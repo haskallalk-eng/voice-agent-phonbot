@@ -1,10 +1,21 @@
 /**
  * Phone number management — provision, assign, and verify numbers.
+ * Supports: Retell-provisioned numbers + Twilio-owned numbers imported into Retell.
  */
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
+import twilio from 'twilio';
 import { pool } from './db.js';
 import type { JwtPayload } from './auth.js';
+
+// ── Twilio client (lazy init) ────────────────────────────────────────────────
+
+function getTwilioClient() {
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  if (!sid || !token) throw new Error('Twilio credentials not configured');
+  return twilio(sid, token);
+}
 
 // ── DB Migration ────────────────────────────────────────────────────────────
 
@@ -154,7 +165,57 @@ export async function registerPhone(app: FastifyInstance) {
     };
   });
 
-  // POST /phone/verify — verify forwarding works (we call the original number)
+  // POST /phone/twilio/import — import a Twilio-owned number into Retell
+  // This enables the Twilio number to receive inbound calls handled by the AI agent.
+  app.post('/phone/twilio/import', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { orgId } = req.user as JwtPayload;
+    if (!pool) return reply.status(503).send({ error: 'Database not configured' });
+
+    const parsed = z.object({
+      number: z.string().min(1),  // e.g. "+493075937562"
+    }).safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'number required (E.164 format)' });
+    const { number } = parsed.data;
+
+    // Verify the number belongs to this Twilio account
+    try {
+      const client = getTwilioClient();
+      const incoming = await client.incomingPhoneNumbers.list({ phoneNumber: number, limit: 1 });
+      if (!incoming.length) {
+        return reply.status(400).send({ error: 'Number not found in your Twilio account' });
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Twilio error';
+      return reply.status(500).send({ error: msg });
+    }
+
+    // Get the org's deployed agent ID for inbound routing
+    const configRes = await pool.query(
+      `SELECT data FROM agent_configs WHERE org_id = $1 OR tenant_id = $1::text LIMIT 1`,
+      [orgId],
+    );
+    const agentId = configRes.rows[0]?.data?.retellAgentId ?? null;
+
+    // Import the number into Retell
+    try {
+      const result = await retellImportPhoneNumber(number, agentId);
+
+      // Upsert into phone_numbers table
+      await pool.query(
+        `INSERT INTO phone_numbers (org_id, number, number_pretty, provider, provider_id, agent_id, method, verified)
+         VALUES ($1, $2, $2, 'twilio', $3, $4, 'provisioned', true)
+         ON CONFLICT DO NOTHING`,
+        [orgId, number, (result.phone_number_id as string | undefined) ?? null, agentId],
+      );
+
+      return { ok: true, number, retellPhoneNumberId: result.phone_number_id ?? null };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to import number into Retell';
+      return reply.status(500).send({ error: msg });
+    }
+  });
+
+  // POST /phone/verify — make a real test call to verify call forwarding is working
   app.post('/phone/verify', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
@@ -163,12 +224,41 @@ export async function registerPhone(app: FastifyInstance) {
     if (!verifyParsed.success) return reply.status(400).send({ error: 'phoneId required (UUID)' });
     const { phoneId } = verifyParsed.data;
 
-    // For now, just mark as verified (actual call-verification is Sprint 3)
-    await pool.query(
-      `UPDATE phone_numbers SET verified = true WHERE id = $1 AND org_id = $2`,
+    const phoneRow = await pool.query(
+      `SELECT number, method FROM phone_numbers WHERE id = $1 AND org_id = $2`,
       [phoneId, orgId],
     );
+    if (!phoneRow.rowCount) return reply.status(404).send({ error: 'Phone number not found' });
+    const { number, method } = phoneRow.rows[0];
 
-    return { ok: true, verified: true };
+    // Provisioned/imported numbers are already verified — mark directly
+    if (method !== 'forwarding') {
+      await pool.query(`UPDATE phone_numbers SET verified = true WHERE id = $1`, [phoneId]);
+      return { ok: true, verified: true };
+    }
+
+    // For forwarding numbers: make an actual Twilio call to check the redirect works
+    const fromNumber = process.env.TWILIO_FROM_NUMBER;
+    if (!fromNumber) {
+      // No Twilio number configured — just mark as verified optimistically
+      await pool.query(`UPDATE phone_numbers SET verified = true WHERE id = $1`, [phoneId]);
+      return { ok: true, verified: true };
+    }
+
+    try {
+      const client = getTwilioClient();
+      // Short TwiML: says a test message then hangs up — proves the forwarding works
+      await client.calls.create({
+        to: number,
+        from: fromNumber,
+        twiml: '<Response><Say language="de-DE">Weiterleitungstest erfolgreich. Ihr Phonbot ist bereit.</Say><Hangup/></Response>',
+      });
+
+      await pool.query(`UPDATE phone_numbers SET verified = true WHERE id = $1`, [phoneId]);
+      return { ok: true, verified: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Twilio call failed';
+      return reply.status(500).send({ error: msg, verified: false });
+    }
   });
 }

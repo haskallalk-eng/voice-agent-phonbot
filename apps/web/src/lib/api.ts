@@ -232,6 +232,20 @@ export function setupForwarding(number: string) {
   });
 }
 
+export function importTwilioNumber(number: string) {
+  return request<{ ok: boolean; number: string; retellPhoneNumberId: string | null }>('/phone/twilio/import', {
+    method: 'POST',
+    body: JSON.stringify({ number }),
+  });
+}
+
+export function verifyPhoneNumber(phoneId: string) {
+  return request<{ ok: boolean; verified: boolean }>('/phone/verify', {
+    method: 'POST',
+    body: JSON.stringify({ phoneId }),
+  });
+}
+
 // --- Chat ---
 
 export type ChatReply = { ok: boolean; reply: string };

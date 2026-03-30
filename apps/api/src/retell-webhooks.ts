@@ -84,6 +84,7 @@ interface RetellEventBody {
 }
 
 interface RetellCallData {
+  call_id?: string;
   call_status?: string;
   start_timestamp?: number;
   end_timestamp?: number;
