@@ -124,15 +124,18 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         const durationMs = (call as RetellCallData & { duration_ms?: number }).duration_ms;
 
         if (orgId && callId && transcript) {
-          // Route to correct learning system based on call type
-          if (callType === 'phone_call') {
-            // Check if this is an outbound sales call
+          const metadata = (call as RetellCallData & { metadata?: Record<string, unknown> }).metadata;
+          const isOutbound = !!(metadata?.outboundRecordId);
+
+          if (isOutbound) {
+            // Outbound sales call — use outbound learning system
             import('./outbound-insights.js').then(({ analyzeOutboundCall }) => {
               analyzeOutboundCall(orgId!, callId!, transcript, durationMs ? Math.round(durationMs / 1000) : undefined).catch(() => {});
             }).catch(() => {});
+          } else {
+            // Inbound call — use inbound learning system
+            analyzeCall(orgId, callId, transcript).catch(() => {});
           }
-          // Always run inbound analysis for inbound calls
-          analyzeCall(orgId, callId, transcript).catch(() => {});
         }
       }
     }

@@ -16,7 +16,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { pool } from './db.js';
 import type { JwtPayload } from './auth.js';
-import { createLLM, updateLLM, createAgent as retellCreateAgent, updateAgent as retellUpdateAgent, createPhoneCall } from './retell.js';
+import { createLLM, createAgent as retellCreateAgent, createPhoneCall } from './retell.js';
 
 // ── DB Migration ─────────────────────────────────────────────────────────────
 
@@ -189,9 +189,12 @@ export async function ensureOutboundAgent(orgId: string): Promise<{ agentId: str
   let llmId = cfg.llmId;
   let agentId = cfg.agentId;
 
+  let changed = false;
+
   if (!llmId) {
     const llm = await createLLM({ generalPrompt: cfg.prompt, tools: [], model });
     llmId = llm.llm_id;
+    changed = true;
   }
 
   if (!agentId) {
@@ -202,6 +205,10 @@ export async function ensureOutboundAgent(orgId: string): Promise<{ agentId: str
       language: 'de-DE',
     });
     agentId = agent.agent_id;
+    changed = true;
+  }
+
+  if (changed) {
     await saveOutboundConfig(orgId, agentId, llmId, cfg.prompt, cfg.version);
   }
 

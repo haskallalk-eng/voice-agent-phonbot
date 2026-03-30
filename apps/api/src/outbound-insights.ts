@@ -98,10 +98,11 @@ Bewertungskriterien:
       .replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
     const analysis = JSON.parse(text) as ConvScoreBreakdown & { outcome_detected?: string };
 
-    const score = analysis.overall ?? (
-      (analysis.rapport + analysis.pain_identified + analysis.value_delivered +
-       analysis.objections_handled + analysis.next_step_secured) / 5
+    const fallback = (
+      (Number(analysis.rapport) + Number(analysis.pain_identified) + Number(analysis.value_delivered) +
+       Number(analysis.objections_handled) + Number(analysis.next_step_secured)) / 5
     );
+    const score = Number(analysis.overall) || (Number.isFinite(fallback) ? fallback : 5);
 
     await pool.query(
       `UPDATE outbound_calls

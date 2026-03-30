@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   triggerSalesCall,
   getOutboundCalls,
@@ -36,6 +36,9 @@ export function OutboundPage() {
   const [suggestions, setSuggestions] = useState<OutboundSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
   // Call form
   const [toNumber, setToNumber] = useState('');
@@ -75,7 +78,7 @@ export function OutboundPage() {
       setCallResult(`Anruf gestartet ✅ Call ID: ${res.callId ?? '–'}`);
       setToNumber('');
       setContactName('');
-      setTimeout(load, 3000);
+      timerRef.current = setTimeout(load, 3000);
     } catch (e: unknown) {
       setError((e instanceof Error ? e.message : null) ?? 'Anruf fehlgeschlagen');
     } finally {
