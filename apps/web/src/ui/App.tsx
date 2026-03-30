@@ -14,6 +14,7 @@ import { BillingPage } from './BillingPage.js';
 import { PhoneManager } from './PhoneManager.js';
 import { CalendarPage } from './CalendarPage.js';
 import { InsightsPage } from './InsightsPage.js';
+import { OutboundPage } from './OutboundPage.js';
 import { ToastProvider } from './Toast.js';
 import { FoxLogo, PhonbotBrand } from './FoxLogo.js';
 
@@ -61,7 +62,7 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-export type Page = 'home' | 'agent' | 'test' | 'tickets' | 'logs' | 'billing' | 'phone' | 'calendar' | 'insights';
+export type Page = 'home' | 'agent' | 'test' | 'tickets' | 'logs' | 'billing' | 'phone' | 'calendar' | 'insights' | 'outbound';
 
 function Dashboard() {
   const { user, org, logout } = useAuth();
@@ -187,6 +188,7 @@ function Dashboard() {
         {page === 'phone' && <PhoneManager />}
         {page === 'calendar' && <CalendarPage />}
         {page === 'insights' && <InsightsPage />}
+        {page === 'outbound' && <OutboundPage />}
       </main>
     </div>
   );

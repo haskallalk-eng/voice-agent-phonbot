@@ -19,6 +19,7 @@ import { registerPhone, migratePhone } from './phone.js';
 import { registerCalendar, migrateCalendar } from './calendar.js';
 import { registerVoices } from './voices.js';
 import { registerInsights } from './insights.js';
+import { registerOutbound, migrateOutbound } from './outbound-agent.js';
 
 initSentry();
 const SENTRY_DSN = process.env.SENTRY_DSN ?? '';
@@ -82,10 +83,12 @@ await registerPhone(app);
 await registerCalendar(app);
 await registerVoices(app);
 await registerInsights(app);
+await registerOutbound(app);
 
 // Additional migrations
 await migratePhone();
 await migrateCalendar();
+await migrateOutbound();
 
 // Global error handler
 app.setErrorHandler((error: FastifyError, request, reply) => {

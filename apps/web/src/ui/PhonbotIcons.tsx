@@ -266,6 +266,17 @@ export const IconInsights = icon(() => (
   </>
 ));
 
+/** Target / Outbound Sales */
+export const IconOutbound = icon(() => (
+  <>
+    <circle cx="12" cy="12" r="10" />
+    <circle cx="12" cy="12" r="6" />
+    <circle cx="12" cy="12" r="2" />
+    <line x1="22" y1="2" x2="16" y2="8" />
+    <polyline points="19 2 22 2 22 5" />
+  </>
+));
+
 /** Refresh — two circular arrows */
 export function IconRefresh({ size = 24, className = '' }: IconProps) {
   return (

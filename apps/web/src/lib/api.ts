@@ -518,6 +518,90 @@ export function triggerConsolidation() {
   return request<{ ok: boolean }>(`/insights/consolidate`, { method: 'POST', body: '{}' });
 }
 
+// --- Outbound ---
+
+export type OutboundCall = {
+  id: string;
+  call_id: string | null;
+  to_number: string;
+  contact_name: string | null;
+  campaign: string | null;
+  outcome: 'converted' | 'interested' | 'callback' | 'not_interested' | 'no_answer' | 'voicemail' | null;
+  duration_s: number | null;
+  conv_score: number | null;
+  prompt_version: number;
+  status: string;
+  created_at: string;
+};
+
+export type OutboundStats = {
+  total: number;
+  converted: number;
+  interested: number;
+  notInterested: number;
+  noAnswer: number;
+  conversionRate: number;
+  avgScore: number | null;
+};
+
+export type OutboundSuggestion = {
+  id: string;
+  category: string;
+  issue_summary: string;
+  suggested_change: string;
+  occurrence_count: number;
+  conv_lift_est: number | null;
+  status: 'pending' | 'applied' | 'rejected' | 'auto_applied';
+  created_at: string;
+};
+
+export type OutboundPromptVersion = {
+  version: number;
+  reason: string;
+  avg_conv_score: number | null;
+  call_count: number;
+  prompt_preview: string;
+  created_at: string;
+};
+
+export function triggerSalesCall(toNumber: string, contactName?: string, campaign?: string, campaignContext?: string) {
+  return request<{ ok: boolean; callId?: string; outboundRecordId?: string }>('/outbound/call', {
+    method: 'POST',
+    body: JSON.stringify({ toNumber, contactName, campaign, campaignContext }),
+  });
+}
+
+export function getOutboundCalls() {
+  return request<{ items: OutboundCall[] }>('/outbound/calls');
+}
+
+export function getOutboundStats() {
+  return request<OutboundStats>('/outbound/stats');
+}
+
+export function getOutboundPrompt() {
+  return request<{ prompt: string; version: number; history: OutboundPromptVersion[] }>('/outbound/prompt');
+}
+
+export function getOutboundSuggestions() {
+  return request<{ items: OutboundSuggestion[] }>('/outbound/suggestions');
+}
+
+export function applyOutboundSuggestion(id: string) {
+  return request<{ ok: boolean }>(`/outbound/suggestions/${encodeURIComponent(id)}/apply`, { method: 'POST', body: '{}' });
+}
+
+export function rejectOutboundSuggestion(id: string) {
+  return request<{ ok: boolean }>(`/outbound/suggestions/${encodeURIComponent(id)}/reject`, { method: 'POST', body: '{}' });
+}
+
+export function updateOutboundOutcome(callId: string, outcome: OutboundCall['outcome']) {
+  return request<{ ok: boolean }>(`/outbound/call/${encodeURIComponent(callId)}/outcome`, {
+    method: 'POST',
+    body: JSON.stringify({ outcome }),
+  });
+}
+
 // --- Auth helpers ---
 
 export function forgotPassword(email: string) {

@@ -120,7 +120,18 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         // AI analysis — fire and forget, never blocks the webhook response
         const transcript = (call as RetellCallData & { transcript?: string }).transcript;
         const callId = (call as RetellCallData).call_id;
+        const callType = (call as RetellCallData & { call_type?: string }).call_type;
+        const durationMs = (call as RetellCallData & { duration_ms?: number }).duration_ms;
+
         if (orgId && callId && transcript) {
+          // Route to correct learning system based on call type
+          if (callType === 'phone_call') {
+            // Check if this is an outbound sales call
+            import('./outbound-insights.js').then(({ analyzeOutboundCall }) => {
+              analyzeOutboundCall(orgId!, callId!, transcript, durationMs ? Math.round(durationMs / 1000) : undefined).catch(() => {});
+            }).catch(() => {});
+          }
+          // Always run inbound analysis for inbound calls
           analyzeCall(orgId, callId, transcript).catch(() => {});
         }
       }
