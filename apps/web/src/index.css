@@ -1,0 +1,312 @@
+@import 'tailwindcss';
+
+/* ─── CSS custom properties ─── */
+:root {
+  --color-bg: #0A0A0F;
+  --color-surface: #0F0F18;
+  --color-primary: #F97316;
+  --color-accent: #06B6D4;
+  --color-border: rgba(255, 255, 255, 0.1);
+}
+
+/* ─── Base ─── */
+html {
+  scroll-behavior: smooth;
+  overflow-y: auto !important;
+  height: auto !important;
+}
+
+body {
+  min-height: 100vh;
+  overflow-y: auto !important;
+  height: auto !important;
+}
+
+#root {
+  min-height: 100vh;
+  height: auto !important;
+  overflow: visible !important;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: #fff;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* ─── Glassmorphism utility ─── */
+.glass {
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.glass-strong {
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* ─── Animations ─── */
+
+/* Pulsing mic ring */
+@keyframes mic-ring {
+  0% {
+    transform: scale(1);
+    box-shadow:
+      0 0 0 0 rgba(249, 115, 22, 0.8),
+      0 0 0 0 rgba(6, 182, 212, 0.5);
+  }
+  70% {
+    transform: scale(1.04);
+    box-shadow:
+      0 0 0 16px rgba(249, 115, 22, 0),
+      0 0 0 30px rgba(6, 182, 212, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow:
+      0 0 0 0 rgba(249, 115, 22, 0),
+      0 0 0 0 rgba(6, 182, 212, 0);
+  }
+}
+
+.mic-pulse {
+  animation: mic-ring 1.6s ease-out infinite;
+}
+
+/* Soft breathe for agent-talking indicator */
+@keyframes breathe {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50%       { opacity: 1;   transform: scale(1.08); }
+}
+
+.breathe {
+  animation: breathe 1.2s ease-in-out infinite;
+}
+
+/* Floating hero element */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-12px); }
+}
+
+.float {
+  animation: float 4s ease-in-out infinite;
+}
+
+/* Progress bar shimmer */
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+.progress-bar {
+  background: linear-gradient(
+    90deg,
+    #F97316 0%,
+    #06B6D4 50%,
+    #F97316 100%
+  );
+  background-size: 200% auto;
+  animation: shimmer 3s linear infinite;
+}
+
+/* Fade-in slide-up for step transitions */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.fade-up {
+  animation: fade-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Glow pulse (decorative background elements) */
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.3; }
+  50%       { opacity: 0.7; }
+}
+
+.glow-pulse {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+/* Spin for loading states */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+/* ─── Audio equalizer bars ─── */
+@keyframes eq-bar {
+  0%, 100% { height: 12px; }
+  50% { height: var(--eq-height, 40px); }
+}
+
+.eq-bar {
+  animation: eq-bar var(--eq-speed, 1s) ease-in-out infinite;
+}
+
+/* ─── Gradient border glow ─── */
+.gradient-border {
+  position: relative;
+}
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, #F97316, #06B6D4);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.gradient-border:hover::before {
+  opacity: 1;
+}
+
+/* ─── Noise texture overlay ─── */
+.noise::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: 0.015;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ─── Waveform SVG ─── */
+.waveform-container {
+  position: relative;
+}
+.waveform-container svg {
+  overflow: visible;
+}
+
+.wave {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.wave-1 {
+  stroke: #F97316;
+  stroke-opacity: 0.5;
+  animation: wave-move 4s ease-in-out infinite;
+}
+.wave-2 {
+  stroke: #FB923C;
+  stroke-opacity: 0.3;
+  animation: wave-move 5.5s ease-in-out infinite reverse;
+}
+.wave-3 {
+  stroke: #06B6D4;
+  stroke-opacity: 0.25;
+  animation: wave-move 3.5s ease-in-out infinite;
+  animation-delay: 0.5s;
+}
+
+@keyframes wave-move {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(-60px); }
+}
+
+.waveform-active .wave-1 { stroke-opacity: 0.75; animation-duration: 1.5s; stroke-width: 3; }
+.waveform-active .wave-2 { stroke-opacity: 0.55; animation-duration: 2s; stroke-width: 2.5; }
+.waveform-active .wave-3 { stroke-opacity: 0.5; animation-duration: 1.2s; stroke-width: 2; }
+
+/* ─── Sound pulse rings ─── */
+@keyframes ring-expand {
+  0% { transform: scale(0.6); opacity: 0.7; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+.sound-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid rgba(249,115,22,0.5);
+  animation: ring-expand 1.8s ease-out infinite;
+  pointer-events: none;
+}
+.sound-ring:nth-child(2) { animation-delay: 0.6s; }
+.sound-ring:nth-child(3) { animation-delay: 1.2s; }
+
+/* ─── Custom scrollbar — subtle, brand-consistent ─── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(249, 115, 22, 0.4);
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+/* -- Chippy animations ---------------------------------------------- */
+
+/* Smooth float for hero/dashboard */
+@keyframes chippy-float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-5px); }
+}
+.chippy-float {
+  animation: chippy-float 3.5s ease-in-out infinite;
+}
+
+/* Blink � left eye pupil squishes to scaleY(0.08) then back */
+@keyframes chippy-blink-l {
+  0%, 90%, 100% { transform: scaleY(1); }
+  94%           { transform: scaleY(0.08); }
+}
+.chippy-blink-l {
+  transform-origin: 36px 50px;
+  animation: chippy-blink-l 4.2s ease-in-out infinite;
+}
+
+/* Blink � right eye, same but tiny offset so they blink together */
+@keyframes chippy-blink-r {
+  0%, 90%, 100% { transform: scaleY(1); }
+  94%           { transform: scaleY(0.08); }
+}
+.chippy-blink-r {
+  transform-origin: 64px 50px;
+  animation: chippy-blink-r 4.2s ease-in-out infinite;
+}
+
+/* Sparkle � tiny glint dot that fades in/out */
+@keyframes chippy-sparkle {
+  0%, 60%, 100% { opacity: 0; transform: scale(0.5); }
+  70%, 85%      { opacity: 1; transform: scale(1.4); }
+}
+.chippy-sparkle {
+  transform-origin: center;
+  animation: chippy-sparkle 4.2s ease-in-out infinite;
+}
+.chippy-sparkle-delay {
+  animation-delay: 0.15s;
+}

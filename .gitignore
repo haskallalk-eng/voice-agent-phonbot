@@ -1,0 +1,16 @@
+node_modules
+.pnpm-store
+.dist
+dist
+build
+coverage
+.env
+.env.*
+!.env.example
+.DS_Store
+logs & Database
+.sqlite
+.db
+.log
+pnpm-lock.yaml
+

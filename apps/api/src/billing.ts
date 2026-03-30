@@ -1,0 +1,272 @@
+import Stripe from 'stripe';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { z } from 'zod';
+import { pool } from './db.js';
+import type { JwtPayload } from './auth.js';
+
+// ── Stripe client ─────────────────────────────────────────────────────────────
+
+const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY ?? '';
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? '';
+
+export const stripe = STRIPE_SECRET
+  ? new Stripe(STRIPE_SECRET)
+  : null;
+
+// ── Plan definitions ──────────────────────────────────────────────────────────
+
+export const PLANS = {
+  free: {
+    id: 'free',
+    name: 'Free',
+    price: 0,
+    minutesLimit: 100,
+    agentsLimit: 1,
+    overchargePerMinute: 0,
+    stripePriceId: null,
+    stripePriceIdYearly: null,
+  },
+  starter: {
+    id: 'starter',
+    name: 'Starter',
+    price: 49,
+    minutesLimit: 500,
+    agentsLimit: 1,
+    overchargePerMinute: 0.10,
+    stripePriceId: process.env.STRIPE_PRICE_STARTER ?? null,
+    stripePriceIdYearly: process.env.STRIPE_PRICE_STARTER_YEARLY ?? null,
+  },
+  pro: {
+    id: 'pro',
+    name: 'Pro',
+    price: 149,
+    minutesLimit: 2000,
+    agentsLimit: 3,
+    overchargePerMinute: 0.08,
+    stripePriceId: process.env.STRIPE_PRICE_PRO ?? null,
+    stripePriceIdYearly: process.env.STRIPE_PRICE_PRO_YEARLY ?? null,
+  },
+  agency: {
+    id: 'agency',
+    name: 'Agency',
+    price: 299,
+    minutesLimit: 5000,
+    agentsLimit: 10,
+    overchargePerMinute: 0.06,
+    stripePriceId: process.env.STRIPE_PRICE_AGENCY ?? null,
+    stripePriceIdYearly: process.env.STRIPE_PRICE_AGENCY_YEARLY ?? null,
+  },
+} as const;
+
+export type PlanId = keyof typeof PLANS;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+async function getOrCreateStripeCustomer(orgId: string, email: string, orgName: string): Promise<string> {
+  if (!stripe) throw new Error('Stripe not configured');
+
+  const res = await pool!.query('SELECT stripe_customer_id FROM orgs WHERE id = $1', [orgId]);
+  const existing = res.rows[0]?.stripe_customer_id as string | null;
+  if (existing) return existing;
+
+  const customer = await stripe.customers.create({
+    email,
+    name: orgName,
+    metadata: { orgId },
+  });
+
+  await pool!.query('UPDATE orgs SET stripe_customer_id = $1 WHERE id = $2', [customer.id, orgId]);
+  return customer.id;
+}
+
+// NOTE: Free plan minutes are one-time (no monthly reset).
+// Paid plans reset at billing period renewal via syncSubscription.
+async function syncSubscription(sub: Stripe.Subscription) {
+  const orgId = sub.metadata?.orgId;
+  if (!orgId || !pool) return;
+
+  const priceId = sub.items.data[0]?.price.id ?? null;
+  const plan = Object.values(PLANS).find((p) => p.stripePriceId === priceId)?.id ?? 'free';
+  const minutesLimit = PLANS[plan as PlanId]?.minutesLimit ?? 100;
+
+  await pool.query(
+    `UPDATE orgs SET
+      plan = $2,
+      plan_status = $3,
+      stripe_subscription_id = $4,
+      plan_interval = $5,
+      current_period_end = to_timestamp($6),
+      minutes_limit = $7
+     WHERE id = $1`,
+    [
+      orgId,
+      plan,
+      sub.status,
+      sub.id,
+      sub.items.data[0]?.plan.interval ?? null,
+      (sub as unknown as { current_period_end?: number }).current_period_end ?? null,
+      minutesLimit,
+    ],
+  );
+}
+
+// ── Routes ────────────────────────────────────────────────────────────────────
+
+export async function registerBilling(app: FastifyInstance) {
+  const auth = { onRequest: [app.authenticate] };
+
+  // GET /billing/plans — public, no auth
+  app.get('/billing/plans', async () => {
+    return {
+      plans: Object.values(PLANS).map(({ id, name, price, minutesLimit, agentsLimit, stripePriceIdYearly }) => ({
+        id, name, price, minutesLimit, agentsLimit,
+        hasYearly: stripePriceIdYearly !== null,
+      })),
+    };
+  });
+
+  // GET /billing/status — current org billing state
+  app.get('/billing/status', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { orgId } = req.user as JwtPayload;
+    if (!pool) return reply.status(503).send({ error: 'Database not configured' });
+
+    const res = await pool.query(
+      `SELECT plan, plan_status, plan_interval, current_period_end, minutes_used, minutes_limit
+       FROM orgs WHERE id = $1`,
+      [orgId],
+    );
+    if (!res.rows[0]) return reply.status(404).send({ error: 'Org not found' });
+
+    const row = res.rows[0];
+    const planDef = PLANS[row.plan as PlanId] ?? PLANS.free;
+
+    return {
+      plan: row.plan,
+      planName: planDef.name,
+      planStatus: row.plan_status,
+      planInterval: row.plan_interval,
+      currentPeriodEnd: row.current_period_end,
+      minutesUsed: row.minutes_used,
+      minutesLimit: row.minutes_limit,
+      minutesRemaining: Math.max(0, row.minutes_limit - row.minutes_used),
+    };
+  });
+
+  // POST /billing/checkout — create Stripe Checkout Session
+  app.post('/billing/checkout', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { orgId, userId } = req.user as JwtPayload;
+    if (!stripe || !pool) return reply.status(503).send({ error: 'Stripe not configured' });
+
+    const parsed = z.object({
+      planId: z.enum(['starter', 'pro', 'agency']).default('starter'),
+      interval: z.enum(['month', 'year']).default('month'),
+    }).safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Invalid plan selection' });
+    const { planId, interval } = parsed.data;
+    const plan = PLANS[planId];
+
+    const priceId = interval === 'year' ? plan.stripePriceIdYearly : plan.stripePriceId;
+    if (!priceId) {
+      return reply.status(400).send({
+        error: interval === 'year'
+          ? 'Yearly price not configured for this plan (set STRIPE_PRICE_*_YEARLY)'
+          : 'Stripe price not configured for this plan',
+      });
+    }
+
+    const userRes = await pool.query(
+      'SELECT u.email, o.name FROM users u JOIN orgs o ON o.id = u.org_id WHERE u.id = $1',
+      [userId],
+    );
+    if (!userRes.rows[0]) return reply.status(404).send({ error: 'User not found' });
+    const { email, name } = userRes.rows[0];
+
+    const customerId = await getOrCreateStripeCustomer(orgId, email, name);
+    const appUrl = process.env.APP_URL ?? 'http://localhost:5173';
+
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: 'subscription',
+      line_items: [{ price: priceId, quantity: 1 }],
+      subscription_data: { metadata: { orgId } },
+      success_url: `${appUrl}/billing?success=1`,
+      cancel_url: `${appUrl}/billing?canceled=1`,
+      allow_promotion_codes: true,
+    });
+
+    return { url: session.url };
+  });
+
+  // POST /billing/portal — Stripe Customer Portal (manage/cancel)
+  app.post('/billing/portal', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { orgId } = req.user as JwtPayload;
+    if (!stripe || !pool) return reply.status(503).send({ error: 'Stripe not configured' });
+
+    const res = await pool.query('SELECT stripe_customer_id FROM orgs WHERE id = $1', [orgId]);
+    const customerId = res.rows[0]?.stripe_customer_id as string | null;
+    if (!customerId) return reply.status(400).send({ error: 'No billing account found' });
+
+    const appUrl = process.env.APP_URL ?? 'http://localhost:5173';
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: `${appUrl}/billing`,
+    });
+
+    return { url: session.url };
+  });
+
+  // POST /billing/webhook — Stripe events (no auth, signature check instead)
+  // Raw body is captured via a custom content-type parser registered in index.ts
+  app.post('/billing/webhook', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!stripe) return reply.status(503).send({ error: 'Stripe not configured' });
+
+    const sig = req.headers['stripe-signature'] as string;
+    let event: Stripe.Event;
+
+    try {
+      // req.body is set to the raw Buffer by the stripe-webhook content-type parser
+      const rawBody = (req as FastifyRequest & { rawBody?: Buffer | string }).rawBody ?? '';
+      event = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WEBHOOK_SECRET);
+    } catch {
+      return reply.status(400).send({ error: 'Invalid signature' });
+    }
+
+    switch (event.type) {
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated':
+      case 'customer.subscription.deleted': {
+        await syncSubscription(event.data.object as Stripe.Subscription);
+        break;
+      }
+      case 'customer.subscription.paused':
+      case 'customer.subscription.resumed': {
+        const sub = event.data.object as Stripe.Subscription;
+        const orgId = sub.metadata?.orgId;
+        if (orgId && pool) {
+          const status = event.type === 'customer.subscription.paused' ? 'paused' : 'active';
+          await pool.query(
+            `UPDATE orgs SET plan_status = $1 WHERE id = $2`,
+            [status, orgId],
+          );
+        }
+        break;
+      }
+      case 'invoice.payment_failed': {
+        const invoiceRaw = event.data.object as unknown as Record<string, unknown>;
+        const rawSub = invoiceRaw.subscription;
+        const subId = typeof rawSub === 'string'
+          ? rawSub
+          : (rawSub != null && typeof rawSub === 'object' && 'id' in (rawSub as Record<string, unknown>)) ? ((rawSub as Record<string, unknown>).id as string) : null;
+        if (subId && pool) {
+          await pool.query(
+            `UPDATE orgs SET plan_status = 'past_due' WHERE stripe_subscription_id = $1`,
+            [subId],
+          );
+        }
+        break;
+      }
+    }
+
+    return { received: true };
+  });
+}

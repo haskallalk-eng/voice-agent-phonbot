@@ -1,0 +1,23 @@
+{$DOMAIN:phonbot.de} {
+    # All /api/* requests → strip prefix → backend
+    handle /api/* {
+        uri strip_prefix /api
+        reverse_proxy api:3001
+    }
+
+    # Direct backend paths (webhooks, health — no /api prefix needed)
+    handle /retell* {
+        reverse_proxy api:3001
+    }
+    handle /webhook* {
+        reverse_proxy api:3001
+    }
+    handle /health {
+        reverse_proxy api:3001
+    }
+
+    # Everything else → frontend SPA
+    handle {
+        reverse_proxy web:80
+    }
+}
