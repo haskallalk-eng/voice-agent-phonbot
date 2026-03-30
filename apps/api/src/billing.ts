@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { pool } from './db.js';
 import type { JwtPayload } from './auth.js';
+import { autoProvisionGermanNumber } from './phone.js';
 
 // ── Stripe client ─────────────────────────────────────────────────────────────
 
@@ -232,7 +233,16 @@ export async function registerBilling(app: FastifyInstance) {
     }
 
     switch (event.type) {
-      case 'customer.subscription.created':
+      case 'customer.subscription.created': {
+        const newSub = event.data.object as Stripe.Subscription;
+        await syncSubscription(newSub);
+        // Auto-provision a German phone number for new paying customers
+        const newOrgId = newSub.metadata?.orgId;
+        if (newOrgId && newSub.status === 'active') {
+          autoProvisionGermanNumber(newOrgId).catch(() => {});
+        }
+        break;
+      }
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {
         await syncSubscription(event.data.object as Stripe.Subscription);

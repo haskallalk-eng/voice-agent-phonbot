@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   getPhoneNumbers,
-  provisionPhoneNumber,
   setupForwarding,
   type PhoneNumber,
 } from '../lib/api.js';
@@ -14,10 +13,7 @@ export function PhoneManager() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Provision form
-  const [areaCode, setAreaCode] = useState('030');
-  const [provisioning, setProvisioning] = useState(false);
-  const [provisionResult, setProvisionResult] = useState<{ number: string; numberPretty: string } | null>(null);
+  const [provisionResult] = useState<{ number: string; numberPretty: string } | null>(null);
 
   // Forwarding form
   const [forwardNumber, setForwardNumber] = useState('');
@@ -38,21 +34,6 @@ export function PhoneManager() {
 
   useEffect(() => { loadNumbers(); }, []);
 
-  async function handleProvision() {
-    setProvisioning(true);
-    setError(null);
-    setProvisionResult(null);
-    try {
-      const res = await provisionPhoneNumber(areaCode);
-      setProvisionResult(res);
-      await loadNumbers();
-      setTab('my-numbers');
-    } catch (e: unknown) {
-      setError((e instanceof Error ? e.message : null) ?? 'Provision fehlgeschlagen');
-    } finally {
-      setProvisioning(false);
-    }
-  }
 
   async function handleForward() {
     setForwarding(true);
@@ -185,44 +166,29 @@ export function PhoneManager() {
       {tab === 'provision' && (
         <div className="glass rounded-2xl p-6 space-y-5">
           <div>
-            <h2 className="font-semibold text-white mb-1">Neue Nummer erhalten</h2>
+            <h2 className="font-semibold text-white mb-1">Deutsche Nummer erhalten</h2>
             <p className="text-sm text-white/50">
-              Wir kaufen eine lokale Telefonnummer für dich. Anrufe werden direkt von deinem Agent beantwortet.
+              Eine deutsche Telefonnummer wird automatisch beim Kauf eines Plans für dich reserviert und sofort mit deinem Agent verbunden.
             </p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-white/70 mb-1">
-              Vorwahl (Area Code)
-            </label>
-            <div className="flex gap-3">
-              <select
-                value={areaCode}
-                onChange={(e) => setAreaCode(e.target.value)}
-                className="flex-1 rounded-xl border border-white/10 bg-[#0F0F18] text-white px-3 py-2 text-sm
-                  focus:outline-none focus:ring-2 focus:ring-orange-500/50"
-              >
-                <option value="030">030 – Berlin</option>
-                <option value="040">040 – Hamburg</option>
-                <option value="089">089 – München</option>
-                <option value="0221">0221 – Köln</option>
-                <option value="069">069 – Frankfurt</option>
-                <option value="0711">0711 – Stuttgart</option>
-                <option value="0211">0211 – Düsseldorf</option>
-              </select>
-              <button
-                onClick={handleProvision}
-                disabled={provisioning}
-                className="bg-gradient-to-r from-orange-500 to-cyan-500 hover:opacity-90 disabled:opacity-50 text-white font-medium rounded-xl px-5 py-2 text-sm transition-opacity"
-              >
-                {provisioning ? 'Aktiviere…' : 'Nummer aktivieren →'}
-              </button>
-            </div>
+          <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 text-sm text-green-400 space-y-1">
+            <p className="font-medium">✅ Bereits inklusive in deinem Plan</p>
+            <p className="text-green-400/70 text-xs">
+              Deine Nummer wurde automatisch beim Kauf eingerichtet. Sie erscheint oben unter "Meine Nummern".
+            </p>
           </div>
 
           <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3 text-xs text-blue-400">
-            💡 Die Nummer wird sofort deinem Agent zugewiesen. Anrufer können sie direkt anrufen — kein Weiterleitungs-Setup nötig.
+            💡 Du brauchst nichts weiter zu tun — Anrufer können die Nummer direkt anrufen und dein Agent antwortet sofort.
           </div>
+
+          <button
+            onClick={() => setTab('my-numbers')}
+            className="w-full bg-gradient-to-r from-orange-500 to-cyan-500 hover:opacity-90 text-white font-medium rounded-2xl py-3 text-sm transition-opacity"
+          >
+            Meine Nummer anzeigen →
+          </button>
         </div>
       )}
 

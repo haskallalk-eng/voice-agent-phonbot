@@ -76,6 +76,67 @@ async function retellPurchasePhoneNumber(areaCode: string, agentId?: string) {
   return res.json() as Promise<Record<string, unknown>>;
 }
 
+// ── Auto-provision a German Twilio number for a new customer ────────────────
+// Called automatically after a successful Stripe checkout.
+
+export async function autoProvisionGermanNumber(orgId: string): Promise<void> {
+  if (!pool) return;
+
+  // Don't provision if org already has a number
+  const existing = await pool.query(
+    `SELECT id FROM phone_numbers WHERE org_id = $1 LIMIT 1`,
+    [orgId],
+  );
+  if (existing.rowCount && existing.rowCount > 0) return;
+
+  // Get org's deployed Retell agent ID
+  const configRes = await pool.query(
+    `SELECT data FROM agent_configs WHERE org_id = $1 OR tenant_id = $1::text LIMIT 1`,
+    [orgId],
+  );
+  const agentId = configRes.rows[0]?.data?.retellAgentId ?? null;
+
+  // Buy a German number via Twilio
+  let purchasedNumber: string;
+  try {
+    const client = getTwilioClient();
+    const available = await client.availablePhoneNumbers('DE').local.list({ limit: 1 });
+    const first = available[0];
+    if (!first) {
+      process.stderr.write(`[phone] No German Twilio numbers available for org ${orgId}\n`);
+      return;
+    }
+    const purchased = await client.incomingPhoneNumbers.create({
+      phoneNumber: first.phoneNumber,
+    });
+    purchasedNumber = purchased.phoneNumber;
+  } catch (e: unknown) {
+    process.stderr.write(`[phone] Twilio provision failed for org ${orgId}: ${e instanceof Error ? e.message : String(e)}\n`);
+    return;
+  }
+
+  // Import the number into Retell so inbound calls route to the AI agent
+  let retellPhoneNumberId: string | null = null;
+  try {
+    const result = await retellImportPhoneNumber(purchasedNumber, agentId);
+    retellPhoneNumberId = (result.phone_number_id as string | undefined) ?? null;
+  } catch (e: unknown) {
+    process.stderr.write(`[phone] Retell import failed for ${purchasedNumber}: ${e instanceof Error ? e.message : String(e)}\n`);
+    // Continue — number is bought, save it even without Retell ID
+  }
+
+  // Save to DB
+  const pretty = purchasedNumber.replace(/^\+49/, '0').replace(/(\d{3})(\d{3})(\d+)/, '$1 $2 $3');
+  await pool.query(
+    `INSERT INTO phone_numbers (org_id, number, number_pretty, provider, provider_id, agent_id, method, verified)
+     VALUES ($1, $2, $3, 'twilio', $4, $5, 'provisioned', true)
+     ON CONFLICT DO NOTHING`,
+    [orgId, purchasedNumber, pretty, retellPhoneNumberId, agentId],
+  );
+
+  process.stdout.write(`[phone] Auto-provisioned ${purchasedNumber} for org ${orgId}\n`);
+}
+
 // ── Routes ──────────────────────────────────────────────────────────────────
 
 export async function registerPhone(app: FastifyInstance) {
