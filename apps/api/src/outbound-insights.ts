@@ -270,8 +270,8 @@ Erstelle präzise Verbesserungen. Fokus auf: konkretere Formulierungen, bessere 
       newPrompt = currentPrompt + '\n\n## Gelernte Verbesserungen (Auto-Update)\n' + result.new_prompt_additions;
     }
 
-    // Apply if score is below threshold or additions are significant
-    if (avgScore < AUTO_APPLY_CONV_SCORE || result.new_prompt_additions) {
+    // Apply only if the prompt actually changed and conditions are met
+    if (newPrompt !== currentPrompt && (avgScore < AUTO_APPLY_CONV_SCORE || result.new_prompt_additions)) {
       const reason = result.summary ?? `Batch learning: avg score ${avgScore.toFixed(2)}, ${suggestions.length} patterns`;
       await analyzeAndImproveOutboundPrompt(orgId, newPrompt, reason, version, avgScore);
 
