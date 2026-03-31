@@ -34,7 +34,7 @@ type RawBodyRequest = FastifyRequest & { rawBody?: Buffer | string };
  * Returns true when valid or when RETELL_API_KEY is not configured (dev mode).
  */
 function verifyRetellSignature(req: RawBodyRequest): boolean {
-  if (!RETELL_API_KEY) return true; // dev mode — skip verification
+  if (!RETELL_API_KEY) return process.env.NODE_ENV !== 'production'; // dev: skip, prod: reject
 
   const signature = (req.headers['x-retell-signature'] as string) ?? '';
   const rawBody: string =

@@ -268,10 +268,11 @@ export async function registerBilling(app: FastifyInstance) {
           ? rawSub
           : (rawSub != null && typeof rawSub === 'object' && 'id' in (rawSub as Record<string, unknown>)) ? ((rawSub as Record<string, unknown>).id as string) : null;
         if (subId && pool) {
-          await pool.query(
+          const r = await pool.query(
             `UPDATE orgs SET plan_status = 'past_due' WHERE stripe_subscription_id = $1`,
             [subId],
           );
+          if (!r.rowCount) console.warn(`[billing] invoice.payment_failed: no org for sub ${subId}`);
         }
         break;
       }

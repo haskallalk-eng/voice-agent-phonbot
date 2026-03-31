@@ -109,7 +109,7 @@ export async function createTicket(input: z.infer<typeof CreateTicketBody>): Pro
     pool.query(
       `SELECT u.email, o.name as org_name
        FROM users u JOIN orgs o ON o.id = u.org_id
-       WHERE u.org_id = (SELECT id FROM orgs WHERE id::text = $1 OR id IN (SELECT org_id FROM agent_configs WHERE tenant_id = $1))
+       WHERE u.org_id IN (SELECT id FROM orgs WHERE id::text = $1 OR id IN (SELECT org_id FROM agent_configs WHERE tenant_id = $1))
          AND u.role = 'owner'
        LIMIT 1`,
       [body.tenantId],
@@ -124,7 +124,7 @@ export async function createTicket(input: z.infer<typeof CreateTicketBody>): Pro
           service: ticket.service,
         }).catch(() => {});
       }
-    }).catch(() => {});
+    }).catch((e: unknown) => { console.error('[tickets] notification error:', e instanceof Error ? e.message : String(e)); });
   }
 
   return ticket;
