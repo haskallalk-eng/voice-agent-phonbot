@@ -9,6 +9,9 @@
     handle /retell* {
         reverse_proxy api:3001
     }
+    handle /billing* {
+        reverse_proxy api:3001
+    }
     handle /webhook* {
         reverse_proxy api:3001
     }

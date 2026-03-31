@@ -12,5 +12,5 @@ logs & Database
 .sqlite
 .db
 .log
-pnpm-lock.yaml
+# pnpm-lock.yaml intentionally tracked (needed for Docker --frozen-lockfile)
 
