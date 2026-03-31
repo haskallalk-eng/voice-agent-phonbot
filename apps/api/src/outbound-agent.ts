@@ -243,7 +243,8 @@ export async function triggerSalesCall(params: {
      VALUES ($1, $2, $3, $4, $5, 'initiated') RETURNING id`,
     [params.orgId, params.toNumber, params.contactName ?? null, params.campaign ?? null, cfg.version],
   );
-  const outboundRecordId = recordRes.rows[0].id as string;
+  const outboundRecordId = recordRes.rows[0]?.id as string | undefined;
+  if (!outboundRecordId) return { ok: false, error: 'DB_ERROR' };
 
   try {
     const call = await createPhoneCall({
