@@ -358,6 +358,29 @@ export function getMicrosoftCalendarAuthUrl() {
   return request<{ url: string }>('/calendar/microsoft/auth-url');
 }
 
+// --- Chippy Calendar ---
+
+export type ChippyDaySchedule = { enabled: boolean; start: string; end: string };
+export type ChippySchedule = Record<string, ChippyDaySchedule>;
+export type ChippyBlock = { id: string; date: string; reason: string | null };
+export type ChippyBooking = {
+  id: string; customer_name: string; customer_phone: string;
+  service: string | null; notes: string | null; slot_time: string;
+};
+
+export function getChippyCalendar() {
+  return request<{ schedule: ChippySchedule; blocks: ChippyBlock[]; bookings: ChippyBooking[] }>('/calendar/chippy');
+}
+export function saveChippySchedule(schedule: ChippySchedule) {
+  return request<{ ok: boolean }>('/calendar/chippy', { method: 'PUT', body: JSON.stringify({ schedule }) });
+}
+export function addChippyBlock(date: string, reason?: string) {
+  return request<{ ok: boolean; id: string }>('/calendar/chippy/block', { method: 'POST', body: JSON.stringify({ date, reason }) });
+}
+export function removeChippyBlock(id: string) {
+  return request<{ ok: boolean }>(`/calendar/chippy/block/${id}`, { method: 'DELETE' });
+}
+
 // --- Billing ---
 
 export type Plan = {

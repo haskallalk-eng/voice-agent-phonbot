@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { getCalendarStatus, connectCalcom, disconnectCalendar, getGoogleCalendarAuthUrl, getMicrosoftCalendarAuthUrl } from '../lib/api.js';
+import { useEffect, useState } from 'react';
+import { getCalendarStatus, connectCalcom, disconnectCalendar, getGoogleCalendarAuthUrl, getMicrosoftCalendarAuthUrl, getChippyCalendar, saveChippySchedule, addChippyBlock, removeChippyBlock } from '../lib/api.js';
+import type { ChippySchedule, ChippyBlock, ChippyBooking } from '../lib/api.js';
 
 type CalendarStatus = {
   connected: boolean;
@@ -342,7 +343,206 @@ export function CalendarPage() {
             </div>
           </div>
         )}
+
+        {/* Chippy Kalender */}
+        <ChippyPanel />
       </div>
+    </div>
+  );
+}
+
+// ── Chippy Kalender Panel ─────────────────────────────────────────────────────
+
+const DAY_NAMES: Record<string, string> = {
+  '1': 'Montag', '2': 'Dienstag', '3': 'Mittwoch',
+  '4': 'Donnerstag', '5': 'Freitag', '6': 'Samstag', '0': 'Sonntag',
+};
+const DAY_ORDER = ['1','2','3','4','5','6','0'];
+
+const DEFAULT_SCHEDULE: ChippySchedule = {
+  '0': { enabled: false, start: '09:00', end: '17:00' },
+  '1': { enabled: true,  start: '09:00', end: '17:00' },
+  '2': { enabled: true,  start: '09:00', end: '17:00' },
+  '3': { enabled: true,  start: '09:00', end: '17:00' },
+  '4': { enabled: true,  start: '09:00', end: '17:00' },
+  '5': { enabled: true,  start: '09:00', end: '17:00' },
+  '6': { enabled: false, start: '09:00', end: '17:00' },
+};
+
+function ChippyPanel() {
+  const [schedule, setSchedule] = useState<ChippySchedule>(DEFAULT_SCHEDULE);
+  const [blocks, setBlocks] = useState<ChippyBlock[]>([]);
+  const [bookings, setBookings] = useState<ChippyBooking[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [newBlockDate, setNewBlockDate] = useState('');
+  const [newBlockReason, setNewBlockReason] = useState('');
+
+  useEffect(() => {
+    getChippyCalendar().then((d) => {
+      setSchedule({ ...DEFAULT_SCHEDULE, ...d.schedule });
+      setBlocks(d.blocks);
+      setBookings(d.bookings);
+    }).catch(() => {});
+  }, []);
+
+  async function handleSave() {
+    setSaving(true);
+    setSaved(false);
+    try {
+      await saveChippySchedule(schedule);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch { /* ignore */ } finally { setSaving(false); }
+  }
+
+  async function handleAddBlock() {
+    if (!newBlockDate) return;
+    try {
+      const res = await addChippyBlock(newBlockDate, newBlockReason || undefined);
+      setBlocks(prev => [...prev, { id: res.id, date: newBlockDate, reason: newBlockReason || null }]);
+      setNewBlockDate('');
+      setNewBlockReason('');
+    } catch { /* ignore */ }
+  }
+
+  async function handleRemoveBlock(id: string) {
+    try {
+      await removeChippyBlock(id);
+      setBlocks(prev => prev.filter(b => b.id !== id));
+    } catch { /* ignore */ }
+  }
+
+  return (
+    <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-6 space-y-6">
+      <div>
+        <h2 className="text-base font-bold text-white flex items-center gap-2">
+          🐾 Chippy Kalender
+        </h2>
+        <p className="text-sm text-white/40 mt-1">
+          Kein Google oder Outlook? Kein Problem — trag hier deine Verfügbarkeit ein. Dein Agent nutzt diese Zeiten automatisch.
+        </p>
+      </div>
+
+      {/* Weekly schedule */}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold text-white/40 uppercase tracking-widest">Wochentage</p>
+        {DAY_ORDER.map((dow) => {
+          const day = schedule[dow] ?? DEFAULT_SCHEDULE[dow]!;
+          return (
+            <div key={dow} className="flex items-center gap-3">
+              {/* Toggle */}
+              <button
+                onClick={() => setSchedule(s => ({ ...s, [dow]: { ...day, enabled: !day.enabled } }))}
+                className={`w-10 h-5 rounded-full transition-all shrink-0 ${day.enabled ? 'bg-orange-500' : 'bg-white/10'}`}
+              >
+                <span className={`block w-4 h-4 rounded-full bg-white mx-0.5 transition-transform ${day.enabled ? 'translate-x-5' : ''}`} />
+              </button>
+              {/* Day name */}
+              <span className={`w-24 text-sm ${day.enabled ? 'text-white' : 'text-white/30'}`}>
+                {DAY_NAMES[dow]}
+              </span>
+              {/* Times */}
+              {day.enabled ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="time"
+                    value={day.start}
+                    onChange={(e) => setSchedule(s => ({ ...s, [dow]: { ...day, start: e.target.value } }))}
+                    className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+                  />
+                  <span className="text-white/30 text-xs">bis</span>
+                  <input
+                    type="time"
+                    value={day.end}
+                    onChange={(e) => setSchedule(s => ({ ...s, [dow]: { ...day, end: e.target.value } }))}
+                    className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+                  />
+                </div>
+              ) : (
+                <span className="text-xs text-white/20">nicht verfügbar</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-40"
+        style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
+      >
+        {saving ? 'Speichern…' : saved ? 'Gespeichert ✓' : 'Verfügbarkeit speichern'}
+      </button>
+
+      {/* Date blocks */}
+      <div className="space-y-3 pt-2 border-t border-white/5">
+        <p className="text-xs font-semibold text-white/40 uppercase tracking-widest pt-2">Nicht verfügbar an</p>
+        <p className="text-xs text-white/30">Trag Urlaub, Krankheit oder einzelne freie Tage ein. Der Agent schlägt diese Tage nicht vor.</p>
+
+        {blocks.length > 0 && (
+          <div className="space-y-1.5">
+            {blocks.map((b) => (
+              <div key={b.id} className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2">
+                <div>
+                  <span className="text-sm text-white font-medium">{b.date}</span>
+                  {b.reason && <span className="ml-2 text-xs text-white/40">{b.reason}</span>}
+                </div>
+                <button
+                  onClick={() => handleRemoveBlock(b.id)}
+                  className="text-xs text-red-400/60 hover:text-red-400 transition-colors"
+                >
+                  Entfernen
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <input
+            type="date"
+            value={newBlockDate}
+            onChange={(e) => setNewBlockDate(e.target.value)}
+            className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+          />
+          <input
+            type="text"
+            value={newBlockReason}
+            onChange={(e) => setNewBlockReason(e.target.value)}
+            placeholder="Grund (optional)"
+            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+          />
+          <button
+            onClick={handleAddBlock}
+            disabled={!newBlockDate}
+            className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-white/10 hover:bg-white/15 disabled:opacity-30 transition-all"
+          >
+            Sperren
+          </button>
+        </div>
+      </div>
+
+      {/* Upcoming bookings */}
+      {bookings.length > 0 && (
+        <div className="space-y-2 pt-2 border-t border-white/5">
+          <p className="text-xs font-semibold text-white/40 uppercase tracking-widest pt-2">Kommende Termine</p>
+          {bookings.map((b) => (
+            <div key={b.id} className="rounded-xl bg-white/5 px-4 py-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-white">{b.customer_name}</span>
+                <span className="text-xs text-orange-400">
+                  {new Date(b.slot_time).toLocaleString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+              <div className="text-xs text-white/40 mt-0.5">
+                {b.customer_phone}{b.service ? ` · ${b.service}` : ''}{b.notes ? ` · ${b.notes}` : ''}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
