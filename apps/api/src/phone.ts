@@ -184,17 +184,32 @@ export async function registerPhone(app: FastifyInstance) {
 
       // Find an existing German address for regulatory compliance
       const addresses = await client.addresses.list({ isoCountry: 'DE', limit: 1 });
-      const addressSid = addresses[0]?.sid;
-      if (!addressSid) return reply.status(400).send({ error: 'Keine deutsche Adresse in Twilio hinterlegt. Bitte zuerst eine Adresse im Twilio-Dashboard anlegen.' });
+      const address = addresses[0];
+      if (!address) return reply.status(400).send({ error: 'Keine deutsche Adresse in Twilio hinterlegt. Bitte zuerst eine Adresse im Twilio-Dashboard anlegen.' });
 
-      const available = await client.availablePhoneNumbers('DE').local.list({ limit: 1 });
-      const first = available[0];
-      if (!first) return reply.status(400).send({ error: 'Keine deutschen Nummern verfügbar. Bitte später erneut versuchen.' });
+      // Search numbers in the same city as the registered address to avoid address mismatch
+      const searchOpts: Record<string, unknown> = { limit: 5 };
+      if (address.city) searchOpts.inLocality = address.city;
 
-      const purchased = await client.incomingPhoneNumbers.create({
-        phoneNumber: first.phoneNumber,
-        addressSid,
-      });
+      const available = await client.availablePhoneNumbers('DE').local.list(searchOpts);
+      if (!available.length) return reply.status(400).send({ error: `Keine Nummern in ${address.city ?? 'Deutschland'} verfügbar. Bitte später erneut versuchen.` });
+
+      // Try each available number until one works (some may still fail)
+      let purchased: { phoneNumber: string } | null = null;
+      let lastError = '';
+      for (const candidate of available) {
+        try {
+          purchased = await client.incomingPhoneNumbers.create({
+            phoneNumber: candidate.phoneNumber,
+            addressSid: address.sid,
+          });
+          break;
+        } catch (e: unknown) {
+          lastError = e instanceof Error ? e.message : String(e);
+          continue;
+        }
+      }
+      if (!purchased) return reply.status(500).send({ error: `Keine Nummer konnte aktiviert werden: ${lastError}` });
       purchasedNumber = purchased.phoneNumber;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Twilio-Fehler';
