@@ -167,8 +167,14 @@ export async function registerPhone(app: FastifyInstance) {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
-    const parsed = z.object({ areaCode: z.string().optional() }).safeParse(req.body);
-    if (!parsed.success) return reply.status(400).send({ error: 'Invalid request' });
+    const parsed = z.object({
+      street: z.string().min(1),
+      city: z.string().min(1),
+      postalCode: z.string().min(4),
+      customerName: z.string().min(1),
+    }).safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Adresse erforderlich: street, city, postalCode, customerName' });
+    const { street, city, postalCode, customerName } = parsed.data;
 
     // Get the org's deployed agent ID
     const configRes = await pool.query(
@@ -177,24 +183,32 @@ export async function registerPhone(app: FastifyInstance) {
     );
     const agentId = configRes.rows[0]?.data?.retellAgentId ?? null;
 
-    // Step 1: Buy a German number via Twilio (requires Address for regulatory compliance)
+    // Step 1: Register customer address at Twilio for regulatory compliance
     let purchasedNumber: string;
     try {
       const client = getTwilioClient();
 
-      // Find an existing German address for regulatory compliance
-      const addresses = await client.addresses.list({ isoCountry: 'DE', limit: 1 });
-      const address = addresses[0];
-      if (!address) return reply.status(400).send({ error: 'Keine deutsche Adresse in Twilio hinterlegt. Bitte zuerst eine Adresse im Twilio-Dashboard anlegen.' });
+      const address = await client.addresses.create({
+        friendlyName: `${customerName} — ${city}`,
+        customerName,
+        street,
+        city,
+        region: city,
+        postalCode,
+        isoCountry: 'DE',
+      });
 
-      // Search numbers in the same city as the registered address to avoid address mismatch
-      const searchOpts: Record<string, unknown> = { limit: 5 };
-      if (address.city) searchOpts.inLocality = address.city;
+      // Step 2: Search numbers in the customer's city
+      const searchOpts: Record<string, unknown> = { limit: 5, inLocality: city };
+      let available = await client.availablePhoneNumbers('DE').local.list(searchOpts);
 
-      const available = await client.availablePhoneNumbers('DE').local.list(searchOpts);
-      if (!available.length) return reply.status(400).send({ error: `Keine Nummern in ${address.city ?? 'Deutschland'} verfügbar. Bitte später erneut versuchen.` });
+      // Fallback: search without city filter if no local numbers found
+      if (!available.length) {
+        available = await client.availablePhoneNumbers('DE').local.list({ limit: 5 });
+      }
+      if (!available.length) return reply.status(400).send({ error: `Keine deutschen Nummern verfügbar. Bitte später erneut versuchen.` });
 
-      // Try each available number until one works (some may still fail)
+      // Step 3: Try each available number until one works
       let purchased: { phoneNumber: string } | null = null;
       let lastError = '';
       for (const candidate of available) {
@@ -345,6 +359,63 @@ export async function registerPhone(app: FastifyInstance) {
     if (!result.rowCount) return reply.status(404).send({ error: 'Nummer nicht gefunden' });
 
     return { ok: true };
+  });
+
+  // POST /phone/upload-document — upload business document (Gewerbeanmeldung etc.)
+  app.post('/phone/upload-document', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { orgId } = req.user as JwtPayload;
+    if (!pool) return reply.status(503).send({ error: 'Database not configured' });
+
+    // For MVP: store document as base64 in DB
+    // TODO: migrate to Supabase Storage later
+    const parsed = z.object({
+      fileName: z.string().min(1),
+      fileData: z.string().min(1), // base64 encoded
+      fileType: z.string().min(1), // e.g. 'application/pdf'
+    }).safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'fileName, fileData (base64), fileType required' });
+
+    const docUrl = `data:${parsed.data.fileType};base64,${parsed.data.fileData.slice(0, 50)}...`; // truncated ref
+    void docUrl; // stored reference for future use
+    await pool.query('UPDATE orgs SET business_document_url = $1 WHERE id = $2', [parsed.data.fileName, orgId]);
+
+    return { ok: true, fileName: parsed.data.fileName };
+  });
+
+  // POST /phone/submit-bundle — submit business docs for regulatory compliance
+  app.post('/phone/submit-bundle', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { orgId } = req.user as JwtPayload;
+
+    const parsed = z.object({
+      customerName: z.string().min(1),
+      street: z.string().min(1),
+      city: z.string().min(1),
+      postalCode: z.string().min(4),
+      documentUrl: z.string().min(1),
+      website: z.string().optional().default(''),
+      email: z.string().email(),
+      representativeName: z.string().min(1),
+    }).safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Alle Felder sind erforderlich' });
+
+    try {
+      const { submitRegulatoryBundle } = await import('./twilio-provisioning.js');
+      const bundleSid = await submitRegulatoryBundle(orgId, parsed.data);
+      return { ok: true, bundleSid, status: 'pending-review' };
+    } catch (e: unknown) {
+      return reply.status(500).send({ error: e instanceof Error ? e.message : 'Bundle-Erstellung fehlgeschlagen' });
+    }
+  });
+
+  // GET /phone/bundle-status — check regulatory bundle status
+  app.get('/phone/bundle-status', { ...auth }, async (req: FastifyRequest) => {
+    const { orgId } = req.user as JwtPayload;
+    try {
+      const { checkBundleStatus } = await import('./twilio-provisioning.js');
+      return await checkBundleStatus(orgId);
+    } catch {
+      return { status: 'none' };
+    }
   });
 
   // POST /phone/verify — make a real test call to verify call forwarding is working

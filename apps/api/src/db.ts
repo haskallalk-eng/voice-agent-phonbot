@@ -119,6 +119,18 @@ export async function migrate() {
   await pool.query(`alter table orgs add column if not exists minutes_used int not null default 0;`);
   await pool.query(`alter table orgs add column if not exists minutes_limit int not null default 100;`);
 
+  // Twilio subaccount + regulatory compliance
+  await pool.query(`ALTER TABLE orgs ADD COLUMN IF NOT EXISTS twilio_subaccount_sid text;`);
+  await pool.query(`ALTER TABLE orgs ADD COLUMN IF NOT EXISTS twilio_address_sid text;`);
+  await pool.query(`ALTER TABLE orgs ADD COLUMN IF NOT EXISTS twilio_bundle_sid text;`);
+  await pool.query(`ALTER TABLE orgs ADD COLUMN IF NOT EXISTS twilio_bundle_status text DEFAULT 'none';`);
+  // bundle_status: none | draft | pending-review | in-review | twilio-approved | twilio-rejected
+  await pool.query(`ALTER TABLE orgs ADD COLUMN IF NOT EXISTS business_street text;`);
+  await pool.query(`ALTER TABLE orgs ADD COLUMN IF NOT EXISTS business_city text;`);
+  await pool.query(`ALTER TABLE orgs ADD COLUMN IF NOT EXISTS business_postal_code text;`);
+  await pool.query(`ALTER TABLE orgs ADD COLUMN IF NOT EXISTS business_document_url text;`);
+  await pool.query(`ALTER TABLE orgs ADD COLUMN IF NOT EXISTS business_website text;`);
+
   // ── Minimal, idempotent schema creation (MVP) ─────────────────────────────
 
   await pool.query(`
