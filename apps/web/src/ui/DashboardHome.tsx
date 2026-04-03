@@ -5,10 +5,12 @@ import {
   getCalls,
   getTickets,
   getAgentConfig,
+  getChippyBookings,
   type BillingStatus,
   type RetellCall,
   type Ticket,
   type AgentConfig,
+  type ChippyBooking,
 } from '../lib/api.js';
 import type { Page } from './App.js';
 import { SkeletonCard } from '../components/ui.js';
@@ -91,17 +93,21 @@ export function DashboardHome({ onNavigate }: Props) {
   const { data, isLoading: loading, error: queryError } = useQuery({
     queryKey: ['dashboard'],
     queryFn: async () => {
-      const [b, c, t, a] = await Promise.all([
+      const bookingsFrom = new Date().toISOString().slice(0, 10);
+      const bookingsTo = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+      const [b, c, t, a, bk] = await Promise.all([
         getBillingStatus().catch((err) => { console.error('getBillingStatus failed', err); return null; }),
         getCalls().catch((err) => { console.error('getCalls failed', err); return { items: [] as RetellCall[] }; }),
         getTickets().catch((err) => { console.error('getTickets failed', err); return { items: [] as Ticket[] }; }),
         getAgentConfig().catch((err) => { console.error('getAgentConfig failed', err); return null; }),
+        getChippyBookings(bookingsFrom, bookingsTo).catch(() => ({ bookings: [] as ChippyBooking[] })),
       ]);
       return {
         billing: b,
         calls: c?.items ?? [],
         tickets: t?.items ?? [],
         agentConfig: a,
+        bookings: bk?.bookings ?? [],
       };
     },
   });
@@ -110,7 +116,13 @@ export function DashboardHome({ onNavigate }: Props) {
   const calls = data?.calls ?? [];
   const tickets = data?.tickets ?? [];
   const agentConfig = data?.agentConfig ?? null;
+  const bookings = data?.bookings ?? [];
   const error = queryError ? 'Daten konnten nicht geladen werden' : null;
+
+  // Upcoming bookings – sorted by slot_time, max 4
+  const upcomingBookings = [...bookings]
+    .sort((a, b) => new Date(a.slot_time).getTime() - new Date(b.slot_time).getTime())
+    .slice(0, 4);
 
   // Derived stats
   const todayStart = new Date();
@@ -346,7 +358,7 @@ export function DashboardHome({ onNavigate }: Props) {
       </div>
 
       {/* Bottom Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Calls */}
         <div className="glass rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
@@ -431,6 +443,44 @@ export function DashboardHome({ onNavigate }: Props) {
                   </div>
                   <span className="text-xs text-white/40 shrink-0 ml-2">
                     {new Date(t.created_at).toLocaleDateString('de-DE')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Nächste Termine */}
+        <div className="glass rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-white font-semibold">Nächste Termine</h3>
+            <button onClick={() => onNavigate('calendar')} className="text-xs text-white/40 hover:text-white/70 transition-colors">
+              Kalender →
+            </button>
+          </div>
+          {upcomingBookings.length === 0 ? (
+            <div className="text-center py-8 text-white/30">
+              <IconCalendar size={32} className="mx-auto mb-2 opacity-30" />
+              <p className="text-sm font-medium text-white/40 mb-1">Keine Termine</p>
+              <p className="text-xs text-white/25">Termine werden automatisch vom Agent gebucht.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {upcomingBookings.map(b => (
+                <div key={b.id} className="flex items-center justify-between px-4 py-3 bg-white/5 rounded-xl">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-lg bg-orange-500/15 flex items-center justify-center shrink-0">
+                      <span className="text-xs font-bold text-orange-400">
+                        {new Date(b.slot_time).getDate()}.{(new Date(b.slot_time).getMonth()+1)}
+                      </span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm text-white truncate">{b.customer_name}</p>
+                      <p className="text-xs text-white/40 truncate">{b.service ?? 'Termin'}</p>
+                    </div>
+                  </div>
+                  <span className="text-xs text-white/50 shrink-0 ml-2">
+                    {new Date(b.slot_time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr
                   </span>
                 </div>
               ))}

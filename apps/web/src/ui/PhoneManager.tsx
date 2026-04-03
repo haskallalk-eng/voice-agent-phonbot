@@ -1,271 +1,386 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getPhoneNumbers,
+  getAgentConfigs,
   setupForwarding,
+  provisionPhoneNumber,
+  verifyPhoneNumber,
   type PhoneNumber,
+  type AgentConfig,
 } from '../lib/api.js';
-import { EmptyState, SkeletonCard } from '../components/ui.js';
+import { SkeletonCard, EmptyState, Card, Button, StatusBadge, PageHeader, Spinner } from '../components/ui.js';
+import { IconPhone, IconAgent } from './PhonbotIcons.js';
 
-type Tab = 'my-numbers' | 'provision' | 'forward';
+/* ── Helpers ──────────────────────────────────────────── */
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+      className="text-xs text-white/30 hover:text-orange-400 transition-colors px-2 py-1 rounded-lg hover:bg-white/5"
+      aria-label="Nummer kopieren"
+    >
+      {copied ? '✓ Kopiert' : 'Kopieren'}
+    </button>
+  );
+}
+
+function SectionHeader({ title, description }: { title: string; description?: string }) {
+  return (
+    <div className="mb-4">
+      <h3 className="text-lg font-semibold text-white">{title}</h3>
+      {description && <p className="text-sm text-white/50 mt-0.5">{description}</p>}
+    </div>
+  );
+}
+
+/* ── Device Tutorial Card ─────────────────────────────── */
+
+const DEVICE_ICONS: Record<string, string> = {
+  iphone: '📱',
+  android: '📱',
+  fritzbox: '🖥️',
+};
+const DEVICE_LABELS: Record<string, string> = {
+  iphone: 'iPhone',
+  android: 'Android',
+  fritzbox: 'Fritzbox / Festnetz',
+};
+
+function DeviceTutorial({ device, instruction, forwardTo }: { device: string; instruction: string; forwardTo: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="glass rounded-2xl overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/5 transition-colors text-left"
+        aria-expanded={open}
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-xl">{DEVICE_ICONS[device] ?? '📞'}</span>
+          <span className="font-medium text-white">{DEVICE_LABELS[device] ?? device}</span>
+        </div>
+        <svg className={`w-4 h-4 text-white/40 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="px-5 pb-5 space-y-3 border-t border-white/5 pt-4">
+          <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-3 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-white/40 mb-0.5">Weiterleiten an:</p>
+              <p className="text-sm font-mono font-bold text-orange-400">{forwardTo}</p>
+            </div>
+            <CopyButton text={forwardTo} />
+          </div>
+          <div className="text-sm text-white/60 leading-relaxed whitespace-pre-line">{instruction}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Number Card ──────────────────────────────────────── */
+
+function NumberCard({
+  num,
+  agents,
+  onVerify,
+}: {
+  num: PhoneNumber;
+  agents: AgentConfig[];
+  onVerify: (id: string) => void;
+}) {
+  const [verifying, setVerifying] = useState(false);
+  const agentName = agents.find(a => a.retellAgentId)?.name ?? 'Agent';
+
+  async function handleVerify() {
+    setVerifying(true);
+    try { await onVerify(num.id); } finally { setVerifying(false); }
+  }
+
+  return (
+    <Card className="flex items-center justify-between gap-4">
+      <div className="flex items-center gap-4 min-w-0">
+        <div className="w-12 h-12 rounded-xl bg-orange-500/15 flex items-center justify-center shrink-0">
+          <IconPhone size={22} className="text-orange-400" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-lg font-bold text-white tracking-wide">{num.number_pretty ?? num.number}</p>
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <span className="text-xs text-white/40 flex items-center gap-1">
+              <IconAgent size={12} className="text-white/30" />
+              {agentName}
+            </span>
+            <span className="text-xs text-white/20">·</span>
+            <span className="text-xs text-white/40">
+              {num.method === 'forwarding' ? 'Rufumleitung' : 'Direktnummer'}
+            </span>
+            <span className="text-xs text-white/20">·</span>
+            {num.verified ? (
+              <StatusBadge status="success">Verifiziert</StatusBadge>
+            ) : (
+              <StatusBadge status="warning">Ausstehend</StatusBadge>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        {!num.verified && (
+          <Button variant="primary" loading={verifying} onClick={handleVerify}>
+            Überprüfen
+          </Button>
+        )}
+        <CopyButton text={num.number} />
+      </div>
+    </Card>
+  );
+}
+
+/* ── Main Component ───────────────────────────────────── */
 
 export function PhoneManager() {
-  const [tab, setTab] = useState<Tab>('my-numbers');
-  const [numbers, setNumbers] = useState<PhoneNumber[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const [provisionResult] = useState<{ number: string; numberPretty: string } | null>(null);
+  const { data, isLoading } = useQuery({
+    queryKey: ['phone-manager'],
+    queryFn: async () => {
+      const [phones, agentRes] = await Promise.all([
+        getPhoneNumbers(),
+        getAgentConfigs(),
+      ]);
+      return { numbers: phones.items, agents: agentRes.items };
+    },
+  });
+
+  const numbers = data?.numbers ?? [];
+  const agents = data?.agents ?? [];
+
+  // Provision form
+  const [showProvision, setShowProvision] = useState(false);
+  const [areaCode, setAreaCode] = useState('030');
+  const [provisioning, setProvisioning] = useState(false);
+  const [provisionSuccess, setProvisionSuccess] = useState<string | null>(null);
+  const [provisionError, setProvisionError] = useState<string | null>(null);
 
   // Forwarding form
+  const [showForward, setShowForward] = useState(false);
   const [forwardNumber, setForwardNumber] = useState('');
   const [forwarding, setForwarding] = useState(false);
   const [forwardResult, setForwardResult] = useState<{ forwardTo: string; instructions: Record<string, string> } | null>(null);
+  const [forwardError, setForwardError] = useState<string | null>(null);
 
-  async function loadNumbers() {
+  async function handleProvision() {
+    setProvisioning(true);
+    setProvisionError(null);
     try {
-      setLoading(true);
-      const res = await getPhoneNumbers();
-      setNumbers(res.items);
+      const res = await provisionPhoneNumber(areaCode);
+      setProvisionSuccess(res.numberPretty || res.number);
+      setShowProvision(false);
+      queryClient.invalidateQueries({ queryKey: ['phone-manager'] });
     } catch (e: unknown) {
-      setError((e instanceof Error ? e.message : null) ?? 'Fehler beim Laden');
+      setProvisionError(e instanceof Error ? e.message : 'Fehler beim Aktivieren');
     } finally {
-      setLoading(false);
+      setProvisioning(false);
     }
   }
 
-  useEffect(() => { loadNumbers(); }, []);
-
-
   async function handleForward() {
     setForwarding(true);
-    setError(null);
-    setForwardResult(null);
+    setForwardError(null);
     try {
       const res = await setupForwarding(forwardNumber);
       setForwardResult(res);
-      await loadNumbers();
+      queryClient.invalidateQueries({ queryKey: ['phone-manager'] });
     } catch (e: unknown) {
-      setError((e instanceof Error ? e.message : null) ?? 'Fehler bei Weiterleitung');
+      setForwardError(e instanceof Error ? e.message : 'Fehler bei Weiterleitung');
     } finally {
       setForwarding(false);
     }
   }
 
-  const TABS: { id: Tab; label: string }[] = [
-    { id: 'my-numbers', label: '📋 Meine Nummern' },
-    { id: 'provision', label: '🆕 Neue Nummer' },
-    { id: 'forward', label: '↪️ Rufumleitung' },
-  ];
+  async function handleVerify(phoneId: string) {
+    await verifyPhoneNumber(phoneId);
+    queryClient.invalidateQueries({ queryKey: ['phone-manager'] });
+  }
+
+  if (isLoading) {
+    return (
+      <div className="p-6 max-w-3xl mx-auto space-y-6">
+        <SkeletonCard />
+        <SkeletonCard />
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6 max-w-2xl">
-      <h1 className="text-2xl font-bold text-white mb-1">📞 Telefonnummer</h1>
-      <p className="text-sm text-white/50 mb-4">
-        Verbinde eine Nummer mit deinem Agent — per Direktzuweisung oder Rufumleitung.
-      </p>
-      <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-3 text-sm text-orange-300 mb-6 flex items-center gap-2">
-        🎁 <span><strong>Starter-Plan und höher:</strong> Eine lokale Telefonnummer ist in deinem Plan inklusive!</span>
-      </div>
+    <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
+      <PageHeader
+        title="Telefon & Nummern"
+        description="Verbinde eine Telefonnummer mit deinem Agent — per Direktnummer oder Rufumleitung."
+      />
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-white/5 border border-white/10 rounded-xl p-1 mb-6 w-fit">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              tab === t.id
-                ? 'bg-white/10 text-white shadow-sm'
-                : 'text-white/40 hover:text-white/70'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {error && (
-        <div className="mb-4 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
-          ⚠️ {error}
+      {/* ── Success Messages ── */}
+      {provisionSuccess && (
+        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 text-sm text-emerald-400 flex items-center justify-between">
+          <span>Neue Nummer aktiviert: <strong>{provisionSuccess}</strong></span>
+          <button onClick={() => setProvisionSuccess(null)} className="text-emerald-400/50 hover:text-emerald-400 ml-2" aria-label="Schließen">✕</button>
         </div>
       )}
 
-      {/* My Numbers */}
-      {tab === 'my-numbers' && (
-        <div>
-          {loading ? (
-            <SkeletonCard />
-          ) : numbers.length === 0 ? (
-            <EmptyState
-              icon={<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-              title="Noch keine Nummer verbunden"
-              description="Aktiviere eine neue Nummer oder richte eine Rufumleitung ein."
-              action={
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setTab('provision')}
-                    className="bg-gradient-to-r from-orange-500 to-cyan-500 hover:opacity-90 text-white text-sm font-medium rounded-xl px-4 py-2 transition-opacity"
-                  >
-                    Neue Nummer aktivieren
-                  </button>
-                  <button
-                    onClick={() => setTab('forward')}
-                    className="border border-white/10 bg-white/5 hover:bg-white/10 text-white/70 text-sm font-medium rounded-xl px-4 py-2 transition-colors"
-                  >
-                    Rufumleitung einrichten
-                  </button>
+      {/* ── Section 1: Active Numbers ── */}
+      <section>
+        <SectionHeader
+          title="Aktive Nummern"
+          description={numbers.length > 0 ? `${numbers.length} Nummer${numbers.length > 1 ? 'n' : ''} verbunden` : undefined}
+        />
+
+        {numbers.length === 0 ? (
+          <EmptyState
+            icon={<IconPhone size={48} className="text-white/20" />}
+            title="Noch keine Nummer verbunden"
+            description="Aktiviere eine neue Nummer oder richte eine Rufumleitung ein, damit dein Agent Anrufe entgegennehmen kann."
+            action={
+              <div className="flex gap-3">
+                <Button variant="primary" onClick={() => setShowProvision(true)}>Neue Nummer</Button>
+                <Button variant="secondary" onClick={() => setShowForward(true)}>Rufumleitung</Button>
+              </div>
+            }
+          />
+        ) : (
+          <div className="space-y-3">
+            {numbers.map(n => (
+              <NumberCard key={n.id} num={n} agents={agents} onVerify={handleVerify} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ── Section 2: Get a Number ── */}
+      {numbers.length > 0 && !showProvision && !showForward && !forwardResult && (
+        <button
+          onClick={() => setShowProvision(true)}
+          className="w-full border-2 border-dashed border-white/10 hover:border-orange-500/40 rounded-2xl py-4 text-sm text-white/30 hover:text-orange-400 transition-all"
+        >
+          + Weitere Nummer hinzufügen
+        </button>
+      )}
+
+      {(showProvision || showForward || numbers.length === 0) && !forwardResult && (
+        <section>
+          <SectionHeader title="Nummer verbinden" description="Wähle wie du eine Nummer mit deinem Agent verbinden möchtest." />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Option A: Neue Nummer */}
+            <Card className={`space-y-4 cursor-pointer transition-all ${showProvision ? 'ring-2 ring-orange-500/50' : 'hover:border-white/20'}`}
+              padding={showProvision ? 'lg' : 'md'}
+            >
+              <div onClick={() => { setShowProvision(true); setShowForward(false); }}>
+                <div className="w-10 h-10 rounded-xl bg-orange-500/15 flex items-center justify-center mb-3">
+                  <IconPhone size={20} className="text-orange-400" />
                 </div>
-              }
-            />
-          ) : (
-            <div className="space-y-3">
-              {provisionResult && (
-                <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 text-sm text-green-400 flex items-center gap-2">
-                  ✅ Neue Nummer aktiviert: <strong>{provisionResult.numberPretty || provisionResult.number}</strong>
+                <h4 className="font-semibold text-white mb-1">Neue Nummer erhalten</h4>
+                <p className="text-xs text-white/40">Deutsche Nummer erhalten und direkt mit deinem Agent verbinden.</p>
+              </div>
+
+              {showProvision && (
+                <div className="space-y-3 pt-2 border-t border-white/5">
+                  <div>
+                    <label className="block text-xs text-white/40 mb-1">Vorwahl</label>
+                    <input
+                      type="text"
+                      value={areaCode}
+                      onChange={e => setAreaCode(e.target.value)}
+                      placeholder="030"
+                      className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+                    />
+                  </div>
+                  {provisionError && <p className="text-xs text-red-400">{provisionError}</p>}
+                  <Button variant="primary" loading={provisioning} onClick={handleProvision} className="w-full">
+                    Nummer aktivieren
+                  </Button>
                 </div>
               )}
-              {numbers.map((n) => (
-                <div
-                  key={n.id}
-                  className="flex items-center justify-between glass rounded-2xl px-5 py-4"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center text-xl">
-                      📞
-                    </div>
-                    <div>
-                      <p className="font-semibold text-white">{n.number_pretty ?? n.number}</p>
-                      <p className="text-xs text-white/40 mt-0.5">
-                        {n.method === 'forwarding' ? 'Rufumleitung' : 'Direkte Nummer'}
-                        {' · '}
-                        {n.verified ? (
-                          <span className="text-green-400">✓ Verifiziert</span>
-                        ) : (
-                          <span className="text-yellow-400">⏳ Nicht verifiziert</span>
-                        )}
-                      </p>
-                    </div>
+            </Card>
+
+            {/* Option B: Rufumleitung */}
+            <Card className={`space-y-4 cursor-pointer transition-all ${showForward ? 'ring-2 ring-orange-500/50' : 'hover:border-white/20'}`}
+              padding={showForward ? 'lg' : 'md'}
+            >
+              <div onClick={() => { setShowForward(true); setShowProvision(false); }}>
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/15 flex items-center justify-center mb-3">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-cyan-400" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 17 20 12 15 7" /><path d="M4 18v-2a4 4 0 014-4h12" />
+                  </svg>
+                </div>
+                <h4 className="font-semibold text-white mb-1">Eigene Nummer weiterleiten</h4>
+                <p className="text-xs text-white/40">Behalte deine Nummer — leite Anrufe bei Besetzt an deinen Agent weiter.</p>
+              </div>
+
+              {showForward && (
+                <div className="space-y-3 pt-2 border-t border-white/5">
+                  <div>
+                    <label className="block text-xs text-white/40 mb-1">Deine Telefonnummer</label>
+                    <input
+                      type="tel"
+                      value={forwardNumber}
+                      onChange={e => setForwardNumber(e.target.value)}
+                      placeholder="+49 30 12345678"
+                      className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+                    />
                   </div>
-                  <button
-                    onClick={() => navigator.clipboard.writeText(n.number)}
-                    className="text-xs text-white/30 hover:text-orange-400 transition-colors"
-                    title="Kopieren"
-                    aria-label="Nummer kopieren"
-                  >
-                    📋
-                  </button>
+                  {forwardError && <p className="text-xs text-red-400">{forwardError}</p>}
+                  <Button variant="primary" loading={forwarding} onClick={handleForward} className="w-full" disabled={!forwardNumber.trim()}>
+                    Weiterleitung einrichten
+                  </Button>
                 </div>
-              ))}
-              <button
-                onClick={() => setTab('provision')}
-                className="w-full border-2 border-dashed border-white/10 hover:border-orange-500/40 rounded-2xl py-3 text-sm text-white/30 hover:text-orange-400 transition-all"
-              >
-                + Weitere Nummer hinzufügen
-              </button>
-            </div>
-          )}
-        </div>
+              )}
+            </Card>
+          </div>
+        </section>
       )}
 
-      {/* Provision */}
-      {tab === 'provision' && (
-        <div className="glass rounded-2xl p-6 space-y-5">
-          <div>
-            <h2 className="font-semibold text-white mb-1">Deutsche Nummer erhalten</h2>
-            <p className="text-sm text-white/50">
-              Eine deutsche Telefonnummer wird automatisch beim Kauf eines Plans für dich reserviert und sofort mit deinem Agent verbunden.
-            </p>
+      {/* ── Section 3: Forwarding Tutorial ── */}
+      {forwardResult && (
+        <section className="space-y-4">
+          <SectionHeader
+            title="Rufumleitung einrichten"
+            description="Folge der Anleitung für dein Gerät. Leite Anrufe bei Besetzt oder Nichtannahme weiter."
+          />
+
+          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-5 py-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-white/40 mb-1">Leite Anrufe weiter an:</p>
+              <p className="text-xl font-mono font-bold text-emerald-400">{forwardResult.forwardTo}</p>
+            </div>
+            <CopyButton text={forwardResult.forwardTo} />
           </div>
 
-          <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 text-sm text-green-400 space-y-1">
-            <p className="font-medium">✅ Bereits inklusive in deinem Plan</p>
-            <p className="text-green-400/70 text-xs">
-              Deine Nummer wurde automatisch beim Kauf eingerichtet. Sie erscheint oben unter "Meine Nummern".
-            </p>
+          <div className="space-y-2">
+            {Object.entries(forwardResult.instructions).map(([device, instruction]) => (
+              <DeviceTutorial
+                key={device}
+                device={device}
+                instruction={instruction}
+                forwardTo={forwardResult.forwardTo}
+              />
+            ))}
           </div>
 
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3 text-xs text-blue-400">
-            💡 Du brauchst nichts weiter zu tun — Anrufer können die Nummer direkt anrufen und dein Agent antwortet sofort.
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 text-sm text-amber-300">
+            <strong>Tipp:</strong> Wähle „Bei Besetzt" oder „Bei Nichtannahme" — so bleibt deine Nummer erreichbar und der Agent springt nur ein wenn du nicht abnimmst.
           </div>
 
-          <button
-            onClick={() => setTab('my-numbers')}
-            className="w-full bg-gradient-to-r from-orange-500 to-cyan-500 hover:opacity-90 text-white font-medium rounded-2xl py-3 text-sm transition-opacity"
+          <Button
+            variant="primary"
+            className="w-full"
+            onClick={() => { setForwardResult(null); setForwardNumber(''); setShowForward(false); }}
           >
-            Meine Nummer anzeigen →
-          </button>
-        </div>
-      )}
-
-      {/* Forward */}
-      {tab === 'forward' && (
-        <div className="space-y-5">
-          {!forwardResult ? (
-            <div className="glass rounded-2xl p-6 space-y-5">
-              <div>
-                <h2 className="font-semibold text-white mb-1">Bestehende Nummer weiterleiten</h2>
-                <p className="text-sm text-white/50">
-                  Behalte deine bisherige Nummer. Wir zeigen dir, wie du Anrufe bei Besetzt an deinen Agent weiterleitest.
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-white/70 mb-1">
-                  Deine bestehende Telefonnummer
-                </label>
-                <div className="flex gap-3">
-                  <input
-                    type="tel"
-                    value={forwardNumber}
-                    onChange={(e) => setForwardNumber(e.target.value)}
-                    placeholder="+49 30 12345678"
-                    className="flex-1 rounded-xl border border-white/10 bg-white/5 text-white px-3 py-2 text-sm
-                      placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
-                  />
-                  <button
-                    onClick={handleForward}
-                    disabled={forwarding || !forwardNumber.trim()}
-                    className="bg-gradient-to-r from-orange-500 to-cyan-500 hover:opacity-90 disabled:opacity-50 text-white font-medium rounded-xl px-5 py-2 text-sm transition-opacity"
-                  >
-                    {forwarding ? 'Speichere…' : 'Weiter →'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 text-sm text-green-400">
-                ✅ Gespeichert! Richte jetzt die Weiterleitung auf{' '}
-                <strong
-                  className="cursor-pointer underline"
-                  onClick={() => navigator.clipboard.writeText(forwardResult.forwardTo)}
-                >
-                  {forwardResult.forwardTo}
-                </strong>{' '}
-                ein:
-              </div>
-
-              {Object.entries(forwardResult.instructions).map(([device, instruction]) => (
-                <div key={device} className="glass rounded-2xl p-5">
-                  <h3 className="font-medium text-white mb-2 capitalize">
-                    {device === 'iphone' ? '📱 iPhone' : device === 'android' ? '🤖 Android' : '🏠 Fritzbox'}
-                  </h3>
-                  <p className="text-sm text-white/60">{instruction}</p>
-                </div>
-              ))}
-
-              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-4 py-3 text-sm text-yellow-400">
-                ⚠️ Tipp: Wähle „Bei Besetzt" oder „Bei Nichtannahme" — so bleibt deine Nummer erreichbar und der Agent springt nur ein wenn du nicht abnimmst.
-              </div>
-
-              <button
-                onClick={() => { setForwardResult(null); setForwardNumber(''); setTab('my-numbers'); }}
-                className="w-full bg-gradient-to-r from-orange-500 to-cyan-500 hover:opacity-90 text-white font-medium rounded-2xl py-3 text-sm transition-opacity"
-              >
-                Eingerichtet ✓ → Meine Nummern
-              </button>
-            </div>
-          )}
-        </div>
+            Fertig — Zurück zur Übersicht
+          </Button>
+        </section>
       )}
     </div>
   );
