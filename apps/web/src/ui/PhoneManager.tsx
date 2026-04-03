@@ -322,6 +322,7 @@ type BusinessFormData = {
   contactPerson: string;
   email: string;
   website: string;
+  registrationNumber: string; // HRB, USt-ID, or Steuernummer
   street: string;
   postalCode: string;
   city: string;
@@ -332,6 +333,7 @@ const emptyFormData: BusinessFormData = {
   contactPerson: '',
   email: '',
   website: '',
+  registrationNumber: '',
   street: '',
   postalCode: '',
   city: '',
@@ -393,6 +395,7 @@ function BusinessRegistrationForm({ onSubmitSuccess }: { onSubmitSuccess: () => 
     if (!form.contactPerson.trim()) errs.contactPerson = 'Ansprechpartner ist erforderlich';
     if (!form.email.trim()) errs.email = 'E-Mail ist erforderlich';
     else if (!isValidEmail(form.email)) errs.email = 'Ungültige E-Mail-Adresse';
+    if (!form.registrationNumber.trim()) errs.registrationNumber = 'Registrierungsnummer ist erforderlich';
     setErrors(errs);
     return Object.keys(errs).length === 0;
   }
@@ -479,6 +482,7 @@ function BusinessRegistrationForm({ onSubmitSuccess }: { onSubmitSuccess: () => 
         representativeName: form.contactPerson,
         email: form.email,
         website: form.website,
+        registrationNumber: form.registrationNumber,
         street: form.street,
         postalCode: form.postalCode,
         city: form.city,
@@ -558,6 +562,17 @@ function BusinessRegistrationForm({ onSubmitSuccess }: { onSubmitSuccess: () => 
               onChange={v => updateField('website', v)}
               placeholder="https://www.firma.de oder @firma"
             />
+            <div>
+              <FormInput
+                label="Registrierungsnummer"
+                value={form.registrationNumber}
+                onChange={v => updateField('registrationNumber', v)}
+                placeholder="z.B. HRB 12345, DE123456789, 21/815/12345"
+                required
+                error={errors.registrationNumber}
+              />
+              <p className="text-[11px] text-white/30 mt-1">HRB-Nummer, Umsatzsteuer-ID (USt-ID) oder Steuernummer — eins davon reicht.</p>
+            </div>
           </div>
           <Button variant="primary" className="w-full" onClick={handleNext}>
             Weiter — Adresse
@@ -694,6 +709,7 @@ function BusinessRegistrationForm({ onSubmitSuccess }: { onSubmitSuccess: () => 
               <SummaryRow label="Firmenname" value={form.companyName} />
               <SummaryRow label="Ansprechpartner" value={form.contactPerson} />
               <SummaryRow label="E-Mail" value={form.email} />
+              <SummaryRow label="Registrierungsnr." value={form.registrationNumber} />
               {form.website && <SummaryRow label="Website / Social" value={form.website} />}
             </SummarySection>
 

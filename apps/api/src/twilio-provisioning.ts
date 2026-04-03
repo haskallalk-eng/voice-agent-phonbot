@@ -43,6 +43,7 @@ export async function submitRegulatoryBundle(orgId: string, data: {
   website: string;
   email: string;
   representativeName: string;
+  registrationNumber: string; // HRB, USt-ID, or Steuernummer
   documentData?: string;   // base64-encoded file content
   documentType?: string;   // mime type, e.g. 'application/pdf'
 }): Promise<string> {
@@ -66,7 +67,7 @@ export async function submitRegulatoryBundle(orgId: string, data: {
     type: 'business',
     attributes: {
       business_name: data.customerName,
-      business_registration_number: 'pending',
+      business_registration_number: data.registrationNumber,
     },
   });
 
@@ -112,7 +113,7 @@ export async function submitRegulatoryBundle(orgId: string, data: {
     type: 'business_registration',
     attributes: {
       business_name: data.customerName,
-      business_registration_number: 'see-document',
+      business_registration_number: data.registrationNumber,
     },
   });
 

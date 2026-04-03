@@ -398,6 +398,7 @@ export async function registerPhone(app: FastifyInstance) {
       website: z.string().optional().default(''),
       email: z.string().email(),
       representativeName: z.string().min(1),
+      registrationNumber: z.string().min(1),
       documentData: z.string().optional(),   // base64-encoded file content
       documentType: z.string().optional(),   // mime type, e.g. 'application/pdf'
     }).safeParse(req.body);

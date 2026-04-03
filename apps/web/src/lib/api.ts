@@ -283,6 +283,7 @@ export function uploadPhoneDocument(fileName: string, fileData: string, fileType
 export function submitPhoneBundle(data: {
   customerName: string; street: string; city: string; postalCode: string;
   documentUrl: string; website: string; email: string; representativeName: string;
+  registrationNumber: string;
 }) {
   return request<{ ok: boolean; bundleSid: string; status: string }>('/phone/submit-bundle', {
     method: 'POST', body: JSON.stringify(data),
