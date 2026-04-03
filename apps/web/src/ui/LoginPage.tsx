@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { useAuth } from '../lib/auth.js';
 import { forgotPassword } from '../lib/api.js';
 import { FoxLogo } from './FoxLogo.js';
@@ -11,53 +12,51 @@ type Props = {
 };
 
 export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
-  const { login, register } = useAuth();
+  const { login, register: authRegister } = useAuth();
   const [mode, setMode] = useState<Mode>(initialMode);
-  const [orgName, setOrgName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  // Inline validation state
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   // Forgot password state
   const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState('');
-  const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotSuccess, setForgotSuccess] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  // Main login/register form
+  const {
+    register,
+    handleSubmit: handleFormSubmit,
+    formState: { errors, isSubmitting },
+    reset: resetMainForm,
+  } = useForm<{ orgName: string; email: string; password: string }>({ mode: 'onBlur' });
+
+  // Forgot password form
+  const {
+    register: registerForgot,
+    handleSubmit: handleForgotFormSubmit,
+    formState: { isSubmitting: isForgotSubmitting },
+    reset: resetForgotForm,
+  } = useForm<{ forgotEmail: string }>();
+
+  async function onMainSubmit(data: { orgName: string; email: string; password: string }) {
     setError(null);
-    setLoading(true);
     try {
       if (mode === 'login') {
-        await login(email, password);
+        await login(data.email, data.password);
       } else {
-        await register(orgName, email, password);
+        await authRegister(data.orgName, data.email, data.password);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Etwas ist schiefgelaufen';
       setError(msg);
-    } finally {
-      setLoading(false);
     }
   }
 
-  async function handleForgotPassword(e: React.FormEvent) {
-    e.preventDefault();
-    setForgotLoading(true);
+  async function onForgotSubmit(data: { forgotEmail: string }) {
     try {
-      await forgotPassword(forgotEmail);
+      await forgotPassword(data.forgotEmail);
       setForgotSuccess(true);
     } catch {
       // Still show success to prevent email enumeration
       setForgotSuccess(true);
-    } finally {
-      setForgotLoading(false);
     }
   }
 
@@ -95,7 +94,7 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
             type="button"
             role="tab"
             aria-selected={mode === 'login'}
-            onClick={() => { setMode('login'); setError(null); setEmailError(null); setPasswordError(null); }}
+            onClick={() => { setMode('login'); setError(null); resetMainForm(); }}
             className="flex-1 py-2 rounded-lg text-sm font-semibold transition-all duration-200"
             style={mode === 'login'
               ? { background: 'linear-gradient(135deg, #F97316, #06B6D4)', color: '#fff' }
@@ -107,7 +106,7 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
             type="button"
             role="tab"
             aria-selected={mode === 'register'}
-            onClick={() => { setMode('register'); setError(null); setEmailError(null); setPasswordError(null); }}
+            onClick={() => { setMode('register'); setError(null); resetMainForm(); }}
             className="flex-1 py-2 rounded-lg text-sm font-semibold transition-all duration-200"
             style={mode === 'register'
               ? { background: 'linear-gradient(135deg, #F97316, #06B6D4)', color: '#fff' }
@@ -126,30 +125,28 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
                 ✅ Falls ein Account mit dieser E-Mail existiert, haben wir dir einen Reset-Link gesendet.
               </div>
             ) : (
-              <form onSubmit={handleForgotPassword} className="space-y-4" aria-label="Passwort zurücksetzen">
+              <form onSubmit={handleForgotFormSubmit(onForgotSubmit)} className="space-y-4" aria-label="Passwort zurücksetzen">
                 <div>
                   <label className="block text-xs font-medium text-white/60 mb-1.5 uppercase tracking-wide">
                     E-Mail
                   </label>
                   <input
                     type="email"
-                    required
-                    value={forgotEmail}
-                    onChange={(e) => setForgotEmail(e.target.value)}
                     placeholder="du@beispiel.de"
                     className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/30
                       focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200"
+                    {...registerForgot('forgotEmail', { required: true })}
                   />
                 </div>
                 <button
                   type="submit"
-                  disabled={forgotLoading}
+                  disabled={isForgotSubmitting}
                   className="w-full rounded-xl px-4 py-3 font-semibold text-white text-sm
                     disabled:opacity-50 transition-all duration-300
                     hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] hover:scale-[1.02]"
                   style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
                 >
-                  {forgotLoading ? (
+                  {isForgotSubmitting ? (
                     <span className="flex items-center justify-center gap-2">
                       <span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white spin" />
                       Bitte warten…
@@ -161,7 +158,7 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
               </form>
             )}
             <button
-              onClick={() => { setShowForgotPassword(false); setForgotSuccess(false); setForgotEmail(''); }}
+              onClick={() => { setShowForgotPassword(false); setForgotSuccess(false); resetForgotForm(); }}
               className="mt-4 text-sm text-orange-400 hover:text-orange-300 font-medium transition-colors"
             >
               ← Zurück zum Login
@@ -169,7 +166,7 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
           </div>
         ) : (
           <>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleFormSubmit(onMainSubmit)} className="space-y-4">
               {mode === 'register' && (
                 <div>
                   <label className="block text-xs font-medium text-white/60 mb-1.5 uppercase tracking-wide">
@@ -177,14 +174,12 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
                   </label>
                   <input
                     type="text"
-                    required
-                    minLength={2}
-                    value={orgName}
-                    onChange={(e) => setOrgName(e.target.value)}
                     placeholder="Muster GmbH"
-                    className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/30
-                      focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200"
+                    className={`w-full rounded-xl bg-white/5 border px-4 py-2.5 text-sm text-white placeholder-white/30
+                      focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${errors.orgName ? 'border-red-500/60' : 'border-white/10'}`}
+                    {...register('orgName', { required: mode === 'register', minLength: { value: 2, message: 'Mindestens 2 Zeichen' } })}
                   />
+                  {errors.orgName && <p className="mt-1 text-xs text-red-400">{errors.orgName.message}</p>}
                 </div>
               )}
 
@@ -194,21 +189,18 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
                 </label>
                 <input
                   type="email"
-                  required
-                  value={email}
-                  onChange={(e) => { setEmail(e.target.value); if (emailError) setEmailError(null); }}
-                  onBlur={() => {
-                    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-                      setEmailError('Bitte gib eine gültige E-Mail-Adresse ein.');
-                    } else {
-                      setEmailError(null);
-                    }
-                  }}
                   placeholder="du@beispiel.de"
                   className={`w-full rounded-xl bg-white/5 border px-4 py-2.5 text-sm text-white placeholder-white/30
-                    focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${emailError ? 'border-red-500/60' : 'border-white/10'}`}
+                    focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${errors.email ? 'border-red-500/60' : 'border-white/10'}`}
+                  {...register('email', {
+                    required: 'E-Mail ist erforderlich',
+                    pattern: {
+                      value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                      message: 'Bitte gib eine gültige E-Mail-Adresse ein.',
+                    },
+                  })}
                 />
-                {emailError && <p className="mt-1 text-xs text-red-400">{emailError}</p>}
+                {errors.email && <p className="mt-1 text-xs text-red-400">{errors.email.message}</p>}
               </div>
 
               <div>
@@ -217,22 +209,15 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
                 </label>
                 <input
                   type="password"
-                  required
-                  minLength={8}
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); if (passwordError) setPasswordError(null); }}
-                  onBlur={() => {
-                    if (password && password.length < 8) {
-                      setPasswordError('Mindestens 8 Zeichen');
-                    } else {
-                      setPasswordError(null);
-                    }
-                  }}
                   placeholder={mode === 'register' ? 'Min. 8 Zeichen' : '••••••••'}
                   className={`w-full rounded-xl bg-white/5 border px-4 py-2.5 text-sm text-white placeholder-white/30
-                    focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${passwordError ? 'border-red-500/60' : 'border-white/10'}`}
+                    focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${errors.password ? 'border-red-500/60' : 'border-white/10'}`}
+                  {...register('password', {
+                    required: 'Passwort ist erforderlich',
+                    minLength: { value: 8, message: 'Mindestens 8 Zeichen' },
+                  })}
                 />
-                {passwordError && <p className="mt-1 text-xs text-red-400">{passwordError}</p>}
+                {errors.password && <p className="mt-1 text-xs text-red-400">{errors.password.message}</p>}
                 {mode === 'login' && (
                   <button
                     type="button"
@@ -252,13 +237,13 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={isSubmitting}
                 className="w-full rounded-xl px-4 py-3 font-semibold text-white text-sm
                   disabled:opacity-50 transition-all duration-300
                   hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] hover:scale-[1.02]"
                 style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
               >
-                {loading ? (
+                {isSubmitting ? (
                   <span className="flex items-center justify-center gap-2">
                     <span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white spin" />
                     Bitte warten…

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { IconPhone, IconInsights, IconStar } from './PhonbotIcons.js';
 import {
   getInsights,
@@ -359,8 +359,8 @@ export function InsightsPage() {
     try { await triggerConsolidation(); await load(); } finally { setConsolidating(false); }
   }
 
-  const pending = data?.suggestions.filter(s => s.status === 'pending') ?? [];
-  const applied = data?.suggestions.filter(s => s.status === 'applied' || s.status === 'auto_applied') ?? [];
+  const pending = useMemo(() => data?.suggestions.filter(s => s.status === 'pending') ?? [], [data?.suggestions]);
+  const applied = useMemo(() => data?.suggestions.filter(s => s.status === 'applied' || s.status === 'auto_applied') ?? [], [data?.suggestions]);
   const trend = data?.trend;
 
   return (

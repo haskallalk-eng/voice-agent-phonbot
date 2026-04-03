@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   getBillingStatus,
   getCalls,
@@ -87,32 +88,29 @@ const TICKET_STATUS_LABELS: Record<string, string> = {
 };
 
 export function DashboardHome({ onNavigate }: Props) {
-  const [billing, setBilling] = useState<BillingStatus | null>(null);
-  const [calls, setCalls] = useState<RetellCall[]>([]);
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['dashboard'],
+    queryFn: async () => {
+      const [b, c, t, a] = await Promise.all([
+        getBillingStatus().catch((err) => { console.error('getBillingStatus failed', err); return null; }),
+        getCalls().catch((err) => { console.error('getCalls failed', err); return { items: [] as RetellCall[] }; }),
+        getTickets().catch((err) => { console.error('getTickets failed', err); return { items: [] as Ticket[] }; }),
+        getAgentConfig().catch((err) => { console.error('getAgentConfig failed', err); return null; }),
+      ]);
+      return {
+        billing: b,
+        calls: c?.items ?? [],
+        tickets: t?.items ?? [],
+        agentConfig: a,
+      };
+    },
+  });
 
-  useEffect(() => {
-    Promise.all([
-      getBillingStatus().catch((err) => { console.error('getBillingStatus failed', err); return null; }),
-      getCalls().catch((err) => { console.error('getCalls failed', err); return { items: [] }; }),
-      getTickets().catch((err) => { console.error('getTickets failed', err); return { items: [] }; }),
-      getAgentConfig().catch((err) => { console.error('getAgentConfig failed', err); return null; }),
-    ]).then(([b, c, t, a]) => {
-      if (!b && !c?.items?.length && !t?.items?.length && !a) {
-        setError('Daten konnten nicht geladen werden');
-      }
-      setBilling(b);
-      setCalls(c?.items ?? []);
-      setTickets(t?.items ?? []);
-      setAgentConfig(a);
-    }).catch((err) => {
-      setError('Daten konnten nicht geladen werden');
-      console.error(err);
-    }).finally(() => setLoading(false));
-  }, []);
+  const billing = data?.billing ?? null;
+  const calls = data?.calls ?? [];
+  const tickets = data?.tickets ?? [];
+  const agentConfig = data?.agentConfig ?? null;
+  const error = queryError ? 'Daten konnten nicht geladen werden' : null;
 
   // Derived stats
   const todayStart = new Date();

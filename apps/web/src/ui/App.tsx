@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '../lib/auth.js';
 import { getAgentConfig, resendVerification, type AgentConfig } from '../lib/api.js';
 import { LandingPage } from './landing/index.js';
@@ -17,6 +18,16 @@ import { InsightsPage } from './InsightsPage.js';
 import { ToastProvider } from './Toast.js';
 import { FoxLogo, PhonbotBrand } from './FoxLogo.js';
 import { ChippyCopilot } from '../components/ChippyCopilot.js';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 // ── Error Boundary ─────────────────────────────────────────────────────────────
 
@@ -237,11 +248,13 @@ function AppGate() {
 export function App() {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <ToastProvider>
-          <AppGate />
-        </ToastProvider>
-      </AuthProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <ToastProvider>
+            <AppGate />
+          </ToastProvider>
+        </AuthProvider>
+      </QueryClientProvider>
     </ErrorBoundary>
   );
 }

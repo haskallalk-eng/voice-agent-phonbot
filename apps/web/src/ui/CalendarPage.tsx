@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   getCalendarStatus, connectCalcom, disconnectCalendar,
   getGoogleCalendarAuthUrl, getMicrosoftCalendarAuthUrl,
@@ -337,12 +337,22 @@ function MonthlyCalendar({
   // Monday-based: Mon=0 ... Sun=6
   const startOffset = (firstDay.getDay() + 6) % 7;
 
-  const fullDayBlockedSet = new Set(blocks.filter(b => !b.start_time).map(b => b.date));
-  const timeBlockedSet = new Set(blocks.filter(b => !!b.start_time).map(b => b.date));
+  const fullDayBlockedSet = useMemo(() => new Set(blocks.filter(b => !b.start_time).map(b => b.date)), [blocks]);
+  const timeBlockedSet = useMemo(() => new Set(blocks.filter(b => !!b.start_time).map(b => b.date)), [blocks]);
+
+  const bookingsByDay = useMemo(() => {
+    const map = new Map<string, ChippyBooking[]>();
+    for (const b of bookings) {
+      const ds = b.slot_time.slice(0, 10);
+      const arr = map.get(ds);
+      if (arr) arr.push(b);
+      else map.set(ds, [b]);
+    }
+    return map;
+  }, [bookings]);
 
   function bookingsForDay(d: Date) {
-    const ds = isoDate(d);
-    return bookings.filter(b => b.slot_time.startsWith(ds));
+    return bookingsByDay.get(isoDate(d)) ?? [];
   }
 
   function prevMonth() {

@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   getBillingPlans,
   getBillingStatus,
@@ -50,26 +51,32 @@ function PlanBadge({ status }: { status: string }) {
 }
 
 export function BillingPage() {
-  const [status, setStatus] = useState<BillingStatus | null>(null);
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [flash, setFlash] = useState<{ type: 'ok' | 'error'; text: string } | null>(null);
-  const [interval, setInterval] = useState<'month' | 'year'>('month');
-
-  useEffect(() => {
+  const [flash, setFlash] = useState<{ type: 'ok' | 'error'; text: string } | null>(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('success')) setFlash({ type: 'ok', text: 'Zahlung erfolgreich! Dein Plan wurde aktiviert.' });
-    if (params.get('canceled')) setFlash({ type: 'error', text: 'Zahlung abgebrochen.' });
+    let initial: { type: 'ok' | 'error'; text: string } | null = null;
+    if (params.get('success')) initial = { type: 'ok', text: 'Zahlung erfolgreich! Dein Plan wurde aktiviert.' };
+    if (params.get('canceled')) initial = { type: 'error', text: 'Zahlung abgebrochen.' };
     if (params.has('success') || params.has('canceled')) {
       window.history.replaceState({}, '', window.location.pathname);
     }
+    return initial;
+  });
+  const [interval, setInterval] = useState<'month' | 'year'>('month');
 
-    Promise.all([getBillingStatus(), getBillingPlans()])
-      .then(([s, p]) => { setStatus(s); setPlans(p.plans); })
-      .catch((err) => { console.error('[BillingPage] load error:', err); setFlash({ type: 'error', text: 'Billing-Daten konnten nicht geladen werden.' }); })
-      .finally(() => setLoading(false));
-  }, []);
+  const { data, isLoading: loading, error: queryError } = useQuery({
+    queryKey: ['billing'],
+    queryFn: async () => {
+      const [s, p] = await Promise.all([getBillingStatus(), getBillingPlans()]);
+      return { status: s, plans: p.plans };
+    },
+  });
+
+  const status = data?.status ?? null;
+  const plans = data?.plans ?? [];
+
+  // Merge query error into the flash display
+  const effectiveFlash = flash ?? (queryError ? { type: 'error' as const, text: 'Billing-Daten konnten nicht geladen werden.' } : null);
 
   async function handleUpgrade(planId: string) {
     setActionLoading(planId);
@@ -117,13 +124,13 @@ export function BillingPage() {
       </div>
 
       {/* Flash */}
-      {flash && (
+      {effectiveFlash && (
         <div className={`rounded-xl px-4 py-3 text-sm border ${
-          flash.type === 'ok'
+          effectiveFlash.type === 'ok'
             ? 'bg-green-500/10 text-green-400 border-green-500/20'
             : 'bg-red-500/10 text-red-400 border-red-500/20'
         }`}>
-          {flash.text}
+          {effectiveFlash.text}
           <button onClick={() => setFlash(null)} className="ml-3 opacity-50 hover:opacity-100">✕</button>
         </div>
       )}
