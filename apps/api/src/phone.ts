@@ -155,14 +155,13 @@ export async function registerPhone(app: FastifyInstance) {
     return { items: rows };
   });
 
-  // POST /phone/provision — get a new number via Retell
+  // POST /phone/provision — get a new German number via Twilio + import into Retell
   app.post('/phone/provision', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
-    const parsed = z.object({ areaCode: z.string().min(1) }).safeParse(req.body);
-    if (!parsed.success) return reply.status(400).send({ error: 'areaCode required (e.g. "30" for Berlin)' });
-    const { areaCode } = parsed.data;
+    const parsed = z.object({ areaCode: z.string().optional() }).safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Invalid request' });
 
     // Get the org's deployed agent ID
     const configRes = await pool.query(
@@ -171,22 +170,40 @@ export async function registerPhone(app: FastifyInstance) {
     );
     const agentId = configRes.rows[0]?.data?.retellAgentId ?? null;
 
+    // Step 1: Buy a German number via Twilio
+    let purchasedNumber: string;
     try {
-      const result = await retellPurchasePhoneNumber(areaCode, agentId);
-      const number = String(result.phone_number ?? result.phone_number_pretty ?? '');
-      const pretty = String(result.phone_number_pretty ?? number);
+      const client = getTwilioClient();
+      const available = await client.availablePhoneNumbers('DE').local.list({ limit: 1 });
+      const first = available[0];
+      if (!first) return reply.status(400).send({ error: 'Keine deutschen Nummern verfügbar. Bitte später erneut versuchen.' });
 
-      await pool.query(
-        `INSERT INTO phone_numbers (org_id, number, number_pretty, provider, provider_id, agent_id, method, verified)
-         VALUES ($1, $2, $3, 'retell', $4, $5, 'provisioned', true)`,
-        [orgId, number, pretty, (result.phone_number_id as string | undefined) ?? null, agentId],
-      );
-
-      return { ok: true, number, numberPretty: pretty };
+      const purchased = await client.incomingPhoneNumbers.create({ phoneNumber: first.phoneNumber });
+      purchasedNumber = purchased.phoneNumber;
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Failed to provision number';
-      return reply.status(500).send({ error: msg });
+      const msg = e instanceof Error ? e.message : 'Twilio-Fehler';
+      return reply.status(500).send({ error: `Nummer konnte nicht erworben werden: ${msg}` });
     }
+
+    // Step 2: Import into Retell for AI agent routing
+    let retellPhoneNumberId: string | null = null;
+    try {
+      const result = await retellImportPhoneNumber(purchasedNumber, agentId);
+      retellPhoneNumberId = (result.phone_number_id as string | undefined) ?? null;
+    } catch (e: unknown) {
+      process.stderr.write(`[phone] Retell import failed for ${purchasedNumber}: ${e instanceof Error ? e.message : String(e)}\n`);
+      // Continue — number is bought, save it even without Retell
+    }
+
+    // Step 3: Save to DB
+    const pretty = purchasedNumber.replace(/^\+49/, '0').replace(/(\d{3})(\d{3})(\d+)/, '$1 $2 $3');
+    await pool.query(
+      `INSERT INTO phone_numbers (org_id, number, number_pretty, provider, provider_id, agent_id, method, verified)
+       VALUES ($1, $2, $3, 'twilio', $4, $5, 'provisioned', true)`,
+      [orgId, purchasedNumber, pretty, retellPhoneNumberId, agentId],
+    );
+
+    return { ok: true, number: purchasedNumber, numberPretty: pretty };
   });
 
   // POST /phone/forward — register an existing number with call forwarding
@@ -274,6 +291,21 @@ export async function registerPhone(app: FastifyInstance) {
       const msg = e instanceof Error ? e.message : 'Failed to import number into Retell';
       return reply.status(500).send({ error: msg });
     }
+  });
+
+  // DELETE /phone/:id — remove a phone number
+  app.delete('/phone/:id', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { orgId } = req.user as JwtPayload;
+    if (!pool) return reply.status(503).send({ error: 'Database not configured' });
+
+    const { id } = req.params as { id: string };
+    const result = await pool.query(
+      `DELETE FROM phone_numbers WHERE id = $1 AND org_id = $2 RETURNING number, provider_id`,
+      [id, orgId],
+    );
+    if (!result.rowCount) return reply.status(404).send({ error: 'Nummer nicht gefunden' });
+
+    return { ok: true };
   });
 
   // POST /phone/verify — make a real test call to verify call forwarding is working

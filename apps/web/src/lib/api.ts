@@ -270,6 +270,10 @@ export function verifyPhoneNumber(phoneId: string) {
   });
 }
 
+export function deletePhoneNumber(id: string) {
+  return request<{ ok: boolean }>(`/phone/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
 // --- Chat ---
 
 export type ChatReply = { ok: boolean; reply: string };

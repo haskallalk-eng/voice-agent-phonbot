@@ -6,6 +6,7 @@ import {
   setupForwarding,
   provisionPhoneNumber,
   verifyPhoneNumber,
+  deletePhoneNumber,
   type PhoneNumber,
   type AgentConfig,
 } from '../lib/api.js';
@@ -88,12 +89,16 @@ function NumberCard({
   num,
   agents,
   onVerify,
+  onDelete,
 }: {
   num: PhoneNumber;
   agents: AgentConfig[];
   onVerify: (id: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const [verifying, setVerifying] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const agentName = agents.find(a => a.retellAgentId)?.name ?? 'Agent';
 
   async function handleVerify() {
@@ -101,40 +106,63 @@ function NumberCard({
     try { await onVerify(num.id); } finally { setVerifying(false); }
   }
 
+  async function handleDelete() {
+    setDeleting(true);
+    try { await onDelete(num.id); } finally { setDeleting(false); setConfirmDelete(false); }
+  }
+
   return (
-    <Card className="flex items-center justify-between gap-4">
-      <div className="flex items-center gap-4 min-w-0">
-        <div className="w-12 h-12 rounded-xl bg-orange-500/15 flex items-center justify-center shrink-0">
-          <IconPhone size={22} className="text-orange-400" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-lg font-bold text-white tracking-wide">{num.number_pretty ?? num.number}</p>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <span className="text-xs text-white/40 flex items-center gap-1">
-              <IconAgent size={12} className="text-white/30" />
-              {agentName}
-            </span>
-            <span className="text-xs text-white/20">·</span>
-            <span className="text-xs text-white/40">
-              {num.method === 'forwarding' ? 'Rufumleitung' : 'Direktnummer'}
-            </span>
-            <span className="text-xs text-white/20">·</span>
-            {num.verified ? (
-              <StatusBadge status="success">Verifiziert</StatusBadge>
-            ) : (
-              <StatusBadge status="warning">Ausstehend</StatusBadge>
-            )}
+    <Card className="space-y-0">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="w-12 h-12 rounded-xl bg-orange-500/15 flex items-center justify-center shrink-0">
+            <IconPhone size={22} className="text-orange-400" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-lg font-bold text-white tracking-wide">{num.number_pretty ?? num.number}</p>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <span className="text-xs text-white/40 flex items-center gap-1">
+                <IconAgent size={12} className="text-white/30" />
+                {agentName}
+              </span>
+              <span className="text-xs text-white/20">·</span>
+              <span className="text-xs text-white/40">
+                {num.method === 'forwarding' ? 'Rufumleitung' : 'Direktnummer'}
+              </span>
+              <span className="text-xs text-white/20">·</span>
+              {num.verified ? (
+                <StatusBadge status="success">Verifiziert</StatusBadge>
+              ) : (
+                <StatusBadge status="warning">Ausstehend</StatusBadge>
+              )}
+            </div>
           </div>
         </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {!num.verified && (
+            <Button variant="primary" loading={verifying} onClick={handleVerify}>
+              Überprüfen
+            </Button>
+          )}
+          <CopyButton text={num.number} />
+          <button
+            onClick={() => setConfirmDelete(true)}
+            className="text-xs text-white/20 hover:text-red-400 transition-colors p-1 rounded-lg hover:bg-red-500/10"
+            aria-label="Nummer entfernen"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+          </button>
+        </div>
       </div>
-      <div className="flex items-center gap-2 shrink-0">
-        {!num.verified && (
-          <Button variant="primary" loading={verifying} onClick={handleVerify}>
-            Überprüfen
-          </Button>
-        )}
-        <CopyButton text={num.number} />
-      </div>
+      {confirmDelete && (
+        <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
+          <p className="text-xs text-red-400">Nummer wirklich entfernen?</p>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={() => setConfirmDelete(false)}>Abbrechen</Button>
+            <Button variant="danger" loading={deleting} onClick={handleDelete}>Entfernen</Button>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
@@ -160,7 +188,6 @@ export function PhoneManager() {
 
   // Provision form
   const [showProvision, setShowProvision] = useState(false);
-  const [areaCode, setAreaCode] = useState('030');
   const [provisioning, setProvisioning] = useState(false);
   const [provisionSuccess, setProvisionSuccess] = useState<string | null>(null);
   const [provisionError, setProvisionError] = useState<string | null>(null);
@@ -176,7 +203,7 @@ export function PhoneManager() {
     setProvisioning(true);
     setProvisionError(null);
     try {
-      const res = await provisionPhoneNumber(areaCode);
+      const res = await provisionPhoneNumber('');
       setProvisionSuccess(res.numberPretty || res.number);
       setShowProvision(false);
       queryClient.invalidateQueries({ queryKey: ['phone-manager'] });
@@ -185,6 +212,11 @@ export function PhoneManager() {
     } finally {
       setProvisioning(false);
     }
+  }
+
+  async function handleDelete(phoneId: string) {
+    await deletePhoneNumber(phoneId);
+    queryClient.invalidateQueries({ queryKey: ['phone-manager'] });
   }
 
   async function handleForward() {
@@ -252,7 +284,7 @@ export function PhoneManager() {
         ) : (
           <div className="space-y-3">
             {numbers.map(n => (
-              <NumberCard key={n.id} num={n} agents={agents} onVerify={handleVerify} />
+              <NumberCard key={n.id} num={n} agents={agents} onVerify={handleVerify} onDelete={handleDelete} />
             ))}
           </div>
         )}
@@ -287,19 +319,10 @@ export function PhoneManager() {
 
               {showProvision && (
                 <div className="space-y-3 pt-2 border-t border-white/5">
-                  <div>
-                    <label className="block text-xs text-white/40 mb-1">Vorwahl</label>
-                    <input
-                      type="text"
-                      value={areaCode}
-                      onChange={e => setAreaCode(e.target.value)}
-                      placeholder="030"
-                      className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-orange-500/40"
-                    />
-                  </div>
+                  <p className="text-xs text-white/40">Eine deutsche Telefonnummer wird automatisch für dich reserviert und sofort mit deinem Agent verbunden.</p>
                   {provisionError && <p className="text-xs text-red-400">{provisionError}</p>}
                   <Button variant="primary" loading={provisioning} onClick={handleProvision} className="w-full">
-                    Nummer aktivieren
+                    Deutsche Nummer aktivieren
                   </Button>
                 </div>
               )}
