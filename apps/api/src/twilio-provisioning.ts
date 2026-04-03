@@ -1,5 +1,6 @@
 import twilio from 'twilio';
 import { pool } from './db.js';
+import { sendPhoneNumberActiveEmail } from './email.js';
 
 const MASTER_SID = process.env.TWILIO_ACCOUNT_SID!;
 const MASTER_TOKEN = process.env.TWILIO_AUTH_TOKEN!;
@@ -164,7 +165,7 @@ export async function checkBundleStatus(orgId: string): Promise<{
     [bundle.status, orgId],
   );
 
-  // If approved, auto-provision a number
+  // If approved, auto-provision a number and send email
   if (bundle.status === 'twilio-approved') {
     try {
       await autoProvisionNumber(orgId, org.twilio_address_sid, org.business_city);
@@ -173,12 +174,34 @@ export async function checkBundleStatus(orgId: string): Promise<{
     }
 
     const phoneRow = await pool.query(
-      'SELECT number FROM phone_numbers WHERE org_id = $1 LIMIT 1',
+      'SELECT number, number_pretty FROM phone_numbers WHERE org_id = $1 LIMIT 1',
       [orgId],
     );
+    const newNumber = phoneRow.rows[0];
+
+    // Send email notification to org owner
+    if (newNumber) {
+      try {
+        const orgInfo = await pool.query('SELECT name, business_city FROM orgs WHERE id = $1', [orgId]);
+        const userRow = await pool.query("SELECT email FROM users WHERE org_id = $1 AND role = 'owner' LIMIT 1", [orgId]);
+        const ownerEmail = userRow.rows[0]?.email;
+        if (ownerEmail) {
+          await sendPhoneNumberActiveEmail({
+            toEmail: ownerEmail,
+            orgName: orgInfo.rows[0]?.name ?? 'Phonbot',
+            phoneNumber: newNumber.number,
+            phoneNumberPretty: newNumber.number_pretty ?? newNumber.number,
+            city: orgInfo.rows[0]?.business_city ?? 'Deutschland',
+          });
+        }
+      } catch (e) {
+        process.stderr.write(`[twilio] Email failed: ${e instanceof Error ? e.message : String(e)}\n`);
+      }
+    }
+
     return {
       status: 'twilio-approved',
-      phoneNumber: phoneRow.rows[0]?.number ?? undefined,
+      phoneNumber: newNumber?.number ?? undefined,
     };
   }
 

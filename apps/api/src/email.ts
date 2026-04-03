@@ -115,6 +115,58 @@ export async function sendPasswordResetEmail(opts: {
   }
 }
 
+export async function sendPhoneNumberActiveEmail(opts: {
+  toEmail: string;
+  orgName: string;
+  phoneNumber: string;
+  phoneNumberPretty: string;
+  city: string;
+}) {
+  if (!resend) return;
+
+  const subject = `Deine Telefonnummer ist aktiv: ${opts.phoneNumberPretty}`;
+  const text = [
+    `Gute Nachrichten, ${opts.orgName}!`,
+    '',
+    `Deine neue Telefonnummer ${opts.phoneNumberPretty} (${opts.city}) ist jetzt aktiv.`,
+    'Dein KI-Agent nimmt ab sofort Anrufe entgegen.',
+    '',
+    'Du kannst die Nummer jetzt testen — ruf sie einfach an!',
+    '',
+    `Öffne dein Dashboard: ${process.env.APP_URL ?? 'https://phonbot.de'}`,
+  ].join('\n');
+
+  const safeOrgName = escapeHtml(opts.orgName);
+  const safeNumber = escapeHtml(opts.phoneNumberPretty);
+  const safeCity = escapeHtml(opts.city);
+  const safeAppUrl = escapeHtml(process.env.APP_URL ?? 'https://phonbot.de');
+
+  const html = `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2 style="color: #1f2937;">Deine Nummer ist aktiv! 🎉</h2>
+      <p style="color: #4b5563;">Gute Nachrichten, <strong>${safeOrgName}</strong>!</p>
+      <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 20px; margin: 16px 0; text-align: center;">
+        <p style="color: #6b7280; font-size: 13px; margin: 0 0 4px 0;">Deine neue Nummer (${safeCity})</p>
+        <p style="font-size: 28px; font-weight: 700; color: #059669; margin: 0; letter-spacing: 1px;">${safeNumber}</p>
+      </div>
+      <p style="color: #4b5563;">Dein KI-Agent nimmt ab sofort Anrufe auf dieser Nummer entgegen. Teste es — ruf die Nummer einfach an!</p>
+      <a href="${safeAppUrl}"
+         style="display: inline-block; background: linear-gradient(135deg, #f97316, #06b6d4); color: white; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-size: 14px; font-weight: 600; margin: 16px 0;">
+        Dashboard öffnen →
+      </a>
+      <p style="margin-top: 24px; font-size: 12px; color: #9ca3af;">
+        ${safeOrgName} · Phonbot Voice Agent
+      </p>
+    </div>
+  `;
+
+  try {
+    await resend.emails.send({ from: FROM_EMAIL, to: opts.toEmail, subject, text, html });
+  } catch (e: unknown) {
+    process.stderr.write(`[email] Failed to send phone number active email: ${e instanceof Error ? e.message : String(e)}\n`);
+  }
+}
+
 export async function sendVerificationEmail(opts: {
   toEmail: string;
   verifyUrl: string;
