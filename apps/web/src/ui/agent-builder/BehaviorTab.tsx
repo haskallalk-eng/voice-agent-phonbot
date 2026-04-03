@@ -25,7 +25,7 @@ export function BehaviorTab({
     <>
       {/* Base Role */}
       <SectionCard title="Grundrolle" icon={IconTemplate} collapsible>
-        <p className="text-xs text-white/40 mb-3">Legt fest wof\u00fcr der Agent haupts\u00e4chlich eingesetzt wird — setzt den Prompt zur\u00fcck.</p>
+        <p className="text-xs text-white/40 mb-3">Legt fest wof\ür der Agent haupts\ächlich eingesetzt wird — setzt den Prompt zur\ück.</p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
           {PROMPT_TEMPLATES.map((tpl) => (
             <button key={tpl.id} onClick={() => {
@@ -43,7 +43,7 @@ export function BehaviorTab({
 
       {/* Section Blocks */}
       <SectionCard title="Verhaltens-Abschnitte" icon={IconMessageSquare}>
-        <p className="text-xs text-white/40 mb-3">Aktiviere Abschnitte — jeder f\u00fcgt einen Textblock zum Prompt hinzu. Nochmal klicken entfernt ihn.</p>
+        <p className="text-xs text-white/40 mb-3">Aktiviere Abschnitte — jeder f\ügt einen Textblock zum Prompt hinzu. Nochmal klicken entfernt ihn.</p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-5">
           {PROMPT_SECTIONS.map((sec) => {
             const isActive = activePromptSections.has(sec.id);
@@ -87,7 +87,7 @@ export function BehaviorTab({
             rows={10}
             value={config.systemPrompt}
             onChange={(e) => onUpdate({ systemPrompt: e.target.value })}
-            placeholder="Aktiviere Abschnitte oben oder schreibe deinen Prompt direkt hier\u2026"
+            placeholder="Aktiviere Abschnitte oben oder schreibe deinen Prompt direkt hier\…"
           />
         </div>
 

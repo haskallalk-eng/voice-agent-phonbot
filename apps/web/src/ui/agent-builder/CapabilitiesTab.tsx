@@ -16,9 +16,9 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
   return (
     <>
       {/* Call Routing Rules */}
-      <SectionCard title="Rufweiterleitung & Gespr\u00e4chslogik" icon={IconPhoneOut}>
+      <SectionCard title="Rufweiterleitung & Gespr\ächslogik" icon={IconPhoneOut}>
         <p className="text-sm text-white/50 mb-4">
-          Definiere Regeln in nat\u00fcrlicher Sprache — der Agent erkennt die Situation und handelt automatisch.
+          Definiere Regeln in nat\ürlicher Sprache — der Agent erkennt die Situation und handelt automatisch.
         </p>
         <CallRoutingEditor
           items={config.callRoutingRules ?? []}
@@ -29,7 +29,7 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
       {/* Calendar Integrations */}
       <SectionCard title="Kalender-Anbindung" icon={IconCalendar}>
         <p className="text-sm text-white/50 mb-4">
-          Verbinde einen Kalender, damit dein Agent Termine pr\u00fcfen und buchen kann.
+          Verbinde einen Kalender, damit dein Agent Termine pr\üfen und buchen kann.
         </p>
         <CalendarConnector
           integrations={config.calendarIntegrations ?? []}
@@ -40,7 +40,7 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
       {/* API Integrations */}
       <SectionCard title="API-Integrationen" icon={IconPlug}>
         <p className="text-sm text-white/50 mb-4">
-          Verbinde externe Systeme (CRM, ERP, Buchungssysteme) — dein Agent kann w\u00e4hrend des Gespr\u00e4chs darauf zugreifen.
+          Verbinde externe Systeme (CRM, ERP, Buchungssysteme) — dein Agent kann w\ährend des Gespr\ächs darauf zugreifen.
         </p>
         <ApiIntegrationEditor
           items={config.apiIntegrations ?? []}
@@ -51,7 +51,7 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
       {/* Live Web Access */}
       <SectionCard title="Live Website-Zugriff" icon={IconGlobe}>
         <p className="text-sm text-white/50 mb-4">
-          Erlaube deinem Agent, w\u00e4hrend des Gespr\u00e4chs aktuelle Infos von Webseiten abzurufen (z.B. Preise, Verf\u00fcgbarkeit).
+          Erlaube deinem Agent, w\ährend des Gespr\ächs aktuelle Infos von Webseiten abzurufen (z.B. Preise, Verf\ügbarkeit).
         </p>
         <LiveWebAccessEditor
           config={config.liveWebAccess ?? { enabled: false, allowedDomains: [] }}
@@ -65,11 +65,11 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
 /* ── Call Routing Rules ── */
 
 const ROUTING_EXAMPLES = [
-  'Wenn der Kunde nach einer Reklamation fragt \u2192 Weiterleiten an Reklamationsabteilung',
-  'Wenn der Anrufer "Notfall" sagt \u2192 Sofort weiterleiten an +49 170 1234567',
-  'Wenn der Kunde 3x nach einem Mitarbeiter fragt \u2192 Weiterleiten an Zentrale',
-  'Wenn der Anrufer nichts sagt nach 10 Sekunden \u2192 H\u00f6flich auflegen',
-  'Wenn die Anfrage medizinisch dringend ist \u2192 Ticket erstellen mit Priorit\u00e4t Hoch',
+  'Wenn der Kunde nach einer Reklamation fragt \→ Weiterleiten an Reklamationsabteilung',
+  'Wenn der Anrufer "Notfall" sagt \→ Sofort weiterleiten an +49 170 1234567',
+  'Wenn der Kunde 3x nach einem Mitarbeiter fragt \→ Weiterleiten an Zentrale',
+  'Wenn der Anrufer nichts sagt nach 10 Sekunden \→ H\öflich auflegen',
+  'Wenn die Anfrage medizinisch dringend ist \→ Ticket erstellen mit Priorit\ät Hoch',
 ];
 
 function CallRoutingEditor({ items, onChange }: { items: CallRoutingRule[]; onChange: (v: CallRoutingRule[]) => void }) {
@@ -109,7 +109,7 @@ function CallRoutingEditor({ items, onChange }: { items: CallRoutingRule[]; onCh
           <div className="space-y-1">
             {ROUTING_EXAMPLES.slice(0, 3).map((ex, i) => (
               <button key={i} onClick={() => {
-                const parts = ex.split(' \u2192 ');
+                const parts = ex.split(' \→ ');
                 onChange([...items, {
                   id: crypto.randomUUID(),
                   description: parts[0] ?? '',
@@ -134,12 +134,12 @@ function CallRoutingEditor({ items, onChange }: { items: CallRoutingRule[]; onCh
               <textarea
                 value={rule.description}
                 onChange={(e) => patch(i, { description: e.target.value })}
-                placeholder="Beschreibe die Situation in nat\u00fcrlicher Sprache\u2026 z.B. 'Wenn der Kunde nach dem Gesch\u00e4ftsf\u00fchrer fragt'"
+                placeholder="Beschreibe die Situation in nat\ürlicher Sprache\… z.B. 'Wenn der Kunde nach dem Gesch\äftsf\ührer fragt'"
                 rows={2}
                 className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 outline-none resize-y"
               />
               <div className="flex gap-3 items-center">
-                <span className="text-xs text-white/50 shrink-0">Dann \u2192</span>
+                <span className="text-xs text-white/50 shrink-0">Dann \→</span>
                 <div className="flex gap-2">
                   {ACTION_OPTIONS.map((act) => (
                     <button key={act.id} onClick={() => patch(i, { action: act.id })}
@@ -169,7 +169,7 @@ function CallRoutingEditor({ items, onChange }: { items: CallRoutingRule[]; onCh
 
       <button onClick={add}
         className="w-full border-2 border-dashed border-white/10 hover:border-orange-500/30 rounded-xl py-3 text-sm text-white/40 hover:text-orange-400 transition-all">
-        + Neue Regel hinzuf\u00fcgen
+        + Neue Regel hinzuf\ügen
       </button>
     </div>
   );
@@ -247,7 +247,7 @@ function CalendarConnector({ integrations, onChange }: {
       </div>
 
       <div className="bg-white/5 rounded-lg px-4 py-3 text-xs text-white/50">
-        Nach der Verbindung kann dein Agent freie Termine pr\u00fcfen, Buchungen erstellen und Kalender-Konflikte erkennen.
+        Nach der Verbindung kann dein Agent freie Termine pr\üfen, Buchungen erstellen und Kalender-Konflikte erkennen.
       </div>
     </div>
   );
@@ -324,7 +324,7 @@ function ApiIntegrationEditor({ items, onChange }: { items: ApiIntegration[]; on
           )}
 
           <textarea value={api.description} onChange={(e) => patch(i, { description: e.target.value })}
-            placeholder="Wof\u00fcr soll der Agent diese API nutzen? z.B. 'Kundendaten abrufen und Bestellstatus pr\u00fcfen'"
+            placeholder="Wof\ür soll der Agent diese API nutzen? z.B. 'Kundendaten abrufen und Bestellstatus pr\üfen'"
             rows={2}
             className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-orange-500/50 outline-none resize-y" />
         </div>
@@ -332,11 +332,11 @@ function ApiIntegrationEditor({ items, onChange }: { items: ApiIntegration[]; on
 
       <button onClick={add}
         className="w-full border-2 border-dashed border-white/10 hover:border-orange-500/30 rounded-xl py-3 text-sm text-white/40 hover:text-orange-400 transition-all">
-        + API-Integration hinzuf\u00fcgen
+        + API-Integration hinzuf\ügen
       </button>
 
       <div className="bg-white/5 rounded-lg px-4 py-3 text-xs text-white/50">
-        Dein Agent kann w\u00e4hrend des Gespr\u00e4chs Daten abrufen und senden — z.B. Kundenstatus pr\u00fcfen, Bestellungen anlegen oder CRM-Eintr\u00e4ge erstellen.
+        Dein Agent kann w\ährend des Gespr\ächs Daten abrufen und senden — z.B. Kundenstatus pr\üfen, Bestellungen anlegen oder CRM-Eintr\äge erstellen.
       </div>
     </div>
   );
@@ -385,13 +385,13 @@ function LiveWebAccessEditor({ config, onChange }: { config: LiveWebAccess; onCh
                 onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addDomain())} />
               <button onClick={addDomain}
                 className="rounded-lg bg-white/10 border border-white/10 px-4 py-2 text-sm text-white/70 hover:bg-white/15 transition-colors">
-                + Hinzuf\u00fcgen
+                + Hinzuf\ügen
               </button>
             </div>
           </div>
 
           <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-3 text-xs text-orange-300">
-            Der Agent kann aktuelle Preise, Produktinfos oder Verf\u00fcgbarkeiten direkt von deiner Website lesen — in Echtzeit w\u00e4hrend des Gespr\u00e4chs.
+            Der Agent kann aktuelle Preise, Produktinfos oder Verf\ügbarkeiten direkt von deiner Website lesen — in Echtzeit w\ährend des Gespr\ächs.
           </div>
         </>
       )}

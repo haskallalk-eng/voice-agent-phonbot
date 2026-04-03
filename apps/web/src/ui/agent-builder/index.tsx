@@ -150,7 +150,7 @@ export function AgentBuilder() {
       }
       const prev = await getAgentPreview();
       setPreview(prev);
-      setStatus({ type: 'ok', text: 'Gespeichert \u2705' });
+      setStatus({ type: 'ok', text: 'Gespeichert \✅' });
     } catch {
       setStatus({ type: 'error', text: 'Speichern fehlgeschlagen' });
     } finally {
@@ -167,7 +167,7 @@ export function AgentBuilder() {
       setConfig((c) => c ? { ...c, ...result.config } : c);
       const prev = await getAgentPreview();
       setPreview(prev);
-      setStatus({ type: 'ok', text: `Deployed \u2014 Agent: ${result.retellAgentId ?? '\u2013'}` });
+      setStatus({ type: 'ok', text: `Deployed \— Agent: ${result.retellAgentId ?? '\–'}` });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unbekannter Fehler';
       setStatus({ type: 'error', text: `Deploy fehlgeschlagen: ${msg}` });
@@ -212,7 +212,7 @@ export function AgentBuilder() {
   }
 
   if (!config) {
-    return <div className="p-8 text-white/50">Lade Agent-Konfiguration\u2026</div>;
+    return <div className="p-8 text-white/50">Lade Agent-Konfiguration\…</div>;
   }
 
   /* ── LIST VIEW ── */
@@ -240,7 +240,7 @@ export function AgentBuilder() {
             onClick={() => setView('list')}
             className="shrink-0 flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer"
           >
-            <span className="text-base leading-none">\u2039</span> Agenten
+            <span className="text-base leading-none">\‹</span> Agenten
           </button>
           <div className="w-px h-4 bg-white/10" />
           <div className="min-w-0">
@@ -277,7 +277,7 @@ export function AgentBuilder() {
               {saving ? (
                 <span className="inline-block w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
               ) : null}
-              {saving ? 'Speichert\u2026' : 'Speichern'}
+              {saving ? 'Speichert\…' : 'Speichern'}
             </button>
           ) : (
             <button
@@ -287,7 +287,7 @@ export function AgentBuilder() {
               style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
             >
               <IconDeploy size={13} />
-              {deploying ? 'Deploying\u2026' : 'Deploy'}
+              {deploying ? 'Deploying\…' : 'Deploy'}
             </button>
           )}
         </div>

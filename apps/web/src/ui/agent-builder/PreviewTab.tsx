@@ -29,7 +29,7 @@ export function PreviewTab({ config, preview, voices, deploying, onDeploy, onPre
             className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white disabled:opacity-50 transition-all cursor-pointer hover:opacity-90"
             style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
           >
-            {deploying ? 'Deploying\u2026' : <><IconDeploy size={13} />Jetzt deployen</>}
+            {deploying ? 'Deploying\…' : <><IconDeploy size={13} />Jetzt deployen</>}
           </button>
         </div>
       </div>
@@ -72,12 +72,12 @@ export function PreviewTab({ config, preview, voices, deploying, onDeploy, onPre
               <span className="text-xs font-semibold text-white/70">Aktive Stimme</span>
             </div>
             <div className="rounded-xl bg-white/[0.04] border border-white/[0.07] px-3 py-2.5 mt-2 min-w-0">
-              <p className="text-xs font-medium text-white truncate">{config.voice || '\u2014'}</p>
+              <p className="text-xs font-medium text-white truncate">{config.voice || '\—'}</p>
               {(() => {
                 const v = voices.find(x => x.voice_id === config.voice);
                 return v ? (
                   <p className="text-[10px] text-white/35 mt-0.5 truncate">
-                    {v.voice_name}{' \u00b7 '}
+                    {v.voice_name}{' \· '}
                     {v.voice_type === 'cloned'
                       ? <span className="text-cyan-400">Eigene Stimme</span>
                       : <span>{v.provider ?? 'Built-in'}</span>}
@@ -86,7 +86,7 @@ export function PreviewTab({ config, preview, voices, deploying, onDeploy, onPre
               })()}
             </div>
             <p className="text-[10px] text-white/25 mt-1.5">
-              Stimme \u00e4ndern im Tab <span className="text-white/45">Identit\u00e4t</span>.
+              Stimme \ändern im Tab <span className="text-white/45">Identit\ät</span>.
             </p>
           </div>
 

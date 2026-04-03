@@ -73,7 +73,7 @@ export function VoiceDropdown({
         onClick={onOpenToggle}
         className="w-full flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-orange-500/50 outline-none"
       >
-        <span className="truncate">{loading ? 'Stimmen werden geladen\u2026' : displayLabel}</span>
+        <span className="truncate">{loading ? 'Stimmen werden geladen\…' : displayLabel}</span>
         <IconChevronDown size={16} className="ml-2 text-white/40 shrink-0" />
       </button>
       {dropdownOpen && (
@@ -86,7 +86,7 @@ export function VoiceDropdown({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Stimme suchen\u2026"
+              placeholder="Stimme suchen\…"
               className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm text-white placeholder:text-white/30 focus:border-orange-500/50 outline-none"
               onClick={(e) => e.stopPropagation()}
             />
@@ -139,18 +139,18 @@ export function VoiceDropdown({
           {/* No search results */}
           {search && cloned.length === 0 && Object.keys(providerGroups).length === 0 && (
             <div className="px-4 py-6 text-sm text-white/40 text-center">
-              Keine Stimmen f\u00fcr \u201e{search}\u201c gefunden.
+              Keine Stimmen f\ür \„{search}\“ gefunden.
             </div>
           )}
 
           {/* Fallback: no voices loaded yet */}
           {voices.length === 0 && !loading && !search && (
             <div className="px-4 py-4 text-sm text-white/40 text-center">
-              Keine Stimmen geladen. Pr\u00fcfe deine Retell API-Verbindung.
+              Keine Stimmen geladen. Pr\üfe deine Retell API-Verbindung.
             </div>
           )}
           {loading && (
-            <div className="px-4 py-4 text-sm text-white/40 text-center">Stimmen werden geladen\u2026</div>
+            <div className="px-4 py-4 text-sm text-white/40 text-center">Stimmen werden geladen\…</div>
           )}
         </div>
       )}

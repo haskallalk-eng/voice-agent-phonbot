@@ -57,7 +57,7 @@ export function AgentListView({
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-white truncate">{agent.name || 'Unbenannter Agent'}</p>
-              <p className="text-xs text-white/40 truncate mt-0.5">{agent.businessName || '\u2014'}</p>
+              <p className="text-xs text-white/40 truncate mt-0.5">{agent.businessName || '\—'}</p>
             </div>
             <div className="flex items-center gap-3 shrink-0">
               {agent.retellAgentId ? (
@@ -68,7 +68,7 @@ export function AgentListView({
               ) : (
                 <span className="text-xs text-amber-400/70 bg-amber-500/10 border border-amber-500/15 px-2.5 py-1 rounded-full font-medium">Entwurf</span>
               )}
-              <span className="text-xs text-white/30 group-hover:text-white/60 transition-colors">Bearbeiten \u2192</span>
+              <span className="text-xs text-white/30 group-hover:text-white/60 transition-colors">Bearbeiten \→</span>
             </div>
           </div>
         ))}
@@ -81,7 +81,7 @@ export function AgentListView({
           disabled={creatingAgent}
           className="w-full rounded-2xl border border-dashed border-white/10 hover:border-orange-500/30 py-4 text-sm text-white/30 hover:text-orange-400/70 disabled:opacity-50 transition-all duration-200 cursor-pointer"
         >
-          {creatingAgent ? 'Wird erstellt\u2026' : '+ Neuen Agenten erstellen'}
+          {creatingAgent ? 'Wird erstellt\…' : '+ Neuen Agenten erstellen'}
         </button>
       ) : (
         <div className="relative">

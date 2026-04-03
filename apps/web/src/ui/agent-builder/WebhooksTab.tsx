@@ -12,7 +12,7 @@ export function WebhooksTab({ config, onUpdate }: WebhooksTabProps) {
     <>
       <SectionCard title="Variablen extrahieren" icon={IconFileText}>
         <p className="text-sm text-white/50 mb-4">
-          Definiere welche Informationen der Agent automatisch aus Gespr\u00e4chen extrahieren soll.
+          Definiere welche Informationen der Agent automatisch aus Gespr\ächen extrahieren soll.
         </p>
         <VariableEditor
           items={config.extractedVariables ?? []}
@@ -73,7 +73,7 @@ function VariableEditor({ items, onChange }: { items: ExtractedVariable[]; onCha
       ))}
       <button onClick={add}
         className="w-full border-2 border-dashed border-white/10 hover:border-orange-500/30 rounded-xl py-3 text-sm text-white/40 hover:text-orange-400 transition-all">
-        + Variable hinzuf\u00fcgen
+        + Variable hinzuf\ügen
       </button>
     </div>
   );
@@ -134,7 +134,7 @@ function WebhookEditor({ items, onChange }: { items: InboundWebhook[]; onChange:
       ))}
       <button onClick={add}
         className="w-full border-2 border-dashed border-white/10 hover:border-orange-500/30 rounded-xl py-3 text-sm text-white/40 hover:text-orange-400 transition-all">
-        + Webhook hinzuf\u00fcgen
+        + Webhook hinzuf\ügen
       </button>
     </div>
   );
