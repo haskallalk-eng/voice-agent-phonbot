@@ -10,75 +10,38 @@ import {
   type PhoneNumber,
   type AgentConfig,
 } from '../lib/api.js';
-import { SkeletonCard, EmptyState, Card, Button, StatusBadge, PageHeader, Spinner } from '../components/ui.js';
+import { SkeletonCard, EmptyState, Card, Button, StatusBadge, PageHeader } from '../components/ui.js';
 import { IconPhone, IconAgent } from './PhonbotIcons.js';
 
-/* ── Helpers ──────────────────────────────────────────── */
+/* ── Copy Button ──────────────────────────────────────── */
 
-function CopyButton({ text }: { text: string }) {
+function CopyButton({ text, label }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
       onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
       className="text-xs text-white/30 hover:text-orange-400 transition-colors px-2 py-1 rounded-lg hover:bg-white/5"
-      aria-label="Nummer kopieren"
+      aria-label={label ?? 'Kopieren'}
     >
       {copied ? '✓ Kopiert' : 'Kopieren'}
     </button>
   );
 }
 
-function SectionHeader({ title, description }: { title: string; description?: string }) {
+/* ── Copyable Code Row ────────────────────────────────── */
+
+function CodeRow({ label, code, description, recommended }: { label: string; code: string; description: string; recommended?: boolean }) {
   return (
-    <div className="mb-4">
-      <h3 className="text-lg font-semibold text-white">{title}</h3>
-      {description && <p className="text-sm text-white/50 mt-0.5">{description}</p>}
-    </div>
-  );
-}
-
-/* ── Device Tutorial Card ─────────────────────────────── */
-
-const DEVICE_ICONS: Record<string, string> = {
-  iphone: '📱',
-  android: '📱',
-  fritzbox: '🖥️',
-};
-const DEVICE_LABELS: Record<string, string> = {
-  iphone: 'iPhone',
-  android: 'Android',
-  fritzbox: 'Fritzbox / Festnetz',
-};
-
-function DeviceTutorial({ device, instruction, forwardTo }: { device: string; instruction: string; forwardTo: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="glass rounded-2xl overflow-hidden">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/5 transition-colors text-left"
-        aria-expanded={open}
-      >
-        <div className="flex items-center gap-3">
-          <span className="text-xl">{DEVICE_ICONS[device] ?? '📞'}</span>
-          <span className="font-medium text-white">{DEVICE_LABELS[device] ?? device}</span>
+    <div className={`rounded-xl px-4 py-3 flex items-center justify-between gap-3 ${recommended ? 'bg-orange-500/10 border border-orange-500/20' : 'bg-white/5 border border-white/10'}`}>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <p className="text-xs font-medium text-white/60">{label}</p>
+          {recommended && <span className="text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded-full font-semibold">Empfohlen</span>}
         </div>
-        <svg className={`w-4 h-4 text-white/40 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      {open && (
-        <div className="px-5 pb-5 space-y-3 border-t border-white/5 pt-4">
-          <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-3 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-white/40 mb-0.5">Weiterleiten an:</p>
-              <p className="text-sm font-mono font-bold text-orange-400">{forwardTo}</p>
-            </div>
-            <CopyButton text={forwardTo} />
-          </div>
-          <div className="text-sm text-white/60 leading-relaxed whitespace-pre-line">{instruction}</div>
-        </div>
-      )}
+        <p className="text-sm font-mono font-bold text-white truncate">{code}</p>
+        <p className="text-[11px] text-white/30 mt-0.5">{description}</p>
+      </div>
+      <CopyButton text={code} label={`${label} kopieren`} />
     </div>
   );
 }
@@ -86,15 +49,10 @@ function DeviceTutorial({ device, instruction, forwardTo }: { device: string; in
 /* ── Number Card ──────────────────────────────────────── */
 
 function NumberCard({
-  num,
-  agents,
-  onVerify,
-  onDelete,
+  num, agents, onVerify, onDelete,
 }: {
-  num: PhoneNumber;
-  agents: AgentConfig[];
-  onVerify: (id: string) => void;
-  onDelete: (id: string) => void;
+  num: PhoneNumber; agents: AgentConfig[];
+  onVerify: (id: string) => void; onDelete: (id: string) => void;
 }) {
   const [verifying, setVerifying] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -105,7 +63,6 @@ function NumberCard({
     setVerifying(true);
     try { await onVerify(num.id); } finally { setVerifying(false); }
   }
-
   async function handleDelete() {
     setDeleting(true);
     try { await onDelete(num.id); } finally { setDeleting(false); setConfirmDelete(false); }
@@ -140,9 +97,7 @@ function NumberCard({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {!num.verified && (
-            <Button variant="primary" loading={verifying} onClick={handleVerify}>
-              Überprüfen
-            </Button>
+            <Button variant="primary" loading={verifying} onClick={handleVerify}>Überprüfen</Button>
           )}
           <CopyButton text={num.number} />
           <button
@@ -167,6 +122,131 @@ function NumberCard({
   );
 }
 
+/* ── Carrier Code Forwarding Section ──────────────────── */
+
+type CarrierCodes = {
+  busy: string; noAnswer: string; always: string;
+  cancelBusy: string; cancelNoAnswer: string; cancelAlways: string;
+};
+
+function ForwardingTutorial({ forwardTo, carrierCodes, onDone }: {
+  forwardTo: string;
+  carrierCodes: CarrierCodes;
+  onDone: () => void;
+}) {
+  const [step, setStep] = useState(1);
+
+  return (
+    <section className="space-y-5">
+      {/* Step indicator */}
+      <div className="flex items-center gap-2">
+        {[1, 2, 3].map(s => (
+          <div key={s} className="flex items-center gap-2">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+              step === s ? 'bg-orange-500 text-white' : step > s ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/10 text-white/30'
+            }`}>
+              {step > s ? '✓' : s}
+            </div>
+            {s < 3 && <div className={`w-8 h-0.5 ${step > s ? 'bg-emerald-500/30' : 'bg-white/10'}`} />}
+          </div>
+        ))}
+      </div>
+
+      {/* Step 1: Choose method */}
+      {step === 1 && (
+        <Card padding="lg" className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold text-white mb-1">Schritt 1: Methode wählen</h3>
+            <p className="text-sm text-white/50">Wähle wann Anrufe an deinen Agent weitergeleitet werden sollen.</p>
+          </div>
+
+          <div className="space-y-2">
+            <CodeRow
+              label="Bei Nichtannahme"
+              code={carrierCodes.noAnswer}
+              description="Agent übernimmt wenn du nach 15 Sek. nicht rangehst"
+              recommended
+            />
+            <CodeRow
+              label="Bei Besetzt"
+              code={carrierCodes.busy}
+              description="Agent übernimmt wenn du in einem anderen Gespräch bist"
+            />
+            <CodeRow
+              label="Immer weiterleiten"
+              code={carrierCodes.always}
+              description="Alle Anrufe gehen direkt zum Agent"
+            />
+          </div>
+
+          <Button variant="primary" className="w-full" onClick={() => setStep(2)}>
+            Weiter — Code anrufen
+          </Button>
+        </Card>
+      )}
+
+      {/* Step 2: Dial the code */}
+      {step === 2 && (
+        <Card padding="lg" className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold text-white mb-1">Schritt 2: Code anrufen</h3>
+            <p className="text-sm text-white/50">Öffne die Telefon-App auf deinem Handy und rufe einen der Codes an. Du hörst einen Bestätigungston.</p>
+          </div>
+
+          <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-5 text-center space-y-2">
+            <p className="text-xs text-white/40">Empfohlen: Bei Nichtannahme</p>
+            <p className="text-2xl font-mono font-bold text-orange-400">{carrierCodes.noAnswer}</p>
+            <CopyButton text={carrierCodes.noAnswer} label="Code kopieren" />
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs text-white/40 space-y-1">
+            <p>1. Öffne die <strong className="text-white/60">Telefon-App</strong> auf deinem Handy</p>
+            <p>2. Tippe den Code ein (oder kopiere ihn)</p>
+            <p>3. Drücke <strong className="text-white/60">Anrufen</strong></p>
+            <p>4. Du hörst einen Bestätigungston — fertig!</p>
+          </div>
+
+          <div className="flex gap-3">
+            <Button variant="ghost" onClick={() => setStep(1)} className="flex-1">Zurück</Button>
+            <Button variant="primary" onClick={() => setStep(3)} className="flex-1">Code angerufen ✓</Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Step 3: Verify */}
+      {step === 3 && (
+        <Card padding="lg" className="space-y-4">
+          <div>
+            <h3 className="text-lg font-semibold text-white mb-1">Schritt 3: Testen</h3>
+            <p className="text-sm text-white/50">Rufe jetzt deine eigene Nummer von einem anderen Telefon an und lass es klingeln. Dein Agent sollte abnehmen.</p>
+          </div>
+
+          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-5 text-center space-y-2">
+            <svg className="mx-auto w-12 h-12 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-sm font-medium text-emerald-400">Weiterleitung eingerichtet!</p>
+            <p className="text-xs text-white/40">Teste es, indem du deine Nummer von einem anderen Telefon anrufst.</p>
+          </div>
+
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 text-xs text-amber-300 space-y-1">
+            <p><strong>Zum Deaktivieren:</strong> Einfach diesen Code anrufen:</p>
+            <div className="flex gap-2 mt-1">
+              <code className="bg-white/5 px-2 py-1 rounded text-amber-400">{carrierCodes.cancelNoAnswer}</code>
+              <code className="bg-white/5 px-2 py-1 rounded text-amber-400">{carrierCodes.cancelBusy}</code>
+              <code className="bg-white/5 px-2 py-1 rounded text-amber-400">{carrierCodes.cancelAlways}</code>
+            </div>
+          </div>
+
+          <Button variant="primary" className="w-full" onClick={onDone}>
+            Fertig — Zurück zur Übersicht
+          </Button>
+        </Card>
+      )}
+    </section>
+  );
+}
+
 /* ── Main Component ───────────────────────────────────── */
 
 export function PhoneManager() {
@@ -175,10 +255,7 @@ export function PhoneManager() {
   const { data, isLoading } = useQuery({
     queryKey: ['phone-manager'],
     queryFn: async () => {
-      const [phones, agentRes] = await Promise.all([
-        getPhoneNumbers(),
-        getAgentConfigs(),
-      ]);
+      const [phones, agentRes] = await Promise.all([getPhoneNumbers(), getAgentConfigs()]);
       return { numbers: phones.items, agents: agentRes.items };
     },
   });
@@ -186,22 +263,21 @@ export function PhoneManager() {
   const numbers = data?.numbers ?? [];
   const agents = data?.agents ?? [];
 
-  // Provision form
+  // Provision
   const [showProvision, setShowProvision] = useState(false);
   const [provisioning, setProvisioning] = useState(false);
   const [provisionSuccess, setProvisionSuccess] = useState<string | null>(null);
   const [provisionError, setProvisionError] = useState<string | null>(null);
 
-  // Forwarding form
+  // Forwarding
   const [showForward, setShowForward] = useState(false);
   const [forwardNumber, setForwardNumber] = useState('');
   const [forwarding, setForwarding] = useState(false);
-  const [forwardResult, setForwardResult] = useState<{ forwardTo: string; instructions: Record<string, string> } | null>(null);
+  const [forwardResult, setForwardResult] = useState<{ forwardTo: string; carrierCodes: CarrierCodes } | null>(null);
   const [forwardError, setForwardError] = useState<string | null>(null);
 
   async function handleProvision() {
-    setProvisioning(true);
-    setProvisionError(null);
+    setProvisioning(true); setProvisionError(null);
     try {
       const res = await provisionPhoneNumber('');
       setProvisionSuccess(res.numberPretty || res.number);
@@ -209,9 +285,18 @@ export function PhoneManager() {
       queryClient.invalidateQueries({ queryKey: ['phone-manager'] });
     } catch (e: unknown) {
       setProvisionError(e instanceof Error ? e.message : 'Fehler beim Aktivieren');
-    } finally {
-      setProvisioning(false);
-    }
+    } finally { setProvisioning(false); }
+  }
+
+  async function handleForward() {
+    setForwarding(true); setForwardError(null);
+    try {
+      const res = await setupForwarding(forwardNumber) as { forwardTo: string; carrierCodes: CarrierCodes };
+      setForwardResult(res);
+      queryClient.invalidateQueries({ queryKey: ['phone-manager'] });
+    } catch (e: unknown) {
+      setForwardError(e instanceof Error ? e.message : 'Fehler bei Weiterleitung');
+    } finally { setForwarding(false); }
   }
 
   async function handleDelete(phoneId: string) {
@@ -219,33 +304,14 @@ export function PhoneManager() {
     queryClient.invalidateQueries({ queryKey: ['phone-manager'] });
   }
 
-  async function handleForward() {
-    setForwarding(true);
-    setForwardError(null);
-    try {
-      const res = await setupForwarding(forwardNumber);
-      setForwardResult(res);
-      queryClient.invalidateQueries({ queryKey: ['phone-manager'] });
-    } catch (e: unknown) {
-      setForwardError(e instanceof Error ? e.message : 'Fehler bei Weiterleitung');
-    } finally {
-      setForwarding(false);
-    }
-  }
-
   async function handleVerify(phoneId: string) {
     await verifyPhoneNumber(phoneId);
     queryClient.invalidateQueries({ queryKey: ['phone-manager'] });
   }
 
-  if (isLoading) {
-    return (
-      <div className="p-6 max-w-3xl mx-auto space-y-6">
-        <SkeletonCard />
-        <SkeletonCard />
-      </div>
-    );
-  }
+  if (isLoading) return (
+    <div className="p-6 max-w-3xl mx-auto space-y-6"><SkeletonCard /><SkeletonCard /></div>
+  );
 
   return (
     <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
@@ -254,7 +320,7 @@ export function PhoneManager() {
         description="Verbinde eine Telefonnummer mit deinem Agent — per Direktnummer oder Rufumleitung."
       />
 
-      {/* ── Success Messages ── */}
+      {/* Success */}
       {provisionSuccess && (
         <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 text-sm text-emerald-400 flex items-center justify-between">
           <span>Neue Nummer aktiviert: <strong>{provisionSuccess}</strong></span>
@@ -262,64 +328,68 @@ export function PhoneManager() {
         </div>
       )}
 
-      {/* ── Section 1: Active Numbers ── */}
-      <section>
-        <SectionHeader
-          title="Aktive Nummern"
-          description={numbers.length > 0 ? `${numbers.length} Nummer${numbers.length > 1 ? 'n' : ''} verbunden` : undefined}
-        />
+      {/* ── Active Numbers ── */}
+      {!forwardResult && (
+        <section>
+          <h3 className="text-lg font-semibold text-white mb-4">
+            {numbers.length > 0 ? `Aktive Nummern (${numbers.length})` : 'Aktive Nummern'}
+          </h3>
 
-        {numbers.length === 0 ? (
-          <EmptyState
-            icon={<IconPhone size={48} className="text-white/20" />}
-            title="Noch keine Nummer verbunden"
-            description="Aktiviere eine neue Nummer oder richte eine Rufumleitung ein, damit dein Agent Anrufe entgegennehmen kann."
-            action={
-              <div className="flex gap-3">
-                <Button variant="primary" onClick={() => setShowProvision(true)}>Neue Nummer</Button>
-                <Button variant="secondary" onClick={() => setShowForward(true)}>Rufumleitung</Button>
-              </div>
-            }
-          />
-        ) : (
-          <div className="space-y-3">
-            {numbers.map(n => (
-              <NumberCard key={n.id} num={n} agents={agents} onVerify={handleVerify} onDelete={handleDelete} />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* ── Section 2: Get a Number ── */}
-      {numbers.length > 0 && !showProvision && !showForward && !forwardResult && (
-        <button
-          onClick={() => setShowProvision(true)}
-          className="w-full border-2 border-dashed border-white/10 hover:border-orange-500/40 rounded-2xl py-4 text-sm text-white/30 hover:text-orange-400 transition-all"
-        >
-          + Weitere Nummer hinzufügen
-        </button>
+          {numbers.length === 0 ? (
+            <EmptyState
+              icon={<IconPhone size={48} className="text-white/20" />}
+              title="Noch keine Nummer verbunden"
+              description="Aktiviere eine neue Nummer oder richte eine Rufumleitung ein, damit dein Agent Anrufe entgegennehmen kann."
+              action={
+                <div className="flex gap-3">
+                  <Button variant="primary" onClick={() => setShowProvision(true)}>Neue Nummer</Button>
+                  <Button variant="secondary" onClick={() => setShowForward(true)}>Rufumleitung</Button>
+                </div>
+              }
+            />
+          ) : (
+            <div className="space-y-3">
+              {numbers.map(n => (
+                <NumberCard key={n.id} num={n} agents={agents} onVerify={handleVerify} onDelete={handleDelete} />
+              ))}
+            </div>
+          )}
+        </section>
       )}
 
-      {(showProvision || showForward || numbers.length === 0) && !forwardResult && (
+      {/* ── Add Number Options ── */}
+      {!forwardResult && numbers.length > 0 && !showProvision && !showForward && (
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={() => setShowProvision(true)}
+            className="border-2 border-dashed border-white/10 hover:border-orange-500/40 rounded-2xl py-4 text-sm text-white/30 hover:text-orange-400 transition-all">
+            + Neue Nummer kaufen
+          </button>
+          <button onClick={() => setShowForward(true)}
+            className="border-2 border-dashed border-white/10 hover:border-cyan-500/40 rounded-2xl py-4 text-sm text-white/30 hover:text-cyan-400 transition-all">
+            + Rufumleitung einrichten
+          </button>
+        </div>
+      )}
+
+      {/* ── Provision / Forward Forms ── */}
+      {!forwardResult && (showProvision || showForward || numbers.length === 0) && (
         <section>
-          <SectionHeader title="Nummer verbinden" description="Wähle wie du eine Nummer mit deinem Agent verbinden möchtest." />
+          {(numbers.length > 0) && (
+            <h3 className="text-lg font-semibold text-white mb-4">Nummer verbinden</h3>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Option A: Neue Nummer */}
-            <Card className={`space-y-4 cursor-pointer transition-all ${showProvision ? 'ring-2 ring-orange-500/50' : 'hover:border-white/20'}`}
-              padding={showProvision ? 'lg' : 'md'}
-            >
+            {/* Option A */}
+            <Card className={`space-y-4 cursor-pointer transition-all ${showProvision ? 'ring-2 ring-orange-500/50' : 'hover:border-white/20'}`}>
               <div onClick={() => { setShowProvision(true); setShowForward(false); }}>
                 <div className="w-10 h-10 rounded-xl bg-orange-500/15 flex items-center justify-center mb-3">
                   <IconPhone size={20} className="text-orange-400" />
                 </div>
                 <h4 className="font-semibold text-white mb-1">Neue Nummer erhalten</h4>
-                <p className="text-xs text-white/40">Deutsche Nummer erhalten und direkt mit deinem Agent verbinden.</p>
+                <p className="text-xs text-white/40">Deutsche Nummer automatisch reservieren und sofort mit deinem Agent verbinden.</p>
               </div>
-
               {showProvision && (
                 <div className="space-y-3 pt-2 border-t border-white/5">
-                  <p className="text-xs text-white/40">Eine deutsche Telefonnummer wird automatisch für dich reserviert und sofort mit deinem Agent verbunden.</p>
                   {provisionError && <p className="text-xs text-red-400">{provisionError}</p>}
                   <Button variant="primary" loading={provisioning} onClick={handleProvision} className="w-full">
                     Deutsche Nummer aktivieren
@@ -328,10 +398,8 @@ export function PhoneManager() {
               )}
             </Card>
 
-            {/* Option B: Rufumleitung */}
-            <Card className={`space-y-4 cursor-pointer transition-all ${showForward ? 'ring-2 ring-orange-500/50' : 'hover:border-white/20'}`}
-              padding={showForward ? 'lg' : 'md'}
-            >
+            {/* Option B */}
+            <Card className={`space-y-4 cursor-pointer transition-all ${showForward ? 'ring-2 ring-orange-500/50' : 'hover:border-white/20'}`}>
               <div onClick={() => { setShowForward(true); setShowProvision(false); }}>
                 <div className="w-10 h-10 rounded-xl bg-cyan-500/15 flex items-center justify-center mb-3">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-cyan-400" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -339,24 +407,20 @@ export function PhoneManager() {
                   </svg>
                 </div>
                 <h4 className="font-semibold text-white mb-1">Eigene Nummer weiterleiten</h4>
-                <p className="text-xs text-white/40">Behalte deine Nummer — leite Anrufe bei Besetzt an deinen Agent weiter.</p>
+                <p className="text-xs text-white/40">Behalte deine Nummer — leite Anrufe per Carrier-Code an deinen Agent weiter.</p>
               </div>
-
               {showForward && (
                 <div className="space-y-3 pt-2 border-t border-white/5">
                   <div>
                     <label className="block text-xs text-white/40 mb-1">Deine Telefonnummer</label>
-                    <input
-                      type="tel"
-                      value={forwardNumber}
-                      onChange={e => setForwardNumber(e.target.value)}
-                      placeholder="+49 30 12345678"
+                    <input type="tel" value={forwardNumber} onChange={e => setForwardNumber(e.target.value)}
+                      placeholder="+49 170 1234567"
                       className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-orange-500/40"
                     />
                   </div>
                   {forwardError && <p className="text-xs text-red-400">{forwardError}</p>}
                   <Button variant="primary" loading={forwarding} onClick={handleForward} className="w-full" disabled={!forwardNumber.trim()}>
-                    Weiterleitung einrichten
+                    Weiter — Anleitung anzeigen
                   </Button>
                 </div>
               )}
@@ -365,45 +429,13 @@ export function PhoneManager() {
         </section>
       )}
 
-      {/* ── Section 3: Forwarding Tutorial ── */}
+      {/* ── Forwarding Tutorial with Carrier Codes ── */}
       {forwardResult && (
-        <section className="space-y-4">
-          <SectionHeader
-            title="Rufumleitung einrichten"
-            description="Folge der Anleitung für dein Gerät. Leite Anrufe bei Besetzt oder Nichtannahme weiter."
-          />
-
-          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-5 py-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-white/40 mb-1">Leite Anrufe weiter an:</p>
-              <p className="text-xl font-mono font-bold text-emerald-400">{forwardResult.forwardTo}</p>
-            </div>
-            <CopyButton text={forwardResult.forwardTo} />
-          </div>
-
-          <div className="space-y-2">
-            {Object.entries(forwardResult.instructions).map(([device, instruction]) => (
-              <DeviceTutorial
-                key={device}
-                device={device}
-                instruction={instruction}
-                forwardTo={forwardResult.forwardTo}
-              />
-            ))}
-          </div>
-
-          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3 text-sm text-amber-300">
-            <strong>Tipp:</strong> Wähle „Bei Besetzt" oder „Bei Nichtannahme" — so bleibt deine Nummer erreichbar und der Agent springt nur ein wenn du nicht abnimmst.
-          </div>
-
-          <Button
-            variant="primary"
-            className="w-full"
-            onClick={() => { setForwardResult(null); setForwardNumber(''); setShowForward(false); }}
-          >
-            Fertig — Zurück zur Übersicht
-          </Button>
-        </section>
+        <ForwardingTutorial
+          forwardTo={forwardResult.forwardTo}
+          carrierCodes={forwardResult.carrierCodes}
+          onDone={() => { setForwardResult(null); setForwardNumber(''); setShowForward(false); }}
+        />
       )}
     </div>
   );

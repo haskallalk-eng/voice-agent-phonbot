@@ -250,7 +250,7 @@ export function provisionPhoneNumber(areaCode: string) {
 }
 
 export function setupForwarding(number: string) {
-  return request<{ ok: boolean; forwardTo: string; instructions: Record<string, string> }>('/phone/forward', {
+  return request<{ ok: boolean; forwardTo: string; carrierCodes: { busy: string; noAnswer: string; always: string; cancelBusy: string; cancelNoAnswer: string; cancelAlways: string }; instructions: Record<string, string> }>('/phone/forward', {
     method: 'POST',
     body: JSON.stringify({ number }),
   });

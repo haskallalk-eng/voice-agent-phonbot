@@ -96,10 +96,16 @@ export async function autoProvisionGermanNumber(orgId: string): Promise<void> {
   );
   const agentId = configRes.rows[0]?.data?.retellAgentId ?? null;
 
-  // Buy a German number via Twilio
+  // Buy a German number via Twilio (requires Address for regulatory compliance)
   let purchasedNumber: string;
   try {
     const client = getTwilioClient();
+    const addresses = await client.addresses.list({ isoCountry: 'DE', limit: 1 });
+    const addressSid = addresses[0]?.sid;
+    if (!addressSid) {
+      process.stderr.write(`[phone] No German address in Twilio for org ${orgId}\n`);
+      return;
+    }
     const available = await client.availablePhoneNumbers('DE').local.list({ limit: 1 });
     const first = available[0];
     if (!first) {
@@ -108,6 +114,7 @@ export async function autoProvisionGermanNumber(orgId: string): Promise<void> {
     }
     const purchased = await client.incomingPhoneNumbers.create({
       phoneNumber: first.phoneNumber,
+      addressSid,
     });
     purchasedNumber = purchased.phoneNumber;
   } catch (e: unknown) {
@@ -170,15 +177,24 @@ export async function registerPhone(app: FastifyInstance) {
     );
     const agentId = configRes.rows[0]?.data?.retellAgentId ?? null;
 
-    // Step 1: Buy a German number via Twilio
+    // Step 1: Buy a German number via Twilio (requires Address for regulatory compliance)
     let purchasedNumber: string;
     try {
       const client = getTwilioClient();
+
+      // Find an existing German address for regulatory compliance
+      const addresses = await client.addresses.list({ isoCountry: 'DE', limit: 1 });
+      const addressSid = addresses[0]?.sid;
+      if (!addressSid) return reply.status(400).send({ error: 'Keine deutsche Adresse in Twilio hinterlegt. Bitte zuerst eine Adresse im Twilio-Dashboard anlegen.' });
+
       const available = await client.availablePhoneNumbers('DE').local.list({ limit: 1 });
       const first = available[0];
       if (!first) return reply.status(400).send({ error: 'Keine deutschen Nummern verfügbar. Bitte später erneut versuchen.' });
 
-      const purchased = await client.incomingPhoneNumbers.create({ phoneNumber: first.phoneNumber });
+      const purchased = await client.incomingPhoneNumbers.create({
+        phoneNumber: first.phoneNumber,
+        addressSid,
+      });
       purchasedNumber = purchased.phoneNumber;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Twilio-Fehler';
@@ -235,6 +251,14 @@ export async function registerPhone(app: FastifyInstance) {
     return {
       ok: true,
       forwardTo,
+      carrierCodes: {
+        busy: `**67*${forwardTo}#`,
+        noAnswer: `**61*${forwardTo}#`,
+        always: `**21*${forwardTo}#`,
+        cancelBusy: '##67#',
+        cancelNoAnswer: '##61#',
+        cancelAlways: '##21#',
+      },
       instructions: {
         iphone: `Einstellungen → Telefon → Rufumleitung → Aktivieren → Nummer: ${forwardTo}`,
         android: `Telefon App → ⋮ → Einstellungen → Anrufweiterleitung → Bei Besetzt: ${forwardTo}`,
