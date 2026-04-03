@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
+import { IconStar, IconPhone, IconCapabilities } from './PhonbotIcons.js';
 
 type ToastType = 'success' | 'error' | 'info';
 type Toast = { id: number; type: ToastType; message: string };
@@ -34,7 +35,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               'bg-white/10 text-white/80 border-white/20'
             }`}
           >
-            {t.type === 'success' ? '✅ ' : t.type === 'error' ? '⚠️ ' : 'ℹ️ '}{t.message}
+            <span className="inline-flex items-center gap-1.5">
+              {t.type === 'success' ? <IconStar size={14} /> : t.type === 'error' ? <IconCapabilities size={14} /> : <IconPhone size={14} />}
+              {t.message}
+            </span>
           </div>
         ))}
       </div>

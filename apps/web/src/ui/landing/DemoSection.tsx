@@ -1,0 +1,337 @@
+import React, { useState, useRef } from 'react';
+import { RetellWebClient } from 'retell-client-js-sdk';
+import { createDemoCall } from '../../lib/api.js';
+import { FoxLogo } from '../FoxLogo.js';
+import { IconPhone } from '../PhonbotIcons.js';
+import { TEMPLATES, TEMPLATE_PREVIEWS, type CallState } from './shared.js';
+
+// ── Sub-components ─────────────────────────────────────────────────────────
+
+function WaveformViz({ active }: { active: boolean }) {
+  return (
+    <div className={`waveform-container my-8 px-4 ${active ? 'waveform-active' : ''}`}>
+      <svg viewBox="0 0 1200 80" preserveAspectRatio="none" className="w-full h-20">
+        <path className="wave wave-1" d="M0,40 C150,10 300,70 450,40 C600,10 750,70 900,40 C1050,10 1200,70 1200,40" />
+        <path className="wave wave-2" d="M0,40 C200,15 350,65 500,40 C650,15 800,65 950,40 C1100,15 1200,55 1200,40" />
+        <path className="wave wave-3" d="M0,40 C100,20 250,60 400,40 C550,20 700,60 850,40 C1000,20 1150,60 1200,40" />
+      </svg>
+    </div>
+  );
+}
+
+type TemplateCardProps = {
+  template: { id: string; Icon: React.ComponentType<{ size?: number; className?: string }>; name: string; description: string };
+  onClick: () => void;
+};
+
+function TemplateCard({ template, onClick }: TemplateCardProps) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="gradient-border group relative flex flex-col items-center gap-4 p-8 rounded-2xl glass
+        hover:bg-white/10 hover:shadow-[0_0_40px_rgba(249,115,22,0.3)]
+        hover:scale-[1.03] transition-all duration-300 text-center"
+      style={{ zIndex: hovered ? 30 : 1 }}
+    >
+      <div
+        className="w-16 h-16 rounded-2xl flex items-center justify-center"
+        style={{
+          background: 'linear-gradient(135deg, rgba(249,115,22,0.2), rgba(6,182,212,0.15))',
+          border: '1px solid rgba(249,115,22,0.15)',
+        }}
+      >
+        <template.Icon size={28} className="text-white/70 group-hover:text-orange-300 transition-colors" />
+      </div>
+      <div>
+        <p className="font-bold text-base text-white mb-1 group-hover:text-orange-300 transition-colors">{template.name}</p>
+        <p className="text-xs text-white/45 leading-snug">{template.description}</p>
+      </div>
+
+      {/* Speech bubble preview — below the card */}
+      <div
+        style={{
+          opacity: hovered ? 1 : 0,
+          position: 'absolute',
+          bottom: '-3.5rem',
+          left: '50%',
+          transform: hovered ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(6px)',
+          transition: 'all 0.25s ease',
+          zIndex: 50,
+          minWidth: '220px',
+          pointerEvents: 'none',
+        }}
+      >
+        <div className="glass-strong rounded-xl px-3 py-2 text-xs text-white/70 italic text-center relative">
+          <div
+            className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rotate-45"
+            style={{
+              background: 'rgba(255,255,255,0.08)',
+              borderTop: '1px solid rgba(255,255,255,0.15)',
+              borderLeft: '1px solid rgba(255,255,255,0.15)',
+            }}
+          />
+          {TEMPLATE_PREVIEWS[template.id]}
+        </div>
+      </div>
+
+      <span className="absolute bottom-4 right-4 text-xs text-orange-400/70 opacity-0 group-hover:opacity-100 transition-opacity duration-200 font-medium">
+        ▶ Demo starten
+      </span>
+    </button>
+  );
+}
+
+// ── Main DemoSection ──────────────────────────────────────────────────────
+
+type DemoSectionProps = {
+  onGoToRegister: () => void;
+};
+
+export function DemoSection({ onGoToRegister }: DemoSectionProps) {
+  const [callState, setCallState] = useState<CallState>('idle');
+  const [agentTalking, setAgentTalking] = useState(false);
+  const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const clientRef = useRef<RetellWebClient | null>(null);
+
+  const isInCall = callState === 'connecting' || callState === 'active' || callState === 'ended' || callState === 'error';
+
+  async function handleTemplateClick(templateId: string) {
+    if (callState === 'active' || callState === 'connecting') return;
+    setActiveTemplate(templateId);
+    setCallState('connecting');
+    setError(null);
+
+    try {
+      const res = await createDemoCall(templateId);
+      if (!res.access_token) {
+        throw new Error('Kein Zugriffstoken erhalten');
+      }
+
+      const client = new RetellWebClient();
+      clientRef.current = client;
+
+      client.on('call_started', () => setCallState('active'));
+      client.on('call_ended', () => {
+        setCallState('ended');
+        setAgentTalking(false);
+      });
+      client.on('agent_start_talking', () => setAgentTalking(true));
+      client.on('agent_stop_talking', () => setAgentTalking(false));
+      client.on('error', (err: unknown) => {
+        setError(String(err));
+        setCallState('error');
+        setAgentTalking(false);
+      });
+
+      await client.startCall({ accessToken: res.access_token });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unbekannter Fehler';
+      setError(msg);
+      setCallState('error');
+    }
+  }
+
+  function stopCall() {
+    clientRef.current?.stopCall();
+    clientRef.current = null;
+    setCallState('ended');
+    setAgentTalking(false);
+  }
+
+  function resetCall() {
+    setCallState('idle');
+    setActiveTemplate(null);
+    setError(null);
+    setAgentTalking(false);
+  }
+
+  return (
+    <>
+      {/* ── WAVEFORM VIZ (between hero and demo) ── */}
+      <WaveformViz active={callState === 'active' && agentTalking} />
+
+      {/* ── DEMO SECTION ── */}
+      <section id="demo" className="relative z-10 px-6 py-20 max-w-5xl mx-auto">
+        <div className="text-center mb-12">
+          <div className="flex items-center justify-center gap-3 mb-4 flex-wrap">
+            <h2 className="text-3xl sm:text-4xl font-extrabold">
+              Hör <span style={{ color: '#F97316' }}>Chippy</span> zu — wähle dein Business
+            </h2>
+            <span className="inline-flex items-center gap-1 text-xs font-bold text-white bg-red-500/20 border border-red-500/30 rounded-full px-3 py-1">
+              <span className="breathe inline-block w-2 h-2 rounded-full bg-red-500 mr-1" />
+              LIVE
+            </span>
+          </div>
+          <p className="text-white/60 text-lg max-w-xl mx-auto">
+            Kein Account nötig. Einfach klicken, sprechen, überzeugen lassen.
+          </p>
+        </div>
+
+        {/* Template grid — shown when idle or error */}
+        {!isInCall && (
+          <div style={{ overflow: 'visible' }}>
+            {/* How it works inline hint */}
+            <div className="flex items-center justify-center gap-6 mb-8 flex-wrap">
+              {[
+                { step: '1', label: 'Business klicken' },
+                { step: '2', label: 'Mikrofon erlauben' },
+                { step: '3', label: 'Chippy live hören' },
+              ].map((s, i) => (
+                <div key={i} className="flex items-center gap-2 text-sm text-white/50">
+                  <span className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold text-white/70">{s.step}</span>
+                  {s.label}
+                  {i < 2 && <span className="text-white/20 ml-2">→</span>}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-x-4 gap-y-16 pb-10" style={{ overflow: 'visible' }}>
+              {TEMPLATES.map((t) => (
+                <TemplateCard key={t.id} template={t} onClick={() => handleTemplateClick(t.id)} />
+              ))}
+            </div>
+            {/* Reassurance */}
+            <p className="text-center text-xs text-white/35 mt-2">
+              🔒 Kein Account, kein Risiko — einfach ausprobieren
+            </p>
+            {/* Mic hint */}
+            <p className="text-center text-xs text-white/30 mt-2 italic">
+              Dein Mikrofon wird benötigt — das Gespräch dauert ca. 30 Sekunden.
+            </p>
+          </div>
+        )}
+
+        {/* Call state card */}
+        {isInCall && (
+          <div className="fade-up flex justify-center">
+            <div
+              className="glass-strong rounded-3xl p-10 max-w-md w-full text-center"
+              style={{ boxShadow: '0 0 60px rgba(249,115,22,0.15), 0 0 120px rgba(6,182,212,0.08)' }}
+            >
+              {/* Connecting */}
+              {callState === 'connecting' && (
+                <>
+                  <div className="flex items-center justify-center gap-3 mb-4 text-orange-300">
+                    <span className="w-6 h-6 rounded-full border-2 border-orange-400 border-t-transparent spin inline-block" />
+                    <span className="font-medium">Verbinde…</span>
+                  </div>
+                  <p className="text-white/50 text-sm">
+                    Starte {TEMPLATES.find((t) => t.id === activeTemplate)?.name}-Agent
+                  </p>
+                </>
+              )}
+
+              {/* Active */}
+              {callState === 'active' && (
+                <>
+                  <div className={`relative mx-auto mb-6 ${agentTalking ? 'mic-pulse' : ''}`}>
+                    {agentTalking && (
+                      <>
+                        <div className="sound-ring" />
+                        <div className="sound-ring" />
+                        <div className="sound-ring" />
+                      </>
+                    )}
+                    <FoxLogo size="xl" glow animate={agentTalking} />
+                  </div>
+                  <div className="flex items-center justify-center gap-2 mb-6">
+                    {agentTalking ? (
+                      <>
+                        <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 breathe inline-block" />
+                        <span className="text-cyan-300 text-sm font-medium">Agent spricht…</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="w-2.5 h-2.5 rounded-full bg-orange-400 breathe inline-block" />
+                        <span className="text-orange-300 text-sm font-medium">Warte auf dich…</span>
+                      </>
+                    )}
+                  </div>
+                  <button
+                    onClick={stopCall}
+                    className="flex items-center justify-center gap-2 mx-auto rounded-full bg-red-500/20 border border-red-500/40 hover:bg-red-500/30 px-8 py-3 text-red-300 text-sm font-medium transition-all duration-200 hover:scale-105"
+                  >
+                    <IconPhone size={16} className="opacity-70" />
+                    Auflegen
+                  </button>
+                </>
+              )}
+
+              {/* Ended */}
+              {callState === 'ended' && (
+                <>
+                  <FoxLogo size="xl" glow className="mx-auto mb-4" />
+                  <h3 className="text-2xl font-bold mb-2">Wie war dein Agent?</h3>
+                  <p className="text-white/60 text-sm mb-8">
+                    Erstelle jetzt deinen eigenen, personalisierten Agenten — in unter 2 Minuten.
+                  </p>
+                  <button
+                    onClick={onGoToRegister}
+                    className="w-full rounded-xl px-6 py-3.5 font-semibold text-white transition-all duration-300 hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] hover:scale-[1.02]"
+                    style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                  >
+                    Jetzt eigenen Agenten erstellen →
+                  </button>
+                  <button
+                    onClick={resetCall}
+                    className="mt-4 text-sm text-white/40 hover:text-white/60 transition-colors"
+                  >
+                    Nochmal testen
+                  </button>
+                </>
+              )}
+
+              {/* Error */}
+              {callState === 'error' && error && (
+                <>
+                  <div className="text-4xl mb-4 flex justify-center">
+                    <span className="text-amber-400/80 text-4xl font-bold">
+                      {error.includes('429') || error.toLowerCase().includes('rate limit') || error.toLowerCase().includes('too many requests')
+                        ? '!' : '×'}
+                    </span>
+                  </div>
+                  {error.includes('429') || error.toLowerCase().includes('rate limit') || error.toLowerCase().includes('too many requests') ? (
+                    <>
+                      <p className="text-amber-300 text-sm font-medium mb-2">
+                        Du hast die Demo-Grenze erreicht (3 Anrufe/Stunde).
+                      </p>
+                      <p className="text-white/50 text-sm mb-6">
+                        Melde dich an um unbegrenzt zu testen!
+                      </p>
+                      <button
+                        onClick={onGoToRegister}
+                        className="w-full rounded-xl px-6 py-3 font-semibold text-white text-sm mb-3 transition-all duration-200 hover:opacity-90"
+                        style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                      >
+                        Jetzt anmelden →
+                      </button>
+                      <button
+                        onClick={resetCall}
+                        className="text-sm text-white/40 hover:text-white/60 underline transition-colors"
+                      >
+                        Zurück zu den Templates
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-red-300 text-sm mb-6">{error}</p>
+                      <button
+                        onClick={resetCall}
+                        className="text-sm text-white/50 hover:text-white underline transition-colors"
+                      >
+                        Zurück zu den Templates
+                      </button>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+    </>
+  );
+}

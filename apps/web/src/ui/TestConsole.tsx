@@ -145,7 +145,7 @@ export function TestConsole() {
             )}
           </p>
         </div>
-        <button onClick={clearLogs} className="text-sm text-white/30 hover:text-white/60">
+        <button onClick={clearLogs} className="text-sm text-white/30 hover:text-white/60" aria-label="Gesprächsprotokoll leeren">
           Log leeren
         </button>
       </div>
@@ -166,7 +166,7 @@ export function TestConsole() {
       {/* Conversation Log */}
       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
         {logs.length === 0 && (
-          <div className="text-center text-white/30 mt-20">
+          <div className="text-center text-white/30 mt-20" aria-label="Keine Gespräche vorhanden">
             <IconMicUpload size={40} className="mx-auto mb-3 text-white/20" />
             <p className="text-sm">
               {isDeployed

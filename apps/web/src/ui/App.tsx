@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from '../lib/auth.js';
 import { getAgentConfig, resendVerification, type AgentConfig } from '../lib/api.js';
-import { LandingPage } from './LandingPage.js';
+import { LandingPage } from './landing/index.js';
 import { LoginPage } from './LoginPage.js';
 import { OnboardingWizard } from './onboarding/OnboardingWizard.js';
 import { Sidebar } from './Sidebar.js';
 import { DashboardHome } from './DashboardHome.js';
-import { AgentBuilder } from './AgentBuilder.js';
+import { AgentBuilder } from './agent-builder/index.js';
 import { TestConsole } from './TestConsole.js';
 import { TicketInbox } from './TicketInbox.js';
 import { CallLog } from './CallLog.js';
@@ -14,9 +14,9 @@ import { BillingPage } from './BillingPage.js';
 import { PhoneManager } from './PhoneManager.js';
 import { CalendarPage } from './CalendarPage.js';
 import { InsightsPage } from './InsightsPage.js';
-import { OutboundPage } from './OutboundPage.js';
 import { ToastProvider } from './Toast.js';
 import { FoxLogo, PhonbotBrand } from './FoxLogo.js';
+import { ChippyCopilot } from '../components/ChippyCopilot.js';
 
 // ── Error Boundary ─────────────────────────────────────────────────────────────
 
@@ -66,7 +66,12 @@ export type Page = 'home' | 'agent' | 'test' | 'tickets' | 'logs' | 'billing' | 
 
 function Dashboard() {
   const { user, org, logout } = useAuth();
-  const [page, setPage] = useState<Page>('home');
+  const initialPage = (): Page => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('calendarConnected') || params.has('calendarError')) return 'calendar';
+    return 'home';
+  };
+  const [page, setPage] = useState<Page>(initialPage);
   const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showVerifyBanner, setShowVerifyBanner] = useState(false);
@@ -119,7 +124,7 @@ function Dashboard() {
     <div className="flex h-screen bg-[#0A0A0F] text-white">
       {/* Mobile top bar */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-[#0F0F18] border-b border-white/5 px-4 py-3 flex items-center justify-between">
-        <button onClick={() => setSidebarOpen(true)} className="text-white/70 hover:text-white">
+        <button onClick={() => setSidebarOpen(true)} className="text-white/70 hover:text-white" aria-label="Menü öffnen">
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
@@ -188,8 +193,10 @@ function Dashboard() {
         {page === 'phone' && <PhoneManager />}
         {page === 'calendar' && <CalendarPage />}
         {page === 'insights' && <InsightsPage />}
-        {page === 'outbound' && <OutboundPage />}
       </main>
+
+      {/* Chippy Copilot — floating chat assistant, visible on all dashboard pages */}
+      <ChippyCopilot />
     </div>
   );
 }

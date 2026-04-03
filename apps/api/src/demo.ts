@@ -66,7 +66,7 @@ REGELN:
 
 let salesAgentId: string | null = null;
 
-async function getOrCreateSalesAgent(): Promise<string> {
+export async function getOrCreateSalesAgent(): Promise<string> {
   if (salesAgentId) return salesAgentId;
 
   const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';

@@ -4,6 +4,7 @@ import {
   setupForwarding,
   type PhoneNumber,
 } from '../lib/api.js';
+import { EmptyState, SkeletonCard } from '../components/ui.js';
 
 type Tab = 'my-numbers' | 'provision' | 'forward';
 
@@ -93,26 +94,29 @@ export function PhoneManager() {
       {tab === 'my-numbers' && (
         <div>
           {loading ? (
-            <p className="text-white/40 text-sm">Lade…</p>
+            <SkeletonCard />
           ) : numbers.length === 0 ? (
-            <div className="text-center py-12 text-white/30">
-              <div className="text-4xl mb-3">📭</div>
-              <p className="text-sm">Noch keine Nummer verbunden.</p>
-              <div className="flex gap-3 justify-center mt-4">
-                <button
-                  onClick={() => setTab('provision')}
-                  className="bg-gradient-to-r from-orange-500 to-cyan-500 hover:opacity-90 text-white text-sm font-medium rounded-xl px-4 py-2 transition-opacity"
-                >
-                  Neue Nummer aktivieren
-                </button>
-                <button
-                  onClick={() => setTab('forward')}
-                  className="border border-white/10 bg-white/5 hover:bg-white/10 text-white/70 text-sm font-medium rounded-xl px-4 py-2 transition-colors"
-                >
-                  Rufumleitung einrichten
-                </button>
-              </div>
-            </div>
+            <EmptyState
+              icon={<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+              title="Noch keine Nummer verbunden"
+              description="Aktiviere eine neue Nummer oder richte eine Rufumleitung ein."
+              action={
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setTab('provision')}
+                    className="bg-gradient-to-r from-orange-500 to-cyan-500 hover:opacity-90 text-white text-sm font-medium rounded-xl px-4 py-2 transition-opacity"
+                  >
+                    Neue Nummer aktivieren
+                  </button>
+                  <button
+                    onClick={() => setTab('forward')}
+                    className="border border-white/10 bg-white/5 hover:bg-white/10 text-white/70 text-sm font-medium rounded-xl px-4 py-2 transition-colors"
+                  >
+                    Rufumleitung einrichten
+                  </button>
+                </div>
+              }
+            />
           ) : (
             <div className="space-y-3">
               {provisionResult && (
@@ -146,6 +150,7 @@ export function PhoneManager() {
                     onClick={() => navigator.clipboard.writeText(n.number)}
                     className="text-xs text-white/30 hover:text-orange-400 transition-colors"
                     title="Kopieren"
+                    aria-label="Nummer kopieren"
                   >
                     📋
                   </button>

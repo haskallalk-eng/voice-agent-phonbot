@@ -90,9 +90,11 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
         </div>
 
         {/* Tab switcher */}
-        <div className="flex gap-1 mb-6 bg-white/5 rounded-xl p-1">
+        <div className="flex gap-1 mb-6 bg-white/5 rounded-xl p-1" role="tablist" aria-label="Login oder Registrierung">
           <button
             type="button"
+            role="tab"
+            aria-selected={mode === 'login'}
             onClick={() => { setMode('login'); setError(null); setEmailError(null); setPasswordError(null); }}
             className="flex-1 py-2 rounded-lg text-sm font-semibold transition-all duration-200"
             style={mode === 'login'
@@ -103,6 +105,8 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={mode === 'register'}
             onClick={() => { setMode('register'); setError(null); setEmailError(null); setPasswordError(null); }}
             className="flex-1 py-2 rounded-lg text-sm font-semibold transition-all duration-200"
             style={mode === 'register'
@@ -122,7 +126,7 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
                 ✅ Falls ein Account mit dieser E-Mail existiert, haben wir dir einen Reset-Link gesendet.
               </div>
             ) : (
-              <form onSubmit={handleForgotPassword} className="space-y-4">
+              <form onSubmit={handleForgotPassword} className="space-y-4" aria-label="Passwort zurücksetzen">
                 <div>
                   <label className="block text-xs font-medium text-white/60 mb-1.5 uppercase tracking-wide">
                     E-Mail

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { EmptyState } from '../components/ui.js';
 import { getTickets, updateTicketStatus, triggerTicketCallback, type Ticket } from '../lib/api.js';
 
 const STATUS_STYLES: Record<Ticket['status'], string> = {
@@ -17,6 +18,8 @@ export function TicketInbox() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Ticket['status'] | 'all'>('all');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
 
   async function load() {
     setLoading(true);
@@ -69,7 +72,7 @@ export function TicketInbox() {
         {(['all', 'open', 'assigned', 'done'] as const).map((s) => (
           <button
             key={s}
-            onClick={() => setFilter(s)}
+            onClick={() => { setFilter(s); setPage(1); }}
             className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
               filter === s
                 ? 'bg-white/10 text-white font-medium shadow-sm'
@@ -84,16 +87,39 @@ export function TicketInbox() {
 
       {/* Ticket list */}
       {filtered.length === 0 ? (
-        <div className="text-center py-16 text-white/30">
-          <p className="text-4xl mb-3">📋</p>
-          <p className="text-sm">Keine Tickets{filter !== 'all' ? ` mit Status "${STATUS_LABELS[filter as Ticket['status']]}"` : ''}.</p>
-        </div>
+        <EmptyState
+          icon={<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+          title="Keine Tickets"
+          description={filter !== 'all' ? `Keine Tickets mit Status "${STATUS_LABELS[filter as Ticket['status']]}"` : 'Wenn Anrufer einen Rückruf wünschen, erscheinen die Tickets hier.'}
+        />
       ) : (
+        <>
         <div className="space-y-3">
-          {filtered.map((t) => (
+          {filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((t) => (
             <TicketCard key={t.id} ticket={t} onChangeStatus={changeStatus} />
           ))}
         </div>
+        {filtered.length > PAGE_SIZE && (
+          <div className="flex items-center justify-between mt-4 px-2">
+            <span className="text-sm text-white/40">{filtered.length} Tickets</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1.5 text-sm rounded-lg bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 disabled:opacity-30"
+              >Zurück</button>
+              <span className="px-3 py-1.5 text-sm text-white/40">
+                {page} / {Math.ceil(filtered.length / PAGE_SIZE)}
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(Math.ceil(filtered.length / PAGE_SIZE), p + 1))}
+                disabled={page >= Math.ceil(filtered.length / PAGE_SIZE)}
+                className="px-3 py-1.5 text-sm rounded-lg bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 disabled:opacity-30"
+              >Weiter</button>
+            </div>
+          </div>
+        )}
+        </>
       )}
     </div>
   );

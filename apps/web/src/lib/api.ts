@@ -1,4 +1,24 @@
 const BASE = '/api';
+const REQUEST_TIMEOUT = 30_000;
+
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    public statusText: string,
+    public body: string,
+  ) {
+    super(`API ${status}: ${body}`);
+    this.name = 'ApiError';
+  }
+
+  get isUnauthorized() { return this.status === 401; }
+  get isForbidden() { return this.status === 403; }
+  get isNotFound() { return this.status === 404; }
+  get isConflict() { return this.status === 409; }
+  get isValidation() { return this.status === 422; }
+  get isRateLimited() { return this.status === 429; }
+  get isServerError() { return this.status >= 500; }
+}
 
 function authHeader(): Record<string, string> {
   const token = localStorage.getItem('vas_token');
@@ -8,9 +28,13 @@ function authHeader(): Record<string, string> {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
-    headers: { 'content-type': 'application/json', ...authHeader(), ...init?.headers },
+    headers: { ...(init?.body ? { 'content-type': 'application/json' } : {}), ...authHeader(), ...init?.headers },
+    signal: init?.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT),
   });
-  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    const body = await res.text();
+    throw new ApiError(res.status, res.statusText, body);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -362,7 +386,13 @@ export function getMicrosoftCalendarAuthUrl() {
 
 export type ChippyDaySchedule = { enabled: boolean; start: string; end: string };
 export type ChippySchedule = Record<string, ChippyDaySchedule>;
-export type ChippyBlock = { id: string; date: string; reason: string | null };
+export type ChippyBlock = {
+  id: string;
+  date: string;
+  start_time: string | null;
+  end_time: string | null;
+  reason: string | null;
+};
 export type ChippyBooking = {
   id: string; customer_name: string; customer_phone: string;
   service: string | null; notes: string | null; slot_time: string;
@@ -374,11 +404,23 @@ export function getChippyCalendar() {
 export function saveChippySchedule(schedule: ChippySchedule) {
   return request<{ ok: boolean }>('/calendar/chippy', { method: 'PUT', body: JSON.stringify({ schedule }) });
 }
-export function addChippyBlock(date: string, reason?: string) {
-  return request<{ ok: boolean; id: string }>('/calendar/chippy/block', { method: 'POST', body: JSON.stringify({ date, reason }) });
+export function addChippyBlock(date: string, opts?: { start_time?: string; end_time?: string; reason?: string }) {
+  return request<{ ok: boolean; id: string }>('/calendar/chippy/block', {
+    method: 'POST',
+    body: JSON.stringify({ date, ...opts }),
+  });
 }
 export function removeChippyBlock(id: string) {
   return request<{ ok: boolean }>(`/calendar/chippy/block/${id}`, { method: 'DELETE' });
+}
+export function getChippyBookings(from: string, to: string) {
+  return request<{ bookings: ChippyBooking[] }>(`/calendar/chippy/bookings?from=${from}&to=${to}`);
+}
+export function createChippyBooking(data: { customer_name: string; customer_phone: string; service?: string; notes?: string; slot_time: string }) {
+  return request<{ ok: boolean; booking: ChippyBooking }>('/calendar/chippy/bookings', { method: 'POST', body: JSON.stringify(data) });
+}
+export function deleteChippyBooking(id: string) {
+  return request<{ ok: boolean }>(`/calendar/chippy/bookings/${id}`, { method: 'DELETE' });
 }
 
 // --- Billing ---
@@ -643,4 +685,18 @@ export function resetPassword(token: string, password: string) {
 
 export function resendVerification() {
   return request<{ ok: boolean }>('/auth/resend-verification', { method: 'POST', body: '{}' });
+}
+
+// --- Copilot ---
+
+export type CopilotMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
+export function sendCopilotMessage(message: string, history: CopilotMessage[] = []) {
+  return request<{ ok: boolean; reply: string }>('/copilot/chat', {
+    method: 'POST',
+    body: JSON.stringify({ message, history }),
+  });
 }

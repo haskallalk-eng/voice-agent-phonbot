@@ -93,7 +93,7 @@ export async function runAgentTurn(input: {
   const history = await getMessages(input.sessionId, input.tenantId);
   const apiInput: OpenAIInputItem[] = [
     { role: 'system', content: instructions },
-    ...history.map((m) => ({ role: m.role, content: m.role === 'tool' ? m.content : m.content })),
+    ...history.map((m) => ({ role: m.role, content: m.content })),
   ];
 
   // 3) Call OpenAI with tool loop (max 6 rounds to prevent infinite loops)

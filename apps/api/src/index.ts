@@ -5,6 +5,7 @@ import Fastify, { type FastifyError, type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
+import websocket from '@fastify/websocket';
 import { migrate, pool } from './db.js';
 import { connectRedis, redis } from './redis.js';
 import { registerAuth } from './auth.js';
@@ -20,19 +21,26 @@ import { registerCalendar, migrateCalendar } from './calendar.js';
 import { registerVoices } from './voices.js';
 import { registerInsights } from './insights.js';
 import { registerOutbound, migrateOutbound } from './outbound-agent.js';
+import { registerTwilioBridge } from './twilio-openai-bridge.js';
+import { registerCopilot } from './copilot.js';
+import { registerLearningApi } from './learning-api.js';
+import { registerTrainingExport } from './training-export.js';
 
 initSentry();
 const SENTRY_DSN = process.env.SENTRY_DSN ?? '';
 
 const app = Fastify({ logger: true });
+await app.register(websocket);
 await app.register(cors, {
   origin: (process.env.APP_URL ?? 'http://localhost:5173').split(',').map(s => s.trim()),
 });
 
 // Global rate limit — 100 req/min per IP
+// Retell webhook endpoints are server-to-server calls — exempt from IP-based limiting
 await app.register(rateLimit, {
   max: 100,
   timeWindow: '1 minute',
+  allowList: (req, _key) => req.url.startsWith('/retell/'),
 });
 
 // Raw-body capture for Stripe webhook signature verification
@@ -64,7 +72,11 @@ app.decorate('authenticate', async (req: FastifyRequest, reply: import('fastify'
   }
 });
 
-await migrate();
+try {
+  await migrate();
+} catch (e) {
+  app.log.error({ err: (e as Error).message }, 'DB migration failed — running without database');
+}
 await connectRedis();
 if (!process.env.DATABASE_URL) {
   app.log.warn('DATABASE_URL not set; using in-memory stores (dev fallback).');
@@ -84,11 +96,15 @@ await registerCalendar(app);
 await registerVoices(app);
 await registerInsights(app);
 await registerOutbound(app);
+await registerTwilioBridge(app);
+await registerCopilot(app);
+await registerLearningApi(app);
+await registerTrainingExport(app);
 
 // Additional migrations
-await migratePhone();
-await migrateCalendar();
-await migrateOutbound();
+for (const fn of [migratePhone, migrateCalendar, migrateOutbound]) {
+  try { await fn(); } catch (e) { app.log.error({ err: (e as Error).message }, `Migration failed: ${fn.name}`); }
+}
 
 // Global error handler
 app.setErrorHandler((error: FastifyError, request, reply) => {

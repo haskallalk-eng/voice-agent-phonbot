@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { EmptyState } from '../components/ui.js';
 import { getCalls, getCall, type RetellCall } from '../lib/api.js';
 
 const STATUS_STYLES: Record<string, string> = {
@@ -29,6 +30,8 @@ export function CallLog() {
   const [loading, setLoading] = useState(true);
   const [selectedCall, setSelectedCall] = useState<RetellCall | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
 
   async function load() {
     setLoading(true);
@@ -111,13 +114,15 @@ export function CallLog() {
 
       {/* Call List */}
       {calls.length === 0 ? (
-        <div className="text-center py-16 text-white/30">
-          <p className="text-4xl mb-3">📊</p>
-          <p className="text-sm">{loading ? 'Lade Calls…' : 'Noch keine Calls vorhanden.'}</p>
-        </div>
+        <EmptyState
+          icon={<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 5.5h18M3 12h18M3 18.5h18" strokeLinecap="round"/></svg>}
+          title="Noch keine Anrufe"
+          description={loading ? 'Lade Calls…' : 'Sobald dein Agent Anrufe bearbeitet, erscheinen sie hier.'}
+        />
       ) : (
+        <>
         <div className="space-y-2">
-          {calls.map((call) => (
+          {calls.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((call) => (
             <button
               key={call.call_id}
               onClick={() => openDetail(call.call_id)}
@@ -137,6 +142,27 @@ export function CallLog() {
             </button>
           ))}
         </div>
+        {calls.length > PAGE_SIZE && (
+          <div className="flex items-center justify-between mt-4 px-2">
+            <span className="text-sm text-white/40">{calls.length} Anrufe</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1.5 text-sm rounded-lg bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 disabled:opacity-30"
+              >Zurück</button>
+              <span className="px-3 py-1.5 text-sm text-white/40">
+                {page} / {Math.ceil(calls.length / PAGE_SIZE)}
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(Math.ceil(calls.length / PAGE_SIZE), p + 1))}
+                disabled={page >= Math.ceil(calls.length / PAGE_SIZE)}
+                className="px-3 py-1.5 text-sm rounded-lg bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 disabled:opacity-30"
+              >Weiter</button>
+            </div>
+          </div>
+        )}
+        </>
       )}
     </div>
   );

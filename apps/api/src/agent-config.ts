@@ -13,37 +13,14 @@ import {
   listCalls,
   getCall,
   type RetellTool,
-  createPhoneCall,
 } from './retell.js';
+import { triggerBridgeCall } from './twilio-openai-bridge.js';
 
 const AgentConfigSchema = z.object({
   tenantId: z.string().min(1).default('demo'),
   name: z.string().min(1).default('Demo Agent'),
-  language: z.enum(['de', 'en']).default('de'),
-  voice: z.string().min(1).default('retell-Cimo').transform((v) => {
-    const allowed = new Set([
-      'retell-Cimo',
-      'retell-Willa',
-      'retell-Alejandro',
-      'openai-Nova',
-      '11labs-Willa',
-      '11labs-Dorothy',
-      '11labs-Anthony',
-      '11labs-Billy',
-      '11labs-Lily',
-      '11labs-Marissa',
-      '11labs-Merritt',
-      'cartesia-Cleo',
-      'cartesia-Willa',
-      'cartesia-Adam',
-      'cartesia-Brian',
-      'cartesia-Evie',
-      'cartesia-Summer',
-      'minimax-Daniel',
-      'minimax-Ashley',
-    ]);
-    return allowed.has(v) ? v : 'retell-Cimo';
-  }),
+  language: z.enum(['de', 'en', 'fr', 'es', 'it', 'tr', 'pl', 'nl']).default('de'),
+  voice: z.string().min(1).default('retell-Cimo'),
   businessName: z.string().min(1).default('Demo Business'),
   businessDescription: z.string().min(1).default('Local service business for appointments, FAQs, and callbacks.'),
   address: z.string().optional().default(''),
@@ -81,18 +58,20 @@ export async function readConfig(tenantId: string): Promise<AgentConfig> {
   return AgentConfigSchema.parse(res.rows[0].data);
 }
 
-async function writeConfig(config: AgentConfig): Promise<AgentConfig> {
+async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentConfig> {
   if (!pool) {
     memory.set(config.tenantId, config);
     return config;
   }
 
   await pool.query(
-    `insert into agent_configs (tenant_id, data, updated_at)
-     values ($1, $2, now())
+    `insert into agent_configs (tenant_id, org_id, data, updated_at)
+     values ($1, $2, $3, now())
      on conflict (tenant_id)
-     do update set data = excluded.data, updated_at = now()`,
-    [config.tenantId, config],
+     do update set data = excluded.data,
+                   org_id = COALESCE(excluded.org_id, agent_configs.org_id),
+                   updated_at = now()`,
+    [config.tenantId, orgId ?? null, config],
   );
   return config;
 }
@@ -179,7 +158,11 @@ async function deployToRetell(config: AgentConfig): Promise<AgentConfig> {
   const instructions = buildAgentInstructions(config);
   const retellTools = buildRetellTools(config, webhookBase);
   const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';
-  const language = config.language === 'de' ? 'de-DE' : 'en-US';
+  const LANG_MAP: Record<string, string> = {
+    de: 'de-DE', en: 'en-US', fr: 'fr-FR', es: 'es-ES',
+    it: 'it-IT', tr: 'tr-TR', pl: 'pl-PL', nl: 'nl-NL',
+  };
+  const language = LANG_MAP[config.language] ?? 'de-DE';
 
   let llmId = config.retellLlmId;
   let agentId = config.retellAgentId;
@@ -238,9 +221,13 @@ function buildCallbackPrompt(): string {
  * Creates them on first call, then caches the IDs in agent_configs.
  * Returns the (possibly updated) config.
  */
-async function ensureCallbackAgent(config: AgentConfig): Promise<AgentConfig> {
+async function ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise<AgentConfig> {
   const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';
-  const language = config.language === 'de' ? 'de-DE' : 'en-US';
+  const LANG_MAP: Record<string, string> = {
+    de: 'de-DE', en: 'en-US', fr: 'fr-FR', es: 'es-ES',
+    it: 'it-IT', tr: 'tr-TR', pl: 'pl-PL', nl: 'nl-NL',
+  };
+  const language = LANG_MAP[config.language] ?? 'de-DE';
   let callbackLlmId = config.retellCallbackLlmId;
   let callbackAgentId = config.retellCallbackAgentId;
 
@@ -261,7 +248,7 @@ async function ensureCallbackAgent(config: AgentConfig): Promise<AgentConfig> {
 
   if (callbackLlmId !== config.retellCallbackLlmId || callbackAgentId !== config.retellCallbackAgentId) {
     const updated = { ...config, retellCallbackLlmId: callbackLlmId, retellCallbackAgentId: callbackAgentId };
-    await writeConfig(updated);
+    await writeConfig(updated, orgId);
     return updated;
   }
 
@@ -311,25 +298,38 @@ export async function triggerCallback(params: {
 
     if (!fromNumber) return { ok: false, error: 'NO_OUTBOUND_NUMBER' };
 
-    // Ensure callback agent exists (creates it if needed)
-    config = await ensureCallbackAgent(config);
+    const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+    const twilioToken = process.env.TWILIO_AUTH_TOKEN;
+    const webhookBase = process.env.WEBHOOK_BASE_URL ?? 'http://localhost:3001';
 
-    if (!config.retellCallbackAgentId) return { ok: false, error: 'CALLBACK_AGENT_UNAVAILABLE' };
+    if (!twilioSid || !twilioToken) return { ok: false, error: 'TWILIO_NOT_CONFIGURED' };
 
-    const call = await createPhoneCall({
-      agentId: config.retellCallbackAgentId,
+    const customerName = params.customerName ?? 'Kunde';
+    const reason = params.reason ?? 'Rückruf';
+    const prompt = `Du bist ${config.name}, ein KI-Telefonassistent von ${config.businessName}. Du rufst ${customerName} zurück.
+
+Grund des Rückrufs: ${reason}${params.service ? `\nService/Bereich: ${params.service}` : ''}
+
+DEIN ZIEL: Beantworte den Anruf professionell, kläre das Anliegen von ${customerName} und helfe weiter.
+
+REGELN:
+- Begrüße ${customerName} freundlich: "Guten Tag ${customerName}, hier ist ${config.name} von ${config.businessName}. Ich melde mich wegen Ihrer Anfrage zu ${reason}."
+- Sprich natürlich Deutsch, professionell und hilfsbereit
+- Maximal 2-3 kurze Sätze pro Antwort
+- Kläre das Anliegen vollständig bevor du das Gespräch beendest`;
+
+    const result = await triggerBridgeCall({
       toNumber: params.customerPhone,
       fromNumber,
-      dynamicVariables: {
-        customer_name: params.customerName ?? 'Kunde',
-        callback_reason: params.reason ?? 'Rückruf',
-        callback_service: params.service ?? '',
-        agent_name: config.name,
-        business_name: config.businessName,
-      },
+      prompt,
+      name: customerName,
+      webhookBase,
+      twilioSid,
+      twilioToken,
     });
 
-    return { ok: true, callId: call.call_id };
+    if (!result.ok) return { ok: false, error: result.error ?? 'CALL_FAILED' };
+    return { ok: true, callId: result.twilioCallSid ?? result.sessionId };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'UNKNOWN';
     return { ok: false, error: msg };
@@ -422,14 +422,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
     // Allow tenantId from body for multi-agent — fallback to orgId
     const tenantId = (typeof raw.tenantId === 'string' && raw.tenantId) ? raw.tenantId : orgId;
     const body = AgentConfigSchema.parse({ ...raw, tenantId });
-    // Ensure org_id is kept in sync
-    if (pool) {
-      await pool.query(
-        `UPDATE agent_configs SET org_id = $1 WHERE tenant_id = $2`,
-        [orgId, tenantId],
-      );
-    }
-    return writeConfig(body);
+    return writeConfig(body, orgId);
   });
 
   // Deploy config to Retell AI (save + sync)
@@ -439,7 +432,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
     const tenantId = (typeof raw.tenantId === 'string' && raw.tenantId) ? raw.tenantId : orgId;
     const body = AgentConfigSchema.parse({ ...raw, tenantId });
     const deployed = await deployToRetell(body);
-    const saved = await writeConfig(deployed);
+    const saved = await writeConfig(deployed, orgId);
     return { ok: true, config: saved, retellAgentId: saved.retellAgentId, retellLlmId: saved.retellLlmId };
   });
 

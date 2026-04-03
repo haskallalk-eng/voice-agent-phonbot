@@ -277,6 +277,206 @@ export const IconOutbound = icon(() => (
   </>
 ));
 
+/** Phone with plus sign */
+export const IconPhonePlus = icon(() => (
+  <>
+    <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" />
+    <line x1="19" y1="1" x2="19" y2="7" />
+    <line x1="16" y1="4" x2="22" y2="4" />
+  </>
+));
+
+/** Phone with forward arrow */
+export const IconPhoneForward = icon(() => (
+  <>
+    <polyline points="19 1 23 5 19 9" />
+    <line x1="15" y1="5" x2="23" y2="5" />
+    <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" />
+  </>
+));
+
+/** Brain – knowledge/AI */
+export const IconBrain = icon(() => (
+  <>
+    <path d="M9.5 2a2.5 2.5 0 00-2.45 2H7a5 5 0 00-5 5c0 1.4.58 2.67 1.5 3.58A4 4 0 005 15a4 4 0 003.5 3.96V20a2 2 0 004 0v-1.04A4 4 0 0016 15a4 4 0 00.5-7.42A5 5 0 0012 4.07V4a2.5 2.5 0 00-2.5-2z" />
+    <path d="M12 6v6M9.5 9.5l5 0" strokeWidth={1.5} />
+  </>
+));
+
+/** Building / office / business */
+export const IconBuilding = icon(() => (
+  <>
+    <rect x="4" y="2" width="16" height="20" rx="1" />
+    <path d="M9 22V12h6v10" />
+    <rect x="8" y="6" width="2" height="2" rx="0.5" fill="currentColor" stroke="none" />
+    <rect x="14" y="6" width="2" height="2" rx="0.5" fill="currentColor" stroke="none" />
+    <rect x="8" y="10" width="2" height="2" rx="0.5" fill="currentColor" stroke="none" />
+    <rect x="14" y="10" width="2" height="2" rx="0.5" fill="currentColor" stroke="none" />
+  </>
+));
+
+/** Volume / speaker */
+export const IconVolume = icon(() => (
+  <>
+    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+    <path d="M19.07 4.93a10 10 0 010 14.14" />
+    <path d="M15.54 8.46a5 5 0 010 7.07" />
+  </>
+));
+
+/** Sliders horizontal */
+export const IconSliders = icon(() => (
+  <>
+    <line x1="4" y1="6" x2="20" y2="6" />
+    <line x1="4" y1="12" x2="20" y2="12" />
+    <line x1="4" y1="18" x2="20" y2="18" />
+    <circle cx="8" cy="6" r="2" fill="currentColor" stroke="none" />
+    <circle cx="16" cy="12" r="2" fill="currentColor" stroke="none" />
+    <circle cx="10" cy="18" r="2" fill="currentColor" stroke="none" />
+  </>
+));
+
+/** Open book */
+export const IconBookOpen = icon(() => (
+  <>
+    <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" />
+    <path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
+  </>
+));
+
+/** Message square / chat bubble */
+export const IconMessageSquare = icon(() => (
+  <>
+    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+  </>
+));
+
+/** Layout / template grid */
+export const IconTemplate = icon(() => (
+  <>
+    <rect x="3" y="3" width="7" height="7" rx="1" />
+    <rect x="14" y="3" width="7" height="7" rx="1" />
+    <rect x="14" y="14" width="7" height="7" rx="1" />
+    <rect x="3" y="14" width="7" height="7" rx="1" />
+  </>
+));
+
+/** Globe / web */
+export const IconGlobe = icon(() => (
+  <>
+    <circle cx="12" cy="12" r="10" />
+    <line x1="2" y1="12" x2="22" y2="12" />
+    <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
+  </>
+));
+
+/** File text / document */
+export const IconFileText = icon(() => (
+  <>
+    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="16" y1="13" x2="8" y2="13" />
+    <line x1="16" y1="17" x2="8" y2="17" />
+    <polyline points="10 9 9 9 8 9" />
+  </>
+));
+
+/** X / close / remove */
+export const IconX = icon(() => (
+  <>
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
+  </>
+));
+
+/** Check circle / success */
+export const IconCheckCircle = icon(() => (
+  <>
+    <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+    <polyline points="22 4 12 14.01 9 11.01" />
+  </>
+));
+
+/** Plug / API integration */
+export const IconPlug = icon(() => (
+  <>
+    <path d="M12 22v-5" />
+    <path d="M9 8V2" />
+    <path d="M15 8V2" />
+    <path d="M18 8v5a4 4 0 01-4 4h-4a4 4 0 01-4-4V8z" />
+  </>
+));
+
+/** Alert triangle / warning */
+export const IconAlertTriangle = icon(() => (
+  <>
+    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+    <line x1="12" y1="9" x2="12" y2="13" />
+    <line x1="12" y1="17" x2="12.01" y2="17" strokeWidth={2.5} />
+  </>
+));
+
+/** Info circle */
+export const IconInfo = icon(() => (
+  <>
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="16" x2="12" y2="12" />
+    <line x1="12" y1="8" x2="12.01" y2="8" strokeWidth={2.5} />
+  </>
+));
+
+/** Mic (simple) */
+export const IconMic = icon(() => (
+  <>
+    <rect x="9" y="2" width="6" height="11" rx="3" />
+    <path d="M5 10a7 7 0 0014 0" />
+    <line x1="12" y1="17" x2="12" y2="21" />
+    <line x1="8" y1="21" x2="16" y2="21" />
+  </>
+));
+
+/** Person / user */
+export const IconUser = icon(() => (
+  <>
+    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+    <circle cx="12" cy="7" r="4" />
+  </>
+));
+
+/** Chevron right */
+export const IconChevronRight = icon(() => (
+  <polyline points="9 18 15 12 9 6" />
+));
+
+/** Phone outgoing (transfer/forward) */
+export const IconPhoneOut = icon(() => (
+  <>
+    <polyline points="23 7 23 1 17 1" />
+    <line x1="16" y1="8" x2="23" y2="1" />
+    <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" />
+  </>
+));
+
+/** Phone off / hang up */
+export const IconPhoneOff = icon(() => (
+  <>
+    <path d="M10.68 13.31a16 16 0 003.41 2.6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-2.6-3.41" />
+    <path d="M6.24 6.24A19.79 19.79 0 002.07 14.9a2 2 0 002 2.11h.09A16.84 16.84 0 006.97 16" />
+    <line x1="1" y1="1" x2="23" y2="23" />
+  </>
+));
+
+/** Ticket / note */
+export const IconTicket = icon(() => (
+  <>
+    <path d="M2 9a3 3 0 010-6h20a3 3 0 010 6" />
+    <path d="M2 15a3 3 0 000 6h20a3 3 0 000-6" />
+    <line x1="2" y1="12" x2="22" y2="12" />
+    <line x1="12" y1="6" x2="12" y2="6.01" strokeWidth={2} />
+    <line x1="12" y1="15" x2="12" y2="15.01" strokeWidth={2} />
+  </>
+));
+
 /** Refresh — two circular arrows */
 export function IconRefresh({ size = 24, className = '' }: IconProps) {
   return (

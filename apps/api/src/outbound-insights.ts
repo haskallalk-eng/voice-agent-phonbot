@@ -127,6 +127,19 @@ Bewertungskriterien:
       await upsertSuggestion(orgId, 'weakness', weak, score);
     }
 
+    // Store outbound transcript enriched with analysis results (fire-and-forget)
+    pool.query(
+      `UPDATE call_transcripts SET
+         score = $1, conv_score = $2, outcome = $3
+       WHERE call_id = $4`,
+      [
+        score.toFixed(2),
+        score.toFixed(2),
+        analysis.outcome_detected ?? null,
+        callId,
+      ],
+    ).catch(() => {});
+
     // Trigger batch learning after enough calls
     const { rowCount } = await pool.query(
       `SELECT id FROM outbound_calls WHERE org_id = $1 AND conv_score IS NOT NULL AND status = 'analyzed'`,

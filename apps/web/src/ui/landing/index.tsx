@@ -1,0 +1,95 @@
+import React, { useState } from 'react';
+import { OwlyDemoModal } from '../OwlyDemoModal.js';
+import { LegalModal } from '../LegalModal.js';
+import { CookieBanner } from '../CookieBanner.js';
+import { NavHeader } from './NavHeader.js';
+import { HeroSection } from './HeroSection.js';
+import { DemoSection } from './DemoSection.js';
+import { HowSection } from './HowSection.js';
+import { FeaturesSection } from './FeaturesSection.js';
+import { SavingsCalculator } from './SavingsCalculator.js';
+import { StatsSection } from './StatsSection.js';
+import { FaqSection } from './FaqSection.js';
+import { PricingSection } from './PricingSection.js';
+import { CallbackSection } from './CallbackSection.js';
+import { FinalCTA } from './FinalCTA.js';
+import { FooterSection } from './FooterSection.js';
+
+type Props = {
+  onGoToRegister: () => void;
+  onGoToLogin: () => void;
+};
+
+export function LandingPage({ onGoToRegister, onGoToLogin }: Props) {
+  const [showDemoModal, setShowDemoModal] = useState(false);
+  const [legalPage, setLegalPage] = useState<'impressum' | 'datenschutz' | 'agb' | null>(null);
+
+  return (
+    <div className="noise bg-[#0A0A0F] text-white relative">
+      {/* Background glow orbs */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" style={{ zIndex: 0 }}>
+        <div
+          className="glow-pulse absolute -top-40 -left-40 w-[700px] h-[700px] rounded-full"
+          style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.18) 0%, transparent 70%)' }}
+        />
+        <div
+          className="glow-pulse absolute top-1/2 -right-60 w-[600px] h-[600px] rounded-full"
+          style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.12) 0%, transparent 70%)', animationDelay: '1.5s' }}
+        />
+        <div
+          className="glow-pulse absolute -bottom-40 left-1/3 w-[500px] h-[500px] rounded-full"
+          style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.10) 0%, transparent 70%)', animationDelay: '3s' }}
+        />
+      </div>
+
+      {/* ── NAV ── */}
+      <NavHeader onGoToRegister={onGoToRegister} onGoToLogin={onGoToLogin} />
+
+      {/* ── HERO + TRUST BAR ── */}
+      <HeroSection onGoToRegister={onGoToRegister} onShowDemoModal={() => setShowDemoModal(true)} />
+
+      {/* ── WAVEFORM + DEMO ── */}
+      <DemoSection onGoToRegister={onGoToRegister} />
+
+      {/* ── HOW IT WORKS (scroll-triggered) ── */}
+      <HowSection />
+
+      {/* ── FEATURES ── */}
+      <FeaturesSection />
+
+      {/* ── SAVINGS CALCULATOR ── */}
+      <SavingsCalculator onCTA={onGoToRegister} />
+
+      {/* ── STATS (count-up) ── */}
+      <StatsSection />
+
+      {/* ── FAQ ── */}
+      <FaqSection />
+
+      {/* ── PRICING ── */}
+      <PricingSection onGoToRegister={onGoToRegister} />
+
+      {/* ── RÜCKRUF-FORMULAR ── */}
+      <CallbackSection />
+
+      {/* ── FINAL CTA ── */}
+      <FinalCTA onGoToRegister={onGoToRegister} />
+
+      {/* ── FOOTER ── */}
+      <FooterSection onShowLegal={setLegalPage} />
+
+      {/* ── CHIPPY DEMO MODAL ── */}
+      {showDemoModal && (
+        <OwlyDemoModal onClose={() => setShowDemoModal(false)} onGoToRegister={onGoToRegister} />
+      )}
+
+      {/* ── LEGAL MODAL ── */}
+      {legalPage && (
+        <LegalModal page={legalPage} onClose={() => setLegalPage(null)} />
+      )}
+
+      {/* ── COOKIE BANNER ── */}
+      <CookieBanner />
+    </div>
+  );
+}

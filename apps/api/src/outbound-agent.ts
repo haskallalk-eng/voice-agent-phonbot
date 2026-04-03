@@ -16,7 +16,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { pool } from './db.js';
 import type { JwtPayload } from './auth.js';
-import { createLLM, createAgent as retellCreateAgent, createPhoneCall } from './retell.js';
+import { triggerBridgeCall } from './twilio-openai-bridge.js';
 
 // ── DB Migration ─────────────────────────────────────────────────────────────
 
@@ -80,6 +80,8 @@ export async function migrateOutbound() {
 // ── Base Sales Prompt ─────────────────────────────────────────────────────────
 
 export const BASE_OUTBOUND_PROMPT = `Du bist ein professioneller Vertriebsberater für {{business_name}}. Dein Name ist {{agent_name}}.
+
+Du rufst {{contact_name}} an unter der Nummer {{to_number}}.
 
 ## Deine Persönlichkeit
 Du klingst menschlich, warm und kompetent — niemals roboterhaft oder aufdringlich. Du sprichst präzise, direkt und ohne Füllwörter. Jeder Satz hat einen klaren Zweck.
@@ -157,62 +159,19 @@ Produkt/Anlass: {{campaign_context}}
 - Wenn der Kunde mehrfach ablehnt: respektvoll beenden, Zeitpunkt für Zukunft sichern
 - Ergebnis jedes Anrufs klar kommunizieren: "Ich halte fest: [Zusammenfassung]. Dann sprechen wir am [Datum]."`;
 
-// ── Retell Agent Management ──────────────────────────────────────────────────
+// ── Prompt management ────────────────────────────────────────────────────────
 
-async function getOutboundConfig(orgId: string): Promise<{ agentId: string | null; llmId: string | null; prompt: string; version: number }> {
-  if (!pool) return { agentId: null, llmId: null, prompt: BASE_OUTBOUND_PROMPT, version: 1 };
+async function getOutboundConfig(orgId: string): Promise<{ prompt: string; version: number }> {
+  if (!pool) return { prompt: BASE_OUTBOUND_PROMPT, version: 1 };
   const res = await pool.query(
-    `SELECT outbound_agent_id, outbound_llm_id, outbound_prompt, outbound_prompt_v FROM orgs WHERE id = $1`,
+    `SELECT outbound_prompt, outbound_prompt_v FROM orgs WHERE id = $1`,
     [orgId],
   );
   const row = res.rows[0];
   return {
-    agentId: row?.outbound_agent_id ?? null,
-    llmId: row?.outbound_llm_id ?? null,
     prompt: row?.outbound_prompt ?? BASE_OUTBOUND_PROMPT,
     version: row?.outbound_prompt_v ?? 1,
   };
-}
-
-async function saveOutboundConfig(orgId: string, agentId: string, llmId: string, prompt: string, version: number) {
-  if (!pool) return;
-  await pool.query(
-    `UPDATE orgs SET outbound_agent_id = $1, outbound_llm_id = $2, outbound_prompt = $3, outbound_prompt_v = $4 WHERE id = $5`,
-    [agentId, llmId, prompt, version, orgId],
-  );
-}
-
-export async function ensureOutboundAgent(orgId: string): Promise<{ agentId: string; llmId: string }> {
-  const cfg = await getOutboundConfig(orgId);
-  const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';
-
-  let llmId = cfg.llmId;
-  let agentId = cfg.agentId;
-
-  let changed = false;
-
-  if (!llmId) {
-    const llm = await createLLM({ generalPrompt: cfg.prompt, tools: [], model });
-    llmId = llm.llm_id;
-    changed = true;
-  }
-
-  if (!agentId) {
-    const agent = await retellCreateAgent({
-      name: `Sales Agent`,
-      llmId,
-      voiceId: 'retell-Cimo',
-      language: 'de-DE',
-    });
-    agentId = agent.agent_id;
-    changed = true;
-  }
-
-  if (changed) {
-    await saveOutboundConfig(orgId, agentId, llmId, cfg.prompt, cfg.version);
-  }
-
-  return { agentId, llmId };
 }
 
 // ── Outbound Call Trigger ────────────────────────────────────────────────────
@@ -235,7 +194,25 @@ export async function triggerSalesCall(params: {
   if (!fromNumber) return { ok: false, error: 'NO_OUTBOUND_NUMBER' };
 
   const cfg = await getOutboundConfig(params.orgId);
-  const { agentId } = await ensureOutboundAgent(params.orgId);
+
+  // Look up org name and agent name for dynamic variables
+  let orgName = 'Phonbot';
+  let agentName = 'Alex';
+  const orgRes = await pool.query(`SELECT name FROM orgs WHERE id = $1`, [params.orgId]);
+  orgName = (orgRes.rows[0]?.name as string | undefined) ?? orgName;
+  const cfgRes = await pool.query(
+    `SELECT data->>'name' AS agent_name FROM agent_configs WHERE org_id = $1 ORDER BY updated_at DESC LIMIT 1`,
+    [params.orgId],
+  );
+  agentName = (cfgRes.rows[0]?.agent_name as string | undefined) ?? agentName;
+
+  // Render prompt with call-specific variables
+  const prompt = cfg.prompt
+    .replace(/\{\{contact_name\}\}/g, params.contactName ?? 'dort')
+    .replace(/\{\{to_number\}\}/g, params.toNumber)
+    .replace(/\{\{agent_name\}\}/g, agentName)
+    .replace(/\{\{business_name\}\}/g, orgName)
+    .replace(/\{\{campaign_context\}\}/g, params.campaignContext ?? params.campaign ?? `KI-Telefonagent ${orgName}`);
 
   // Save outbound record before calling
   const recordRes = await pool.query(
@@ -246,26 +223,37 @@ export async function triggerSalesCall(params: {
   const outboundRecordId = recordRes.rows[0]?.id as string | undefined;
   if (!outboundRecordId) return { ok: false, error: 'DB_ERROR' };
 
+  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
+  const webhookBase = process.env.WEBHOOK_BASE_URL ?? 'http://localhost:3001';
+
+  if (!twilioSid || !twilioToken) {
+    await pool.query(`UPDATE outbound_calls SET status = 'failed' WHERE id = $1`, [outboundRecordId]);
+    return { ok: false, error: 'TWILIO_NOT_CONFIGURED' };
+  }
+
   try {
-    const call = await createPhoneCall({
-      agentId,
+    const result = await triggerBridgeCall({
       toNumber: params.toNumber,
       fromNumber,
-      dynamicVariables: {
-        contact_name: params.contactName ?? 'dort',
-        agent_name: 'Alex',
-        business_name: 'Phonbot',
-        campaign_context: params.campaignContext ?? params.campaign ?? 'KI-Telefonagent Phonbot',
-      },
-      metadata: { orgId: params.orgId, outboundRecordId },
+      prompt,
+      name: params.contactName,
+      webhookBase,
+      twilioSid,
+      twilioToken,
     });
+
+    if (!result.ok) {
+      await pool.query(`UPDATE outbound_calls SET status = 'failed' WHERE id = $1`, [outboundRecordId]);
+      return { ok: false, error: result.error ?? 'CALL_FAILED' };
+    }
 
     await pool.query(
       `UPDATE outbound_calls SET call_id = $1, status = 'calling' WHERE id = $2`,
-      [call.call_id, outboundRecordId],
+      [result.twilioCallSid ?? result.sessionId, outboundRecordId],
     );
 
-    return { ok: true, callId: call.call_id, outboundRecordId };
+    return { ok: true, callId: result.twilioCallSid ?? result.sessionId, outboundRecordId };
   } catch (e: unknown) {
     await pool.query(`UPDATE outbound_calls SET status = 'failed' WHERE id = $1`, [outboundRecordId]);
     return { ok: false, error: e instanceof Error ? e.message : 'CALL_FAILED' };
@@ -411,5 +399,52 @@ export async function registerOutbound(app: FastifyInstance) {
       [id, orgId],
     );
     return { ok: true };
+  });
+
+  // POST /outbound/website-callback — public endpoint for landing page visitors
+  // No auth required; rate-limited to 5 requests per hour per IP.
+  // Uses Retell createPhoneCall directly (same as demo/callback) for reliability.
+  app.post('/outbound/website-callback', {
+    config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const parsed = z.object({
+      phone: z.string().min(5).max(30),
+      name: z.string().max(100).optional(),
+    }).safeParse(req.body);
+
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Telefonnummer erforderlich' });
+    }
+
+    // Normalize phone to E.164
+    let phone = parsed.data.phone.replace(/[\s\-()]/g, '');
+    if (phone.startsWith('00')) phone = '+' + phone.slice(2);
+    else if (phone.startsWith('0') && !phone.startsWith('+')) phone = '+49' + phone.slice(1);
+    if (!phone.startsWith('+')) phone = '+49' + phone;
+
+    const fromNumber = process.env.RETELL_OUTBOUND_NUMBER;
+    if (!fromNumber) {
+      app.log.warn('RETELL_OUTBOUND_NUMBER not configured — cannot make callback');
+      return reply.status(503).send({ error: 'Rückruf aktuell nicht verfügbar' });
+    }
+
+    try {
+      // Use the same Retell-based sales agent as demo/callback
+      const { getOrCreateSalesAgent } = await import('./demo.js');
+      const { createPhoneCall } = await import('./retell.js');
+      const agentId = await getOrCreateSalesAgent();
+      const call = await createPhoneCall({
+        agentId,
+        toNumber: phone,
+        fromNumber,
+        metadata: { source: 'website-callback', name: parsed.data.name ?? '' },
+      });
+      app.log.info({ callId: call.call_id, phone }, 'Website callback call initiated via Retell');
+      return { ok: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Call failed';
+      app.log.warn({ err: msg, phone }, 'website-callback call failed');
+      return reply.status(500).send({ error: 'Rückruf konnte nicht gestartet werden. Bitte versuche es erneut.' });
+    }
   });
 }

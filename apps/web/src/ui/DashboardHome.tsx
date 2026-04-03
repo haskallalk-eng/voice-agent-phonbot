@@ -10,6 +10,7 @@ import {
   type AgentConfig,
 } from '../lib/api.js';
 import type { Page } from './App.js';
+import { SkeletonCard } from '../components/ui.js';
 import { FoxLogo } from './FoxLogo.js';
 import {
   IconCalls,
@@ -91,18 +92,25 @@ export function DashboardHome({ onNavigate }: Props) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
-      getBillingStatus().catch(() => null),
-      getCalls().catch(() => ({ items: [] })),
-      getTickets().catch(() => ({ items: [] })),
-      getAgentConfig().catch(() => null),
+      getBillingStatus().catch((err) => { console.error('getBillingStatus failed', err); return null; }),
+      getCalls().catch((err) => { console.error('getCalls failed', err); return { items: [] }; }),
+      getTickets().catch((err) => { console.error('getTickets failed', err); return { items: [] }; }),
+      getAgentConfig().catch((err) => { console.error('getAgentConfig failed', err); return null; }),
     ]).then(([b, c, t, a]) => {
+      if (!b && !c?.items?.length && !t?.items?.length && !a) {
+        setError('Daten konnten nicht geladen werden');
+      }
       setBilling(b);
       setCalls(c?.items ?? []);
       setTickets(t?.items ?? []);
       setAgentConfig(a);
+    }).catch((err) => {
+      setError('Daten konnten nicht geladen werden');
+      console.error(err);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -147,6 +155,16 @@ export function DashboardHome({ onNavigate }: Props) {
   const step5Done = step1Done && step2Done && step3Done && step4Done;
   const allSetupDone = step1Done && step2Done && step3Done;
 
+  if (loading) return (
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <SkeletonCard />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard />
+      </div>
+      <SkeletonCard />
+    </div>
+  );
+
   return (
     <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
       {/* Header */}
@@ -157,6 +175,14 @@ export function DashboardHome({ onNavigate }: Props) {
           <p className="text-white/50 mt-1 text-sm">Hier ist dein Überblick.</p>
         </div>
       </div>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-sm text-red-400 flex items-center gap-2">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          {error}
+        </div>
+      )}
 
       {/* Getting-started / All done */}
       {!loading && (
@@ -223,14 +249,7 @@ export function DashboardHome({ onNavigate }: Props) {
       )}
 
       {/* Stats Grid – 2 rows */}
-      {loading ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="glass rounded-2xl p-5 h-28 animate-pulse" />
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-4">
+      <div className="space-y-4">
           {/* Row 1 */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
@@ -286,8 +305,7 @@ export function DashboardHome({ onNavigate }: Props) {
               sub={`von ${tickets.length} gesamt`}
             />
           </div>
-        </div>
-      )}
+      </div>
 
       {/* Quick Actions */}
       <div className="glass rounded-2xl p-6">
@@ -342,13 +360,7 @@ export function DashboardHome({ onNavigate }: Props) {
               Alle anzeigen →
             </button>
           </div>
-          {loading ? (
-            <div className="space-y-2">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="h-12 bg-white/5 rounded-xl animate-pulse" />
-              ))}
-            </div>
-          ) : recentCalls.length === 0 ? (
+          {recentCalls.length === 0 ? (
             <div className="text-center py-8 text-white/30">
               <IconCalls size={32} className="mx-auto mb-2 opacity-30" />
               <p className="text-sm font-medium text-white/40 mb-1">Noch keine Anrufe</p>
@@ -395,13 +407,7 @@ export function DashboardHome({ onNavigate }: Props) {
               Alle anzeigen →
             </button>
           </div>
-          {loading ? (
-            <div className="space-y-2">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="h-12 bg-white/5 rounded-xl animate-pulse" />
-              ))}
-            </div>
-          ) : recentOpenTickets.length === 0 ? (
+          {recentOpenTickets.length === 0 ? (
             <div className="text-center py-8 text-white/30">
               <IconTickets size={32} className="mx-auto mb-2 opacity-30" />
               <p className="text-sm">Keine offenen Tickets</p>

@@ -13,7 +13,6 @@ import {
   IconBilling,
   IconLogout,
   IconInsights,
-  IconOutbound,
 } from './PhonbotIcons.js';
 import { deleteAccount } from '../lib/api.js';
 
@@ -32,7 +31,6 @@ const NAV_GROUPS: { label?: string; items: NavItem[] }[] = [
       { id: 'tickets', label: 'Tickets', Icon: IconTickets },
       { id: 'calendar', label: 'Kalender', Icon: IconCalendar },
       { id: 'insights', label: 'KI-Insights', Icon: IconInsights },
-      { id: 'outbound', label: 'Outbound Sales', Icon: IconOutbound },
     ],
   },
   {
@@ -79,9 +77,9 @@ function DeleteAccountModal({ onClose, onLogout }: { onClose: () => void; onLogo
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)' }}>
-      <div className="w-full max-w-sm bg-[#14141f] border border-red-500/20 rounded-2xl p-6 space-y-4">
+      <div className="w-full max-w-sm bg-[#14141f] border border-red-500/20 rounded-2xl p-6 space-y-4" role="dialog" aria-modal="true" aria-labelledby="delete-account-title">
         <div>
-          <h3 className="text-base font-bold text-white">Account unwiderruflich löschen</h3>
+          <h3 id="delete-account-title" className="text-base font-bold text-white">Account unwiderruflich löschen</h3>
           <p className="text-sm text-white/50 mt-1">
             Alle Daten — Agent, Anrufe, Tickets, Kalender — werden sofort und dauerhaft gelöscht. Dein Stripe-Abo wird gekündigt.
           </p>
@@ -129,7 +127,7 @@ export function Sidebar({ current, onNavigate, org, user, onLogout }: Props) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-3 overflow-y-auto">
+      <nav className="flex-1 py-3 overflow-y-auto" aria-label="Hauptnavigation">
         {NAV_GROUPS.map((group, gi) => (
           <div key={gi} className={gi > 0 ? 'mt-4' : ''}>
             {group.label && (
@@ -143,6 +141,7 @@ export function Sidebar({ current, onNavigate, org, user, onLogout }: Props) {
                 <button
                   key={item.id}
                   onClick={() => onNavigate(item.id)}
+                  aria-current={active ? 'page' : undefined}
                   className={[
                     'w-full flex items-center gap-3 px-5 py-2.5 text-sm transition-all duration-150 relative',
                     active
@@ -191,6 +190,7 @@ export function Sidebar({ current, onNavigate, org, user, onLogout }: Props) {
         <button
           onClick={() => setShowDeleteModal(true)}
           className="mt-2 flex items-center gap-2 text-xs text-red-500/40 hover:text-red-400/70 transition-colors"
+          aria-label="Account unwiderruflich löschen"
         >
           Account löschen
         </button>

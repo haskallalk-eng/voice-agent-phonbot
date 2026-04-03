@@ -33,8 +33,10 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { 'content-type': 'application/json', ...init?.headers },
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error ?? `Request failed (${res.status})`);
+  const text = await res.text();
+  let data: Record<string, unknown> | null = null;
+  try { data = text ? JSON.parse(text) : null; } catch { /* non-JSON response */ }
+  if (!res.ok) throw new Error((data as { error?: string } | null)?.error ?? `Request failed (${res.status})`);
   return data as T;
 }
 

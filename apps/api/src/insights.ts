@@ -21,6 +21,7 @@
 import type { FastifyInstance } from 'fastify';
 import OpenAI from 'openai';
 import { pool } from './db.js';
+import { computeSatisfactionScore, extractSignalsFromCall, storeSatisfactionData } from './satisfaction-signals.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? '' });
 const MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
@@ -51,15 +52,25 @@ interface BadMoment {
   prompt_fix: string;
 }
 
+interface SatisfactionSignalsGpt {
+  sentiment?: number;
+  task_completed?: boolean;
+  escalation_requested?: boolean;
+  interruption_count?: number;
+}
+
 interface CallAnalysis {
   score: number;
   bad_moments: BadMoment[];
   overall_feedback: string;
+  satisfaction_signals?: SatisfactionSignalsGpt;
 }
 
 interface BusinessContext {
   name: string;
   description: string;
+  industry?: string;
+  templateId?: string;
 }
 
 // ── Cosine similarity ─────────────────────────────────────────────────────────
@@ -98,13 +109,16 @@ async function getSystemPrompt(orgId: string): Promise<string> {
 async function getBusinessContext(orgId: string): Promise<BusinessContext> {
   if (!pool) return { name: '', description: '' };
   const res = await pool.query(
-    `SELECT data->>'businessName' AS name, data->>'businessDescription' AS description
+    `SELECT data->>'businessName' AS name, data->>'businessDescription' AS description,
+            data->>'industry' AS industry, data->>'templateId' AS template_id
      FROM agent_configs WHERE org_id = $1 ORDER BY updated_at DESC LIMIT 1`,
     [orgId],
   );
   return {
     name: (res.rows[0]?.name as string | undefined) ?? '',
     description: (res.rows[0]?.description as string | undefined) ?? '',
+    industry: (res.rows[0]?.industry as string | undefined) ?? undefined,
+    templateId: (res.rows[0]?.template_id as string | undefined) ?? undefined,
   };
 }
 
@@ -310,7 +324,34 @@ async function setPrompt(orgId: string, newPrompt: string, reason: string): Prom
      WHERE org_id = $1`,
     [orgId, newPrompt],
   );
+
+  // Sync to live Retell agent — rebuild full instructions and push to Retell LLM
+  syncPromptToRetell(orgId).catch(() => {});
+
   return versionId;
+}
+
+/**
+ * Reads the full agent config for an org, rebuilds instructions, and pushes to Retell.
+ * Fire-and-forget safe — errors are swallowed.
+ */
+async function syncPromptToRetell(orgId: string): Promise<void> {
+  if (!pool) return;
+  const configRes = await pool.query(
+    `SELECT data FROM agent_configs WHERE org_id = $1 ORDER BY updated_at DESC LIMIT 1`,
+    [orgId],
+  );
+  if (!configRes.rowCount || configRes.rowCount === 0) return;
+  const data = configRes.rows[0].data as Record<string, unknown>;
+  const llmId = data.retellLlmId as string | undefined;
+  if (!llmId) return; // not deployed yet — nothing to sync
+
+  const { buildAgentInstructions } = await import('./agent-instructions.js');
+  const { updateLLM } = await import('./retell.js');
+
+  // Reconstruct a minimal config object for buildAgentInstructions
+  const instructions = buildAgentInstructions(data as Parameters<typeof buildAgentInstructions>[0]);
+  await updateLLM(llmId, { generalPrompt: instructions });
 }
 
 async function applyPromptAddition(orgId: string, addition: string): Promise<void> {
@@ -696,7 +737,17 @@ Identifiziere die EINE wirkungsvollste Verbesserung für dieses spezifische Unte
 
 // ── Core analysis ─────────────────────────────────────────────────────────────
 
-export async function analyzeCall(orgId: string, callId: string, transcript: string): Promise<void> {
+export async function analyzeCall(
+  orgId: string,
+  callId: string,
+  transcript: string,
+  callMeta?: {
+    duration_ms?: number;
+    disconnection_reason?: string;
+    from_number?: string;
+    silence_duration_ms?: number;
+  },
+): Promise<void> {
   if (!pool || !process.env.OPENAI_API_KEY) return;
   if (!transcript?.trim()) return;
 
@@ -751,10 +802,16 @@ Analysiere das Gespräch im Kontext des Unternehmens und gib dieses JSON zurück
       "prompt_fix": "<konkrete Anweisung für den System-Prompt>"
     }
   ],
-  "overall_feedback": "<2-3 Sätze Fazit, bezogen auf dieses Unternehmen>"
+  "overall_feedback": "<2-3 Sätze Fazit, bezogen auf dieses Unternehmen>",
+  "satisfaction_signals": {
+    "sentiment": <Zahl von -1 bis 1, Tonalität des Kunden>,
+    "task_completed": <true wenn Termin, Ticket oder Auskunft erfolgreich erledigt>,
+    "escalation_requested": <true wenn Kunde nach einem Menschen verlangt hat>,
+    "interruption_count": <Anzahl Male der Kunde den Agenten unterbrochen hat>
+  }
 }
 
-Falls keine Probleme: bad_moments leer.`,
+Falls keine Probleme: bad_moments leer. satisfaction_signals ist immer auszufüllen.`,
         },
       ],
     });
@@ -774,6 +831,39 @@ Falls keine Probleme: bad_moments leer.`,
      VALUES ($1, $2, $3, $4, $5) ON CONFLICT (call_id) DO NOTHING`,
     [orgId, callId, analysis.score, JSON.stringify(analysis.bad_moments), analysis.overall_feedback ?? ''],
   );
+
+  // Enrich transcript record with analysis results (fire-and-forget)
+  pool.query(
+    `UPDATE call_transcripts SET
+       score = $1, bad_moments = $2, agent_prompt = $3,
+       industry = $4, template_id = $5, outcome = $6
+     WHERE call_id = $7`,
+    [
+      analysis.score,
+      JSON.stringify(analysis.bad_moments),
+      currentPrompt,
+      ctx.industry ?? null,
+      ctx.templateId ?? null,
+      analysis.overall_feedback?.toLowerCase().includes('ticket') ? 'ticket' : 'resolved',
+      callId,
+    ],
+  ).catch(() => {});
+
+  // Compute and store implicit satisfaction score (fire-and-forget)
+  if (callMeta) {
+    extractSignalsFromCall(
+      { ...callMeta, call_id: callId },
+      analysis.satisfaction_signals ?? {},
+    ).then(signals => {
+      const satScore = computeSatisfactionScore(signals);
+      return storeSatisfactionData(callId, satScore, signals, callMeta.disconnection_reason ?? null);
+    }).catch(() => {});
+  }
+
+  // Cross-org template learning (fire-and-forget)
+  import('./template-learning.js').then(({ processTemplateLearning }) => {
+    processTemplateLearning(orgId, callId, analysis).catch(() => {});
+  }).catch(() => {});
 
   // Outlier detection — if this call's score is a statistical outlier (e.g. angry caller, bad connection),
   // double the threshold so a single freak call can't trigger prompt changes.

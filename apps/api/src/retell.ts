@@ -277,6 +277,37 @@ export async function createWebCall(agentId: string): Promise<WebCallResponse> {
   });
 }
 
+// --- BYOT: Register Call (Bring Your Own Telephony) ---
+
+export type RegisterCallResponse = {
+  call_id: string;
+  access_token: string; // used as WebSocket URL suffix
+};
+
+/**
+ * Register a call with Retell so a third-party telephony provider (e.g. Twilio)
+ * can stream audio to the Retell AI agent.
+ * Returns a call_id whose audio WebSocket is at:
+ *   wss://api.retellai.com/audio-websocket/<call_id>
+ */
+export async function registerCall(config: {
+  agentId: string;
+  fromNumber: string;
+  toNumber: string;
+}): Promise<RegisterCallResponse> {
+  return retellRequest('/v2/register-call', {
+    method: 'POST',
+    body: JSON.stringify({
+      agent_id: config.agentId,
+      audio_websocket_protocol: 'twilio',
+      audio_encoding: 'mulaw_8000',
+      sample_rate: 8000,
+      from_number: config.fromNumber,
+      to_number: config.toNumber,
+    }),
+  });
+}
+
 // --- Outbound Phone Call ---
 
 export type PhoneCallResponse = {

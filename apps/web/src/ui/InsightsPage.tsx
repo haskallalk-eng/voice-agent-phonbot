@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { IconPhone, IconInsights, IconStar } from './PhonbotIcons.js';
 import {
   getInsights,
   applyInsightSuggestion,
@@ -411,12 +412,12 @@ export function InsightsPage() {
           <p className="text-xs text-white/30 uppercase tracking-widest mb-3">So funktioniert es</p>
           <div className="grid grid-cols-3 gap-4 text-center">
             {[
-              { icon: '📞', title: 'Anruf endet', desc: 'Transkript wird analysiert' },
-              { icon: '🔍', title: 'Muster erkannt', desc: `Gleiches Problem ${data?.auto_apply_threshold ?? 3}× → Vorschlag` },
-              { icon: '✅', title: 'Prompt verbessert', desc: 'Auto oder manuell angewendet' },
+              { icon: <IconPhone size={22} />, title: 'Anruf endet', desc: 'Transkript wird analysiert' },
+              { icon: <IconInsights size={22} />, title: 'Muster erkannt', desc: `Gleiches Problem ${data?.auto_apply_threshold ?? 3}× → Vorschlag` },
+              { icon: <IconStar size={22} />, title: 'Prompt verbessert', desc: 'Auto oder manuell angewendet' },
             ].map((s, i) => (
               <div key={i}>
-                <div className="text-2xl mb-1">{s.icon}</div>
+                <div className="flex justify-center mb-1 text-white/50">{s.icon}</div>
                 <p className="text-xs font-semibold text-white/70">{s.title}</p>
                 <p className="text-xs text-white/30 mt-0.5">{s.desc}</p>
               </div>

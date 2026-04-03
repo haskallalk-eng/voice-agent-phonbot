@@ -1,19 +1,77 @@
 import pg from 'pg';
+import dns from 'node:dns/promises';
+import { URL } from 'node:url';
 import './env.js'; // ensure dotenv is loaded before we read process.env
 
 const { Pool } = pg;
 
 export const DATABASE_URL = process.env.DATABASE_URL;
 
-// Postgres is optional for now (dev machines without Docker).
-export const pool = DATABASE_URL
-  ? new Pool({
+/**
+ * On networks where dns.lookup returns ENOENT for IPv6-only hosts,
+ * pre-resolve the hostname to its IPv6 address and build pool config manually
+ * so pg never needs to call dns.lookup at all.
+ */
+async function resolveHost(dbUrl: string): Promise<pg.PoolConfig> {
+  const parsed = new URL(dbUrl);
+  const hostname = parsed.hostname;
+
+  let resolvedHost = hostname;
+  try {
+    // Try IPv4 first, fall back to IPv6
+    const v4 = await dns.resolve4(hostname).catch(() => null);
+    if (v4 && v4.length > 0) {
+      resolvedHost = v4[0]!;
+    } else {
+      const v6 = await dns.resolve6(hostname);
+      if (v6.length > 0) resolvedHost = v6[0]!;
+    }
+  } catch {
+    // Keep original hostname — let pg try
+  }
+
+  return {
+    host: resolvedHost,
+    port: parsed.port ? parseInt(parsed.port, 10) : 5432,
+    user: decodeURIComponent(parsed.username),
+    password: decodeURIComponent(parsed.password),
+    database: parsed.pathname.slice(1),
+    ssl: { rejectUnauthorized: false, servername: hostname },
+    max: Number(process.env.PG_POOL_MAX ?? 20),
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 10_000,
+  };
+}
+
+// Pool is created lazily after hostname resolution
+let _pool: pg.Pool | null = null;
+let _poolReady: Promise<void> | null = null;
+
+if (DATABASE_URL) {
+  _poolReady = resolveHost(DATABASE_URL).then((config) => {
+    _pool = new Pool(config);
+  }).catch(() => {
+    // Fall back to direct connection string
+    _pool = new Pool({
       connectionString: DATABASE_URL,
       max: Number(process.env.PG_POOL_MAX ?? 20),
       idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 5_000,
-    })
-  : null;
+      connectionTimeoutMillis: 10_000,
+    });
+  });
+}
+
+// Proxy object: awaits pool initialization before first use
+export const pool = DATABASE_URL ? new Proxy({} as pg.Pool, {
+  get(_target, prop) {
+    if (prop === 'then') return undefined; // not a Promise
+    return async (...args: unknown[]) => {
+      if (_poolReady) await _poolReady;
+      if (!_pool) throw new Error('Pool not initialized');
+      return (_pool[prop as keyof pg.Pool] as (...a: unknown[]) => unknown)(...args);
+    };
+  },
+}) : null;
 
 export async function migrate() {
   if (!pool) {
@@ -201,4 +259,90 @@ export async function migrate() {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS ab_tests_org_status ON ab_tests(org_id, status);`);
+
+  // ── Learning System: Call Transcripts ─────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS call_transcripts (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      org_id       UUID NOT NULL,
+      call_id      TEXT NOT NULL UNIQUE,
+      direction    TEXT NOT NULL DEFAULT 'inbound',
+      transcript   TEXT NOT NULL,
+      duration_sec INT,
+      from_number  TEXT,
+      to_number    TEXT,
+      template_id  TEXT,
+      industry     TEXT,
+      agent_prompt TEXT,
+      score        NUMERIC(4,2),
+      conv_score   NUMERIC(4,2),
+      outcome      TEXT,
+      bad_moments  JSONB,
+      metadata     JSONB DEFAULT '{}',
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_transcripts_org ON call_transcripts(org_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_transcripts_industry ON call_transcripts(industry);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_transcripts_score ON call_transcripts(score);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_transcripts_created ON call_transcripts(created_at DESC);`);
+
+  // ── Satisfaction signals columns (added in learning v2) ───────────────────
+  await pool.query(`ALTER TABLE call_transcripts ADD COLUMN IF NOT EXISTS satisfaction_score NUMERIC(4,2);`);
+  await pool.query(`ALTER TABLE call_transcripts ADD COLUMN IF NOT EXISTS satisfaction_signals JSONB;`);
+  await pool.query(`ALTER TABLE call_transcripts ADD COLUMN IF NOT EXISTS repeat_caller BOOLEAN DEFAULT false;`);
+  await pool.query(`ALTER TABLE call_transcripts ADD COLUMN IF NOT EXISTS disconnection_reason TEXT;`);
+
+  // ── Learning System: Template Learnings ───────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS template_learnings (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      template_id   TEXT NOT NULL,
+      learning_type TEXT NOT NULL DEFAULT 'prompt_rule',
+      content       TEXT NOT NULL,
+      source_count  INT NOT NULL DEFAULT 1,
+      avg_impact    NUMERIC(4,2),
+      confidence    NUMERIC(3,2),
+      embedding     JSONB,
+      status        TEXT NOT NULL DEFAULT 'pending',
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      applied_at    TIMESTAMPTZ
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_tl_template ON template_learnings(template_id, status);`);
+
+  // ── Learning System: Conversation Patterns ────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS conversation_patterns (
+      id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      direction      TEXT NOT NULL DEFAULT 'inbound',
+      industry       TEXT,
+      pattern_type   TEXT NOT NULL,
+      situation      TEXT NOT NULL,
+      agent_response TEXT NOT NULL,
+      effectiveness  NUMERIC(4,2),
+      usage_count    INT NOT NULL DEFAULT 0,
+      source_calls   INT NOT NULL DEFAULT 0,
+      embedding      JSONB,
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_patterns_industry ON conversation_patterns(industry, pattern_type);`);
+
+  // ── Learning System: Training Examples ───────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS training_examples (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      example_type  TEXT NOT NULL DEFAULT 'chat_completion',
+      direction     TEXT NOT NULL,
+      industry      TEXT,
+      system_prompt TEXT,
+      messages      JSONB NOT NULL,
+      score         NUMERIC(4,2),
+      quality_label TEXT,
+      metadata      JSONB DEFAULT '{}',
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_training_industry ON training_examples(industry, quality_label);`);
 }

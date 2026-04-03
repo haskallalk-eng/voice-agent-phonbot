@@ -89,6 +89,8 @@ interface RetellCallData {
   start_timestamp?: number;
   end_timestamp?: number;
   agent_id?: string;
+  from_number?: string;
+  to_number?: string;
 }
 
 export async function registerRetellWebhooks(app: FastifyInstance) {
@@ -109,8 +111,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       const agentId = (call as RetellCallData).agent_id;
 
       if (startTs && endTs && agentId) {
-        const durationSeconds = Math.max(0, endTs - startTs);
-        const minutes = Math.ceil(durationSeconds / 60);
+        const callDurationMs = Math.max(0, endTs - startTs);
+        const minutes = Math.ceil(callDurationMs / 60000);
 
         const orgId = await getOrgIdByAgentId(agentId);
         if (orgId) {
@@ -122,10 +124,34 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         const callId = (call as RetellCallData).call_id;
         const callType = (call as RetellCallData & { call_type?: string }).call_type;
         const durationMs = (call as RetellCallData & { duration_ms?: number }).duration_ms;
+        const fromNumber = (call as RetellCallData).from_number;
+        const toNumber = (call as RetellCallData).to_number;
+        const disconnectionReason = (call as RetellCallData & { disconnection_reason?: string }).disconnection_reason;
+        const silenceDurationMs = (call as RetellCallData & { silence_duration_ms?: number }).silence_duration_ms;
 
         if (orgId && callId && transcript) {
           const metadata = (call as RetellCallData & { metadata?: Record<string, unknown> }).metadata;
           const isOutbound = !!(metadata?.outboundRecordId);
+
+          // Store transcript for learning system (fire-and-forget)
+          if (pool) {
+            pool.query(
+              `INSERT INTO call_transcripts (org_id, call_id, direction, transcript, duration_sec, from_number, to_number, disconnection_reason, metadata)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+               ON CONFLICT (call_id) DO NOTHING`,
+              [
+                orgId,
+                callId,
+                isOutbound ? 'outbound' : 'inbound',
+                transcript,
+                durationMs ? Math.round(durationMs / 1000) : null,
+                fromNumber ?? null,
+                toNumber ?? null,
+                disconnectionReason ?? null,
+                JSON.stringify(metadata ?? {}),
+              ],
+            ).catch(() => {});
+          }
 
           if (isOutbound) {
             // Outbound sales call — use outbound learning system
@@ -134,7 +160,12 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
             }).catch(() => {});
           } else {
             // Inbound call — use inbound learning system
-            analyzeCall(orgId, callId, transcript).catch(() => {});
+            analyzeCall(orgId, callId, transcript, {
+              duration_ms: durationMs ?? undefined,
+              disconnection_reason: disconnectionReason ?? undefined,
+              from_number: fromNumber ?? undefined,
+              silence_duration_ms: silenceDurationMs ?? undefined,
+            }).catch(() => {});
           }
         }
       }

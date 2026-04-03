@@ -49,22 +49,26 @@ export async function registerAuth(app: FastifyInstance) {
       );
       const org = orgResult.rows[0];
 
+      // If no email service is configured (dev), mark user as already verified
+      const emailServiceConfigured = !!process.env.RESEND_API_KEY;
       const userResult = await client.query(
-        `INSERT INTO users (org_id, email, password_hash, role, email_verify_token)
-         VALUES ($1, $2, $3, 'owner', $4)
+        `INSERT INTO users (org_id, email, password_hash, role, email_verify_token, email_verified)
+         VALUES ($1, $2, $3, 'owner', $4, $5)
          RETURNING id, email, role`,
-        [org.id, email, passwordHash, verifyToken],
+        [org.id, email, passwordHash, emailServiceConfigured ? verifyToken : null, !emailServiceConfigured],
       );
       const user = userResult.rows[0];
 
       await client.query('COMMIT');
 
-      // Send verification email (fire-and-forget, don't block registration)
-      const appUrl = process.env.APP_URL ?? 'http://localhost:5173';
-      sendVerificationEmail({
-        toEmail: email,
-        verifyUrl: `${appUrl}/verify-email?token=${verifyToken}`,
-      }).catch(() => {/* already logged inside */});
+      // Send verification email only when email service is configured
+      if (emailServiceConfigured) {
+        const appUrl = process.env.APP_URL ?? 'http://localhost:5173';
+        sendVerificationEmail({
+          toEmail: email,
+          verifyUrl: `${appUrl}/verify-email?token=${verifyToken}`,
+        }).catch(() => {/* already logged inside */});
+      }
 
       const token = app.jwt.sign(
         { userId: user.id, orgId: org.id, role: user.role },
@@ -111,9 +115,7 @@ export async function registerAuth(app: FastifyInstance) {
       return reply.status(401).send({ error: 'Invalid credentials' });
     }
 
-    if (!user.email_verified) {
-      return reply.status(403).send({ error: 'Bitte bestätige zuerst deine E-Mail-Adresse. Sieh in deinem Postfach nach.' });
-    }
+    // Email verification is informational only — never block login
 
     const token = app.jwt.sign(
       { userId: user.id, orgId: user.org_id, role: user.role },

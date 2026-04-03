@@ -1,5 +1,6 @@
 import './env.js';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { z } from 'zod';
 import { pool } from './db.js';
 import type { JwtPayload } from './auth.js';
 
@@ -68,12 +69,24 @@ export async function migrateCalendar(): Promise<void> {
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       org_id      UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
       date        DATE NOT NULL,
+      start_time  TIME,
+      end_time    TIME,
       reason      TEXT,
       created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // Add time columns if they don't exist yet (idempotent migration)
+  await pool.query(`ALTER TABLE chippy_blocks ADD COLUMN IF NOT EXISTS start_time TIME`);
+  await pool.query(`ALTER TABLE chippy_blocks ADD COLUMN IF NOT EXISTS end_time   TIME`);
+  // Drop old full-day unique index (we now allow multiple time-based blocks per day)
+  await pool.query(`DROP INDEX IF EXISTS chippy_blocks_org_date_uniq`);
   await pool.query(`
     CREATE INDEX IF NOT EXISTS chippy_blocks_org_idx ON chippy_blocks(org_id, date);
+  `);
+  // Unique index only for full-day blocks (start_time IS NULL)
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS chippy_blocks_fullday_uniq
+      ON chippy_blocks(org_id, date) WHERE start_time IS NULL;
   `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS chippy_bookings (
@@ -98,6 +111,15 @@ async function getConnection(orgId: string): Promise<CalendarConnection | null> 
     [orgId],
   );
   return res.rows[0] ?? null;
+}
+
+async function getAllConnections(orgId: string): Promise<CalendarConnection[]> {
+  if (!pool) return [];
+  const res = await pool.query<CalendarConnection>(
+    `SELECT * FROM calendar_connections WHERE org_id = $1 ORDER BY created_at`,
+    [orgId],
+  );
+  return res.rows;
 }
 
 // ── Token Management (Microsoft) ─────────────────────────────────────────────
@@ -580,21 +602,49 @@ export async function findFreeSlots(
   orgId: string,
   opts: { date?: string; range?: string; service?: string },
 ): Promise<{ slots: string[]; source: string }> {
-  const conn = await getConnection(orgId);
-  if (!conn) {
-    // No external calendar — try Chippy built-in calendar
-    const { schedule, blocks } = await getChippySchedule(orgId);
-    const hasChippy = Object.values(schedule).some((d) => d.enabled);
-    if (hasChippy) {
-      return { slots: generateChippySlots(schedule, blocks), source: 'chippy' };
+  // Search ALL connected calendars + Chippy, merge results
+  const connections = await getAllConnections(orgId);
+  const allSlots: string[] = [];
+  const sources: string[] = [];
+
+  // Always check Chippy built-in calendar first
+  const { schedule, blocks } = await getChippySchedule(orgId);
+  const hasChippy = Object.values(schedule).some((d) => d.enabled);
+  if (hasChippy) {
+    allSlots.push(...generateChippySlots(schedule, blocks));
+    sources.push('chippy');
+  }
+
+  // Check each external calendar
+  for (const conn of connections) {
+    try {
+      const connSlots = await findSlotsForConnection(conn, orgId);
+      if (connSlots.length > 0) {
+        allSlots.push(...connSlots);
+        sources.push(conn.provider);
+      }
+    } catch {
+      // Skip failed connections, continue with others
     }
+  }
+
+  if (allSlots.length === 0 && sources.length === 0) {
     return { slots: [], source: 'not-connected' };
   }
 
+  // Deduplicate and sort slots
+  const unique = [...new Set(allSlots)].sort();
+  return { slots: unique, source: sources.join('+') || 'chippy' };
+}
+
+async function findSlotsForConnection(
+  conn: CalendarConnection,
+  orgId: string,
+): Promise<string[]> {
   // ── Cal.com path ───────────────────────────────────────────────────────────
   if (conn.provider === 'calcom') {
     const apiKey = conn.api_key;
-    if (!apiKey) return { slots: [], source: 'calcom-no-key' };
+    if (!apiKey) return [];
 
     const now = new Date();
     const dateFrom = now.toISOString().slice(0, 10);
@@ -603,21 +653,20 @@ export async function findFreeSlots(
       .slice(0, 10);
 
     const slots = await calcomFindSlots(apiKey, { dateFrom, dateTo });
-    return { slots, source: 'calcom' };
+    return slots;
   }
 
   // ── Microsoft path ─────────────────────────────────────────────────────────
   if (conn.provider === 'microsoft') {
     const token = await getValidMsToken(orgId);
-    if (!token) return { slots: [], source: 'microsoft-not-connected' };
+    if (!token) return [];
     const email = conn.email ?? '';
-    const slots = await msFindSlots(token, email);
-    return { slots, source: 'microsoft' };
+    return msFindSlots(token, email);
   }
 
   // ── Google path ────────────────────────────────────────────────────────────
   const token = await getValidToken(orgId);
-  if (!token) return { slots: [], source: 'not-connected' };
+  if (!token) return [];
 
   const timeMin = new Date().toISOString();
   const timeMax = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -636,20 +685,16 @@ export async function findFreeSlots(
       }),
     });
 
-    if (!resp.ok) {
-      return { slots: [], source: 'google-error' };
-    }
+    if (!resp.ok) return [];
 
     const data = (await resp.json()) as {
       calendars: Record<string, { busy: { start: string; end: string }[] }>;
     };
 
     const busyPeriods = data.calendars[conn.calendar_id]?.busy ?? [];
-    const slots = generateFreeSlots(busyPeriods);
-
-    return { slots, source: 'google' };
+    return generateFreeSlots(busyPeriods);
   } catch {
-    return { slots: [], source: 'google-error' };
+    return [];
   }
 }
 
@@ -663,20 +708,57 @@ export async function bookSlot(
     notes?: string;
   },
 ): Promise<{ ok: boolean; eventId?: string; bookingId?: number; error?: string }> {
-  const conn = await getConnection(orgId);
-  if (!conn) {
-    // No external calendar — save via Chippy
-    const slotTime = parseSlotTime(opts.time);
-    if (!slotTime) return { ok: false, error: `Cannot parse time: ${opts.time}` };
-    if (!pool) return { ok: false, error: 'No database configured' };
+  const connections = await getAllConnections(orgId);
+
+  // Always book into Chippy (internal record) regardless of external calendars
+  const slotTime = parseSlotTime(opts.time);
+  let chippyBookingId: string | undefined;
+  if (slotTime && pool) {
     const res = await pool.query(
       `INSERT INTO chippy_bookings (org_id, customer_name, customer_phone, service, notes, slot_time)
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
       [orgId, opts.customerName, opts.customerPhone, opts.service || null, opts.notes || null, slotTime.toISOString()],
     );
-    const eventId = res.rows[0]?.id as string | undefined;
-    return { ok: true, eventId };
+    chippyBookingId = res.rows[0]?.id as string | undefined;
   }
+
+  // No external calendars — Chippy booking is sufficient
+  if (connections.length === 0) {
+    if (!slotTime) return { ok: false, error: `Cannot parse time: ${opts.time}` };
+    return { ok: true, eventId: chippyBookingId };
+  }
+
+  // Book into ALL connected external calendars (fire-and-collect)
+  const results: { provider: string; ok: boolean; eventId?: string; error?: string }[] = [];
+  for (const conn of connections) {
+    try {
+      const result = await bookSlotForConnection(conn, orgId, opts);
+      results.push({ provider: conn.provider, ...result });
+    } catch (e) {
+      results.push({ provider: conn.provider, ok: false, error: (e instanceof Error ? e.message : 'Unknown error') });
+    }
+  }
+
+  // If at least one external booking succeeded, return ok
+  const anySuccess = results.some(r => r.ok);
+  const firstSuccess = results.find(r => r.ok);
+  if (anySuccess) {
+    return { ok: true, eventId: firstSuccess?.eventId ?? chippyBookingId };
+  }
+
+  // All external failed but Chippy booking exists
+  if (chippyBookingId) {
+    return { ok: true, eventId: chippyBookingId };
+  }
+
+  return { ok: false, error: results.map(r => `${r.provider}: ${r.error}`).join('; ') };
+}
+
+async function bookSlotForConnection(
+  conn: CalendarConnection,
+  orgId: string,
+  opts: { customerName: string; customerPhone: string; time: string; service: string; notes?: string },
+): Promise<{ ok: boolean; eventId?: string; error?: string }> {
 
   // ── Microsoft path ─────────────────────────────────────────────────────────
   if (conn.provider === 'microsoft') {
@@ -1000,15 +1082,37 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
 
       const conn = await getConnection(orgId);
 
+      // Check if Chippy built-in calendar has configured hours
+      const { schedule } = await getChippySchedule(orgId);
+      const hasChippy = Object.values(schedule).some((d) => d.enabled);
+
       if (!conn) {
-        return reply.send({ connected: false, provider: null });
+        // No external calendar — report Chippy status
+        return reply.send({
+          connected: hasChippy,
+          provider: hasChippy ? 'chippy' : null,
+          email: null,
+          chippy: { configured: hasChippy, schedule },
+        });
+      }
+
+      // Verify external connection is still valid
+      let connectionValid = true;
+      if (conn.provider === 'google') {
+        const token = await getValidToken(orgId);
+        if (!token) connectionValid = false;
+      } else if (conn.provider === 'microsoft') {
+        const token = await getValidMsToken(orgId);
+        if (!token) connectionValid = false;
       }
 
       const base = {
-        connected: true,
-        provider: conn.provider,
-        email: conn.email ?? null,
+        connected: connectionValid,
+        provider: connectionValid ? conn.provider : (hasChippy ? 'chippy' : null),
+        email: connectionValid ? (conn.email ?? null) : null,
         calendarId: conn.calendar_id ?? null,
+        chippy: { configured: hasChippy, schedule },
+        ...((!connectionValid && conn.provider) ? { expired: true, expiredProvider: conn.provider } : {}),
       };
 
       if (conn.provider === 'calcom' && conn.api_key) {
@@ -1188,7 +1292,8 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
     }
 
     const blockRes = pool ? await pool.query(
-      `SELECT id, date::text, reason FROM chippy_blocks WHERE org_id = $1 AND date >= CURRENT_DATE ORDER BY date`,
+      `SELECT id, date::text, start_time::text, end_time::text, reason
+       FROM chippy_blocks WHERE org_id = $1 AND date >= CURRENT_DATE ORDER BY date, start_time NULLS FIRST`,
       [orgId],
     ) : { rows: [] };
 
@@ -1210,16 +1315,17 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
     return { ok: true };
   });
 
-  /** POST /calendar/chippy/block — block a specific date */
+  /** POST /calendar/chippy/block — block a specific date or time range */
   app.post('/calendar/chippy/block', { ...auth }, async (req: FastifyRequest) => {
     const { orgId } = req.user as JwtPayload;
-    const body = req.body as { date: string; reason?: string };
+    const body = req.body as { date: string; start_time?: string; end_time?: string; reason?: string };
     if (!pool) return { ok: true };
 
     const res = await pool.query(
-      `INSERT INTO chippy_blocks (org_id, date, reason) VALUES ($1, $2, $3)
+      `INSERT INTO chippy_blocks (org_id, date, start_time, end_time, reason)
+       VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT DO NOTHING RETURNING id`,
-      [orgId, body.date, body.reason ?? null],
+      [orgId, body.date, body.start_time ?? null, body.end_time ?? null, body.reason ?? null],
     );
     return { ok: true, id: res.rows[0]?.id };
   });
@@ -1230,6 +1336,51 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
     const { id } = req.params as { id: string };
     if (!pool) return reply.send({ ok: true });
     await pool.query(`DELETE FROM chippy_blocks WHERE id = $1 AND org_id = $2`, [id, orgId]);
+    return { ok: true };
+  });
+
+  /** GET /calendar/chippy/bookings?from=YYYY-MM-DD&to=YYYY-MM-DD — list bookings in a range */
+  app.get('/calendar/chippy/bookings', { ...auth }, async (req: FastifyRequest) => {
+    const { orgId } = req.user as JwtPayload;
+    const query = req.query as { from?: string; to?: string };
+    if (!pool) return { bookings: [] };
+    const from = query.from ?? new Date().toISOString().slice(0, 10);
+    const toDate = query.to ?? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const res = await pool.query(
+      `SELECT id, customer_name, customer_phone, service, notes, slot_time, created_at
+       FROM chippy_bookings WHERE org_id = $1 AND slot_time >= $2::date AND slot_time < ($3::date + interval '1 day')
+       ORDER BY slot_time`,
+      [orgId, from, toDate],
+    );
+    return { bookings: res.rows };
+  });
+
+  /** POST /calendar/chippy/bookings — create a manual booking */
+  app.post('/calendar/chippy/bookings', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { orgId } = req.user as JwtPayload;
+    const parsed = z.object({
+      customer_name: z.string().min(1).max(200),
+      customer_phone: z.string().min(1).max(50),
+      service: z.string().max(200).optional(),
+      notes: z.string().max(1000).optional(),
+      slot_time: z.string().min(1), // ISO datetime
+    }).safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Ungültige Daten', details: parsed.error.flatten() });
+    if (!pool) return { ok: true, id: 'mock' };
+    const res = await pool.query(
+      `INSERT INTO chippy_bookings (org_id, customer_name, customer_phone, service, notes, slot_time)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, customer_name, customer_phone, service, notes, slot_time`,
+      [orgId, parsed.data.customer_name, parsed.data.customer_phone, parsed.data.service ?? null, parsed.data.notes ?? null, parsed.data.slot_time],
+    );
+    return { ok: true, booking: res.rows[0] };
+  });
+
+  /** DELETE /calendar/chippy/bookings/:id — delete a manual booking */
+  app.delete('/calendar/chippy/bookings/:id', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { orgId } = req.user as JwtPayload;
+    const { id } = req.params as { id: string };
+    if (!pool) return reply.send({ ok: true });
+    await pool.query(`DELETE FROM chippy_bookings WHERE id = $1 AND org_id = $2`, [id, orgId]);
     return { ok: true };
   });
 }

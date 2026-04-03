@@ -7,6 +7,7 @@ import {
   type Plan,
   type BillingStatus,
 } from '../lib/api.js';
+import { SkeletonCard } from '../components/ui.js';
 
 const PLAN_FEATURES: Record<string, string[]> = {
   free: ['100 Freiminuten (einmalig)', '1 Agent', 'Web-Call Test', 'Community Support'],
@@ -66,7 +67,7 @@ export function BillingPage() {
 
     Promise.all([getBillingStatus(), getBillingPlans()])
       .then(([s, p]) => { setStatus(s); setPlans(p.plans); })
-      .catch(() => {})
+      .catch((err) => { console.error('[BillingPage] load error:', err); setFlash({ type: 'error', text: 'Billing-Daten konnten nicht geladen werden.' }); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -94,8 +95,11 @@ export function BillingPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-white/30 text-sm">Lade Billing…</p>
+      <div className="max-w-4xl mx-auto px-6 py-8 space-y-6">
+        <SkeletonCard />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard />
+        </div>
       </div>
     );
   }

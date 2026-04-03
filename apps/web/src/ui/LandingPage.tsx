@@ -83,6 +83,168 @@ const FAQ_ITEMS = [
   },
 ];
 
+function CallbackSection() {
+  const [phone, setPhone] = React.useState('');
+  const [name, setName] = React.useState('');
+  const [state, setState] = React.useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const ref = React.useRef<HTMLElement>(null);
+  const visible = useVisible(ref);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!phone.trim()) return;
+    setState('loading');
+    try {
+      const res = await fetch('/api/outbound/website-callback', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ phone: phone.trim(), name: name.trim() || undefined }),
+      });
+      if (!res.ok) throw new Error();
+      setState('success');
+    } catch {
+      setState('error');
+    }
+  }
+
+  return (
+    <section
+      ref={ref}
+      id="callback"
+      className="relative z-10 px-6 py-24"
+      style={{ opacity: visible ? 1 : 0, transform: visible ? 'none' : 'translateY(32px)', transition: 'opacity 0.7s ease, transform 0.7s ease' }}
+    >
+      <div className="max-w-2xl mx-auto">
+        {/* Card */}
+        <div
+          className="relative rounded-3xl overflow-hidden"
+          style={{
+            background: 'linear-gradient(135deg, rgba(15,15,28,0.98), rgba(10,10,20,0.98))',
+            border: '1px solid rgba(249,115,22,0.25)',
+            boxShadow: '0 0 80px rgba(249,115,22,0.12), 0 0 160px rgba(6,182,212,0.06), inset 0 1px 0 rgba(255,255,255,0.05)',
+          }}
+        >
+          {/* Glow blob */}
+          <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full pointer-events-none"
+            style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.15) 0%, transparent 70%)' }} />
+          <div className="absolute -bottom-20 -left-20 w-64 h-64 rounded-full pointer-events-none"
+            style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.10) 0%, transparent 70%)' }} />
+
+          <div className="relative grid grid-cols-1 sm:grid-cols-2 gap-0">
+            {/* Left — visual side */}
+            <div className="p-8 sm:p-10 flex flex-col justify-center">
+              {/* Phone icon with ring animation */}
+              <div className="relative w-16 h-16 mb-6">
+                <div className="absolute inset-0 rounded-full animate-ping"
+                  style={{ background: 'rgba(249,115,22,0.15)', animationDuration: '2s' }} />
+                <div className="absolute inset-1 rounded-full animate-ping"
+                  style={{ background: 'rgba(249,115,22,0.1)', animationDuration: '2s', animationDelay: '0.5s' }} />
+                <div className="relative w-full h-full rounded-full flex items-center justify-center text-2xl"
+                  style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.3), rgba(6,182,212,0.2))' }}>
+                  📞
+                </div>
+              </div>
+
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-white leading-tight mb-3">
+                Chippy ruft dich<br />
+                <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+                  in 60 Sekunden
+                </span>{' '}an
+              </h2>
+              <p className="text-white/45 text-sm leading-relaxed mb-6">
+                Erfahre live wie ein KI-Agent klingt — kostenlos, ohne Risiko, direkt auf dein Handy.
+              </p>
+
+              {/* Trust signals */}
+              <div className="space-y-2">
+                {['Kein Spam, kein Sales-Druck', 'Funktioniert auf jede Handynummer', 'Kostenlos & unverbindlich'].map(t => (
+                  <div key={t} className="flex items-center gap-2 text-xs text-white/40">
+                    <span className="w-1.5 h-1.5 rounded-full bg-orange-500/70 shrink-0" />
+                    {t}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Right — form side */}
+            <div className="p-8 sm:p-10 sm:border-l" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+              {state === 'success' ? (
+                <div className="h-full flex flex-col items-center justify-center text-center gap-4">
+                  <div className="w-16 h-16 rounded-full flex items-center justify-center text-3xl"
+                    style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)' }}>
+                    ✓
+                  </div>
+                  <div>
+                    <p className="text-green-300 font-bold text-lg">Chippy ruft dich an!</p>
+                    <p className="text-white/40 text-sm mt-1">Bitte hab dein Telefon bereit — der Anruf kommt gleich.</p>
+                  </div>
+                  <button onClick={() => setState('idle')} className="text-xs text-white/30 hover:text-white/50 transition-colors mt-2">
+                    Nochmal versuchen
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmit} className="space-y-4 h-full flex flex-col justify-center">
+                  <div>
+                    <label className="block text-xs text-white/40 mb-1.5 uppercase tracking-wide">Dein Name</label>
+                    <input
+                      type="text"
+                      placeholder="Max Mustermann"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full rounded-xl bg-white/[0.06] border border-white/10 px-4 py-3 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-orange-500/40 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-white/40 mb-1.5 uppercase tracking-wide">Telefonnummer *</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 text-sm select-none">📱</span>
+                      <input
+                        type="tel"
+                        placeholder="+49 123 456789"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        required
+                        className="w-full rounded-xl bg-white/[0.06] border border-white/10 pl-10 pr-4 py-3 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-orange-500/40 transition-all"
+                      />
+                    </div>
+                  </div>
+                  {state === 'error' && (
+                    <p className="text-red-400 text-xs bg-red-500/10 rounded-lg px-3 py-2">
+                      ⚠️ Etwas ist schiefgelaufen — bitte versuche es erneut.
+                    </p>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={state === 'loading' || !phone.trim()}
+                    className="w-full rounded-xl px-6 py-3.5 font-bold text-white text-sm disabled:opacity-40 transition-all duration-300 hover:scale-[1.02]"
+                    style={{
+                      background: 'linear-gradient(135deg, #F97316, #06B6D4)',
+                      boxShadow: state !== 'loading' && phone.trim() ? '0 0 32px rgba(249,115,22,0.35)' : 'none',
+                    }}
+                  >
+                    {state === 'loading' ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                        Verbinde Chippy…
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center gap-2">
+                        <span>Jetzt kostenlos anrufen lassen</span>
+                        <span>→</span>
+                      </span>
+                    )}
+                  </button>
+                  <p className="text-xs text-white/20 text-center">Einmaliger Demo-Anruf · Keine Kosten · Keine Weitergabe</p>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function FaqSection() {
   const [open, setOpen] = React.useState<number | null>(null);
   const ref = React.useRef<HTMLElement>(null);
@@ -213,112 +375,125 @@ function SavingsCalculator({ onCTA }: { onCTA: () => void }) {
   const gesparteKosten = gesparteStunden * stundenlohn;
   const phonbotKosten = anrufe <= 5 ? 0 : anrufe <= 20 ? 49 : anrufe <= 50 ? 149 : 299;
   const nettoErsparnis = gesparteKosten - phonbotKosten;
+  const roi = phonbotKosten > 0 ? Math.round((nettoErsparnis / phonbotKosten) * 100) : 0;
 
   const sliders = [
     { label: 'Anrufe pro Tag', value: anrufe, set: setAnrufe, min: 1, max: 100, step: 1, display: `${anrufe}` },
-    { label: 'Ø Anrufdauer (Min)', value: dauer, set: setDauer, min: 1, max: 15, step: 1, display: `${dauer} min` },
-    { label: 'Stundenlohn Mitarbeiter (€)', value: stundenlohn, set: setStundenlohn, min: 10, max: 80, step: 1, display: `${stundenlohn} €/h` },
-    { label: 'Nachbearbeitungszeit (Min)', value: nachbearbeitung, set: setNachbearbeitung, min: 0, max: 30, step: 1, display: `${nachbearbeitung} min` },
-    { label: 'Bot löst alleine (%)', value: botQuote, set: setBotQuote, min: 30, max: 90, step: 1, display: `${botQuote}%` },
+    { label: 'Ø Anrufdauer', value: dauer, set: setDauer, min: 1, max: 15, step: 1, display: `${dauer} min` },
+    { label: 'Stundenlohn MA', value: stundenlohn, set: setStundenlohn, min: 10, max: 80, step: 1, display: `${stundenlohn} €/h` },
+    { label: 'Nachbearbeitung', value: nachbearbeitung, set: setNachbearbeitung, min: 0, max: 30, step: 1, display: `${nachbearbeitung} min` },
+    { label: 'Bot löst alleine', value: botQuote, set: setBotQuote, min: 30, max: 90, step: 1, display: `${botQuote}%` },
   ];
 
   return (
-    <section className="relative z-10 px-6 py-20 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="text-center mb-10">
-        <h2 className="text-3xl sm:text-4xl font-extrabold mb-3">Rechne selbst</h2>
-        <p className="text-white/50 text-lg">Ehrliche Zahlen — auch wenn's sich (noch) nicht lohnt.</p>
+    <section className="relative z-10 px-6 py-20 max-w-5xl mx-auto">
+      <div className="text-center mb-12">
+        <span className="inline-block text-xs font-semibold uppercase tracking-widest text-orange-400/80 mb-3 px-3 py-1 rounded-full border border-orange-500/20 bg-orange-500/5">Ehrlicher ROI-Rechner</span>
+        <h2 className="text-3xl sm:text-4xl font-extrabold mb-3">Was sparst du wirklich?</h2>
+        <p className="text-white/45 text-base">Schieb die Regler — wir zeigen dir die echten Zahlen, auch wenn sie noch nicht passen.</p>
       </div>
 
       <div
-        className="glass rounded-2xl border"
+        className="rounded-3xl overflow-hidden"
         style={{
-          borderColor: 'rgba(249,115,22,0.3)',
-          background: 'linear-gradient(135deg, rgba(249,115,22,0.05), rgba(6,182,212,0.03))',
-          boxShadow: '0 0 60px rgba(249,115,22,0.08), 0 0 120px rgba(6,182,212,0.04)',
+          border: '1px solid rgba(249,115,22,0.2)',
+          background: 'linear-gradient(135deg, rgba(15,15,28,0.95), rgba(10,10,20,0.95))',
+          boxShadow: '0 0 80px rgba(249,115,22,0.08), 0 0 160px rgba(6,182,212,0.04)',
         }}
       >
-        <div className="grid grid-cols-1 lg:grid-cols-2">
-          {/* LEFT — Results */}
-          <div
-            className="p-8 lg:border-r"
-            style={{ borderColor: 'rgba(255,255,255,0.07)' }}
-          >
-            {/* Hours saved */}
-            <div className="mb-6">
-              <p
-                className="text-6xl font-extrabold bg-clip-text text-transparent leading-none mb-1"
-                style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
-              >
-                ~{gesparteStunden.toFixed(0)} Std
-              </p>
-              <p className="text-white/50 text-sm font-medium">gespart pro Monat</p>
-            </div>
+        <div className="grid grid-cols-1 lg:grid-cols-5">
+          {/* LEFT — Sliders (3 cols) */}
+          <div className="lg:col-span-3 p-8 space-y-5" style={{ borderRight: '1px solid rgba(255,255,255,0.06)' }}>
+            <p className="text-xs font-semibold text-white/30 uppercase tracking-widest mb-6">Deine Zahlen</p>
+            {sliders.map((s) => {
+              const pct = ((s.value - s.min) / (s.max - s.min)) * 100;
+              return (
+                <div key={s.label}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-white/60">{s.label}</span>
+                    <span className="text-sm font-bold font-mono px-2 py-0.5 rounded-lg text-orange-400"
+                      style={{ background: 'rgba(249,115,22,0.1)' }}>
+                      {s.display}
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-150"
+                        style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #F97316, #06B6D4)' }} />
+                    </div>
+                    <input
+                      type="range" min={s.min} max={s.max} step={s.step} value={s.value}
+                      onChange={(e) => s.set(Number(e.target.value))}
+                      className="absolute inset-0 w-full opacity-0 cursor-pointer h-full"
+                      style={{ margin: 0 }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
 
-            {/* Cost saved */}
-            <div className="mb-6 pb-6" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-              <p className="text-4xl font-extrabold text-white leading-none mb-1">
-                ~{gesparteKosten.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €
-              </p>
-              <p className="text-white/50 text-sm font-medium">Personalkosten gespart</p>
-            </div>
+          {/* RIGHT — Results (2 cols) */}
+          <div className="lg:col-span-2 p-8 flex flex-col justify-between">
+            <div className="space-y-5">
+              <p className="text-xs font-semibold text-white/30 uppercase tracking-widest">Dein Ergebnis</p>
 
-            {/* Net savings — honest calculation */}
-            <div className="mb-5">
-              <p className="text-xs text-white/40 uppercase tracking-widest font-semibold mb-2">
-                Phonbot-Kosten eingerechnet (Starter-Plan)
-              </p>
-              {nettoErsparnis > 0 ? (
-                <>
-                  <p className="text-3xl font-extrabold text-green-400 leading-none mb-1">
-                    +{nettoErsparnis.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €
-                  </p>
-                  <p className="text-green-400/70 text-sm">Monatlicher Gewinn nach Phonbot-Kosten</p>
-                </>
-              ) : (
-                <>
-                  <p className="text-3xl font-extrabold text-red-400 leading-none mb-1">
-                    {nettoErsparnis.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €
-                  </p>
-                  <p className="text-red-400/70 text-sm">
-                    Bei diesem Volumen lohnt es sich noch nicht ganz — du brauchst mehr Anrufe
-                  </p>
-                </>
+              {/* Hours */}
+              <div className="rounded-2xl p-4" style={{ background: 'rgba(249,115,22,0.07)', border: '1px solid rgba(249,115,22,0.15)' }}>
+                <p className="text-3xl font-extrabold bg-clip-text text-transparent leading-none mb-0.5"
+                  style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+                  {gesparteStunden.toFixed(0)} Std
+                </p>
+                <p className="text-xs text-white/40 font-medium">gespart pro Monat</p>
+              </div>
+
+              {/* Cost */}
+              <div className="rounded-2xl p-4 bg-white/[0.04]" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
+                <p className="text-2xl font-extrabold text-white leading-none mb-0.5">
+                  {gesparteKosten.toLocaleString('de-DE', { maximumFractionDigits: 0 })} €
+                </p>
+                <p className="text-xs text-white/40 font-medium">Personalkosten gespart</p>
+              </div>
+
+              {/* Net / ROI */}
+              <div className={`rounded-2xl p-4 ${nettoErsparnis > 0 ? '' : ''}`}
+                style={{
+                  background: nettoErsparnis > 0 ? 'rgba(34,197,94,0.07)' : 'rgba(239,68,68,0.07)',
+                  border: `1px solid ${nettoErsparnis > 0 ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                }}>
+                <div className="flex items-end justify-between">
+                  <div>
+                    <p className={`text-2xl font-extrabold leading-none mb-0.5 ${nettoErsparnis > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {nettoErsparnis > 0 ? '+' : ''}{nettoErsparnis.toLocaleString('de-DE', { maximumFractionDigits: 0 })} €
+                    </p>
+                    <p className="text-xs font-medium" style={{ color: nettoErsparnis > 0 ? 'rgba(134,239,172,0.7)' : 'rgba(252,165,165,0.7)' }}>
+                      Netto nach Phonbot ({phonbotKosten} €/Mo)
+                    </p>
+                  </div>
+                  {phonbotKosten > 0 && nettoErsparnis > 0 && (
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-green-400">{roi}%</p>
+                      <p className="text-[10px] text-white/30">ROI</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {nettoErsparnis <= 0 && (
+                <p className="text-xs text-white/30 leading-relaxed">
+                  Noch nicht rentabel? Mehr Anrufe pro Tag oder höhere Bot-Quote — dann klappt's.
+                </p>
               )}
             </div>
 
-            <p className="text-xs text-white/30 mb-6 leading-relaxed">
-              {botQuote}% aller Anrufe vollständig durch Bot gelöst — komplexe Fälle herausgerechnet.
-            </p>
-
             <button
               onClick={onCTA}
-              className="w-full rounded-xl px-6 py-3.5 font-semibold text-white transition-all duration-300 hover:opacity-90 hover:scale-[1.02]"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+              className="mt-6 w-full rounded-xl px-6 py-3.5 font-bold text-white transition-all duration-300 hover:scale-[1.02]"
+              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)', boxShadow: '0 0 24px rgba(249,115,22,0.3)' }}
             >
-              Jetzt kostenlos testen →
+              Kostenlos testen →
             </button>
-          </div>
-
-          {/* RIGHT — Sliders */}
-          <div className="p-8 space-y-6">
-            {sliders.map((s) => (
-              <div key={s.label}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-white/60">{s.label}</span>
-                  <span className="text-sm font-bold text-orange-400 font-mono">{s.display}</span>
-                </div>
-                <input
-                  type="range"
-                  min={s.min}
-                  max={s.max}
-                  step={s.step}
-                  value={s.value}
-                  onChange={(e) => s.set(Number(e.target.value))}
-                  className="w-full accent-orange-500 cursor-pointer"
-                />
-              </div>
-            ))}
+            <p className="text-[10px] text-white/20 text-center mt-2">100 Freiminuten · Keine Kreditkarte nötig</p>
           </div>
         </div>
       </div>
@@ -398,7 +573,7 @@ function StatsSection() {
           >
             {businesses}+
           </p>
-          <p className="text-white/55 text-sm font-medium">Businesses aktiv</p>
+          <p className="text-white/55 text-sm font-medium">Stunden gespart</p>
         </div>
         <div>
           <p
@@ -1120,6 +1295,9 @@ export function LandingPage({ onGoToRegister, onGoToLogin }: Props) {
           ))}
         </div>
       </section>
+
+      {/* ── RÜCKRUF-FORMULAR ── */}
+      <CallbackSection />
 
       {/* ── FINAL CTA ── */}
       <section className="relative z-10 px-6 py-24 text-center max-w-2xl mx-auto">

@@ -3,12 +3,72 @@ import { RetellWebClient } from 'retell-client-js-sdk';
 import { TEMPLATES, type Template } from './templates.js';
 import { deployAgentConfig, createWebCall, connectCalcom, type AgentConfig } from '../../lib/api.js';
 import { FoxLogo } from '../FoxLogo.js';
+import {
+  IconStar, IconCalendar, IconPhone, IconCapabilities,
+  IconScissors, IconWrench, IconMedical, IconBroom, IconSettings,
+  IconTickets, IconAgent, IconDeploy, IconPhoneForward,
+} from '../PhonbotIcons.js';
+
+type IconComponent = React.ComponentType<{ size?: number; className?: string }>;
+const TEMPLATE_CONFIG: Record<string, {
+  Icon: IconComponent;
+  accent: string;
+  iconBg: string;
+  hoverBorder: string;
+  hoverGlow: string;
+  selectedBorder: string;
+  selectedGlow: string;
+}> = {
+  hairdresser: {
+    Icon: IconScissors,
+    accent: 'text-pink-300',
+    iconBg: 'bg-pink-500/15',
+    hoverBorder: 'hover:border-pink-500/40',
+    hoverGlow: 'hover:shadow-[0_0_22px_rgba(236,72,153,0.18)]',
+    selectedBorder: 'border-pink-500/60',
+    selectedGlow: 'shadow-[0_0_22px_rgba(236,72,153,0.25)]',
+  },
+  tradesperson: {
+    Icon: IconWrench,
+    accent: 'text-orange-300',
+    iconBg: 'bg-orange-500/15',
+    hoverBorder: 'hover:border-orange-500/40',
+    hoverGlow: 'hover:shadow-[0_0_22px_rgba(249,115,22,0.18)]',
+    selectedBorder: 'border-orange-500/60',
+    selectedGlow: 'shadow-[0_0_22px_rgba(249,115,22,0.25)]',
+  },
+  medical: {
+    Icon: IconMedical,
+    accent: 'text-cyan-300',
+    iconBg: 'bg-cyan-500/15',
+    hoverBorder: 'hover:border-cyan-500/40',
+    hoverGlow: 'hover:shadow-[0_0_22px_rgba(6,182,212,0.18)]',
+    selectedBorder: 'border-cyan-500/60',
+    selectedGlow: 'shadow-[0_0_22px_rgba(6,182,212,0.25)]',
+  },
+  cleaning: {
+    Icon: IconBroom,
+    accent: 'text-emerald-300',
+    iconBg: 'bg-emerald-500/15',
+    hoverBorder: 'hover:border-emerald-500/40',
+    hoverGlow: 'hover:shadow-[0_0_22px_rgba(16,185,129,0.18)]',
+    selectedBorder: 'border-emerald-500/60',
+    selectedGlow: 'shadow-[0_0_22px_rgba(16,185,129,0.25)]',
+  },
+  custom: {
+    Icon: IconSettings,
+    accent: 'text-violet-300',
+    iconBg: 'bg-violet-500/15',
+    hoverBorder: 'hover:border-violet-500/40',
+    hoverGlow: 'hover:shadow-[0_0_22px_rgba(139,92,246,0.18)]',
+    selectedBorder: 'border-violet-500/60',
+    selectedGlow: 'shadow-[0_0_22px_rgba(139,92,246,0.25)]',
+  },
+};
 
 type Step = 'template' | 'details' | 'phone' | 'calendar' | 'test' | 'done';
 type CallState = 'idle' | 'connecting' | 'active' | 'ended' | 'error';
 
-type PhoneMode = 'none' | 'provision' | 'forward';
-type CalendarMode = 'none' | 'google' | 'calcom';
 
 type Props = {
   onComplete: () => void;
@@ -39,17 +99,16 @@ export function OnboardingWizard({ onComplete }: Props) {
   const [deployedAgentId, setDeployedAgentId] = useState<string | null>(null);
 
   // Phone step state
-  const [phoneMode, setPhoneMode] = useState<PhoneMode>('none');
   const [areaCode, setAreaCode] = useState('030');
-  const [forwardNumber, setForwardNumber] = useState('');
   const [phoneLoading, setPhoneLoading] = useState(false);
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [provisionedNumber, setProvisionedNumber] = useState<string | null>(null);
-  const [forwardInstructions, setForwardInstructions] = useState<Record<string, string> | null>(null);
   const [phoneDone, setPhoneDone] = useState(false);
+  const [callMode, setCallMode] = useState<'direct' | 'backup' | 'always' | null>(null);
+  const [selectedCarrier, setSelectedCarrier] = useState('telekom');
+  const [copiedCode, setCopiedCode] = useState(false);
 
   // Calendar step state
-  const [calendarMode, setCalendarMode] = useState<CalendarMode>('none');
   const [calcomApiKey, setCalcomApiKey] = useState('');
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [calendarError, setCalendarError] = useState<string | null>(null);
@@ -131,26 +190,6 @@ export function OnboardingWizard({ onComplete }: Props) {
       setPhoneDone(true);
     } catch (e: unknown) {
       setPhoneError((e instanceof Error ? e.message : null) ?? 'Fehler beim Aktivieren');
-    } finally {
-      setPhoneLoading(false);
-    }
-  }
-
-  async function handleForward() {
-    setPhoneLoading(true);
-    setPhoneError(null);
-    try {
-      const res = await fetch('/api/phone/forward', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${localStorage.getItem('vas_token') ?? ''}` },
-        body: JSON.stringify({ number: forwardNumber }),
-      });
-      if (!res.ok) throw new Error(`Fehler ${res.status}: ${await res.text()}`);
-      const data = await res.json();
-      setForwardInstructions(data.instructions ?? null);
-      setPhoneDone(true);
-    } catch (e: unknown) {
-      setPhoneError((e instanceof Error ? e.message : null) ?? 'Fehler beim Einrichten');
     } finally {
       setPhoneLoading(false);
     }
@@ -253,26 +292,45 @@ export function OnboardingWizard({ onComplete }: Props) {
       {/* ── Step: Template ── */}
       {step === 'template' && (
         <div className="relative z-10 w-full max-w-2xl">
-          <h2 className="text-2xl font-bold text-center mb-2">Was für ein Business hast du?</h2>
-          <p className="text-white/50 text-center mb-8">
-            Wähle ein Template — du kannst alles später anpassen.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {TEMPLATES.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => selectTemplate(t)}
-                className="flex items-start gap-4 p-5 rounded-2xl glass
-                  hover:bg-white/10 hover:border-orange-500/40 hover:shadow-[0_0_20px_rgba(249,115,22,0.2)]
-                  transition-all duration-300 text-left"
-              >
-                <span className="text-3xl">{t.icon}</span>
-                <div>
-                  <h3 className="font-semibold text-white">{t.name}</h3>
-                  <p className="text-sm text-white/40 mt-0.5">{t.description}</p>
-                </div>
-              </button>
-            ))}
+          {/* Welcome hero */}
+          <div className="text-center mb-10">
+            <FoxLogo size="lg" glow animate className="mx-auto mb-5" />
+            <h1 className="text-3xl font-bold mb-2 tracking-tight">Willkommen bei Phonbot</h1>
+            <p className="text-white/50 text-base max-w-sm mx-auto leading-relaxed">
+              Dein KI-Telefonagent ist in 5 Minuten einsatzbereit.
+              Wähle zuerst ein Template für dein Business.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {TEMPLATES.map((t) => {
+              const cfg = TEMPLATE_CONFIG[t.id];
+              const Icon = cfg?.Icon ?? IconSettings;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => selectTemplate(t)}
+                  className={`flex items-center gap-4 p-5 rounded-2xl glass border-2 border-transparent
+                    ${cfg?.hoverBorder ?? ''} ${cfg?.hoverGlow ?? ''}
+                    hover:bg-white/5 transition-all duration-300 text-left cursor-pointer group`}
+                >
+                  <div className={`shrink-0 w-12 h-12 rounded-xl ${cfg?.iconBg ?? 'bg-white/10'}
+                    flex items-center justify-center ${cfg?.accent ?? 'text-white/60'}
+                    transition-all duration-300 group-hover:scale-110`}>
+                    <Icon size={22} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-white text-sm mb-0.5">{t.name}</h3>
+                    <p className="text-xs text-white/40 leading-relaxed">{t.description}</p>
+                  </div>
+                  <svg className="shrink-0 text-white/20 group-hover:text-white/50 transition-colors duration-300"
+                    width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -280,8 +338,9 @@ export function OnboardingWizard({ onComplete }: Props) {
       {/* ── Step: Details ── */}
       {step === 'details' && template && (
         <div className="relative z-10 w-full max-w-lg">
-          <h2 className="text-2xl font-bold text-center mb-2">
-            {template.icon} Dein {template.name}
+          <h2 className="text-2xl font-bold text-center mb-2 flex items-center justify-center gap-2">
+            {(() => { const cfg = TEMPLATE_CONFIG[template.id]; const Icon = cfg?.Icon ?? IconSettings; return <Icon size={22} className={cfg?.accent ?? 'text-white/60'} />; })()}
+            Dein {template.name}
           </h2>
           <p className="text-white/50 text-center mb-8">
             Gib ein paar Basics ein. Dauert unter 2 Minuten.
@@ -379,162 +438,267 @@ export function OnboardingWizard({ onComplete }: Props) {
 
       {/* ── Step: Phone ── */}
       {step === 'phone' && (
-        <div className="relative z-10 w-full max-w-2xl">
-          <h2 className="text-2xl font-bold text-center mb-2">📞 Telefonnummer einrichten</h2>
+        <div className="relative z-10 w-full max-w-xl">
+          <h2 className="text-2xl font-bold text-center mb-2 flex items-center justify-center gap-2">
+            <IconPhone size={22} /> Telefon einrichten
+          </h2>
           <p className="text-white/50 text-center mb-8">
-            Dein Agent braucht eine Nummer um Anrufe entgegenzunehmen.
+            Dein Agent bekommt eine eigene Nummer — dann wählst du wie er erreichbar sein soll.
           </p>
 
-          {!phoneDone ? (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                {/* Option A: Neue Nummer */}
-                <div
-                  className={`glass rounded-2xl p-6 flex flex-col gap-4 cursor-pointer border-2 transition-all duration-300
-                    ${phoneMode === 'provision'
-                      ? 'border-orange-500/60 shadow-[0_0_24px_rgba(249,115,22,0.25)]'
-                      : 'border-transparent hover:border-white/20'}`}
-                  onClick={() => { setPhoneMode('provision'); setPhoneError(null); }}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">🆕</span>
-                    <h3 className="font-semibold text-white">Neue Nummer erhalten</h3>
-                  </div>
-                  <p className="text-sm text-white/50">
-                    Wir aktivieren eine lokale Nummer die dein Agent sofort beantwortet.
-                  </p>
-
-                  {phoneMode === 'provision' && (
-                    <div className="flex flex-col gap-3 mt-2" onClick={(e) => e.stopPropagation()}>
-                      <div>
-                        <label className="block text-xs text-white/50 mb-1.5 uppercase tracking-wide">Vorwahl</label>
-                        <select
-                          value={areaCode}
-                          onChange={(e) => setAreaCode(e.target.value)}
-                          className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white
-                            focus:outline-none focus:ring-2 focus:ring-orange-500/50 transition-all"
-                        >
-                          {AREA_CODES.map((ac) => (
-                            <option key={ac.code} value={ac.code} className="bg-[#1a1a2e]">
-                              {ac.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <button
-                        onClick={handleProvision}
-                        disabled={phoneLoading}
-                        className="w-full rounded-xl px-4 py-2.5 font-semibold text-sm text-white disabled:opacity-50
-                          transition-all duration-300 hover:shadow-[0_0_24px_rgba(249,115,22,0.4)]"
-                        style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
-                      >
-                        {phoneLoading ? (
-                          <span className="flex items-center justify-center gap-2">
-                            <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white spin" />
-                            Aktiviere…
-                          </span>
-                        ) : (
-                          'Nummer aktivieren →'
-                        )}
-                      </button>
-                    </div>
-                  )}
+          {/* Phase 1: Provision number */}
+          {!provisionedNumber && !phoneDone && (
+            <div className="glass rounded-2xl p-6 space-y-5">
+              <div className="flex items-center gap-3">
+                <div className="w-7 h-7 rounded-full bg-orange-500/20 border border-orange-500/30 flex items-center justify-center text-orange-300 text-xs font-bold shrink-0">1</div>
+                <div>
+                  <h3 className="font-semibold text-white">Phonbot-Nummer aktivieren</h3>
+                  <p className="text-xs text-white/40 mt-0.5">Jeder Agent braucht eine eigene Rufnummer</p>
                 </div>
+              </div>
 
-                {/* Option B: Weiterleitung */}
-                <div
-                  className={`glass rounded-2xl p-6 flex flex-col gap-4 cursor-pointer border-2 transition-all duration-300
-                    ${phoneMode === 'forward'
-                      ? 'border-cyan-500/60 shadow-[0_0_24px_rgba(6,182,212,0.25)]'
-                      : 'border-transparent hover:border-white/20'}`}
-                  onClick={() => { setPhoneMode('forward'); setPhoneError(null); }}
+              <div>
+                <label className="block text-xs font-medium text-white/50 mb-1.5 uppercase tracking-wide">Wunschvorwahl</label>
+                <select
+                  value={areaCode}
+                  onChange={(e) => setAreaCode(e.target.value)}
+                  className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white
+                    focus:outline-none focus:ring-2 focus:ring-orange-500/50 transition-all cursor-pointer"
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">↪️</span>
-                    <h3 className="font-semibold text-white">Bestehende Nummer weiterleiten</h3>
-                  </div>
-                  <p className="text-sm text-white/50">
-                    Behalte deine Nummer und leite bei Besetzt an deinen Agent weiter.
-                  </p>
-
-                  {phoneMode === 'forward' && (
-                    <div className="flex flex-col gap-3 mt-2" onClick={(e) => e.stopPropagation()}>
-                      <div>
-                        <label className="block text-xs text-white/50 mb-1.5 uppercase tracking-wide">Deine Nummer</label>
-                        <input
-                          type="tel"
-                          value={forwardNumber}
-                          onChange={(e) => setForwardNumber(e.target.value)}
-                          placeholder="+49 30 123456"
-                          className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/30
-                            focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all"
-                        />
-                      </div>
-                      <button
-                        onClick={handleForward}
-                        disabled={phoneLoading || !forwardNumber.trim()}
-                        className="w-full rounded-xl px-4 py-2.5 font-semibold text-sm text-white disabled:opacity-50
-                          transition-all duration-300 hover:shadow-[0_0_24px_rgba(6,182,212,0.4)]"
-                        style={{ background: 'linear-gradient(to right, #06B6D4, #F97316)' }}
-                      >
-                        {phoneLoading ? (
-                          <span className="flex items-center justify-center gap-2">
-                            <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white spin" />
-                            Einrichten…
-                          </span>
-                        ) : (
-                          'Weiterleitung einrichten →'
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </div>
+                  {AREA_CODES.map((ac) => (
+                    <option key={ac.code} value={ac.code} className="bg-[#1a1a2e]">{ac.label}</option>
+                  ))}
+                </select>
               </div>
 
               {phoneError && (
-                <p className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 mb-4">
-                  ⚠️ {phoneError}
+                <p className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 flex items-center gap-2">
+                  <IconCapabilities size={14} className="shrink-0" />{phoneError}
                 </p>
               )}
 
-              <div className="text-center">
-                <button
-                  onClick={() => setStep('calendar')}
-                  className="text-sm text-white/30 hover:text-white/50 transition-colors"
-                >
-                  Später einrichten →
+              <button
+                onClick={handleProvision}
+                disabled={phoneLoading}
+                className="w-full rounded-xl px-4 py-3 font-semibold text-sm text-white disabled:opacity-50
+                  transition-all duration-300 hover:shadow-[0_0_28px_rgba(249,115,22,0.4)] cursor-pointer"
+                style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
+              >
+                {phoneLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white spin" />
+                    Nummer wird aktiviert…
+                  </span>
+                ) : (
+                  'Meine Phonbot-Nummer aktivieren →'
+                )}
+              </button>
+
+              <div className="text-center pt-1">
+                <button onClick={() => setStep('calendar')} className="text-xs text-white/25 hover:text-white/45 transition-colors cursor-pointer">
+                  Später einrichten
                 </button>
               </div>
-            </>
-          ) : (
-            /* Success state */
-            <div className="glass rounded-2xl p-8 text-center space-y-5">
-              <div className="text-4xl">✅</div>
-              {provisionedNumber ? (
-                <>
-                  <h3 className="text-lg font-semibold text-white">Nummer aktiviert!</h3>
-                  <p className="text-3xl font-bold" style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                    {provisionedNumber}
-                  </p>
-                  <p className="text-sm text-white/50">Diese Nummer ist ab sofort mit deinem Agent verbunden.</p>
-                </>
-              ) : forwardInstructions ? (
-                <>
-                  <h3 className="text-lg font-semibold text-white">Weiterleitung eingerichtet!</h3>
-                  <p className="text-sm text-white/50 mb-4">Richte jetzt die Weiterleitung auf deinem Gerät ein:</p>
-                  <div className="text-left space-y-3">
-                    {Object.entries(forwardInstructions).map(([device, instruction]) => (
-                      <div key={device} className="bg-white/5 rounded-xl p-4">
-                        <p className="text-xs font-medium text-white/60 uppercase tracking-wide mb-1">{device}</p>
-                        <p className="text-sm text-white/80">{instruction}</p>
-                      </div>
-                    ))}
+            </div>
+          )}
+
+          {/* Phase 2: Number provisioned → choose call mode */}
+          {provisionedNumber && !phoneDone && (() => {
+            const gsmNumber = provisionedNumber.replace(/\s/g, '');
+            const gsmCode = callMode === 'always' ? `**21*${gsmNumber}#` : `**004*${gsmNumber}#`;
+            const carriers = [
+              { id: 'telekom', label: 'Telekom', sub: 'congstar · klarmobil · Aldi Talk' },
+              { id: 'vodafone', label: 'Vodafone', sub: 'Callya · Otelo' },
+              { id: 'o2', label: 'O2', sub: 'Telefónica · Blau · Fonic' },
+              { id: 'other', label: '1&1 / andere', sub: '' },
+            ];
+            return (
+              <>
+                {/* Number display */}
+                <div className="glass rounded-2xl p-4 mb-5 flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-green-500/15 flex items-center justify-center text-green-400 shrink-0">
+                    <IconStar size={18} />
                   </div>
-                </>
-              ) : null}
+                  <div>
+                    <p className="text-[11px] text-white/40 uppercase tracking-wide mb-0.5">Deine Phonbot-Nummer</p>
+                    <p className="text-xl font-bold text-white">{provisionedNumber}</p>
+                  </div>
+                </div>
+
+                {/* Step 2 header */}
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-7 h-7 rounded-full bg-orange-500/20 border border-orange-500/30 flex items-center justify-center text-orange-300 text-xs font-bold shrink-0">2</div>
+                  <div>
+                    <h3 className="font-semibold text-white">Wie soll dein Agent erreichbar sein?</h3>
+                    <p className="text-xs text-white/40 mt-0.5">Wähle den Modus — du kannst ihn später ändern</p>
+                  </div>
+                </div>
+
+                {/* Mode cards */}
+                <div className="space-y-3 mb-5">
+                  <button
+                    onClick={() => setCallMode('direct')}
+                    className={`w-full glass rounded-2xl p-5 flex items-start gap-4 text-left border-2 transition-all duration-300 cursor-pointer
+                      ${callMode === 'direct'
+                        ? 'border-orange-500/60 shadow-[0_0_22px_rgba(249,115,22,0.2)] bg-orange-500/5'
+                        : 'border-transparent hover:border-white/20 hover:bg-white/[0.03]'}`}
+                  >
+                    <div className={`shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-300
+                      ${callMode === 'direct' ? 'bg-orange-500/25 text-orange-300' : 'bg-white/8 text-white/50'}`}>
+                      <IconPhone size={20} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-semibold text-white text-sm">Eigene Agent-Nummer</h4>
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/30">Empfohlen</span>
+                      </div>
+                      <p className="text-xs text-white/50 leading-relaxed">Kunden rufen die Phonbot-Nummer direkt an. Der Agent geht sofort ran. Keine Weiterleitung nötig.</p>
+                    </div>
+                    <div className={`shrink-0 w-5 h-5 rounded-full border-2 mt-0.5 flex-none transition-all ${callMode === 'direct' ? 'bg-orange-500 border-orange-500' : 'border-white/20'}`} />
+                  </button>
+
+                  <button
+                    onClick={() => setCallMode('backup')}
+                    className={`w-full glass rounded-2xl p-5 flex items-start gap-4 text-left border-2 transition-all duration-300 cursor-pointer
+                      ${callMode === 'backup'
+                        ? 'border-cyan-500/60 shadow-[0_0_22px_rgba(6,182,212,0.2)] bg-cyan-500/5'
+                        : 'border-transparent hover:border-white/20 hover:bg-white/[0.03]'}`}
+                  >
+                    <div className={`shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-300
+                      ${callMode === 'backup' ? 'bg-cyan-500/25 text-cyan-300' : 'bg-white/8 text-white/50'}`}>
+                      <IconPhoneForward size={20} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-semibold text-white text-sm mb-1">Backup — wenn ich nicht rangehe</h4>
+                      <p className="text-xs text-white/50 leading-relaxed">Du behältst deine Nummer. Wenn du besetzt bist, kein Empfang hast oder nicht abnimmst, springt der Agent ein.</p>
+                      <p className="text-[11px] text-white/30 mt-1.5">Rufumleitung: Keine Antwort · Besetzt · Nicht erreichbar</p>
+                    </div>
+                    <div className={`shrink-0 w-5 h-5 rounded-full border-2 mt-0.5 flex-none transition-all ${callMode === 'backup' ? 'bg-cyan-500 border-cyan-500' : 'border-white/20'}`} />
+                  </button>
+
+                  <button
+                    onClick={() => setCallMode('always')}
+                    className={`w-full glass rounded-2xl p-5 flex items-start gap-4 text-left border-2 transition-all duration-300 cursor-pointer
+                      ${callMode === 'always'
+                        ? 'border-violet-500/60 shadow-[0_0_22px_rgba(139,92,246,0.2)] bg-violet-500/5'
+                        : 'border-transparent hover:border-white/20 hover:bg-white/[0.03]'}`}
+                  >
+                    <div className={`shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-300
+                      ${callMode === 'always' ? 'bg-violet-500/25 text-violet-300' : 'bg-white/8 text-white/50'}`}>
+                      <IconAgent size={20} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-semibold text-white text-sm mb-1">Agent geht immer ran</h4>
+                      <p className="text-xs text-white/50 leading-relaxed">Alle eingehenden Anrufe gehen sofort zum Agent — auch wenn du verfügbar wärst. Du bist komplett freihändig.</p>
+                      <p className="text-[11px] text-white/30 mt-1.5">Unbedingte Rufumleitung</p>
+                    </div>
+                    <div className={`shrink-0 w-5 h-5 rounded-full border-2 mt-0.5 flex-none transition-all ${callMode === 'always' ? 'bg-violet-500 border-violet-500' : 'border-white/20'}`} />
+                  </button>
+                </div>
+
+                {/* GSM forwarding instructions */}
+                {(callMode === 'backup' || callMode === 'always') && (
+                  <div className="glass rounded-2xl p-5 mb-5 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />
+                      <h4 className="text-sm font-semibold text-white">Rufumleitung auf deinem Handy einrichten</h4>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-white/40 mb-2 uppercase tracking-wide">Dein Anbieter</p>
+                      <div className="flex gap-2 flex-wrap">
+                        {carriers.map(c => (
+                          <button
+                            key={c.id}
+                            onClick={() => setSelectedCarrier(c.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer
+                              ${selectedCarrier === c.id
+                                ? 'bg-white/15 text-white border border-white/25'
+                                : 'bg-white/5 text-white/50 border border-white/10 hover:bg-white/8 hover:text-white/70'}`}
+                          >
+                            {c.label}
+                          </button>
+                        ))}
+                      </div>
+                      {carriers.find(c => c.id === selectedCarrier)?.sub && (
+                        <p className="text-[11px] text-white/30 mt-1.5">Auch für: {carriers.find(c => c.id === selectedCarrier)?.sub}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-3">
+                        <div className="w-5 h-5 rounded-full bg-white/10 text-white/50 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">1</div>
+                        <p className="text-sm text-white/70">Öffne die <strong className="text-white">Telefon-App</strong> und tippe die Wähltastatur auf.</p>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div className="w-5 h-5 rounded-full bg-white/10 text-white/50 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">2</div>
+                        <div className="flex-1">
+                          <p className="text-sm text-white/70 mb-2">Tippe diesen Code <strong className="text-white">genau so</strong> ein:</p>
+                          <div className="flex items-center gap-3 bg-black/40 border border-white/10 rounded-xl px-4 py-3">
+                            <code className="flex-1 text-base font-mono tracking-widest text-orange-300">{gsmCode}</code>
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(gsmCode); setCopiedCode(true); setTimeout(() => setCopiedCode(false), 2000); }}
+                              className={`shrink-0 px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer
+                                ${copiedCode ? 'bg-green-500/20 text-green-300 border border-green-500/30' : 'bg-white/10 text-white/60 border border-white/15 hover:bg-white/15'}`}
+                            >
+                              {copiedCode ? '✓ Kopiert' : 'Kopieren'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div className="w-5 h-5 rounded-full bg-white/10 text-white/50 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">3</div>
+                        <p className="text-sm text-white/70">Drücke die <strong className="text-white">grüne Anruftaste</strong>. Dein Handy bestätigt kurz die Aktivierung.</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-white/4 rounded-xl px-4 py-3 border border-white/8 space-y-1.5">
+                      <p className="text-[11px] text-white/40 leading-relaxed">
+                        {callMode === 'backup'
+                          ? `Aktiviert bedingte Weiterleitung → ${provisionedNumber}: Verpasste Anrufe (besetzt, kein Empfang, keine Antwort) landen beim Agent.`
+                          : `Aktiviert unbedingte Weiterleitung → ${provisionedNumber}: Jeder Anruf geht sofort zum Agent.`}
+                      </p>
+                      <p className="text-[11px] text-white/25">
+                        Deaktivieren jederzeit: <code className="text-white/40 font-mono">##002#</code> + Anruftaste
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => setPhoneDone(true)}
+                  disabled={!callMode}
+                  className="w-full rounded-xl px-4 py-3 font-semibold text-sm text-white disabled:opacity-40 disabled:cursor-not-allowed
+                    transition-all duration-300 hover:shadow-[0_0_28px_rgba(249,115,22,0.4)] cursor-pointer"
+                  style={{ background: callMode ? 'linear-gradient(to right, #F97316, #06B6D4)' : 'rgba(255,255,255,0.08)' }}
+                >
+                  {!callMode
+                    ? 'Wähle einen Modus ↑'
+                    : callMode === 'direct'
+                    ? 'Eingerichtet — weiter →'
+                    : 'Weiterleitung eingerichtet — weiter →'}
+                </button>
+              </>
+            );
+          })()}
+
+          {/* Phase 3: Done */}
+          {phoneDone && (
+            <div className="glass rounded-2xl p-8 text-center space-y-5">
+              <div className="flex justify-center"><IconStar size={44} className="text-green-400" /></div>
+              <h3 className="text-lg font-semibold text-white">Telefon eingerichtet!</h3>
+              <p className="text-3xl font-bold" style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                {provisionedNumber}
+              </p>
+              <p className="text-sm text-white/50">
+                {callMode === 'direct' && 'Kunden rufen diese Nummer direkt an — der Agent geht sofort ran.'}
+                {callMode === 'backup' && 'Rufumleitung eingerichtet — der Agent springt ein wenn du nicht abnimmst.'}
+                {callMode === 'always' && 'Unbedingte Weiterleitung — der Agent geht bei jedem Anruf ran.'}
+                {!callMode && 'Diese Nummer ist mit deinem Agent verbunden.'}
+              </p>
               <button
                 onClick={() => setStep('calendar')}
-                className="mt-2 rounded-xl px-6 py-2.5 font-semibold text-sm text-white
+                className="mt-2 rounded-xl px-6 py-2.5 font-semibold text-sm text-white cursor-pointer
                   transition-all duration-300 hover:shadow-[0_0_24px_rgba(249,115,22,0.4)]"
                 style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
               >
@@ -548,14 +712,14 @@ export function OnboardingWizard({ onComplete }: Props) {
       {/* ── Step: Calendar ── */}
       {step === 'calendar' && (
         <div className="relative z-10 w-full max-w-2xl">
-          <h2 className="text-2xl font-bold text-center mb-2">📅 Kalender verbinden (optional)</h2>
+          <h2 className="text-2xl font-bold text-center mb-2 flex items-center justify-center gap-2"><IconCalendar size={22} /> Kalender verbinden (optional)</h2>
           <p className="text-white/50 text-center mb-8">
             Dein Agent kann Termine direkt buchen wenn du deinen Kalender verbindest.
           </p>
 
           {calendarDone ? (
             <div className="glass rounded-2xl p-8 text-center space-y-4">
-              <div className="text-4xl">✅</div>
+              <div className="flex justify-center"><IconStar size={44} className="text-green-400" /></div>
               <h3 className="text-lg font-semibold text-white">Kalender verbunden!</h3>
               <p className="text-sm text-white/50">{calendarProvider} ist jetzt mit deinem Agent verbunden.</p>
               <button
@@ -573,7 +737,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                 {/* Google Calendar */}
                 <div className="glass rounded-2xl p-6 flex flex-col gap-4">
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">🟢</span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-green-400 shrink-0" />
                     <h3 className="font-semibold text-white">Google Calendar</h3>
                   </div>
                   <p className="text-sm text-white/50 flex-1">
@@ -592,7 +756,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                 {/* Cal.com */}
                 <div className="glass rounded-2xl p-6 flex flex-col gap-4">
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">🔵</span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 shrink-0" />
                     <h3 className="font-semibold text-white">Cal.com</h3>
                   </div>
                   <p className="text-sm text-white/50">
@@ -637,7 +801,9 @@ export function OnboardingWizard({ onComplete }: Props) {
                 {/* Ohne Kalender */}
                 <div className="glass rounded-2xl p-6 flex flex-col gap-4">
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">📋</span>
+                    <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-white/50">
+                      <IconTickets size={18} />
+                    </div>
                     <h3 className="font-semibold text-white">Ohne Kalender</h3>
                   </div>
                   <p className="text-sm text-white/50 flex-1">
@@ -654,8 +820,8 @@ export function OnboardingWizard({ onComplete }: Props) {
               </div>
 
               {calendarError && (
-                <p className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 mb-4">
-                  ⚠️ {calendarError}
+                <p className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 mb-4 flex items-center gap-2">
+                  <IconCapabilities size={14} className="shrink-0" />{calendarError}
                 </p>
               )}
             </>
@@ -666,7 +832,12 @@ export function OnboardingWizard({ onComplete }: Props) {
       {/* ── Step: Test ── */}
       {step === 'test' && (
         <div className="relative z-10 w-full max-w-md text-center">
-          <div className="text-5xl mb-4">🎉</div>
+          <div className="flex justify-center mb-4">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
+              style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)' }}>
+              <IconDeploy size={30} className="text-white" />
+            </div>
+          </div>
           <h2 className="text-2xl font-bold mb-2">Dein Agent ist live!</h2>
           <p className="text-white/50 mb-8">
             Teste ihn direkt — sprich mit deinem Agent über das Mikrofon.
@@ -678,10 +849,10 @@ export function OnboardingWizard({ onComplete }: Props) {
               <button
                 onClick={startTestCall}
                 className="flex items-center gap-3 mx-auto rounded-full px-8 py-4 font-semibold text-white
-                  transition-all duration-300 hover:shadow-[0_0_40px_rgba(249,115,22,0.5)] hover:scale-105"
+                  transition-all duration-300 hover:shadow-[0_0_40px_rgba(249,115,22,0.5)] hover:scale-105 cursor-pointer"
                 style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
               >
-                <span className="text-2xl">🎙️</span> Jetzt anrufen
+                <IconAgent size={20} /> Jetzt anrufen
               </button>
             )}
 
@@ -695,7 +866,7 @@ export function OnboardingWizard({ onComplete }: Props) {
             {callState === 'active' && (
               <div className="flex flex-col items-center gap-5">
                 <div
-                  className={`w-24 h-24 rounded-full flex items-center justify-center text-5xl shadow-2xl transition-all duration-300 ${
+                  className={`w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 ${
                     agentTalking ? 'mic-pulse' : ''
                   }`}
                   style={{
@@ -705,7 +876,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                       : '0 0 20px rgba(249,115,22,0.2)',
                   }}
                 >
-                  🎙️
+                  <IconAgent size={36} className="text-white" />
                 </div>
                 <p className="text-sm">
                   {agentTalking ? (
@@ -719,14 +890,14 @@ export function OnboardingWizard({ onComplete }: Props) {
                   className="flex items-center gap-2 rounded-full bg-red-500/20 border border-red-500/40 hover:bg-red-500/30
                     px-6 py-2.5 text-red-300 text-sm font-medium transition-all duration-200"
                 >
-                  📵 Auflegen
+                  Auflegen
                 </button>
               </div>
             )}
 
             {callState === 'ended' && (
               <div className="flex flex-col items-center gap-4">
-                <div className="text-3xl">✅</div>
+                <div className="flex justify-center"><IconStar size={40} className="text-green-400" /></div>
                 <p className="text-white/60 text-sm">Call beendet. Gut gemacht!</p>
                 <button
                   onClick={() => { setCallState('idle'); setCallError(null); }}
@@ -740,7 +911,7 @@ export function OnboardingWizard({ onComplete }: Props) {
             {callState === 'error' && callError && (
               <div className="flex flex-col items-center gap-3">
                 <p className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5">
-                  ⚠️ {callError}
+                  <span className="inline-flex items-center gap-1.5"><IconCapabilities size={13} />{callError}</span>
                 </p>
                 <button
                   onClick={() => { setCallState('idle'); setCallError(null); }}
@@ -778,12 +949,12 @@ export function OnboardingWizard({ onComplete }: Props) {
           <h2 className="text-2xl font-bold mb-2">Dein Phonbot ist komplett eingerichtet!</h2>
           <div className="glass rounded-2xl p-6 mb-8 text-left space-y-3">
             <div className="flex items-center gap-3 text-sm text-white/70">
-              <span className="text-green-400">✅</span>
+              <IconStar size={15} className="text-green-400 shrink-0" />
               <span>Agent deployed</span>
             </div>
-            {(provisionedNumber || forwardInstructions) && (
+            {provisionedNumber && (
               <div className="flex items-center gap-3 text-sm text-white/70">
-                <span className="text-green-400">✅</span>
+                <IconStar size={15} className="text-green-400 shrink-0" />
                 <span>
                   Nummer verbunden
                   {provisionedNumber ? ` (${provisionedNumber})` : ''}
@@ -792,19 +963,19 @@ export function OnboardingWizard({ onComplete }: Props) {
             )}
             {calendarDone && (
               <div className="flex items-center gap-3 text-sm text-white/70">
-                <span className="text-green-400">✅</span>
+                <IconStar size={15} className="text-green-400 shrink-0" />
                 <span>Kalender verbunden ({calendarProvider})</span>
               </div>
             )}
             {!phoneDone && (
               <div className="flex items-center gap-3 text-sm text-white/40">
-                <span>⏭️</span>
+                <span className="text-white/20">–</span>
                 <span>Telefonnummer — später einrichten</span>
               </div>
             )}
             {!calendarDone && (
               <div className="flex items-center gap-3 text-sm text-white/40">
-                <span>⏭️</span>
+                <span className="text-white/20">–</span>
                 <span>Kalender — später einrichten</span>
               </div>
             )}

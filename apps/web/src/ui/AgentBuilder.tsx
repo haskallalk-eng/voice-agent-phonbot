@@ -19,14 +19,11 @@ import {
   type LiveWebAccess,
   type Voice,
 } from '../lib/api.js';
+import { useUnsavedChanges } from '../components/ui.js';
 import { WebCallWidget } from './WebCallWidget.js';
-import { FoxLogo } from './FoxLogo.js';
 import {
   IconAgent,
-  IconKnowledge,
-  IconTest,
   IconCapabilities,
-  IconSettings,
   IconPrivacy,
   IconWebhook,
   IconPlay,
@@ -35,6 +32,24 @@ import {
   IconChevronDown,
   IconRefresh,
   IconStar,
+  IconBrain,
+  IconBuilding,
+  IconVolume,
+  IconSliders,
+  IconBookOpen,
+  IconMessageSquare,
+  IconTemplate,
+  IconGlobe,
+  IconFileText,
+  IconPlug,
+  IconCheckCircle,
+  IconAlertTriangle,
+  IconInfo,
+  IconMic,
+  IconPhoneOut,
+  IconPhoneOff,
+  IconTicket,
+  IconCalendar,
 } from './PhonbotIcons.js';
 
 const LANGUAGES = [
@@ -51,40 +66,47 @@ const LANGUAGES = [
 const KNOWN_TOOLS = ['calendar.findSlots', 'calendar.book', 'ticket.create'] as const;
 
 /* ── Prompt Templates ── */
-const PROMPT_TEMPLATES = [
+type IconComp = React.FC<{ size?: number; className?: string }>;
+const PROMPT_TEMPLATES: { id: string; Icon: IconComp; accent: string; name: string; prompt: string }[] = [
   {
     id: 'reception',
-    icon: '🏢',
+    Icon: IconBuilding,
+    accent: 'text-orange-400',
     name: 'Empfang / Zentrale',
     prompt: `Du bist die freundliche Telefonzentrale von {businessName}. Begrüße Anrufer herzlich, finde heraus worum es geht und leite sie an die richtige Stelle weiter. Bei Unklarheiten erstelle ein Ticket.`,
   },
   {
     id: 'appointment',
-    icon: '📅',
+    Icon: IconCalendar,
+    accent: 'text-cyan-400',
     name: 'Terminbuchung',
     prompt: `Du bist der Terminassistent von {businessName}. Hilf dem Anrufer einen passenden Termin zu finden und zu buchen. Frage nach gewünschtem Datum, Uhrzeit und Service. Bestätige den Termin am Ende.`,
   },
   {
     id: 'support',
-    icon: '🛠️',
+    Icon: IconSliders,
+    accent: 'text-violet-400',
     name: 'Kundensupport',
     prompt: `Du bist der Support-Assistent von {businessName}. Höre dem Kunden aufmerksam zu, versuche das Problem zu lösen und erstelle bei Bedarf ein Ticket mit allen Details für das Team.`,
   },
   {
     id: 'orders',
-    icon: '🍕',
+    Icon: IconTicket,
+    accent: 'text-amber-400',
     name: 'Bestellannahme',
     prompt: `Du bist der Bestellassistent von {businessName}. Nimm Bestellungen entgegen, frage nach Details (Menge, Sonderwünsche) und bestätige die Bestellung mit geschätzter Lieferzeit.`,
   },
   {
     id: 'emergency',
-    icon: '🚨',
+    Icon: IconAlertTriangle,
+    accent: 'text-red-400',
     name: 'Notdienst / After-Hours',
     prompt: `Du bist der Notdienst-Assistent von {businessName}. Außerhalb der Öffnungszeiten nimmst du dringende Anfragen entgegen, sammelst Kontaktdaten und erstellst ein priorisiertes Ticket.`,
   },
   {
     id: 'info',
-    icon: 'ℹ️',
+    Icon: IconInfo,
+    accent: 'text-sky-400',
     name: 'Auskunft & FAQ',
     prompt: `Du bist der Informationsassistent von {businessName}. Beantworte häufige Fragen zu Öffnungszeiten, Preisen, Services und Standort. Nutze das hinterlegte Wissen für genaue Antworten.`,
   },
@@ -92,24 +114,100 @@ const PROMPT_TEMPLATES = [
 
 /* ── Small UI Components ── */
 
-function SectionCard({ title, icon, children, collapsible = false, className = '' }: {
-  title: string; icon: string; children: React.ReactNode; collapsible?: boolean; className?: string;
+type SectionIconComp = React.FC<{ size?: number; className?: string }>;
+
+/* ── Prompt Section Blocks (additive, toggleable) ── */
+type PromptSection = { id: string; label: string; Icon: SectionIconComp; accent: string; description: string; text: string };
+const PROMPT_SECTIONS: PromptSection[] = [
+  {
+    id: 'greeting', label: 'Begrüßung', Icon: IconAgent, accent: 'text-orange-400',
+    description: 'Wie der Agent Anrufer begrüßt',
+    text: `Begrüße jeden Anrufer herzlich: "Guten Tag, willkommen bei {businessName}, mein Name ist {agentName} — wie kann ich Ihnen helfen?" Passe die Tageszeit an.`,
+  },
+  {
+    id: 'tone', label: 'Tonalität', Icon: IconVolume, accent: 'text-cyan-400',
+    description: 'Sprachstil & Persönlichkeit',
+    text: `Spreche ruhig, klar und professionell. Verwende eine freundliche, empathische Sprache. Vermeide Fachjargon. Höre aktiv zu und bestätige das Gehörte mit kurzen Phrasen wie "Ich verstehe" oder "Gerne helfe ich Ihnen".`,
+  },
+  {
+    id: 'appointment', label: 'Terminbuchung', Icon: IconCalendar, accent: 'text-violet-400',
+    description: 'Termin finden und buchen',
+    text: `Wenn ein Anrufer einen Termin möchte: Frage nach gewünschtem Datum, Uhrzeit und Art des Termins. Prüfe die Verfügbarkeit. Biete 2–3 Optionen an. Bestätige den Termin mit Datum, Uhrzeit und Ort. Frage bei Unklarheiten präzise nach.`,
+  },
+  {
+    id: 'ticket', label: 'Ticket erstellen', Icon: IconTicket, accent: 'text-amber-400',
+    description: 'Anliegen als Ticket erfassen',
+    text: `Erstelle ein Ticket wenn das Anliegen komplex ist, eine Bearbeitung durch das Team erfordert oder du das Problem nicht sofort lösen kannst. Erfasse: Name, Telefonnummer, Art des Anliegens und alle Details. Bestätige die Erstellung mit Ticketnummer.`,
+  },
+  {
+    id: 'routing', label: 'Weiterleitung', Icon: IconPhoneOut, accent: 'text-sky-400',
+    description: 'Anruf weiterleiten',
+    text: `Leite Anrufe weiter wenn das Anliegen außerhalb deines Bereichs liegt, der Anrufer nach einer bestimmten Person fragt oder eine persönliche Bearbeitung nötig ist. Kündige die Weiterleitung freundlich an und nenne die Wartezeit.`,
+  },
+  {
+    id: 'afterhours', label: 'After-Hours', Icon: IconAlertTriangle, accent: 'text-red-400',
+    description: 'Außerhalb der Öffnungszeiten',
+    text: `Außerhalb der Öffnungszeiten teile mit, dass {businessName} aktuell geschlossen ist, und nenne die Öffnungszeiten. Bei dringendem Anliegen: Notfall-Kontakt nennen oder Ticket mit Priorität "Dringend" erstellen. Sonst Rückruf anbieten.`,
+  },
+  {
+    id: 'faq', label: 'FAQ & Auskunft', Icon: IconBookOpen, accent: 'text-indigo-400',
+    description: 'Häufige Fragen beantworten',
+    text: `Beantworte häufige Fragen anhand des hinterlegten Wissens: Öffnungszeiten, Preise, Services, Standort und Anfahrt. Wenn du eine Antwort nicht sicher kennst, sage das ehrlich und biete Alternativen an.`,
+  },
+  {
+    id: 'escalation', label: 'Eskalation', Icon: IconSliders, accent: 'text-rose-400',
+    description: 'An menschlichen Mitarbeiter übergeben',
+    text: `Übergib an einen Mitarbeiter wenn: der Anrufer es ausdrücklich verlangt, du eine Frage nicht beantworten kannst, der Anrufer sehr aufgebracht ist oder das Anliegen rechtlicher Natur ist. Kündige die Übergabe freundlich an.`,
+  },
+  {
+    id: 'privacy', label: 'Datenschutz', Icon: IconPrivacy, accent: 'text-emerald-400',
+    description: 'DSGVO-konform handeln',
+    text: `Behandle persönliche Daten vertraulich. Frage nicht nach mehr Informationen als nötig. Gib keine Kundendaten an unbekannte Dritte weiter. Bestätige keine personenbezogenen Daten gegenüber unbekannten Anrufern.`,
+  },
+  {
+    id: 'closing', label: 'Gesprächsabschluss', Icon: IconPhoneOff, accent: 'text-teal-400',
+    description: 'Gespräch professionell beenden',
+    text: `Beende jedes Gespräch freundlich. Fasse die besprochenen Punkte kurz zusammen. Frage ob du noch anderweitig helfen kannst. Verabschiedsformel: "Ich wünsche Ihnen noch einen angenehmen Tag, auf Wiederhören!"`,
+  },
+  {
+    id: 'upsell', label: 'Zusatzangebote', Icon: IconStar, accent: 'text-yellow-400',
+    description: 'Passende Angebote erwähnen',
+    text: `Weise bei passender Gelegenheit auf relevante Angebote hin — ohne aufdringlich zu sein. Erwähne nur Angebote, die zum Anliegen des Anrufers passen. Formuliere als Vorschlag, nicht als Verkaufsgespräch. Respektiere ein "Nein" sofort.`,
+  },
+  {
+    id: 'multilingual', label: 'Mehrsprachig', Icon: IconGlobe, accent: 'text-lime-400',
+    description: 'Mehrere Sprachen unterstützen',
+    text: `Erkenne die Sprache des Anrufers und antworte in derselben Sprache, sofern du diese beherrschst. Wechsle nahtlos die Sprache wenn der Anrufer wechselt. Bei unbekannten Sprachen bitte höflich auf Deutsch oder Englisch weiterzusprechen.`,
+  },
+];
+
+function SectionCard({ title, icon: Icon, children, collapsible = false, className = '', accent = 'text-orange-400' }: {
+  title: string;
+  icon?: SectionIconComp;
+  children: React.ReactNode;
+  collapsible?: boolean;
+  className?: string;
+  accent?: string;
 }) {
   const [open, setOpen] = useState(true);
   return (
-    <section className={`glass rounded-2xl p-6 mb-6 ${className}`}>
+    <section className={`rounded-2xl border border-white/[0.07] bg-white/[0.03] mb-5 overflow-hidden ${className}`}>
       <button
         type="button"
         onClick={() => collapsible && setOpen(!open)}
-        className={`flex items-center gap-2 w-full text-left ${collapsible ? 'cursor-pointer' : 'cursor-default'}`}
+        className={`flex items-center gap-3 w-full text-left px-5 py-4 ${collapsible ? 'cursor-pointer hover:bg-white/[0.03] transition-colors' : 'cursor-default'}`}
       >
-        <span className="text-xl">{icon}</span>
-        <h3 className="text-lg font-semibold text-white flex-1">{title}</h3>
+        {Icon && (
+          <span className={`shrink-0 ${accent}`}>
+            <Icon size={17} />
+          </span>
+        )}
+        <h3 className="text-sm font-semibold text-white/90 flex-1 tracking-wide">{title}</h3>
         {collapsible && (
-          <span className={`text-white/30 transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
+          <IconChevronDown size={15} className={`text-white/25 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
         )}
       </button>
-      {open && <div className="mt-4">{children}</div>}
+      {open && <div className="px-5 pb-5">{children}</div>}
     </section>
   );
 }
@@ -211,28 +309,16 @@ function Badge({ children, color = 'orange' }: { children: React.ReactNode; colo
 /* ── Tabs ── */
 type Tab = 'identity' | 'knowledge' | 'behavior' | 'capabilities' | 'technical' | 'privacy' | 'webhooks' | 'preview';
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'identity', label: 'Identität' },
-  { id: 'knowledge', label: 'Wissen' },
-  { id: 'behavior', label: 'Verhalten' },
-  { id: 'capabilities', label: 'Fähigkeiten' },
-  { id: 'technical', label: 'Technik' },
-  { id: 'privacy', label: 'Datenschutz' },
-  { id: 'webhooks', label: 'Webhooks' },
-  { id: 'preview', label: 'Vorschau' },
+const TABS: { id: Tab; label: string; Icon: SectionIconComp }[] = [
+  { id: 'identity',     label: 'Identität',    Icon: IconAgent },
+  { id: 'knowledge',    label: 'Wissen',       Icon: IconBrain },
+  { id: 'behavior',     label: 'Verhalten',    Icon: IconMessageSquare },
+  { id: 'capabilities', label: 'Fähigkeiten',  Icon: IconCapabilities },
+  { id: 'technical',    label: 'Technik',      Icon: IconSliders },
+  { id: 'privacy',      label: 'Datenschutz',  Icon: IconPrivacy },
+  { id: 'webhooks',     label: 'Webhooks',     Icon: IconWebhook },
+  { id: 'preview',      label: 'Vorschau',     Icon: IconPlay },
 ];
-
-type IconComp = React.FC<{ size?: number; className?: string }>;
-const TAB_ICONS: Record<Tab, IconComp> = {
-  identity: IconAgent,
-  knowledge: IconKnowledge,
-  behavior: IconTest,
-  capabilities: IconCapabilities,
-  technical: IconSettings,
-  privacy: IconPrivacy,
-  webhooks: IconWebhook,
-  preview: IconPlay,
-};
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 /*  Main Component                                                          */
@@ -255,6 +341,11 @@ export function AgentBuilder() {
   // Voice dropdown
   const [voiceDropdownOpen, setVoiceDropdownOpen] = useState(false);
   const voiceDropdownRef = useRef<HTMLDivElement>(null);
+  // Prompt section chips
+  const [activePromptSections, setActivePromptSections] = useState<Set<string>>(new Set());
+  // Unsaved changes warning
+  const [isDirty, setIsDirty] = useState(false);
+  useUnsavedChanges(isDirty);
 
   const loadVoices = useCallback(async () => {
     setVoicesLoading(true);
@@ -375,10 +466,17 @@ export function AgentBuilder() {
     setSaving(true);
     setStatus(null);
     try {
-      await saveAgentConfig(config);
+      // If already deployed, sync to Retell so voice/config changes take effect immediately
+      if (config.retellAgentId) {
+        const result = await deployAgentConfig(config);
+        setConfig((c) => c ? { ...c, ...result.config } : c);
+      } else {
+        await saveAgentConfig(config);
+      }
       const prev = await getAgentPreview();
       setPreview(prev);
       setStatus({ type: 'ok', text: 'Gespeichert ✅' });
+      setIsDirty(false);
     } catch {
       setStatus({ type: 'error', text: 'Speichern fehlgeschlagen' });
     } finally {
@@ -395,7 +493,8 @@ export function AgentBuilder() {
       setConfig((c) => c ? { ...c, ...result.config } : c);
       const prev = await getAgentPreview();
       setPreview(prev);
-      setStatus({ type: 'ok', text: `Deployed ✅ Agent: ${result.retellAgentId ?? '–'}` });
+      setStatus({ type: 'ok', text: `Deployed — Agent: ${result.retellAgentId ?? '–'}` });
+      setIsDirty(false);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unbekannter Fehler';
       setStatus({ type: 'error', text: `Deploy fehlgeschlagen: ${msg}` });
@@ -406,6 +505,38 @@ export function AgentBuilder() {
 
   function update(patch: Partial<AgentConfig>) {
     setConfig((c) => (c ? { ...c, ...patch } : c));
+    setIsDirty(true);
+  }
+
+  function togglePromptSection(sectionId: string) {
+    if (!config) return;
+    const section = PROMPT_SECTIONS.find(s => s.id === sectionId);
+    if (!section) return;
+    const isActive = activePromptSections.has(sectionId);
+    const newActive = new Set(activePromptSections);
+    if (isActive) {
+      newActive.delete(sectionId);
+      setActivePromptSections(newActive);
+      const current = config.systemPrompt ?? '';
+      const lines = current.split('\n');
+      const startIdx = lines.findIndex(l => l.trim() === `### ${section.label}`);
+      if (startIdx >= 0) {
+        const endIdx = lines.findIndex((l, i) => i > startIdx + 1 && l.startsWith('### '));
+        const removeFrom = startIdx > 0 && lines[startIdx - 1]?.trim() === '' ? startIdx - 1 : startIdx;
+        const removeEnd = endIdx < 0 ? lines.length : endIdx;
+        update({ systemPrompt: [...lines.slice(0, removeFrom), ...lines.slice(removeEnd)].join('\n').trim() });
+      }
+    } else {
+      newActive.add(sectionId);
+      setActivePromptSections(newActive);
+      const businessName = config.businessName || 'deinem Unternehmen';
+      const agentName = config.name || 'dem Assistenten';
+      const sectionText = section.text
+        .replace(/\{businessName\}/g, businessName)
+        .replace(/\{agentName\}/g, agentName);
+      const current = (config.systemPrompt ?? '').trim();
+      update({ systemPrompt: current ? `${current}\n\n### ${section.label}\n${sectionText}` : `### ${section.label}\n${sectionText}` });
+    }
   }
 
   if (!config) {
@@ -418,42 +549,50 @@ export function AgentBuilder() {
     const canAddAgent = displayAgents.length < agentsLimit;
 
     return (
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-6">
+      <div className="max-w-4xl mx-auto px-6 py-6">
+        <div className="flex items-center justify-between mb-5">
           <div>
-            <h2 className="text-2xl font-bold text-white">Deine Agenten</h2>
-            <p className="text-sm text-white/50 mt-1">
-              {displayAgents.length} von {agentsLimit} Agent{agentsLimit !== 1 ? 'en' : ''} aktiv
+            <h2 className="text-lg font-semibold text-white">Deine Agenten</h2>
+            <p className="text-xs text-white/35 mt-0.5">
+              {displayAgents.length} / {agentsLimit} Agent{agentsLimit !== 1 ? 'en' : ''} aktiv
             </p>
           </div>
           {status && (
-            <span className={`text-sm ${status.type === 'ok' ? 'text-green-400' : 'text-red-400'}`}>
+            <span className={`text-xs px-2.5 py-1 rounded-lg font-medium ${
+              status.type === 'ok'
+                ? 'text-green-400 bg-green-500/10 border border-green-500/20'
+                : 'text-red-400 bg-red-500/10 border border-red-500/20'
+            }`}>
               {status.text}
             </span>
           )}
         </div>
 
         {/* Agent Cards */}
-        <div className="space-y-3 mb-5">
+        <div className="space-y-2 mb-5">
           {displayAgents.map((agent) => (
-            <div key={agent.tenantId} className="glass rounded-2xl p-5 flex items-center gap-4 border border-white/10">
-              <FoxLogo size="sm" />
+            <div
+              key={agent.tenantId}
+              className="group flex items-center gap-4 rounded-2xl border border-white/[0.07] bg-white/[0.03] px-5 py-4 hover:border-white/[0.12] hover:bg-white/[0.05] transition-all duration-200 cursor-pointer"
+              onClick={() => void handleSelectAgent(agent.tenantId)}
+            >
+              <div className="shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500/20 to-cyan-500/20 border border-white/10 flex items-center justify-center">
+                <IconAgent size={16} className="text-orange-400" />
+              </div>
               <div className="flex-1 min-w-0">
-                <p className="text-base font-semibold text-white truncate">{agent.name || 'Unbenannter Agent'}</p>
-                <p className="text-xs text-white/50 truncate">{agent.businessName}</p>
+                <p className="text-sm font-semibold text-white truncate">{agent.name || 'Unbenannter Agent'}</p>
+                <p className="text-xs text-white/40 truncate mt-0.5">{agent.businessName || '—'}</p>
               </div>
               <div className="flex items-center gap-3 shrink-0">
                 {agent.retellAgentId ? (
-                  <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full font-medium">✓ Live</span>
+                  <span className="flex items-center gap-1.5 text-xs text-green-400 bg-green-500/10 border border-green-500/20 px-2.5 py-1 rounded-full font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
+                    Live
+                  </span>
                 ) : (
-                  <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded-full font-medium">Entwurf</span>
+                  <span className="text-xs text-amber-400/70 bg-amber-500/10 border border-amber-500/15 px-2.5 py-1 rounded-full font-medium">Entwurf</span>
                 )}
-                <button
-                  onClick={() => void handleSelectAgent(agent.tenantId)}
-                  className="rounded-lg bg-white/5 border border-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/10 transition-colors"
-                >
-                  Bearbeiten
-                </button>
+                <span className="text-xs text-white/30 group-hover:text-white/60 transition-colors">Bearbeiten →</span>
               </div>
             </div>
           ))}
@@ -464,20 +603,20 @@ export function AgentBuilder() {
           <button
             onClick={() => void handleCreateAgent()}
             disabled={creatingAgent}
-            className="rounded-xl border-2 border-dashed border-white/20 hover:border-orange-500/40 px-5 py-2.5 text-sm text-white/50 hover:text-white/80 disabled:opacity-50 transition-all"
+            className="w-full rounded-2xl border border-dashed border-white/10 hover:border-orange-500/30 py-4 text-sm text-white/30 hover:text-orange-400/70 disabled:opacity-50 transition-all duration-200 cursor-pointer"
           >
-            {creatingAgent ? '…' : '+ Neuen Agenten erstellen'}
+            {creatingAgent ? 'Wird erstellt…' : '+ Neuen Agenten erstellen'}
           </button>
         ) : (
-          <div className="relative inline-block">
+          <div className="relative">
             <button
               disabled
-              className="rounded-xl border-2 border-dashed border-white/10 px-5 py-2.5 text-sm text-white/30 cursor-not-allowed"
+              className="w-full rounded-2xl border border-dashed border-white/5 py-4 text-sm text-white/20 cursor-not-allowed"
             >
               + Neuen Agenten erstellen
             </button>
-            <span className="absolute -top-2 -right-2 text-[10px] bg-orange-500/20 text-orange-300 px-1.5 py-0.5 rounded-full font-medium">
-              {agentsLimit < 3 ? 'ab Pro' : 'Limit erreicht'}
+            <span className="absolute top-1/2 -translate-y-1/2 right-4 text-[10px] bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full font-medium">
+              {agentsLimit < 3 ? 'ab Pro' : 'Limit'}
             </span>
           </div>
         )}
@@ -487,38 +626,61 @@ export function AgentBuilder() {
 
   /* ── EDIT VIEW ── */
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8">
+    <div className="max-w-4xl mx-auto px-6 py-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => setView('list')}
-            className="text-sm text-white/50 hover:text-white transition-colors flex items-center gap-1"
+            className="shrink-0 flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer"
           >
-            ← Zurück
+            <span className="text-base leading-none">‹</span> Agenten
           </button>
-          <div>
-            <h2 className="text-2xl font-bold text-white">Agent Builder</h2>
-            <p className="text-sm text-white/50 mt-0.5">Konfiguriere deinen Phonbot – Persönlichkeit, Wissen und Verhalten.</p>
+          <div className="w-px h-4 bg-white/10" />
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-white truncate">{config.name || 'Agent Builder'}</h2>
+            <p className="text-xs text-white/30 mt-0.5 truncate">{config.businessName || 'Konfiguration'}</p>
           </div>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2 shrink-0">
           {status && (
-            <span className={`text-sm ${status.type === 'ok' ? 'text-green-400' : 'text-red-400'}`}>
+            <span className={`text-xs px-2.5 py-1 rounded-lg font-medium ${
+              status.type === 'ok'
+                ? 'text-green-400 bg-green-500/10 border border-green-500/20'
+                : 'text-red-400 bg-red-500/10 border border-red-500/20'
+            }`}>
               {status.text}
             </span>
           )}
+          {config.retellAgentId && (
+            <button
+              onClick={() => setTab('preview')}
+              className="flex items-center gap-2 rounded-xl border border-cyan-500/25 bg-cyan-500/8 px-3.5 py-2 text-xs font-medium text-cyan-400 hover:bg-cyan-500/15 hover:border-cyan-500/40 transition-all cursor-pointer"
+            >
+              <IconPlay size={13} />
+              Testen
+            </button>
+          )}
           {config.retellAgentId ? (
-            /* Already deployed — just save changes */
-            <button onClick={handleSave} disabled={saving || deploying}
-              className="rounded-lg bg-gradient-to-r from-orange-500 to-cyan-500 px-5 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 transition-opacity">
+            <button
+              onClick={handleSave}
+              disabled={saving || deploying}
+              className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 transition-all cursor-pointer"
+              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+            >
+              {saving ? (
+                <span className="inline-block w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+              ) : null}
               {saving ? 'Speichert…' : 'Speichern'}
             </button>
           ) : (
-            /* Not yet deployed — show deploy CTA */
-            <button onClick={handleDeploy} disabled={deploying || saving}
-              className="rounded-lg bg-gradient-to-r from-orange-500 to-cyan-500 px-5 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-2">
-              <IconDeploy size={14} />
+            <button
+              onClick={handleDeploy}
+              disabled={deploying || saving}
+              className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 transition-all cursor-pointer"
+              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+            >
+              <IconDeploy size={13} />
               {deploying ? 'Deploying…' : 'Deploy'}
             </button>
           )}
@@ -526,26 +688,23 @@ export function AgentBuilder() {
       </div>
 
       {/* Vertical Tab Navigation + Content */}
-      <div className="flex gap-6">
+      <div className="flex gap-5">
         {/* Left: Tab list */}
-        <div className="w-36 shrink-0">
-          {TABS.map((t) => {
-            const TabIcon = TAB_ICONS[t.id];
-            return (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm mb-1 transition-all text-left ${
-                  tab === t.id
-                    ? 'bg-white/10 text-white font-medium'
-                    : 'text-white/40 hover:text-white/70 hover:bg-white/5'
-                }`}
-              >
-                <TabIcon size={16} />
-                {t.label}
-              </button>
-            );
-          })}
+        <div className="w-40 shrink-0 space-y-0.5">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-medium transition-all text-left cursor-pointer ${
+                tab === t.id
+                  ? 'bg-white/8 text-white border border-white/10'
+                  : 'text-white/35 hover:text-white/65 hover:bg-white/[0.04] border border-transparent'
+              }`}
+            >
+              <t.Icon size={14} className={tab === t.id ? 'text-orange-400' : ''} />
+              {t.label}
+            </button>
+          ))}
         </div>
 
         {/* Right: Content */}
@@ -554,7 +713,7 @@ export function AgentBuilder() {
       {/* ────────────────────── IDENTITY ────────────────────── */}
       {tab === 'identity' && (
         <>
-          <SectionCard title="Identität" icon="🎭" className={voiceDropdownOpen ? 'relative z-10 overflow-visible' : ''}>
+          <SectionCard title="Identität" icon={IconAgent} className={voiceDropdownOpen ? 'relative z-10 overflow-visible' : ''}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Field label="Agent-Name">
                 <Input value={config.name} onChange={(e) => update({ name: e.target.value })} placeholder="z.B. Lisa" />
@@ -578,7 +737,7 @@ export function AgentBuilder() {
             </div>
             {config.retellAgentId && (
               <div className="mt-3 flex items-center gap-3 text-xs text-white/50">
-                <Badge color="green">✓ Deployed</Badge>
+                <Badge color="green">Deployed</Badge>
                 <span>Agent: <code className="font-mono">{config.retellAgentId}</code></span>
               </div>
             )}
@@ -595,7 +754,7 @@ export function AgentBuilder() {
             }}
           />
 
-          <SectionCard title="Business-Informationen" icon="🏪">
+          <SectionCard title="Business-Informationen" icon={IconBuilding}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Field label="Firmenname">
                 <Input value={config.businessName} onChange={(e) => update({ businessName: e.target.value })} placeholder="Friseur Müller" />
@@ -621,7 +780,7 @@ export function AgentBuilder() {
 
       {/* ────────────────────── KNOWLEDGE ────────────────────── */}
       {tab === 'knowledge' && (
-        <SectionCard title="Wissensquellen" icon="🧠">
+        <SectionCard title="Wissensquellen" icon={IconBrain}>
           <p className="text-sm text-white/50 mb-4">
             Gib deinem Agent Zugang zu Informationen — er kann Inhalte von Webseiten lesen, PDFs verarbeiten oder eigene Texte nutzen.
           </p>
@@ -631,21 +790,23 @@ export function AgentBuilder() {
             <div className="space-y-2 mb-4">
               {(config.knowledgeSources ?? []).map((src, i) => (
                 <div key={src.id} className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-3">
-                  <span className="text-lg">
-                    {src.type === 'url' ? '🌐' : src.type === 'pdf' ? '📄' : '📝'}
+                  <span className="text-white/40 shrink-0">
+                    {src.type === 'url' ? <IconGlobe size={16} /> : src.type === 'pdf' ? <IconFileText size={16} /> : <IconMessageSquare size={16} />}
                   </span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-white font-medium truncate">{src.name}</p>
                     <p className="text-xs text-white/40 truncate">{src.content}</p>
                   </div>
                   <Badge color={src.status === 'indexed' ? 'green' : src.status === 'error' ? 'red' : 'orange'}>
-                    {src.status === 'indexed' ? '✓ Indexiert' : src.status === 'error' ? '✗ Fehler' : '⏳ Warte'}
+                    {src.status === 'indexed' ? 'Indexiert' : src.status === 'error' ? 'Fehler' : 'Warte…'}
                   </Badge>
                   <button onClick={() => {
                     const next = [...(config.knowledgeSources ?? [])];
                     next.splice(i, 1);
                     update({ knowledgeSources: next });
-                  }} className="text-white/30 hover:text-red-400 transition-colors text-sm">✕</button>
+                  }} className="text-white/30 hover:text-red-400 transition-colors cursor-pointer" aria-label="Entfernen">
+                    <IconFileText size={13} className="rotate-45" />
+                  </button>
                 </div>
               ))}
             </div>
@@ -661,34 +822,79 @@ export function AgentBuilder() {
       {/* ────────────────────── BEHAVIOR ────────────────────── */}
       {tab === 'behavior' && (
         <>
-          {/* Prompt Templates */}
-          <SectionCard title="Prompt-Vorlagen" icon="📋">
-            <p className="text-sm text-white/50 mb-4">Wähle eine Vorlage als Startpunkt — du kannst sie danach anpassen.</p>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+          {/* Base Role */}
+          <SectionCard title="Grundrolle" icon={IconTemplate} collapsible>
+            <p className="text-xs text-white/40 mb-3">Legt fest wofür der Agent hauptsächlich eingesetzt wird — setzt den Prompt zurück.</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               {PROMPT_TEMPLATES.map((tpl) => (
                 <button key={tpl.id} onClick={() => {
                   const prompt = tpl.prompt.replace('{businessName}', config.businessName || 'deinem Unternehmen');
                   update({ systemPrompt: prompt });
+                  setActivePromptSections(new Set());
                 }}
-                  className="group flex flex-col items-center gap-2 p-4 rounded-xl bg-white/5 border border-white/10 hover:border-orange-500/40 hover:bg-white/10 transition-all text-center">
-                  <span className="text-2xl">{tpl.icon}</span>
-                  <span className="text-sm font-medium text-white group-hover:text-orange-300 transition-colors">{tpl.name}</span>
+                  className="group flex flex-col items-center gap-2 p-3 rounded-xl bg-white/[0.03] border border-white/[0.07] hover:border-orange-500/30 hover:bg-white/[0.06] transition-all text-center cursor-pointer">
+                  <tpl.Icon size={18} className={tpl.accent} />
+                  <span className="text-xs font-medium text-white/65 group-hover:text-white/90 transition-colors leading-tight">{tpl.name}</span>
                 </button>
               ))}
             </div>
           </SectionCard>
 
-          <SectionCard title="System Prompt" icon="💬">
-            <Field label="Anweisungen für den Agent">
-              <TextArea rows={8} value={config.systemPrompt} onChange={(e) => update({ systemPrompt: e.target.value })}
-                placeholder="Wie soll sich der Agent verhalten?" />
-            </Field>
+          {/* Section Blocks */}
+          <SectionCard title="Verhaltens-Abschnitte" icon={IconMessageSquare}>
+            <p className="text-xs text-white/40 mb-3">Aktiviere Abschnitte — jeder fügt einen Textblock zum Prompt hinzu. Nochmal klicken entfernt ihn.</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-5">
+              {PROMPT_SECTIONS.map((sec) => {
+                const isActive = activePromptSections.has(sec.id);
+                return (
+                  <button
+                    key={sec.id}
+                    type="button"
+                    onClick={() => togglePromptSection(sec.id)}
+                    className={`group flex items-start gap-2.5 p-3 rounded-xl border transition-all text-left cursor-pointer ${
+                      isActive
+                        ? 'border-orange-500/35 bg-orange-500/[0.07]'
+                        : 'border-white/[0.07] bg-white/[0.03] hover:border-white/[0.14] hover:bg-white/[0.06]'
+                    }`}
+                  >
+                    <sec.Icon
+                      size={13}
+                      className={`shrink-0 mt-0.5 transition-colors ${isActive ? sec.accent : 'text-white/25 group-hover:text-white/45'}`}
+                    />
+                    <div className="min-w-0">
+                      <p className={`text-xs font-semibold leading-tight transition-colors ${isActive ? 'text-white' : 'text-white/55 group-hover:text-white/80'}`}>
+                        {sec.label}
+                      </p>
+                      <p className="text-[10px] text-white/30 mt-0.5 leading-tight">{sec.description}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
 
-            <div className="mt-5">
-              <span className="text-sm font-medium text-white/70">Tools</span>
-              <div className="flex flex-wrap gap-3 mt-2">
+            {/* Assembled Prompt */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Prompt</span>
+                {activePromptSections.size > 0 && (
+                  <span className="text-[10px] text-orange-400/70 bg-orange-500/10 border border-orange-500/15 px-2 py-0.5 rounded-full">
+                    {activePromptSections.size} Abschnitt{activePromptSections.size !== 1 ? 'e' : ''} aktiv
+                  </span>
+                )}
+              </div>
+              <TextArea
+                rows={10}
+                value={config.systemPrompt}
+                onChange={(e) => update({ systemPrompt: e.target.value })}
+                placeholder="Aktiviere Abschnitte oben oder schreibe deinen Prompt direkt hier…"
+              />
+            </div>
+
+            <div className="mt-4">
+              <span className="text-xs font-medium text-white/40 uppercase tracking-wider block mb-2">Aktive Tools</span>
+              <div className="flex flex-wrap gap-2">
                 {KNOWN_TOOLS.map((tool) => (
-                  <label key={tool} className="flex items-center gap-2 text-sm cursor-pointer select-none text-white/70">
+                  <label key={tool} className="flex items-center gap-2 text-xs cursor-pointer select-none text-white/55">
                     <input type="checkbox" checked={config.tools.includes(tool)}
                       onChange={(e) => {
                         const next = new Set(config.tools);
@@ -696,13 +902,13 @@ export function AgentBuilder() {
                         update({ tools: Array.from(next) });
                       }}
                       className="rounded border-white/20 bg-white/5 text-orange-500 focus:ring-orange-500/50" />
-                    <code className="text-xs bg-white/10 text-white/60 px-2 py-0.5 rounded">{tool}</code>
+                    <code className="text-[11px] bg-white/[0.07] text-white/50 px-2 py-0.5 rounded">{tool}</code>
                   </label>
                 ))}
               </div>
             </div>
 
-            <div className="mt-5 flex items-center gap-4">
+            <div className="mt-4 flex items-center gap-4">
               <Toggle checked={config.fallback.enabled}
                 onChange={(v) => update({ fallback: { ...config.fallback, enabled: v } })}
                 label="Fallback / Handoff aktiv" />
@@ -720,7 +926,7 @@ export function AgentBuilder() {
       {tab === 'capabilities' && (
         <>
           {/* Call Routing Rules */}
-          <SectionCard title="Rufweiterleitung & Gesprächslogik" icon="📞">
+          <SectionCard title="Rufweiterleitung & Gesprächslogik" icon={IconPhoneOut}>
             <p className="text-sm text-white/50 mb-4">
               Definiere Regeln in natürlicher Sprache — der Agent erkennt die Situation und handelt automatisch.
             </p>
@@ -731,7 +937,7 @@ export function AgentBuilder() {
           </SectionCard>
 
           {/* Calendar Integrations */}
-          <SectionCard title="Kalender-Anbindung" icon="📅">
+          <SectionCard title="Kalender-Anbindung" icon={IconCalendar}>
             <p className="text-sm text-white/50 mb-4">
               Verbinde einen Kalender, damit dein Agent Termine prüfen und buchen kann.
             </p>
@@ -742,7 +948,7 @@ export function AgentBuilder() {
           </SectionCard>
 
           {/* API Integrations */}
-          <SectionCard title="API-Integrationen" icon="🔌">
+          <SectionCard title="API-Integrationen" icon={IconPlug}>
             <p className="text-sm text-white/50 mb-4">
               Verbinde externe Systeme (CRM, ERP, Buchungssysteme) — dein Agent kann während des Gesprächs darauf zugreifen.
             </p>
@@ -753,7 +959,7 @@ export function AgentBuilder() {
           </SectionCard>
 
           {/* Live Web Access */}
-          <SectionCard title="Live Website-Zugriff" icon="🌐">
+          <SectionCard title="Live Website-Zugriff" icon={IconGlobe}>
             <p className="text-sm text-white/50 mb-4">
               Erlaube deinem Agent, während des Gesprächs aktuelle Infos von Webseiten abzurufen (z.B. Preise, Verfügbarkeit).
             </p>
@@ -768,7 +974,7 @@ export function AgentBuilder() {
       {/* ────────────────────── TECHNICAL ────────────────────── */}
       {tab === 'technical' && (
         <>
-          <SectionCard title="Stimme & Geschwindigkeit" icon="🎤">
+          <SectionCard title="Stimme & Geschwindigkeit" icon={IconMic}>
             <div className="space-y-5">
               <Slider value={config.speakingSpeed ?? 1.0} onChange={(v) => update({ speakingSpeed: v })}
                 min={0.5} max={2.0} step={0.1}
@@ -779,7 +985,7 @@ export function AgentBuilder() {
                 label="Kreativität (Temperature)" displayValue={(config.temperature ?? 0.7).toFixed(2)} />
 
               <div className="bg-white/5 rounded-lg px-4 py-3 text-xs text-white/50">
-                💡 <strong>Niedrig</strong> = konsistenter & faktisch · <strong>Hoch</strong> = kreativer & spontaner
+                <strong>Niedrig</strong> = konsistenter & faktisch · <strong>Hoch</strong> = kreativer & spontaner
               </div>
 
               <Slider value={config.maxCallDuration ?? 300} onChange={(v) => update({ maxCallDuration: v })}
@@ -788,28 +994,28 @@ export function AgentBuilder() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Hintergrundgeräusche" icon="🔊">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <SectionCard title="Hintergrundgeräusche" icon={IconVolume}>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {([
-                { id: 'off', icon: '🔇', label: 'Keine' },
-                { id: 'office', icon: '🏢', label: 'Büro' },
-                { id: 'cafe', icon: '☕', label: 'Café' },
-                { id: 'nature', icon: '🌿', label: 'Natur' },
+                { id: 'off',    Icon: IconPhoneOff,  label: 'Keine' },
+                { id: 'office', Icon: IconBuilding,  label: 'Büro' },
+                { id: 'cafe',   Icon: IconAgent,     label: 'Café' },
+                { id: 'nature', Icon: IconGlobe,     label: 'Natur' },
               ] as const).map((bg) => (
                 <button key={bg.id} onClick={() => update({ backgroundSound: bg.id })}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${
+                  className={`flex flex-col items-center gap-2 py-4 px-3 rounded-xl border transition-all cursor-pointer ${
                     config.backgroundSound === bg.id
-                      ? 'border-orange-500/50 bg-orange-500/10 text-white'
-                      : 'border-white/10 bg-white/5 text-white/50 hover:border-white/20'
+                      ? 'border-orange-500/40 bg-orange-500/8 text-white'
+                      : 'border-white/[0.07] bg-white/[0.03] text-white/40 hover:border-white/15 hover:text-white/70'
                   }`}>
-                  <span className="text-2xl">{bg.icon}</span>
-                  <span className="text-sm font-medium">{bg.label}</span>
+                  <bg.Icon size={18} className={config.backgroundSound === bg.id ? 'text-orange-400' : ''} />
+                  <span className="text-xs font-medium">{bg.label}</span>
                 </button>
               ))}
             </div>
           </SectionCard>
 
-          <SectionCard title="Gesprächssteuerung" icon="🎛️">
+          <SectionCard title="Gesprächssteuerung" icon={IconSliders}>
             <div className="space-y-4">
               <Field label="Unterbrechungen">
                 <Select value={config.interruptionMode ?? 'allow'}
@@ -831,7 +1037,7 @@ export function AgentBuilder() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Fachbegriffe" icon="📖">
+          <SectionCard title="Fachbegriffe" icon={IconBookOpen}>
             <p className="text-sm text-white/50 mb-3">
               Begriffe die die KI korrekt aussprechen und verstehen soll (Produktnamen, Fachausdrücke, Fremdwörter).
             </p>
@@ -845,14 +1051,14 @@ export function AgentBuilder() {
 
       {/* ────────────────────── PRIVACY ────────────────────── */}
       {tab === 'privacy' && (
-        <SectionCard title="Aufzeichnung & Datenschutz" icon="🔒">
+        <SectionCard title="Aufzeichnung & Datenschutz" icon={IconPrivacy}>
           <div className="space-y-6">
             <Toggle checked={config.recordCalls ?? false}
               onChange={(v) => update({ recordCalls: v })}
               label="Anrufe aufzeichnen" />
             {config.recordCalls && (
               <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-4 py-3 text-sm text-yellow-300 ml-14">
-                ⚠️ Stelle sicher, dass Anrufer zu Beginn über die Aufzeichnung informiert werden (DSGVO).
+                Stelle sicher, dass Anrufer zu Beginn über die Aufzeichnung informiert werden (DSGVO).
               </div>
             )}
 
@@ -868,7 +1074,7 @@ export function AgentBuilder() {
             </Field>
 
             <div className="bg-white/5 rounded-lg px-4 py-3 text-xs text-white/50">
-              🔒 Alle Daten werden verschlüsselt gespeichert und nach Ablauf automatisch gelöscht. DSGVO-konform.
+              Alle Daten werden verschlüsselt gespeichert und nach Ablauf automatisch gelöscht. DSGVO-konform.
             </div>
           </div>
         </SectionCard>
@@ -877,7 +1083,7 @@ export function AgentBuilder() {
       {/* ────────────────────── WEBHOOKS & VARIABLES ────────────────────── */}
       {tab === 'webhooks' && (
         <>
-          <SectionCard title="Variablen extrahieren" icon="📤">
+          <SectionCard title="Variablen extrahieren" icon={IconFileText}>
             <p className="text-sm text-white/50 mb-4">
               Definiere welche Informationen der Agent automatisch aus Gesprächen extrahieren soll.
             </p>
@@ -887,7 +1093,7 @@ export function AgentBuilder() {
             />
           </SectionCard>
 
-          <SectionCard title="Inbound Webhooks" icon="🔗">
+          <SectionCard title="Inbound Webhooks" icon={IconWebhook}>
             <p className="text-sm text-white/50 mb-4">
               Sende extrahierte Daten und Events automatisch an deine Systeme.
             </p>
@@ -901,94 +1107,99 @@ export function AgentBuilder() {
 
       {/* ────────────────────── PREVIEW ────────────────────── */}
       {tab === 'preview' && (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {!config.retellAgentId ? (
-            <div className="glass rounded-2xl p-8 text-center space-y-4">
-              <IconDeploy size={44} className="mx-auto text-orange-400/40" />
-              <h3 className="text-lg font-semibold text-white">Agent noch nicht deployed</h3>
-              <p className="text-sm text-white/50">Speichere und deploye deinen Agent zuerst.</p>
+            <div className="rounded-2xl border border-white/[0.07] bg-white/[0.03] p-10 text-center space-y-4">
+              <IconDeploy size={36} className="mx-auto text-orange-400/30" />
+              <div>
+                <h3 className="text-sm font-semibold text-white/80">Agent noch nicht deployed</h3>
+                <p className="text-xs text-white/35 mt-1">Speichere und deploye deinen Agent, um ihn zu testen.</p>
+              </div>
               <button
                 onClick={handleDeploy}
                 disabled={deploying}
-                className="rounded-lg bg-gradient-to-r from-orange-500 to-cyan-500 px-5 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-2 mx-auto"
+                className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold text-white disabled:opacity-50 transition-all cursor-pointer hover:opacity-90"
+                style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
               >
-                {deploying ? 'Deploying…' : (
-                  <>
-                    <IconDeploy size={14} />
-                    Jetzt deployen
-                  </>
-                )}
+                {deploying ? 'Deploying…' : <><IconDeploy size={13} />Jetzt deployen</>}
               </button>
             </div>
           ) : (
             <>
+              {/* Agent identity strip */}
+              <div className="flex items-center gap-3 px-1 min-w-0">
+                <div className="w-8 h-8 shrink-0 rounded-xl bg-gradient-to-br from-orange-500/20 to-cyan-500/20 border border-white/10 flex items-center justify-center">
+                  <IconAgent size={15} className="text-orange-400" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-white truncate">{config.name || 'Agent'}</p>
+                  <p className="text-[11px] text-white/35 truncate">{config.businessName || ''}</p>
+                </div>
+                <span className="shrink-0 flex items-center gap-1.5 text-[11px] text-green-400 bg-green-500/10 border border-green-500/20 px-2.5 py-1 rounded-full font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                  Live
+                </span>
+              </div>
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Left: Live Call */}
-                <div className="glass rounded-2xl p-6">
-                  <div className="flex items-center gap-3 mb-2">
-                    <IconPlay size={18} className="text-orange-400" />
-                    <h3 className="text-lg font-semibold text-white">Live Web-Call</h3>
-                    <span className="ml-auto text-xs text-orange-400 bg-orange-500/10 px-2 py-1 rounded-full">● Agent live</span>
+                <div className="rounded-2xl border border-white/[0.07] bg-white/[0.03] p-5">
+                  <div className="flex items-center gap-2 mb-1">
+                    <IconMic size={14} className="text-orange-400 shrink-0" />
+                    <span className="text-xs font-semibold text-white/70">Web-Call</span>
                   </div>
-                  <p className="text-sm text-white/50 mb-4">Sprich direkt mit deinem Agenten — Mikrofon erforderlich.</p>
+                  <p className="text-[11px] text-white/30 mb-4">Mikrofon erforderlich — sprich direkt mit dem Agenten.</p>
                   <WebCallWidget />
                 </div>
 
-                {/* Right: Active Voice Info */}
-                <div className="glass rounded-2xl p-6">
-                  <div className="flex items-center gap-3 mb-2">
-                    <IconMicUpload size={18} className="text-cyan-400" />
-                    <h3 className="text-lg font-semibold text-white">Aktive Stimme</h3>
+                {/* Right: Voice + Details */}
+                <div className="rounded-2xl border border-white/[0.07] bg-white/[0.03] p-5 space-y-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <IconMicUpload size={14} className="text-cyan-400 shrink-0" />
+                      <span className="text-xs font-semibold text-white/70">Aktive Stimme</span>
+                    </div>
+                    <div className="rounded-xl bg-white/[0.04] border border-white/[0.07] px-3 py-2.5 mt-2 min-w-0">
+                      <p className="text-xs font-medium text-white truncate">{config.voice || '—'}</p>
+                      {(() => {
+                        const v = voices.find(x => x.voice_id === config.voice);
+                        return v ? (
+                          <p className="text-[10px] text-white/35 mt-0.5 truncate">
+                            {v.voice_name}{' · '}
+                            {v.voice_type === 'cloned'
+                              ? <span className="text-cyan-400">Eigene Stimme</span>
+                              : <span>{v.provider ?? 'Built-in'}</span>}
+                          </p>
+                        ) : null;
+                      })()}
+                    </div>
+                    <p className="text-[10px] text-white/25 mt-1.5">
+                      Stimme ändern im Tab <span className="text-white/45">Identität</span>.
+                    </p>
                   </div>
-                  <p className="text-sm text-white/50 mb-4">
-                    Aktuelle Stimme des Agents. Eigene Stimmen klonen im Tab <strong className="text-white">Identität</strong>.
-                  </p>
-                  <div className="rounded-xl bg-white/5 border border-white/10 px-4 py-3">
-                    <p className="text-sm font-medium text-white">{config.voice}</p>
-                    {voices.find((v) => v.voice_id === config.voice) && (
-                      <p className="text-xs text-white/40 mt-0.5">
-                        {voices.find((v) => v.voice_id === config.voice)?.voice_name}
-                        {' · '}
-                        {voices.find((v) => v.voice_id === config.voice)?.voice_type === 'cloned' ? (
-                          <span className="text-cyan-400">Eigene Stimme</span>
-                        ) : (
-                          <span className="text-white/40">{voices.find((v) => v.voice_id === config.voice)?.provider ?? 'Built-in'}</span>
-                        )}
-                      </p>
+
+                  <div className="border-t border-white/[0.05] pt-4">
+                    <button
+                      onClick={() => getAgentPreview().then(setPreview)}
+                      className="flex items-center gap-1.5 text-[11px] text-white/40 hover:text-orange-400 transition-colors cursor-pointer mb-3"
+                    >
+                      <IconRefresh size={12} /> Technische Vorschau laden
+                    </button>
+                    {preview && (
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          {preview.tools.map((t) => (
+                            <span key={t} className="text-[10px] bg-orange-500/15 text-orange-300/80 px-2 py-0.5 rounded font-mono">{t}</span>
+                          ))}
+                        </div>
+                        <pre className="bg-black/30 text-white/50 text-[10px] p-3 rounded-lg overflow-auto max-h-40 whitespace-pre-wrap border border-white/[0.05] leading-relaxed">
+                          {preview.instructions}
+                        </pre>
+                      </div>
                     )}
                   </div>
                 </div>
               </div>
-
-              <details className="glass rounded-2xl p-4 cursor-pointer">
-                <summary className="text-sm font-medium text-white/60 select-none">Technische Vorschau</summary>
-                <div className="mt-4">
-                  <button
-                    onClick={() => getAgentPreview().then(setPreview)}
-                    className="flex items-center gap-1.5 text-sm text-orange-400 mb-3 hover:text-orange-300 transition-colors"
-                  >
-                    <IconRefresh size={14} /> Aktualisieren
-                  </button>
-                  {preview && (
-                    <div className="space-y-4">
-                      <div>
-                        <span className="text-xs font-medium text-white/40 uppercase">Aktive Tools</span>
-                        <div className="flex gap-2 mt-1 flex-wrap">
-                          {preview.tools.map((t) => (
-                            <span key={t} className="text-xs bg-orange-500/20 text-orange-300 px-2 py-1 rounded font-mono">{t}</span>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <span className="text-xs font-medium text-white/40 uppercase">Instructions</span>
-                        <pre className="mt-1 bg-black/40 text-white/80 text-xs p-4 rounded-lg overflow-auto max-h-60 whitespace-pre-wrap border border-white/5">
-                          {preview.instructions}
-                        </pre>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </details>
             </>
           )}
         </div>
@@ -1052,18 +1263,18 @@ function KnowledgeAdder({ onAdd }: { onAdd: (src: KnowledgeSource) => void }) {
 
   if (!mode) {
     return (
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-2">
         <button onClick={() => setMode('url')}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white/70 hover:border-orange-500/40 hover:text-white transition-all">
-          🌐 Website-URL
+          className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-white/[0.07] bg-white/[0.03] text-xs text-white/60 hover:border-orange-500/30 hover:text-white transition-all cursor-pointer">
+          <IconGlobe size={13} className="text-white/40" /> Website-URL
         </button>
         <button onClick={() => fileRef.current?.click()}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white/70 hover:border-orange-500/40 hover:text-white transition-all">
-          📄 PDF hochladen
+          className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-white/[0.07] bg-white/[0.03] text-xs text-white/60 hover:border-orange-500/30 hover:text-white transition-all cursor-pointer">
+          <IconFileText size={13} className="text-white/40" /> PDF hochladen
         </button>
         <button onClick={() => setMode('text')}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white/70 hover:border-orange-500/40 hover:text-white transition-all">
-          📝 Eigener Text
+          className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-white/[0.07] bg-white/[0.03] text-xs text-white/60 hover:border-orange-500/30 hover:text-white transition-all cursor-pointer">
+          <IconMessageSquare size={13} className="text-white/40" /> Eigener Text
         </button>
         <input ref={fileRef} type="file" accept=".pdf" className="hidden" onChange={addPdf} />
       </div>
@@ -1119,7 +1330,7 @@ function VocabularyEditor({ items, onChange }: { items: string[]; onChange: (v: 
         {items.map((term, i) => (
           <span key={i} className="flex items-center gap-1.5 bg-white/10 text-white/80 text-sm px-3 py-1.5 rounded-full">
             {term}
-            <button onClick={() => onChange(items.filter((_, j) => j !== i))} className="text-white/30 hover:text-red-400">✕</button>
+            <button onClick={() => onChange(items.filter((_, j) => j !== i))} className="text-white/30 hover:text-red-400 cursor-pointer transition-colors"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </span>
         ))}
         {items.length === 0 && <span className="text-sm text-white/30">Noch keine Begriffe hinzugefügt</span>}
@@ -1169,7 +1380,7 @@ function VariableEditor({ items, onChange }: { items: ExtractedVariable[]; onCha
               className="rounded border-white/20 bg-white/5" />
             Pflicht
           </label>
-          <button onClick={() => remove(i)} className="text-white/30 hover:text-red-400 transition-colors">✕</button>
+          <button onClick={() => remove(i)} className="text-white/30 hover:text-red-400 transition-colors cursor-pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
       ))}
       <button onClick={add}
@@ -1210,7 +1421,7 @@ function WebhookEditor({ items, onChange }: { items: InboundWebhook[]; onChange:
           <div className="flex items-center gap-3">
             <Toggle checked={wh.enabled} onChange={(v) => patch(i, { enabled: v })} label="" />
             <Input value={wh.name} onChange={(e) => patch(i, { name: e.target.value })} placeholder="Name (z.B. CRM Webhook)" className="flex-1" />
-            <button onClick={() => remove(i)} className="text-white/30 hover:text-red-400 transition-colors">✕</button>
+            <button onClick={() => remove(i)} className="text-white/30 hover:text-red-400 transition-colors cursor-pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
           <Input value={wh.url} onChange={(e) => patch(i, { url: e.target.value })} placeholder="https://mein-crm.de/api/webhook" />
           <div>
@@ -1270,11 +1481,11 @@ function CallRoutingEditor({ items, onChange }: { items: CallRoutingRule[]; onCh
     onChange(items.filter((_, j) => j !== i));
   }
 
-  const ACTION_OPTIONS: { id: CallRoutingRule['action']; label: string; icon: string }[] = [
-    { id: 'transfer', label: 'Weiterleiten', icon: '📞' },
-    { id: 'hangup', label: 'Auflegen', icon: '📵' },
-    { id: 'voicemail', label: 'Mailbox', icon: '📧' },
-    { id: 'ticket', label: 'Ticket erstellen', icon: '📋' },
+  const ACTION_OPTIONS: { id: CallRoutingRule['action']; label: string; Icon: SectionIconComp }[] = [
+    { id: 'transfer',  label: 'Weiterleiten',    Icon: IconPhoneOut },
+    { id: 'hangup',    label: 'Auflegen',         Icon: IconPhoneOff },
+    { id: 'voicemail', label: 'Mailbox',          Icon: IconMicUpload },
+    { id: 'ticket',    label: 'Ticket',           Icon: IconTicket },
   ];
 
   return (
@@ -1282,7 +1493,7 @@ function CallRoutingEditor({ items, onChange }: { items: CallRoutingRule[]; onCh
       {/* Examples hint */}
       {items.length === 0 && (
         <div className="bg-white/5 rounded-xl p-4 space-y-2">
-          <span className="text-xs font-medium text-white/50">💡 Beispiele:</span>
+          <span className="text-xs font-medium text-white/40">Beispiele:</span>
           <div className="space-y-1">
             {ROUTING_EXAMPLES.slice(0, 3).map((ex, i) => (
               <button key={i} onClick={() => {
@@ -1325,7 +1536,7 @@ function CallRoutingEditor({ items, onChange }: { items: CallRoutingRule[]; onCh
                           ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
                           : 'bg-white/5 text-white/50 border border-white/10 hover:border-white/20'
                       }`}>
-                      {act.icon} {act.label}
+                      <act.Icon size={12} /> {act.label}
                     </button>
                   ))}
                 </div>
@@ -1339,7 +1550,7 @@ function CallRoutingEditor({ items, onChange }: { items: CallRoutingRule[]; onCh
                 />
               )}
             </div>
-            <button onClick={() => remove(i)} className="text-white/30 hover:text-red-400 transition-colors mt-1">✕</button>
+            <button onClick={() => remove(i)} className="text-white/30 hover:text-red-400 transition-colors cursor-pointer mt-1"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
         </div>
       ))}
@@ -1354,11 +1565,11 @@ function CallRoutingEditor({ items, onChange }: { items: CallRoutingRule[]; onCh
 
 /* ── Calendar Connector ── */
 
-const CALENDAR_PROVIDERS = [
-  { id: 'google' as const, icon: '📅', name: 'Google Calendar', desc: 'Verbinde dein Google-Konto' },
-  { id: 'outlook' as const, icon: '📧', name: 'Microsoft Outlook', desc: 'Outlook / Microsoft 365' },
-  { id: 'calcom' as const, icon: '🗓️', name: 'Cal.com', desc: 'Open-Source Terminbuchung' },
-  { id: 'caldav' as const, icon: '🔗', name: 'CalDAV', desc: 'Nextcloud, iCloud, etc.' },
+const CALENDAR_PROVIDERS: { id: 'google' | 'outlook' | 'calcom' | 'caldav'; Icon: SectionIconComp; name: string; desc: string }[] = [
+  { id: 'google',  Icon: IconCalendar,  name: 'Google Calendar',     desc: 'Verbinde dein Google-Konto' },
+  { id: 'outlook', Icon: IconBookOpen,  name: 'Microsoft Outlook',   desc: 'Outlook / Microsoft 365' },
+  { id: 'calcom',  Icon: IconCheckCircle, name: 'Cal.com',           desc: 'Open-Source Terminbuchung' },
+  { id: 'caldav',  Icon: IconWebhook,   name: 'CalDAV',              desc: 'Nextcloud, iCloud, etc.' },
 ];
 
 function CalendarConnector({ integrations, onChange }: {
@@ -1389,12 +1600,12 @@ function CalendarConnector({ integrations, onChange }: {
         <div className="space-y-2 mb-2">
           {connected.map((cal) => (
             <div key={cal.provider} className="flex items-center gap-3 bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3">
-              <span className="text-lg">{CALENDAR_PROVIDERS.find((p) => p.id === cal.provider)?.icon}</span>
+              {(() => { const P = CALENDAR_PROVIDERS.find((p) => p.id === cal.provider); return P ? <P.Icon size={16} className="text-green-400 shrink-0" /> : null; })()}
               <div className="flex-1">
                 <p className="text-sm text-white font-medium">{cal.label ?? cal.provider}</p>
                 {cal.email && <p className="text-xs text-white/40">{cal.email}</p>}
               </div>
-              <span className="text-xs text-green-400 font-medium">✓ Verbunden</span>
+              <span className="flex items-center gap-1 text-xs text-green-400 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />Verbunden</span>
               <button onClick={() => disconnect(cal.provider)} className="text-white/30 hover:text-red-400 text-sm">Trennen</button>
             </div>
           ))}
@@ -1413,7 +1624,7 @@ function CalendarConnector({ integrations, onChange }: {
                   ? 'border-green-500/20 bg-green-500/5 opacity-60 cursor-default'
                   : 'border-white/10 bg-white/5 hover:border-orange-500/40 hover:bg-white/10 cursor-pointer'
               }`}>
-              <span className="text-2xl">{prov.icon}</span>
+              <prov.Icon size={18} className="text-white/50 shrink-0" />
               <div>
                 <p className="text-sm font-medium text-white">{prov.name}</p>
                 <p className="text-xs text-white/40">{isConnected ? 'Bereits verbunden' : prov.desc}</p>
@@ -1424,7 +1635,7 @@ function CalendarConnector({ integrations, onChange }: {
       </div>
 
       <div className="bg-white/5 rounded-lg px-4 py-3 text-xs text-white/50">
-        💡 Nach der Verbindung kann dein Agent freie Termine prüfen, Buchungen erstellen und Kalender-Konflikte erkennen.
+        Nach der Verbindung kann dein Agent freie Termine prüfen, Buchungen erstellen und Kalender-Konflikte erkennen.
       </div>
     </div>
   );
@@ -1464,7 +1675,7 @@ function ApiIntegrationEditor({ items, onChange }: { items: ApiIntegration[]; on
             <input value={api.name} onChange={(e) => patch(i, { name: e.target.value })}
               placeholder="Name (z.B. CRM, Buchungssystem)"
               className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-orange-500/50 outline-none" />
-            <button onClick={() => remove(i)} className="text-white/30 hover:text-red-400 transition-colors">✕</button>
+            <button onClick={() => remove(i)} className="text-white/30 hover:text-red-400 transition-colors cursor-pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
 
           <input value={api.baseUrl} onChange={(e) => patch(i, { baseUrl: e.target.value })}
@@ -1513,7 +1724,7 @@ function ApiIntegrationEditor({ items, onChange }: { items: ApiIntegration[]; on
       </button>
 
       <div className="bg-white/5 rounded-lg px-4 py-3 text-xs text-white/50">
-        💡 Dein Agent kann während des Gesprächs Daten abrufen und senden — z.B. Kundenstatus prüfen, Bestellungen anlegen oder CRM-Einträge erstellen.
+        Dein Agent kann während des Gesprächs Daten abrufen und senden — z.B. Kundenstatus prüfen, Bestellungen anlegen oder CRM-Einträge erstellen.
       </div>
     </div>
   );
@@ -2079,11 +2290,12 @@ function LiveWebAccessEditor({ config, onChange }: { config: LiveWebAccess; onCh
             <div className="flex flex-wrap gap-2 mb-3">
               {config.allowedDomains.map((domain, i) => (
                 <span key={i} className="flex items-center gap-1.5 bg-white/10 text-white/80 text-sm px-3 py-1.5 rounded-full">
-                  🌐 {domain}
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" className="text-white/40 shrink-0"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+                  {domain}
                   <button onClick={() => onChange({
                     ...config,
                     allowedDomains: config.allowedDomains.filter((_, j) => j !== i),
-                  })} className="text-white/30 hover:text-red-400">✕</button>
+                  })} className="text-white/30 hover:text-red-400 cursor-pointer transition-colors"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                 </span>
               ))}
               {config.allowedDomains.length === 0 && (
@@ -2103,7 +2315,7 @@ function LiveWebAccessEditor({ config, onChange }: { config: LiveWebAccess; onCh
           </div>
 
           <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-3 text-xs text-orange-300">
-            🌐 Der Agent kann aktuelle Preise, Produktinfos oder Verfügbarkeiten direkt von deiner Website lesen — in Echtzeit während des Gesprächs.
+            Der Agent kann aktuelle Preise, Produktinfos oder Verfügbarkeiten direkt von deiner Website lesen — in Echtzeit während des Gesprächs.
           </div>
         </>
       )}

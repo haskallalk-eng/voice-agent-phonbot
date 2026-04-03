@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { IconStar, IconBolt, IconPhone, IconCapabilities, IconInsights } from './PhonbotIcons.js';
 import {
   triggerSalesCall,
   getOutboundCalls,
@@ -15,12 +16,12 @@ import {
 type Tab = 'dashboard' | 'call' | 'suggestions';
 
 const OUTCOME_LABELS: Record<string, { label: string; color: string }> = {
-  converted:      { label: '✅ Gewonnen',       color: 'text-green-400 bg-green-500/10 border-green-500/20' },
-  interested:     { label: '🔥 Interessiert',   color: 'text-orange-400 bg-orange-500/10 border-orange-500/20' },
-  callback:       { label: '📞 Rückruf',         color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' },
-  not_interested: { label: '❌ Kein Interesse', color: 'text-red-400 bg-red-500/10 border-red-500/20' },
-  no_answer:      { label: '📵 Nicht erreicht', color: 'text-white/40 bg-white/5 border-white/10' },
-  voicemail:      { label: '📬 Mailbox',         color: 'text-white/40 bg-white/5 border-white/10' },
+  converted:      { label: '✓ Gewonnen',        color: 'text-green-400 bg-green-500/10 border-green-500/20' },
+  interested:     { label: '+ Interessiert',     color: 'text-orange-400 bg-orange-500/10 border-orange-500/20' },
+  callback:       { label: '↩ Rückruf',          color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' },
+  not_interested: { label: '✗ Kein Interesse',   color: 'text-red-400 bg-red-500/10 border-red-500/20' },
+  no_answer:      { label: '– Nicht erreicht',   color: 'text-white/40 bg-white/5 border-white/10' },
+  voicemail:      { label: '↵ Mailbox',           color: 'text-white/40 bg-white/5 border-white/10' },
 };
 
 function ScoreBadge({ score }: { score: number | null }) {
@@ -75,7 +76,7 @@ export function OutboundPage() {
     setError(null);
     try {
       const res = await triggerSalesCall(toNumber, contactName || undefined, campaign || undefined, campaignContext || undefined);
-      setCallResult(`Anruf gestartet ✅ Call ID: ${res.callId ?? '–'}`);
+      setCallResult(`Anruf gestartet ✓ Call ID: ${res.callId ?? '–'}`);
       setToNumber('');
       setContactName('');
       timerRef.current = setTimeout(load, 3000);
@@ -294,11 +295,15 @@ export function OutboundPage() {
             disabled={calling || !toNumber.trim()}
             className="w-full bg-gradient-to-r from-orange-500 to-cyan-500 hover:opacity-90 disabled:opacity-40 text-white font-medium rounded-2xl py-3 text-sm transition-opacity"
           >
-            {calling ? '📞 Verbinde…' : '📞 Jetzt anrufen →'}
+            <span className="inline-flex items-center gap-2 justify-center">
+              <IconPhone size={15} />
+              {calling ? 'Verbinde…' : 'Jetzt anrufen →'}
+            </span>
           </button>
 
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3 text-xs text-blue-400">
-            💡 Der Agent nutzt SPIN-Qualifizierung, Micro-Commitments und präzise Einwandbehandlung.
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3 text-xs text-blue-400 flex items-start gap-2">
+            <IconCapabilities size={13} className="shrink-0 mt-0.5" />
+            Der Agent nutzt SPIN-Qualifizierung, Micro-Commitments und präzise Einwandbehandlung.
             Nach dem Gespräch wird es automatisch analysiert und der Prompt verbessert.
           </div>
         </div>
@@ -307,13 +312,14 @@ export function OutboundPage() {
       {/* Suggestions */}
       {tab === 'suggestions' && (
         <div className="space-y-4">
-          <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-3 text-sm text-orange-300">
-            🧠 Das Lernsystem analysiert jeden Anruf und schlägt Prompt-Verbesserungen vor. Wende sie an um die Conversion zu steigern.
+          <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-3 text-sm text-orange-300 flex items-start gap-2">
+            <IconInsights size={15} className="shrink-0 mt-0.5" />
+            Das Lernsystem analysiert jeden Anruf und schlägt Prompt-Verbesserungen vor. Wende sie an um die Conversion zu steigern.
           </div>
 
           {suggestions.length === 0 ? (
             <div className="text-center py-12 text-white/30">
-              <div className="text-4xl mb-3">✨</div>
+              <div className="mb-3 flex justify-center"><IconStar size={36} className="text-white/20" /></div>
               <p className="text-sm">Keine offenen Verbesserungsvorschläge.</p>
               <p className="text-xs mt-1 text-white/20">Nach 5+ Anrufen beginnt das Lernsystem automatisch.</p>
             </div>
@@ -337,7 +343,7 @@ export function OutboundPage() {
                     onClick={() => handleApply(s.id)}
                     className="flex-1 bg-gradient-to-r from-orange-500 to-cyan-500 hover:opacity-90 text-white text-xs font-medium rounded-xl py-2 transition-opacity"
                   >
-                    ✅ Anwenden
+                    ✓ Anwenden
                   </button>
                   <button
                     onClick={() => handleReject(s.id)}
