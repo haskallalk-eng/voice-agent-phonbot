@@ -163,18 +163,30 @@ export async function registerPhone(app: FastifyInstance) {
   });
 
   // POST /phone/provision — get a new German number via Twilio + import into Retell
+  // Requires an approved regulatory bundle. Uses the org's existing address.
   app.post('/phone/provision', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
-    const parsed = z.object({
-      street: z.string().min(1),
-      city: z.string().min(1),
-      postalCode: z.string().min(4),
-      customerName: z.string().min(1),
-    }).safeParse(req.body);
-    if (!parsed.success) return reply.status(400).send({ error: 'Adresse erforderlich: street, city, postalCode, customerName' });
-    const { street, city, postalCode, customerName } = parsed.data;
+    // Check if org has an approved regulatory bundle
+    const orgRow = await pool.query(
+      `SELECT twilio_bundle_status, twilio_address_sid, business_city FROM orgs WHERE id = $1`,
+      [orgId],
+    );
+    const org = orgRow.rows[0];
+    if (!org) return reply.status(404).send({ error: 'Organisation nicht gefunden' });
+
+    if (org.twilio_bundle_status !== 'twilio-approved') {
+      return reply.status(400).send({
+        error: 'Bitte zuerst den Regulatory Bundle abschließen. Gehen Sie zu Einstellungen → Telefonnummer und reichen Sie Ihre Geschäftsdokumente ein.',
+        bundleStatus: org.twilio_bundle_status ?? 'none',
+      });
+    }
+
+    const addressSid = org.twilio_address_sid;
+    if (!addressSid) {
+      return reply.status(400).send({ error: 'Keine Adresse hinterlegt. Bitte reichen Sie Ihre Geschäftsdokumente erneut ein.' });
+    }
 
     // Get the org's deployed agent ID
     const configRes = await pool.query(
@@ -183,39 +195,30 @@ export async function registerPhone(app: FastifyInstance) {
     );
     const agentId = configRes.rows[0]?.data?.retellAgentId ?? null;
 
-    // Step 1: Register customer address at Twilio for regulatory compliance
+    // Search and purchase a number using the org's existing approved address
     let purchasedNumber: string;
     try {
       const client = getTwilioClient();
 
-      const address = await client.addresses.create({
-        friendlyName: `${customerName} — ${city}`,
-        customerName,
-        street,
-        city,
-        region: city,
-        postalCode,
-        isoCountry: 'DE',
-      });
-
-      // Step 2: Search numbers in the customer's city
-      const searchOpts: Record<string, unknown> = { limit: 5, inLocality: city };
+      const city = org.business_city ?? '';
+      const searchOpts: Record<string, unknown> = { limit: 5 };
+      if (city) searchOpts.inLocality = city;
       let available = await client.availablePhoneNumbers('DE').local.list(searchOpts);
 
       // Fallback: search without city filter if no local numbers found
       if (!available.length) {
         available = await client.availablePhoneNumbers('DE').local.list({ limit: 5 });
       }
-      if (!available.length) return reply.status(400).send({ error: `Keine deutschen Nummern verfügbar. Bitte später erneut versuchen.` });
+      if (!available.length) return reply.status(400).send({ error: 'Keine deutschen Nummern verfügbar. Bitte später erneut versuchen.' });
 
-      // Step 3: Try each available number until one works
+      // Try each available number until one works
       let purchased: { phoneNumber: string } | null = null;
       let lastError = '';
       for (const candidate of available) {
         try {
           purchased = await client.incomingPhoneNumbers.create({
             phoneNumber: candidate.phoneNumber,
-            addressSid: address.sid,
+            addressSid,
           });
           break;
         } catch (e: unknown) {
@@ -230,7 +233,7 @@ export async function registerPhone(app: FastifyInstance) {
       return reply.status(500).send({ error: `Nummer konnte nicht erworben werden: ${msg}` });
     }
 
-    // Step 2: Import into Retell for AI agent routing
+    // Import into Retell for AI agent routing
     let retellPhoneNumberId: string | null = null;
     try {
       const result = await retellImportPhoneNumber(purchasedNumber, agentId);
@@ -240,7 +243,7 @@ export async function registerPhone(app: FastifyInstance) {
       // Continue — number is bought, save it even without Retell
     }
 
-    // Step 3: Save to DB
+    // Save to DB
     const pretty = purchasedNumber.replace(/^\+49/, '0').replace(/(\d{3})(\d{3})(\d+)/, '$1 $2 $3');
     await pool.query(
       `INSERT INTO phone_numbers (org_id, number, number_pretty, provider, provider_id, agent_id, method, verified)
@@ -395,6 +398,8 @@ export async function registerPhone(app: FastifyInstance) {
       website: z.string().optional().default(''),
       email: z.string().email(),
       representativeName: z.string().min(1),
+      documentData: z.string().optional(),   // base64-encoded file content
+      documentType: z.string().optional(),   // mime type, e.g. 'application/pdf'
     }).safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: 'Alle Felder sind erforderlich' });
 
