@@ -3,6 +3,7 @@ import { initSentry, Sentry } from './sentry.js';
 
 import Fastify, { type FastifyError, type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
 import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
@@ -31,6 +32,9 @@ const SENTRY_DSN = process.env.SENTRY_DSN ?? '';
 
 const app = Fastify({ logger: true });
 await app.register(websocket);
+await app.register(helmet, {
+  contentSecurityPolicy: false, // CSP handled by Caddy / frontend
+});
 await app.register(cors, {
   origin: (process.env.APP_URL ?? 'http://localhost:5173').split(',').map(s => s.trim()),
 });
