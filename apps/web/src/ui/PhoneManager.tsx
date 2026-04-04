@@ -40,7 +40,12 @@ function NumberCard({ num, agents, onVerify, onDelete, onRefresh }: {
   const [forwardStep, setForwardStep] = useState(1);
   const [testNumber, setTestNumber] = useState('');
 
-  const agentName = agents.find(a => a.retellAgentId)?.name ?? 'Agent';
+  // Find the agent connected to THIS number (by agent_id matching retellAgentId)
+  const connectedAgent = (num as PhoneNumber & { agent_id?: string }).agent_id;
+  const agentName = (connectedAgent
+    ? agents.find(a => a.retellAgentId === connectedAgent)?.name
+    : agents.find(a => a.retellAgentId)?.name
+  ) ?? 'Agent';
 
   async function handleDelete() {
     setDeleting(true);

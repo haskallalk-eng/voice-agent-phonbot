@@ -201,6 +201,7 @@ export async function registerPhone(app: FastifyInstance) {
     // Optional: specify which agent to connect (defaults to first deployed agent)
     const parsed = z.object({ agentTenantId: z.string().optional() }).safeParse(req.body);
     const agentTenantId = parsed.success ? parsed.data.agentTenantId : undefined;
+    req.log.info({ agentTenantId, body: req.body }, '[phone/provision] received');
 
     // Get the agent ID — if agentTenantId specified, find that specific agent
     let agentId: string | null = null;
@@ -271,26 +272,30 @@ export async function registerPhone(app: FastifyInstance) {
       }
     }
 
-    // Import into Retell (if not already imported from pool)
-    if (!retellPhoneNumberId) {
-      try {
-        const result = await retellImportPhoneNumber(purchasedNumber, agentId ?? undefined);
-        retellPhoneNumberId = (result.phone_number_id as string | undefined) ?? null;
-      } catch (e: unknown) {
-        process.stderr.write(`[phone] Retell import failed for ${purchasedNumber}: ${e instanceof Error ? e.message : String(e)}\n`);
-      }
-    } else if (agentId) {
-      // Pool number already in Retell — update the agent assignment
-      try {
-        const key = process.env.RETELL_API_KEY;
-        if (key) {
+    // Connect number to agent in Retell
+    const key = process.env.RETELL_API_KEY;
+    if (key && agentId) {
+      if (poolNumberId) {
+        // Pool number — already in Retell, just update the agent
+        try {
           await fetch(`https://api.retellai.com/update-phone-number/${encodeURIComponent(purchasedNumber)}`, {
             method: 'PATCH',
             headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ inbound_agent_id: agentId }),
           });
+          req.log.info({ number: purchasedNumber, agentId }, '[phone/provision] Retell agent updated');
+        } catch (e: unknown) {
+          req.log.error({ error: e instanceof Error ? e.message : String(e) }, '[phone/provision] Retell update failed');
         }
-      } catch { /* non-fatal */ }
+      } else {
+        // New number — import into Retell
+        try {
+          const result = await retellImportPhoneNumber(purchasedNumber, agentId ?? undefined);
+          retellPhoneNumberId = (result.phone_number_id as string | undefined) ?? null;
+        } catch (e: unknown) {
+          req.log.error({ error: e instanceof Error ? e.message : String(e) }, '[phone/provision] Retell import failed');
+        }
+      }
     }
 
     // Save or update DB
