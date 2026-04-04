@@ -164,9 +164,32 @@ export async function registerPhone(app: FastifyInstance) {
 
   // POST /phone/provision — buy a German number under Phonbot's own Twilio bundle
   // Simple model: Phonbot owns all numbers, customers just use them.
+  // REQUIRES: active paid plan (starter/pro/agency)
   app.post('/phone/provision', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
+
+    // Check billing: only paid plans can provision numbers
+    const orgRow = await pool.query(
+      `SELECT plan, plan_status FROM orgs WHERE id = $1`,
+      [orgId],
+    );
+    const org = orgRow.rows[0];
+    if (!org || org.plan === 'free' || (org.plan_status !== 'active' && org.plan_status !== 'trialing')) {
+      return reply.status(403).send({ error: 'Telefonnummern sind ab dem Starter-Plan verfügbar. Bitte upgrade deinen Plan.' });
+    }
+
+    // Limit numbers per plan
+    const countRes = await pool.query(
+      `SELECT count(*) as cnt FROM phone_numbers WHERE org_id = $1 AND method = 'provisioned'`,
+      [orgId],
+    );
+    const currentCount = parseInt(String(countRes.rows[0]?.cnt ?? '0'), 10);
+    const limits: Record<string, number> = { starter: 1, pro: 3, agency: 10 };
+    const maxNumbers = limits[org.plan] ?? 1;
+    if (currentCount >= maxNumbers) {
+      return reply.status(403).send({ error: `Dein ${org.plan}-Plan erlaubt max. ${maxNumbers} Nummer${maxNumbers > 1 ? 'n' : ''}. Upgrade für mehr.` });
+    }
 
     // Optional: specify which agent to connect (defaults to first deployed agent)
     const parsed = z.object({ agentTenantId: z.string().optional() }).safeParse(req.body);
