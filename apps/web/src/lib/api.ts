@@ -274,26 +274,6 @@ export function deletePhoneNumber(id: string) {
   return request<{ ok: boolean }>(`/phone/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
-export function uploadPhoneDocument(fileName: string, fileData: string, fileType: string) {
-  return request<{ ok: boolean; fileName: string }>('/phone/upload-document', {
-    method: 'POST', body: JSON.stringify({ fileName, fileData, fileType }),
-  });
-}
-
-export function submitPhoneBundle(data: {
-  customerName: string; street: string; city: string; postalCode: string;
-  documentUrl: string; website: string; email: string; representativeName: string;
-  registrationNumber: string;
-}) {
-  return request<{ ok: boolean; bundleSid: string; status: string }>('/phone/submit-bundle', {
-    method: 'POST', body: JSON.stringify(data),
-  });
-}
-
-export function getPhoneBundleStatus() {
-  return request<{ status: string; phoneNumber?: string }>('/phone/bundle-status');
-}
-
 // --- Chat ---
 
 export type ChatReply = { ok: boolean; reply: string };

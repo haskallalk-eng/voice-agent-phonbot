@@ -162,31 +162,11 @@ export async function registerPhone(app: FastifyInstance) {
     return { items: rows };
   });
 
-  // POST /phone/provision — get a new German number via Twilio + import into Retell
-  // Requires an approved regulatory bundle. Uses the org's existing address.
+  // POST /phone/provision — buy a German number under Phonbot's own Twilio bundle
+  // Simple model: Phonbot owns all numbers, customers just use them.
   app.post('/phone/provision', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
-
-    // Check if org has an approved regulatory bundle
-    const orgRow = await pool.query(
-      `SELECT twilio_bundle_status, twilio_address_sid, business_city FROM orgs WHERE id = $1`,
-      [orgId],
-    );
-    const org = orgRow.rows[0];
-    if (!org) return reply.status(404).send({ error: 'Organisation nicht gefunden' });
-
-    if (org.twilio_bundle_status !== 'twilio-approved') {
-      return reply.status(400).send({
-        error: 'Bitte zuerst den Regulatory Bundle abschließen. Gehen Sie zu Einstellungen → Telefonnummer und reichen Sie Ihre Geschäftsdokumente ein.',
-        bundleStatus: org.twilio_bundle_status ?? 'none',
-      });
-    }
-
-    const addressSid = org.twilio_address_sid;
-    if (!addressSid) {
-      return reply.status(400).send({ error: 'Keine Adresse hinterlegt. Bitte reichen Sie Ihre Geschäftsdokumente erneut ein.' });
-    }
 
     // Get the org's deployed agent ID
     const configRes = await pool.query(
@@ -195,30 +175,35 @@ export async function registerPhone(app: FastifyInstance) {
     );
     const agentId = configRes.rows[0]?.data?.retellAgentId ?? null;
 
-    // Search and purchase a number using the org's existing approved address
+    // Buy a German number under Phonbot's own Twilio address (Berlin)
     let purchasedNumber: string;
     try {
       const client = getTwilioClient();
 
-      const city = org.business_city ?? '';
+      // Use Phonbot's own German address for regulatory compliance
+      const addresses = await client.addresses.list({ isoCountry: 'DE', limit: 1 });
+      const address = addresses[0];
+      if (!address) return reply.status(500).send({ error: 'Twilio-Konfigurationsfehler. Bitte Support kontaktieren.' });
+
+      // Search numbers in the address city (Berlin)
       const searchOpts: Record<string, unknown> = { limit: 5 };
-      if (city) searchOpts.inLocality = city;
+      if (address.city) searchOpts.inLocality = address.city;
       let available = await client.availablePhoneNumbers('DE').local.list(searchOpts);
 
-      // Fallback: search without city filter if no local numbers found
+      // Fallback: any German number
       if (!available.length) {
         available = await client.availablePhoneNumbers('DE').local.list({ limit: 5 });
       }
       if (!available.length) return reply.status(400).send({ error: 'Keine deutschen Nummern verfügbar. Bitte später erneut versuchen.' });
 
-      // Try each available number until one works
+      // Try each available number
       let purchased: { phoneNumber: string } | null = null;
       let lastError = '';
       for (const candidate of available) {
         try {
           purchased = await client.incomingPhoneNumbers.create({
             phoneNumber: candidate.phoneNumber,
-            addressSid,
+            addressSid: address.sid,
           });
           break;
         } catch (e: unknown) {
@@ -362,66 +347,6 @@ export async function registerPhone(app: FastifyInstance) {
     if (!result.rowCount) return reply.status(404).send({ error: 'Nummer nicht gefunden' });
 
     return { ok: true };
-  });
-
-  // POST /phone/upload-document — upload business document (Gewerbeanmeldung etc.)
-  app.post('/phone/upload-document', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { orgId } = req.user as JwtPayload;
-    if (!pool) return reply.status(503).send({ error: 'Database not configured' });
-
-    // For MVP: store document as base64 in DB
-    // TODO: migrate to Supabase Storage later
-    const parsed = z.object({
-      fileName: z.string().min(1),
-      fileData: z.string().min(1), // base64 encoded
-      fileType: z.string().min(1), // e.g. 'application/pdf'
-    }).safeParse(req.body);
-    if (!parsed.success) return reply.status(400).send({ error: 'fileName, fileData (base64), fileType required' });
-
-    const docUrl = `data:${parsed.data.fileType};base64,${parsed.data.fileData.slice(0, 50)}...`; // truncated ref
-    void docUrl; // stored reference for future use
-    await pool.query('UPDATE orgs SET business_document_url = $1 WHERE id = $2', [parsed.data.fileName, orgId]);
-
-    return { ok: true, fileName: parsed.data.fileName };
-  });
-
-  // POST /phone/submit-bundle — submit business docs for regulatory compliance
-  app.post('/phone/submit-bundle', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { orgId } = req.user as JwtPayload;
-
-    const parsed = z.object({
-      customerName: z.string().min(1),
-      street: z.string().min(1),
-      city: z.string().min(1),
-      postalCode: z.string().min(4),
-      documentUrl: z.string().min(1),
-      website: z.string().optional().default(''),
-      email: z.string().email(),
-      representativeName: z.string().min(1),
-      registrationNumber: z.string().min(1),
-      documentData: z.string().optional(),   // base64-encoded file content
-      documentType: z.string().optional(),   // mime type, e.g. 'application/pdf'
-    }).safeParse(req.body);
-    if (!parsed.success) return reply.status(400).send({ error: 'Alle Felder sind erforderlich' });
-
-    try {
-      const { submitRegulatoryBundle } = await import('./twilio-provisioning.js');
-      const bundleSid = await submitRegulatoryBundle(orgId, parsed.data);
-      return { ok: true, bundleSid, status: 'pending-review' };
-    } catch (e: unknown) {
-      return reply.status(500).send({ error: e instanceof Error ? e.message : 'Bundle-Erstellung fehlgeschlagen' });
-    }
-  });
-
-  // GET /phone/bundle-status — check regulatory bundle status
-  app.get('/phone/bundle-status', { ...auth }, async (req: FastifyRequest) => {
-    const { orgId } = req.user as JwtPayload;
-    try {
-      const { checkBundleStatus } = await import('./twilio-provisioning.js');
-      return await checkBundleStatus(orgId);
-    } catch {
-      return { status: 'none' };
-    }
   });
 
   // POST /phone/verify — make a real test call to verify call forwarding is working
