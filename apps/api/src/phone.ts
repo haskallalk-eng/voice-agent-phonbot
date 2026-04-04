@@ -36,6 +36,8 @@ export async function migratePhone() {
     );
   `);
   await pool.query(`create index if not exists phone_numbers_org_idx on phone_numbers(org_id);`);
+  // Allow pool numbers (org_id = NULL = unassigned, available for next customer)
+  await pool.query(`ALTER TABLE phone_numbers ALTER COLUMN org_id DROP NOT NULL;`);
 }
 
 // ── Retell phone number provisioning ────────────────────────────────────────
@@ -46,11 +48,16 @@ async function retellImportPhoneNumber(phoneNumber: string, agentId?: string) {
   const key = process.env.RETELL_API_KEY;
   if (!key) throw new Error('RETELL_API_KEY not set');
 
-  const res = await fetch(`${RETELL_API}/create-phone-number`, {
+  // Import as custom SIP number with Twilio trunk config
+  const res = await fetch(`${RETELL_API}/import-phone-number`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       phone_number: phoneNumber,
+      termination_uri: 'anfangtelebot.pstn.twilio.com',
+      sip_trunk_auth_username: 'phonbot_retell',
+      sip_trunk_auth_password: 'phonbot_retell',
+      sip_trunk_transport: 'TCP',
       ...(agentId ? { inbound_agent_id: agentId } : {}),
     }),
   });
@@ -203,64 +210,99 @@ export async function registerPhone(app: FastifyInstance) {
     const configRes = await pool.query(configQuery, configParams);
     const agentId = configRes.rows[0]?.data?.retellAgentId ?? null;
 
-    // Buy a German number under Phonbot's approved regulatory bundle
-    // Bundle SID and Address SID from Phonbot's Twilio account
-    const PHONBOT_BUNDLE_SID = 'BUdf48e4eb15c501c7fe3b36008b728062';
-    const PHONBOT_ADDRESS_SID = 'AD4c5ce0dc9622cf67e55cbc07996802c8';
-
-    let purchasedNumber: string;
-    try {
-      const client = getTwilioClient();
-
-      // Search Berlin numbers (matches our approved bundle address)
-      let available = await client.availablePhoneNumbers('DE').local.list({ inLocality: 'Berlin', limit: 5 });
-      if (!available.length) {
-        available = await client.availablePhoneNumbers('DE').local.list({ limit: 5 });
-      }
-      if (!available.length) return reply.status(400).send({ error: 'Keine deutschen Nummern verfügbar. Bitte später erneut versuchen.' });
-
-      // Try each available number with our bundle
-      let purchased: { phoneNumber: string } | null = null;
-      let lastError = '';
-      for (const candidate of available) {
-        try {
-          purchased = await client.incomingPhoneNumbers.create({
-            phoneNumber: candidate.phoneNumber,
-            bundleSid: PHONBOT_BUNDLE_SID,
-            addressSid: PHONBOT_ADDRESS_SID,
-          });
-          break;
-        } catch (e: unknown) {
-          lastError = e instanceof Error ? e.message : String(e);
-          continue;
-        }
-      }
-      if (!purchased) return reply.status(500).send({ error: `Keine Nummer konnte aktiviert werden: ${lastError}` });
-      purchasedNumber = purchased.phoneNumber;
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Twilio-Fehler';
-      return reply.status(500).send({ error: `Nummer konnte nicht erworben werden: ${msg}` });
-    }
-
-    // Import into Retell for AI agent routing
-    let retellPhoneNumberId: string | null = null;
-    try {
-      const result = await retellImportPhoneNumber(purchasedNumber, agentId);
-      retellPhoneNumberId = (result.phone_number_id as string | undefined) ?? null;
-    } catch (e: unknown) {
-      process.stderr.write(`[phone] Retell import failed for ${purchasedNumber}: ${e instanceof Error ? e.message : String(e)}\n`);
-      // Continue — number is bought, save it even without Retell
-    }
-
-    // Save to DB
-    const pretty = purchasedNumber.replace(/^\+49/, '0').replace(/(\d{3})(\d{3})(\d+)/, '$1 $2 $3');
-    await pool.query(
-      `INSERT INTO phone_numbers (org_id, number, number_pretty, provider, provider_id, agent_id, method, verified)
-       VALUES ($1, $2, $3, 'twilio', $4, $5, 'provisioned', true)`,
-      [orgId, purchasedNumber, pretty, retellPhoneNumberId, agentId],
+    // ── Number Pool System ──
+    // Step 1: Check if there's a free number in the pool (org_id IS NULL = unassigned)
+    const freeNumber = await pool.query(
+      `SELECT id, number, number_pretty, provider_id FROM phone_numbers WHERE org_id IS NULL AND method = 'provisioned' LIMIT 1`,
     );
 
-    return { ok: true, number: purchasedNumber, numberPretty: pretty };
+    let purchasedNumber: string;
+    let numberPretty: string;
+    let retellPhoneNumberId: string | null = null;
+    let poolNumberId: string | null = null;
+
+    if (freeNumber.rowCount && freeNumber.rowCount > 0) {
+      // Use number from pool — assign to this org
+      const free = freeNumber.rows[0];
+      purchasedNumber = free.number;
+      numberPretty = free.number_pretty ?? purchasedNumber;
+      retellPhoneNumberId = free.provider_id ?? null;
+      poolNumberId = free.id;
+    } else {
+      // No free numbers in pool — buy a new one from Twilio
+      const PHONBOT_BUNDLE_SID = 'BUdf48e4eb15c501c7fe3b36008b728062';
+      const PHONBOT_ADDRESS_SID = 'AD4c5ce0dc9622cf67e55cbc07996802c8';
+
+      try {
+        const client = getTwilioClient();
+        let available = await client.availablePhoneNumbers('DE').local.list({ inLocality: 'Berlin', limit: 5 });
+        if (!available.length) {
+          available = await client.availablePhoneNumbers('DE').local.list({ limit: 5 });
+        }
+        if (!available.length) return reply.status(400).send({ error: 'Keine deutschen Nummern verfügbar. Bitte später erneut versuchen.' });
+
+        let purchased: { phoneNumber: string } | null = null;
+        let lastError = '';
+        for (const candidate of available) {
+          try {
+            purchased = await client.incomingPhoneNumbers.create({
+              phoneNumber: candidate.phoneNumber,
+              bundleSid: PHONBOT_BUNDLE_SID,
+              addressSid: PHONBOT_ADDRESS_SID,
+            });
+            break;
+          } catch (e: unknown) {
+            lastError = e instanceof Error ? e.message : String(e);
+            continue;
+          }
+        }
+        if (!purchased) return reply.status(500).send({ error: `Keine Nummer konnte aktiviert werden: ${lastError}` });
+        purchasedNumber = purchased.phoneNumber;
+        numberPretty = purchasedNumber.replace(/^\+49/, '0').replace(/(\d{3})(\d{3})(\d+)/, '$1 $2 $3');
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Twilio-Fehler';
+        return reply.status(500).send({ error: `Nummer konnte nicht erworben werden: ${msg}` });
+      }
+    }
+
+    // Import into Retell (if not already imported from pool)
+    if (!retellPhoneNumberId) {
+      try {
+        const result = await retellImportPhoneNumber(purchasedNumber, agentId);
+        retellPhoneNumberId = (result.phone_number_id as string | undefined) ?? null;
+      } catch (e: unknown) {
+        process.stderr.write(`[phone] Retell import failed for ${purchasedNumber}: ${e instanceof Error ? e.message : String(e)}\n`);
+      }
+    } else if (agentId) {
+      // Pool number already in Retell — update the agent assignment
+      try {
+        const key = process.env.RETELL_API_KEY;
+        if (key) {
+          await fetch(`https://api.retellai.com/update-phone-number/${encodeURIComponent(purchasedNumber)}`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ inbound_agent_id: agentId }),
+          });
+        }
+      } catch { /* non-fatal */ }
+    }
+
+    // Save or update DB
+    if (poolNumberId) {
+      // Assign pool number to this org
+      await pool.query(
+        `UPDATE phone_numbers SET org_id = $1, agent_id = $2, provider_id = $3 WHERE id = $4`,
+        [orgId, agentId, retellPhoneNumberId, poolNumberId],
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO phone_numbers (org_id, number, number_pretty, provider, provider_id, agent_id, method, verified)
+         VALUES ($1, $2, $3, 'twilio', $4, $5, 'provisioned', true)`,
+      [orgId, purchasedNumber, numberPretty, retellPhoneNumberId, agentId],
+      );
+    }
+
+    return { ok: true, number: purchasedNumber, numberPretty };
   });
 
   // POST /phone/forward — register an existing number with call forwarding
