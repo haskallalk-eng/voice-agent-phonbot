@@ -175,35 +175,31 @@ export async function registerPhone(app: FastifyInstance) {
     );
     const agentId = configRes.rows[0]?.data?.retellAgentId ?? null;
 
-    // Buy a German number under Phonbot's own Twilio address (Berlin)
+    // Buy a German number under Phonbot's approved regulatory bundle
+    // Bundle SID and Address SID from Phonbot's Twilio account
+    const PHONBOT_BUNDLE_SID = 'BUdf48e4eb15c501c7fe3b36008b728062';
+    const PHONBOT_ADDRESS_SID = 'AD4c5ce0dc9622cf67e55cbc07996802c8';
+
     let purchasedNumber: string;
     try {
       const client = getTwilioClient();
 
-      // Use Phonbot's own German address for regulatory compliance
-      const addresses = await client.addresses.list({ isoCountry: 'DE', limit: 1 });
-      const address = addresses[0];
-      if (!address) return reply.status(500).send({ error: 'Twilio-Konfigurationsfehler. Bitte Support kontaktieren.' });
-
-      // Search numbers in the address city (Berlin)
-      const searchOpts: Record<string, unknown> = { limit: 5 };
-      if (address.city) searchOpts.inLocality = address.city;
-      let available = await client.availablePhoneNumbers('DE').local.list(searchOpts);
-
-      // Fallback: any German number
+      // Search Berlin numbers (matches our approved bundle address)
+      let available = await client.availablePhoneNumbers('DE').local.list({ inLocality: 'Berlin', limit: 5 });
       if (!available.length) {
         available = await client.availablePhoneNumbers('DE').local.list({ limit: 5 });
       }
       if (!available.length) return reply.status(400).send({ error: 'Keine deutschen Nummern verfügbar. Bitte später erneut versuchen.' });
 
-      // Try each available number
+      // Try each available number with our bundle
       let purchased: { phoneNumber: string } | null = null;
       let lastError = '';
       for (const candidate of available) {
         try {
           purchased = await client.incomingPhoneNumbers.create({
             phoneNumber: candidate.phoneNumber,
-            addressSid: address.sid,
+            bundleSid: PHONBOT_BUNDLE_SID,
+            addressSid: PHONBOT_ADDRESS_SID,
           });
           break;
         } catch (e: unknown) {
