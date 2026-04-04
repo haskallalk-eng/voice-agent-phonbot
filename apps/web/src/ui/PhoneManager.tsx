@@ -39,6 +39,8 @@ function NumberCard({ num, agents, onVerify, onDelete, onRefresh }: {
   const [verifyResult, setVerifyResult] = useState<'success' | 'failed' | null>(null);
   const [forwardStep, setForwardStep] = useState(1);
   const [testNumber, setTestNumber] = useState('');
+  const [showAgentChange, setShowAgentChange] = useState(false);
+  const [changingAgent, setChangingAgent] = useState(false);
 
   // Find the agent connected to THIS number (by agent_id matching retellAgentId)
   const connectedAgent = (num as PhoneNumber & { agent_id?: string }).agent_id;
@@ -46,6 +48,25 @@ function NumberCard({ num, agents, onVerify, onDelete, onRefresh }: {
     ? agents.find(a => a.retellAgentId === connectedAgent)?.name
     : agents.find(a => a.retellAgentId)?.name
   ) ?? 'Agent';
+
+  async function handleChangeAgent(newAgentTenantId: string) {
+    setChangingAgent(true);
+    try {
+      const agent = agents.find(a => a.tenantId === newAgentTenantId);
+      const retellAgentId = agent?.retellAgentId;
+      if (retellAgentId) {
+        const key = localStorage.getItem('vas_token');
+        await fetch('/api/phone/reassign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', authorization: `Bearer ${key}` },
+          body: JSON.stringify({ phoneId: num.id, agentTenantId: newAgentTenantId }),
+        });
+      }
+      setShowAgentChange(false);
+      onRefresh();
+    } catch { /* ignore */ }
+    finally { setChangingAgent(false); }
+  }
 
   async function handleDelete() {
     setDeleting(true);
@@ -84,10 +105,12 @@ function NumberCard({ num, agents, onVerify, onDelete, onRefresh }: {
           <div className="min-w-0">
             <p className="text-lg font-bold text-white tracking-wide">{num.number_pretty ?? num.number}</p>
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <span className="text-xs text-white/40 flex items-center gap-1">
+              <button onClick={() => agents.length > 1 && setShowAgentChange(!showAgentChange)}
+                className={`text-xs flex items-center gap-1 ${agents.length > 1 ? 'text-white/40 hover:text-orange-400 cursor-pointer' : 'text-white/40'}`}>
                 <IconAgent size={12} className="text-white/30" />
                 {agentName}
-              </span>
+                {agents.length > 1 && <span className="text-[10px] text-white/20">✎</span>}
+              </button>
               <span className="text-xs text-white/20">·</span>
               {num.verified ? (
                 <StatusBadge status="success">Aktiv</StatusBadge>
@@ -118,10 +141,25 @@ function NumberCard({ num, agents, onVerify, onDelete, onRefresh }: {
         </div>
       )}
 
+      {/* Agent Change */}
+      {showAgentChange && (
+        <div className="mt-3 pt-3 border-t border-white/5 space-y-2">
+          <p className="text-xs text-white/40">Agent wechseln:</p>
+          {agents.filter(a => a.retellAgentId && a.retellAgentId !== connectedAgent).map(a => (
+            <button key={a.tenantId} onClick={() => handleChangeAgent(a.tenantId)} disabled={changingAgent}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-left text-sm text-white/70 disabled:opacity-50">
+              <IconAgent size={14} className="text-orange-400" />
+              {a.name || 'Agent'}
+            </button>
+          ))}
+          <button onClick={() => setShowAgentChange(false)} className="text-xs text-white/30 hover:text-white/50">Abbrechen</button>
+        </div>
+      )}
+
       {/* Forwarding Button */}
       {!confirmDelete && !showForwarding && (
         <div className="mt-3 pt-3 border-t border-white/5 flex items-center gap-2">
-          <button onClick={() => setShowForwarding(true)}
+          <button onClick={() => setShowForwarding(true)} data-forwarding-trigger
             className="text-xs text-white/40 hover:text-orange-400 transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-white/5">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 17 20 12 15 7" /><path d="M4 18v-2a4 4 0 014-4h12" />
@@ -261,18 +299,17 @@ export function PhoneManager() {
   const [showAgentSelect, setShowAgentSelect] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
   const [newNumber, setNewNumber] = useState<string | null>(null);
+  const [openForwardingFor, setOpenForwardingFor] = useState<string | null>(null);
 
   async function handleProvision(agentTenantId?: string) {
     if (provisioning) return;
     setProvisioning(true); setProvisionError(null);
     try {
       const res = await provisionPhoneNumber(agentTenantId || undefined);
-      queryClient.invalidateQueries({ queryKey: ['phone-manager'] });
+      await queryClient.invalidateQueries({ queryKey: ['phone-manager'] });
       setShowAgentSelect(false);
-      if (numbers.length === 0) {
-        setNewNumber(res.numberPretty || res.number);
-        setShowWelcome(true);
-      }
+      setNewNumber(res.numberPretty || res.number);
+      setShowWelcome(true);
     } catch (e: unknown) {
       setProvisionError(e instanceof Error ? e.message : 'Fehler beim Aktivieren');
     } finally { setProvisioning(false); }
@@ -337,7 +374,9 @@ export function PhoneManager() {
           </div>
           <div className="flex gap-3">
             <Button variant="secondary" onClick={() => setShowWelcome(false)} className="flex-1">Überspringen</Button>
-            <Button variant="primary" onClick={() => setShowWelcome(false)} className="flex-1">Rufumleitung einrichten</Button>
+            <Button variant="primary" onClick={() => { setShowWelcome(false); /* Find the newest number and open its forwarding */
+              setTimeout(() => { const newest = document.querySelector('[data-forwarding-trigger]') as HTMLButtonElement; newest?.click(); }, 300);
+            }} className="flex-1">Rufumleitung einrichten</Button>
           </div>
         </div>
       )}

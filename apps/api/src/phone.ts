@@ -430,6 +430,56 @@ export async function registerPhone(app: FastifyInstance) {
     return { ok: true };
   });
 
+  // POST /phone/reassign — change which agent a number is connected to
+  app.post('/phone/reassign', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { orgId } = req.user as JwtPayload;
+    if (!pool) return reply.status(503).send({ error: 'Database not configured' });
+
+    const parsed = z.object({
+      phoneId: z.string().uuid(),
+      agentTenantId: z.string().min(1),
+    }).safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'phoneId and agentTenantId required' });
+
+    // Get the phone number
+    const phoneRow = await pool.query(
+      `SELECT number FROM phone_numbers WHERE id = $1 AND org_id = $2`,
+      [parsed.data.phoneId, orgId],
+    );
+    if (!phoneRow.rowCount) return reply.status(404).send({ error: 'Nummer nicht gefunden' });
+    const phoneNumber = phoneRow.rows[0].number;
+
+    // Get the new agent's retell ID
+    const agentRow = await pool.query(
+      `SELECT data FROM agent_configs WHERE tenant_id = $1 LIMIT 1`,
+      [parsed.data.agentTenantId],
+    );
+    const newRetellAgentId = agentRow.rows[0]?.data?.retellAgentId;
+    if (!newRetellAgentId) return reply.status(400).send({ error: 'Agent hat keine Retell-ID. Bitte erst deployen.' });
+
+    // Update in Retell
+    const key = process.env.RETELL_API_KEY;
+    if (key) {
+      try {
+        await fetch(`https://api.retellai.com/update-phone-number/${encodeURIComponent(phoneNumber)}`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ inbound_agent_id: newRetellAgentId }),
+        });
+      } catch (e: unknown) {
+        return reply.status(500).send({ error: `Retell-Update fehlgeschlagen: ${e instanceof Error ? e.message : 'Unbekannt'}` });
+      }
+    }
+
+    // Update in DB
+    await pool.query(
+      `UPDATE phone_numbers SET agent_id = $1 WHERE id = $2`,
+      [newRetellAgentId, parsed.data.phoneId],
+    );
+
+    return { ok: true };
+  });
+
   // POST /phone/verify-forwarding — call customer's number to test if forwarding works
   app.post('/phone/verify-forwarding', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
