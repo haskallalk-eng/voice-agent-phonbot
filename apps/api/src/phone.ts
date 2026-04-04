@@ -425,6 +425,37 @@ export async function registerPhone(app: FastifyInstance) {
     return { ok: true };
   });
 
+  // POST /phone/verify-forwarding — call customer's number to test if forwarding works
+  app.post('/phone/verify-forwarding', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { orgId } = req.user as JwtPayload;
+    if (!pool) return reply.status(503).send({ error: 'Database not configured' });
+
+    const parsed = z.object({
+      customerNumber: z.string().min(1),
+      phonbotNumberId: z.string().uuid(),
+    }).safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'customerNumber and phonbotNumberId required' });
+
+    const phonbotNum = await pool.query(
+      `SELECT number FROM phone_numbers WHERE id = $1 AND org_id = $2`,
+      [parsed.data.phonbotNumberId, orgId],
+    );
+    if (!phonbotNum.rowCount) return reply.status(404).send({ error: 'Phonbot-Nummer nicht gefunden' });
+    const fromNumber = phonbotNum.rows[0].number;
+
+    try {
+      const client = getTwilioClient();
+      await client.calls.create({
+        to: parsed.data.customerNumber,
+        from: fromNumber,
+        twiml: '<Response><Say language="de-DE">Weiterleitungstest erfolgreich. Ihr Phonbot Agent ist korrekt verbunden.</Say><Hangup/></Response>',
+      });
+      return { ok: true, verified: true };
+    } catch (e: unknown) {
+      return reply.status(500).send({ error: e instanceof Error ? e.message : 'Anruf fehlgeschlagen', verified: false });
+    }
+  });
+
   // POST /phone/verify — make a real test call to verify call forwarding is working
   app.post('/phone/verify', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;

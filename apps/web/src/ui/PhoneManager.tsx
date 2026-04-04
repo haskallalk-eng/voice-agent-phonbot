@@ -38,6 +38,7 @@ function NumberCard({ num, agents, onVerify, onDelete, onRefresh }: {
   const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState<'success' | 'failed' | null>(null);
   const [forwardStep, setForwardStep] = useState(1);
+  const [testNumber, setTestNumber] = useState('');
 
   const agentName = agents.find(a => a.retellAgentId)?.name ?? 'Agent';
 
@@ -47,11 +48,21 @@ function NumberCard({ num, agents, onVerify, onDelete, onRefresh }: {
   }
 
   async function handleVerifyForwarding() {
+    if (!testNumber.trim()) return;
     setVerifying(true); setVerifyResult(null);
     try {
-      await onVerify(num.id);
-      setVerifyResult('success');
-      onRefresh();
+      // Call the customer's number — if forwarding works, the agent picks up
+      const res = await fetch('/api/phone/verify-forwarding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', authorization: `Bearer ${localStorage.getItem('vas_token')}` },
+        body: JSON.stringify({ customerNumber: testNumber, phonbotNumberId: num.id }),
+      });
+      if (res.ok) {
+        setVerifyResult('success');
+        onRefresh();
+      } else {
+        setVerifyResult('failed');
+      }
     } catch {
       setVerifyResult('failed');
     } finally { setVerifying(false); }
@@ -156,12 +167,17 @@ function NumberCard({ num, agents, onVerify, onDelete, onRefresh }: {
       {showForwarding && forwardStep === 2 && (
         <div className="mt-3 pt-3 border-t border-white/5 space-y-3">
           <p className="text-sm font-medium text-white">Überprüfung</p>
-          <p className="text-xs text-white/40">Wir rufen deine Nummer an und prüfen ob die Weiterleitung funktioniert.</p>
+          <p className="text-xs text-white/40">Gib deine Nummer ein — wir rufen sie an und prüfen ob die Weiterleitung zum Agent funktioniert.</p>
 
           {verifyResult === null && (
-            <Button variant="primary" className="w-full" loading={verifying} onClick={handleVerifyForwarding}>
-              Jetzt überprüfen
-            </Button>
+            <div className="space-y-2">
+              <input type="tel" value={testNumber} onChange={e => setTestNumber(e.target.value)}
+                placeholder="Deine Nummer z.B. +49 170 1234567"
+                className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-orange-500/40" />
+              <Button variant="primary" className="w-full" loading={verifying} onClick={handleVerifyForwarding} disabled={!testNumber.trim()}>
+                Jetzt anrufen und prüfen
+              </Button>
+            </div>
           )}
 
           {verifyResult === 'success' && (
