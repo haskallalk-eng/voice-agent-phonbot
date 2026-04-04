@@ -73,15 +73,24 @@ function NumberCard({ num, agents, onVerify, onDelete, onRefresh }: {
     try { await onDelete(num.id); } finally { setDeleting(false); setConfirmDelete(false); }
   }
 
+  // Normalize German number: 0176... → +49176...
+  function normalizeNumber(n: string): string {
+    const cleaned = n.replace(/[\s\-()]/g, '');
+    if (cleaned.startsWith('0') && !cleaned.startsWith('00')) return '+49' + cleaned.slice(1);
+    if (cleaned.startsWith('00')) return '+' + cleaned.slice(2);
+    return cleaned;
+  }
+
+  const normalizedTestNumber = normalizeNumber(testNumber);
+
   async function handleVerifyForwarding() {
     if (!testNumber.trim()) return;
     setVerifying(true); setVerifyResult(null);
     try {
-      // Call the customer's number — if forwarding works, the agent picks up
       const res = await fetch('/api/phone/verify-forwarding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', authorization: `Bearer ${localStorage.getItem('vas_token')}` },
-        body: JSON.stringify({ customerNumber: testNumber, phonbotNumberId: num.id }),
+        body: JSON.stringify({ customerNumber: normalizedTestNumber, phonbotNumberId: num.id }),
       });
       if (res.ok) {
         setVerifyResult('success');
@@ -191,7 +200,7 @@ function NumberCard({ num, agents, onVerify, onDelete, onRefresh }: {
       {showForwarding && forwardStep >= 2 && (
         <div className="mt-3 pt-3 border-t border-white/5 space-y-3">
           <p className="text-sm font-medium text-white">Carrier-Codes</p>
-          <p className="text-xs text-white/40">Öffne die Telefon-App auf <strong className="text-white/60">{testNumber}</strong> und rufe einen Code an:</p>
+          <p className="text-xs text-white/40">Öffne die Telefon-App auf deinem Handy (<strong className="text-white/60">{testNumber}</strong>) und rufe einen der folgenden Codes an:</p>
 
           {/* All codes */}
           <div className="space-y-2">
@@ -215,20 +224,13 @@ function NumberCard({ num, agents, onVerify, onDelete, onRefresh }: {
             ))}
 
             <p className="text-[11px] text-white/30 uppercase tracking-wide font-semibold pt-2">Deaktivieren</p>
-            {[
-              { label: 'Nichtannahme aus', code: '##61#' },
-              { label: 'Besetzt aus', code: '##67#' },
-              { label: 'Immer aus', code: '##21#' },
-              { label: 'Alle aus', code: '##002#' },
-            ].map(c => (
-              <div key={c.label} className="rounded-xl px-4 py-2 flex items-center justify-between gap-2 bg-white/5 border border-white/10">
-                <div>
-                  <p className="text-xs text-white/40">{c.label}</p>
-                  <p className="text-sm font-mono text-white/60">{c.code}</p>
-                </div>
-                <CopyButton text={c.code} />
+            <div className="rounded-xl px-4 py-2 flex items-center justify-between gap-2 bg-white/5 border border-white/10">
+              <div>
+                <p className="text-xs text-white/40">Alle Umleitungen deaktivieren</p>
+                <p className="text-sm font-mono text-white/60">##002#</p>
               </div>
-            ))}
+              <CopyButton text="##002#" />
+            </div>
           </div>
 
           <div className="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white/40 space-y-0.5">
@@ -267,7 +269,7 @@ function NumberCard({ num, agents, onVerify, onDelete, onRefresh }: {
                   <p>• Android: Telefon → ⋮ → Einstellungen → Anrufweiterleitung → {num.number}</p>
                   <p>• Fritzbox: Telefonie → Rufumleitung → {num.number}</p>
                 </div>
-                <Button variant="secondary" className="w-full" onClick={() => setVerifyResult(null)}>Erneut testen</Button>
+                <Button variant="secondary" className="w-full" loading={verifying} onClick={handleVerifyForwarding}>Erneut testen</Button>
               </div>
             )}
           </div>

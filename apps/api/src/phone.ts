@@ -500,12 +500,16 @@ export async function registerPhone(app: FastifyInstance) {
 
     try {
       const client = getTwilioClient();
-      await client.calls.create({
+      // Call the customer's number FROM a Twilio number (not the Phonbot number)
+      // so that if forwarding is set up, it redirects to the Phonbot number → agent picks up
+      const twilioFromNumber = process.env.TWILIO_FROM_NUMBER ?? fromNumber;
+      const call = await client.calls.create({
         to: parsed.data.customerNumber,
-        from: fromNumber,
-        twiml: '<Response><Say language="de-DE">Weiterleitungstest erfolgreich. Ihr Phonbot Agent ist korrekt verbunden.</Say><Hangup/></Response>',
+        from: twilioFromNumber,
+        twiml: '<Response><Pause length="5"/><Say language="de-DE">Weiterleitungstest erfolgreich. Dein Phonbot Agent ist korrekt verbunden.</Say><Hangup/></Response>',
+        timeout: 20,
       });
-      return { ok: true, verified: true };
+      return { ok: true, verified: true, callSid: call.sid };
     } catch (e: unknown) {
       return reply.status(500).send({ error: e instanceof Error ? e.message : 'Anruf fehlgeschlagen', verified: false });
     }
