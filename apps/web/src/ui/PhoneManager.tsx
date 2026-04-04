@@ -252,15 +252,16 @@ function NumberCard({
 
 /* ── Agent Selector (when multiple agents) ────────────── */
 
-function AgentSelector({ agents, onSelect }: { agents: AgentConfig[]; onSelect: (tenantId: string) => void }) {
+function AgentSelector({ agents, onSelect, disabled }: { agents: AgentConfig[]; onSelect: (tenantId: string) => void; disabled?: boolean }) {
   return (
     <div className="space-y-2">
       <p className="text-sm font-medium text-white">Welcher Agent soll diese Nummer nutzen?</p>
       {agents.map(a => (
         <button
           key={a.tenantId}
-          onClick={() => onSelect(a.tenantId)}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-white/10 hover:border-orange-500/40 hover:bg-white/8 transition-all text-left"
+          onClick={() => !disabled && onSelect(a.tenantId)}
+          disabled={disabled}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-white/5 border border-white/10 hover:border-orange-500/40 hover:bg-white/8 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <div className="w-10 h-10 rounded-xl bg-orange-500/15 flex items-center justify-center shrink-0">
             <IconAgent size={18} className="text-orange-400" />
@@ -294,13 +295,21 @@ export function PhoneManager() {
   const [provisioning, setProvisioning] = useState(false);
   const [provisionError, setProvisionError] = useState<string | null>(null);
   const [showAgentSelect, setShowAgentSelect] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [newNumber, setNewNumber] = useState<string | null>(null);
 
   async function handleProvision(agentTenantId?: string) {
+    if (provisioning) return; // prevent double-click
     setProvisioning(true); setProvisionError(null);
     try {
-      await provisionPhoneNumber(agentTenantId ?? '');
+      const res = await provisionPhoneNumber(agentTenantId || undefined);
       queryClient.invalidateQueries({ queryKey: ['phone-manager'] });
       setShowAgentSelect(false);
+      // Show welcome popup on first number
+      if (numbers.length === 0) {
+        setNewNumber(res.numberPretty || res.number);
+        setShowWelcome(true);
+      }
     } catch (e: unknown) {
       setProvisionError(e instanceof Error ? e.message : 'Fehler beim Aktivieren');
     } finally { setProvisioning(false); }
@@ -347,6 +356,36 @@ export function PhoneManager() {
         </div>
       )}
 
+      {/* ── Welcome Popup (after first number) ── */}
+      {showWelcome && newNumber && (
+        <div className="bg-white/5 backdrop-blur-xl border border-orange-500/20 rounded-2xl p-8 space-y-4" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.08), rgba(6,182,212,0.05))' }}>
+          <div className="text-center space-y-2">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 flex items-center justify-center mx-auto">
+              <svg className="w-7 h-7 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-bold text-white">Deine Nummer ist aktiv!</h3>
+            <p className="text-2xl font-mono font-bold text-orange-400">{newNumber}</p>
+            <p className="text-sm text-white/50">Dein Agent ist ab sofort unter dieser Nummer erreichbar.</p>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-2">
+            <p className="text-sm font-medium text-white">Möchtest du deine bestehende Nummer umleiten?</p>
+            <p className="text-xs text-white/40">Damit Anrufe auf deine bisherige Nummer (z.B. Handy oder Festnetz) bei Besetzt oder Nichtannahme automatisch an deinen Agent weitergeleitet werden.</p>
+          </div>
+
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={() => setShowWelcome(false)} className="flex-1">
+              Überspringen
+            </Button>
+            <Button variant="primary" onClick={() => { setShowWelcome(false); }} className="flex-1">
+              Rufumleitung einrichten
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* ── Numbers ── */}
       {numbers.length === 0 && !showAgentSelect ? (
         <EmptyState
@@ -381,7 +420,7 @@ export function PhoneManager() {
       {/* ── Agent Selection ── */}
       {showAgentSelect && (
         <Card padding="lg" className="space-y-4">
-          <AgentSelector agents={agents} onSelect={(id) => handleProvision(id)} />
+          <AgentSelector agents={agents} onSelect={(id) => handleProvision(id)} disabled={provisioning} />
           <button onClick={() => setShowAgentSelect(false)} className="text-xs text-white/30 hover:text-white/50">Abbrechen</button>
         </Card>
       )}

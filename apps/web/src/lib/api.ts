@@ -242,10 +242,10 @@ export type PhoneNumber = {
   verified?: boolean;
 };
 
-export function provisionPhoneNumber(areaCode: string) {
+export function provisionPhoneNumber(agentTenantId?: string) {
   return request<{ ok: boolean; number: string; numberPretty: string }>('/phone/provision', {
     method: 'POST',
-    body: JSON.stringify({ areaCode }),
+    body: JSON.stringify(agentTenantId ? { agentTenantId } : {}),
   });
 }
 

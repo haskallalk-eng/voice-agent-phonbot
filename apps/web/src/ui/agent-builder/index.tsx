@@ -150,6 +150,7 @@ export function AgentBuilder() {
       }
       const prev = await getAgentPreview();
       setPreview(prev);
+      await loadAllAgents(); // refresh agent list after save (name changes etc.)
       setStatus({ type: 'ok', text: 'Gespeichert \✅' });
     } catch {
       setStatus({ type: 'error', text: 'Speichern fehlgeschlagen' });
@@ -167,6 +168,7 @@ export function AgentBuilder() {
       setConfig((c) => c ? { ...c, ...result.config } : c);
       const prev = await getAgentPreview();
       setPreview(prev);
+      await loadAllAgents(); // refresh agent list after deploy
       setStatus({ type: 'ok', text: `Deployed \— Agent: ${result.retellAgentId ?? '\–'}` });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unbekannter Fehler';
