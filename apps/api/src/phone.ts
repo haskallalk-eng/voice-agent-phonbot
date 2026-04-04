@@ -168,6 +168,16 @@ export async function registerPhone(app: FastifyInstance) {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
+    // Check if org already has a provisioned number
+    const existingNum = await pool.query(
+      `SELECT number, number_pretty FROM phone_numbers WHERE org_id = $1 AND method = 'provisioned' LIMIT 1`,
+      [orgId],
+    );
+    if (existingNum.rowCount && existingNum.rowCount > 0) {
+      const ex = existingNum.rows[0];
+      return { ok: true, number: ex.number, numberPretty: ex.number_pretty ?? ex.number, existing: true };
+    }
+
     // Get the org's deployed agent ID
     const configRes = await pool.query(
       `SELECT data FROM agent_configs WHERE org_id = $1 OR tenant_id = $1::text LIMIT 1`,
@@ -250,9 +260,9 @@ export async function registerPhone(app: FastifyInstance) {
       [orgId],
     );
 
-    const forwardTo = existing.rows[0]?.number ?? process.env.TWILIO_FROM_NUMBER ?? null;
+    const forwardTo = existing.rows[0]?.number ?? null;
     if (!forwardTo) {
-      return reply.status(400).send({ error: 'No inbound number available. Provision one first.' });
+      return reply.status(400).send({ error: 'Du brauchst zuerst eine Phonbot-Nummer. Klicke auf "Nummer aktivieren".' });
     }
 
     await pool.query(
