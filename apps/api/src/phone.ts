@@ -168,21 +168,16 @@ export async function registerPhone(app: FastifyInstance) {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
-    // Check if org already has a provisioned number
-    const existingNum = await pool.query(
-      `SELECT number, number_pretty FROM phone_numbers WHERE org_id = $1 AND method = 'provisioned' LIMIT 1`,
-      [orgId],
-    );
-    if (existingNum.rowCount && existingNum.rowCount > 0) {
-      const ex = existingNum.rows[0];
-      return { ok: true, number: ex.number, numberPretty: ex.number_pretty ?? ex.number, existing: true };
-    }
+    // Optional: specify which agent to connect (defaults to first deployed agent)
+    const parsed = z.object({ agentTenantId: z.string().optional() }).safeParse(req.body);
+    const agentTenantId = parsed.success ? parsed.data.agentTenantId : undefined;
 
-    // Get the org's deployed agent ID
-    const configRes = await pool.query(
-      `SELECT data FROM agent_configs WHERE org_id = $1 OR tenant_id = $1::text LIMIT 1`,
-      [orgId],
-    );
+    // Get the agent ID
+    const configQuery = agentTenantId
+      ? `SELECT data FROM agent_configs WHERE (org_id = $1 OR tenant_id = $1::text) AND tenant_id = $2 LIMIT 1`
+      : `SELECT data FROM agent_configs WHERE org_id = $1 OR tenant_id = $1::text LIMIT 1`;
+    const configParams = agentTenantId ? [orgId, agentTenantId] : [orgId];
+    const configRes = await pool.query(configQuery, configParams);
     const agentId = configRes.rows[0]?.data?.retellAgentId ?? null;
 
     // Buy a German number under Phonbot's approved regulatory bundle
@@ -250,15 +245,19 @@ export async function registerPhone(app: FastifyInstance) {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
-    const fwdParsed = z.object({ number: z.string().min(1) }).safeParse(req.body);
+    const fwdParsed = z.object({
+      number: z.string().min(1),
+      phoneId: z.string().uuid().optional(), // which Phonbot number to forward to
+    }).safeParse(req.body);
     if (!fwdParsed.success) return reply.status(400).send({ error: 'number required' });
-    const { number } = fwdParsed.data;
+    const { number, phoneId } = fwdParsed.data;
 
-    // Get our inbound number that the user should forward to
-    const existing = await pool.query(
-      `SELECT number FROM phone_numbers WHERE org_id = $1 AND method = 'provisioned' LIMIT 1`,
-      [orgId],
-    );
+    // Get the Phonbot number to forward to (specific or first available)
+    const existingQuery = phoneId
+      ? `SELECT number FROM phone_numbers WHERE id = $2 AND org_id = $1 AND method = 'provisioned'`
+      : `SELECT number FROM phone_numbers WHERE org_id = $1 AND method = 'provisioned' LIMIT 1`;
+    const existingParams = phoneId ? [orgId, phoneId] : [orgId];
+    const existing = await pool.query(existingQuery, existingParams);
 
     const forwardTo = existing.rows[0]?.number ?? null;
     if (!forwardTo) {
