@@ -172,83 +172,107 @@ function NumberCard({ num, agents, onVerify, onDelete, onRefresh }: {
         </div>
       )}
 
-      {/* Forwarding Flow — Step 1: Carrier Codes */}
+      {/* Forwarding Flow — Step 1: Enter customer number */}
       {showForwarding && forwardStep === 1 && (
         <div className="mt-3 pt-3 border-t border-white/5 space-y-3">
           <p className="text-sm font-medium text-white">Rufumleitung einrichten</p>
-          <p className="text-xs text-white/40">Öffne die Telefon-App und rufe einen dieser Codes an:</p>
-
-          <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 text-center space-y-1">
-            <p className="text-xs text-white/40">Bei Nichtannahme (empfohlen)</p>
-            <p className="text-xl font-mono font-bold text-orange-400">**61*{num.number}#</p>
-            <CopyButton text={`**61*${num.number}#`} />
-          </div>
-
-          <details className="text-xs text-white/30">
-            <summary className="cursor-pointer hover:text-white/50">Andere Optionen</summary>
-            <div className="mt-2 space-y-1.5 pl-2">
-              <div className="flex justify-between"><span>Bei Besetzt:</span><code className="text-white/50">**67*{num.number}#</code></div>
-              <div className="flex justify-between"><span>Immer:</span><code className="text-white/50">**21*{num.number}#</code></div>
-              <div className="flex justify-between"><span>Deaktivieren:</span><code className="text-white/50">##61# / ##67# / ##21#</code></div>
-            </div>
-          </details>
-
-          <div className="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white/40 space-y-0.5">
-            <p>1. Öffne die <strong className="text-white/60">Telefon-App</strong></p>
-            <p>2. Tippe den Code ein oder kopiere ihn</p>
-            <p>3. Drücke <strong className="text-white/60">Anrufen</strong> — Bestätigungston abwarten</p>
-          </div>
-
+          <p className="text-xs text-white/40">Von welcher Nummer sollen Anrufe an deinen Agent weitergeleitet werden?</p>
+          <input type="tel" value={testNumber} onChange={e => setTestNumber(e.target.value)}
+            placeholder="Deine Nummer z.B. +49 170 1234567"
+            className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-orange-500/40" />
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => { setShowForwarding(false); setForwardStep(1); }} className="flex-1">Abbrechen</Button>
-            <Button variant="primary" onClick={() => setForwardStep(2)} className="flex-1">Code angerufen — überprüfen</Button>
+            <Button variant="ghost" onClick={() => { setShowForwarding(false); setForwardStep(1); setTestNumber(''); }} className="flex-1">Abbrechen</Button>
+            <Button variant="primary" onClick={() => setForwardStep(2)} className="flex-1" disabled={!testNumber.trim()}>Weiter</Button>
           </div>
         </div>
       )}
 
-      {/* Forwarding Flow — Step 2: Verify */}
-      {showForwarding && forwardStep === 2 && (
+      {/* Forwarding Flow — Step 2: Carrier Codes + Verify */}
+      {showForwarding && forwardStep >= 2 && (
         <div className="mt-3 pt-3 border-t border-white/5 space-y-3">
-          <p className="text-sm font-medium text-white">Überprüfung</p>
-          <p className="text-xs text-white/40">Gib deine Nummer ein — wir rufen sie an und prüfen ob die Weiterleitung zum Agent funktioniert.</p>
+          <p className="text-sm font-medium text-white">Carrier-Codes</p>
+          <p className="text-xs text-white/40">Öffne die Telefon-App auf <strong className="text-white/60">{testNumber}</strong> und rufe einen Code an:</p>
 
-          {verifyResult === null && (
-            <div className="space-y-2">
-              <input type="tel" value={testNumber} onChange={e => setTestNumber(e.target.value)}
-                placeholder="Deine Nummer z.B. +49 170 1234567"
-                className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-orange-500/40" />
-              <Button variant="primary" className="w-full" loading={verifying} onClick={handleVerifyForwarding} disabled={!testNumber.trim()}>
-                Jetzt anrufen und prüfen
+          {/* All codes */}
+          <div className="space-y-2">
+            <p className="text-[11px] text-white/30 uppercase tracking-wide font-semibold">Aktivieren</p>
+            {[
+              { label: 'Bei Nichtannahme', code: `**61*${num.number}#`, desc: 'Agent übernimmt wenn du nicht rangehst', recommended: true },
+              { label: 'Bei Besetzt', code: `**67*${num.number}#`, desc: 'Agent übernimmt wenn du im Gespräch bist' },
+              { label: 'Immer', code: `**21*${num.number}#`, desc: 'Alle Anrufe gehen direkt zum Agent' },
+            ].map(c => (
+              <div key={c.label} className={`rounded-xl px-4 py-2.5 flex items-center justify-between gap-2 ${c.recommended ? 'bg-orange-500/10 border border-orange-500/20' : 'bg-white/5 border border-white/10'}`}>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-medium text-white/60">{c.label}</p>
+                    {c.recommended && <span className="text-[9px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded-full font-semibold">Empfohlen</span>}
+                  </div>
+                  <p className="text-sm font-mono font-bold text-white">{c.code}</p>
+                  <p className="text-[11px] text-white/30">{c.desc}</p>
+                </div>
+                <CopyButton text={c.code} />
+              </div>
+            ))}
+
+            <p className="text-[11px] text-white/30 uppercase tracking-wide font-semibold pt-2">Deaktivieren</p>
+            {[
+              { label: 'Nichtannahme aus', code: '##61#' },
+              { label: 'Besetzt aus', code: '##67#' },
+              { label: 'Immer aus', code: '##21#' },
+              { label: 'Alle aus', code: '##002#' },
+            ].map(c => (
+              <div key={c.label} className="rounded-xl px-4 py-2 flex items-center justify-between gap-2 bg-white/5 border border-white/10">
+                <div>
+                  <p className="text-xs text-white/40">{c.label}</p>
+                  <p className="text-sm font-mono text-white/60">{c.code}</p>
+                </div>
+                <CopyButton text={c.code} />
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white/40 space-y-0.5">
+            <p>1. Öffne die <strong className="text-white/60">Telefon-App</strong></p>
+            <p>2. Tippe den gewünschten Code ein oder kopiere ihn</p>
+            <p>3. Drücke <strong className="text-white/60">Anrufen</strong> — Bestätigungston abwarten</p>
+          </div>
+
+          {/* Verify section */}
+          <div className="pt-2 border-t border-white/5 space-y-2">
+            <p className="text-xs font-medium text-white/50">Überprüfung</p>
+
+            {verifyResult === null && (
+              <Button variant="secondary" className="w-full" loading={verifying} onClick={handleVerifyForwarding}>
+                Weiterleitung jetzt testen (wir rufen {testNumber} an)
               </Button>
-            </div>
-          )}
+            )}
 
-          {verifyResult === 'success' && (
-            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-center space-y-1">
-              <svg className="mx-auto w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p className="text-sm font-medium text-emerald-400">Rufumleitung funktioniert!</p>
-            </div>
-          )}
-
-          {verifyResult === 'failed' && (
-            <div className="space-y-3">
-              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-center">
-                <p className="text-sm font-medium text-red-400">Weiterleitung nicht erkannt</p>
+            {verifyResult === 'success' && (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-center flex items-center justify-center gap-2">
+                <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm font-medium text-emerald-400">Rufumleitung funktioniert!</p>
               </div>
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2.5 text-xs text-amber-300 space-y-1">
-                <p className="font-medium">Alternative:</p>
-                <p>• <strong>iPhone:</strong> Einstellungen → Telefon → Rufumleitung</p>
-                <p>• <strong>Android:</strong> Telefon → ⋮ → Einstellungen → Anrufweiterleitung</p>
-                <p>• <strong>Fritzbox:</strong> Telefonie → Rufumleitung</p>
-              </div>
-              <p className="text-xs text-white/30">Ziel: <code className="text-white/50">{num.number}</code></p>
-              <Button variant="secondary" className="w-full" onClick={() => setVerifyResult(null)}>Erneut überprüfen</Button>
-            </div>
-          )}
+            )}
 
-          <button onClick={() => { setShowForwarding(false); setForwardStep(1); setVerifyResult(null); }}
+            {verifyResult === 'failed' && (
+              <div className="space-y-2">
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-center">
+                  <p className="text-sm text-red-400">Weiterleitung nicht erkannt</p>
+                </div>
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 text-xs text-amber-300 space-y-0.5">
+                  <p className="font-medium">Alternative:</p>
+                  <p>• iPhone: Einstellungen → Telefon → Rufumleitung → {num.number}</p>
+                  <p>• Android: Telefon → ⋮ → Einstellungen → Anrufweiterleitung → {num.number}</p>
+                  <p>• Fritzbox: Telefonie → Rufumleitung → {num.number}</p>
+                </div>
+                <Button variant="secondary" className="w-full" onClick={() => setVerifyResult(null)}>Erneut testen</Button>
+              </div>
+            )}
+          </div>
+
+          <button onClick={() => { setShowForwarding(false); setForwardStep(1); setVerifyResult(null); setTestNumber(''); }}
             className="text-xs text-white/30 hover:text-white/50 w-full text-center">Schließen</button>
         </div>
       )}
