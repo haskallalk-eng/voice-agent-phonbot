@@ -202,13 +202,19 @@ export async function registerPhone(app: FastifyInstance) {
     const parsed = z.object({ agentTenantId: z.string().optional() }).safeParse(req.body);
     const agentTenantId = parsed.success ? parsed.data.agentTenantId : undefined;
 
-    // Get the agent ID
-    const configQuery = agentTenantId
-      ? `SELECT data FROM agent_configs WHERE (org_id = $1 OR tenant_id = $1::text) AND tenant_id = $2 LIMIT 1`
-      : `SELECT data FROM agent_configs WHERE org_id = $1 OR tenant_id = $1::text LIMIT 1`;
-    const configParams = agentTenantId ? [orgId, agentTenantId] : [orgId];
-    const configRes = await pool.query(configQuery, configParams);
-    const agentId = configRes.rows[0]?.data?.retellAgentId ?? null;
+    // Get the agent ID — if agentTenantId specified, find that specific agent
+    let agentId: string | null = null;
+    if (agentTenantId) {
+      const res = await pool.query(`SELECT data FROM agent_configs WHERE tenant_id = $1 LIMIT 1`, [agentTenantId]);
+      agentId = res.rows[0]?.data?.retellAgentId ?? null;
+    } else {
+      // No specific agent — get the first deployed one for this org
+      const res = await pool.query(
+        `SELECT data FROM agent_configs WHERE org_id = $1 AND data->>'retellAgentId' IS NOT NULL ORDER BY updated_at DESC LIMIT 1`,
+        [orgId],
+      );
+      agentId = res.rows[0]?.data?.retellAgentId ?? null;
+    }
 
     // ── Number Pool System ──
     // Step 1: Check if there's a free number in the pool (org_id IS NULL = unassigned)
@@ -268,7 +274,7 @@ export async function registerPhone(app: FastifyInstance) {
     // Import into Retell (if not already imported from pool)
     if (!retellPhoneNumberId) {
       try {
-        const result = await retellImportPhoneNumber(purchasedNumber, agentId);
+        const result = await retellImportPhoneNumber(purchasedNumber, agentId ?? undefined);
         retellPhoneNumberId = (result.phone_number_id as string | undefined) ?? null;
       } catch (e: unknown) {
         process.stderr.write(`[phone] Retell import failed for ${purchasedNumber}: ${e instanceof Error ? e.message : String(e)}\n`);
