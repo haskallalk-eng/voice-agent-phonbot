@@ -22,7 +22,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
                 style={{ boxShadow: '0 0 20px rgba(249,115,22,0.3), inset 0 0 20px rgba(249,115,22,0.05)' }}
               >
                 <IconStar size={14} className="text-orange-400" />
-                Über 500 Unternehmen vertrauen Phonbot
+                Dein KI-Telefonassistent
               </span>
             </div>
 
@@ -40,8 +40,8 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
 
             {/* Subtitle */}
             <p className="text-white/55 text-lg sm:text-xl max-w-2xl mb-10 leading-relaxed">
-              KI-Assistent der Anrufe beantwortet, Termine bucht —{' '}
-              <span className="text-white/80 font-medium">rund um die Uhr.</span>
+              <span className="bg-clip-text text-transparent font-semibold" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Chipy</span> beantwortet Anrufe, bucht Termine und{' '}
+              <span className="text-white/80 font-medium">lernt mit jedem Gespräch dazu.</span>
             </p>
 
             {/* CTA buttons */}
@@ -66,7 +66,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
             <p className="text-xs text-white/40 mt-4">✓ Kostenlos · ✓ Sofort einsatzbereit · ✓ DSGVO-konform</p>
           </div>
 
-          {/* Right: Chippy mascot — clickable, opens demo modal */}
+          {/* Right: Chipy mascot — clickable, opens demo modal */}
           <div className="flex-shrink-0 flex flex-col items-center">
             <div className="relative group cursor-pointer" onClick={onShowDemoModal}>
               {/* Glow ring */}
@@ -82,7 +82,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
                 className="absolute -top-6 -right-2 glass rounded-2xl px-3 py-2 text-xs text-white/70 italic group-hover:scale-105 transition-transform"
                 style={{ border: '1px solid rgba(255,255,255,0.12)', maxWidth: '160px' }}
               >
-                „Hallo! Wie kann ich helfen?" 📞
+                „Hi, ich bin Chipy! Wie kann ich dir heute helfen?" 📞
               </div>
 
               {/* Click hint */}
@@ -109,11 +109,11 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
           </div>
           <div className="flex items-center gap-2 text-sm text-white/60">
             <IconPhone size={14} className="text-white/50" />
-            <span>Eigene Telefonnummer inklusive</span>
+            <span>Eigene Telefonnummer</span>
           </div>
           <div className="flex items-center gap-2 text-sm text-white/60">
             <IconStar size={14} className="text-orange-400/70" />
-            <span>4.9/5 Bewertung</span>
+            <span>Keine Bindung</span>
           </div>
         </div>
       </section>

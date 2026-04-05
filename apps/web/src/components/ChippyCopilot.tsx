@@ -91,7 +91,7 @@ export function ChippyCopilot() {
     {
       id: 'welcome',
       role: 'assistant',
-      content: 'Hey! Ich bin Chippy 👋\nDein Phonbot-Assistent. Frag mich alles zum Dashboard, deinem Agent oder den Features!',
+      content: 'Hey! Ich bin Chipy 👋\nDein Phonbot-Assistent. Frag mich alles zum Dashboard, deinem Agent oder den Features!',
       timestamp: new Date(),
     },
   ]);
@@ -184,7 +184,7 @@ export function ChippyCopilot() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          aria-label="Chippy Copilot öffnen"
+          aria-label="Chipy Copilot öffnen"
           className="fixed bottom-5 right-5 z-50 flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
           style={{
             width: 60, height: 60,
@@ -225,7 +225,7 @@ export function ChippyCopilot() {
             <FoxLogo size={36} glow />
             <div className="flex-1 min-w-0">
               <p className="font-bold text-white text-sm leading-tight tracking-tight">
-                Chippy Copilot
+                Chipy Copilot
               </p>
               <p className="text-xs" style={{ color: 'rgba(249,115,22,0.6)' }}>
                 Dein Phonbot-Assistent
@@ -274,7 +274,7 @@ export function ChippyCopilot() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Frag Chippy was…"
+                placeholder="Frag Chipy was…"
                 rows={1}
                 disabled={loading}
                 className="flex-1 resize-none rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none transition-colors disabled:opacity-40"

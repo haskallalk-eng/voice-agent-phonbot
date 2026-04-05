@@ -39,7 +39,7 @@ const OUTLIER_STD_FACTOR = 1.5;         // calls below mean - N*std are treated 
 const MIN_STD_FOR_OUTLIER = 0.5;        // ignore outlier check if scores are very stable
 const CONSOLIDATION_MIN_SIMILARITY = 0.70; // reject consolidation if too different from original
 const AB_TEST_SCORE_THRESHOLD = 7.0;   // agents scoring >= this get A/B tested instead of direct apply
-const AB_TEST_CALLS_TARGET = 8;        // calls needed to evaluate an A/B test
+const AB_TEST_CALLS_TARGET = 15;       // calls needed to evaluate an A/B test (15 for statistical significance)
 const AB_TEST_MIN_LIFT = 0.5;          // variant must beat control by this to be promoted
 const AB_TEST_MAX_DROP = 0.3;          // rollback if variant drops by more than this
 
@@ -271,17 +271,21 @@ async function recordAbTestCall(orgId: string, score: number): Promise<void> {
 // Dynamic threshold — conservative when agent is already good
 async function getDynamicThreshold(orgId: string): Promise<number> {
   if (!pool) return AUTO_APPLY_THRESHOLD;
+  // Use larger window (20 calls) for more stable threshold
   const res = await pool.query(
-    `SELECT AVG(score) AS avg FROM (
-       SELECT score FROM call_analyses WHERE org_id=$1 ORDER BY created_at DESC LIMIT 10
+    `SELECT AVG(score) AS avg, COUNT(*) AS cnt FROM (
+       SELECT score FROM call_analyses WHERE org_id=$1 ORDER BY created_at DESC LIMIT 20
      ) t`,
     [orgId],
   );
   const avg = res.rows[0]?.avg != null ? Number(res.rows[0].avg) : null;
-  if (avg == null) return AUTO_APPLY_THRESHOLD;
-  if (avg >= 8.0) return 99;  // effectively off — human review only
-  if (avg < 6.0)  return 2;   // aggressive improvement
-  return AUTO_APPLY_THRESHOLD;
+  const cnt = Number(res.rows[0]?.cnt ?? 0);
+  if (avg == null || cnt < 5) return AUTO_APPLY_THRESHOLD; // not enough data yet
+  // Smooth gradient instead of hard cutoffs
+  if (avg >= 8.5) return 10;   // very high quality — conservative, needs 10 occurrences
+  if (avg >= 7.5) return 5;    // good quality — moderate threshold
+  if (avg < 5.5)  return 2;    // poor quality — aggressive improvement
+  return AUTO_APPLY_THRESHOLD;  // default: 3
 }
 
 async function getAppliedFixCount(orgId: string): Promise<number> {
@@ -326,7 +330,9 @@ async function setPrompt(orgId: string, newPrompt: string, reason: string): Prom
   );
 
   // Sync to live Retell agent — rebuild full instructions and push to Retell LLM
-  syncPromptToRetell(orgId).catch(() => {});
+  syncPromptToRetell(orgId).catch((e) => {
+    process.stderr.write(`[insights] Retell sync failed for org ${orgId}: ${e instanceof Error ? e.message : String(e)}\n`);
+  });
 
   return versionId;
 }
@@ -980,14 +986,17 @@ async function processIssue(
       return;
     }
 
-    // Pending match — increment occurrence count
-    const newCount = bestMatch.occurrence_count + 1;
-    const examples: BadMoment[] = [...bestMatch.all_examples, moment];
-
-    await pool.query(
-      `UPDATE prompt_suggestions SET occurrence_count=$1, all_examples=$2 WHERE id=$3`,
-      [newCount, JSON.stringify(examples), bestMatch.id],
+    // Pending match — atomically increment occurrence count (prevents race condition)
+    const updated = await pool.query(
+      `UPDATE prompt_suggestions
+       SET occurrence_count = occurrence_count + 1,
+           all_examples = all_examples::jsonb || $1::jsonb
+       WHERE id = $2
+       RETURNING occurrence_count`,
+      [JSON.stringify([moment]), bestMatch.id],
     );
+    const newCount = (updated.rows[0]?.occurrence_count as number) ?? bestMatch.occurrence_count + 1;
+    const examples: BadMoment[] = [...bestMatch.all_examples, moment];
 
     // Auto-apply only if: threshold reached AND cooldown passed AND no other fix applied this cycle
     if (newCount >= autoApplyThreshold && cooldownOk && !appliedInThisCycle.applied) {

@@ -1,5 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { AgentConfig, CallRoutingRule, ApiIntegration, LiveWebAccess } from '../../lib/api.js';
+import {
+  getCalendarStatus,
+  getGoogleCalendarAuthUrl,
+  getMicrosoftCalendarAuthUrl,
+  connectCalcom,
+  disconnectCalendar,
+} from '../../lib/api.js';
 import {
   SectionCard, Toggle,
   IconPhoneOut, IconPhoneOff, IconMicUpload, IconTicket, IconCalendar,
@@ -16,9 +23,9 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
   return (
     <>
       {/* Call Routing Rules */}
-      <SectionCard title="Rufweiterleitung & Gespr\ächslogik" icon={IconPhoneOut}>
+      <SectionCard title="Rufweiterleitung & Gesprächslogik" icon={IconPhoneOut}>
         <p className="text-sm text-white/50 mb-4">
-          Definiere Regeln in nat\ürlicher Sprache — der Agent erkennt die Situation und handelt automatisch.
+          Definiere Regeln in natürlicher Sprache — der Agent erkennt die Situation und handelt automatisch.
         </p>
         <CallRoutingEditor
           items={config.callRoutingRules ?? []}
@@ -29,7 +36,7 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
       {/* Calendar Integrations */}
       <SectionCard title="Kalender-Anbindung" icon={IconCalendar}>
         <p className="text-sm text-white/50 mb-4">
-          Verbinde einen Kalender, damit dein Agent Termine pr\üfen und buchen kann.
+          Verbinde einen Kalender, damit dein Agent Termine prüfen und buchen kann.
         </p>
         <CalendarConnector
           integrations={config.calendarIntegrations ?? []}
@@ -40,7 +47,7 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
       {/* API Integrations */}
       <SectionCard title="API-Integrationen" icon={IconPlug}>
         <p className="text-sm text-white/50 mb-4">
-          Verbinde externe Systeme (CRM, ERP, Buchungssysteme) — dein Agent kann w\ährend des Gespr\ächs darauf zugreifen.
+          Verbinde externe Systeme (CRM, ERP, Buchungssysteme) — dein Agent kann während des Gesprächs darauf zugreifen.
         </p>
         <ApiIntegrationEditor
           items={config.apiIntegrations ?? []}
@@ -51,7 +58,7 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
       {/* Live Web Access */}
       <SectionCard title="Live Website-Zugriff" icon={IconGlobe}>
         <p className="text-sm text-white/50 mb-4">
-          Erlaube deinem Agent, w\ährend des Gespr\ächs aktuelle Infos von Webseiten abzurufen (z.B. Preise, Verf\ügbarkeit).
+          Erlaube deinem Agent, während des Gesprächs aktuelle Infos von Webseiten abzurufen (z.B. Preise, Verfügbarkeit).
         </p>
         <LiveWebAccessEditor
           config={config.liveWebAccess ?? { enabled: false, allowedDomains: [] }}
@@ -65,11 +72,11 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
 /* ── Call Routing Rules ── */
 
 const ROUTING_EXAMPLES = [
-  'Wenn der Kunde nach einer Reklamation fragt \→ Weiterleiten an Reklamationsabteilung',
-  'Wenn der Anrufer "Notfall" sagt \→ Sofort weiterleiten an +49 170 1234567',
-  'Wenn der Kunde 3x nach einem Mitarbeiter fragt \→ Weiterleiten an Zentrale',
-  'Wenn der Anrufer nichts sagt nach 10 Sekunden \→ H\öflich auflegen',
-  'Wenn die Anfrage medizinisch dringend ist \→ Ticket erstellen mit Priorit\ät Hoch',
+  'Wenn der Kunde nach einer Reklamation fragt → Weiterleiten an Reklamationsabteilung',
+  'Wenn der Anrufer "Notfall" sagt → Sofort weiterleiten an +49 170 1234567',
+  'Wenn der Kunde 3x nach einem Mitarbeiter fragt → Weiterleiten an Zentrale',
+  'Wenn der Anrufer nichts sagt nach 10 Sekunden → Höflich auflegen',
+  'Wenn die Anfrage medizinisch dringend ist → Ticket erstellen mit Priorität Hoch',
 ];
 
 function CallRoutingEditor({ items, onChange }: { items: CallRoutingRule[]; onChange: (v: CallRoutingRule[]) => void }) {
@@ -109,7 +116,7 @@ function CallRoutingEditor({ items, onChange }: { items: CallRoutingRule[]; onCh
           <div className="space-y-1">
             {ROUTING_EXAMPLES.slice(0, 3).map((ex, i) => (
               <button key={i} onClick={() => {
-                const parts = ex.split(' \→ ');
+                const parts = ex.split(' → ');
                 onChange([...items, {
                   id: crypto.randomUUID(),
                   description: parts[0] ?? '',
@@ -134,12 +141,12 @@ function CallRoutingEditor({ items, onChange }: { items: CallRoutingRule[]; onCh
               <textarea
                 value={rule.description}
                 onChange={(e) => patch(i, { description: e.target.value })}
-                placeholder="Beschreibe die Situation in nat\ürlicher Sprache\… z.B. 'Wenn der Kunde nach dem Gesch\äftsf\ührer fragt'"
+                placeholder="Beschreibe die Situation in natürlicher Sprache… z.B. 'Wenn der Kunde nach dem Geschäftsführer fragt'"
                 rows={2}
                 className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 outline-none resize-y"
               />
               <div className="flex gap-3 items-center">
-                <span className="text-xs text-white/50 shrink-0">Dann \→</span>
+                <span className="text-xs text-white/50 shrink-0">Dann →</span>
                 <div className="flex gap-2">
                   {ACTION_OPTIONS.map((act) => (
                     <button key={act.id} onClick={() => patch(i, { action: act.id })}
@@ -169,7 +176,7 @@ function CallRoutingEditor({ items, onChange }: { items: CallRoutingRule[]; onCh
 
       <button onClick={add}
         className="w-full border-2 border-dashed border-white/10 hover:border-orange-500/30 rounded-xl py-3 text-sm text-white/40 hover:text-orange-400 transition-all">
-        + Neue Regel hinzuf\ügen
+        + Neue Regel hinzufügen
       </button>
     </div>
   );
@@ -188,22 +195,114 @@ function CalendarConnector({ integrations, onChange }: {
   integrations: AgentConfig['calendarIntegrations'] & {};
   onChange: (v: NonNullable<AgentConfig['calendarIntegrations']>) => void;
 }) {
-  const connected = integrations?.filter((c) => c.connected) ?? [];
+  const [loading, setLoading] = useState(false);
+  const [calcomKey, setCalcomKey] = useState('');
+  const [showCalcomInput, setShowCalcomInput] = useState(false);
+  const [serverConnection, setServerConnection] = useState<{ connected: boolean; provider: string | null; email: string | null } | null>(null);
+  const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function connect(provider: typeof CALENDAR_PROVIDERS[number]['id']) {
-    // In production this would open OAuth flow -- here we add a placeholder
-    const existing = integrations ?? [];
-    if (existing.find((c) => c.provider === provider)) return;
-    onChange([...existing, {
-      provider,
-      connected: false,
-      label: CALENDAR_PROVIDERS.find((p) => p.id === provider)?.name ?? provider,
-    }]);
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+    };
+  }, []);
+
+  // Load real calendar connection status from server
+  const loadStatus = useCallback(async () => {
+    try {
+      const status = await getCalendarStatus();
+      setServerConnection(status);
+      // Sync server state into config integrations
+      if (status.connected && status.provider) {
+        const existing = integrations ?? [];
+        const providerName = CALENDAR_PROVIDERS.find(p => p.id === status.provider)?.name ?? status.provider;
+        const alreadyExists = existing.find(c => c.provider === status.provider);
+        if (!alreadyExists) {
+          onChange([...existing, {
+            provider: status.provider as 'google' | 'outlook' | 'calcom' | 'caldav',
+            connected: true,
+            email: status.email ?? undefined,
+            label: providerName,
+          }]);
+        } else if (!alreadyExists.connected) {
+          onChange(existing.map(c => c.provider === status.provider ? { ...c, connected: true, email: status.email ?? undefined } : c));
+        }
+      }
+    } catch { /* non-fatal */ }
+  }, []);
+
+  useEffect(() => { void loadStatus(); }, [loadStatus]);
+
+  async function connectProvider(provider: typeof CALENDAR_PROVIDERS[number]['id']) {
+    setLoading(true);
+    try {
+      if (provider === 'google') {
+        const { url } = await getGoogleCalendarAuthUrl();
+        window.open(url, '_blank', 'width=600,height=700');
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = setInterval(async () => {
+          const s = await getCalendarStatus();
+          if (s.connected && s.provider === 'google') {
+            if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+            void loadStatus();
+          }
+        }, 2000);
+        if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+        pollTimeoutRef.current = setTimeout(() => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } }, 120000);
+      } else if (provider === 'outlook') {
+        const { url } = await getMicrosoftCalendarAuthUrl();
+        window.open(url, '_blank', 'width=600,height=700');
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = setInterval(async () => {
+          const s = await getCalendarStatus();
+          if (s.connected && s.provider === 'microsoft') {
+            if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+            void loadStatus();
+          }
+        }, 2000);
+        if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+        pollTimeoutRef.current = setTimeout(() => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } }, 120000);
+      } else if (provider === 'calcom') {
+        setShowCalcomInput(true);
+        setLoading(false);
+        return;
+      } else {
+        // CalDAV — not yet supported
+        setLoading(false);
+        return;
+      }
+    } catch { /* error handled by UI */ }
+    setLoading(false);
   }
 
-  function disconnect(provider: string) {
-    onChange((integrations ?? []).filter((c) => c.provider !== provider));
+  async function handleCalcomConnect() {
+    if (!calcomKey.trim()) return;
+    setLoading(true);
+    try {
+      const result = await connectCalcom(calcomKey.trim());
+      if (result.ok) {
+        setShowCalcomInput(false);
+        setCalcomKey('');
+        void loadStatus();
+      }
+    } catch { /* non-fatal */ }
+    setLoading(false);
   }
+
+  async function handleDisconnect(provider: string) {
+    setLoading(true);
+    try {
+      await disconnectCalendar();
+      setServerConnection(null);
+      onChange((integrations ?? []).filter(c => c.provider !== provider));
+    } catch { /* non-fatal */ }
+    setLoading(false);
+  }
+
+  const connected = (integrations ?? []).filter(c => c.connected);
 
   return (
     <div className="space-y-4">
@@ -218,28 +317,57 @@ function CalendarConnector({ integrations, onChange }: {
                 {cal.email && <p className="text-xs text-white/40">{cal.email}</p>}
               </div>
               <span className="flex items-center gap-1 text-xs text-green-400 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />Verbunden</span>
-              <button onClick={() => disconnect(cal.provider)} className="text-white/30 hover:text-red-400 text-sm">Trennen</button>
+              <button onClick={() => handleDisconnect(cal.provider)} disabled={loading}
+                className="text-white/30 hover:text-red-400 text-sm disabled:opacity-50 cursor-pointer">Trennen</button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Cal.com API Key input */}
+      {showCalcomInput && (
+        <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-4 space-y-3">
+          <p className="text-sm text-white/70">Cal.com API Key eingeben:</p>
+          <input
+            value={calcomKey}
+            onChange={(e) => setCalcomKey(e.target.value)}
+            placeholder="cal_live_..."
+            type="password"
+            className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-orange-500/50 outline-none"
+          />
+          <div className="flex gap-2">
+            <button onClick={handleCalcomConnect} disabled={loading || !calcomKey.trim()}
+              className="px-4 py-2 rounded-lg text-xs font-medium text-white disabled:opacity-50 cursor-pointer"
+              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+              {loading ? 'Verbinde…' : 'Verbinden'}
+            </button>
+            <button onClick={() => { setShowCalcomInput(false); setCalcomKey(''); }}
+              className="px-4 py-2 rounded-lg text-xs text-white/50 hover:text-white/70 bg-white/5 cursor-pointer">
+              Abbrechen
+            </button>
+          </div>
         </div>
       )}
 
       {/* Provider grid */}
       <div className="grid grid-cols-2 gap-3">
         {CALENDAR_PROVIDERS.map((prov) => {
-          const isConnected = (integrations ?? []).find((c) => c.provider === prov.id);
+          const isConnected = connected.find(c => c.provider === prov.id || (prov.id === 'outlook' && c.provider === ('microsoft' as string)));
+          const isCalDAV = prov.id === 'caldav';
           return (
-            <button key={prov.id} onClick={() => !isConnected && connect(prov.id)}
-              disabled={!!isConnected}
+            <button key={prov.id} onClick={() => !isConnected && !isCalDAV && connectProvider(prov.id)}
+              disabled={!!isConnected || loading || isCalDAV}
               className={`flex items-center gap-3 p-4 rounded-xl border transition-all text-left ${
                 isConnected
                   ? 'border-green-500/20 bg-green-500/5 opacity-60 cursor-default'
-                  : 'border-white/10 bg-white/5 hover:border-orange-500/40 hover:bg-white/10 cursor-pointer'
+                  : isCalDAV
+                    ? 'border-white/10 bg-white/5 opacity-40 cursor-default'
+                    : 'border-white/10 bg-white/5 hover:border-orange-500/40 hover:bg-white/10 cursor-pointer'
               }`}>
               <prov.Icon size={18} className="text-white/50 shrink-0" />
               <div>
                 <p className="text-sm font-medium text-white">{prov.name}</p>
-                <p className="text-xs text-white/40">{isConnected ? 'Bereits verbunden' : prov.desc}</p>
+                <p className="text-xs text-white/40">{isConnected ? 'Bereits verbunden' : isCalDAV ? 'Bald verfügbar' : prov.desc}</p>
               </div>
             </button>
           );
@@ -247,7 +375,7 @@ function CalendarConnector({ integrations, onChange }: {
       </div>
 
       <div className="bg-white/5 rounded-lg px-4 py-3 text-xs text-white/50">
-        Nach der Verbindung kann dein Agent freie Termine pr\üfen, Buchungen erstellen und Kalender-Konflikte erkennen.
+        Nach der Verbindung kann dein Agent freie Termine prüfen, Buchungen erstellen und Kalender-Konflikte erkennen.
       </div>
     </div>
   );
@@ -324,7 +452,7 @@ function ApiIntegrationEditor({ items, onChange }: { items: ApiIntegration[]; on
           )}
 
           <textarea value={api.description} onChange={(e) => patch(i, { description: e.target.value })}
-            placeholder="Wof\ür soll der Agent diese API nutzen? z.B. 'Kundendaten abrufen und Bestellstatus pr\üfen'"
+            placeholder="Wofür soll der Agent diese API nutzen? z.B. 'Kundendaten abrufen und Bestellstatus prüfen'"
             rows={2}
             className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-orange-500/50 outline-none resize-y" />
         </div>
@@ -332,11 +460,11 @@ function ApiIntegrationEditor({ items, onChange }: { items: ApiIntegration[]; on
 
       <button onClick={add}
         className="w-full border-2 border-dashed border-white/10 hover:border-orange-500/30 rounded-xl py-3 text-sm text-white/40 hover:text-orange-400 transition-all">
-        + API-Integration hinzuf\ügen
+        + API-Integration hinzufügen
       </button>
 
       <div className="bg-white/5 rounded-lg px-4 py-3 text-xs text-white/50">
-        Dein Agent kann w\ährend des Gespr\ächs Daten abrufen und senden — z.B. Kundenstatus pr\üfen, Bestellungen anlegen oder CRM-Eintr\äge erstellen.
+        Dein Agent kann während des Gesprächs Daten abrufen und senden — z.B. Kundenstatus prüfen, Bestellungen anlegen oder CRM-Einträge erstellen.
       </div>
     </div>
   );
@@ -385,13 +513,13 @@ function LiveWebAccessEditor({ config, onChange }: { config: LiveWebAccess; onCh
                 onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addDomain())} />
               <button onClick={addDomain}
                 className="rounded-lg bg-white/10 border border-white/10 px-4 py-2 text-sm text-white/70 hover:bg-white/15 transition-colors">
-                + Hinzuf\ügen
+                + Hinzufügen
               </button>
             </div>
           </div>
 
           <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-3 text-xs text-orange-300">
-            Der Agent kann aktuelle Preise, Produktinfos oder Verf\ügbarkeiten direkt von deiner Website lesen — in Echtzeit w\ährend des Gespr\ächs.
+            Der Agent kann aktuelle Preise, Produktinfos oder Verfügbarkeiten direkt von deiner Website lesen — in Echtzeit während des Gesprächs.
           </div>
         </>
       )}

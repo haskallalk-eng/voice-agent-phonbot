@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import type { JwtPayload } from './auth.js';
 import { pool } from './db.js';
@@ -436,6 +436,50 @@ export async function registerAgentConfig(app: FastifyInstance) {
     return { ok: true, config: saved, retellAgentId: saved.retellAgentId, retellLlmId: saved.retellLlmId };
   });
 
+  // Delete an agent config
+  app.delete('/agent-config/:tenantId', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { orgId } = req.user as JwtPayload;
+    const { tenantId } = req.params as { tenantId: string };
+    if (!pool) return reply.status(503).send({ error: 'Database not configured' });
+
+    // Verify the agent belongs to this org
+    const check = await pool.query(
+      `SELECT data, updated_at FROM agent_configs WHERE tenant_id = $1 AND org_id = $2`,
+      [tenantId, orgId],
+    );
+    if (!check.rowCount) return reply.status(404).send({ error: 'Agent nicht gefunden' });
+
+    // If agent is older than 30 days, require password confirmation
+    const updated = check.rows[0].updated_at as string | null;
+    const ageMs = updated ? Date.now() - new Date(updated).getTime() : 0;
+    const needsPassword = ageMs > 30 * 24 * 60 * 60 * 1000;
+
+    if (needsPassword) {
+      const body = req.body as { password?: string } | null;
+      if (!body?.password) return reply.status(400).send({ error: 'password_required', message: 'Bitte Passwort eingeben um diesen Agent zu löschen.' });
+
+      // Verify password
+      const userRow = await pool.query(`SELECT password_hash FROM users WHERE org_id = $1 LIMIT 1`, [orgId]);
+      const hash = userRow.rows[0]?.password_hash;
+      if (!hash) return reply.status(403).send({ error: 'Passwort konnte nicht verifiziert werden.' });
+
+      const bcrypt = await import('bcrypt');
+      const valid = await bcrypt.compare(body.password, hash as string);
+      if (!valid) return reply.status(403).send({ error: 'Falsches Passwort.' });
+    }
+
+    // Delete from DB
+    await pool.query(`DELETE FROM agent_configs WHERE tenant_id = $1 AND org_id = $2`, [tenantId, orgId]);
+
+    // Unassign phone numbers that were connected to this agent's retell ID
+    const retellAgentId = check.rows[0].data?.retellAgentId;
+    if (retellAgentId) {
+      await pool.query(`UPDATE phone_numbers SET agent_id = NULL WHERE agent_id = $1 AND org_id = $2`, [retellAgentId, orgId]);
+    }
+
+    return { ok: true };
+  });
+
   // Create a web call for testing (requires deployed agent)
   app.post('/agent-config/web-call', { ...auth }, async (req: FastifyRequest) => {
     const { orgId } = req.user as JwtPayload;
@@ -451,7 +495,23 @@ export async function registerAgentConfig(app: FastifyInstance) {
       };
     }
 
-    const config = await readConfig(orgId);
+    // Use specific agent if tenantId provided, otherwise fall back to first deployed agent
+    const parsed = z.object({ agentTenantId: z.string().optional() }).safeParse(req.body);
+    const tenantId = parsed.success ? parsed.data.agentTenantId : undefined;
+
+    let config: AgentConfig;
+    if (tenantId) {
+      config = await readConfig(tenantId);
+    } else {
+      // Fallback: find first deployed agent for this org
+      if (!pool) return { ok: false, error: 'AGENT_NOT_DEPLOYED', message: 'Deploy the agent first.' };
+      const res = await pool.query(
+        `SELECT data FROM agent_configs WHERE org_id = $1 AND data->>'retellAgentId' IS NOT NULL ORDER BY updated_at DESC LIMIT 1`,
+        [orgId],
+      );
+      config = res.rows[0]?.data ? AgentConfigSchema.parse(res.rows[0].data) : await readConfig(orgId);
+    }
+
     if (!config.retellAgentId) {
       return { ok: false, error: 'AGENT_NOT_DEPLOYED', message: 'Deploy the agent first.' };
     }

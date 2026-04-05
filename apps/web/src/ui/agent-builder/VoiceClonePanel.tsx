@@ -131,7 +131,7 @@ export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
       setRecording(true);
       timerRef.current = setInterval(() => setRecordSeconds((s) => s + 1), 1000);
     } catch {
-      setRecordError('Mikrofon konnte nicht ge\öffnet werden. Bitte Berechtigungen pr\üfen.');
+      setRecordError('Mikrofon konnte nicht geöffnet werden. Bitte Berechtigungen prüfen.');
     }
   }
 
@@ -190,7 +190,7 @@ export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
       </div>
       <p className="text-sm text-white/50 mb-4">
         Lade eine Aufnahme hoch oder nimm direkt auf — Phonbot klont deine Stimme via Retell Voice Cloning.
-        Mindestl\änge: 30 Sekunden.
+        Mindestlänge: 30 Sekunden.
       </p>
 
       {/* Provider selector -- always visible when not idle */}
@@ -206,7 +206,7 @@ export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
               <option key={p.value} value={p.value}>{p.label}</option>
             ))}
           </select>
-          <p className="text-xs text-white/30 mt-1">ElevenLabs unterst\ützt bis zu 25 Audiodateien \· Cartesia & MiniMax nur 1 Datei</p>
+          <p className="text-xs text-white/30 mt-1">ElevenLabs unterstützt bis zu 25 Audiodateien \· Cartesia & MiniMax nur 1 Datei</p>
         </div>
       )}
 
@@ -247,7 +247,7 @@ export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white/70 hover:border-cyan-500/40 hover:text-white transition-all"
             >
               <IconMicUpload size={16} className="text-cyan-400" />
-              {uploadFile ? uploadFile.name : 'Datei ausw\ählen (MP3/WAV)'}
+              {uploadFile ? uploadFile.name : 'Datei auswählen (MP3/WAV)'}
             </button>
             {uploadFile && (
               <span className="self-center text-xs text-white/40">
@@ -273,7 +273,7 @@ export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
               disabled={!uploadFile || !uploadName.trim() || uploading}
               className="rounded-lg bg-gradient-to-r from-cyan-500 to-orange-500 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
             >
-              {uploading ? 'Wird hochgeladen\…' : 'Stimme klonen'}
+              {uploading ? 'Wird hochgeladen…' : 'Stimme klonen'}
             </button>
             <button type="button" onClick={() => { setMode('idle'); setUploadFile(null); setUploadError(null); }}
               className="text-sm text-white/40 hover:text-white/70">
@@ -362,7 +362,7 @@ export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
                   disabled={!recordName.trim() || uploading}
                   className="rounded-lg bg-gradient-to-r from-cyan-500 to-orange-500 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
                 >
-                  {uploading ? 'Wird hochgeladen\…' : 'Stimme klonen'}
+                  {uploading ? 'Wird hochgeladen…' : 'Stimme klonen'}
                 </button>
                 <button type="button" onClick={() => { setMode('idle'); setRecordedBlob(null); setRecordError(null); setRecordSeconds(0); }}
                   className="text-sm text-white/40 hover:text-white/70">

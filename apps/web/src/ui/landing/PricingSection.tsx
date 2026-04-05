@@ -14,7 +14,7 @@ export function PricingSection({ onGoToRegister }: PricingSectionProps) {
   }));
 
   return (
-    <section id="preise" className="relative z-10 px-6 py-20 max-w-6xl mx-auto">
+    <section id="preise" className="relative z-10 px-6 py-20 max-w-6xl mx-auto ambient-glow">
       <div className="text-center mb-14">
         <h2 className="text-3xl sm:text-4xl font-extrabold mb-4">Einfache Preise. Starte kostenlos.</h2>
       </div>
@@ -72,17 +72,24 @@ export function PricingSection({ onGoToRegister }: PricingSectionProps) {
             </div>
 
             <ul className="flex-1 space-y-3 mb-8">
-              {plan.features.map((feat) => (
-                <li key={feat} className="flex items-center gap-2 text-sm text-white/70">
-                  <span
-                    className="w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
-                    style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
-                  >
-                    ✓
-                  </span>
-                  {feat}
-                </li>
-              ))}
+              {plan.features.map((feat) => {
+                const isHighlight = feat.startsWith('✦');
+                const label = isHighlight ? feat.slice(2) : feat;
+                return (
+                  <li key={feat} className="flex items-center gap-2 text-sm">
+                    {isHighlight ? (
+                      <svg width="14" height="14" viewBox="0 0 24 24" className="shrink-0 fancy-star"><defs><linearGradient id="fg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#F97316"/><stop offset="100%" stopColor="#06B6D4"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill="url(#fg)"/></svg>
+                    ) : (
+                      <span className="w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                        style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>✓</span>
+                    )}
+                    <span className={isHighlight ? 'font-semibold bg-clip-text text-transparent' : 'text-white/70'}
+                      style={isHighlight ? { backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' } : undefined}>
+                      {label}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
 
             <button

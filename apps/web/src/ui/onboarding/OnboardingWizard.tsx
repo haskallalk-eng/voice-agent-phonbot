@@ -1,13 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { RetellWebClient } from 'retell-client-js-sdk';
 import { TEMPLATES, type Template } from './templates.js';
-import { deployAgentConfig, createWebCall, connectCalcom, type AgentConfig } from '../../lib/api.js';
+import { deployAgentConfig, createWebCall, connectCalcom, getMicrosoftCalendarAuthUrl, type AgentConfig } from '../../lib/api.js';
 import { FoxLogo } from '../FoxLogo.js';
 import {
   IconStar, IconCalendar, IconPhone, IconCapabilities,
   IconScissors, IconWrench, IconMedical, IconBroom, IconSettings,
   IconTickets, IconAgent, IconDeploy, IconPhoneForward,
+  IconRestaurant,
 } from '../PhonbotIcons.js';
+import { IconCar } from '../PhonbotIcons.js';
 
 type IconComponent = React.ComponentType<{ size?: number; className?: string }>;
 const TEMPLATE_CONFIG: Record<string, {
@@ -45,6 +47,24 @@ const TEMPLATE_CONFIG: Record<string, {
     hoverGlow: 'hover:shadow-[0_0_22px_rgba(6,182,212,0.18)]',
     selectedBorder: 'border-cyan-500/60',
     selectedGlow: 'shadow-[0_0_22px_rgba(6,182,212,0.25)]',
+  },
+  restaurant: {
+    Icon: IconRestaurant,
+    accent: 'text-amber-300',
+    iconBg: 'bg-amber-500/15',
+    hoverBorder: 'hover:border-amber-500/40',
+    hoverGlow: 'hover:shadow-[0_0_22px_rgba(245,158,11,0.18)]',
+    selectedBorder: 'border-amber-500/60',
+    selectedGlow: 'shadow-[0_0_22px_rgba(245,158,11,0.25)]',
+  },
+  auto: {
+    Icon: IconCar,
+    accent: 'text-blue-300',
+    iconBg: 'bg-blue-500/15',
+    hoverBorder: 'hover:border-blue-500/40',
+    hoverGlow: 'hover:shadow-[0_0_22px_rgba(59,130,246,0.18)]',
+    selectedBorder: 'border-blue-500/60',
+    selectedGlow: 'shadow-[0_0_22px_rgba(59,130,246,0.25)]',
   },
   cleaning: {
     Icon: IconBroom,
@@ -85,9 +105,30 @@ const AREA_CODES = [
   { code: '0341', label: '0341 – Leipzig' },
 ];
 
+const OB_KEY = 'phonbot_onboarding';
+
+function loadOnboardingState(): { step: Step; templateId?: string; deployedAgentId?: string; phoneDone?: boolean; calendarDone?: boolean; provisionedNumber?: string } | null {
+  try {
+    const raw = localStorage.getItem(OB_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
+function saveOnboardingState(data: { step: Step; templateId?: string; deployedAgentId?: string; phoneDone?: boolean; calendarDone?: boolean; provisionedNumber?: string }) {
+  try { localStorage.setItem(OB_KEY, JSON.stringify(data)); } catch { /* non-fatal */ }
+}
+
+function clearOnboardingState() {
+  try { localStorage.removeItem(OB_KEY); } catch { /* non-fatal */ }
+}
+
 export function OnboardingWizard({ onComplete }: Props) {
-  const [step, setStep] = useState<Step>('template');
-  const [template, setTemplate] = useState<Template | null>(null);
+  const saved = loadOnboardingState();
+  const [step, setStepRaw] = useState<Step>(saved?.step ?? 'template');
+  const [template, setTemplate] = useState<Template | null>(
+    saved?.templateId ? TEMPLATES.find(t => t.id === saved.templateId) ?? null : null,
+  );
   const [form, setForm] = useState({
     businessName: '',
     address: '',
@@ -96,14 +137,27 @@ export function OnboardingWizard({ onComplete }: Props) {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [deployedAgentId, setDeployedAgentId] = useState<string | null>(null);
+  const [deployedAgentId, setDeployedAgentId] = useState<string | null>(saved?.deployedAgentId ?? null);
+
+  // Persist step changes
+  function setStep(s: Step) {
+    setStepRaw(s);
+    saveOnboardingState({
+      step: s,
+      templateId: template?.id,
+      deployedAgentId: deployedAgentId ?? undefined,
+      phoneDone,
+      calendarDone,
+      provisionedNumber: provisionedNumber ?? undefined,
+    });
+  }
 
   // Phone step state
   const [areaCode, setAreaCode] = useState('030');
   const [phoneLoading, setPhoneLoading] = useState(false);
   const [phoneError, setPhoneError] = useState<string | null>(null);
-  const [provisionedNumber, setProvisionedNumber] = useState<string | null>(null);
-  const [phoneDone, setPhoneDone] = useState(false);
+  const [provisionedNumber, setProvisionedNumber] = useState<string | null>(saved?.provisionedNumber ?? null);
+  const [phoneDone, setPhoneDone] = useState(saved?.phoneDone ?? false);
   const [callMode, setCallMode] = useState<'direct' | 'backup' | 'always' | null>(null);
   const [selectedCarrier, setSelectedCarrier] = useState('telekom');
   const [copiedCode, setCopiedCode] = useState(false);
@@ -112,8 +166,11 @@ export function OnboardingWizard({ onComplete }: Props) {
   const [calcomApiKey, setCalcomApiKey] = useState('');
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [calendarError, setCalendarError] = useState<string | null>(null);
-  const [calendarDone, setCalendarDone] = useState(false);
+  const [calendarDone, setCalendarDone] = useState(saved?.calendarDone ?? false);
   const [calendarProvider, setCalendarProvider] = useState<string | null>(null);
+
+  // Upgrade modal
+  const [showUpgrade, setShowUpgrade] = useState(false);
 
   // Test call state
   const [callState, setCallState] = useState<CallState>('idle');
@@ -166,8 +223,10 @@ export function OnboardingWizard({ onComplete }: Props) {
         fallback: { enabled: true, reason: 'handoff' },
       };
       const result = await deployAgentConfig(config);
-      setDeployedAgentId(result.retellAgentId ?? null);
-      setStep('phone');
+      const agentId = result.retellAgentId ?? null;
+      setDeployedAgentId(agentId);
+      saveOnboardingState({ step: 'phone', templateId: template.id, deployedAgentId: agentId ?? undefined });
+      setStepRaw('phone');
     } catch (e: unknown) {
       setError((e instanceof Error ? e.message : null) ?? 'Deployment fehlgeschlagen');
     } finally {
@@ -186,8 +245,10 @@ export function OnboardingWizard({ onComplete }: Props) {
       });
       if (!res.ok) throw new Error(`Fehler ${res.status}: ${await res.text()}`);
       const data = await res.json();
-      setProvisionedNumber(data.numberPretty ?? data.number);
-      setPhoneDone(true);
+      const num = data.numberPretty ?? data.number;
+      setProvisionedNumber(num);
+      saveOnboardingState({ step: 'phone', templateId: template?.id, deployedAgentId: deployedAgentId ?? undefined, provisionedNumber: num });
+      // Don't set phoneDone yet — user still needs to choose call mode in Phase 2
     } catch (e: unknown) {
       setPhoneError((e instanceof Error ? e.message : null) ?? 'Fehler beim Aktivieren');
     } finally {
@@ -291,40 +352,46 @@ export function OnboardingWizard({ onComplete }: Props) {
 
       {/* ── Step: Template ── */}
       {step === 'template' && (
-        <div className="relative z-10 w-full max-w-2xl">
+        <div className="relative z-10 w-full max-w-3xl">
           {/* Welcome hero */}
           <div className="text-center mb-10">
             <FoxLogo size="lg" glow animate className="mx-auto mb-5" />
             <h1 className="text-3xl font-bold mb-2 tracking-tight">Willkommen bei Phonbot</h1>
-            <p className="text-white/50 text-base max-w-sm mx-auto leading-relaxed">
-              Dein KI-Telefonagent ist in 5 Minuten einsatzbereit.
-              Wähle zuerst ein Template für dein Business.
+            <p className="text-white/40 text-sm max-w-md mx-auto leading-relaxed">
+              Dein KI-Telefonagent ist in wenigen Minuten einsatzbereit. Wähle ein Template als Startpunkt.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {TEMPLATES.map((t) => {
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {TEMPLATES.map((t, i) => {
               const cfg = TEMPLATE_CONFIG[t.id];
               const Icon = cfg?.Icon ?? IconSettings;
+              const isLast = i === TEMPLATES.length - 1;
+              const isOddTotal = TEMPLATES.length % 3 !== 0;
+              // Stretch last item to fill remaining columns if total is not divisible by 3
+              const spanClass = isLast && isOddTotal
+                ? TEMPLATES.length % 3 === 1 ? 'sm:col-span-2 lg:col-span-3' : 'lg:col-span-1'
+                : '';
               return (
                 <button
                   key={t.id}
                   onClick={() => selectTemplate(t)}
-                  className={`flex items-center gap-4 p-5 rounded-2xl glass border-2 border-transparent
-                    ${cfg?.hoverBorder ?? ''} ${cfg?.hoverGlow ?? ''}
-                    hover:bg-white/5 transition-all duration-300 text-left cursor-pointer group`}
+                  className={`flex items-center gap-4 p-5 rounded-2xl border transition-all duration-200 text-left cursor-pointer group ${spanClass}`}
+                  style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.07)' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(249,115,22,0.3)'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
                 >
-                  <div className={`shrink-0 w-12 h-12 rounded-xl ${cfg?.iconBg ?? 'bg-white/10'}
+                  <div className={`shrink-0 w-11 h-11 rounded-xl ${cfg?.iconBg ?? 'bg-white/10'}
                     flex items-center justify-center ${cfg?.accent ?? 'text-white/60'}
-                    transition-all duration-300 group-hover:scale-110`}>
-                    <Icon size={22} />
+                    transition-all duration-200 group-hover:scale-110`}>
+                    <Icon size={20} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-white text-sm mb-0.5">{t.name}</h3>
-                    <p className="text-xs text-white/40 leading-relaxed">{t.description}</p>
+                    <h3 className="font-semibold text-white text-[13px] mb-0.5">{t.name}</h3>
+                    <p className="text-[11px] text-white/35 leading-relaxed">{t.description}</p>
                   </div>
-                  <svg className="shrink-0 text-white/20 group-hover:text-white/50 transition-colors duration-300"
-                    width="16" height="16" viewBox="0 0 24 24" fill="none"
+                  <svg className="shrink-0 text-white/15 group-hover:text-white/40 transition-colors"
+                    width="14" height="14" viewBox="0 0 24 24" fill="none"
                     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="9 18 15 12 9 6" />
                   </svg>
@@ -408,19 +475,13 @@ export function OnboardingWizard({ onComplete }: Props) {
               <p className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5">{error}</p>
             )}
 
-            <div className="flex gap-3 pt-1">
-              <button
-                onClick={() => setStep('template')}
-                className="px-4 py-2 text-sm text-white/40 hover:text-white/70 transition-colors"
-              >
-                ← Zurück
-              </button>
+            <div className="flex flex-col items-center gap-3 pt-2">
               <button
                 onClick={handleDeploy}
                 disabled={loading || !form.businessName.trim()}
-                className="flex-1 rounded-xl px-4 py-2.5 font-semibold text-sm text-white disabled:opacity-50
-                  transition-all duration-300 hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] hover:scale-[1.01]"
-                style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
+                className="w-full rounded-xl px-4 py-3 font-semibold text-sm text-white disabled:opacity-50
+                  transition-all duration-200 hover:scale-[1.01] cursor-pointer"
+                style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)', boxShadow: '0 4px 24px rgba(249,115,22,0.2)' }}
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
@@ -428,8 +489,14 @@ export function OnboardingWizard({ onComplete }: Props) {
                     Agent wird erstellt…
                   </span>
                 ) : (
-                  'Agent erstellen & aktivieren →'
+                  'Agent erstellen & aktivieren'
                 )}
+              </button>
+              <button
+                onClick={() => setStep('template')}
+                className="text-xs text-white/30 hover:text-white/60 transition-colors cursor-pointer"
+              >
+                ← Zurück zur Auswahl
               </button>
             </div>
           </div>
@@ -448,57 +515,60 @@ export function OnboardingWizard({ onComplete }: Props) {
 
           {/* Phase 1: Provision number */}
           {!provisionedNumber && !phoneDone && (
-            <div className="glass rounded-2xl p-6 space-y-5">
-              <div className="flex items-center gap-3">
-                <div className="w-7 h-7 rounded-full bg-orange-500/20 border border-orange-500/30 flex items-center justify-center text-orange-300 text-xs font-bold shrink-0">1</div>
-                <div>
-                  <h3 className="font-semibold text-white">Phonbot-Nummer aktivieren</h3>
-                  <p className="text-xs text-white/40 mt-0.5">Jeder Agent braucht eine eigene Rufnummer</p>
+            <div className="rounded-2xl p-6 space-y-5" style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <div className="text-center">
+                <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.15), rgba(6,182,212,0.1))' }}>
+                  <IconPhone size={20} className="text-orange-400" />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-white/50 mb-1.5 uppercase tracking-wide">Wunschvorwahl</label>
-                <select
-                  value={areaCode}
-                  onChange={(e) => setAreaCode(e.target.value)}
-                  className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white
-                    focus:outline-none focus:ring-2 focus:ring-orange-500/50 transition-all cursor-pointer"
-                >
-                  {AREA_CODES.map((ac) => (
-                    <option key={ac.code} value={ac.code} className="bg-[#1a1a2e]">{ac.label}</option>
-                  ))}
-                </select>
+                <h3 className="font-semibold text-white text-sm">Eigene Telefonnummer aktivieren</h3>
+                <p className="text-xs text-white/35 mt-1">Dein Agent bekommt eine deutsche Rufnummer (030 Berlin)</p>
               </div>
 
               {phoneError && (
-                <p className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 flex items-center gap-2">
-                  <IconCapabilities size={14} className="shrink-0" />{phoneError}
-                </p>
+                phoneError.includes('Starter') || phoneError.includes('upgrade') || phoneError.includes('Plan') ? (
+                  <div className="rounded-xl p-4 text-center space-y-3" style={{ background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.2)' }}>
+                    <p className="text-sm font-medium bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Telefonnummern sind ab dem Starter-Plan verfügbar</p>
+                    <p className="text-xs text-white/35">Upgrade deinen Plan um eine eigene Nummer zu erhalten.</p>
+                    <button
+                      onClick={() => setShowUpgrade(true)}
+                      className="text-xs font-medium bg-clip-text text-transparent hover:opacity-80 transition-opacity cursor-pointer"
+                      style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                    >
+                      Plan upgraden →
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5">
+                    {phoneError}
+                  </p>
+                )
               )}
 
-              <button
-                onClick={handleProvision}
-                disabled={phoneLoading}
-                className="w-full rounded-xl px-4 py-3 font-semibold text-sm text-white disabled:opacity-50
-                  transition-all duration-300 hover:shadow-[0_0_28px_rgba(249,115,22,0.4)] cursor-pointer"
-                style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
-              >
-                {phoneLoading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white spin" />
-                    Nummer wird aktiviert…
-                  </span>
-                ) : (
-                  'Meine Phonbot-Nummer aktivieren →'
-                )}
-              </button>
-
-              <div className="text-center pt-1">
-                <button onClick={() => setStep('calendar')} className="text-xs text-white/25 hover:text-white/45 transition-colors cursor-pointer">
-                  Später einrichten
+              {!phoneError?.includes('Starter') && !phoneError?.includes('upgrade') && !phoneError?.includes('Plan') && (
+                <button
+                  onClick={handleProvision}
+                  disabled={phoneLoading}
+                  className="w-full rounded-xl px-4 py-3 font-semibold text-sm text-white disabled:opacity-50
+                    transition-all duration-200 hover:scale-[1.01] cursor-pointer"
+                  style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)', boxShadow: '0 4px 24px rgba(249,115,22,0.2)' }}
+                >
+                  {phoneLoading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white spin" />
+                      Nummer wird aktiviert…
+                    </span>
+                  ) : (
+                    'Nummer aktivieren'
+                  )}
                 </button>
-              </div>
+              )}
+
+              <button onClick={() => setStep('calendar')}
+                className="w-full rounded-xl px-4 py-2.5 text-sm text-white/50 hover:text-white/80 transition-all cursor-pointer"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+              >
+                Überspringen — später einrichten
+              </button>
             </div>
           )}
 
@@ -712,230 +782,223 @@ export function OnboardingWizard({ onComplete }: Props) {
       {/* ── Step: Calendar ── */}
       {step === 'calendar' && (
         <div className="relative z-10 w-full max-w-2xl">
-          <h2 className="text-2xl font-bold text-center mb-2 flex items-center justify-center gap-2"><IconCalendar size={22} /> Kalender verbinden (optional)</h2>
-          <p className="text-white/50 text-center mb-8">
-            Dein Agent kann Termine direkt buchen wenn du deinen Kalender verbindest.
-          </p>
+          <div className="text-center mb-8">
+            <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.15), rgba(6,182,212,0.1))' }}>
+              <IconCalendar size={20} className="text-orange-400" />
+            </div>
+            <h2 className="text-2xl font-bold text-white">Kalender verbinden</h2>
+            <p className="text-sm text-white/35 mt-1.5">Optional — dein Agent kann Termine direkt buchen</p>
+          </div>
 
           {calendarDone ? (
-            <div className="glass rounded-2xl p-8 text-center space-y-4">
-              <div className="flex justify-center"><IconStar size={44} className="text-green-400" /></div>
-              <h3 className="text-lg font-semibold text-white">Kalender verbunden!</h3>
-              <p className="text-sm text-white/50">{calendarProvider} ist jetzt mit deinem Agent verbunden.</p>
-              <button
-                onClick={() => setStep('test')}
-                className="mt-2 rounded-xl px-6 py-2.5 font-semibold text-sm text-white
-                  transition-all duration-300 hover:shadow-[0_0_24px_rgba(249,115,22,0.4)]"
-                style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
-              >
-                Weiter →
-              </button>
+            <div className="rounded-2xl p-8 text-center space-y-4" style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(24px)', border: '1px solid rgba(34,197,94,0.15)' }}>
+              <div className="w-14 h-14 rounded-full mx-auto flex items-center justify-center" style={{ background: 'rgba(34,197,94,0.1)' }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <h3 className="text-base font-semibold text-white">Kalender verbunden</h3>
+              <p className="text-xs text-white/40">{calendarProvider} ist jetzt aktiv</p>
+              <div className="flex flex-col items-center gap-3 pt-2">
+                <button onClick={() => setStep('test')}
+                  className="w-full max-w-xs rounded-xl px-4 py-3 font-semibold text-sm text-white transition-all duration-200 hover:scale-[1.01] cursor-pointer"
+                  style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)', boxShadow: '0 4px 24px rgba(249,115,22,0.2)' }}>
+                  Weiter
+                </button>
+              </div>
             </div>
           ) : (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                {/* Google Calendar */}
-                <div className="glass rounded-2xl p-6 flex flex-col gap-4">
-                  <div className="flex items-center gap-3">
-                    <span className="w-2.5 h-2.5 rounded-full bg-green-400 shrink-0" />
-                    <h3 className="font-semibold text-white">Google Calendar</h3>
-                  </div>
-                  <p className="text-sm text-white/50 flex-1">
-                    Verbinde deinen Google-Kalender für automatische Terminbuchungen.
-                  </p>
-                  <button
-                    onClick={() => { window.location.href = '/api/calendar/google/connect'; }}
-                    className="w-full rounded-xl px-4 py-2.5 font-semibold text-sm text-white
-                      transition-all duration-300 hover:shadow-[0_0_24px_rgba(249,115,22,0.4)]"
-                    style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
-                  >
-                    Google Calendar verbinden →
-                  </button>
-                </div>
+            <div className="space-y-3">
+              {calendarError && (
+                <p className="text-sm text-red-300 bg-red-500/8 border border-red-500/15 rounded-xl px-4 py-2.5">{calendarError}</p>
+              )}
 
-                {/* Cal.com */}
-                <div className="glass rounded-2xl p-6 flex flex-col gap-4">
-                  <div className="flex items-center gap-3">
-                    <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 shrink-0" />
-                    <h3 className="font-semibold text-white">Cal.com</h3>
-                  </div>
-                  <p className="text-sm text-white/50">
-                    Nutze Cal.com für professionelles Terminmanagement.
-                  </p>
-                  <div className="flex flex-col gap-2">
-                    <input
-                      type="text"
-                      value={calcomApiKey}
-                      onChange={(e) => setCalcomApiKey(e.target.value)}
-                      placeholder="cal_live_xxxx…"
-                      className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white placeholder-white/30
-                        focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-                    />
-                    <details className="text-xs text-white/30">
-                      <summary className="cursor-pointer hover:text-white/50 transition-colors">
-                        Wo finde ich meinen API Key?
-                      </summary>
-                      <p className="mt-2 text-white/40 leading-relaxed">
-                        Cal.com → Settings → Developer → API Keys → New API Key
-                      </p>
-                    </details>
-                  </div>
-                  <button
-                    onClick={handleCalcom}
-                    disabled={calendarLoading || !calcomApiKey.trim()}
-                    className="w-full rounded-xl px-4 py-2.5 font-semibold text-sm text-white disabled:opacity-50
-                      transition-all duration-300 hover:shadow-[0_0_24px_rgba(59,130,246,0.4)]"
-                    style={{ background: 'linear-gradient(to right, #3B82F6, #F97316)' }}
-                  >
-                    {calendarLoading ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white spin" />
-                        Verbinde…
-                      </span>
-                    ) : (
-                      'Verbinden →'
-                    )}
-                  </button>
+              {/* Google Calendar */}
+              <div className="rounded-2xl p-5 flex items-center gap-4 transition-all hover:bg-white/[0.04] cursor-pointer"
+                style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}
+                onClick={() => { window.location.href = '/api/calendar/google/connect'; }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(66,133,244,0.08)' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" className="fancy-star"><defs><linearGradient id="ggl" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#4285F4"/><stop offset="33%" stopColor="#34A853"/><stop offset="66%" stopColor="#FBBC05"/><stop offset="100%" stopColor="#EA4335"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill="url(#ggl)"/></svg>
                 </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white">Google Calendar</p>
+                  <p className="text-[11px] text-white/30">Ein Klick — OAuth</p>
+                </div>
+                <span className="shrink-0 text-xs font-semibold bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Verbinden →</span>
+              </div>
 
-                {/* Ohne Kalender */}
-                <div className="glass rounded-2xl p-6 flex flex-col gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-white/50">
-                      <IconTickets size={18} />
-                    </div>
-                    <h3 className="font-semibold text-white">Ohne Kalender</h3>
+              {/* Microsoft Outlook */}
+              <div className="rounded-2xl p-5 flex items-center gap-4 transition-all hover:bg-white/[0.04] cursor-pointer"
+                style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}
+                onClick={async () => { try { const { url } = await getMicrosoftCalendarAuthUrl(); window.location.href = url; } catch {} }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(0,120,212,0.08)' }}>
+                  <span className="text-lg">🪟</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white">Microsoft Outlook</p>
+                  <p className="text-[11px] text-white/30">Office 365 / Outlook.com</p>
+                </div>
+                <span className="shrink-0 text-xs font-semibold bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Verbinden →</span>
+              </div>
+
+              {/* Cal.com */}
+              <div className="rounded-2xl p-5 transition-all" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(59,130,246,0.08)' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                   </div>
-                  <p className="text-sm text-white/50 flex-1">
-                    Dein Agent nimmt Terminwünsche entgegen und erstellt Tickets.
-                  </p>
-                  <button
-                    onClick={() => setStep('test')}
-                    className="w-full rounded-xl px-4 py-2.5 font-semibold text-sm text-white/70 border border-white/10
-                      hover:bg-white/5 hover:text-white transition-all duration-300"
-                  >
-                    Ohne Kalender weiter →
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-white">Cal.com</p>
+                    <p className="text-[11px] text-white/30">API Key</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <input type="text" value={calcomApiKey} onChange={(e) => setCalcomApiKey(e.target.value)}
+                    placeholder="cal_live_xxxx…"
+                    className="flex-1 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:border-orange-500/40 focus:ring-1 focus:ring-orange-500/20 transition-all"
+                    style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }} />
+                  <button onClick={handleCalcom} disabled={calendarLoading || !calcomApiKey.trim()}
+                    className="shrink-0 rounded-lg px-4 py-2 text-xs font-semibold disabled:opacity-40 cursor-pointer transition-all hover:brightness-110"
+                    style={{ background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.15)' }}>
+                    <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+                      {calendarLoading ? '…' : 'OK'}
+                    </span>
                   </button>
                 </div>
               </div>
 
-              {calendarError && (
-                <p className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 mb-4 flex items-center gap-2">
-                  <IconCapabilities size={14} className="shrink-0" />{calendarError}
-                </p>
-              )}
-            </>
+              {/* Chipy Kalender (eingebaut) */}
+              <div className="rounded-2xl p-5 flex items-center gap-4" style={{ background: 'rgba(249,115,22,0.03)', backdropFilter: 'blur(24px)', border: '1px solid rgba(249,115,22,0.1)' }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.12), rgba(6,182,212,0.08))' }}>
+                  <FoxLogo size={24} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-white">Chipy Kalender</p>
+                  <p className="text-[11px] text-white/30">Eingebaut — immer aktiv</p>
+                </div>
+                <span className="flex items-center gap-1.5 text-[10px] text-green-400/70 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-400" />Aktiv
+                </span>
+              </div>
+
+              {/* Skip */}
+              <button onClick={() => setStep('test')}
+                className="w-full rounded-xl px-4 py-3 text-sm font-medium transition-all cursor-pointer mt-1 hover:brightness-125"
+                style={{ background: 'rgba(249,115,22,0.04)', border: '1px solid rgba(249,115,22,0.15)' }}>
+                <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+                  Überspringen — später einrichten
+                </span>
+              </button>
+            </div>
           )}
         </div>
       )}
 
       {/* ── Step: Test ── */}
       {step === 'test' && (
-        <div className="relative z-10 w-full max-w-md text-center">
-          <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)' }}>
-              <IconDeploy size={30} className="text-white" />
+        <div className="relative z-10 w-full max-w-sm">
+          {/* Header */}
+          <div className="text-center mb-10">
+            <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.15), rgba(6,182,212,0.1))' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
             </div>
+            <h2 className="text-2xl font-bold text-white">Teste deinen Agent</h2>
+            <p className="text-sm text-white/30 mt-1">Sprich mit Chipy — direkt hier im Browser</p>
           </div>
-          <h2 className="text-2xl font-bold mb-2">Dein Agent ist live!</h2>
-          <p className="text-white/50 mb-8">
-            Teste ihn direkt — sprich mit deinem Agent über das Mikrofon.
-          </p>
 
-          {/* Call UI */}
-          <div className="glass rounded-2xl p-8 mb-6">
+          {/* Call Area */}
+          <div className="rounded-2xl min-h-[260px] flex flex-col items-center justify-center mb-6"
+            style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
+
             {callState === 'idle' && (
-              <button
-                onClick={startTestCall}
-                className="flex items-center gap-3 mx-auto rounded-full px-8 py-4 font-semibold text-white
-                  transition-all duration-300 hover:shadow-[0_0_40px_rgba(249,115,22,0.5)] hover:scale-105 cursor-pointer"
-                style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
-              >
-                <IconAgent size={20} /> Jetzt anrufen
-              </button>
+              <div className="flex flex-col items-center gap-6 py-10">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <FoxLogo size={40} />
+                </div>
+                <button onClick={startTestCall}
+                  className="rounded-xl px-8 py-3 font-semibold text-sm transition-all duration-200 hover:bg-white/[0.03] cursor-pointer"
+                  style={{ background: 'rgba(249,115,22,0.04)', border: '1px solid rgba(249,115,22,0.15)' }}>
+                  <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Gespräch starten</span>
+                </button>
+                <p className="text-[10px] text-white/15">Mikrofon wird benötigt</p>
+              </div>
             )}
 
             {callState === 'connecting' && (
-              <div className="flex items-center justify-center gap-3 text-orange-300">
-                <span className="w-5 h-5 rounded-full border-2 border-orange-400 border-t-transparent spin" />
-                Verbinde…
+              <div className="flex flex-col items-center gap-4 py-10">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center animate-pulse"
+                  style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.12), rgba(6,182,212,0.08))', border: '1px solid rgba(249,115,22,0.15)' }}>
+                  <FoxLogo size={40} glow />
+                </div>
+                <p className="text-xs text-white/30">Verbinde…</p>
               </div>
             )}
 
             {callState === 'active' && (
-              <div className="flex flex-col items-center gap-5">
-                <div
-                  className={`w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 ${
-                    agentTalking ? 'mic-pulse' : ''
-                  }`}
-                  style={{
-                    background: 'linear-gradient(135deg, #F97316, #06B6D4)',
-                    boxShadow: agentTalking
-                      ? '0 0 40px rgba(249,115,22,0.6), 0 0 80px rgba(6,182,212,0.3)'
-                      : '0 0 20px rgba(249,115,22,0.2)',
-                  }}
-                >
-                  <IconAgent size={36} className="text-white" />
+              <div className="flex flex-col items-center gap-4 py-8">
+                <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 ${agentTalking ? 'scale-110' : ''}`}
+                  style={agentTalking
+                    ? { background: 'linear-gradient(135deg, #F97316, #06B6D4)', boxShadow: '0 0 32px rgba(249,115,22,0.35)' }
+                    : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }
+                  }>
+                  <FoxLogo size={48} glow={agentTalking} />
                 </div>
-                <p className="text-sm">
-                  {agentTalking ? (
-                    <span className="text-cyan-300">Agent spricht…</span>
-                  ) : (
-                    <span className="text-orange-300">Warte auf dich…</span>
-                  )}
-                </p>
-                <button
-                  onClick={stopTestCall}
-                  className="flex items-center gap-2 rounded-full bg-red-500/20 border border-red-500/40 hover:bg-red-500/30
-                    px-6 py-2.5 text-red-300 text-sm font-medium transition-all duration-200"
-                >
+
+                <div className="flex items-end justify-center gap-[2px] h-5">
+                  {Array.from({ length: 20 }).map((_, i) => (
+                    <div key={i} className="w-[2px] rounded-full transition-all duration-75"
+                      style={{
+                        height: agentTalking ? `${Math.max(3, Math.round(3 + Math.random() * 14))}px` : '3px',
+                        backgroundColor: agentTalking ? '#f97316' : 'rgba(255,255,255,0.08)',
+                      }} />
+                  ))}
+                </div>
+
+                <p className="text-[11px] text-white/25">{agentTalking ? 'Chipy spricht…' : 'Hört zu…'}</p>
+
+                <button onClick={stopTestCall}
+                  className="rounded-lg px-4 py-2 text-[11px] font-medium text-red-400/70 hover:text-red-400 transition-all cursor-pointer"
+                  style={{ border: '1px solid rgba(239,68,68,0.12)' }}>
                   Auflegen
                 </button>
               </div>
             )}
 
             {callState === 'ended' && (
-              <div className="flex flex-col items-center gap-4">
-                <div className="flex justify-center"><IconStar size={40} className="text-green-400" /></div>
-                <p className="text-white/60 text-sm">Call beendet. Gut gemacht!</p>
-                <button
-                  onClick={() => { setCallState('idle'); setCallError(null); }}
-                  className="text-sm text-orange-400 hover:text-orange-300 underline underline-offset-2 transition-colors"
-                >
+              <div className="flex flex-col items-center gap-4 py-10">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.15)' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </div>
+                <p className="text-xs text-white/50">Gespräch beendet</p>
+                <button onClick={() => { setCallState('idle'); setCallError(null); }}
+                  className="text-[11px] font-medium bg-clip-text text-transparent cursor-pointer"
+                  style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
                   Nochmal testen
                 </button>
               </div>
             )}
 
             {callState === 'error' && callError && (
-              <div className="flex flex-col items-center gap-3">
-                <p className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5">
-                  <span className="inline-flex items-center gap-1.5"><IconCapabilities size={13} />{callError}</span>
-                </p>
-                <button
-                  onClick={() => { setCallState('idle'); setCallError(null); }}
-                  className="text-sm text-white/40 hover:text-white/60 transition-colors"
-                >
-                  Zurück
+              <div className="flex flex-col items-center gap-3 py-8 px-6">
+                <p className="text-[11px] text-red-400/70 text-center">{callError}</p>
+                <button onClick={() => { setCallState('idle'); setCallError(null); }}
+                  className="text-[11px] text-white/25 hover:text-white/50 transition-colors cursor-pointer">
+                  Erneut versuchen
                 </button>
               </div>
             )}
           </div>
 
-          <div className="flex flex-col gap-3">
-            <button
-              onClick={() => setStep('done')}
-              className="rounded-xl px-6 py-3 font-semibold text-white text-sm
-                transition-all duration-300 hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] hover:scale-[1.01]"
-              style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
-            >
-              Weiter →
+          {/* Actions */}
+          <div className="flex flex-col items-center gap-3">
+            <button onClick={() => setStep('done')}
+              className="w-full rounded-xl px-6 py-3 font-semibold text-sm text-white transition-all duration-200 hover:scale-[1.01] cursor-pointer"
+              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)', boxShadow: '0 4px 20px rgba(249,115,22,0.15)' }}>
+              Weiter
             </button>
-            <button
-              onClick={() => setStep('done')}
-              className="text-sm text-white/30 hover:text-white/50 transition-colors"
-            >
+            <button onClick={() => setStep('done')}
+              className="text-xs text-white/20 hover:text-white/45 transition-colors cursor-pointer">
               Überspringen
             </button>
           </div>
@@ -981,7 +1044,7 @@ export function OnboardingWizard({ onComplete }: Props) {
             )}
           </div>
           <button
-            onClick={onComplete}
+            onClick={() => { clearOnboardingState(); onComplete(); }}
             className="rounded-xl px-8 py-3 font-semibold text-white
               transition-all duration-300 hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] hover:scale-[1.01]"
             style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
@@ -990,6 +1053,102 @@ export function OnboardingWizard({ onComplete }: Props) {
           </button>
         </div>
       )}
+      {/* Upgrade Modal */}
+      {showUpgrade && (
+        <UpgradeModal onClose={() => setShowUpgrade(false)} />
+      )}
+    </div>
+  );
+}
+
+function UpgradeModal({ onClose }: { onClose: () => void }) {
+  const [loading, setLoading] = useState<string | null>(null);
+
+  const plans = [
+    { id: 'starter', name: 'Starter', price: '49', features: ['✦ Telefonnummer inklusive', '500 Min/Monat', '1 Agent'], accent: '#F97316' },
+    { id: 'pro', name: 'Pro', price: '149', features: ['✦ Telefonnummer inklusive', '2.000 Min/Monat', '3 Agents', 'Kalender-Integration', 'Priority Support'], accent: '#06B6D4', recommended: true },
+    { id: 'agency', name: 'Agency', price: '299', features: ['✦ Telefonnummer inklusive', '5.000 Min/Monat', '10 Agents', 'White-Label', 'Dedicated Support'], accent: '#8B5CF6' },
+  ];
+
+  async function handleSelect(planId: string) {
+    setLoading(planId);
+    try {
+      const { createCheckoutSession } = await import('../../lib/api.js');
+      const result = await createCheckoutSession(planId, 'month');
+      if (result.url) window.location.href = result.url;
+    } catch {
+      setLoading(null);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }}>
+      <div className="w-full max-w-2xl rounded-2xl p-6 sm:p-8" style={{ background: '#14141f', border: '1px solid rgba(255,255,255,0.08)' }}>
+        {/* Header with back button */}
+        <div className="flex items-center justify-between mb-6">
+          <button onClick={onClose} className="flex items-center gap-1.5 text-xs text-white/30 hover:text-white/60 transition-colors cursor-pointer">
+            <span className="text-base leading-none">‹</span> Zurück
+          </button>
+          <div className="text-center flex-1">
+            <h3 className="text-lg font-bold text-white">Plan wählen</h3>
+            <p className="text-xs text-white/30 mt-0.5">Wähle einen Plan um deine Telefonnummer zu aktivieren</p>
+          </div>
+          <div className="w-16" />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {plans.map(p => (
+            <div key={p.id} className="rounded-xl p-5 relative flex flex-col"
+              style={{
+                background: 'rgba(255,255,255,0.02)',
+                border: p.recommended ? '1px solid rgba(6,182,212,0.2)' : '1px solid rgba(255,255,255,0.06)',
+              }}>
+              {p.recommended && (
+                <span className="absolute left-1/2 -translate-x-1/2 rounded-full px-3 py-0.5"
+                  style={{ background: '#14141f', border: '1px solid rgba(6,182,212,0.2)', top: '-9px' }}>
+                  <span className="text-[10px] font-semibold bg-clip-text text-transparent"
+                    style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Empfohlen</span>
+                </span>
+              )}
+              <p className="text-sm font-bold bg-clip-text text-transparent mb-0.5" style={{ backgroundImage: `linear-gradient(135deg, ${p.accent}, #06B6D4)` }}>{p.name}</p>
+              <p className="text-2xl font-extrabold text-white mb-3">{p.price}<span className="text-sm text-white/30 font-normal">€/Mo</span></p>
+              <ul className="space-y-1.5 flex-1">
+                {p.features.map(f => {
+                  const hl = f.startsWith('✦');
+                  const label = hl ? f.slice(2) : f;
+                  return (
+                    <li key={f} className="text-[11px] flex items-center gap-1.5">
+                      {hl ? (
+                        <svg width="12" height="12" viewBox="0 0 24 24" className="shrink-0 fancy-star"><defs><linearGradient id="fgOb" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#F97316"/><stop offset="100%" stopColor="#06B6D4"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill="url(#fgOb)"/></svg>
+                      ) : (
+                        <span className="w-1 h-1 rounded-full shrink-0" style={{ background: p.accent }} />
+                      )}
+                      <span className={hl ? 'font-semibold bg-clip-text text-transparent' : 'text-white/40'}
+                        style={hl ? { backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' } : undefined}>
+                        {label}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <button
+                onClick={() => handleSelect(p.id)}
+                disabled={loading !== null}
+                className="w-full rounded-lg py-2.5 text-xs font-semibold disabled:opacity-50 transition-all hover:brightness-110 cursor-pointer mt-5"
+                style={{
+                  background: 'rgba(249,115,22,0.05)',
+                  border: '1px solid rgba(249,115,22,0.15)',
+                  borderRadius: '0.5rem',
+                }}
+              >
+                <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+                  {loading === p.id ? '…' : 'Auswählen'}
+                </span>
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

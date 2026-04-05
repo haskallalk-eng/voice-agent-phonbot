@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 const STORAGE_KEY = 'phonbot_cookie_consent';
 
-export function CookieBanner() {
+export function CookieBanner({ onShowDatenschutz }: { onShowDatenschutz?: () => void } = {}) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -39,10 +39,9 @@ export function CookieBanner() {
         {/* Text */}
         <div className="flex-1 text-sm text-white/70 leading-relaxed">
           Wir verwenden technisch notwendige Cookies. Keine Tracking-Cookies.{' '}
-          {/* TODO: Link to Datenschutz */}
-          <span className="text-orange-400 hover:text-orange-300 underline cursor-pointer transition-colors">
+          <button onClick={onShowDatenschutz} className="text-orange-400 hover:text-orange-300 underline cursor-pointer transition-colors">
             Datenschutz
-          </span>
+          </button>
         </div>
 
         {/* Buttons */}

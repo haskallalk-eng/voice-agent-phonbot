@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '../lib/auth.js';
 import { getAgentConfig, resendVerification, type AgentConfig } from '../lib/api.js';
 import { LandingPage } from './landing/index.js';
+import { ContactPage } from './landing/ContactPage.js';
 import { LoginPage } from './LoginPage.js';
 import { OnboardingWizard } from './onboarding/OnboardingWizard.js';
 import { Sidebar } from './Sidebar.js';
@@ -90,6 +91,12 @@ function Dashboard() {
   const [verifySent, setVerifySent] = useState(false);
 
   useEffect(() => {
+    // Check if onboarding was in progress (localStorage)
+    const obState = localStorage.getItem('phonbot_onboarding');
+    if (obState) {
+      setNeedsOnboarding(true);
+      return;
+    }
     getAgentConfig()
       .then((cfg: AgentConfig) => {
         setNeedsOnboarding(!cfg.businessName || cfg.businessName === 'Demo Business');
@@ -165,7 +172,34 @@ function Dashboard() {
         <Sidebar current={page} onNavigate={setPage} org={org} user={user} onLogout={logout} />
       </div>
 
-      <main className="flex-1 overflow-y-auto md:ml-0 mt-12 md:mt-0">
+      <main className="flex-1 overflow-y-auto md:ml-0 mt-12 md:mt-0 relative">
+        {/* Ambient glow orbs */}
+        <div className="pointer-events-none fixed inset-0 overflow-hidden" style={{ zIndex: 0 }}>
+          {[
+            { w: 600, t: '-5%', r: '-8%', c: '249,115,22', o: 0.08, b: 70, s: 40, d: 0 },
+            { w: 500, b2: '0%', l: '-5%', c: '6,182,212', o: 0.04, b: 60, s: 50, d: 0, rev: true },
+            { w: 400, t: '35%', r: '10%', c: '249,115,22', o: 0.06, b: 55, s: 55, d: -12 },
+            { w: 450, t: '10%', l: '15%', c: '6,182,212', o: 0.03, b: 55, s: 45, d: -18, rev: true },
+            { w: 300, b2: '15%', r: '25%', c: '249,115,22', o: 0.07, b: 50, s: 48, d: -8 },
+            { w: 350, t: '55%', l: '40%', c: '6,182,212', o: 0.03, b: 55, s: 60, d: -25, rev: true },
+            { w: 250, t: '5%', l: '50%', c: '249,115,22', o: 0.06, b: 45, s: 42, d: -5 },
+            { w: 280, t: '70%', l: '-2%', c: '6,182,212', o: 0.035, b: 50, s: 52, d: -20, rev: true },
+            { w: 220, t: '45%', l: '75%', c: '249,115,22', o: 0.05, b: 40, s: 46, d: -15 },
+            { w: 320, t: '20%', r: '-3%', c: '6,182,212', o: 0.035, b: 50, s: 56, d: -10, rev: true },
+            { w: 200, t: '80%', l: '30%', c: '249,115,22', o: 0.055, b: 40, s: 50, d: -22 },
+            { w: 270, b2: '10%', l: '60%', c: '6,182,212', o: 0.03, b: 45, s: 58, d: -14, rev: true },
+          ].map((g, i) => (
+            <div key={i} className="absolute rounded-full" style={{
+              width: g.w, height: g.w,
+              top: g.t ?? undefined, bottom: g.b2 ?? undefined,
+              left: g.l ?? undefined, right: g.r ?? undefined,
+              background: `radial-gradient(circle, rgba(${g.c},${g.o}) 0%, transparent 60%)`,
+              filter: `blur(${g.b}px)`,
+              animation: `ambient-drift ${g.s}s ease-in-out infinite${g.rev ? ' reverse' : ''}`,
+              animationDelay: `${g.d}s`,
+            }} />
+          ))}
+        </div>
         {/* Email verification banner */}
         {showVerifyBanner && emailVerified === false && (
           <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-3 flex items-center justify-between">
@@ -196,23 +230,23 @@ function Dashboard() {
         )}
 
         {page === 'home' && <DashboardHome onNavigate={setPage} />}
-        {page === 'agent' && <AgentBuilder />}
-        {page === 'test' && <TestConsole />}
+        {page === 'agent' && <AgentBuilder onNavigate={setPage} />}
+        {page === 'test' && <TestConsole onNavigate={setPage} />}
         {page === 'tickets' && <TicketInbox />}
         {page === 'logs' && <CallLog />}
         {page === 'billing' && <BillingPage />}
-        {page === 'phone' && <PhoneManager />}
+        {page === 'phone' && <PhoneManager onNavigate={setPage as (page: string) => void} />}
         {page === 'calendar' && <CalendarPage />}
         {page === 'insights' && <InsightsPage />}
       </main>
 
-      {/* Chippy Copilot — floating chat assistant, visible on all dashboard pages */}
+      {/* Chipy Copilot — floating chat assistant, visible on all dashboard pages */}
       <ChippyCopilot />
     </div>
   );
 }
 
-type Gate = 'landing' | 'login' | 'register' | 'app';
+type Gate = 'landing' | 'login' | 'register' | 'contact' | 'app';
 
 function AppGate() {
   const { token, user } = useAuth();
@@ -233,6 +267,17 @@ function AppGate() {
       <LandingPage
         onGoToRegister={() => setGate('register')}
         onGoToLogin={() => setGate('login')}
+        onGoToContact={() => setGate('contact')}
+      />
+    );
+  }
+
+  if (gate === 'contact') {
+    return (
+      <ContactPage
+        onGoToRegister={() => setGate('register')}
+        onGoToLogin={() => setGate('login')}
+        onBack={() => setGate('landing')}
       />
     );
   }

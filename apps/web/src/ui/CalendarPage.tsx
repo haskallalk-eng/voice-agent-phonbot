@@ -6,12 +6,15 @@ import {
   getChippyBookings, createChippyBooking, deleteChippyBooking,
 } from '../lib/api.js';
 import type { ChippySchedule, ChippyBlock, ChippyBooking } from '../lib/api.js';
+import { FoxLogo } from './FoxLogo.js';
 
 type CalendarStatus = { connected: boolean; provider: string | null; email: string | null; expired?: boolean; expiredProvider?: string; chippy?: { configured: boolean } };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function isoDate(d: Date) { return d.toISOString().slice(0, 10); }
+function isoDate(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 function todayISO() { return isoDate(new Date()); }
 
 function getDaysInMonth(year: number, month: number): Date[] {
@@ -35,12 +38,12 @@ function formatDateTime(iso: string) {
 
 type ProviderMeta = { label: string; color: string; bg: string; icon: string };
 const PROVIDER_META: Record<string, ProviderMeta> = {
-  google:    { label: 'Google Calendar',   color: '#22C55E', bg: 'rgba(34,197,94,0.12)',    icon: '🟢' },
+  google:    { label: 'Google Calendar',   color: '#4285F4', bg: 'rgba(66,133,244,0.08)',   icon: '📅' },
   microsoft: { label: 'Microsoft Outlook', color: '#0078D4', bg: 'rgba(0,120,212,0.12)',    icon: '🪟' },
   calcom:    { label: 'Cal.com',           color: '#3B82F6', bg: 'rgba(59,130,246,0.12)',   icon: '🔵' },
-  chippy:    { label: 'Chippy Kalender',   color: '#F97316', bg: 'rgba(249,115,22,0.12)',   icon: '🐾' },
+  chippy:    { label: 'Chipy Kalender',   color: '#F97316', bg: 'rgba(249,115,22,0.12)',   icon: '🐾' },
 };
-const DEFAULT_PROVIDER_META: ProviderMeta = { label: 'Chippy Kalender', color: '#F97316', bg: 'rgba(249,115,22,0.12)', icon: '🐾' };
+const DEFAULT_PROVIDER_META: ProviderMeta = { label: 'Chipy Kalender', color: '#F97316', bg: 'rgba(249,115,22,0.12)', icon: '🐾' };
 
 // ── Booking Modal ─────────────────────────────────────────────────────────────
 
@@ -473,8 +476,12 @@ function SettingsPanel({
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [newBlockDate, setNewBlockDate] = useState('');
+  const [newBlockEndDate, setNewBlockEndDate] = useState('');
+  const [newBlockStartTime, setNewBlockStartTime] = useState('');
+  const [newBlockEndTime, setNewBlockEndTime] = useState('');
   const [newBlockReason, setNewBlockReason] = useState('');
   const [blockError, setBlockError] = useState<string | null>(null);
+  const [blockMode, setBlockMode] = useState<'day' | 'range' | 'hours'>('day');
 
   async function handleSave() {
     setSaving(true); setSaved(false); setSaveError(null);
@@ -499,79 +506,192 @@ function SettingsPanel({
     }
   }
 
+  async function handleAddRange() {
+    if (!newBlockDate || !newBlockEndDate) return;
+    setBlockError(null);
+    try {
+      // Create a block for each day in the range
+      const start = new Date(newBlockDate + 'T00:00:00');
+      const end = new Date(newBlockEndDate + 'T00:00:00');
+      const newBlocks: ChippyBlock[] = [];
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dateStr = isoDate(d);
+        const res = await addChippyBlock(dateStr, { reason: newBlockReason || undefined });
+        newBlocks.push({ id: res.id, date: dateStr, start_time: null, end_time: null, reason: newBlockReason || null });
+      }
+      setBlocks(prev => [...prev, ...newBlocks]);
+      setNewBlockDate(''); setNewBlockEndDate(''); setNewBlockReason('');
+    } catch (e: unknown) {
+      setBlockError((e instanceof Error ? e.message : null) ?? 'Fehler');
+    }
+  }
+
+  async function handleAddHoursBlock() {
+    if (!newBlockDate || !newBlockStartTime || !newBlockEndTime) return;
+    setBlockError(null);
+    try {
+      const res = await addChippyBlock(newBlockDate, {
+        start_time: newBlockStartTime,
+        end_time: newBlockEndTime,
+        reason: newBlockReason || undefined,
+      });
+      setBlocks(prev => [...prev, { id: res.id, date: newBlockDate, start_time: newBlockStartTime, end_time: newBlockEndTime, reason: newBlockReason || null }]);
+      setNewBlockDate(''); setNewBlockStartTime(''); setNewBlockEndTime(''); setNewBlockReason('');
+    } catch (e: unknown) {
+      setBlockError((e instanceof Error ? e.message : null) ?? 'Fehler');
+    }
+  }
+
   async function handleRemoveBlock(id: string) {
     try { await removeChippyBlock(id); setBlocks(prev => prev.filter(b => b.id !== id)); } catch {}
   }
 
+  const inputClass = "rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/40 focus:ring-1 focus:ring-orange-500/20 transition-all";
+  const inputStyle = { background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Weekly schedule */}
       <div>
-        <p className="text-xs font-semibold text-white/40 uppercase tracking-widest mb-3">Wöchentliche Verfügbarkeit</p>
-        <div className="space-y-2">
-          {DAY_ORDER.map(dow => {
+        <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.15em] mb-4">Wöchentliche Verfügbarkeit</p>
+        <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+          {DAY_ORDER.map((dow, i) => {
             const day = schedule[dow] ?? DEFAULT_SCHEDULE[dow]!;
             return (
-              <div key={dow} className="flex items-center gap-3">
+              <div key={dow} className="flex items-center gap-4 px-5 py-3.5"
+                style={i < DAY_ORDER.length - 1 ? { borderBottom: '1px solid rgba(255,255,255,0.03)' } : undefined}>
                 <button
                   aria-pressed={day.enabled}
                   onClick={() => setSchedule(s => ({ ...s, [dow]: { ...day, enabled: !day.enabled } }))}
-                  className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${day.enabled ? 'bg-orange-500' : 'bg-white/10'}`}
+                  className="relative w-9 h-5 rounded-full transition-all shrink-0 cursor-pointer"
+                  style={day.enabled ? { background: 'linear-gradient(135deg, #F97316, #06B6D4)' } : { background: 'rgba(255,255,255,0.08)' }}
                 >
-                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${day.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                  <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${day.enabled ? 'translate-x-4' : 'translate-x-0'}`} />
                 </button>
-                <span className={`w-24 text-sm ${day.enabled ? 'text-white' : 'text-white/30'}`}>{DAY_NAMES[dow]}</span>
+                <span className={`w-20 text-[13px] font-medium ${day.enabled ? 'text-white' : 'text-white/25'}`}>{DAY_NAMES[dow]}</span>
                 {day.enabled ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-1 justify-end">
                     <input type="time" value={day.start} onChange={e => setSchedule(s => ({ ...s, [dow]: { ...day, start: e.target.value } }))}
-                      className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500/50" />
-                    <span className="text-white/30 text-xs">bis</span>
+                      className={inputClass} style={inputStyle} />
+                    <span className="text-white/20 text-[11px]">–</span>
                     <input type="time" value={day.end} onChange={e => setSchedule(s => ({ ...s, [dow]: { ...day, end: e.target.value } }))}
-                      className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500/50" />
+                      className={inputClass} style={inputStyle} />
                   </div>
                 ) : (
-                  <span className="text-xs text-white/20">nicht verfügbar</span>
+                  <span className="text-[11px] text-white/15 flex-1 text-right">Geschlossen</span>
                 )}
               </div>
             );
           })}
         </div>
-        {saveError && <p className="text-sm text-red-300 mt-3">⚠️ {saveError}</p>}
+        {saveError && <p className="text-xs text-red-300 mt-3">{saveError}</p>}
         <button onClick={handleSave} disabled={saving}
-          className="mt-4 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all disabled:opacity-40"
-          style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}>
-          {saving ? 'Speichern…' : saved ? 'Gespeichert ✓' : 'Verfügbarkeit speichern'}
+          className="mt-4 w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition-all disabled:opacity-40 hover:scale-[1.01] cursor-pointer"
+          style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)', boxShadow: '0 4px 20px rgba(249,115,22,0.15)' }}>
+          {saving ? 'Speichern…' : saved ? 'Gespeichert ✓' : 'Speichern'}
         </button>
       </div>
 
       {/* Date blocks */}
-      <div className="pt-4 border-t border-white/5">
-        <p className="text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">Ausnahmetage</p>
-        <p className="text-xs text-white/30 mb-3">Urlaub, Krankheit oder einzelne freie Tage.</p>
+      <div>
+        <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.15em] mb-2">Ausnahmen & Sperrzeiten</p>
+        <p className="text-[11px] text-white/20 mb-4">Urlaub, Krankheit, Mittagspause oder einzelne Stunden.</p>
+
         {blocks.length > 0 && (
-          <div className="space-y-1.5 mb-3">
-            {blocks.map(b => (
-              <div key={b.id} className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2">
-                <div>
-                  <span className="text-sm text-white">{new Date(b.date + 'T00:00:00').toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
-                  {b.reason && <span className="ml-2 text-xs text-white/40">{b.reason}</span>}
+          <div className="rounded-2xl overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
+            {blocks.map((b, i) => (
+              <div key={b.id} className="flex items-center justify-between px-5 py-3"
+                style={i < blocks.length - 1 ? { borderBottom: '1px solid rgba(255,255,255,0.03)' } : undefined}>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-[13px] text-white/70">{new Date(b.date + 'T00:00:00').toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span>
+                  {b.start_time && b.end_time ? (
+                    <span className="text-[10px] text-amber-400/60 font-medium">{b.start_time.slice(0, 5)} – {b.end_time.slice(0, 5)}</span>
+                  ) : (
+                    <span className="text-[10px] text-red-400/50 font-medium">Ganztägig</span>
+                  )}
+                  {b.reason && <span className="text-[10px] text-white/25">{b.reason}</span>}
                 </div>
-                <button onClick={() => handleRemoveBlock(b.id)} className="text-xs text-red-400/60 hover:text-red-400 transition-colors">Entfernen</button>
+                <button onClick={() => handleRemoveBlock(b.id)} className="text-white/15 hover:text-red-400 transition-colors shrink-0 ml-2 cursor-pointer">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
               </div>
             ))}
           </div>
         )}
-        {blockError && <p className="text-sm text-red-300 mb-2">⚠️ {blockError}</p>}
-        <div className="flex gap-2">
-          <input type="date" value={newBlockDate} min={todayISO()} onChange={e => setNewBlockDate(e.target.value)}
-            className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-orange-500/50" />
-          <input type="text" value={newBlockReason} onChange={e => setNewBlockReason(e.target.value)} placeholder="Grund (optional)"
-            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-1 focus:ring-orange-500/50" />
-          <button onClick={handleAddBlock} disabled={!newBlockDate}
-            className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-white/10 hover:bg-white/15 disabled:opacity-30 transition-all">
-            Sperren
-          </button>
+
+        {blockError && <p className="text-xs text-red-300 mb-3">{blockError}</p>}
+
+        {/* Block type toggle */}
+        <div className="flex gap-1.5 mb-4 rounded-xl p-1" style={{ background: 'rgba(255,255,255,0.03)' }}>
+          {(['day', 'range', 'hours'] as const).map(m => (
+            <button key={m} onClick={() => setBlockMode(m)}
+              className={`flex-1 py-2 rounded-lg text-[11px] font-medium transition-all cursor-pointer ${
+                blockMode === m ? 'bg-white/8' : 'text-white/30 hover:text-white/50'
+              }`}>
+              {blockMode === m ? (
+                <span className="bg-clip-text text-transparent font-semibold" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>{m === 'day' ? 'Tag' : m === 'range' ? 'Zeitraum' : 'Uhrzeiten'}</span>
+              ) : (m === 'day' ? 'Tag' : m === 'range' ? 'Zeitraum' : 'Uhrzeiten')}
+            </button>
+          ))}
         </div>
+
+        {blockMode === 'day' && (
+          <div className="flex gap-2">
+            <input type="date" value={newBlockDate} min={todayISO()} onChange={e => setNewBlockDate(e.target.value)}
+              className={`${inputClass} flex-1`} style={inputStyle} />
+            <input type="text" value={newBlockReason} onChange={e => setNewBlockReason(e.target.value)} placeholder="Grund"
+              className={`${inputClass} flex-1 placeholder-white/15`} style={inputStyle} />
+            <button onClick={handleAddBlock} disabled={!newBlockDate}
+              className="shrink-0 rounded-lg px-4 py-2 text-xs font-semibold disabled:opacity-30 transition-all hover:brightness-110 cursor-pointer"
+              style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
+              <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Sperren</span>
+            </button>
+          </div>
+        )}
+
+        {blockMode === 'range' && (
+          <div className="space-y-2">
+            <div className="flex gap-2 items-center">
+              <input type="date" value={newBlockDate} min={todayISO()} onChange={e => setNewBlockDate(e.target.value)}
+                className={`${inputClass} flex-1`} style={inputStyle} />
+              <span className="text-white/20 text-[11px]">–</span>
+              <input type="date" value={newBlockEndDate} min={newBlockDate || todayISO()} onChange={e => setNewBlockEndDate(e.target.value)}
+                className={`${inputClass} flex-1`} style={inputStyle} />
+            </div>
+            <div className="flex gap-2">
+              <input type="text" value={newBlockReason} onChange={e => setNewBlockReason(e.target.value)} placeholder="Grund"
+                className={`${inputClass} flex-1 placeholder-white/15`} style={inputStyle} />
+              <button onClick={handleAddRange} disabled={!newBlockDate || !newBlockEndDate}
+                className="shrink-0 rounded-lg px-4 py-2 text-xs font-semibold disabled:opacity-30 transition-all hover:brightness-110 cursor-pointer"
+                style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
+                <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Sperren</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {blockMode === 'hours' && (
+          <div className="space-y-2">
+            <div className="flex gap-2 items-center">
+              <input type="date" value={newBlockDate} min={todayISO()} onChange={e => setNewBlockDate(e.target.value)}
+                className={`${inputClass} flex-1`} style={inputStyle} />
+              <input type="time" value={newBlockStartTime} onChange={e => setNewBlockStartTime(e.target.value)}
+                className={inputClass} style={inputStyle} />
+              <span className="text-white/20 text-[11px]">–</span>
+              <input type="time" value={newBlockEndTime} onChange={e => setNewBlockEndTime(e.target.value)}
+                className={inputClass} style={inputStyle} />
+            </div>
+            <div className="flex gap-2">
+              <input type="text" value={newBlockReason} onChange={e => setNewBlockReason(e.target.value)} placeholder="Grund"
+                className={`${inputClass} flex-1 placeholder-white/15`} style={inputStyle} />
+              <button onClick={handleAddHoursBlock} disabled={!newBlockDate || !newBlockStartTime || !newBlockEndTime}
+                className="shrink-0 rounded-lg px-4 py-2 text-xs font-semibold disabled:opacity-30 transition-all hover:brightness-110 cursor-pointer"
+                style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
+                <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Sperren</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -621,7 +741,8 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
         </div>
       )}
 
-      {status?.connected && meta && (
+      {/* Connected provider (if any external one) */}
+      {status?.connected && meta && status.provider !== 'chippy' && (
         <div className="rounded-2xl p-5 border border-white/10" style={{ background: meta.bg }}>
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -644,78 +765,118 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
         </div>
       )}
 
-      {!status?.connected && (
-        <div className="space-y-3">
-          <p className="text-xs text-white/40 mb-3">
-            Verbinde einen oder mehrere Kalender. Termine werden automatisch in alle verbundenen Kalender gebucht.
-          </p>
-          {(status as CalendarStatus | null)?.expired && (
-            <div className="rounded-xl px-4 py-3 mb-2 text-xs" style={{ background: 'rgba(251,146,60,0.1)', border: '1px solid rgba(251,146,60,0.2)', color: '#FB923C' }}>
-              ⚠️ Deine {(status as CalendarStatus).expiredProvider === 'google' ? 'Google' : (status as CalendarStatus).expiredProvider === 'microsoft' ? 'Microsoft' : ''}-Verbindung ist abgelaufen. Bitte neu verbinden.
-            </div>
-          )}
-
-          {/* Google */}
-          <div className="rounded-2xl p-5 border border-white/10 hover:border-white/20 transition-all" style={{ background: (PROVIDER_META.google ?? DEFAULT_PROVIDER_META).bg }}>
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl bg-white/5">🟢</div>
-                <div>
-                  <p className="text-sm font-semibold text-white">Google Calendar</p>
-                  <p className="text-xs text-white/40">OAuth 2.0</p>
-                </div>
-              </div>
-              <button onClick={async () => { setGoogleLoading(true); try { const { url } = await getGoogleCalendarAuthUrl(); window.location.href = url; } catch { setGoogleLoading(false); } }}
-                disabled={googleLoading}
-                className="shrink-0 rounded-xl px-4 py-2 font-semibold text-xs text-white disabled:opacity-50 transition-all hover:opacity-90"
-                style={{ background: 'linear-gradient(135deg, #22C55E, #06B6D4)' }}>
-                {googleLoading ? 'Verbinde…' : 'Verbinden →'}
-              </button>
-            </div>
+      {/* Always show provider options (not hidden behind connected check) */}
+      <div className="space-y-3">
+        <p className="text-xs text-white/40 mb-3">
+          Verbinde einen Kalender, damit dein Agent Termine prüfen und buchen kann.
+        </p>
+        {(status as CalendarStatus | null)?.expired && (
+          <div className="rounded-xl px-4 py-3 mb-2 text-xs" style={{ background: 'rgba(251,146,60,0.1)', border: '1px solid rgba(251,146,60,0.2)', color: '#FB923C' }}>
+            ⚠️ Deine {(status as CalendarStatus).expiredProvider === 'google' ? 'Google' : (status as CalendarStatus).expiredProvider === 'microsoft' ? 'Microsoft' : ''}-Verbindung ist abgelaufen. Bitte neu verbinden.
           </div>
+        )}
+
+        <div className="space-y-3">
+          {/* Google */}
+          {(() => {
+            const isConnected = status?.connected && status.provider === 'google';
+            return (
+              <div className="flex items-center gap-4 rounded-2xl px-5 py-4 hover:bg-white/[0.04] transition-all" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(66,133,244,0.08)' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" className="fancy-star"><defs><linearGradient id="gglCal" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#4285F4"/><stop offset="33%" stopColor="#34A853"/><stop offset="66%" stopColor="#FBBC05"/><stop offset="100%" stopColor="#EA4335"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill="url(#gglCal)"/></svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-semibold text-white">Google Calendar</p>
+                  <p className="text-[11px] text-white/30">{isConnected ? status.email ?? 'Verbunden' : 'OAuth 2.0'}</p>
+                </div>
+                {isConnected ? (
+                  <span className="flex items-center gap-1.5 text-[11px] text-green-400/70 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-green-400" />Verbunden</span>
+                ) : (
+                  <button onClick={async () => { setGoogleLoading(true); try { const { url } = await getGoogleCalendarAuthUrl(); window.location.href = url; } catch { setGoogleLoading(false); } }}
+                    disabled={googleLoading}
+                    className="shrink-0 rounded-lg px-4 py-2 font-semibold text-xs text-white disabled:opacity-50 transition-all hover:brightness-110 cursor-pointer"
+                    style={{ background: 'linear-gradient(135deg, #4285F4, #34A853, #FBBC05, #EA4335)', backgroundSize: '300% 300%', animation: 'fancy-bg 4s ease infinite' }}>
+                    {googleLoading ? 'Verbinde…' : 'Verbinden'}
+                  </button>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Microsoft */}
-          <div className="rounded-2xl p-5 border border-white/10 hover:border-white/20 transition-all" style={{ background: (PROVIDER_META.microsoft ?? DEFAULT_PROVIDER_META).bg }}>
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl bg-white/5">🪟</div>
-                <div>
-                  <p className="text-sm font-semibold text-white">Microsoft Outlook</p>
-                  <p className="text-xs text-white/40">Office 365 / Outlook.com</p>
+          {(() => {
+            const isConnected = status?.connected && status.provider === 'microsoft';
+            return (
+              <div className="flex items-center gap-4 rounded-2xl px-5 py-4 hover:bg-white/[0.04] transition-all" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-lg" style={{ background: 'rgba(0,120,212,0.08)' }}>🪟</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-semibold text-white">Microsoft Outlook</p>
+                  <p className="text-[11px] text-white/30">{isConnected ? status.email ?? 'Verbunden' : 'Office 365 / Outlook.com'}</p>
                 </div>
+                {isConnected ? (
+                  <span className="flex items-center gap-1.5 text-[11px] text-green-400/70 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-green-400" />Verbunden</span>
+                ) : (
+                  <button onClick={async () => { setMicrosoftLoading(true); try { const { url } = await getMicrosoftCalendarAuthUrl(); window.location.href = url; } catch { setMicrosoftLoading(false); } }}
+                    disabled={microsoftLoading}
+                    className="shrink-0 rounded-lg px-4 py-2 font-semibold text-xs text-white disabled:opacity-50 transition-all hover:brightness-110 cursor-pointer"
+                    style={{ background: 'linear-gradient(135deg, #0078D4, #00BCF2)' }}>
+                    {microsoftLoading ? 'Verbinde…' : 'Verbinden'}
+                  </button>
+                )}
               </div>
-              <button onClick={async () => { setMicrosoftLoading(true); try { const { url } = await getMicrosoftCalendarAuthUrl(); window.location.href = url; } catch { setMicrosoftLoading(false); } }}
-                disabled={microsoftLoading}
-                className="shrink-0 rounded-xl px-4 py-2 font-semibold text-xs text-white disabled:opacity-50 transition-all hover:opacity-90"
-                style={{ background: 'linear-gradient(135deg, #0078D4, #00BCF2)' }}>
-                {microsoftLoading ? 'Verbinde…' : 'Verbinden →'}
-              </button>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* Cal.com */}
-          <div className="rounded-2xl p-5 border border-white/10 hover:border-white/20 transition-all" style={{ background: (PROVIDER_META.calcom ?? DEFAULT_PROVIDER_META).bg }}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl bg-white/5">🔵</div>
-              <div>
-                <p className="text-sm font-semibold text-white">Cal.com</p>
-                <p className="text-xs text-white/40">API Key</p>
+          {(() => {
+            const isConnected = status?.connected && status.provider === 'calcom';
+            return (
+              <div className="rounded-2xl px-5 py-4 hover:bg-white/[0.04] transition-all" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(59,130,246,0.08)' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-white">Cal.com</p>
+                    <p className="text-[11px] text-white/30">{isConnected ? 'Verbunden' : 'API Key'}</p>
+                  </div>
+                  {isConnected && (
+                    <span className="flex items-center gap-1.5 text-[11px] text-green-400/70 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-green-400" />Verbunden</span>
+                  )}
+                </div>
+                {!isConnected && (
+                  <div className="flex gap-2 mt-3">
+                    <input type="text" value={calcomKey} onChange={e => setCalcomKey(e.target.value)} placeholder="cal_live_xxxx…"
+                      className="flex-1 rounded-lg px-3 py-2 text-sm text-white placeholder-white/15 focus:outline-none focus:border-orange-500/40 focus:ring-1 focus:ring-orange-500/20 transition-all"
+                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }} />
+                    <button onClick={async () => { setCalcomLoading(true); setCalcomError(null); try { await connectCalcom(calcomKey); setCalcomKey(''); await loadStatus(); } catch (e: unknown) { setCalcomError((e instanceof Error ? e.message : null) ?? 'Fehler'); } finally { setCalcomLoading(false); } }}
+                      disabled={calcomLoading || !calcomKey.trim()}
+                      className="shrink-0 rounded-lg px-4 py-2 text-xs font-semibold disabled:opacity-40 cursor-pointer transition-all hover:brightness-110"
+                      style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.12)' }}>
+                      <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+                        {calcomLoading ? '…' : 'Verbinden'}
+                      </span>
+                    </button>
+                    {calcomError && <p className="text-xs text-red-300 mt-2">{calcomError}</p>}
+                  </div>
+                )}
               </div>
+            );
+          })()}
+
+          {/* Chipy (built-in) */}
+          <div className="flex items-center gap-4 rounded-2xl px-5 py-4" style={{ background: 'rgba(249,115,22,0.03)', backdropFilter: 'blur(24px)', border: '1px solid rgba(249,115,22,0.08)' }}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.1), rgba(6,182,212,0.06))' }}>
+              <FoxLogo size={24} />
             </div>
-            <div className="flex gap-2">
-              <input type="text" value={calcomKey} onChange={e => setCalcomKey(e.target.value)} placeholder="cal_live_xxxx…"
-                className="flex-1 rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-1 focus:ring-blue-500/50" />
-              <button onClick={async () => { setCalcomLoading(true); setCalcomError(null); try { await connectCalcom(calcomKey); setCalcomKey(''); await loadStatus(); } catch (e: unknown) { setCalcomError((e instanceof Error ? e.message : null) ?? 'Fehler'); } finally { setCalcomLoading(false); } }}
-                disabled={calcomLoading || !calcomKey.trim()}
-                className="px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50 transition-all"
-                style={{ background: 'linear-gradient(135deg, #3B82F6, #F97316)' }}>
-                {calcomLoading ? '…' : 'OK'}
-              </button>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-semibold text-white">Chipy Kalender</p>
+              <p className="text-[11px] text-white/30">Eingebaut — immer aktiv</p>
             </div>
-            {calcomError && <p className="text-xs text-red-300 mt-2">⚠️ {calcomError}</p>}
+            <span className="flex items-center gap-1.5 text-[11px] text-green-400/70 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-green-400" />Aktiv</span>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -728,7 +889,7 @@ export function CalendarPage() {
   const [tab, setTab] = useState<Tab>('calendar');
   const [calendarStatus, setCalendarStatus] = useState<CalendarStatus | null>(null);
 
-  // Chippy data (shared between calendar + settings)
+  // Chipy data (shared between calendar + settings)
   const [schedule, setSchedule] = useState<ChippySchedule>(DEFAULT_SCHEDULE);
   const [blocks, setBlocks] = useState<ChippyBlock[]>([]);
   const [bookings, setBookings] = useState<ChippyBooking[]>([]);
@@ -738,7 +899,7 @@ export function CalendarPage() {
   const [showAddBooking, setShowAddBooking] = useState(false);
 
   // Load chippy data + bookings for a 3-month window
-  const loadChippy = useCallback(async () => {
+  const loadChipy = useCallback(async () => {
     try {
       const [chippy, bkgs] = await Promise.all([
         getChippyCalendar(),
@@ -753,7 +914,7 @@ export function CalendarPage() {
     } catch {}
   }, []);
 
-  useEffect(() => { loadChippy(); }, [loadChippy]);
+  useEffect(() => { loadChipy(); }, [loadChipy]);
 
   async function handleDeleteBooking(id: string) {
     try {
@@ -808,7 +969,7 @@ export function CalendarPage() {
               {calendarStatus?.provider && calendarStatus.provider !== 'chippy'
                 ? `Verbunden mit ${providerMeta.label}`
                 : calendarStatus?.connected
-                  ? 'Chippy Kalender aktiv — verbinde optional einen externen Kalender'
+                  ? 'Chipy Kalender aktiv — verbinde optional einen externen Kalender'
                   : 'Kein Kalender konfiguriert — richte Verfügbarkeit ein oder verbinde einen Kalender'}
             </p>
           </div>
@@ -823,14 +984,16 @@ export function CalendarPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-white/[0.04] rounded-2xl p-1 mb-6">
+        <div className="flex gap-1 rounded-2xl p-1 mb-6" style={{ background: 'rgba(255,255,255,0.03)' }}>
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={[
-                'flex-1 py-2 rounded-xl text-sm font-medium transition-all duration-200',
-                tab === t.id ? 'bg-white/10 text-white shadow-sm' : 'text-white/40 hover:text-white/60',
+                'flex-1 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer',
+                tab === t.id ? 'bg-white/8' : 'text-white/35 hover:text-white/55',
               ].join(' ')}>
-              {t.label}
+              {tab === t.id ? (
+                <span className="bg-clip-text text-transparent font-semibold" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>{t.label}</span>
+              ) : t.label}
             </button>
           ))}
         </div>
@@ -850,7 +1013,7 @@ export function CalendarPage() {
                 Verbinde deinen Kalender für automatische Terminbuchungen
               </p>
               <p className="text-xs text-white/45 leading-relaxed">
-                Phonbot unterstützt <strong className="text-white/70">Google Calendar</strong>, <strong className="text-white/70">Microsoft Outlook</strong>, <strong className="text-white/70">Cal.com</strong> und den <strong className="text-white/70">eingebauten Chippy Kalender</strong>.
+                Phonbot unterstützt <strong className="text-white/70">Google Calendar</strong>, <strong className="text-white/70">Microsoft Outlook</strong>, <strong className="text-white/70">Cal.com</strong> und den <strong className="text-white/70">eingebauten Chipy Kalender</strong>.
                 Du kannst auch mehrere Kalender gleichzeitig verbinden — Termine werden in alle synchronisiert.
               </p>
               <button
@@ -900,7 +1063,7 @@ export function CalendarPage() {
           <div className="rounded-2xl border border-white/10 p-5" style={{ background: 'rgba(255,255,255,0.02)' }}>
             <p className="text-xs text-white/40 mb-4">
               {calendarStatus?.connected
-                ? 'Dein externer Kalender ist aktiv. Chippy dient als Fallback.'
+                ? 'Dein externer Kalender ist aktiv. Chipy dient als Fallback.'
                 : 'Kein externer Kalender? Trag hier deine Verfügbarkeit ein — der Agent nutzt diese automatisch.'}
             </p>
             <SettingsPanel

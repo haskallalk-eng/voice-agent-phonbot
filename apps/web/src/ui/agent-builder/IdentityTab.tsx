@@ -29,7 +29,7 @@ export function IdentityTab({
 }: IdentityTabProps) {
   return (
     <>
-      <SectionCard title="Identit\ät" icon={IconAgent} className={voiceDropdownOpen ? 'relative z-10 overflow-visible' : ''}>
+      <SectionCard title="Identität" icon={IconAgent} className={voiceDropdownOpen ? 'relative z-10 overflow-visible' : ''}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="Agent-Name">
             <Input value={config.name} onChange={(e) => onUpdate({ name: e.target.value })} placeholder="z.B. Lisa" />
@@ -65,7 +65,7 @@ export function IdentityTab({
       <SectionCard title="Business-Informationen" icon={IconBuilding}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="Firmenname">
-            <Input value={config.businessName} onChange={(e) => onUpdate({ businessName: e.target.value })} placeholder="Friseur M\üller" />
+            <Input value={config.businessName} onChange={(e) => onUpdate({ businessName: e.target.value })} placeholder="Friseur Müller" />
           </Field>
           <Field label="Adresse">
             <Input value={config.address} onChange={(e) => onUpdate({ address: e.target.value })} placeholder="Hauptstr. 12, 10115 Berlin" />
@@ -75,11 +75,11 @@ export function IdentityTab({
           <Field label="Beschreibung">
             <TextArea rows={2} value={config.businessDescription} onChange={(e) => onUpdate({ businessDescription: e.target.value })} placeholder="Was macht euer Unternehmen?" />
           </Field>
-          <Field label="\Öffnungszeiten">
-            <TextArea rows={2} value={config.openingHours} onChange={(e) => onUpdate({ openingHours: e.target.value })} placeholder="Mo\–Fr 9\–18 Uhr, Sa 10\–14 Uhr" />
+          <Field label="Öffnungszeiten">
+            <TextArea rows={2} value={config.openingHours} onChange={(e) => onUpdate({ openingHours: e.target.value })} placeholder="Mo–Fr 9–18 Uhr, Sa 10–14 Uhr" />
           </Field>
           <Field label="Services / Angebote">
-            <TextArea rows={2} value={config.servicesText} onChange={(e) => onUpdate({ servicesText: e.target.value })} placeholder="Haarschnitt, F\ärben, Beratung\…" />
+            <TextArea rows={2} value={config.servicesText} onChange={(e) => onUpdate({ servicesText: e.target.value })} placeholder="Haarschnitt, Färben, Beratung…" />
           </Field>
         </div>
       </SectionCard>

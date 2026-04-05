@@ -1,5 +1,5 @@
 import React from 'react';
-import { IconScissors, IconWrench, IconMedical, IconBroom, IconRestaurant, IconCar, IconPhone, IconBolt, IconStar, IconCalendar, IconTickets, IconCalls, IconSettings } from '../PhonbotIcons.js';
+import { IconScissors, IconWrench, IconMedical, IconBroom, IconRestaurant, IconCar, IconPhone, IconBolt, IconStar, IconCalendar, IconTickets, IconCalls, IconSettings, IconInsights } from '../PhonbotIcons.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,9 +35,9 @@ export const FEATURES: FeatureItem[] = [
   { Icon: IconBolt, title: 'In 2 Minuten live', desc: 'Template wählen, Daten eintragen, fertig. Kein Techniker, kein Setup-Marathon.' },
   { Icon: IconPhone, title: 'Kein Anruf geht verloren', desc: '24/7 erreichbar — auch nachts und am Wochenende. Jeder Anruf ist ein möglicher Auftrag.' },
   { Icon: IconSettings, title: 'Deine Nummer bleibt', desc: 'Einfach weiterleiten. Kein Nummernwechsel, keine Unterbrechung für deine Kunden.' },
-  { Icon: IconCalendar, title: 'Termine? Erledigt.', desc: 'Phonbot bucht direkt in deinen Kalender — ohne Rückfragen, ohne Wartezeit.' },
-  { Icon: IconTickets, title: 'Nichts bleibt liegen', desc: 'Was Phonbot nicht sofort löst, wird zum strukturierten Ticket. Kein Zettelchaos.' },
-  { Icon: IconCalls, title: 'Voller Überblick', desc: 'Anrufe, Buchungen, Tickets — alles auf einem Dashboard. Du siehst was läuft.' },
+  { Icon: IconCalendar, title: 'Termine? Erledigt.', desc: 'Chipy bucht direkt in deinen Kalender — ohne Rückfragen, ohne Wartezeit.' },
+  { Icon: IconTickets, title: 'Nichts bleibt liegen', desc: 'Was Chipy nicht sofort löst, wird zum strukturierten Ticket. Kein Zettelchaos.' },
+  { Icon: IconInsights, title: 'Wird mit jedem Anruf besser', desc: 'Chipy analysiert Gespräche und optimiert sich selbst — dein Agent lernt aus jeder Interaktion.' },
 ];
 
 export const STEPS = [
@@ -53,7 +53,7 @@ export const FAQ_ITEMS = [
   },
   {
     q: 'Kann ich meine bisherige Telefonnummer behalten?',
-    a: 'Ja. Richte eine Rufweiterleitung zu deiner Phonbot-Nummer ein. Deine bestehende Nummer bleibt unverändert.',
+    a: 'Ja. Richte eine Rufweiterleitung zu deiner Chipy-Nummer ein. Deine bestehende Nummer bleibt unverändert.',
   },
   {
     q: 'Was passiert, wenn der Agent eine Frage nicht beantworten kann?',
@@ -61,15 +61,15 @@ export const FAQ_ITEMS = [
   },
   {
     q: 'Wie funktioniert die Kalender-Integration?',
-    a: 'Phonbot verbindet sich mit Google Calendar oder Cal.com. Termine werden direkt eingetragen — ohne dass du eingreifen musst.',
+    a: 'Chipy verbindet sich mit Google Calendar oder Cal.com. Termine werden direkt eingetragen — ohne dass du eingreifen musst.',
   },
   {
-    q: 'Ist Phonbot DSGVO-konform?',
+    q: 'Ist Chipy DSGVO-konform?',
     a: 'Ja. Server stehen in Deutschland (EU). Gesprächsdaten werden verschlüsselt gespeichert und können auf Wunsch jederzeit gelöscht werden.',
   },
   {
     q: 'Kann ich den Agenten auf mehrere Sprachen einstellen?',
-    a: 'Phonbot unterstützt Deutsch, Englisch und weitere EU-Sprachen. Du stellst die Hauptsprache im Agent Builder ein.',
+    a: 'Chipy unterstützt Deutsch, Englisch und weitere EU-Sprachen. Du stellst die Hauptsprache im Agent Builder ein.',
   },
   {
     q: 'Gibt es eine Mindestlaufzeit?',
@@ -103,9 +103,9 @@ export const PLANS = [
     yearlyPrice: '39€',
     period: '/Monat',
     features: [
+      '✦ Telefonnummer inklusive',
       '500 Min/Monat',
       '1 Agent',
-      'Eigene Telefonnummer',
       'E-Mail-Benachrichtigungen',
       '+0,10€/Min bei Überschreitung',
     ],
@@ -119,6 +119,7 @@ export const PLANS = [
     yearlyPrice: '119€',
     period: '/Monat',
     features: [
+      '✦ Telefonnummer inklusive',
       '2.000 Min/Monat',
       '3 Agents',
       'Kalender-Integration',
@@ -135,6 +136,7 @@ export const PLANS = [
     yearlyPrice: '239€',
     period: '/Monat',
     features: [
+      '✦ Telefonnummer inklusive',
       '5.000 Min/Monat',
       '10 Agents',
       'White-Label',

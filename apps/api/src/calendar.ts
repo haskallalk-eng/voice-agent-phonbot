@@ -1324,7 +1324,7 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
     const res = await pool.query(
       `INSERT INTO chippy_blocks (org_id, date, start_time, end_time, reason)
        VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT DO NOTHING RETURNING id`,
+       RETURNING id`,
       [orgId, body.date, body.start_time ?? null, body.end_time ?? null, body.reason ?? null],
     );
     return { ok: true, id: res.rows[0]?.id };

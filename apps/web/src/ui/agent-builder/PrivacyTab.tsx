@@ -16,14 +16,14 @@ export function PrivacyTab({ config, onUpdate }: PrivacyTabProps) {
           label="Anrufe aufzeichnen" />
         {config.recordCalls && (
           <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-4 py-3 text-sm text-yellow-300 ml-14">
-            Stelle sicher, dass Anrufer zu Beginn \über die Aufzeichnung informiert werden (DSGVO).
+            Stelle sicher, dass Anrufer zu Beginn über die Aufzeichnung informiert werden (DSGVO).
           </div>
         )}
 
-        <Field label="Gespr\ächsdaten aufbewahren">
+        <Field label="Gesprächsdaten aufbewahren">
           <Select value={String(config.dataRetentionDays ?? 30)}
             onChange={(e) => onUpdate({ dataRetentionDays: parseInt(e.target.value) })}>
-            <option value="0">Nicht speichern (sofort l\öschen)</option>
+            <option value="0">Nicht speichern (sofort löschen)</option>
             <option value="7">7 Tage</option>
             <option value="30">30 Tage</option>
             <option value="90">90 Tage</option>
@@ -32,7 +32,7 @@ export function PrivacyTab({ config, onUpdate }: PrivacyTabProps) {
         </Field>
 
         <div className="bg-white/5 rounded-lg px-4 py-3 text-xs text-white/50">
-          Alle Daten werden verschl\üsselt gespeichert und nach Ablauf automatisch gel\öscht. DSGVO-konform.
+          Alle Daten werden verschlüsselt gespeichert und nach Ablauf automatisch gelöscht. DSGVO-konform.
         </div>
       </div>
     </SectionCard>

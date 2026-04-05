@@ -1,8 +1,8 @@
-// Chippy — Phonbot mascot (the hamster)
+// Chipy — Phonbot mascot (the hamster)
 import React from 'react';
 
 /**
- * Chippy design principles:
+ * Chipy design principles:
  *  - 50-65% of face = eyes (Duolingo principle)
  *  - Max 5 colors, recognizable at 16px
  *  - Signature chubby cheek pouches
@@ -17,7 +17,7 @@ type Props = { size?: Size | number; className?: string; glow?: boolean; animate
 
 export function FoxLogo({ size = 'md', className = '', glow = false, animate = false }: Props) {
   const px = typeof size === 'number' ? size : SIZES[size];
-  // Unique ID per instance to avoid gradient collisions when multiple Chippys on page
+  // Unique ID per instance to avoid gradient collisions when multiple Chipys on page
   const uid = React.useId().replace(/:/g, '');
 
   return (
@@ -30,7 +30,7 @@ export function FoxLogo({ size = 'md', className = '', glow = false, animate = f
     >
       {/*
         viewBox "0 8 100 92" — crops from y=8 so ears are fully visible at top,
-        and stops at y=100 (bottom of head+cheeks). Chippy fills the square nicely.
+        and stops at y=100 (bottom of head+cheeks). Chipy fills the square nicely.
       */}
       <svg viewBox="0 8 100 92" fill="none" xmlns="http://www.w3.org/2000/svg" width={px} height={px}>
         <defs>
@@ -117,7 +117,7 @@ export function FoxLogo({ size = 'md', className = '', glow = false, animate = f
   );
 }
 
-/** Chippy Eyes — minimal variant, just the big eyes */
+/** Chipy Eyes — minimal variant, just the big eyes */
 export function FoxEyes({ size = 28, className = '' }: { size?: number; className?: string }) {
   const uid = React.useId().replace(/:/g, '');
   return (

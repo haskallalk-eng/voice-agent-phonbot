@@ -7,7 +7,7 @@ export function FaqSection() {
   const visible = useVisible(ref);
 
   return (
-    <section ref={ref} id="faq" className="relative z-10 px-6 py-20 max-w-3xl mx-auto">
+    <section ref={ref} id="faq" className="relative z-10 px-6 py-20 max-w-3xl mx-auto ambient-glow-alt ambient-glow">
       <div className="text-center mb-12">
         <h2 className="text-3xl sm:text-4xl font-extrabold mb-3">Häufige Fragen</h2>
         <p className="text-white/50 text-base">Alles was du wissen musst — kurz und ehrlich.</p>

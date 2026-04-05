@@ -27,7 +27,7 @@ export function KnowledgeTab({ config, onUpdate }: KnowledgeTabProps) {
                 <p className="text-xs text-white/40 truncate">{src.content}</p>
               </div>
               <Badge color={src.status === 'indexed' ? 'green' : src.status === 'error' ? 'red' : 'orange'}>
-                {src.status === 'indexed' ? 'Indexiert' : src.status === 'error' ? 'Fehler' : 'Warte\…'}
+                {src.status === 'indexed' ? 'Indexiert' : src.status === 'error' ? 'Fehler' : 'Warte…'}
               </Badge>
               <button onClick={() => {
                 const next = [...(config.knowledgeSources ?? [])];
@@ -125,7 +125,7 @@ function KnowledgeAdder({ onAdd }: { onAdd: (src: KnowledgeSource) => void }) {
           className="flex-1" onKeyDown={(e) => e.key === 'Enter' && addUrl()} />
         <button onClick={addUrl}
           className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 transition-colors">
-          Hinzuf\ügen
+          Hinzufügen
         </button>
         <button onClick={() => setMode(null)} className="text-white/40 hover:text-white/70 text-sm">Abbrechen</button>
       </div>
@@ -136,11 +136,11 @@ function KnowledgeAdder({ onAdd }: { onAdd: (src: KnowledgeSource) => void }) {
     return (
       <div className="space-y-3">
         <Input value={textName} onChange={(e) => setTextName(e.target.value)} placeholder="Name (z.B. Preisliste)" />
-        <TextArea rows={4} value={text} onChange={(e) => setText(e.target.value)} placeholder="Dein Text hier\…" />
+        <TextArea rows={4} value={text} onChange={(e) => setText(e.target.value)} placeholder="Dein Text hier…" />
         <div className="flex gap-3">
           <button onClick={addText}
             className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 transition-colors">
-            Hinzuf\ügen
+            Hinzufügen
           </button>
           <button onClick={() => setMode(null)} className="text-white/40 hover:text-white/70 text-sm">Abbrechen</button>
         </div>

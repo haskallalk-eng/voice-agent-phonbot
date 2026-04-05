@@ -155,11 +155,11 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
       <WaveformViz active={callState === 'active' && agentTalking} />
 
       {/* ── DEMO SECTION ── */}
-      <section id="demo" className="relative z-10 px-6 py-20 max-w-5xl mx-auto">
+      <section id="demo" className="relative z-10 px-6 py-20 max-w-5xl mx-auto ambient-glow-alt ambient-glow">
         <div className="text-center mb-12">
           <div className="flex items-center justify-center gap-3 mb-4 flex-wrap">
             <h2 className="text-3xl sm:text-4xl font-extrabold">
-              Hör <span style={{ color: '#F97316' }}>Chippy</span> zu — wähle dein Business
+              Hör <span style={{ color: '#F97316' }}>Chipy</span> zu — wähle dein Business
             </h2>
             <span className="inline-flex items-center gap-1 text-xs font-bold text-white bg-red-500/20 border border-red-500/30 rounded-full px-3 py-1">
               <span className="breathe inline-block w-2 h-2 rounded-full bg-red-500 mr-1" />
@@ -179,7 +179,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
               {[
                 { step: '1', label: 'Business klicken' },
                 { step: '2', label: 'Mikrofon erlauben' },
-                { step: '3', label: 'Chippy live hören' },
+                { step: '3', label: 'Chipy live hören' },
               ].map((s, i) => (
                 <div key={i} className="flex items-center gap-2 text-sm text-white/50">
                   <span className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold text-white/70">{s.step}</span>

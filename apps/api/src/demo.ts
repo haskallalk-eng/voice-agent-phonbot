@@ -203,8 +203,8 @@ export async function registerDemo(app: FastifyInstance) {
     return { ok: true, message: 'Chippy ruft dich bald an! Wir haben deine Nummer gespeichert.' };
   });
 
-  // GET /demo/leads — internal admin endpoint
-  app.get('/demo/leads', async () => {
+  // GET /demo/leads — internal admin endpoint (requires auth)
+  app.get('/demo/leads', { onRequest: [app.authenticate] }, async () => {
     return { leads: demoLeads, total: demoLeads.length };
   });
 }

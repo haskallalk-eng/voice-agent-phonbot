@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   getAgentConfig,
   getAgentConfigs,
@@ -8,6 +8,7 @@ import {
   getAgentPreview,
   getBillingStatus,
   getVoices,
+  getInsights,
   type AgentConfig,
   type AgentPreview,
   type Voice,
@@ -27,7 +28,9 @@ import { PreviewTab } from './PreviewTab.js';
 /*  Main Component                                                          */
 /* ══════════════════════════════════════════════════════════════════════════ */
 
-export function AgentBuilder() {
+type Page = 'home' | 'agent' | 'test' | 'tickets' | 'logs' | 'billing' | 'phone' | 'calendar' | 'insights' | 'outbound';
+
+export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void } = {}) {
   const [config, setConfig] = useState<AgentConfig | null>(null);
   const [allAgents, setAllAgents] = useState<AgentConfig[]>([]);
   const [agentsLimit, setAgentsLimit] = useState(1);
@@ -46,6 +49,17 @@ export function AgentBuilder() {
   const voiceDropdownRef = useRef<HTMLDivElement>(null);
   // Prompt section chips
   const [activePromptSections, setActivePromptSections] = useState<Set<string>>(new Set());
+  // KI Insights — pending suggestions count (runs in background)
+  const [pendingSuggestions, setPendingSuggestions] = useState(0);
+  // Phone numbers — check if agent has a number
+  const [hasPhone, setHasPhone] = useState(true); // assume true until loaded
+  // Track original config snapshot for dirty detection
+  const savedConfigRef = useRef<string>('');
+
+  const isDirty = useMemo(() => {
+    if (!config || !savedConfigRef.current) return false;
+    return JSON.stringify(config) !== savedConfigRef.current;
+  }, [config]);
 
   const loadVoices = useCallback(async () => {
     setVoicesLoading(true);
@@ -59,7 +73,18 @@ export function AgentBuilder() {
     }
   }, []);
 
-  useEffect(() => { void loadAllAgents(); void loadConfig(); void loadVoices(); }, [loadVoices]);
+  useEffect(() => {
+    void loadAllAgents(); void loadConfig(); void loadVoices();
+    // Load pending insight suggestions (background)
+    void getInsights().then(d => {
+      setPendingSuggestions(d.suggestions.filter(s => s.status === 'pending').length);
+    }).catch(() => {});
+    // Check if any phone numbers exist
+    void fetch('/api/phone', { headers: { authorization: `Bearer ${localStorage.getItem('vas_token') ?? ''}` } })
+      .then(r => r.json())
+      .then(d => setHasPhone((d.items ?? []).length > 0))
+      .catch(() => {});
+  }, [loadVoices]);
 
   // Close voice dropdown on outside click
   useEffect(() => {
@@ -96,6 +121,7 @@ export function AgentBuilder() {
         ...newCfg,
       } as AgentConfig;
       setConfig(merged);
+      savedConfigRef.current = JSON.stringify(merged);
       setView('edit');
     } catch (e: unknown) {
       setStatus({ type: 'error', text: e instanceof Error ? e.message : 'Fehler beim Erstellen' });
@@ -112,6 +138,7 @@ export function AgentBuilder() {
         ...cfg,
       } as AgentConfig;
       setConfig(merged);
+      savedConfigRef.current = JSON.stringify(merged);
       setView('edit');
     } catch {
       // fallback
@@ -126,6 +153,7 @@ export function AgentBuilder() {
         ...cfg,
       } as AgentConfig;
       setConfig(merged);
+      savedConfigRef.current = JSON.stringify(merged);
       // Default to list view if already deployed
       if (merged.retellAgentId) setView('list');
       else setView('edit');
@@ -151,7 +179,12 @@ export function AgentBuilder() {
       const prev = await getAgentPreview();
       setPreview(prev);
       await loadAllAgents(); // refresh agent list after save (name changes etc.)
-      setStatus({ type: 'ok', text: 'Gespeichert \✅' });
+      // Update snapshot so isDirty resets
+      setConfig((c) => {
+        if (c) savedConfigRef.current = JSON.stringify(c);
+        return c;
+      });
+      setStatus({ type: 'ok', text: 'Gespeichert ✅' });
     } catch {
       setStatus({ type: 'error', text: 'Speichern fehlgeschlagen' });
     } finally {
@@ -169,7 +202,12 @@ export function AgentBuilder() {
       const prev = await getAgentPreview();
       setPreview(prev);
       await loadAllAgents(); // refresh agent list after deploy
-      setStatus({ type: 'ok', text: `Deployed \— Agent: ${result.retellAgentId ?? '\–'}` });
+      // Update snapshot so isDirty resets
+      setConfig((c) => {
+        if (c) savedConfigRef.current = JSON.stringify(c);
+        return c;
+      });
+      setStatus({ type: 'ok', text: `Deployed — Agent: ${result.retellAgentId ?? '–'}` });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unbekannter Fehler';
       setStatus({ type: 'error', text: `Deploy fehlgeschlagen: ${msg}` });
@@ -214,7 +252,7 @@ export function AgentBuilder() {
   }
 
   if (!config) {
-    return <div className="p-8 text-white/50">Lade Agent-Konfiguration\…</div>;
+    return <div className="p-8 text-white/50">Lade Agent-Konfiguration…</div>;
   }
 
   /* ── LIST VIEW ── */
@@ -228,21 +266,24 @@ export function AgentBuilder() {
         status={status}
         onSelectAgent={(tenantId) => void handleSelectAgent(tenantId)}
         onCreateAgent={() => void handleCreateAgent()}
+        onAgentDeleted={() => void loadAllAgents()}
+        onNavigate={onNavigate}
       />
     );
   }
 
   /* ── EDIT VIEW ── */
+  /* Layout: fixed header + fixed tab sidebar + scrollable content */
   return (
-    <div className="max-w-4xl mx-auto px-6 py-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div className="flex flex-col h-full">
+      {/* Header — fixed at top */}
+      <div className="shrink-0 z-20 px-6 py-4 flex items-center justify-between flex-wrap gap-3 border-b border-white/[0.05]" style={{ background: 'rgba(10,10,15,0.95)', backdropFilter: 'blur(12px)' }}>
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => setView('list')}
             className="shrink-0 flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer"
           >
-            <span className="text-base leading-none">\‹</span> Agenten
+            <span className="text-base leading-none">‹</span> Agenten
           </button>
           <div className="w-px h-4 bg-white/10" />
           <div className="min-w-0">
@@ -272,14 +313,14 @@ export function AgentBuilder() {
           {config.retellAgentId ? (
             <button
               onClick={handleSave}
-              disabled={saving || deploying}
-              className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 transition-all cursor-pointer"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+              disabled={saving || deploying || !isDirty}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 transition-all ${isDirty ? 'cursor-pointer' : 'cursor-default'}`}
+              style={{ background: isDirty ? 'linear-gradient(135deg, #F97316, #06B6D4)' : 'rgba(255,255,255,0.08)' }}
             >
               {saving ? (
                 <span className="inline-block w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
               ) : null}
-              {saving ? 'Speichert\…' : 'Speichern'}
+              {saving ? 'Speichert…' : 'Speichern'}
             </button>
           ) : (
             <button
@@ -289,21 +330,33 @@ export function AgentBuilder() {
               style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
             >
               <IconDeploy size={13} />
-              {deploying ? 'Deploying\…' : 'Deploy'}
+              {deploying ? 'Deploying…' : 'Deploy'}
             </button>
           )}
         </div>
       </div>
 
-      {/* Vertical Tab Navigation + Content */}
-      <div className="flex gap-5">
-        {/* Left: Tab list */}
-        <div className="w-40 shrink-0 space-y-0.5">
+      {/* No phone hint */}
+      {config.retellAgentId && !hasPhone && (
+        <div className="flex items-center justify-between px-6 py-2.5" style={{ background: 'rgba(6,182,212,0.04)', borderBottom: '1px solid rgba(6,182,212,0.08)' }}>
+          <p className="text-[11px] text-cyan-400/60">Nur per Web-Call erreichbar — verbinde eine Telefonnummer für echte Anrufe</p>
+          <button onClick={() => onNavigate?.('phone' as Page)}
+            className="shrink-0 ml-3 text-[11px] font-medium bg-clip-text text-transparent cursor-pointer"
+            style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+            Nummer einrichten →
+          </button>
+        </div>
+      )}
+
+      {/* Body: fixed sidebar + scrollable content */}
+      <div className="flex flex-1 min-h-0">
+        {/* Left: Tab list — fixed, never scrolls */}
+        <div className="w-40 shrink-0 border-r border-white/[0.05] py-4 px-3 space-y-0.5 overflow-y-auto">
           {TABS.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-medium transition-all text-left cursor-pointer ${
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-medium transition-all text-left cursor-pointer relative ${
                 tab === t.id
                   ? 'bg-white/8 text-white border border-white/10'
                   : 'text-white/35 hover:text-white/65 hover:bg-white/[0.04] border border-transparent'
@@ -311,12 +364,17 @@ export function AgentBuilder() {
             >
               <t.Icon size={14} className={tab === t.id ? 'text-orange-400' : ''} />
               {t.label}
+              {t.id === 'behavior' && pendingSuggestions > 0 && (
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-[9px] font-bold text-white">
+                  {pendingSuggestions > 9 ? '9+' : pendingSuggestions}
+                </span>
+              )}
             </button>
           ))}
         </div>
 
-        {/* Right: Content */}
-        <div className="flex-1 min-w-0">
+        {/* Right: Content — this is the only part that scrolls */}
+        <div className="flex-1 min-w-0 overflow-y-auto px-6 py-5">
 
       {tab === 'identity' && (
         <IdentityTab

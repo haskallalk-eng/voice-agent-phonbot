@@ -40,14 +40,14 @@ export type Tab = 'identity' | 'knowledge' | 'behavior' | 'capabilities' | 'tech
 /* ── Constants ── */
 
 export const LANGUAGES = [
-  { id: 'de', label: '\🇩\🇪 Deutsch' },
-  { id: 'en', label: '\🇬\🇧 English' },
-  { id: 'fr', label: '\🇫\🇷 Fran\çais' },
-  { id: 'es', label: '\🇪\🇸 Espa\ñol' },
-  { id: 'it', label: '\🇮\🇹 Italiano' },
-  { id: 'tr', label: '\🇹\🇷 T\ürk\çe' },
-  { id: 'pl', label: '\🇵\🇱 Polski' },
-  { id: 'nl', label: '\🇳\🇱 Nederlands' },
+  { id: 'de', label: '🇩🇪 Deutsch' },
+  { id: 'en', label: '🇬🇧 English' },
+  { id: 'fr', label: '🇫🇷 Français' },
+  { id: 'es', label: '🇪🇸 Español' },
+  { id: 'it', label: '🇮🇹 Italiano' },
+  { id: 'tr', label: '🇹🇷 Türkçe' },
+  { id: 'pl', label: '🇵🇱 Polski' },
+  { id: 'nl', label: '🇳🇱 Nederlands' },
 ] as const;
 
 export const KNOWN_TOOLS = ['calendar.findSlots', 'calendar.book', 'ticket.create'] as const;
@@ -58,42 +58,42 @@ export const PROMPT_TEMPLATES: { id: string; Icon: IconComp; accent: string; nam
     Icon: IconBuilding,
     accent: 'text-orange-400',
     name: 'Empfang / Zentrale',
-    prompt: `Du bist die freundliche Telefonzentrale von {businessName}. Begr\ü\ße Anrufer herzlich, finde heraus worum es geht und leite sie an die richtige Stelle weiter. Bei Unklarheiten erstelle ein Ticket.`,
+    prompt: `Du bist die freundliche Telefonzentrale von {businessName}. Begrüße Anrufer herzlich, finde heraus worum es geht und leite sie an die richtige Stelle weiter. Bei Unklarheiten erstelle ein Ticket.`,
   },
   {
     id: 'appointment',
     Icon: IconCalendar,
     accent: 'text-cyan-400',
     name: 'Terminbuchung',
-    prompt: `Du bist der Terminassistent von {businessName}. Hilf dem Anrufer einen passenden Termin zu finden und zu buchen. Frage nach gew\ünschtem Datum, Uhrzeit und Service. Best\ätige den Termin am Ende.`,
+    prompt: `Du bist der Terminassistent von {businessName}. Hilf dem Anrufer einen passenden Termin zu finden und zu buchen. Frage nach gewünschtem Datum, Uhrzeit und Service. Bestätige den Termin am Ende.`,
   },
   {
     id: 'support',
     Icon: IconSliders,
     accent: 'text-violet-400',
     name: 'Kundensupport',
-    prompt: `Du bist der Support-Assistent von {businessName}. H\öre dem Kunden aufmerksam zu, versuche das Problem zu l\ösen und erstelle bei Bedarf ein Ticket mit allen Details f\ür das Team.`,
+    prompt: `Du bist der Support-Assistent von {businessName}. Höre dem Kunden aufmerksam zu, versuche das Problem zu lösen und erstelle bei Bedarf ein Ticket mit allen Details für das Team.`,
   },
   {
     id: 'orders',
     Icon: IconTicket,
     accent: 'text-amber-400',
     name: 'Bestellannahme',
-    prompt: `Du bist der Bestellassistent von {businessName}. Nimm Bestellungen entgegen, frage nach Details (Menge, Sonderw\ünsche) und best\ätige die Bestellung mit gesch\ätzter Lieferzeit.`,
+    prompt: `Du bist der Bestellassistent von {businessName}. Nimm Bestellungen entgegen, frage nach Details (Menge, Sonderwünsche) und bestätige die Bestellung mit geschätzter Lieferzeit.`,
   },
   {
     id: 'emergency',
     Icon: IconAlertTriangle,
     accent: 'text-red-400',
     name: 'Notdienst / After-Hours',
-    prompt: `Du bist der Notdienst-Assistent von {businessName}. Au\ßerhalb der \Öffnungszeiten nimmst du dringende Anfragen entgegen, sammelst Kontaktdaten und erstellst ein priorisiertes Ticket.`,
+    prompt: `Du bist der Notdienst-Assistent von {businessName}. Außerhalb der Öffnungszeiten nimmst du dringende Anfragen entgegen, sammelst Kontaktdaten und erstellst ein priorisiertes Ticket.`,
   },
   {
     id: 'info',
     Icon: IconInfo,
     accent: 'text-sky-400',
     name: 'Auskunft & FAQ',
-    prompt: `Du bist der Informationsassistent von {businessName}. Beantworte h\äufige Fragen zu \Öffnungszeiten, Preisen, Services und Standort. Nutze das hinterlegte Wissen f\ür genaue Antworten.`,
+    prompt: `Du bist der Informationsassistent von {businessName}. Beantworte häufige Fragen zu Öffnungszeiten, Preisen, Services und Standort. Nutze das hinterlegte Wissen für genaue Antworten.`,
   },
 ];
 
@@ -101,72 +101,72 @@ export type PromptSection = { id: string; label: string; Icon: SectionIconComp; 
 
 export const PROMPT_SECTIONS: PromptSection[] = [
   {
-    id: 'greeting', label: 'Begr\ü\ßung', Icon: IconAgent, accent: 'text-orange-400',
-    description: 'Wie der Agent Anrufer begr\ü\ßt',
-    text: `Begr\ü\ße jeden Anrufer herzlich: "Guten Tag, willkommen bei {businessName}, mein Name ist {agentName} \— wie kann ich Ihnen helfen?" Passe die Tageszeit an.`,
+    id: 'greeting', label: 'Begrüßung', Icon: IconAgent, accent: 'text-orange-400',
+    description: 'Wie der Agent Anrufer begrüßt',
+    text: `Begrüße jeden Anrufer herzlich: "Guten Tag, willkommen bei {businessName}, mein Name ist {agentName} — wie kann ich Ihnen helfen?" Passe die Tageszeit an.`,
   },
   {
-    id: 'tone', label: 'Tonalit\ät', Icon: IconVolume, accent: 'text-cyan-400',
-    description: 'Sprachstil & Pers\önlichkeit',
-    text: `Spreche ruhig, klar und professionell. Verwende eine freundliche, empathische Sprache. Vermeide Fachjargon. H\öre aktiv zu und best\ätige das Geh\örte mit kurzen Phrasen wie "Ich verstehe" oder "Gerne helfe ich Ihnen".`,
+    id: 'tone', label: 'Tonalität', Icon: IconVolume, accent: 'text-cyan-400',
+    description: 'Sprachstil & Persönlichkeit',
+    text: `Spreche ruhig, klar und professionell. Verwende eine freundliche, empathische Sprache. Vermeide Fachjargon. Höre aktiv zu und bestätige das Gehörte mit kurzen Phrasen wie "Ich verstehe" oder "Gerne helfe ich Ihnen".`,
   },
   {
     id: 'appointment', label: 'Terminbuchung', Icon: IconCalendar, accent: 'text-violet-400',
     description: 'Termin finden und buchen',
-    text: `Wenn ein Anrufer einen Termin m\öchte: Frage nach gew\ünschtem Datum, Uhrzeit und Art des Termins. Pr\üfe die Verf\ügbarkeit. Biete 2\–3 Optionen an. Best\ätige den Termin mit Datum, Uhrzeit und Ort. Frage bei Unklarheiten pr\äzise nach.`,
+    text: `Wenn ein Anrufer einen Termin möchte: Frage nach gewünschtem Datum, Uhrzeit und Art des Termins. Prüfe die Verfügbarkeit. Biete 2–3 Optionen an. Bestätige den Termin mit Datum, Uhrzeit und Ort. Frage bei Unklarheiten präzise nach.`,
   },
   {
     id: 'ticket', label: 'Ticket erstellen', Icon: IconTicket, accent: 'text-amber-400',
     description: 'Anliegen als Ticket erfassen',
-    text: `Erstelle ein Ticket wenn das Anliegen komplex ist, eine Bearbeitung durch das Team erfordert oder du das Problem nicht sofort l\ösen kannst. Erfasse: Name, Telefonnummer, Art des Anliegens und alle Details. Best\ätige die Erstellung mit Ticketnummer.`,
+    text: `Erstelle ein Ticket wenn das Anliegen komplex ist, eine Bearbeitung durch das Team erfordert oder du das Problem nicht sofort lösen kannst. Erfasse: Name, Telefonnummer, Art des Anliegens und alle Details. Bestätige die Erstellung mit Ticketnummer.`,
   },
   {
     id: 'routing', label: 'Weiterleitung', Icon: IconPhoneOut, accent: 'text-sky-400',
     description: 'Anruf weiterleiten',
-    text: `Leite Anrufe weiter wenn das Anliegen au\ßerhalb deines Bereichs liegt, der Anrufer nach einer bestimmten Person fragt oder eine pers\önliche Bearbeitung n\ötig ist. K\ündige die Weiterleitung freundlich an und nenne die Wartezeit.`,
+    text: `Leite Anrufe weiter wenn das Anliegen außerhalb deines Bereichs liegt, der Anrufer nach einer bestimmten Person fragt oder eine persönliche Bearbeitung nötig ist. Kündige die Weiterleitung freundlich an und nenne die Wartezeit.`,
   },
   {
     id: 'afterhours', label: 'After-Hours', Icon: IconAlertTriangle, accent: 'text-red-400',
-    description: 'Au\ßerhalb der \Öffnungszeiten',
-    text: `Au\ßerhalb der \Öffnungszeiten teile mit, dass {businessName} aktuell geschlossen ist, und nenne die \Öffnungszeiten. Bei dringendem Anliegen: Notfall-Kontakt nennen oder Ticket mit Priorit\ät "Dringend" erstellen. Sonst R\ückruf anbieten.`,
+    description: 'Außerhalb der Öffnungszeiten',
+    text: `Außerhalb der Öffnungszeiten teile mit, dass {businessName} aktuell geschlossen ist, und nenne die Öffnungszeiten. Bei dringendem Anliegen: Notfall-Kontakt nennen oder Ticket mit Priorität "Dringend" erstellen. Sonst Rückruf anbieten.`,
   },
   {
     id: 'faq', label: 'FAQ & Auskunft', Icon: IconBookOpen, accent: 'text-indigo-400',
-    description: 'H\äufige Fragen beantworten',
-    text: `Beantworte h\äufige Fragen anhand des hinterlegten Wissens: \Öffnungszeiten, Preise, Services, Standort und Anfahrt. Wenn du eine Antwort nicht sicher kennst, sage das ehrlich und biete Alternativen an.`,
+    description: 'Häufige Fragen beantworten',
+    text: `Beantworte häufige Fragen anhand des hinterlegten Wissens: Öffnungszeiten, Preise, Services, Standort und Anfahrt. Wenn du eine Antwort nicht sicher kennst, sage das ehrlich und biete Alternativen an.`,
   },
   {
     id: 'escalation', label: 'Eskalation', Icon: IconSliders, accent: 'text-rose-400',
-    description: 'An menschlichen Mitarbeiter \übergeben',
-    text: `\Übergib an einen Mitarbeiter wenn: der Anrufer es ausdr\ücklich verlangt, du eine Frage nicht beantworten kannst, der Anrufer sehr aufgebracht ist oder das Anliegen rechtlicher Natur ist. K\ündige die \Übergabe freundlich an.`,
+    description: 'An menschlichen Mitarbeiter übergeben',
+    text: `Übergib an einen Mitarbeiter wenn: der Anrufer es ausdrücklich verlangt, du eine Frage nicht beantworten kannst, der Anrufer sehr aufgebracht ist oder das Anliegen rechtlicher Natur ist. Kündige die Übergabe freundlich an.`,
   },
   {
     id: 'privacy', label: 'Datenschutz', Icon: IconPrivacy, accent: 'text-emerald-400',
     description: 'DSGVO-konform handeln',
-    text: `Behandle pers\önliche Daten vertraulich. Frage nicht nach mehr Informationen als n\ötig. Gib keine Kundendaten an unbekannte Dritte weiter. Best\ätige keine personenbezogenen Daten gegen\über unbekannten Anrufern.`,
+    text: `Behandle persönliche Daten vertraulich. Frage nicht nach mehr Informationen als nötig. Gib keine Kundendaten an unbekannte Dritte weiter. Bestätige keine personenbezogenen Daten gegenüber unbekannten Anrufern.`,
   },
   {
-    id: 'closing', label: 'Gespr\ächsabschluss', Icon: IconPhoneOff, accent: 'text-teal-400',
-    description: 'Gespr\äch professionell beenden',
-    text: `Beende jedes Gespr\äch freundlich. Fasse die besprochenen Punkte kurz zusammen. Frage ob du noch anderweitig helfen kannst. Verabschiedsformel: "Ich w\ünsche Ihnen noch einen angenehmen Tag, auf Wiederh\ören!"`,
+    id: 'closing', label: 'Gesprächsabschluss', Icon: IconPhoneOff, accent: 'text-teal-400',
+    description: 'Gespräch professionell beenden',
+    text: `Beende jedes Gespräch freundlich. Fasse die besprochenen Punkte kurz zusammen. Frage ob du noch anderweitig helfen kannst. Verabschiedsformel: "Ich wünsche Ihnen noch einen angenehmen Tag, auf Wiederhören!"`,
   },
   {
     id: 'upsell', label: 'Zusatzangebote', Icon: IconStar, accent: 'text-yellow-400',
-    description: 'Passende Angebote erw\ähnen',
-    text: `Weise bei passender Gelegenheit auf relevante Angebote hin \— ohne aufdringlich zu sein. Erw\ähne nur Angebote, die zum Anliegen des Anrufers passen. Formuliere als Vorschlag, nicht als Verkaufsgespr\äch. Respektiere ein "Nein" sofort.`,
+    description: 'Passende Angebote erwähnen',
+    text: `Weise bei passender Gelegenheit auf relevante Angebote hin — ohne aufdringlich zu sein. Erwähne nur Angebote, die zum Anliegen des Anrufers passen. Formuliere als Vorschlag, nicht als Verkaufsgespräch. Respektiere ein "Nein" sofort.`,
   },
   {
     id: 'multilingual', label: 'Mehrsprachig', Icon: IconGlobe, accent: 'text-lime-400',
-    description: 'Mehrere Sprachen unterst\ützen',
-    text: `Erkenne die Sprache des Anrufers und antworte in derselben Sprache, sofern du diese beherrschst. Wechsle nahtlos die Sprache wenn der Anrufer wechselt. Bei unbekannten Sprachen bitte h\öflich auf Deutsch oder Englisch weiterzusprechen.`,
+    description: 'Mehrere Sprachen unterstützen',
+    text: `Erkenne die Sprache des Anrufers und antworte in derselben Sprache, sofern du diese beherrschst. Wechsle nahtlos die Sprache wenn der Anrufer wechselt. Bei unbekannten Sprachen bitte höflich auf Deutsch oder Englisch weiterzusprechen.`,
   },
 ];
 
 export const TABS: { id: Tab; label: string; Icon: SectionIconComp }[] = [
-  { id: 'identity',     label: 'Identit\ät',    Icon: IconAgent },
+  { id: 'identity',     label: 'Identität',    Icon: IconAgent },
   { id: 'knowledge',    label: 'Wissen',       Icon: IconBrain },
   { id: 'behavior',     label: 'Verhalten',    Icon: IconMessageSquare },
-  { id: 'capabilities', label: 'F\ähigkeiten',  Icon: IconCapabilities },
+  { id: 'capabilities', label: 'Fähigkeiten',  Icon: IconCapabilities },
   { id: 'technical',    label: 'Technik',      Icon: IconSliders },
   { id: 'privacy',      label: 'Datenschutz',  Icon: IconPrivacy },
   { id: 'webhooks',     label: 'Webhooks',     Icon: IconWebhook },
@@ -352,4 +352,5 @@ export {
   IconMicUpload,
   IconRefresh,
   IconDeploy,
+  IconInsights,
 } from '../PhonbotIcons.js';

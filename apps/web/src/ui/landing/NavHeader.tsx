@@ -4,9 +4,10 @@ import { PhonbotBrand } from '../FoxLogo.js';
 type NavHeaderProps = {
   onGoToRegister: () => void;
   onGoToLogin: () => void;
+  onGoToContact?: () => void;
 };
 
-export function NavHeader({ onGoToRegister, onGoToLogin }: NavHeaderProps) {
+export function NavHeader({ onGoToRegister, onGoToLogin, onGoToContact }: NavHeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
@@ -17,11 +18,11 @@ export function NavHeader({ onGoToRegister, onGoToLogin }: NavHeaderProps) {
 
         {/* Center nav links — hidden on mobile */}
         <nav className="hidden md:flex items-center gap-8">
-          <a href="#features" className="text-sm text-white/60 hover:text-white transition-colors duration-200">Features</a>
-          <a href="#how" className="text-sm text-white/60 hover:text-white transition-colors duration-200">So funktioniert's</a>
           <a href="#demo" className="text-sm text-white/60 hover:text-white transition-colors duration-200">Demo</a>
+          <a href="#features" className="text-sm text-white/60 hover:text-white transition-colors duration-200">Features</a>
           <a href="#preise" className="text-sm text-white/60 hover:text-white transition-colors duration-200">Preise</a>
           <a href="#faq" className="text-sm text-white/60 hover:text-white transition-colors duration-200">FAQ</a>
+          <button onClick={onGoToContact} className="text-sm text-white/60 hover:text-white transition-colors duration-200">Kontakt</button>
         </nav>
 
         {/* Right side */}
@@ -57,7 +58,6 @@ export function NavHeader({ onGoToRegister, onGoToLogin }: NavHeaderProps) {
         <div className="md:hidden border-t border-white/5 bg-[#0A0A0F]/95 backdrop-blur-md px-6 py-4 space-y-1">
           {[
             { href: '#features', label: 'Features' },
-            { href: '#how', label: "So funktioniert's" },
             { href: '#demo', label: 'Demo' },
             { href: '#preise', label: 'Preise' },
             { href: '#faq', label: 'FAQ' },
@@ -66,11 +66,17 @@ export function NavHeader({ onGoToRegister, onGoToLogin }: NavHeaderProps) {
               key={item.href}
               href={item.href}
               onClick={() => setMobileMenuOpen(false)}
-              className="block py-3 text-sm text-white/60 hover:text-white transition-colors border-b border-white/5 last:border-0"
+              className="block py-3 text-sm text-white/60 hover:text-white transition-colors border-b border-white/5"
             >
               {item.label}
             </a>
           ))}
+          <button
+            onClick={() => { setMobileMenuOpen(false); onGoToContact?.(); }}
+            className="block w-full text-left py-3 text-sm text-white/60 hover:text-white transition-colors"
+          >
+            Kontakt
+          </button>
           <div className="pt-3 flex flex-col gap-2">
             <button
               onClick={() => { setMobileMenuOpen(false); onGoToLogin(); }}

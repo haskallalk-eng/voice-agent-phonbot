@@ -18,9 +18,10 @@ import { FooterSection } from './FooterSection.js';
 type Props = {
   onGoToRegister: () => void;
   onGoToLogin: () => void;
+  onGoToContact?: () => void;
 };
 
-export function LandingPage({ onGoToRegister, onGoToLogin }: Props) {
+export function LandingPage({ onGoToRegister, onGoToLogin, onGoToContact }: Props) {
   const [showDemoModal, setShowDemoModal] = useState(false);
   const [legalPage, setLegalPage] = useState<'impressum' | 'datenschutz' | 'agb' | null>(null);
 
@@ -43,7 +44,7 @@ export function LandingPage({ onGoToRegister, onGoToLogin }: Props) {
       </div>
 
       {/* ── NAV ── */}
-      <NavHeader onGoToRegister={onGoToRegister} onGoToLogin={onGoToLogin} />
+      <NavHeader onGoToRegister={onGoToRegister} onGoToLogin={onGoToLogin} onGoToContact={onGoToContact} />
 
       {/* ── HERO + TRUST BAR ── */}
       <HeroSection onGoToRegister={onGoToRegister} onShowDemoModal={() => setShowDemoModal(true)} />
@@ -76,7 +77,7 @@ export function LandingPage({ onGoToRegister, onGoToLogin }: Props) {
       <FinalCTA onGoToRegister={onGoToRegister} />
 
       {/* ── FOOTER ── */}
-      <FooterSection onShowLegal={setLegalPage} />
+      <FooterSection onShowLegal={setLegalPage} onGoToContact={onGoToContact} />
 
       {/* ── CHIPPY DEMO MODAL ── */}
       {showDemoModal && (
@@ -89,7 +90,7 @@ export function LandingPage({ onGoToRegister, onGoToLogin }: Props) {
       )}
 
       {/* ── COOKIE BANNER ── */}
-      <CookieBanner />
+      <CookieBanner onShowDatenschutz={() => setLegalPage('datenschutz')} />
     </div>
   );
 }

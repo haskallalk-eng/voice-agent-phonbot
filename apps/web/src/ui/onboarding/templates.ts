@@ -1,6 +1,6 @@
 export type Template = {
   id: string;
-  icon: string;
+  iconId: string;
   name: string;
   description: string;
   defaults: {
@@ -18,7 +18,7 @@ export type Template = {
 export const TEMPLATES: Template[] = [
   {
     id: 'hairdresser',
-    icon: '💇',
+    iconId: 'scissors',
     name: 'Friseur / Salon',
     description: 'Terminbuchungen, Öffnungszeiten, Preisauskunft',
     defaults: {
@@ -35,9 +35,9 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: 'tradesperson',
-    icon: '🔧',
+    iconId: 'wrench',
     name: 'Handwerker',
-    description: 'Auftragsannahme, Terminanfragen, Notdienst-Weiterleitung',
+    description: 'Auftragsannahme, Terminanfragen, Notdienst',
     defaults: {
       name: 'Handwerker-Assistent',
       language: 'de',
@@ -52,9 +52,9 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: 'medical',
-    icon: '🏥',
-    name: 'Arztpraxis / Praxis',
-    description: 'Terminvereinbarung, Sprechzeiten, Rezeptbestellung',
+    iconId: 'medical',
+    name: 'Arztpraxis',
+    description: 'Terminvergabe, Sprechzeiten, Rezeptbestellung',
     defaults: {
       name: 'Praxis-Assistent',
       language: 'de',
@@ -68,8 +68,42 @@ export const TEMPLATES: Template[] = [
     },
   },
   {
+    id: 'restaurant',
+    iconId: 'restaurant',
+    name: 'Restaurant / Gastro',
+    description: 'Reservierungen, Speisekarte, Öffnungszeiten',
+    defaults: {
+      name: 'Restaurant-Assistent',
+      language: 'de',
+      voice: 'retell-Cimo',
+      businessDescription: 'Restaurant mit regionaler und saisonaler Küche.',
+      servicesText: 'Mittagstisch, Abendkarte, Catering, Veranstaltungen, Lieferservice',
+      openingHours: 'Di-Sa 11:30-14:30, 17:30-22:00, So 11:30-15:00',
+      systemPrompt:
+        'Du bist die telefonische Assistenz eines Restaurants. Nimm Tischreservierungen entgegen, beantworte Fragen zur Speisekarte und Öffnungszeiten. Frage nach Personenzahl, Datum und Uhrzeit. Sprich freundlich und gastfreundlich.',
+      tools: ['calendar.findSlots', 'calendar.book', 'ticket.create'],
+    },
+  },
+  {
+    id: 'auto',
+    iconId: 'car',
+    name: 'Autowerkstatt',
+    description: 'Terminvereinbarung, Kostenvoranschläge, Rückruf',
+    defaults: {
+      name: 'Werkstatt-Assistent',
+      language: 'de',
+      voice: 'retell-Cimo',
+      businessDescription: 'Freie Kfz-Werkstatt für alle Marken.',
+      servicesText: 'Inspektion, Ölwechsel, Bremsen, TÜV/HU, Reifenwechsel, Klimaservice',
+      openingHours: 'Mo-Fr 07:30-17:00, Sa 08:00-12:00',
+      systemPrompt:
+        'Du bist die telefonische Assistenz einer Autowerkstatt. Frage nach Fahrzeugtyp, Kennzeichen und gewünschtem Service. Vereinbare Termine oder erstelle ein Ticket für Kostenvoranschläge. Sprich klar und kompetent.',
+      tools: ['calendar.findSlots', 'calendar.book', 'ticket.create'],
+    },
+  },
+  {
     id: 'cleaning',
-    icon: '🧹',
+    iconId: 'broom',
     name: 'Reinigungsfirma',
     description: 'Angebote, Terminplanung, Sonderwünsche',
     defaults: {
@@ -86,7 +120,7 @@ export const TEMPLATES: Template[] = [
   },
   {
     id: 'custom',
-    icon: '⚙️',
+    iconId: 'settings',
     name: 'Eigener Agent',
     description: 'Komplett selbst konfigurieren',
     defaults: {

@@ -137,6 +137,9 @@ export type AgentConfig = {
   calendarIntegrations?: CalendarIntegration[];
   apiIntegrations?: ApiIntegration[];
   liveWebAccess?: LiveWebAccess;
+
+  // KI Insights
+  autoApplyInsights?: boolean;
 };
 
 export type AgentPreview = {
@@ -180,6 +183,13 @@ export function createNewAgent(base?: Partial<AgentConfig>) {
   });
 }
 
+export function deleteAgent(tenantId: string, password?: string) {
+  return request<{ ok: boolean }>(`/agent-config/${encodeURIComponent(tenantId)}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ password }),
+  });
+}
+
 export function saveAgentConfig(config: AgentConfig) {
   return request<AgentConfig>('/agent-config', {
     method: 'PUT',
@@ -198,10 +208,10 @@ export function getAgentPreview() {
   return request<AgentPreview>(`/agent-config/preview`);
 }
 
-export function createWebCall() {
+export function createWebCall(agentTenantId?: string) {
   return request<WebCallResult>('/agent-config/web-call', {
     method: 'POST',
-    body: JSON.stringify({}),
+    body: JSON.stringify({ agentTenantId }),
   });
 }
 
@@ -386,7 +396,7 @@ export function getMicrosoftCalendarAuthUrl() {
   return request<{ url: string }>('/calendar/microsoft/auth-url');
 }
 
-// --- Chippy Calendar ---
+// --- Chipy Calendar ---
 
 export type ChippyDaySchedule = { enabled: boolean; start: string; end: string };
 export type ChippySchedule = Record<string, ChippyDaySchedule>;

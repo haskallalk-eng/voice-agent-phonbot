@@ -65,8 +65,9 @@ export type PlanId = keyof typeof PLANS;
 
 async function getOrCreateStripeCustomer(orgId: string, email: string, orgName: string): Promise<string> {
   if (!stripe) throw new Error('Stripe not configured');
+  if (!pool) throw new Error('Database not configured');
 
-  const res = await pool!.query('SELECT stripe_customer_id FROM orgs WHERE id = $1', [orgId]);
+  const res = await pool.query('SELECT stripe_customer_id FROM orgs WHERE id = $1', [orgId]);
   const existing = res.rows[0]?.stripe_customer_id as string | null;
   if (existing) return existing;
 

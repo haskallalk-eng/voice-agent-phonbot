@@ -12,9 +12,9 @@ import { SkeletonCard } from '../components/ui.js';
 
 const PLAN_FEATURES: Record<string, string[]> = {
   free: ['100 Freiminuten (einmalig)', '1 Agent', 'Web-Call Test', 'Community Support'],
-  starter: ['500 Minuten / Monat', '1 Agent', 'Telefonnummer inklusive', 'Ticket-System', 'E-Mail Support', '+0,10€/Min bei Überschreitung'],
-  pro: ['2.000 Minuten / Monat', '3 Agents', '2 Telefonnummern', 'Analytics Dashboard', 'Priority Support', '+0,08€/Min bei Überschreitung'],
-  agency: ['5.000 Minuten / Monat', '10 Agents', 'White-Label', 'Dedicated Support', 'API-Zugang', '+0,06€/Min bei Überschreitung'],
+  starter: ['✦ Telefonnummer inklusive', '500 Minuten / Monat', '1 Agent', 'Ticket-System', 'E-Mail Support', '+0,10€/Min bei Überschreitung'],
+  pro: ['✦ Telefonnummer inklusive', '2.000 Minuten / Monat', '3 Agents', 'Analytics Dashboard', 'Priority Support', '+0,08€/Min bei Überschreitung'],
+  agency: ['✦ Telefonnummer inklusive', '5.000 Minuten / Monat', '10 Agents', 'White-Label', 'Dedicated Support', '+0,06€/Min bei Überschreitung'],
 };
 
 function UsageBar({ used, limit }: { used: number; limit: number }) {
@@ -239,12 +239,23 @@ export function BillingPage() {
                 </div>
 
                 <ul className="space-y-1.5 flex-1">
-                  {features.map((f) => (
-                    <li key={f} className="flex items-start gap-2 text-sm text-white/60">
-                      <span className="text-green-400 mt-0.5">✓</span>
-                      {f}
-                    </li>
-                  ))}
+                  {features.map((f) => {
+                    const hl = f.startsWith('✦');
+                    const label = hl ? f.slice(2) : f;
+                    return (
+                      <li key={f} className="flex items-center gap-2 text-sm">
+                        {hl ? (
+                          <svg width="14" height="14" viewBox="0 0 24 24" className="shrink-0 fancy-star"><defs><linearGradient id="fgBl" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#F97316"/><stop offset="100%" stopColor="#06B6D4"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill="url(#fgBl)"/></svg>
+                        ) : (
+                          <span className="text-green-400">✓</span>
+                        )}
+                        <span className={hl ? 'font-semibold bg-clip-text text-transparent' : 'text-white/60'}
+                          style={hl ? { backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' } : undefined}>
+                          {label}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
 
                 {!isCurrent && plan.id !== 'free' && (

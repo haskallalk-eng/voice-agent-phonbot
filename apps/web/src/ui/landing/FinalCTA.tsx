@@ -6,7 +6,7 @@ type FinalCTAProps = {
 
 export function FinalCTA({ onGoToRegister }: FinalCTAProps) {
   return (
-    <section className="relative z-10 px-6 py-24 text-center max-w-2xl mx-auto">
+    <section className="relative z-10 px-6 py-24 text-center max-w-2xl mx-auto ambient-glow">
       <h2 className="text-4xl sm:text-5xl font-extrabold mb-6 leading-tight">
         Dein Telefon. Jetzt intelligent.
       </h2>

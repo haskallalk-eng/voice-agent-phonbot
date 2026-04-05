@@ -1,4 +1,4 @@
-// Note: file named OwlyDemoModal for historical reasons, mascot is now "Chippy"
+// Note: file named OwlyDemoModal for historical reasons, mascot is now "Chipy"
 import React, { useState, useRef } from 'react';
 import { RetellWebClient } from 'retell-client-js-sdk';
 import { createDemoCall } from '../lib/api.js';
@@ -131,10 +131,10 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
           ✕
         </button>
 
-        {/* Header — Chippy intro */}
+        {/* Header — Chipy intro */}
         <div className="px-6 pt-8 pb-4 text-center">
           <FoxLogo size="lg" glow animate className="mx-auto mb-3" />
-          <h2 className="text-xl font-bold text-white">Hey! Ich bin Chippy</h2>
+          <h2 className="text-xl font-bold text-white">Hey! Ich bin Chipy</h2>
           <p className="text-sm text-white/50 mt-1">
             Dein KI-Telefonassistent. Hör rein wie ich für verschiedene Branchen arbeite — oder lass dich zurückrufen.
           </p>
@@ -227,7 +227,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
                   {agentTalking ? (
                     <>
                       <span className="w-2 h-2 rounded-full bg-orange-400 breathe inline-block" />
-                      <span className="text-orange-300 text-sm font-medium">Chippy spricht…</span>
+                      <span className="text-orange-300 text-sm font-medium">Chipy spricht…</span>
                     </>
                   ) : (
                     <>
@@ -291,7 +291,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
             {!cbSent ? (
               <>
                 <p className="text-sm text-white/50 mb-5 text-center">
-                  Chippy ruft dich an — direkt auf dein Handy. Erlebe Phonbot in deinem echten Umfeld.
+                  Chipy ruft dich an — direkt auf dein Handy. Erlebe Phonbot in deinem echten Umfeld.
                 </p>
                 <form onSubmit={submitCallback} className="space-y-3">
                   <div>
@@ -312,7 +312,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
                   <button type="submit" disabled={cbLoading}
                     className="w-full py-3.5 rounded-2xl font-bold text-white text-sm transition-all hover:scale-[1.02] disabled:opacity-50 mt-1"
                     style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
-                    {cbLoading ? '…' : 'Chippy soll mich anrufen'}
+                    {cbLoading ? '…' : 'Chipy soll mich anrufen'}
                   </button>
                 </form>
                 <p className="text-xs text-white/25 text-center mt-3">Kein Spam. Daten nur für den Demo-Anruf.</p>
@@ -320,7 +320,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
             ) : (
               <div className="text-center py-4">
                 <FoxLogo size="lg" glow animate className="mx-auto mb-4" />
-                <h3 className="text-lg font-bold text-white mb-2">Chippy ruft dich an!</h3>
+                <h3 className="text-lg font-bold text-white mb-2">Chipy ruft dich an!</h3>
                 <p className="text-sm text-white/50 mb-2">
                   Du erhältst in Kürze einen Anruf auf <strong className="text-white">{cbPhone}</strong>.
                 </p>

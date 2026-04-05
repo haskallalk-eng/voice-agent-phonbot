@@ -38,8 +38,13 @@ export function TicketInbox() {
   }, []);
 
   async function changeStatus(id: number, status: Ticket['status']) {
-    await updateTicketStatus(id, status);
-    await load();
+    try {
+      await updateTicketStatus(id, status);
+      await load();
+    } catch {
+      // Reload to show current state even if update failed
+      await load();
+    }
   }
 
   const filtered = filter === 'all' ? tickets : tickets.filter((t) => t.status === filter);

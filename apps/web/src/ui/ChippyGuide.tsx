@@ -2,14 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FoxLogo } from './FoxLogo.js';
 
 /**
- * ChippyGuide — Chippy rolls dynamically through the landing page.
+ * ChippyGuide — Chipy rolls dynamically through the landing page.
  * 
- * NOT a fixed corner widget. Instead, Chippy is embedded between sections
+ * NOT a fixed corner widget. Instead, Chipy is embedded between sections
  * and "rolls" across the screen as you scroll. Speech bubbles appear inline.
  * He never covers content — he lives in dedicated gaps between sections.
  * 
  * Usage: Place <ChippyWaypoint /> components between sections in LandingPage.
- * Each waypoint is a "stop" where Chippy appears, rolls in, shows a bubble.
+ * Each waypoint is a "stop" where Chipy appears, rolls in, shows a bubble.
  */
 
 interface WaypointProps {
@@ -19,8 +19,8 @@ interface WaypointProps {
 }
 
 /**
- * A single Chippy waypoint — place between sections.
- * Chippy rolls in from left or right, pauses, shows speech bubble, then the user scrolls on.
+ * A single Chipy waypoint — place between sections.
+ * Chipy rolls in from left or right, pauses, shows speech bubble, then the user scrolls on.
  */
 export function ChippyWaypoint({ message, from = 'left', size = 52 }: WaypointProps) {
   const ref = useRef<HTMLDivElement>(null);
@@ -57,7 +57,7 @@ export function ChippyWaypoint({ message, from = 'left', size = 52 }: WaypointPr
       className="relative w-full overflow-hidden pointer-events-none select-none"
       style={{ height: 80 }}
     >
-      {/* Chippy rolling in */}
+      {/* Chipy rolling in */}
       <div
         className={`
           absolute top-1/2 flex items-center gap-3
@@ -71,7 +71,7 @@ export function ChippyWaypoint({ message, from = 'left', size = 52 }: WaypointPr
           transition: 'all 0.7s cubic-bezier(0.34, 1.56, 0.64, 1)',
         }}
       >
-        {/* Chippy mascot with subtle bounce */}
+        {/* Chipy mascot with subtle bounce */}
         <div
           style={{
             animation: visible ? 'chippy-bounce 2s ease-in-out infinite' : 'none',

@@ -38,6 +38,98 @@ export async function migratePhone() {
   await pool.query(`create index if not exists phone_numbers_org_idx on phone_numbers(org_id);`);
   // Allow pool numbers (org_id = NULL = unassigned, available for next customer)
   await pool.query(`ALTER TABLE phone_numbers ALTER COLUMN org_id DROP NOT NULL;`);
+  // Unique index on number to prevent duplicates
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS phone_numbers_number_uniq ON phone_numbers(number);`);
+
+  // Sync: ensure all Twilio numbers exist in DB (prevents buying duplicates)
+  await syncTwilioNumbersToDb();
+}
+
+// Max unassigned numbers to keep in pool — rest gets released from Twilio to save costs
+const MAX_POOL_SIZE = 3;
+
+/**
+ * Sync all Twilio-owned numbers into the DB.
+ * Numbers that exist in Twilio but not in DB are added as pool numbers (org_id = NULL).
+ * Then trims pool to MAX_POOL_SIZE by releasing excess numbers from Twilio.
+ * Runs on every startup to prevent the "bought numbers not in DB" bug.
+ */
+async function syncTwilioNumbersToDb() {
+  if (!pool) return;
+  try {
+    const client = getTwilioClient();
+    const twilioNumbers = await client.incomingPhoneNumbers.list({ limit: 100 });
+
+    // Step 1: Sync missing numbers into DB
+    let synced = 0;
+    for (const num of twilioNumbers) {
+      const existing = await pool.query(`SELECT id FROM phone_numbers WHERE number = $1`, [num.phoneNumber]);
+      if (existing.rowCount && existing.rowCount > 0) continue;
+
+      const pretty = num.phoneNumber.replace(/^\+49/, '0').replace(/(\d{3})(\d{3})(\d+)/, '$1 $2 $3');
+      await pool.query(
+        `INSERT INTO phone_numbers (org_id, number, number_pretty, provider, method, verified)
+         VALUES (NULL, $1, $2, 'twilio', 'provisioned', true)
+         ON CONFLICT (number) DO NOTHING`,
+        [num.phoneNumber, pretty],
+      );
+      synced++;
+    }
+    if (synced > 0) {
+      process.stdout.write(`[phone] Synced ${synced} Twilio numbers to DB pool\n`);
+    }
+
+    // Step 2: Trim pool — release excess unassigned numbers from Twilio
+    await trimPool(client);
+  } catch (e) {
+    process.stderr.write(`[phone] Twilio sync skipped: ${e instanceof Error ? e.message : String(e)}\n`);
+  }
+}
+
+/**
+ * Release excess pool numbers from Twilio to save costs.
+ * Keeps MAX_POOL_SIZE unassigned numbers, releases the rest.
+ */
+async function trimPool(client?: ReturnType<typeof getTwilioClient>) {
+  if (!pool) return;
+  try {
+    // Get all unassigned pool numbers, oldest first
+    const poolNumbers = await pool.query(
+      `SELECT id, number FROM phone_numbers
+       WHERE org_id IS NULL AND method = 'provisioned'
+       ORDER BY created_at ASC`,
+    );
+
+    const excess = (poolNumbers.rowCount ?? 0) - MAX_POOL_SIZE;
+    if (excess <= 0) return;
+
+    const cli = client ?? getTwilioClient();
+    let released = 0;
+
+    // Release oldest excess numbers
+    for (let i = 0; i < excess; i++) {
+      const num = poolNumbers.rows[i];
+      try {
+        // Find in Twilio and release
+        const incoming = await cli.incomingPhoneNumbers.list({ phoneNumber: num.number, limit: 1 });
+        if (incoming[0]) {
+          await cli.incomingPhoneNumbers(incoming[0].sid).remove();
+        }
+        // Remove from DB
+        await pool.query(`DELETE FROM phone_numbers WHERE id = $1`, [num.id]);
+        released++;
+        process.stdout.write(`[phone] Released ${num.number} from pool (cost saving)\n`);
+      } catch (e) {
+        process.stderr.write(`[phone] Failed to release ${num.number}: ${e instanceof Error ? e.message : String(e)}\n`);
+      }
+    }
+
+    if (released > 0) {
+      process.stdout.write(`[phone] Pool trimmed: released ${released} numbers, keeping ${MAX_POOL_SIZE}\n`);
+    }
+  } catch (e) {
+    process.stderr.write(`[phone] Pool trim failed: ${e instanceof Error ? e.message : String(e)}\n`);
+  }
 }
 
 // ── Retell phone number provisioning ────────────────────────────────────────
@@ -54,9 +146,9 @@ async function retellImportPhoneNumber(phoneNumber: string, agentId?: string) {
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       phone_number: phoneNumber,
-      termination_uri: 'anfangtelebot.pstn.twilio.com',
-      sip_trunk_auth_username: 'phonbot_retell',
-      sip_trunk_auth_password: 'phonbot_retell',
+      termination_uri: process.env.SIP_TERMINATION_URI ?? 'anfangtelebot.pstn.twilio.com',
+      sip_trunk_auth_username: process.env.SIP_TRUNK_USERNAME ?? 'phonbot_retell',
+      sip_trunk_auth_password: process.env.SIP_TRUNK_PASSWORD ?? 'phonbot_retell',
       sip_trunk_transport: 'TCP',
       ...(agentId ? { inbound_agent_id: agentId } : {}),
     }),
@@ -218,9 +310,20 @@ export async function registerPhone(app: FastifyInstance) {
     }
 
     // ── Number Pool System ──
-    // Step 1: Check if there's a free number in the pool (org_id IS NULL = unassigned)
-    const freeNumber = await pool.query(
-      `SELECT id, number, number_pretty, provider_id FROM phone_numbers WHERE org_id IS NULL AND method = 'provisioned' LIMIT 1`,
+    // Atomically claim a free number from the pool using CTE (race-condition safe)
+    const claimed = await pool.query(
+      `WITH free AS (
+         SELECT id FROM phone_numbers
+         WHERE org_id IS NULL AND method = 'provisioned'
+         LIMIT 1
+         FOR UPDATE SKIP LOCKED
+       )
+       UPDATE phone_numbers
+       SET org_id = $1
+       FROM free
+       WHERE phone_numbers.id = free.id
+       RETURNING phone_numbers.id, phone_numbers.number, phone_numbers.number_pretty, phone_numbers.provider_id`,
+      [orgId],
     );
 
     let purchasedNumber: string;
@@ -228,17 +331,17 @@ export async function registerPhone(app: FastifyInstance) {
     let retellPhoneNumberId: string | null = null;
     let poolNumberId: string | null = null;
 
-    if (freeNumber.rowCount && freeNumber.rowCount > 0) {
-      // Use number from pool — assign to this org
-      const free = freeNumber.rows[0];
+    if (claimed.rowCount && claimed.rowCount > 0) {
+      const free = claimed.rows[0];
       purchasedNumber = free.number;
       numberPretty = free.number_pretty ?? purchasedNumber;
       retellPhoneNumberId = free.provider_id ?? null;
       poolNumberId = free.id;
     } else {
-      // No free numbers in pool — buy a new one from Twilio
-      const PHONBOT_BUNDLE_SID = 'BUdf48e4eb15c501c7fe3b36008b728062';
-      const PHONBOT_ADDRESS_SID = 'AD4c5ce0dc9622cf67e55cbc07996802c8';
+      // No free numbers in pool — try to buy a new one from Twilio
+      // But if Twilio fails (no credit, auth issues), give a clear error
+      const PHONBOT_BUNDLE_SID = process.env.TWILIO_BUNDLE_SID ?? 'BUdf48e4eb15c501c7fe3b36008b728062';
+      const PHONBOT_ADDRESS_SID = process.env.TWILIO_ADDRESS_SID ?? 'AD4c5ce0dc9622cf67e55cbc07996802c8';
 
       try {
         const client = getTwilioClient();
@@ -246,7 +349,7 @@ export async function registerPhone(app: FastifyInstance) {
         if (!available.length) {
           available = await client.availablePhoneNumbers('DE').local.list({ limit: 5 });
         }
-        if (!available.length) return reply.status(400).send({ error: 'Keine deutschen Nummern verfügbar. Bitte später erneut versuchen.' });
+        if (!available.length) return reply.status(400).send({ error: 'Keine freien Nummern im Pool und keine neuen verfügbar. Bitte kontaktiere den Support.' });
 
         let purchased: { phoneNumber: string } | null = null;
         let lastError = '';
@@ -263,12 +366,12 @@ export async function registerPhone(app: FastifyInstance) {
             continue;
           }
         }
-        if (!purchased) return reply.status(500).send({ error: `Keine Nummer konnte aktiviert werden: ${lastError}` });
+        if (!purchased) return reply.status(503).send({ error: 'Aktuell sind keine Nummern verfügbar. Bitte versuche es später erneut oder kontaktiere den Support.' });
         purchasedNumber = purchased.phoneNumber;
         numberPretty = purchasedNumber.replace(/^\+49/, '0').replace(/(\d{3})(\d{3})(\d+)/, '$1 $2 $3');
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'Twilio-Fehler';
-        return reply.status(500).send({ error: `Nummer konnte nicht erworben werden: ${msg}` });
+        // Twilio failed (auth, billing, etc.) — give user-friendly error
+        return reply.status(503).send({ error: 'Aktuell sind keine Nummern verfügbar. Bitte versuche es später erneut oder kontaktiere den Support.' });
       }
     }
 
@@ -415,17 +518,47 @@ export async function registerPhone(app: FastifyInstance) {
     }
   });
 
-  // DELETE /phone/:id — remove a phone number
+  // DELETE /phone/:id — remove a phone number (provisioned → return to pool, forwarding → delete)
   app.delete('/phone/:id', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
     const { id } = req.params as { id: string };
-    const result = await pool.query(
-      `DELETE FROM phone_numbers WHERE id = $1 AND org_id = $2 RETURNING number, provider_id`,
+
+    // Check what kind of number it is
+    const phoneRow = await pool.query(
+      `SELECT id, number, method, provider_id FROM phone_numbers WHERE id = $1 AND org_id = $2`,
       [id, orgId],
     );
-    if (!result.rowCount) return reply.status(404).send({ error: 'Nummer nicht gefunden' });
+    if (!phoneRow.rowCount) return reply.status(404).send({ error: 'Nummer nicht gefunden' });
+
+    const phone = phoneRow.rows[0];
+
+    if (phone.method === 'provisioned') {
+      // Provisioned Twilio numbers → return to pool (don't delete, don't release from Twilio)
+      // Unassign agent in Retell so it's clean for next customer
+      const key = process.env.RETELL_API_KEY;
+      if (key && phone.provider_id) {
+        try {
+          await fetch(`https://api.retellai.com/update-phone-number/${encodeURIComponent(phone.number)}`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ inbound_agent_id: null }),
+          });
+        } catch { /* non-fatal */ }
+      }
+      // Return to pool: set org_id and agent_id to NULL
+      await pool.query(
+        `UPDATE phone_numbers SET org_id = NULL, agent_id = NULL WHERE id = $1`,
+        [id],
+      );
+    } else {
+      // Forwarding numbers → fully delete (no Twilio cost)
+      await pool.query(
+        `DELETE FROM phone_numbers WHERE id = $1 AND org_id = $2`,
+        [id, orgId],
+      );
+    }
 
     return { ok: true };
   });
@@ -560,5 +693,62 @@ export async function registerPhone(app: FastifyInstance) {
       const msg = e instanceof Error ? e.message : 'Twilio call failed';
       return reply.status(500).send({ error: msg, verified: false });
     }
+  });
+
+  // POST /phone/admin/seed-pool — add existing phone numbers to the pool (admin only)
+  // Used to seed pool with numbers already purchased in Twilio
+  app.post('/phone/admin/seed-pool', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { role } = req.user as JwtPayload;
+    if (role !== 'owner') return reply.status(403).send({ error: 'Admin only' });
+    if (!pool) return reply.status(503).send({ error: 'Database not configured' });
+
+    const parsed = z.object({
+      numbers: z.array(z.object({
+        number: z.string().min(1),       // E.164 format, e.g. "+493012345678"
+        providerId: z.string().optional(), // Retell phone_number_id if already imported
+      })).max(50),
+    }).safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'numbers array required' });
+
+    const results: Array<{ number: string; status: string }> = [];
+
+    for (const entry of parsed.data.numbers) {
+      // Check if number already exists in DB
+      const existing = await pool.query(
+        `SELECT id FROM phone_numbers WHERE number = $1`,
+        [entry.number],
+      );
+      if (existing.rowCount && existing.rowCount > 0) {
+        results.push({ number: entry.number, status: 'already_exists' });
+        continue;
+      }
+
+      const pretty = entry.number.replace(/^\+49/, '0').replace(/(\d{3})(\d{3})(\d+)/, '$1 $2 $3');
+      await pool.query(
+        `INSERT INTO phone_numbers (org_id, number, number_pretty, provider, provider_id, agent_id, method, verified)
+         VALUES (NULL, $1, $2, 'twilio', $3, NULL, 'provisioned', true)`,
+        [entry.number, pretty, entry.providerId ?? null],
+      );
+      results.push({ number: entry.number, status: 'added_to_pool' });
+    }
+
+    return { ok: true, results };
+  });
+
+  // GET /phone/admin/pool — list all pool numbers (admin only)
+  app.get('/phone/admin/pool', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { role } = req.user as JwtPayload;
+    if (role !== 'owner') return reply.status(403).send({ error: 'Admin only' });
+    if (!pool) return { items: [] };
+
+    const { rows } = await pool.query(
+      `SELECT id, number, number_pretty, provider_id, org_id, agent_id, created_at
+       FROM phone_numbers WHERE method = 'provisioned' ORDER BY org_id NULLS FIRST, created_at`,
+    );
+    return {
+      items: rows,
+      pool: rows.filter(r => !r.org_id).length,
+      assigned: rows.filter(r => r.org_id).length,
+    };
   });
 }

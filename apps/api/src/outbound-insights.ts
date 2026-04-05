@@ -19,7 +19,7 @@ import { pool } from './db.js';
 import { BASE_OUTBOUND_PROMPT } from './outbound-agent.js';
 import { updateLLM } from './retell.js';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? '' });
 
 const ANALYSIS_MODEL = 'gpt-4o-mini';
 const MIN_CALLS_FOR_LEARNING = 5;      // Analyze patterns after N calls
@@ -146,10 +146,12 @@ Bewertungskriterien:
       [orgId],
     );
     if ((rowCount ?? 0) % MIN_CALLS_FOR_LEARNING === 0) {
-      consolidateAndLearn(orgId).catch(() => {});
+      consolidateAndLearn(orgId).catch((e) => {
+        process.stderr.write(`[outbound-insights] consolidate failed for org ${orgId}: ${e instanceof Error ? e.message : String(e)}\n`);
+      });
     }
-  } catch {
-    // Non-critical — don't crash webhook
+  } catch (e) {
+    process.stderr.write(`[outbound-insights] analyzeOutboundCall failed: ${e instanceof Error ? e.message : String(e)}\n`);
   }
 }
 

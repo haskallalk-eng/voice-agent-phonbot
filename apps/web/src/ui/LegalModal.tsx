@@ -19,9 +19,9 @@ function ImpressumContent() {
       <section>
         <h2 className="text-base font-semibold text-white mb-2">Angaben gemäß § 5 TMG</h2>
         <p>
-          [PLATZHALTER – Name/Firma]<br />
-          [PLATZHALTER – Straße und Hausnummer]<br />
-          [PLATZHALTER – PLZ und Ort]<br />
+          Mindrails<br />
+          Hassieb Kalla<br />
+          Hennigsdorf<br />
           Deutschland
         </p>
       </section>
@@ -29,24 +29,8 @@ function ImpressumContent() {
       <section>
         <h2 className="text-base font-semibold text-white mb-2">Kontakt</h2>
         <p>
-          E-Mail: [PLATZHALTER – E-Mail-Adresse]<br />
-          Telefon: [PLATZHALTER – Telefonnummer]
-        </p>
-      </section>
-
-      <section>
-        <h2 className="text-base font-semibold text-white mb-2">Umsatzsteuer-ID</h2>
-        <p>
-          Umsatzsteuer-Identifikationsnummer gemäß § 27a Umsatzsteuergesetz:<br />
-          [PLATZHALTER – Umsatzsteuer-ID]
-        </p>
-      </section>
-
-      <section>
-        <h2 className="text-base font-semibold text-white mb-2">Handelsregister</h2>
-        <p>
-          Registergericht: [PLATZHALTER – Amtsgericht]<br />
-          Registernummer: [PLATZHALTER – HRB-Nummer]
+          E-Mail: info@mindrails.de<br />
+          Web: phonbot.de
         </p>
       </section>
 
@@ -55,8 +39,8 @@ function ImpressumContent() {
           Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV
         </h2>
         <p>
-          [PLATZHALTER – Name der verantwortlichen Person]<br />
-          [PLATZHALTER – Adresse der verantwortlichen Person]
+          Hassieb Kalla<br />
+          Hennigsdorf, Deutschland
         </p>
       </section>
 
@@ -120,9 +104,9 @@ function DatenschutzContent() {
         <h2 className="text-base font-semibold text-white mb-2">1. Verantwortlicher</h2>
         <p>
           Verantwortlicher im Sinne der DSGVO ist:<br />
-          [PLATZHALTER – Name/Firma]<br />
-          [PLATZHALTER – Adresse]<br />
-          E-Mail: [PLATZHALTER – E-Mail-Adresse]
+          Mindrails — Hassieb Kalla<br />
+          Hennigsdorf, Deutschland<br />
+          E-Mail: info@mindrails.de
         </p>
       </section>
 
@@ -196,7 +180,7 @@ function DatenschutzContent() {
           </li>
         </ul>
         <p className="mt-3">
-          Zur Ausübung Ihrer Rechte wenden Sie sich bitte an: [PLATZHALTER – Kontakt-E-Mail]
+          Zur Ausübung Ihrer Rechte wenden Sie sich bitte an: info@mindrails.de
         </p>
       </section>
 
@@ -234,8 +218,8 @@ function DatenschutzContent() {
       <section>
         <h2 className="text-base font-semibold text-white mb-2">5. Hosting</h2>
         <p>
-          Diese Website wird auf Servern in Deutschland gehostet. Anbieter: [PLATZHALTER –
-          Hosting-Anbieter]. Durch die Nutzung dieser Website werden personenbezogene Daten auf diesen
+          Diese Website wird auf Servern in Deutschland gehostet. Anbieter: Supabase (EU).
+          Durch die Nutzung dieser Website werden personenbezogene Daten auf diesen
           Servern gespeichert. Zwischen uns und dem Hosting-Anbieter besteht ein
           Auftragsverarbeitungsvertrag gemäß Art. 28 DSGVO.
         </p>
@@ -244,9 +228,9 @@ function DatenschutzContent() {
       <section>
         <h2 className="text-base font-semibold text-white mb-2">6. Datenschutzbeauftragter</h2>
         <p>
-          Kontakt Datenschutzbeauftragter:<br />
-          [PLATZHALTER – Name des Datenschutzbeauftragten]<br />
-          E-Mail: [PLATZHALTER – E-Mail-Datenschutz]
+          Kontakt Datenschutz:<br />
+          Hassieb Kalla<br />
+          E-Mail: info@mindrails.de
         </p>
         <p className="mt-2 text-white/50 text-xs">
           Stand: März 2025
@@ -262,8 +246,7 @@ function AgbContent() {
       <section>
         <h2 className="text-base font-semibold text-white mb-2">§ 1 Geltungsbereich</h2>
         <p>
-          Diese Allgemeinen Geschäftsbedingungen (AGB) gelten für alle Verträge zwischen [PLATZHALTER –
-          Firmenname] (nachfolgend „Anbieter") und dem Kunden (nachfolgend „Nutzer") über die Nutzung
+          Diese Allgemeinen Geschäftsbedingungen (AGB) gelten für alle Verträge zwischen Mindrails (nachfolgend „Anbieter") und dem Kunden (nachfolgend „Nutzer") über die Nutzung
           der Phonbot-Plattform. Abweichende Bedingungen des Nutzers werden nicht anerkannt, es sei
           denn, der Anbieter stimmt ihrer Geltung ausdrücklich schriftlich zu.
         </p>
@@ -342,7 +325,7 @@ function AgbContent() {
         <p>
           Verträge werden auf unbestimmte Zeit geschlossen und können jeweils zum Ende des
           Abrechnungszeitraums (Monat) gekündigt werden. Die Kündigung kann jederzeit im Nutzerkonto
-          oder per E-Mail an [PLATZHALTER – Kündigungs-E-Mail] erfolgen.
+          oder per E-Mail an info@mindrails.de erfolgen.
         </p>
         <p className="mt-2">
           Das Recht zur außerordentlichen Kündigung aus wichtigem Grund bleibt beiderseits unberührt.

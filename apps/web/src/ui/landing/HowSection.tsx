@@ -5,7 +5,7 @@ export function HowSection() {
   const ref = React.useRef<HTMLElement>(null);
   const visible = useVisible(ref);
   return (
-    <section ref={ref} id="how" className="relative z-10 px-6 py-20 max-w-5xl mx-auto">
+    <section ref={ref} id="how" className="relative z-10 px-6 py-20 max-w-5xl mx-auto ambient-glow-alt ambient-glow">
       <div className="text-center mb-16">
         <h2 className="text-3xl sm:text-4xl font-extrabold mb-4">So funktioniert's</h2>
       </div>

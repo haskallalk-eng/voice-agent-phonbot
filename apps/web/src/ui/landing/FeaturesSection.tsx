@@ -3,9 +3,9 @@ import { FEATURES } from './shared.js';
 
 export function FeaturesSection() {
   return (
-    <section id="features" className="relative z-10 px-6 py-24 max-w-5xl mx-auto">
+    <section id="features" className="relative z-10 px-6 py-24 max-w-5xl mx-auto ambient-glow">
       <div className="text-center mb-16">
-        <h2 className="text-3xl sm:text-4xl font-extrabold mb-3">Was Phonbot für dich erledigt</h2>
+        <h2 className="text-3xl sm:text-4xl font-extrabold mb-3">Was <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Chipy</span> für dich erledigt</h2>
         <p className="text-white/50 text-base max-w-lg mx-auto">Sechs Gründe warum du nie wieder einen Anruf verpasst.</p>
       </div>
 

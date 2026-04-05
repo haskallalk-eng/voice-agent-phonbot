@@ -12,7 +12,6 @@ import {
   IconPhone,
   IconBilling,
   IconLogout,
-  IconInsights,
 } from './PhonbotIcons.js';
 import { deleteAccount } from '../lib/api.js';
 
@@ -30,7 +29,6 @@ const NAV_GROUPS: { label?: string; items: NavItem[] }[] = [
       { id: 'logs', label: 'Anrufe', Icon: IconCalls },
       { id: 'tickets', label: 'Tickets', Icon: IconTickets },
       { id: 'calendar', label: 'Kalender', Icon: IconCalendar },
-      { id: 'insights', label: 'KI-Insights', Icon: IconInsights },
     ],
   },
   {
@@ -119,19 +117,19 @@ function DeleteAccountModal({ onClose, onLogout }: { onClose: () => void; onLogo
 export function Sidebar({ current, onNavigate, org, user, onLogout }: Props) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   return (
-    <aside className="w-56 shrink-0 bg-[#0F0F18] border-r border-white/5 text-white flex flex-col h-full min-h-0">
+    <aside className="w-56 shrink-0 bg-[#0F0F18] border-r border-white/5 text-white flex flex-col h-full">
       {/* Brand */}
-      <div className="px-5 py-5 border-b border-white/5 shrink-0">
+      <div className="px-5 py-4 border-b border-white/5 shrink-0">
         <PhonbotBrand size="sm" />
-        {org && <p className="text-xs text-white/40 mt-1 truncate">{org.name}</p>}
+        {org && <p className="text-[11px] text-white/40 mt-1 truncate">{org.name}</p>}
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 py-3 overflow-y-auto" aria-label="Hauptnavigation">
+      {/* Navigation — flex-1 fills all available space, groups spread evenly */}
+      <nav className="flex-1 flex flex-col justify-between py-4 overflow-hidden" aria-label="Hauptnavigation">
         {NAV_GROUPS.map((group, gi) => (
-          <div key={gi} className={gi > 0 ? 'mt-4' : ''}>
+          <div key={gi}>
             {group.label && (
-              <p className="px-5 mb-1 text-[10px] font-semibold tracking-widest text-white/25 uppercase select-none">
+              <p className="px-5 mb-1 text-[10px] font-semibold tracking-widest text-white/20 uppercase select-none">
                 {group.label}
               </p>
             )}
@@ -143,13 +141,13 @@ export function Sidebar({ current, onNavigate, org, user, onLogout }: Props) {
                   onClick={() => onNavigate(item.id)}
                   aria-current={active ? 'page' : undefined}
                   className={[
-                    'w-full flex items-center gap-3 px-5 py-2.5 text-sm transition-all duration-150 relative',
+                    'w-full flex items-center gap-3 px-5 py-2 text-[13px] transition-all duration-150 relative',
                     active
                       ? 'bg-white/[0.08] text-white font-medium border-l-2 border-orange-500'
                       : 'text-white/45 hover:text-white/75 hover:bg-white/[0.04] border-l-2 border-transparent',
                   ].join(' ')}
                 >
-                  <item.Icon size={18} />
+                  <item.Icon size={16} />
                   {item.label}
                 </button>
               );
@@ -159,41 +157,41 @@ export function Sidebar({ current, onNavigate, org, user, onLogout }: Props) {
       </nav>
 
       {/* User Footer */}
-      <div className="px-4 py-4 border-t border-white/5 shrink-0">
-        {(user || org) && (
-          <div className="flex items-center gap-3 mb-3 min-w-0">
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
-            >
-              {user?.email?.[0]?.toUpperCase() ?? '?'}
-            </div>
-            <div className="min-w-0 flex-1">
-              {org && (
-                <p className="text-xs font-semibold text-white/80 truncate">{org.name}</p>
-              )}
-              {user && (
-                <p className="text-xs text-white/40 truncate" title={user.email}>
-                  {user.email}
-                </p>
-              )}
-            </div>
+      <div className="px-4 py-3 border-t border-white/5 shrink-0">
+        <div className="flex items-center gap-2.5 mb-2.5 min-w-0">
+          <div
+            className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
+            style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+          >
+            {user?.email?.[0]?.toUpperCase() ?? '?'}
           </div>
-        )}
-        <button
-          onClick={onLogout}
-          className="flex items-center gap-2 text-xs text-white/30 hover:text-white/70 transition-colors"
-        >
-          <IconLogout size={14} />
-          Abmelden
-        </button>
-        <button
-          onClick={() => setShowDeleteModal(true)}
-          className="mt-2 flex items-center gap-2 text-xs text-red-500/40 hover:text-red-400/70 transition-colors"
-          aria-label="Account unwiderruflich löschen"
-        >
-          Account löschen
-        </button>
+          <div className="min-w-0 flex-1">
+            {org && (
+              <p className="text-[11px] font-semibold text-white/80 truncate leading-tight">{org.name}</p>
+            )}
+            {user && (
+              <p className="text-[11px] text-white/35 truncate leading-tight" title={user.email}>
+                {user.email}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center justify-between">
+          <button
+            onClick={onLogout}
+            className="flex items-center gap-1.5 text-[11px] text-white/30 hover:text-white/70 transition-colors"
+          >
+            <IconLogout size={12} />
+            Abmelden
+          </button>
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="text-[11px] text-red-500/30 hover:text-red-400/70 transition-colors"
+            aria-label="Account löschen"
+          >
+            Löschen
+          </button>
+        </div>
       </div>
       {showDeleteModal && (
         <DeleteAccountModal

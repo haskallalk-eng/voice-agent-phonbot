@@ -4,7 +4,7 @@ import { createWebCall } from '../lib/api.js';
 
 type CallState = 'idle' | 'connecting' | 'active' | 'error';
 
-export function WebCallWidget() {
+export function WebCallWidget({ agentTenantId }: { agentTenantId?: string } = {}) {
   const [state, setState] = useState<CallState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [agentTalking, setAgentTalking] = useState(false);
@@ -24,7 +24,7 @@ export function WebCallWidget() {
     setError(null);
     setSeconds(0);
     try {
-      const res = await createWebCall();
+      const res = await createWebCall(agentTenantId);
       if (!res.access_token) throw new Error(res.message ?? 'Kein access_token erhalten');
       const client = new RetellWebClient();
       clientRef.current = client;
