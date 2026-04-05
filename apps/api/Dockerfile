@@ -2,33 +2,30 @@ FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@9.15.3 --activate
 WORKDIR /app
 
-# ── deps: install all dependencies (including dev for build) ──────────────────
-FROM base AS deps
+# ── build: install all deps + compile ────────────────────────────────────────
+FROM base AS build
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json ./
 COPY apps/api/package.json apps/api/
 COPY packages/shared/package.json packages/shared/
 COPY packages/voice-core/package.json packages/voice-core/
-RUN pnpm install --frozen-lockfile
-
-# ── build ─────────────────────────────────────────────────────────────────────
-FROM deps AS build
+# Install with --shamefully-hoist so node_modules are at /app/node_modules
+RUN pnpm install --frozen-lockfile --shamefully-hoist
 COPY apps/api/ apps/api/
 COPY packages/ packages/
 RUN pnpm -r build
 
 # ── runtime: lean production image ────────────────────────────────────────────
-FROM base AS runtime
-# Copy the full monorepo node_modules (pnpm hoists everything here)
-COPY --from=deps /app/node_modules ./node_modules
-# Copy compiled output
+FROM node:22-alpine AS runtime
+WORKDIR /app
+# Copy everything built (node_modules + dist)
+COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build /app/packages/voice-core/dist ./packages/voice-core/dist
-# Copy package manifests so module resolution works
-COPY pnpm-workspace.yaml package.json ./
-COPY apps/api/package.json apps/api/
-COPY packages/shared/package.json packages/shared/
-COPY packages/voice-core/package.json packages/voice-core/
+COPY --from=build /app/apps/api/package.json ./apps/api/
+COPY --from=build /app/packages/shared/package.json ./packages/shared/
+COPY --from=build /app/packages/voice-core/package.json ./packages/voice-core/
+COPY --from=build /app/pnpm-workspace.yaml /app/package.json ./
 
 ENV NODE_ENV=production
 ENV PORT=3001
