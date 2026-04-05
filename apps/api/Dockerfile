@@ -6,7 +6,7 @@ FROM base AS deps
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/api/package.json apps/api/
 COPY packages/shared/package.json packages/shared/
-COPY packages/voice-core/package.json packages/voice-core/ 2>/dev/null || true
+COPY packages/voice-core/package.json packages/voice-core/
 RUN pnpm install --frozen-lockfile --prod
 
 FROM base AS build
@@ -19,10 +19,10 @@ RUN pnpm -r build
 FROM base AS runtime
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
-COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules 2>/dev/null || true
+COPY --from=deps /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY --from=build /app/apps/api/dist ./apps/api/dist
-COPY --from=build /app/packages/shared/dist ./packages/shared/dist 2>/dev/null || true
-COPY --from=build /app/packages/voice-core/dist ./packages/voice-core/dist 2>/dev/null || true
+COPY --from=build /app/packages/shared/dist ./packages/shared/dist
+COPY --from=build /app/packages/voice-core/dist ./packages/voice-core/dist
 COPY apps/api/package.json apps/api/
 COPY packages/shared/package.json packages/shared/
 COPY packages/ packages/
