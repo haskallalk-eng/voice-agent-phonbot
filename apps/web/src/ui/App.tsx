@@ -16,6 +16,7 @@ import { BillingPage } from './BillingPage.js';
 import { PhoneManager } from './PhoneManager.js';
 import { CalendarPage } from './CalendarPage.js';
 import { InsightsPage } from './InsightsPage.js';
+import { OutboundPage } from './OutboundPage.js';
 import { ToastProvider } from './Toast.js';
 import { FoxLogo, PhonbotBrand } from './FoxLogo.js';
 import { ChippyCopilot } from '../components/ChippyCopilot.js';
@@ -238,6 +239,7 @@ function Dashboard() {
         {page === 'phone' && <PhoneManager onNavigate={setPage as (page: string) => void} />}
         {page === 'calendar' && <CalendarPage />}
         {page === 'insights' && <InsightsPage />}
+        {page === 'outbound' && <OutboundPage />}
       </main>
 
       {/* Chipy Copilot — floating chat assistant, visible on all dashboard pages */}

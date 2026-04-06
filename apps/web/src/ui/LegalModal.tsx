@@ -21,7 +21,8 @@ function ImpressumContent() {
         <p>
           Mindrails<br />
           Hassieb Kalla<br />
-          Hennigsdorf<br />
+          Scharnhorststraße 8<br />
+          12307 Berlin<br />
           Deutschland
         </p>
       </section>
@@ -29,6 +30,7 @@ function ImpressumContent() {
       <section>
         <h2 className="text-base font-semibold text-white mb-2">Kontakt</h2>
         <p>
+          Telefon: +49 176 76679632<br />
           E-Mail: info@mindrails.de<br />
           Web: phonbot.de
         </p>
@@ -40,7 +42,8 @@ function ImpressumContent() {
         </h2>
         <p>
           Hassieb Kalla<br />
-          Hennigsdorf, Deutschland
+          Scharnhorststraße 8<br />
+          12307 Berlin, Deutschland
         </p>
       </section>
 
@@ -105,7 +108,7 @@ function DatenschutzContent() {
         <p>
           Verantwortlicher im Sinne der DSGVO ist:<br />
           Mindrails — Hassieb Kalla<br />
-          Hennigsdorf, Deutschland<br />
+          Scharnhorststraße 8, 12307 Berlin<br />
           E-Mail: info@mindrails.de
         </p>
       </section>
@@ -230,6 +233,8 @@ function DatenschutzContent() {
         <p>
           Kontakt Datenschutz:<br />
           Hassieb Kalla<br />
+          Scharnhorststraße 8, 12307 Berlin<br />
+          Telefon: +49 176 76679632<br />
           E-Mail: info@mindrails.de
         </p>
         <p className="mt-2 text-white/50 text-xs">

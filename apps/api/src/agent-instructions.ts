@@ -13,10 +13,8 @@ function buildOpeningHoursBlock(openingHours: string): string {
   const lines: string[] = [];
   lines.push(`Opening hours: ${openingHours.trim()}`);
 
-  // Inject current time context so the LLM can reason about open/closed
-  const now = new Date();
-  const berlinTime = now.toLocaleString('de-DE', { timeZone: 'Europe/Berlin', weekday: 'long', hour: '2-digit', minute: '2-digit' });
-  lines.push(`Current time (Europe/Berlin): ${berlinTime}`);
+  // Timezone context — actual time is determined at call-start, not deploy-time
+  lines.push(`Timezone: Europe/Berlin. Use the current time at the moment of the call to determine if the business is open or closed.`);
   lines.push(
     'IMPORTANT: If the business is currently CLOSED based on the opening hours above, ' +
     'tell the caller politely that the business is currently closed, mention when they reopen, ' +

@@ -100,6 +100,11 @@ export async function migrateCalendar(): Promise<void> {
       created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+
+  // Prevent double bookings for the same org + slot time
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS chippy_bookings_org_slot_uniq ON chippy_bookings(org_id, slot_time);
+  `);
 }
 
 // ── Internal DB helpers ───────────────────────────────────────────────────────
@@ -292,14 +297,14 @@ async function getValidToken(orgId: string): Promise<string | null> {
 
       if (!resp.ok) return null;
 
-      const data = (await resp.json()) as { access_token: string; expires_in: number };
+      const data = (await resp.json()) as { access_token: string; expires_in: number; refresh_token?: string };
       const expiresAt = new Date(Date.now() + data.expires_in * 1000);
 
       await pool!.query(
         `UPDATE calendar_connections
-         SET access_token = $1, token_expires_at = $2
-         WHERE org_id = $3 AND provider = 'google'`,
-        [data.access_token, expiresAt, orgId],
+         SET access_token = $1, refresh_token = COALESCE($2, refresh_token), token_expires_at = $3
+         WHERE org_id = $4 AND provider = 'google'`,
+        [data.access_token, data.refresh_token ?? null, expiresAt, orgId],
       );
 
       return data.access_token;
@@ -404,23 +409,30 @@ const DEFAULT_CHIPPY_SCHEDULE: ChippySchedule = {
   '6': { enabled: false, start: '09:00', end: '17:00' }, // Sa
 };
 
-async function getChippySchedule(orgId: string): Promise<{ schedule: ChippySchedule; blocks: string[] }> {
-  if (!pool) return { schedule: DEFAULT_CHIPPY_SCHEDULE, blocks: [] };
+type ChippyBlock = { date: string; start_time: string | null; end_time: string | null };
+
+async function getChippySchedule(orgId: string): Promise<{ schedule: ChippySchedule; blocks: string[]; timeBlocks: ChippyBlock[] }> {
+  if (!pool) return { schedule: DEFAULT_CHIPPY_SCHEDULE, blocks: [], timeBlocks: [] };
 
   const [schedRes, blockRes] = await Promise.all([
     pool.query(`SELECT schedule FROM chippy_schedules WHERE org_id = $1`, [orgId]),
     pool.query(
-      `SELECT date::text FROM chippy_blocks WHERE org_id = $1 AND date >= CURRENT_DATE ORDER BY date`,
+      `SELECT date::text, start_time::text, end_time::text FROM chippy_blocks WHERE org_id = $1 AND date >= CURRENT_DATE ORDER BY date`,
       [orgId],
     ),
   ]);
 
   const schedule: ChippySchedule = (schedRes.rows[0]?.schedule as ChippySchedule | undefined) ?? DEFAULT_CHIPPY_SCHEDULE;
-  const blocks: string[] = blockRes.rows.map((r) => r.date as string);
-  return { schedule, blocks };
+  // Full-day blocks (no start_time)
+  const blocks: string[] = blockRes.rows.filter((r) => !r.start_time).map((r) => r.date as string);
+  // Time-specific blocks
+  const timeBlocks: ChippyBlock[] = blockRes.rows.filter((r) => r.start_time).map((r) => ({
+    date: r.date as string, start_time: r.start_time as string, end_time: r.end_time as string,
+  }));
+  return { schedule, blocks, timeBlocks };
 }
 
-function generateChippySlots(schedule: ChippySchedule, blocks: string[]): string[] {
+function generateChippySlots(schedule: ChippySchedule, blocks: string[], timeBlocks: ChippyBlock[] = []): string[] {
   const slots: string[] = [];
   const now = new Date();
   const blockedSet = new Set(blocks);
@@ -441,11 +453,22 @@ function generateChippySlots(schedule: ChippySchedule, blocks: string[]): string
     const [startH] = dayConfig.start.split(':').map(Number);
     const [endH] = dayConfig.end.split(':').map(Number);
 
+    // Get time-specific blocks for this date
+    const dayTimeBlocks = timeBlocks.filter(b => b.date === dateStr);
+
     for (let h = (startH ?? 9); h < (endH ?? 17); h++) {
       for (const m of [0, 30] as const) {
         const slotStart = new Date(day);
         slotStart.setHours(h, m, 0, 0);
         if (slotStart <= now) continue;
+
+        // Check if this slot falls within a time-specific block
+        const slotTime = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+        const isTimeBlocked = dayTimeBlocks.some(b =>
+          b.start_time && b.end_time && slotTime >= b.start_time.slice(0, 5) && slotTime < b.end_time.slice(0, 5)
+        );
+        if (isTimeBlocked) continue;
+
         const hStr = h.toString().padStart(2, '0');
         const mStr = m.toString().padStart(2, '0');
         slots.push(`${dayLabel} ${hStr}:${mStr}`);
@@ -608,10 +631,10 @@ export async function findFreeSlots(
   const sources: string[] = [];
 
   // Always check Chippy built-in calendar first
-  const { schedule, blocks } = await getChippySchedule(orgId);
+  const { schedule, blocks, timeBlocks } = await getChippySchedule(orgId);
   const hasChippy = Object.values(schedule).some((d) => d.enabled);
   if (hasChippy) {
-    allSlots.push(...generateChippySlots(schedule, blocks));
+    allSlots.push(...generateChippySlots(schedule, blocks, timeBlocks));
     sources.push('chippy');
   }
 
@@ -709,22 +732,20 @@ export async function bookSlot(
   },
 ): Promise<{ ok: boolean; eventId?: string; bookingId?: number; error?: string }> {
   const connections = await getAllConnections(orgId);
-
-  // Always book into Chippy (internal record) regardless of external calendars
   const slotTime = parseSlotTime(opts.time);
-  let chippyBookingId: string | undefined;
-  if (slotTime && pool) {
-    const res = await pool.query(
-      `INSERT INTO chippy_bookings (org_id, customer_name, customer_phone, service, notes, slot_time)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-      [orgId, opts.customerName, opts.customerPhone, opts.service || null, opts.notes || null, slotTime.toISOString()],
-    );
-    chippyBookingId = res.rows[0]?.id as string | undefined;
-  }
 
-  // No external calendars — Chippy booking is sufficient
+  // No external calendars — book directly into Chippy
   if (connections.length === 0) {
     if (!slotTime) return { ok: false, error: `Cannot parse time: ${opts.time}` };
+    let chippyBookingId: string | undefined;
+    if (pool) {
+      const res = await pool.query(
+        `INSERT INTO chippy_bookings (org_id, customer_name, customer_phone, service, notes, slot_time)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [orgId, opts.customerName, opts.customerPhone, opts.service || null, opts.notes || null, slotTime.toISOString()],
+      );
+      chippyBookingId = res.rows[0]?.id as string | undefined;
+    }
     return { ok: true, eventId: chippyBookingId };
   }
 
@@ -739,16 +760,41 @@ export async function bookSlot(
     }
   }
 
-  // If at least one external booking succeeded, return ok
+  // If at least one external booking succeeded, also create chippy record
   const anySuccess = results.some(r => r.ok);
   const firstSuccess = results.find(r => r.ok);
+
+  let chippyBookingId: string | undefined;
+  if (anySuccess && slotTime && pool) {
+    try {
+      const res = await pool.query(
+        `INSERT INTO chippy_bookings (org_id, customer_name, customer_phone, service, notes, slot_time)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [orgId, opts.customerName, opts.customerPhone, opts.service || null, opts.notes || null, slotTime.toISOString()],
+      );
+      chippyBookingId = res.rows[0]?.id as string | undefined;
+    } catch {
+      // Chippy record is best-effort; external booking already succeeded
+    }
+  }
+
   if (anySuccess) {
     return { ok: true, eventId: firstSuccess?.eventId ?? chippyBookingId };
   }
 
-  // All external failed but Chippy booking exists
-  if (chippyBookingId) {
-    return { ok: true, eventId: chippyBookingId };
+  // All external failed — try chippy-only as fallback
+  if (slotTime && pool) {
+    try {
+      const res = await pool.query(
+        `INSERT INTO chippy_bookings (org_id, customer_name, customer_phone, service, notes, slot_time)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [orgId, opts.customerName, opts.customerPhone, opts.service || null, opts.notes || null, slotTime.toISOString()],
+      );
+      chippyBookingId = res.rows[0]?.id as string | undefined;
+      return { ok: true, eventId: chippyBookingId };
+    } catch {
+      // Fall through to error
+    }
   }
 
   return { ok: false, error: results.map(r => `${r.provider}: ${r.error}`).join('; ') };
@@ -868,7 +914,7 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
       const { orgId } = req.user as JwtPayload;
 
       const state = app.jwt.sign(
-        { orgId, userId: '', role: '' } as { userId: string; orgId: string; role: string },
+        { orgId, userId: '', role: '', purpose: 'oauth-state' } as { userId: string; orgId: string; role: string; purpose: string },
         { expiresIn: '10m' },
       );
 
@@ -903,7 +949,7 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
 
       // Short-lived state token to prevent CSRF
       const state = app.jwt.sign(
-        { orgId, userId: '', role: '' } as { userId: string; orgId: string; role: string },
+        { orgId, userId: '', role: '', purpose: 'oauth-state' } as { userId: string; orgId: string; role: string; purpose: string },
         { expiresIn: '10m' },
       );
 
@@ -942,7 +988,10 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
     // Verify state → extract orgId
     let orgId: string;
     try {
-      const decoded = app.jwt.verify<{ orgId: string }>(state);
+      const decoded = app.jwt.verify<{ orgId: string; purpose?: string }>(state);
+      if (decoded.purpose !== 'oauth-state') {
+        return reply.redirect(`${appUrl}?calendarError=invalid_state`);
+      }
       orgId = decoded.orgId;
     } catch {
       return reply.redirect(`${appUrl}?calendarError=invalid_state`);
@@ -1169,7 +1218,7 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
 
       const { orgId } = req.user as JwtPayload;
       const state = app.jwt.sign(
-        { orgId, userId: '', role: '' } as { userId: string; orgId: string; role: string },
+        { orgId, userId: '', role: '', purpose: 'oauth-state' } as { userId: string; orgId: string; role: string; purpose: string },
         { expiresIn: '10m' },
       );
 
@@ -1205,7 +1254,10 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
 
     let orgId: string;
     try {
-      const decoded = app.jwt.verify<{ orgId: string }>(state);
+      const decoded = app.jwt.verify<{ orgId: string; purpose?: string }>(state);
+      if (decoded.purpose !== 'oauth-state') {
+        return reply.redirect(`${appUrl}?calendarError=invalid_state`);
+      }
       orgId = decoded.orgId;
     } catch {
       return reply.redirect(`${appUrl}?calendarError=invalid_state`);

@@ -79,13 +79,18 @@ export async function createTicket(input: z.infer<typeof CreateTicketBody>): Pro
     return row;
   }
 
+  // Resolve org_id from tenant_id
+  let orgId: string | null = null;
+  const orgRes = await pool.query(`SELECT org_id FROM agent_configs WHERE tenant_id = $1 LIMIT 1`, [body.tenantId]);
+  if (orgRes.rows[0]?.org_id) orgId = orgRes.rows[0].org_id as string;
+
   const { rows } = await pool.query(
     `insert into tickets (
-        tenant_id, status,
+        tenant_id, org_id, status,
         source, session_id, reason,
         customer_name, customer_phone, preferred_time, service, notes
       )
-     values ($1, 'open', $2, $3, $4, $5, $6, $7, $8, $9)
+     values ($1, $10, 'open', $2, $3, $4, $5, $6, $7, $8, $9)
      returning id, created_at, updated_at, tenant_id, status,
                source, session_id, reason,
                customer_name, customer_phone, preferred_time, service, notes`,
@@ -99,6 +104,7 @@ export async function createTicket(input: z.infer<typeof CreateTicketBody>): Pro
       body.preferredTime ?? null,
       body.service ?? null,
       body.notes ?? null,
+      orgId,
     ]
   );
 

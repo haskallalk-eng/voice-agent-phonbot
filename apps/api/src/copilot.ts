@@ -147,7 +147,7 @@ async function handleToolCall(name: string, orgId: string): Promise<string> {
 
       case 'get_phone_numbers': {
         const result = await pool.query(
-          `SELECT number, number_pretty, status, method FROM phone_numbers WHERE org_id = $1`,
+          `SELECT number, number_pretty, verified, method FROM phone_numbers WHERE org_id = $1`,
           [orgId],
         );
         return JSON.stringify({
@@ -155,7 +155,7 @@ async function handleToolCall(name: string, orgId: string): Promise<string> {
           numbers: result.rows.map((r: Record<string, unknown>) => ({
             number: r['number'],
             display: r['number_pretty'] ?? r['number'],
-            status: r['status'],
+            verified: r['verified'],
             method: r['method'],
           })),
         });

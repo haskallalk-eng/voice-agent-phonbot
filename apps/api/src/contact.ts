@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { Resend } from 'resend';
+import { escapeHtml } from './utils.js';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY ?? '';
 const CONTACT_TO = process.env.CONTACT_EMAIL ?? 'info@mindrails.de';
@@ -54,6 +55,3 @@ export async function registerContact(app: FastifyInstance) {
   });
 }
 
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}

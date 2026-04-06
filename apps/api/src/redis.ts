@@ -16,5 +16,10 @@ export async function connectRedis() {
     process.stderr.write(`[redis] Error: ${err.message}\n`);
   });
 
-  await redis.connect();
+  try {
+    await redis.connect();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[redis] Failed to connect: ${msg} — falling back to in-memory session store\n`);
+  }
 }

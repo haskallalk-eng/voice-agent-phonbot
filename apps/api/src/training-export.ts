@@ -127,7 +127,9 @@ async function generateDpoPairs(): Promise<void> {
          WHERE industry = $1 AND quality_label = 'good'
            AND id NOT IN (
              SELECT (metadata->>'good_id')::uuid FROM training_examples
-             WHERE example_type = 'dpo_pair' AND metadata->>'good_id' IS NOT NULL
+             WHERE example_type = 'dpo_pair'
+               AND metadata->>'good_id' IS NOT NULL
+               AND metadata->>'good_id' ~ '^[0-9a-f]{8}-'
            )
          ORDER BY score DESC LIMIT 1`,
         [industry],
@@ -137,7 +139,9 @@ async function generateDpoPairs(): Promise<void> {
          WHERE industry = $1 AND quality_label = 'bad'
            AND id NOT IN (
              SELECT (metadata->>'bad_id')::uuid FROM training_examples
-             WHERE example_type = 'dpo_pair' AND metadata->>'bad_id' IS NOT NULL
+             WHERE example_type = 'dpo_pair'
+               AND metadata->>'bad_id' IS NOT NULL
+               AND metadata->>'bad_id' ~ '^[0-9a-f]{8}-'
            )
          ORDER BY score ASC LIMIT 1`,
         [industry],

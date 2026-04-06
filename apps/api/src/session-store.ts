@@ -116,16 +116,20 @@ export async function listSessions(
   tenantId?: string,
 ): Promise<{ sessionId: string; messageCount: number; lastActiveAt: number }[]> {
   if (redis) {
-    const keys = await redis.keys('session:*');
     const result: { sessionId: string; messageCount: number; lastActiveAt: number }[] = [];
-    for (const key of keys) {
-      const raw = await redis.get(key);
-      if (!raw) continue;
-      const s: Session = JSON.parse(raw);
-      if (tenantId && s.tenantId !== tenantId) continue;
-      const sessionId = key.replace(/^session:/, '');
-      result.push({ sessionId, messageCount: s.messages.length, lastActiveAt: s.lastActiveAt });
-    }
+    let cursor = 0;
+    do {
+      const reply = await redis.scan(cursor, { MATCH: 'session:*', COUNT: 100 });
+      cursor = reply.cursor;
+      for (const key of reply.keys) {
+        const raw = await redis.get(key);
+        if (!raw) continue;
+        const s: Session = JSON.parse(raw);
+        if (tenantId && s.tenantId !== tenantId) continue;
+        const sessionId = key.replace(/^session:/, '');
+        result.push({ sessionId, messageCount: s.messages.length, lastActiveAt: s.lastActiveAt });
+      }
+    } while (cursor !== 0);
     return result.sort((a, b) => b.lastActiveAt - a.lastActiveAt);
   }
 

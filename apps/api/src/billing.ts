@@ -88,8 +88,20 @@ async function syncSubscription(sub: Stripe.Subscription) {
   if (!orgId || !pool) return;
 
   const priceId = sub.items.data[0]?.price.id ?? null;
-  const plan = Object.values(PLANS).find((p) => p.stripePriceId === priceId)?.id ?? 'free';
+  // Match against both monthly AND yearly price IDs
+  const plan = Object.values(PLANS).find((p) => p.stripePriceId === priceId || p.stripePriceIdYearly === priceId)?.id ?? 'free';
   const minutesLimit = PLANS[plan as PlanId]?.minutesLimit ?? 100;
+
+  // Check if this is a period renewal (reset minutes_used)
+  const currentPeriodEnd = (sub as unknown as { current_period_end?: number }).current_period_end ?? null;
+  let resetMinutes = false;
+  if (currentPeriodEnd && pool) {
+    const existing = await pool.query(`SELECT current_period_end FROM orgs WHERE id = $1`, [orgId]);
+    const oldEnd = existing.rows[0]?.current_period_end;
+    if (oldEnd && new Date(oldEnd).getTime() !== currentPeriodEnd * 1000) {
+      resetMinutes = true; // Period changed = new billing cycle
+    }
+  }
 
   await pool.query(
     `UPDATE orgs SET
@@ -98,7 +110,7 @@ async function syncSubscription(sub: Stripe.Subscription) {
       stripe_subscription_id = $4,
       plan_interval = $5,
       current_period_end = to_timestamp($6),
-      minutes_limit = $7
+      minutes_limit = $7${resetMinutes ? ',\n      minutes_used = 0' : ''}
      WHERE id = $1`,
     [
       orgId,
@@ -106,7 +118,7 @@ async function syncSubscription(sub: Stripe.Subscription) {
       sub.status,
       sub.id,
       sub.items.data[0]?.plan.interval ?? null,
-      (sub as unknown as { current_period_end?: number }).current_period_end ?? null,
+      currentPeriodEnd,
       minutesLimit,
     ],
   );

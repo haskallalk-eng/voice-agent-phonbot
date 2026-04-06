@@ -11,6 +11,7 @@
 import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import WS from 'ws';
+import { pool } from './db.js';
 
 // ── Sales prompt for website callback ─────────────────────────────────────────
 
@@ -43,6 +44,7 @@ interface CallSession {
   phone: string;
   prompt?: string;
   createdAt: number;
+  outboundRecordId?: string;
 }
 
 const sessions = new Map<string, CallSession>();
@@ -66,11 +68,19 @@ export async function triggerBridgeCall(params: {
   webhookBase: string;
   twilioSid: string;
   twilioToken: string;
+  outboundRecordId?: string;
 }): Promise<{ ok: boolean; sessionId: string; twilioCallSid?: string; error?: string }> {
   const sessionId = crypto.randomUUID();
-  createSession(sessionId, { phone: params.toNumber, name: params.name, prompt: params.prompt, createdAt: Date.now() });
+  createSession(sessionId, { phone: params.toNumber, name: params.name, prompt: params.prompt, createdAt: Date.now(), outboundRecordId: params.outboundRecordId });
 
   const twimlUrl = `${params.webhookBase}/outbound/twiml/${sessionId}`;
+  const statusCallback = params.outboundRecordId ? `${params.webhookBase}/outbound/status/${sessionId}` : undefined;
+
+  const urlParams: Record<string, string> = { To: params.toNumber, From: params.fromNumber, Url: twimlUrl, Method: 'POST' };
+  if (statusCallback) {
+    urlParams.StatusCallback = statusCallback;
+    urlParams.StatusCallbackEvent = 'completed';
+  }
 
   const res = await fetch(
     `https://api.twilio.com/2010-04-01/Accounts/${params.twilioSid}/Calls.json`,
@@ -80,7 +90,7 @@ export async function triggerBridgeCall(params: {
         Authorization: `Basic ${Buffer.from(`${params.twilioSid}:${params.twilioToken}`).toString('base64')}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams({ To: params.toNumber, From: params.fromNumber, Url: twimlUrl, Method: 'POST' }),
+      body: new URLSearchParams(urlParams),
     },
   );
 
@@ -146,6 +156,7 @@ export async function registerTwilioBridge(app: FastifyInstance) {
     );
 
     let streamSid: string | null = null;
+    const transcriptParts: string[] = [];
     let openaiReady = false;
     const pendingAudio: string[] = []; // buffer until OpenAI is ready
 
@@ -187,6 +198,14 @@ export async function registerTwilioBridge(app: FastifyInstance) {
     openai.on('message', (raw) => {
       try {
         const msg = JSON.parse(raw.toString()) as Record<string, unknown>;
+
+        // Collect transcript pieces
+        if (msg.type === 'response.audio_transcript.done' && typeof msg.transcript === 'string') {
+          transcriptParts.push(`Agent: ${msg.transcript}`);
+        }
+        if (msg.type === 'conversation.item.input_audio_transcription.completed' && typeof msg.transcript === 'string') {
+          transcriptParts.push(`User: ${msg.transcript}`);
+        }
 
         if (msg.type === 'response.audio.delta' && typeof msg.delta === 'string') {
           // Send audio back to Twilio
@@ -254,6 +273,25 @@ export async function registerTwilioBridge(app: FastifyInstance) {
     socket.on('close', () => {
       app.log.info({ sessionId }, 'Twilio WebSocket closed');
       if (openai.readyState === WS.OPEN) openai.close();
+
+      // Save transcript to outbound_calls if this was an outbound call
+      const transcript = transcriptParts.join('\n');
+      if (session?.outboundRecordId && transcript && pool) {
+        pool.query(
+          `UPDATE outbound_calls SET transcript = $1, status = 'completed' WHERE id = $2`,
+          [transcript, session.outboundRecordId],
+        ).then(() => {
+          // Trigger outbound learning
+          import('./outbound-insights.js').then(({ analyzeOutboundCall }) => {
+            // Get org_id from outbound_calls
+            pool!.query(`SELECT org_id FROM outbound_calls WHERE id = $1`, [session.outboundRecordId]).then(res => {
+              const orgId = res.rows[0]?.org_id as string | undefined;
+              if (orgId) analyzeOutboundCall(orgId, session.outboundRecordId!, transcript).catch(() => {});
+            }).catch(() => {});
+          }).catch(() => {});
+        }).catch(() => {});
+      }
+
       sessions.delete(sessionId);
     });
 

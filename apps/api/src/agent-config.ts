@@ -42,7 +42,7 @@ const AgentConfigSchema = z.object({
   // Callback agent (separate Retell LLM+Agent used for outbound callbacks)
   retellCallbackAgentId: z.string().optional(),
   retellCallbackLlmId: z.string().optional(),
-});
+}).passthrough(); // Allow extra fields (knowledgeSources, speakingSpeed, calendarIntegrations, etc.) to pass through
 
 type AgentConfig = z.infer<typeof AgentConfigSchema>;
 

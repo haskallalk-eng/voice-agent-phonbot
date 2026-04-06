@@ -1,15 +1,8 @@
 import { Resend } from 'resend';
+import { escapeHtml } from './utils.js';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY ?? '';
 const FROM_EMAIL = process.env.EMAIL_FROM ?? 'Voice Agent <noreply@voiceagent.app>';
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
 
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 

@@ -65,6 +65,14 @@ if (DATABASE_URL) {
 export const pool = DATABASE_URL ? new Proxy({} as pg.Pool, {
   get(_target, prop) {
     if (prop === 'then') return undefined; // not a Promise
+    // connect() returns a PoolClient directly — needs special handling
+    if (prop === 'connect') {
+      return async () => {
+        if (_poolReady) await _poolReady;
+        if (!_pool) throw new Error('Pool not initialized');
+        return _pool.connect();
+      };
+    }
     return async (...args: unknown[]) => {
       if (_poolReady) await _poolReady;
       if (!_pool) throw new Error('Pool not initialized');

@@ -95,7 +95,7 @@ export function ContactSection() {
             {/* Location */}
             <div className="px-2 pt-2">
               <p className="text-[11px] text-white/15 leading-relaxed">
-                Mindrails · Hennigsdorf, Deutschland
+                Mindrails · Berlin, Deutschland
               </p>
             </div>
           </div>

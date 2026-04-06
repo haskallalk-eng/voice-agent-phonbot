@@ -273,6 +273,37 @@ export async function registerAuth(app: FastifyInstance) {
     return reply.send({ ok: true });
   });
 
+  // POST /auth/refresh — refresh a token that is within 24h of expiry
+  app.post('/auth/refresh', {
+    onRequest: [app.authenticate],
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { userId, orgId, role } = req.user as JwtPayload;
+
+    // Decode the token to check its expiry
+    const decoded = app.jwt.decode<{ exp?: number }>(
+      req.headers.authorization?.replace(/^Bearer\s+/i, '') ?? '',
+    );
+    if (!decoded || typeof decoded !== 'object' || !decoded.exp) {
+      return reply.status(400).send({ error: 'Cannot decode token' });
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const secondsUntilExpiry = decoded.exp - now;
+    const twentyFourHours = 24 * 60 * 60;
+
+    if (secondsUntilExpiry > twentyFourHours) {
+      return reply.status(400).send({ error: 'Token is not yet eligible for refresh (more than 24h until expiry)' });
+    }
+
+    const token = app.jwt.sign(
+      { userId, orgId, role },
+      { expiresIn: '7d' },
+    );
+
+    return reply.send({ token });
+  });
+
   // DELETE /auth/account — GDPR: delete own account + org data
   app.delete('/auth/account', {
     onRequest: [app.authenticate],
@@ -296,12 +327,11 @@ export async function registerAuth(app: FastifyInstance) {
 
     if (stripeSubId) {
       try {
+        const Stripe = (await import('stripe')).default;
         const stripeKey = process.env.STRIPE_SECRET_KEY;
         if (stripeKey) {
-          await fetch(`https://api.stripe.com/v1/subscriptions/${stripeSubId}`, {
-            method: 'DELETE',
-            headers: { Authorization: `Basic ${Buffer.from(stripeKey + ':').toString('base64')}` },
-          });
+          const stripe = new Stripe(stripeKey);
+          await stripe.subscriptions.cancel(stripeSubId);
         }
       } catch {
         // Non-critical — continue with deletion even if Stripe cancel fails

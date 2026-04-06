@@ -185,6 +185,11 @@ export async function triggerSalesCall(params: {
 }): Promise<{ ok: boolean; callId?: string; outboundRecordId?: string; error?: string }> {
   if (!pool) return { ok: false, error: 'DB_NOT_CONFIGURED' };
 
+  // Check usage limits before making outbound call
+  const { checkUsageLimit } = await import('./usage.js');
+  const usage = await checkUsageLimit(params.orgId);
+  if (!usage.allowed) return { ok: false, error: 'USAGE_LIMIT_REACHED' };
+
   // Get from number (org's provisioned number)
   const phoneRes = await pool.query(
     `SELECT number FROM phone_numbers WHERE org_id = $1 AND method = 'provisioned' AND verified = true ORDER BY created_at LIMIT 1`,
@@ -241,6 +246,7 @@ export async function triggerSalesCall(params: {
       webhookBase,
       twilioSid,
       twilioToken,
+      outboundRecordId,
     });
 
     if (!result.ok) {
@@ -429,6 +435,17 @@ export async function registerOutbound(app: FastifyInstance) {
     }
 
     try {
+      // Track in DB
+      let websiteCallId: string | null = null;
+      if (pool) {
+        const res = await pool.query(
+          `INSERT INTO outbound_calls (org_id, to_number, contact_name, campaign, prompt_version, status)
+           VALUES (NULL, $1, $2, 'website-callback', 1, 'initiated') RETURNING id`,
+          [phone, parsed.data.name ?? null],
+        ).catch(() => null);
+        websiteCallId = (res?.rows[0]?.id as string) ?? null;
+      }
+
       // Use the same Retell-based sales agent as demo/callback
       const { getOrCreateSalesAgent } = await import('./demo.js');
       const { createPhoneCall } = await import('./retell.js');
@@ -437,8 +454,13 @@ export async function registerOutbound(app: FastifyInstance) {
         agentId,
         toNumber: phone,
         fromNumber,
-        metadata: { source: 'website-callback', name: parsed.data.name ?? '' },
+        metadata: { source: 'website-callback', name: parsed.data.name ?? '', outboundRecordId: websiteCallId ?? '' },
       });
+
+      if (websiteCallId && pool) {
+        pool.query(`UPDATE outbound_calls SET call_id = $1, status = 'calling' WHERE id = $2`, [call.call_id, websiteCallId]).catch(() => {});
+      }
+
       app.log.info({ callId: call.call_id, phone }, 'Website callback call initiated via Retell');
       return { ok: true };
     } catch (e: unknown) {
