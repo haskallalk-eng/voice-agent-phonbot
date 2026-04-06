@@ -125,7 +125,7 @@ export async function createAgent(config: {
     body: JSON.stringify({
       agent_name: config.name,
       response_engine: { type: 'retell-llm', llm_id: config.llmId },
-      voice_id: config.voiceId ?? 'retell-Cimo',
+      voice_id: config.voiceId ?? 'custom_voice_ca7baccd54690ff5035768d2ef',
       language: config.language ?? 'de-DE',
       interruption_sensitivity: 1.0,
       enable_backchannel: true,

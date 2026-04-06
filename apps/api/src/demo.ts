@@ -79,7 +79,7 @@ export async function getOrCreateSalesAgent(): Promise<string> {
   const agent = await retellCreateAgent({
     name: 'Phonbot Sales Callback',
     llmId: llm.llm_id,
-    voiceId: 'retell-Cimo',
+    voiceId: 'custom_voice_ca7baccd54690ff5035768d2ef',
     language: 'de-DE',
   });
 
