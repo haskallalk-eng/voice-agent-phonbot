@@ -132,7 +132,7 @@ export async function registerDemo(app: FastifyInstance) {
   // POST /demo/call — create a web call with a demo agent (no auth)
   // Rate limited to 3 calls per hour per IP via @fastify/rate-limit
   app.post('/demo/call', {
-    config: { rateLimit: { max: 3, timeWindow: '1 hour' } },
+    config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
   }, async (req, reply) => {
     const parsed = DemoCallBody.safeParse(req.body);
     if (!parsed.success) {
@@ -152,7 +152,7 @@ export async function registerDemo(app: FastifyInstance) {
 
   // POST /demo/callback
   app.post('/demo/callback', {
-    config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
+    config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
   }, async (req, reply) => {
     const parsed = DemoCallbackBody.safeParse(req.body);
     if (!parsed.success) {

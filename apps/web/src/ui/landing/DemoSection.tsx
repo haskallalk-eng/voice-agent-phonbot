@@ -130,7 +130,11 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
       await client.startCall({ accessToken: res.access_token });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unbekannter Fehler';
-      setError(msg);
+      if (msg.includes('429') || msg.includes('Rate limit') || msg.includes('Too Many')) {
+        setError('Du hast die Demo schon mehrfach getestet — probier es in einer Stunde nochmal oder registriere dich kostenlos für unbegrenzte Tests.');
+      } else {
+        setError(msg);
+      }
       setCallState('error');
     }
   }
