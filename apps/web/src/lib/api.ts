@@ -284,6 +284,20 @@ export function deletePhoneNumber(id: string) {
   return request<{ ok: boolean }>(`/phone/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
+export function reassignPhoneAgent(phoneId: string, agentTenantId: string) {
+  return request<{ ok: boolean }>('/phone/reassign', {
+    method: 'POST',
+    body: JSON.stringify({ phoneId, agentTenantId }),
+  });
+}
+
+export function verifyForwarding(customerNumber: string, phonbotNumberId: string) {
+  return request<{ ok: boolean }>('/phone/verify-forwarding', {
+    method: 'POST',
+    body: JSON.stringify({ customerNumber, phonbotNumberId }),
+  });
+}
+
 // --- Chat ---
 
 export type ChatReply = { ok: boolean; reply: string };

@@ -62,7 +62,7 @@ export function BillingPage() {
     }
     return initial;
   });
-  const [interval, setInterval] = useState<'month' | 'year'>('month');
+  const [billingInterval, setBillingInterval] = useState<'month' | 'year'>('month');
 
   const { data, isLoading: loading, error: queryError } = useQuery({
     queryKey: ['billing'],
@@ -81,7 +81,7 @@ export function BillingPage() {
   async function handleUpgrade(planId: string) {
     setActionLoading(planId);
     try {
-      const { url } = await createCheckoutSession(planId, interval);
+      const { url } = await createCheckoutSession(planId, billingInterval);
       window.location.href = url;
     } catch (e: unknown) {
       setFlash({ type: 'error', text: (e instanceof Error ? e.message : null) ?? 'Fehler beim Öffnen des Checkouts' });
@@ -173,17 +173,17 @@ export function BillingPage() {
           {plans.some((p) => p.hasYearly) && (
             <div className="flex items-center gap-1 bg-white/5 rounded-xl p-1 border border-white/10">
               <button
-                onClick={() => setInterval('month')}
+                onClick={() => setBillingInterval('month')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  interval === 'month' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/70'
+                  billingInterval === 'month' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/70'
                 }`}
               >
                 Monatlich
               </button>
               <button
-                onClick={() => setInterval('year')}
+                onClick={() => setBillingInterval('year')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  interval === 'year' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/70'
+                  billingInterval === 'year' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/70'
                 }`}
               >
                 Jährlich
@@ -198,7 +198,7 @@ export function BillingPage() {
           {plans.map((plan) => {
             const isCurrent = plan.id === currentPlan;
             const features = PLAN_FEATURES[plan.id] ?? [];
-            const showYearly = interval === 'year' && plan.hasYearly && plan.price > 0;
+            const showYearly = billingInterval === 'year' && plan.hasYearly && plan.price > 0;
             const yearlyMonthlyPrice = Math.round((plan.price * 10) / 12);
 
             return (

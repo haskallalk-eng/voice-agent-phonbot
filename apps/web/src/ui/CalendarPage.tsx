@@ -543,7 +543,9 @@ function SettingsPanel({
   }
 
   async function handleRemoveBlock(id: string) {
-    try { await removeChippyBlock(id); setBlocks(prev => prev.filter(b => b.id !== id)); } catch {}
+    try { await removeChippyBlock(id); setBlocks(prev => prev.filter(b => b.id !== id)); } catch (e: unknown) {
+      setBlockError((e instanceof Error ? e.message : null) ?? 'Sperre konnte nicht entfernt werden');
+    }
   }
 
   const inputClass = "rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/40 focus:ring-1 focus:ring-orange-500/20 transition-all";
@@ -756,7 +758,7 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
                 </div>
               </div>
             </div>
-            <button onClick={async () => { setDisconnectLoading(true); try { await disconnectCalendar(); await loadStatus(); } catch {} finally { setDisconnectLoading(false); } }}
+            <button onClick={async () => { setDisconnectLoading(true); try { await disconnectCalendar(); await loadStatus(); } catch (e: unknown) { setError((e instanceof Error ? e.message : null) ?? 'Trennen fehlgeschlagen'); } finally { setDisconnectLoading(false); } }}
               disabled={disconnectLoading}
               className="shrink-0 px-3 py-1.5 rounded-xl text-xs text-red-300 border border-red-500/20 hover:bg-red-500/10 transition-all disabled:opacity-50">
               {disconnectLoading ? 'Trenne…' : 'Trennen'}
@@ -893,6 +895,7 @@ export function CalendarPage() {
   const [schedule, setSchedule] = useState<ChippySchedule>(DEFAULT_SCHEDULE);
   const [blocks, setBlocks] = useState<ChippyBlock[]>([]);
   const [bookings, setBookings] = useState<ChippyBooking[]>([]);
+  const [calendarError, setCalendarError] = useState<string | null>(null);
 
   // Modal state
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
@@ -911,7 +914,9 @@ export function CalendarPage() {
       setSchedule({ ...DEFAULT_SCHEDULE, ...chippy.schedule });
       setBlocks(chippy.blocks);
       setBookings(bkgs.bookings);
-    } catch {}
+    } catch (e: unknown) {
+      setCalendarError((e instanceof Error ? e.message : null) ?? 'Kalenderdaten konnten nicht geladen werden');
+    }
   }, []);
 
   useEffect(() => { loadChipy(); }, [loadChipy]);
@@ -920,7 +925,9 @@ export function CalendarPage() {
     try {
       await deleteChippyBooking(id);
       setBookings(prev => prev.filter(b => b.id !== id));
-    } catch {}
+    } catch (e: unknown) {
+      setCalendarError((e instanceof Error ? e.message : null) ?? 'Termin konnte nicht gelöscht werden');
+    }
   }
 
   async function handleAddBlock(date: Date, opts?: { start_time?: string; end_time?: string; reason?: string }) {
@@ -933,7 +940,9 @@ export function CalendarPage() {
         end_time: opts?.end_time ?? null,
         reason: opts?.reason ?? null,
       }]);
-    } catch {}
+    } catch (e: unknown) {
+      setCalendarError((e instanceof Error ? e.message : null) ?? 'Sperre konnte nicht hinzugefügt werden');
+    }
   }
 
   function handleBookingSaved(booking: ChippyBooking) {
@@ -997,6 +1006,14 @@ export function CalendarPage() {
             </button>
           ))}
         </div>
+
+        {/* Calendar error banner */}
+        {calendarError && (
+          <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-sm text-red-400 flex items-center justify-between mb-4">
+            <span>{calendarError}</span>
+            <button onClick={() => setCalendarError(null)} className="text-red-400/50 hover:text-red-400 ml-2" aria-label="Schließen">✕</button>
+          </div>
+        )}
 
         {/* Calendar integration hint */}
         {tab === 'calendar' && (!calendarStatus?.connected || calendarStatus?.provider === 'chippy') && (

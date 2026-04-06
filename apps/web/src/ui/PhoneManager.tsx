@@ -6,6 +6,8 @@ import {
   provisionPhoneNumber,
   verifyPhoneNumber,
   deletePhoneNumber,
+  reassignPhoneAgent,
+  verifyForwarding,
   type PhoneNumber,
   type AgentConfig,
 } from '../lib/api.js';
@@ -55,12 +57,7 @@ function NumberCard({ num, agents, onVerify, onDelete, onRefresh }: {
       const agent = agents.find(a => a.tenantId === newAgentTenantId);
       const retellAgentId = agent?.retellAgentId;
       if (retellAgentId) {
-        const key = localStorage.getItem('vas_token');
-        await fetch('/api/phone/reassign', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', authorization: `Bearer ${key}` },
-          body: JSON.stringify({ phoneId: num.id, agentTenantId: newAgentTenantId }),
-        });
+        await reassignPhoneAgent(num.id, newAgentTenantId);
       }
       setShowAgentChange(false);
       onRefresh();
@@ -87,17 +84,9 @@ function NumberCard({ num, agents, onVerify, onDelete, onRefresh }: {
     if (!testNumber.trim()) return;
     setVerifying(true); setVerifyResult(null);
     try {
-      const res = await fetch('/api/phone/verify-forwarding', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', authorization: `Bearer ${localStorage.getItem('vas_token')}` },
-        body: JSON.stringify({ customerNumber: normalizedTestNumber, phonbotNumberId: num.id }),
-      });
-      if (res.ok) {
-        setVerifyResult('success');
-        onRefresh();
-      } else {
-        setVerifyResult('failed');
-      }
+      await verifyForwarding(normalizedTestNumber, num.id);
+      setVerifyResult('success');
+      onRefresh();
     } catch {
       setVerifyResult('failed');
     } finally { setVerifying(false); }
@@ -325,7 +314,6 @@ export function PhoneManager({ onNavigate }: { onNavigate?: (page: string) => vo
   const [showAgentSelect, setShowAgentSelect] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
   const [newNumber, setNewNumber] = useState<string | null>(null);
-  const [openForwardingFor, setOpenForwardingFor] = useState<string | null>(null);
 
   async function handleProvision(agentTenantId?: string) {
     if (provisioning) return;

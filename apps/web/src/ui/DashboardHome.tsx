@@ -6,11 +6,13 @@ import {
   getTickets,
   getAgentConfig,
   getChippyBookings,
+  getPhoneNumbers,
   type BillingStatus,
   type RetellCall,
   type Ticket,
   type AgentConfig,
   type ChippyBooking,
+  type PhoneNumber,
 } from '../lib/api.js';
 import type { Page } from './App.js';
 import { SkeletonCard } from '../components/ui.js';
@@ -95,12 +97,13 @@ export function DashboardHome({ onNavigate }: Props) {
     queryFn: async () => {
       const bookingsFrom = new Date().toISOString().slice(0, 10);
       const bookingsTo = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-      const [b, c, t, a, bk] = await Promise.all([
+      const [b, c, t, a, bk, ph] = await Promise.all([
         getBillingStatus().catch((err) => { console.error('getBillingStatus failed', err); return null; }),
         getCalls().catch((err) => { console.error('getCalls failed', err); return { items: [] as RetellCall[] }; }),
         getTickets().catch((err) => { console.error('getTickets failed', err); return { items: [] as Ticket[] }; }),
         getAgentConfig().catch((err) => { console.error('getAgentConfig failed', err); return null; }),
         getChippyBookings(bookingsFrom, bookingsTo).catch(() => ({ bookings: [] as ChippyBooking[] })),
+        getPhoneNumbers().catch((err) => { console.error('getPhoneNumbers failed', err); return { items: [] as PhoneNumber[] }; }),
       ]);
       return {
         billing: b,
@@ -108,6 +111,7 @@ export function DashboardHome({ onNavigate }: Props) {
         tickets: t?.items ?? [],
         agentConfig: a,
         bookings: bk?.bookings ?? [],
+        phoneNumbers: ph?.items ?? [],
       };
     },
   });
@@ -117,6 +121,7 @@ export function DashboardHome({ onNavigate }: Props) {
   const tickets = data?.tickets ?? [];
   const agentConfig = data?.agentConfig ?? null;
   const bookings = data?.bookings ?? [];
+  const phoneNumbers = data?.phoneNumbers ?? [];
   const error = queryError ? 'Daten konnten nicht geladen werden' : null;
 
   // Upcoming bookings – sorted by slot_time, max 4
@@ -138,7 +143,7 @@ export function DashboardHome({ onNavigate }: Props) {
     (c) => c.start_timestamp && c.start_timestamp >= weekStart.getTime()
   ).length;
 
-  const savedMinutes = calls.length * 3;
+  const savedMinutes = Math.round(calls.reduce((sum, c) => sum + (c.duration_ms ?? 0), 0) / 60000);
   const savedHours = (savedMinutes / 60).toFixed(1);
 
   const avgDurationMs =
@@ -161,7 +166,7 @@ export function DashboardHome({ onNavigate }: Props) {
   const step1Done = !!(agentConfig?.name && agentConfig.name !== 'Demo Business' && agentConfig.name !== '');
   const step2Done = !!agentConfig?.retellAgentId;
   const step3Done = calls.length > 0;
-  const step4Done = !!(agentConfig as (AgentConfig & { phoneNumber?: string }) | null)?.phoneNumber;
+  const step4Done = phoneNumbers.length > 0;
   const step5Done = step1Done && step2Done && step3Done && step4Done;
   const allSetupDone = step1Done && step2Done && step3Done;
 
