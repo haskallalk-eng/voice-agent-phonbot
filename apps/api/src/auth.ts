@@ -3,7 +3,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import bcrypt from 'bcrypt';
 import { pool } from './db.js';
 import { z } from 'zod';
-import { sendPasswordResetEmail, sendVerificationEmail } from './email.js';
+import { sendPasswordResetEmail, sendVerificationEmail, sendWelcomeEmail } from './email.js';
 
 const RegisterBody = z.object({
   orgName: z.string().min(2).max(100),
@@ -61,13 +61,14 @@ export async function registerAuth(app: FastifyInstance) {
 
       await client.query('COMMIT');
 
-      // Send verification email only when email service is configured
+      // Send verification + welcome emails when email service is configured
       if (emailServiceConfigured) {
         const appUrl = process.env.APP_URL ?? 'http://localhost:5173';
         sendVerificationEmail({
           toEmail: email,
           verifyUrl: `${appUrl}/verify-email?token=${verifyToken}`,
         }).catch(() => {/* already logged inside */});
+        sendWelcomeEmail({ toEmail: email, orgName }).catch(() => {});
       }
 
       const token = app.jwt.sign(

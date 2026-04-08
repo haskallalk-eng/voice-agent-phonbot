@@ -2,190 +2,224 @@ import { Resend } from 'resend';
 import { escapeHtml } from './utils.js';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY ?? '';
-const FROM_EMAIL = process.env.EMAIL_FROM ?? 'Voice Agent <noreply@voiceagent.app>';
+const FROM_EMAIL = process.env.EMAIL_FROM ?? 'Phonbot <noreply@phonbot.de>';
+const APP_URL = process.env.APP_URL ?? 'https://phonbot.de';
 
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
-export async function sendTicketNotification(opts: {
-  toEmail: string;
-  orgName: string;
-  customerName: string | null;
-  customerPhone: string;
-  reason: string | null;
-  service: string | null;
-}) {
-  if (!resend) {
-    // Resend not configured — skip silently (logged at startup)
-    return;
-  }
+// ── Branded Email Template ─────────────────────────────────────────────────
 
-  const subject = `Neues Ticket: ${opts.customerName ?? opts.customerPhone}`;
-  const text = [
-    `Neues Ticket für ${opts.orgName}`,
-    '',
-    `Kunde: ${opts.customerName ?? '—'}`,
-    `Telefon: ${opts.customerPhone}`,
-    opts.reason ? `Grund: ${opts.reason}` : null,
-    opts.service ? `Service: ${opts.service}` : null,
-    '',
-    'Öffne dein Dashboard um das Ticket zu bearbeiten.',
-  ]
-    .filter(Boolean)
-    .join('\n');
+function brandedEmail(opts: { title: string; body: string; cta?: { label: string; url: string }; footer?: string }): string {
+  const safeAppUrl = escapeHtml(APP_URL);
+  return `
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
+<body style="margin:0;padding:0;background:#0A0A0F;font-family:'Inter',system-ui,-apple-system,sans-serif;">
+<div style="max-width:520px;margin:0 auto;padding:40px 24px;">
 
-  const safeCustomerName = opts.customerName ? escapeHtml(opts.customerName) : '—';
-  const safeCustomerPhone = escapeHtml(opts.customerPhone);
-  const safeReason = opts.reason ? escapeHtml(opts.reason) : null;
-  const safeService = opts.service ? escapeHtml(opts.service) : null;
-  const safeOrgName = escapeHtml(opts.orgName);
-  const safeAppUrl = escapeHtml(process.env.APP_URL ?? 'http://localhost:5173');
+  <!-- Header -->
+  <div style="text-align:center;margin-bottom:32px;">
+    <a href="${safeAppUrl}" style="text-decoration:none;">
+      <span style="font-size:22px;font-weight:800;letter-spacing:-0.5px;">
+        <span style="color:#F97316;">Phon</span><span style="color:#06B6D4;">bot</span>
+      </span>
+    </a>
+  </div>
 
-  const html = `
-    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-      <h2 style="color: #1f2937;">Neues Ticket</h2>
-      <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-        <tr><td style="padding: 6px 0; color: #6b7280; width: 100px;">Kunde</td><td style="padding: 6px 0; font-weight: 600;">${safeCustomerName}</td></tr>
-        <tr><td style="padding: 6px 0; color: #6b7280;">Telefon</td><td style="padding: 6px 0;"><a href="tel:${safeCustomerPhone}" style="color: #4f46e5;">${safeCustomerPhone}</a></td></tr>
-        ${safeReason ? `<tr><td style="padding: 6px 0; color: #6b7280;">Grund</td><td style="padding: 6px 0;">${safeReason}</td></tr>` : ''}
-        ${safeService ? `<tr><td style="padding: 6px 0; color: #6b7280;">Service</td><td style="padding: 6px 0;">${safeService}</td></tr>` : ''}
-      </table>
-      <a href="${safeAppUrl}/tickets"
-         style="display: inline-block; background: #4f46e5; color: white; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-size: 14px;">
-        Ticket öffnen →
-      </a>
-      <p style="margin-top: 24px; font-size: 12px; color: #9ca3af;">
-        ${safeOrgName} · Voice Agent Dashboard
-      </p>
+  <!-- Card -->
+  <div style="background:#141420;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:32px 28px;">
+    <h2 style="color:#ffffff;font-size:20px;font-weight:700;margin:0 0 16px 0;">${opts.title}</h2>
+    <div style="color:rgba(255,255,255,0.6);font-size:14px;line-height:1.6;">
+      ${opts.body}
     </div>
-  `;
+    ${opts.cta ? `
+    <div style="text-align:center;margin:28px 0 8px 0;">
+      <a href="${escapeHtml(opts.cta.url)}"
+         style="display:inline-block;background:linear-gradient(135deg,#F97316,#06B6D4);color:#ffffff;padding:12px 32px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">
+        ${escapeHtml(opts.cta.label)}
+      </a>
+    </div>
+    ` : ''}
+  </div>
 
+  <!-- Footer -->
+  <div style="text-align:center;margin-top:24px;">
+    <p style="color:rgba(255,255,255,0.2);font-size:11px;margin:0;">
+      ${opts.footer ? escapeHtml(opts.footer) : 'Phonbot by Mindrails · phonbot.de'}
+    </p>
+  </div>
+
+</div>
+</body></html>`;
+}
+
+async function send(to: string, subject: string, text: string, html: string) {
+  if (!resend) return;
   try {
-    await resend.emails.send({
-      from: FROM_EMAIL,
-      to: opts.toEmail,
-      subject,
-      text,
-      html,
-    });
+    await resend.emails.send({ from: FROM_EMAIL, to, subject, text, html });
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    // Use console.error here since we may not have app logger in scope
-    // Callers catch and ignore this — the error is surfaced via the thrown/logged path
-    process.stderr.write(`[email] Failed to send ticket notification: ${msg}\n`);
+    process.stderr.write(`[email] Send failed (${subject}): ${e instanceof Error ? e.message : String(e)}\n`);
   }
 }
 
-export async function sendPasswordResetEmail(opts: {
-  toEmail: string;
-  resetUrl: string;
-}) {
-  if (!resend) {
-    return;
-  }
+// ── Transactional Emails ─────────────────────────────────────────────────
 
-  const subject = 'Passwort zurücksetzen';
-  const text = `Klicke auf den folgenden Link um dein Passwort zurückzusetzen:\n\n${opts.resetUrl}\n\nDer Link ist 1 Stunde gültig.`;
-  const safeResetUrl = escapeHtml(opts.resetUrl);
-  const html = `
-    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-      <h2 style="color: #1f2937;">Passwort zurücksetzen</h2>
-      <p style="color: #4b5563;">Klicke auf den Button um dein Passwort zurückzusetzen.</p>
-      <a href="${safeResetUrl}"
-         style="display: inline-block; background: #4f46e5; color: white; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-size: 14px; margin: 16px 0;">
-        Passwort zurücksetzen →
-      </a>
-      <p style="margin-top: 24px; font-size: 12px; color: #9ca3af;">
-        Der Link ist 1 Stunde gültig. Falls du diese E-Mail nicht angefordert hast, ignoriere sie.
-      </p>
-    </div>
-  `;
+export async function sendVerificationEmail(opts: { toEmail: string; verifyUrl: string }) {
+  const html = brandedEmail({
+    title: 'E-Mail bestätigen',
+    body: '<p style="margin:0;">Klicke auf den Button um deine E-Mail-Adresse zu bestätigen und dein Konto zu aktivieren.</p>',
+    cta: { label: 'E-Mail bestätigen', url: opts.verifyUrl },
+    footer: 'Falls du dich nicht registriert hast, ignoriere diese E-Mail.',
+  });
+  await send(opts.toEmail, 'E-Mail bestätigen — Phonbot', `Bestätige deine E-Mail: ${opts.verifyUrl}`, html);
+}
 
-  try {
-    await resend.emails.send({ from: FROM_EMAIL, to: opts.toEmail, subject, text, html });
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    process.stderr.write(`[email] Failed to send password reset email: ${msg}\n`);
-  }
+export async function sendPasswordResetEmail(opts: { toEmail: string; resetUrl: string }) {
+  const html = brandedEmail({
+    title: 'Passwort zurücksetzen',
+    body: `
+      <p style="margin:0 0 12px 0;">Jemand hat eine Passwort-Zurücksetzung für dein Konto angefordert.</p>
+      <p style="margin:0;">Klicke auf den Button um ein neues Passwort zu setzen. Der Link ist <strong style="color:#fff;">1 Stunde</strong> gültig.</p>
+    `,
+    cta: { label: 'Neues Passwort setzen', url: opts.resetUrl },
+    footer: 'Falls du das nicht angefordert hast, ignoriere diese E-Mail. Dein Passwort bleibt unverändert.',
+  });
+  await send(opts.toEmail, 'Passwort zurücksetzen — Phonbot', `Passwort zurücksetzen: ${opts.resetUrl}\n\nDer Link ist 1 Stunde gültig.`, html);
 }
 
 export async function sendPhoneNumberActiveEmail(opts: {
-  toEmail: string;
-  orgName: string;
-  phoneNumber: string;
-  phoneNumberPretty: string;
-  city: string;
+  toEmail: string; orgName: string; phoneNumber: string; phoneNumberPretty: string; city: string;
 }) {
-  if (!resend) return;
-
-  const subject = `Deine Telefonnummer ist aktiv: ${opts.phoneNumberPretty}`;
-  const text = [
-    `Gute Nachrichten, ${opts.orgName}!`,
-    '',
-    `Deine neue Telefonnummer ${opts.phoneNumberPretty} (${opts.city}) ist jetzt aktiv.`,
-    'Dein KI-Agent nimmt ab sofort Anrufe entgegen.',
-    '',
-    'Du kannst die Nummer jetzt testen — ruf sie einfach an!',
-    '',
-    `Öffne dein Dashboard: ${process.env.APP_URL ?? 'https://phonbot.de'}`,
-  ].join('\n');
-
-  const safeOrgName = escapeHtml(opts.orgName);
   const safeNumber = escapeHtml(opts.phoneNumberPretty);
   const safeCity = escapeHtml(opts.city);
-  const safeAppUrl = escapeHtml(process.env.APP_URL ?? 'https://phonbot.de');
-
-  const html = `
-    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-      <h2 style="color: #1f2937;">Deine Nummer ist aktiv! 🎉</h2>
-      <p style="color: #4b5563;">Gute Nachrichten, <strong>${safeOrgName}</strong>!</p>
-      <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 20px; margin: 16px 0; text-align: center;">
-        <p style="color: #6b7280; font-size: 13px; margin: 0 0 4px 0;">Deine neue Nummer (${safeCity})</p>
-        <p style="font-size: 28px; font-weight: 700; color: #059669; margin: 0; letter-spacing: 1px;">${safeNumber}</p>
+  const safeOrg = escapeHtml(opts.orgName);
+  const html = brandedEmail({
+    title: 'Deine Nummer ist aktiv! 🎉',
+    body: `
+      <p style="margin:0 0 16px 0;">Gute Nachrichten, <strong style="color:#fff;">${safeOrg}</strong>!</p>
+      <div style="background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.15);border-radius:12px;padding:20px;text-align:center;margin:0 0 16px 0;">
+        <p style="color:rgba(255,255,255,0.4);font-size:12px;margin:0 0 4px 0;">Deine Nummer (${safeCity})</p>
+        <p style="font-size:28px;font-weight:800;color:#F97316;margin:0;letter-spacing:1px;">${safeNumber}</p>
       </div>
-      <p style="color: #4b5563;">Dein KI-Agent nimmt ab sofort Anrufe auf dieser Nummer entgegen. Teste es — ruf die Nummer einfach an!</p>
-      <a href="${safeAppUrl}"
-         style="display: inline-block; background: linear-gradient(135deg, #f97316, #06b6d4); color: white; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-size: 14px; font-weight: 600; margin: 16px 0;">
-        Dashboard öffnen →
-      </a>
-      <p style="margin-top: 24px; font-size: 12px; color: #9ca3af;">
-        ${safeOrgName} · Phonbot Voice Agent
-      </p>
-    </div>
-  `;
-
-  try {
-    await resend.emails.send({ from: FROM_EMAIL, to: opts.toEmail, subject, text, html });
-  } catch (e: unknown) {
-    process.stderr.write(`[email] Failed to send phone number active email: ${e instanceof Error ? e.message : String(e)}\n`);
-  }
+      <p style="margin:0;">Dein KI-Agent nimmt ab sofort Anrufe auf dieser Nummer entgegen. Teste es — ruf einfach an!</p>
+    `,
+    cta: { label: 'Dashboard öffnen', url: APP_URL },
+    footer: `${opts.orgName} · Phonbot Voice Agent`,
+  });
+  await send(opts.toEmail, `Nummer aktiv: ${opts.phoneNumberPretty} — Phonbot`, `Deine Nummer ${opts.phoneNumberPretty} (${opts.city}) ist jetzt aktiv!`, html);
 }
 
-export async function sendVerificationEmail(opts: {
-  toEmail: string;
-  verifyUrl: string;
+export async function sendTicketNotification(opts: {
+  toEmail: string; orgName: string; customerName: string | null; customerPhone: string; reason: string | null; service: string | null;
 }) {
-  if (!resend) {
-    return;
-  }
+  const safeName = opts.customerName ? escapeHtml(opts.customerName) : '—';
+  const safePhone = escapeHtml(opts.customerPhone);
+  const safeReason = opts.reason ? escapeHtml(opts.reason) : null;
+  const safeService = opts.service ? escapeHtml(opts.service) : null;
+  const html = brandedEmail({
+    title: 'Neues Ticket',
+    body: `
+      <table style="width:100%;border-collapse:collapse;margin:0 0 8px 0;">
+        <tr><td style="padding:8px 0;color:rgba(255,255,255,0.4);width:90px;font-size:13px;">Kunde</td><td style="padding:8px 0;color:#fff;font-weight:600;font-size:14px;">${safeName}</td></tr>
+        <tr><td style="padding:8px 0;color:rgba(255,255,255,0.4);font-size:13px;">Telefon</td><td style="padding:8px 0;font-size:14px;"><a href="tel:${safePhone}" style="color:#F97316;text-decoration:none;">${safePhone}</a></td></tr>
+        ${safeReason ? `<tr><td style="padding:8px 0;color:rgba(255,255,255,0.4);font-size:13px;">Grund</td><td style="padding:8px 0;color:rgba(255,255,255,0.7);font-size:14px;">${safeReason}</td></tr>` : ''}
+        ${safeService ? `<tr><td style="padding:8px 0;color:rgba(255,255,255,0.4);font-size:13px;">Service</td><td style="padding:8px 0;color:rgba(255,255,255,0.7);font-size:14px;">${safeService}</td></tr>` : ''}
+      </table>
+    `,
+    cta: { label: 'Ticket öffnen', url: `${APP_URL}/tickets` },
+    footer: `${opts.orgName} · Phonbot`,
+  });
+  const text = `Neues Ticket: ${opts.customerName ?? opts.customerPhone}\nTelefon: ${opts.customerPhone}${opts.reason ? `\nGrund: ${opts.reason}` : ''}`;
+  await send(opts.toEmail, `Neues Ticket: ${opts.customerName ?? opts.customerPhone}`, text, html);
+}
 
-  const subject = 'E-Mail bestätigen';
-  const text = `Bestätige deine E-Mail-Adresse:\n\n${opts.verifyUrl}`;
-  const safeVerifyUrl = escapeHtml(opts.verifyUrl);
-  const html = `
-    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-      <h2 style="color: #1f2937;">E-Mail bestätigen</h2>
-      <p style="color: #4b5563;">Klicke auf den Button um deine E-Mail-Adresse zu bestätigen.</p>
-      <a href="${safeVerifyUrl}"
-         style="display: inline-block; background: #4f46e5; color: white; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-size: 14px; margin: 16px 0;">
-        E-Mail bestätigen →
-      </a>
-    </div>
-  `;
+// ── CRM / Lifecycle Emails ─────────────────────────────────────────────────
 
-  try {
-    await resend.emails.send({ from: FROM_EMAIL, to: opts.toEmail, subject, text, html });
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    process.stderr.write(`[email] Failed to send verification email: ${msg}\n`);
-  }
+export async function sendWelcomeEmail(opts: { toEmail: string; orgName: string }) {
+  const safeOrg = escapeHtml(opts.orgName);
+  const html = brandedEmail({
+    title: 'Willkommen bei Phonbot! 👋',
+    body: `
+      <p style="margin:0 0 12px 0;">Hey <strong style="color:#fff;">${safeOrg}</strong>,</p>
+      <p style="margin:0 0 16px 0;">dein Account ist eingerichtet. In wenigen Minuten kann dein KI-Agent Anrufe entgegennehmen.</p>
+      <div style="margin:16px 0;">
+        <p style="margin:0 0 8px 0;color:rgba(255,255,255,0.5);font-size:13px;">Nächste Schritte:</p>
+        <p style="margin:0 0 6px 0;">✦ Agent konfigurieren und deployen</p>
+        <p style="margin:0 0 6px 0;">✦ Telefonnummer aktivieren</p>
+        <p style="margin:0;">✦ Kalender verbinden</p>
+      </div>
+    `,
+    cta: { label: 'Loslegen', url: APP_URL },
+  });
+  await send(opts.toEmail, 'Willkommen bei Phonbot!', `Willkommen bei Phonbot, ${opts.orgName}! Dein Agent wartet auf dich.`, html);
+}
+
+export async function sendPlanActivatedEmail(opts: { toEmail: string; orgName: string; planName: string; minutesLimit: number }) {
+  const safeOrg = escapeHtml(opts.orgName);
+  const safePlan = escapeHtml(opts.planName);
+  const html = brandedEmail({
+    title: `${safePlan}-Plan aktiviert ✅`,
+    body: `
+      <p style="margin:0 0 16px 0;"><strong style="color:#fff;">${safeOrg}</strong>, dein ${safePlan}-Plan ist aktiv!</p>
+      <div style="background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.15);border-radius:12px;padding:16px;margin:0 0 16px 0;">
+        <p style="margin:0;color:rgba(255,255,255,0.5);font-size:13px;">Dein Kontingent</p>
+        <p style="margin:4px 0 0 0;font-size:24px;font-weight:700;color:#F97316;">${opts.minutesLimit} Minuten / Monat</p>
+      </div>
+      <p style="margin:0;">Du kannst jetzt eine Telefonnummer aktivieren und deinen Agent live schalten.</p>
+    `,
+    cta: { label: 'Dashboard öffnen', url: APP_URL },
+    footer: `${opts.orgName} · ${opts.planName}-Plan · Phonbot`,
+  });
+  await send(opts.toEmail, `${opts.planName}-Plan aktiviert — Phonbot`, `Dein ${opts.planName}-Plan ist aktiv! ${opts.minutesLimit} Min/Monat.`, html);
+}
+
+export async function sendUsageWarningEmail(opts: { toEmail: string; orgName: string; minutesUsed: number; minutesLimit: number; percent: number }) {
+  const safeOrg = escapeHtml(opts.orgName);
+  const html = brandedEmail({
+    title: `${opts.percent}% deines Kontingents verbraucht`,
+    body: `
+      <p style="margin:0 0 16px 0;"><strong style="color:#fff;">${safeOrg}</strong>, du hast ${opts.percent}% deiner monatlichen Minuten verbraucht.</p>
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;margin:0 0 16px 0;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <span style="color:rgba(255,255,255,0.4);font-size:13px;">Verbraucht</span>
+          <span style="color:#fff;font-weight:600;font-size:14px;">${opts.minutesUsed} / ${opts.minutesLimit} Min</span>
+        </div>
+        <div style="background:rgba(255,255,255,0.06);border-radius:4px;height:6px;overflow:hidden;">
+          <div style="background:linear-gradient(90deg,#F97316,#06B6D4);height:100%;width:${Math.min(opts.percent, 100)}%;border-radius:4px;"></div>
+        </div>
+      </div>
+      <p style="margin:0;color:rgba(255,255,255,0.5);">Zusätzliche Minuten werden automatisch zum Überschreitungspreis abgerechnet. Upgrade für mehr Kontingent.</p>
+    `,
+    cta: { label: 'Plan verwalten', url: `${APP_URL}/billing` },
+  });
+  await send(opts.toEmail, `${opts.percent}% Kontingent verbraucht — Phonbot`, `Du hast ${opts.minutesUsed}/${opts.minutesLimit} Minuten verbraucht (${opts.percent}%).`, html);
+}
+
+export async function sendPaymentFailedEmail(opts: { toEmail: string; orgName: string }) {
+  const safeOrg = escapeHtml(opts.orgName);
+  const html = brandedEmail({
+    title: 'Zahlung fehlgeschlagen',
+    body: `
+      <p style="margin:0 0 12px 0;"><strong style="color:#fff;">${safeOrg}</strong>, deine letzte Zahlung konnte nicht verarbeitet werden.</p>
+      <p style="margin:0 0 16px 0;">Bitte aktualisiere deine Zahlungsmethode um deinen Service ohne Unterbrechung weiterzunutzen.</p>
+      <p style="margin:0;color:rgba(255,255,255,0.4);font-size:13px;">Wenn das Problem bestehen bleibt, kontaktiere uns unter info@mindrails.de.</p>
+    `,
+    cta: { label: 'Zahlungsmethode aktualisieren', url: `${APP_URL}/billing` },
+  });
+  await send(opts.toEmail, 'Zahlung fehlgeschlagen — Phonbot', `Deine Zahlung für ${opts.orgName} konnte nicht verarbeitet werden. Bitte aktualisiere deine Zahlungsmethode.`, html);
+}
+
+export async function sendAgentDeployedEmail(opts: { toEmail: string; orgName: string; agentName: string }) {
+  const safeOrg = escapeHtml(opts.orgName);
+  const safeName = escapeHtml(opts.agentName);
+  const html = brandedEmail({
+    title: `Agent "${safeName}" ist live! 🚀`,
+    body: `
+      <p style="margin:0 0 12px 0;"><strong style="color:#fff;">${safeOrg}</strong>, dein Agent <strong style="color:#06B6D4;">${safeName}</strong> ist jetzt bereit.</p>
+      <p style="margin:0;">Du kannst ihn sofort testen — per Web-Call im Dashboard oder mit einer verbundenen Telefonnummer.</p>
+    `,
+    cta: { label: 'Agent testen', url: `${APP_URL}/test` },
+    footer: `${opts.orgName} · Phonbot`,
+  });
+  await send(opts.toEmail, `Agent "${opts.agentName}" ist live — Phonbot`, `Dein Agent "${opts.agentName}" ist deployed und bereit!`, html);
 }

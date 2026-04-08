@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { pool } from './db.js';
 import type { JwtPayload } from './auth.js';
 import { autoProvisionGermanNumber } from './phone.js';
+import { sendPlanActivatedEmail, sendPaymentFailedEmail } from './email.js';
 
 // ── Stripe client ─────────────────────────────────────────────────────────────
 
@@ -253,6 +254,14 @@ export async function registerBilling(app: FastifyInstance) {
         const newOrgId = newSub.metadata?.orgId;
         if (newOrgId && newSub.status === 'active') {
           autoProvisionGermanNumber(newOrgId).catch(() => {});
+          // Send plan activation email
+          if (pool) {
+            pool.query(`SELECT u.email, o.name, o.plan, o.minutes_limit FROM users u JOIN orgs o ON o.id = u.org_id WHERE u.org_id = $1 AND u.role = 'owner' LIMIT 1`, [newOrgId])
+              .then(res => {
+                const r = res.rows[0];
+                if (r?.email) sendPlanActivatedEmail({ toEmail: r.email, orgName: r.name ?? 'Phonbot', planName: r.plan ?? 'Starter', minutesLimit: r.minutes_limit ?? 500 }).catch(() => {});
+              }).catch(() => {});
+          }
         }
         break;
       }
@@ -286,6 +295,12 @@ export async function registerBilling(app: FastifyInstance) {
             [subId],
           );
           if (!r.rowCount) console.warn(`[billing] invoice.payment_failed: no org for sub ${subId}`);
+          // Send payment failed email
+          const orgRes = await pool.query(
+            `SELECT u.email, o.name FROM users u JOIN orgs o ON o.id = u.org_id WHERE o.stripe_subscription_id = $1 AND u.role = 'owner' LIMIT 1`, [subId],
+          );
+          const owner = orgRes.rows[0];
+          if (owner?.email) sendPaymentFailedEmail({ toEmail: owner.email, orgName: owner.name ?? 'Phonbot' }).catch(() => {});
         }
         break;
       }

@@ -240,21 +240,44 @@ export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
             className="hidden"
             onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
           />
-          <div className="flex gap-3">
-            <button
-              type="button"
+          {/* Drag & Drop Zone */}
+          {!uploadFile ? (
+            <div
+              className="relative rounded-2xl border-2 border-dashed border-white/10 hover:border-orange-500/25 transition-all cursor-pointer py-10 px-6 text-center"
               onClick={() => fileRef.current?.click()}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white/70 hover:border-cyan-500/40 hover:text-white transition-all"
+              onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-orange-500/40', 'bg-orange-500/5'); }}
+              onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-orange-500/40', 'bg-orange-500/5'); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.currentTarget.classList.remove('border-orange-500/40', 'bg-orange-500/5');
+                const file = e.dataTransfer.files[0];
+                if (file && (file.type.includes('audio') || file.name.match(/\.(mp3|wav|m4a|ogg|webm)$/i))) {
+                  setUploadFile(file);
+                } else {
+                  setUploadError('Bitte eine Audio-Datei (MP3, WAV) verwenden');
+                }
+              }}
             >
-              <IconMicUpload size={16} className="text-cyan-400" />
-              {uploadFile ? uploadFile.name : 'Datei auswählen (MP3/WAV)'}
-            </button>
-            {uploadFile && (
-              <span className="self-center text-xs text-white/40">
-                {(uploadFile.size / 1024 / 1024).toFixed(1)} MB
-              </span>
-            )}
-          </div>
+              <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.12), rgba(6,182,212,0.08))' }}>
+                <IconMicUpload size={20} className="text-orange-400" />
+              </div>
+              <p className="text-sm text-white/50 mb-1">Audio-Datei hierher ziehen</p>
+              <p className="text-[11px] text-white/25">oder klicken zum Auswählen · MP3, WAV · Min. 30 Sek.</p>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 rounded-xl px-4 py-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.15), rgba(6,182,212,0.1))' }}>
+                <IconMicUpload size={14} className="text-orange-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-white truncate">{uploadFile.name}</p>
+                <p className="text-[10px] text-white/30">{(uploadFile.size / 1024 / 1024).toFixed(1)} MB</p>
+              </div>
+              <button onClick={() => setUploadFile(null)} className="text-white/20 hover:text-red-400 transition-colors cursor-pointer">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          )}
           <div>
             <label className="text-sm text-white/60 block mb-1">Name der Stimme</label>
             <input
