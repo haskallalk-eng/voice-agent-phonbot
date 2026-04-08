@@ -7,6 +7,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { createWebCall, createLLM, createAgent as retellCreateAgent, createPhoneCall, updatePhoneNumber } from './retell.js';
 import { TEMPLATES } from './templates.js';
+import { pool } from './db.js';
 
 // Cache demo agents so we don't re-create them on every request
 const demoAgentCache = new Map<string, { agentId: string; createdAt: number }>();
@@ -178,6 +179,14 @@ export async function registerDemo(app: FastifyInstance) {
     };
     demoLeads.push(lead);
     app.log.info({ lead }, 'New demo callback lead');
+
+    // Persist lead in CRM database
+    if (pool) {
+      pool.query(
+        `INSERT INTO crm_leads (name, email, phone, source, status) VALUES ($1, $2, $3, 'demo-callback', 'new')`,
+        [name, email, phone],
+      ).catch(() => {});
+    }
 
     // Try outbound call via Retell
     const fromNumber = process.env.RETELL_OUTBOUND_NUMBER; // e.g. "+4930123456"

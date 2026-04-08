@@ -5,6 +5,7 @@ import { useVisible } from './shared.js';
 
 export function CallbackSection() {
   const [phone, setPhone] = React.useState('');
+  const [email, setEmail] = React.useState('');
   const [name, setName] = React.useState('');
   const [state, setState] = React.useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const ref = React.useRef<HTMLElement>(null);
@@ -12,13 +13,13 @@ export function CallbackSection() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!phone.trim()) return;
+    if (!phone.trim() || !email.trim()) return;
     setState('loading');
     try {
       const res = await fetch('/api/outbound/website-callback', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ phone: phone.trim(), name: name.trim() || undefined }),
+        body: JSON.stringify({ phone: phone.trim(), email: email.trim(), name: name.trim() || undefined }),
       });
       if (!res.ok) throw new Error();
       setState('success');
@@ -130,6 +131,17 @@ export function CallbackSection() {
                     />
                   </div>
                   <div>
+                    <label className="block text-xs text-white/50 mb-1.5 font-medium">E-Mail</label>
+                    <input
+                      type="email"
+                      placeholder="deine@email.de"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      className="w-full rounded-xl bg-white/[0.05] border border-white/[0.08] px-4 py-3 text-sm text-white placeholder-white/20 focus:outline-none focus:border-orange-500/40 focus:ring-1 focus:ring-orange-500/20 transition-all"
+                    />
+                  </div>
+                  <div>
                     <label className="block text-xs text-white/50 mb-1.5 font-medium">Telefonnummer</label>
                     <input
                       type="tel"
@@ -147,11 +159,11 @@ export function CallbackSection() {
                   )}
                   <button
                     type="submit"
-                    disabled={state === 'loading' || !phone.trim()}
+                    disabled={state === 'loading' || !phone.trim() || !email.trim()}
                     className="w-full rounded-xl px-6 py-3.5 font-bold text-white text-sm disabled:opacity-40 transition-all duration-300 hover:scale-[1.02] cursor-pointer"
                     style={{
                       background: 'linear-gradient(135deg, #F97316, #EA580C)',
-                      boxShadow: state !== 'loading' && phone.trim() ? '0 4px 24px rgba(249,115,22,0.3)' : 'none',
+                      boxShadow: state !== 'loading' && phone.trim() && email.trim() ? '0 4px 24px rgba(249,115,22,0.3)' : 'none',
                     }}
                   >
                     {state === 'loading' ? (

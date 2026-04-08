@@ -75,6 +75,24 @@ export async function migrateOutbound() {
       ADD COLUMN IF NOT EXISTS outbound_prompt     TEXT,
       ADD COLUMN IF NOT EXISTS outbound_prompt_v  INT NOT NULL DEFAULT 1;
   `);
+
+  // CRM Leads table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS crm_leads (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      name          TEXT,
+      email         TEXT NOT NULL,
+      phone         TEXT,
+      source        TEXT NOT NULL DEFAULT 'website-callback',
+      status        TEXT NOT NULL DEFAULT 'new',
+      notes         TEXT,
+      call_id       TEXT,
+      converted_at  TIMESTAMPTZ
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS crm_leads_email_idx ON crm_leads(email);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS crm_leads_status_idx ON crm_leads(status);`);
 }
 
 // ── Base Sales Prompt ─────────────────────────────────────────────────────────
@@ -415,11 +433,12 @@ export async function registerOutbound(app: FastifyInstance) {
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = z.object({
       phone: z.string().min(5).max(30),
+      email: z.string().email().max(200),
       name: z.string().max(100).optional(),
     }).safeParse(req.body);
 
     if (!parsed.success) {
-      return reply.status(400).send({ error: 'Telefonnummer erforderlich' });
+      return reply.status(400).send({ error: 'E-Mail und Telefonnummer erforderlich' });
     }
 
     // Normalize phone to E.164
@@ -435,7 +454,19 @@ export async function registerOutbound(app: FastifyInstance) {
     }
 
     try {
-      // Track in DB
+      // Save lead to CRM
+      let leadId: string | null = null;
+      if (pool) {
+        const leadRes = await pool.query(
+          `INSERT INTO crm_leads (name, email, phone, source, status)
+           VALUES ($1, $2, $3, 'website-callback', 'new')
+           RETURNING id`,
+          [parsed.data.name ?? null, parsed.data.email, phone],
+        ).catch(() => null);
+        leadId = (leadRes?.rows[0]?.id as string) ?? null;
+      }
+
+      // Track call in DB
       let websiteCallId: string | null = null;
       if (pool) {
         const res = await pool.query(
@@ -444,6 +475,11 @@ export async function registerOutbound(app: FastifyInstance) {
           [phone, parsed.data.name ?? null],
         ).catch(() => null);
         websiteCallId = (res?.rows[0]?.id as string) ?? null;
+      }
+
+      // Update lead with call reference
+      if (leadId && websiteCallId && pool) {
+        pool.query(`UPDATE crm_leads SET call_id = $1 WHERE id = $2`, [websiteCallId, leadId]).catch(() => {});
       }
 
       // Use the same Retell-based sales agent as demo/callback
@@ -468,5 +504,78 @@ export async function registerOutbound(app: FastifyInstance) {
       app.log.warn({ err: msg, phone }, 'website-callback call failed');
       return reply.status(500).send({ error: 'Rückruf konnte nicht gestartet werden. Bitte versuche es erneut.' });
     }
+  });
+
+  // ── CRM Leads API (admin only) ──────────────────────────────────────────
+
+  // GET /outbound/leads — list all leads
+  app.get('/outbound/leads', { ...auth }, async (req: FastifyRequest) => {
+    if (!pool) return { items: [], total: 0 };
+    const q = z.object({
+      status: z.string().optional(),
+      limit: z.coerce.number().int().min(1).max(500).default(100),
+      offset: z.coerce.number().int().min(0).default(0),
+    }).parse(req.query);
+
+    const where = q.status ? `WHERE status = '${q.status === 'new' ? 'new' : q.status === 'contacted' ? 'contacted' : q.status === 'converted' ? 'converted' : q.status === 'lost' ? 'lost' : 'new'}'` : '';
+    const { rows } = await pool.query(
+      `SELECT id, created_at, name, email, phone, source, status, notes, call_id, converted_at
+       FROM crm_leads ${where} ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+      [q.limit, q.offset],
+    );
+    const countRes = await pool.query(`SELECT COUNT(*) as cnt FROM crm_leads ${where}`);
+    return { items: rows, total: parseInt(String(countRes.rows[0]?.cnt ?? '0'), 10) };
+  });
+
+  // PATCH /outbound/leads/:id — update lead status/notes
+  app.patch('/outbound/leads/:id', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!pool) return reply.status(503).send({ error: 'DB not configured' });
+    const { id } = req.params as { id: string };
+    const body = z.object({
+      status: z.enum(['new', 'contacted', 'converted', 'lost']).optional(),
+      notes: z.string().max(2000).optional(),
+    }).safeParse(req.body);
+    if (!body.success) return reply.status(400).send({ error: 'Invalid input' });
+
+    const updates: string[] = [];
+    const values: unknown[] = [];
+    let idx = 1;
+
+    if (body.data.status) {
+      updates.push(`status = $${idx++}`);
+      values.push(body.data.status);
+      if (body.data.status === 'converted') {
+        updates.push(`converted_at = now()`);
+      }
+    }
+    if (body.data.notes !== undefined) {
+      updates.push(`notes = $${idx++}`);
+      values.push(body.data.notes);
+    }
+
+    if (updates.length === 0) return { ok: true };
+
+    values.push(id);
+    await pool.query(`UPDATE crm_leads SET ${updates.join(', ')} WHERE id = $${idx}`, values);
+    return { ok: true };
+  });
+
+  // DELETE /outbound/leads/:id — delete a lead
+  app.delete('/outbound/leads/:id', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!pool) return reply.status(503).send({ error: 'DB not configured' });
+    const { id } = req.params as { id: string };
+    await pool.query(`DELETE FROM crm_leads WHERE id = $1`, [id]);
+    return { ok: true };
+  });
+
+  // GET /outbound/leads/stats — lead funnel stats
+  app.get('/outbound/leads/stats', { ...auth }, async () => {
+    if (!pool) return { total: 0, new: 0, contacted: 0, converted: 0, lost: 0 };
+    const { rows } = await pool.query(
+      `SELECT status, COUNT(*) as cnt FROM crm_leads GROUP BY status`,
+    );
+    const stats: Record<string, number> = { new: 0, contacted: 0, converted: 0, lost: 0 };
+    for (const r of rows) stats[r.status as string] = parseInt(String(r.cnt), 10);
+    return { total: Object.values(stats).reduce((a, b) => a + b, 0), ...stats };
   });
 }
