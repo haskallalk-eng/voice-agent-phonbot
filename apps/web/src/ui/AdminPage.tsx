@@ -21,6 +21,7 @@ type Tab = 'overview' | 'leads' | 'users';
 
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -32,8 +33,8 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
       const { token } = await adminLogin(password);
       localStorage.setItem(ADMIN_TOKEN_KEY, token);
       onLogin();
-    } catch {
-      setError('Invalid password');
+    } catch (err) {
+      setError(err instanceof Error && err.message.includes('401') ? 'Falsches Passwort' : 'Verbindungsfehler — versuche es erneut');
     } finally {
       setLoading(false);
     }
@@ -46,14 +47,24 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
           <h1 className="text-2xl font-bold text-white">Phonbot Admin</h1>
           <p className="text-white/40 text-sm mt-1">Owner access only</p>
         </div>
-        <input
-          type="password"
-          placeholder="Admin password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-orange-500/50 transition-colors"
-          autoFocus
-        />
+        <div className="relative">
+          <input
+            type={showPassword ? 'text' : 'password'}
+            placeholder="Admin password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full px-4 py-3 pr-12 rounded-xl bg-white/5 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-orange-500/50 transition-colors"
+            autoFocus
+          />
+          <button type="button" onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors cursor-pointer">
+            {showPassword ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            )}
+          </button>
+        </div>
         {error && <p className="text-red-400 text-sm text-center">{error}</p>}
         <button
           type="submit"
