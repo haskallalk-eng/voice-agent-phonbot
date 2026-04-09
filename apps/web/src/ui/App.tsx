@@ -20,6 +20,7 @@ import { OutboundPage } from './OutboundPage.js';
 import { ToastProvider } from './Toast.js';
 import { FoxLogo, PhonbotBrand } from './FoxLogo.js';
 import { ChippyCopilot } from '../components/ChippyCopilot.js';
+import { AdminPage } from './AdminPage.js';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -293,6 +294,17 @@ function AppGate() {
 }
 
 export function App() {
+  // Admin panel: standalone page, no auth provider needed
+  const isAdminRoute = window.location.pathname === '/admin' || window.location.pathname.startsWith('/admin/');
+
+  if (isAdminRoute) {
+    return (
+      <ErrorBoundary>
+        <AdminPage />
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>

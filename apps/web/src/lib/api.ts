@@ -728,3 +728,137 @@ export function sendCopilotMessage(message: string, history: CopilotMessage[] = 
     body: JSON.stringify({ message, history }),
   });
 }
+
+// --- Admin CRM ---
+
+const ADMIN_TOKEN_KEY = 'phonbot_admin_token';
+
+function adminAuthHeader(): Record<string, string> {
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  return token ? { authorization: `Bearer ${token}` } : {};
+}
+
+async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: {
+      ...(init?.body ? { 'content-type': 'application/json' } : {}),
+      ...adminAuthHeader(),
+      ...init?.headers,
+    },
+    signal: init?.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new ApiError(res.status, res.statusText, body);
+  }
+  return res.json() as Promise<T>;
+}
+
+export function adminLogin(password: string) {
+  return adminRequest<{ token: string }>('/admin/login', {
+    method: 'POST',
+    body: JSON.stringify({ password }),
+  });
+}
+
+export type AdminLead = {
+  id: string;
+  created_at: string;
+  name: string | null;
+  email: string;
+  phone: string | null;
+  source: string | null;
+  status: 'new' | 'contacted' | 'converted' | 'lost';
+  notes: string | null;
+  call_id: string | null;
+  converted_at: string | null;
+};
+
+export type AdminLeadsResponse = {
+  items: AdminLead[];
+  total: number;
+};
+
+export function adminGetLeads(params?: { status?: string; limit?: number; offset?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.offset) qs.set('offset', String(params.offset));
+  const q = qs.toString();
+  return adminRequest<AdminLeadsResponse>(`/admin/leads${q ? `?${q}` : ''}`);
+}
+
+export type AdminLeadStats = {
+  total: number;
+  byStatus: Record<string, number>;
+  bySource: Record<string, number>;
+  conversionRate: number;
+  perDay: { day: string; count: number }[];
+};
+
+export function adminGetLeadStats() {
+  return adminRequest<AdminLeadStats>('/admin/leads/stats');
+}
+
+export function adminUpdateLead(id: string, data: { status?: string; notes?: string }) {
+  return adminRequest<{ ok: boolean }>(`/admin/leads/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export function adminDeleteLead(id: string) {
+  return adminRequest<{ ok: boolean }>(`/admin/leads/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+export type AdminMetrics = {
+  totalUsers: number;
+  totalOrgs: number;
+  planCounts: Record<string, number>;
+  totalRevenue: number;
+  totalCalls: number;
+  totalTickets: number;
+  phoneTotal: number;
+  phoneAssigned: number;
+};
+
+export function adminGetMetrics() {
+  return adminRequest<AdminMetrics>('/admin/metrics');
+}
+
+export type AdminUser = {
+  id: string;
+  email: string;
+  role: string;
+  created_at: string;
+  is_active: boolean;
+  org_id: string | null;
+  org_name: string | null;
+  plan: string | null;
+  plan_status: string | null;
+};
+
+export function adminGetUsers() {
+  return adminRequest<{ items: AdminUser[] }>('/admin/users');
+}
+
+export type AdminOrg = {
+  id: string;
+  name: string;
+  slug: string | null;
+  plan: string;
+  plan_status: string;
+  is_active: boolean;
+  created_at: string;
+  minutes_used: number;
+  minutes_limit: number;
+  agents_count: number;
+  users_count: number;
+};
+
+export function adminGetOrgs() {
+  return adminRequest<{ items: AdminOrg[] }>('/admin/orgs');
+}

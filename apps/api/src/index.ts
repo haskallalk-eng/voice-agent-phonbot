@@ -27,6 +27,7 @@ import { registerCopilot } from './copilot.js';
 import { registerLearningApi } from './learning-api.js';
 import { registerTrainingExport } from './training-export.js';
 import { registerContact } from './contact.js';
+import { registerAdmin } from './admin.js';
 
 initSentry();
 const SENTRY_DSN = process.env.SENTRY_DSN ?? '';
@@ -106,6 +107,7 @@ await registerCopilot(app);
 await registerLearningApi(app);
 await registerTrainingExport(app);
 await registerContact(app);
+await registerAdmin(app);
 
 // Additional migrations
 for (const fn of [migratePhone, migrateCalendar, migrateOutbound]) {
