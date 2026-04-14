@@ -1,4 +1,17 @@
 {$DOMAIN:phonbot.de} {
+    # Global security headers — applied to every response (SPA + API + webhooks).
+    # CSP blocks XSS → fetch-exfiltration of JWT tokens from localStorage.
+    # HSTS forces HTTPS for 1 year. X-Frame-Options prevents click-jacking.
+    header {
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' wss://*.retellai.com https://*.retellai.com wss://phonbot.de; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "microphone=(self), camera=(), geolocation=(), payment=(self)"
+        -Server
+    }
+
     # All /api/* requests → strip prefix → backend
     handle /api/* {
         uri strip_prefix /api
