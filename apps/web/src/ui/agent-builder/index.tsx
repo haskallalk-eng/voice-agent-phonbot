@@ -28,7 +28,7 @@ import { PreviewTab } from './PreviewTab.js';
 /*  Main Component                                                          */
 /* ══════════════════════════════════════════════════════════════════════════ */
 
-type Page = 'home' | 'agent' | 'test' | 'tickets' | 'logs' | 'billing' | 'phone' | 'calendar' | 'insights' | 'outbound';
+type Page = 'home' | 'agent' | 'test' | 'tickets' | 'logs' | 'billing' | 'phone' | 'calendar' | 'insights';
 
 export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void } = {}) {
   const [config, setConfig] = useState<AgentConfig | null>(null);

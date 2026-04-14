@@ -12,7 +12,7 @@ type LogEntry = {
   text: string;
 };
 
-type Page = 'home' | 'agent' | 'test' | 'tickets' | 'logs' | 'billing' | 'phone' | 'calendar' | 'insights' | 'outbound';
+type Page = 'home' | 'agent' | 'test' | 'tickets' | 'logs' | 'billing' | 'phone' | 'calendar' | 'insights';
 
 export function TestConsole({ onNavigate }: { onNavigate?: (page: Page) => void } = {}) {
   const [config, setConfig] = useState<AgentConfig | null>(null);

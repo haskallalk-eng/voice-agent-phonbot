@@ -23,7 +23,7 @@ export interface AgentListViewProps {
   onSelectAgent: (tenantId: string) => void;
   onCreateAgent: () => void;
   onAgentDeleted?: () => void;
-  onNavigate?: (page: 'home' | 'agent' | 'test' | 'tickets' | 'logs' | 'billing' | 'phone' | 'calendar' | 'insights' | 'outbound') => void;
+  onNavigate?: (page: 'home' | 'agent' | 'test' | 'tickets' | 'logs' | 'billing' | 'phone' | 'calendar' | 'insights') => void;
 }
 
 export function AgentListView({

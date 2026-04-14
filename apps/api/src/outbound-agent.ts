@@ -303,8 +303,22 @@ export async function triggerSalesCall(params: {
 export async function registerOutbound(app: FastifyInstance) {
   const auth = { onRequest: [app.authenticate] };
 
-  // POST /outbound/call — trigger a single outbound sales call
-  app.post('/outbound/call', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  // Customer-outbound feature flag. Phonbot is an INBOUND-only product right now;
+  // outbound endpoints are only for the landing-page demo callback (public) and Twilio webhooks.
+  // Set CUSTOMER_OUTBOUND_ENABLED=true to re-expose customer outbound features.
+  const CUSTOMER_OUTBOUND_ENABLED = process.env.CUSTOMER_OUTBOUND_ENABLED === 'true';
+
+  const requireCustomerOutbound = async (_req: FastifyRequest, reply: FastifyReply) => {
+    if (!CUSTOMER_OUTBOUND_ENABLED) {
+      return reply.status(503).send({
+        error: 'FEATURE_DISABLED',
+        message: 'Outbound-Anrufe sind aktuell nicht als Kunden-Feature verfügbar. Kontakt: info@phonbot.de',
+      });
+    }
+  };
+
+  // POST /outbound/call — trigger a single outbound sales call (customer-feature, gated)
+  app.post('/outbound/call', { onRequest: [app.authenticate, requireCustomerOutbound] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
     const parsed = z.object({
       toNumber: z.string().min(5),
@@ -320,7 +334,7 @@ export async function registerOutbound(app: FastifyInstance) {
   });
 
   // POST /outbound/call/outcome — update call outcome (webhook or manual)
-  app.post('/outbound/call/:callId/outcome', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/outbound/call/:callId/outcome', { onRequest: [app.authenticate, requireCustomerOutbound] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
     const { callId } = req.params as { callId: string };
     const parsed = z.object({
@@ -338,7 +352,7 @@ export async function registerOutbound(app: FastifyInstance) {
   });
 
   // GET /outbound/calls — list recent outbound calls
-  app.get('/outbound/calls', { ...auth }, async (req: FastifyRequest) => {
+  app.get('/outbound/calls', { onRequest: [app.authenticate, requireCustomerOutbound] }, async (req: FastifyRequest) => {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return { items: [] };
     const { rows } = await pool.query(
@@ -351,7 +365,7 @@ export async function registerOutbound(app: FastifyInstance) {
   });
 
   // GET /outbound/stats — conversion stats
-  app.get('/outbound/stats', { ...auth }, async (req: FastifyRequest) => {
+  app.get('/outbound/stats', { onRequest: [app.authenticate, requireCustomerOutbound] }, async (req: FastifyRequest) => {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return { total: 0, conversionRate: 0, avgScore: null, byOutcome: {} };
 
@@ -383,7 +397,7 @@ export async function registerOutbound(app: FastifyInstance) {
   });
 
   // GET /outbound/prompt — current prompt + version history
-  app.get('/outbound/prompt', { ...auth }, async (req: FastifyRequest) => {
+  app.get('/outbound/prompt', { onRequest: [app.authenticate, requireCustomerOutbound] }, async (req: FastifyRequest) => {
     const { orgId } = req.user as JwtPayload;
     const cfg = await getOutboundConfig(orgId);
     if (!pool) return { prompt: cfg.prompt, version: cfg.version, history: [] };
@@ -398,7 +412,7 @@ export async function registerOutbound(app: FastifyInstance) {
   });
 
   // GET /outbound/suggestions — pending improvement suggestions
-  app.get('/outbound/suggestions', { ...auth }, async (req: FastifyRequest) => {
+  app.get('/outbound/suggestions', { onRequest: [app.authenticate, requireCustomerOutbound] }, async (req: FastifyRequest) => {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return { items: [] };
     const { rows } = await pool.query(
@@ -410,7 +424,7 @@ export async function registerOutbound(app: FastifyInstance) {
   });
 
   // POST /outbound/suggestions/:id/apply
-  app.post('/outbound/suggestions/:id/apply', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/outbound/suggestions/:id/apply', { onRequest: [app.authenticate, requireCustomerOutbound] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
     const { id } = req.params as { id: string };
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
@@ -428,7 +442,7 @@ export async function registerOutbound(app: FastifyInstance) {
   });
 
   // POST /outbound/suggestions/:id/reject
-  app.post('/outbound/suggestions/:id/reject', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/outbound/suggestions/:id/reject', { onRequest: [app.authenticate, requireCustomerOutbound] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
     const { id } = req.params as { id: string };
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
@@ -532,7 +546,7 @@ export async function registerOutbound(app: FastifyInstance) {
 
   // GET /outbound/leads — list leads scoped to the caller's org only
   // (anonymous platform-level leads with org_id IS NULL are visible only via /admin/leads)
-  app.get('/outbound/leads', { ...auth }, async (req: FastifyRequest) => {
+  app.get('/outbound/leads', { onRequest: [app.authenticate, requireCustomerOutbound] }, async (req: FastifyRequest) => {
     if (!pool) return { items: [], total: 0 };
     const { orgId } = req.user as JwtPayload;
     const q = z.object({
@@ -558,7 +572,7 @@ export async function registerOutbound(app: FastifyInstance) {
   });
 
   // PATCH /outbound/leads/:id — update lead status/notes (org-scoped)
-  app.patch('/outbound/leads/:id', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch('/outbound/leads/:id', { onRequest: [app.authenticate, requireCustomerOutbound] }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
     const { orgId } = req.user as JwtPayload;
     const { id } = req.params as { id: string };
@@ -592,7 +606,7 @@ export async function registerOutbound(app: FastifyInstance) {
   });
 
   // DELETE /outbound/leads/:id — delete a lead (org-scoped)
-  app.delete('/outbound/leads/:id', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.delete('/outbound/leads/:id', { onRequest: [app.authenticate, requireCustomerOutbound] }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
     const { orgId } = req.user as JwtPayload;
     const { id } = req.params as { id: string };
@@ -601,7 +615,7 @@ export async function registerOutbound(app: FastifyInstance) {
   });
 
   // GET /outbound/leads/stats — lead funnel stats (org-scoped)
-  app.get('/outbound/leads/stats', { ...auth }, async (req: FastifyRequest) => {
+  app.get('/outbound/leads/stats', { onRequest: [app.authenticate, requireCustomerOutbound] }, async (req: FastifyRequest) => {
     if (!pool) return { total: 0, new: 0, contacted: 0, converted: 0, lost: 0 };
     const { orgId } = req.user as JwtPayload;
     const { rows } = await pool.query(
