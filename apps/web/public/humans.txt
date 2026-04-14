@@ -1,0 +1,25 @@
+# humanstxt.org — Phonbot Crew & Tech
+
+/* TEAM */
+
+  Gründer & Product: Phonbot Team
+  Contact: hello [at] phonbot.de
+  Location: Berlin, Deutschland
+
+/* THANKS */
+
+  Retell AI — Voice orchestration
+  Cartesia — Native German TTS
+  Deepgram — Speech-to-Text
+  OpenAI — LLM
+  Twilio — Telephony
+  Supabase — Database
+  IONOS — Hosting
+
+/* SITE */
+
+  Last update: 2026/04/14
+  Language: Deutsch (primär), EN/FR/ES/IT/TR/PL/NL
+  Standards: HTML5, CSS4, ES2023, Schema.org, llms.txt
+  Components: React 19, TypeScript, Tailwind 4, Vite 6, Fastify 5
+  Software: Node.js 24, Docker, Caddy

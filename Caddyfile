@@ -38,6 +38,18 @@
         reverse_proxy web:80
     }
 
+    # PWA manifest — correct Content-Type for Lighthouse/browsers
+    handle /manifest.webmanifest {
+        header Content-Type "application/manifest+json; charset=utf-8"
+        reverse_proxy web:80
+    }
+
+    # OG image SVG
+    handle /og-image.svg {
+        header Content-Type "image/svg+xml; charset=utf-8"
+        reverse_proxy web:80
+    }
+
     # Everything else → frontend SPA
     handle {
         reverse_proxy web:80
