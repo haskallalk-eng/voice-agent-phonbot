@@ -19,8 +19,7 @@ function ImpressumContent() {
       <section>
         <h2 className="text-base font-semibold text-white mb-2">Angaben gemäß § 5 TMG</h2>
         <p>
-          Mindrails<br />
-          Hassieb Kalla<br />
+          Mindrails UG (haftungsbeschränkt)<br />
           Scharnhorststraße 8<br />
           12307 Berlin<br />
           Deutschland
@@ -28,22 +27,57 @@ function ImpressumContent() {
       </section>
 
       <section>
+        <h2 className="text-base font-semibold text-white mb-2">Vertreten durch</h2>
+        <p>
+          Geschäftsführer: Hans Ulrich Waier
+        </p>
+      </section>
+
+      <section>
         <h2 className="text-base font-semibold text-white mb-2">Kontakt</h2>
         <p>
-          Telefon: +49 176 76679632<br />
-          E-Mail: info@mindrails.de<br />
-          Web: phonbot.de
+          Telefon: +49 30 75937169<br />
+          E-Mail: hello@phonbot.de<br />
+          Web: <a href="https://phonbot.de" className="text-orange-400 hover:text-orange-300 underline">phonbot.de</a>
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-base font-semibold text-white mb-2">Registereintrag</h2>
+        <p>
+          Eintragung im Handelsregister<br />
+          Registergericht: Amtsgericht Berlin-Charlottenburg<br />
+          Registernummer: HRB [TODO: Nummer einfügen]
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-base font-semibold text-white mb-2">Umsatzsteuer-ID</h2>
+        <p>
+          Umsatzsteuer-Identifikationsnummer gemäß § 27 a Umsatzsteuergesetz:<br />
+          [TODO: USt-IdNr. einfügen, z.B. DE123456789]
         </p>
       </section>
 
       <section>
         <h2 className="text-base font-semibold text-white mb-2">
-          Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV
+          Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV
         </h2>
         <p>
-          Hassieb Kalla<br />
-          Scharnhorststraße 8<br />
-          12307 Berlin, Deutschland
+          Hans Ulrich Waier<br />
+          Mindrails UG (haftungsbeschränkt)<br />
+          Scharnhorststraße 8, 12307 Berlin
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-base font-semibold text-white mb-2">Konzernzugehörigkeit</h2>
+        <p>
+          Phonbot ist ein Produkt der{' '}
+          <a href="https://mindrails.de" target="_blank" rel="noopener" className="text-orange-400 hover:text-orange-300 underline">
+            Mindrails UG (haftungsbeschränkt)
+          </a>
+          . Weitere Produkte: Sozibot (in Entwicklung).
         </p>
       </section>
 
@@ -107,9 +141,10 @@ function DatenschutzContent() {
         <h2 className="text-base font-semibold text-white mb-2">1. Verantwortlicher</h2>
         <p>
           Verantwortlicher im Sinne der DSGVO ist:<br />
-          Mindrails — Hassieb Kalla<br />
+          Mindrails UG (haftungsbeschränkt)<br />
+          Geschäftsführer: Hans Ulrich Waier<br />
           Scharnhorststraße 8, 12307 Berlin<br />
-          E-Mail: info@mindrails.de
+          E-Mail: hello@phonbot.de
         </p>
       </section>
 
@@ -183,7 +218,7 @@ function DatenschutzContent() {
           </li>
         </ul>
         <p className="mt-3">
-          Zur Ausübung Ihrer Rechte wenden Sie sich bitte an: info@mindrails.de
+          Zur Ausübung Ihrer Rechte wenden Sie sich bitte an: hello@phonbot.de
         </p>
       </section>
 
@@ -229,16 +264,17 @@ function DatenschutzContent() {
       </section>
 
       <section>
-        <h2 className="text-base font-semibold text-white mb-2">6. Datenschutzbeauftragter</h2>
+        <h2 className="text-base font-semibold text-white mb-2">6. Kontakt Datenschutz</h2>
         <p>
-          Kontakt Datenschutz:<br />
-          Hassieb Kalla<br />
+          Bei Fragen zum Datenschutz wende dich an:<br />
+          Mindrails UG (haftungsbeschränkt)<br />
+          z. Hd. Hans Ulrich Waier<br />
           Scharnhorststraße 8, 12307 Berlin<br />
-          Telefon: +49 176 76679632<br />
-          E-Mail: info@mindrails.de
+          Telefon: +49 30 75937169<br />
+          E-Mail: hello@phonbot.de
         </p>
         <p className="mt-2 text-white/50 text-xs">
-          Stand: März 2025
+          Stand: April 2026
         </p>
       </section>
     </div>
@@ -251,7 +287,7 @@ function AgbContent() {
       <section>
         <h2 className="text-base font-semibold text-white mb-2">§ 1 Geltungsbereich</h2>
         <p>
-          Diese Allgemeinen Geschäftsbedingungen (AGB) gelten für alle Verträge zwischen Mindrails (nachfolgend „Anbieter") und dem Kunden (nachfolgend „Nutzer") über die Nutzung
+          Diese Allgemeinen Geschäftsbedingungen (AGB) gelten für alle Verträge zwischen der Mindrails UG (haftungsbeschränkt) (nachfolgend „Anbieter") und dem Kunden (nachfolgend „Nutzer") über die Nutzung
           der Phonbot-Plattform. Abweichende Bedingungen des Nutzers werden nicht anerkannt, es sei
           denn, der Anbieter stimmt ihrer Geltung ausdrücklich schriftlich zu.
         </p>
@@ -330,7 +366,7 @@ function AgbContent() {
         <p>
           Verträge werden auf unbestimmte Zeit geschlossen und können jeweils zum Ende des
           Abrechnungszeitraums (Monat) gekündigt werden. Die Kündigung kann jederzeit im Nutzerkonto
-          oder per E-Mail an info@mindrails.de erfolgen.
+          oder per E-Mail an hello@phonbot.de erfolgen.
         </p>
         <p className="mt-2">
           Das Recht zur außerordentlichen Kündigung aus wichtigem Grund bleibt beiderseits unberührt.

@@ -48,10 +48,24 @@ export function FooterSection({ onShowLegal, onGoToContact }: FooterSectionProps
           </div>
         </div>
 
-        {/* Bottom row: copyright + DSGVO */}
+        {/* Bottom row: copyright + DSGVO + parent company */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-white/5 pt-6">
-          <p className="text-xs text-white/30">© {new Date().getFullYear()} Phonbot by Mindrails · Alle Rechte vorbehalten</p>
-          <p className="text-xs text-white/30">DSGVO-konform · Server in Deutschland · <a href="mailto:info@mindrails.de" className="hover:text-white/50 transition-colors">info@mindrails.de</a></p>
+          <p className="text-xs text-white/30">
+            © {new Date().getFullYear()} Phonbot · Ein Produkt der{' '}
+            <a
+              href="https://mindrails.de"
+              target="_blank"
+              rel="noopener"
+              className="text-white/50 hover:text-white/80 transition-colors underline decoration-white/20 hover:decoration-orange-400/60"
+            >
+              Mindrails UG
+            </a>
+            {' · Alle Rechte vorbehalten'}
+          </p>
+          <p className="text-xs text-white/30">
+            DSGVO-konform · Server in Deutschland ·{' '}
+            <a href="mailto:hello@phonbot.de" className="hover:text-white/50 transition-colors">hello@phonbot.de</a>
+          </p>
         </div>
       </div>
     </footer>
