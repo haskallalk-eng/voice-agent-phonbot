@@ -338,11 +338,11 @@ function buildPage(d) {
 <meta name="theme-color" content="#0A0A0F" />
 <title>${d.title}</title>
 <meta name="description" content="${d.description}" />
-<link rel="canonical" href="https://phonbot.de/${d.slug}" />
-<link rel="alternate" hreflang="de" href="https://phonbot.de/${d.slug}" />
+<link rel="canonical" href="https://phonbot.de/${d.slug}/" />
+<link rel="alternate" hreflang="de" href="https://phonbot.de/${d.slug}/" />
 <meta property="og:type" content="website" />
 <meta property="og:locale" content="de_DE" />
-<meta property="og:url" content="https://phonbot.de/${d.slug}" />
+<meta property="og:url" content="https://phonbot.de/${d.slug}/" />
 <meta property="og:title" content="${d.ogTitle}" />
 <meta property="og:description" content="${d.ogDesc}" />
 <meta property="og:image" content="https://phonbot.de/og-image.svg" />
