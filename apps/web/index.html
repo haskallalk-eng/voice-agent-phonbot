@@ -2,15 +2,235 @@
 <html lang="de">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Phonbot — Dein KI-Telefonassistent</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0A0A0F" />
+    <meta name="color-scheme" content="dark" />
+
+    <title>Phonbot · KI-Telefonassistent für kleine Unternehmen</title>
+    <meta name="description" content="Nie wieder Anrufe verpassen. Phonbot — der KI-Telefonassistent für Friseure, Handwerker, Ärzte & Praxen. Bucht Termine, beantwortet Fragen, 24/7 auf Deutsch." />
+    <meta name="keywords" content="KI Telefonassistent, KI Telefonagent, Voice Bot Deutsch, Terminbuchung KI, virtuelle Telefonistin, Anrufannahme automatisch, AI Receptionist Deutschland, Telefonbot, Anrufbeantworter KI, Sprachassistent Unternehmen" />
+    <meta name="author" content="Phonbot" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="googlebot" content="index, follow" />
+    <link rel="canonical" href="https://phonbot.de/" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="de_DE" />
+    <meta property="og:site_name" content="Phonbot" />
+    <meta property="og:url" content="https://phonbot.de/" />
+    <meta property="og:title" content="Phonbot · KI-Telefonassistent für kleine Unternehmen" />
+    <meta property="og:description" content="Nie wieder Anrufe verpassen. Phonbot bucht Termine, beantwortet Fragen und erstellt Tickets — 24/7 auf Deutsch. Für Friseure, Handwerker, Ärzte & Praxen." />
+    <meta property="og:image" content="https://phonbot.de/og-image.svg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Phonbot — KI-Telefonassistent Logo mit Hamster-Maskottchen" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Phonbot · KI-Telefonassistent für kleine Unternehmen" />
+    <meta name="twitter:description" content="Nie wieder Anrufe verpassen. Phonbot bucht Termine und beantwortet Fragen 24/7 auf Deutsch." />
+    <meta name="twitter:image" content="https://phonbot.de/og-image.svg" />
+    <meta name="twitter:image:alt" content="Phonbot Logo" />
+
+    <!-- PWA / Apple -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Phonbot" />
+    <meta name="application-name" content="Phonbot" />
+    <meta name="format-detection" content="telephone=no" />
+
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='55' r='40' fill='%23F5C842'/><ellipse cx='14' cy='62' rx='12' ry='11' fill='%23E8B32D'/><ellipse cx='86' cy='62' rx='12' ry='11' fill='%23E8B32D'/><circle cx='28' cy='22' r='9' fill='%23D49B12'/><circle cx='72' cy='22' r='9' fill='%23D49B12'/><circle cx='36' cy='50' r='13' fill='white'/><circle cx='36' cy='50' r='10' fill='%23E8A317'/><circle cx='37' cy='51' r='6' fill='%231C1917'/><circle cx='40' cy='46' r='3' fill='white'/><circle cx='64' cy='50' r='13' fill='white'/><circle cx='64' cy='50' r='10' fill='%23E8A317'/><circle cx='65' cy='51' r='6' fill='%231C1917'/><circle cx='68' cy='46' r='3' fill='white'/><ellipse cx='50' cy='64' rx='3' ry='2.2' fill='%23B45309'/></svg>" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='55' r='40' fill='%23F5C842'/><ellipse cx='14' cy='62' rx='12' ry='11' fill='%23E8B32D'/><ellipse cx='86' cy='62' rx='12' ry='11' fill='%23E8B32D'/><circle cx='28' cy='22' r='9' fill='%23D49B12'/><circle cx='72' cy='22' r='9' fill='%23D49B12'/><circle cx='36' cy='50' r='13' fill='white'/><circle cx='36' cy='50' r='10' fill='%23E8A317'/><circle cx='37' cy='51' r='6' fill='%231C1917'/><circle cx='40' cy='46' r='3' fill='white'/><circle cx='64' cy='50' r='13' fill='white'/><circle cx='64' cy='50' r='10' fill='%23E8A317'/><circle cx='65' cy='51' r='6' fill='%231C1917'/><circle cx='68' cy='46' r='3' fill='white'/><ellipse cx='50' cy='64' rx='3' ry='2.2' fill='%23B45309'/></svg>" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+    <!-- Structured Data: Organization + SoftwareApplication + FAQPage + WebSite -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://phonbot.de/#organization",
+          "name": "Phonbot",
+          "url": "https://phonbot.de/",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://phonbot.de/og-image.svg",
+            "width": 1200,
+            "height": 630
+          },
+          "description": "KI-Telefonassistent für kleine Unternehmen. Bucht Termine, beantwortet Fragen, erstellt Tickets — 24/7 auf Deutsch.",
+          "areaServed": {
+            "@type": "Country",
+            "name": "Deutschland"
+          },
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "telephone": "+49-30-75937169",
+            "contactType": "Kundenservice",
+            "areaServed": "DE",
+            "availableLanguage": ["German", "English"]
+          }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://phonbot.de/#app",
+          "name": "Phonbot",
+          "applicationCategory": "BusinessApplication",
+          "applicationSubCategory": "VoiceAI",
+          "operatingSystem": "Web",
+          "description": "KI-Telefonassistent der Anrufe annimmt, Termine bucht und Tickets erstellt — für Friseure, Handwerker, Ärzte, Kanzleien und andere kleine Unternehmen.",
+          "inLanguage": "de",
+          "offers": [
+            {
+              "@type": "Offer",
+              "name": "Free",
+              "price": "0",
+              "priceCurrency": "EUR",
+              "description": "100 Freiminuten, 1 Agent, Web-Call Test"
+            },
+            {
+              "@type": "Offer",
+              "name": "Starter",
+              "price": "49",
+              "priceCurrency": "EUR",
+              "description": "500 Minuten/Monat, eigene Telefonnummer, 1 Agent"
+            },
+            {
+              "@type": "Offer",
+              "name": "Pro",
+              "price": "149",
+              "priceCurrency": "EUR",
+              "description": "2000 Minuten/Monat, 3 Agents, Analytics Dashboard"
+            },
+            {
+              "@type": "Offer",
+              "name": "Agency",
+              "price": "299",
+              "priceCurrency": "EUR",
+              "description": "5000 Minuten/Monat, 10 Agents, White-Label"
+            }
+          ],
+          "publisher": {
+            "@id": "https://phonbot.de/#organization"
+          }
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://phonbot.de/#website",
+          "url": "https://phonbot.de/",
+          "name": "Phonbot",
+          "inLanguage": "de-DE",
+          "publisher": {
+            "@id": "https://phonbot.de/#organization"
+          }
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://phonbot.de/#faq",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "Brauche ich technisches Wissen?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Nein. Du gibst deinen Businessnamen, Öffnungszeiten und Services ein — fertig. Kein Code, kein Techniker."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Kann ich meine bisherige Telefonnummer behalten?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Ja. Richte eine Rufweiterleitung zu deiner Phonbot-Nummer ein. Deine bestehende Nummer bleibt unverändert."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Was passiert, wenn der Agent eine Frage nicht beantworten kann?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Der Agent erstellt automatisch ein Rückruf-Ticket mit allen relevanten Infos, damit du schnell nachfassen kannst."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Wie funktioniert die Kalender-Integration?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Phonbot verbindet sich mit Google Calendar, Microsoft Outlook oder Cal.com. Termine werden direkt eingetragen — ohne dass du eingreifen musst."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Ist Phonbot DSGVO-konform?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Ja. Server stehen in Deutschland (EU). Gesprächsdaten werden verschlüsselt gespeichert und können auf Wunsch jederzeit gelöscht werden."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Für welche Branchen ist Phonbot geeignet?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Phonbot ist optimiert für Friseure, Handwerker, Arztpraxen, Kanzleien, Gastronomie, Kosmetikstudios und alle kleinen Unternehmen die Anrufe und Terminbuchungen bearbeiten müssen. Der Agent passt sich deiner Branche über den Agent Builder an."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Kann ich den Agenten auf mehrere Sprachen einstellen?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Phonbot unterstützt Deutsch, Englisch, Französisch, Spanisch, Italienisch, Türkisch, Polnisch und Niederländisch. Du stellst die Hauptsprache im Agent Builder ein."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Gibt es eine Mindestlaufzeit?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Nein. Monatliche Pläne sind monatlich kündbar. Beim Jahresplan sparst du 20%, aber es gibt keine Strafgebühren."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Was passiert wenn mein Minutenkontingent aufgebraucht ist?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Der Agent bleibt aktiv — zusätzliche Minuten werden zum günstigen Überschreitungspreis (ab 0,06 €/Min) abgerechnet. Du wirst per E-Mail informiert."
+              }
+            }
+          ]
+        },
+        {
+          "@type": "BreadcrumbList",
+          "itemListElement": [
+            {
+              "@type": "ListItem",
+              "position": 1,
+              "name": "Home",
+              "item": "https://phonbot.de/"
+            }
+          ]
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <div style="max-width:600px;margin:80px auto;padding:32px;font-family:Inter,system-ui,sans-serif;color:#fff;background:#0F0F18;border:1px solid rgba(255,255,255,.1);border-radius:16px;text-align:center;">
+        <h1 style="font-size:24px;margin:0 0 16px;">Phonbot · KI-Telefonassistent</h1>
+        <p style="opacity:.7;line-height:1.6;">Für Phonbot wird JavaScript benötigt. Bitte aktiviere JavaScript in deinem Browser oder nutze einen modernen Browser wie Chrome, Firefox oder Safari.</p>
+        <p style="margin-top:24px;"><a href="mailto:hello@phonbot.de" style="color:#F97316;">hello@phonbot.de</a></p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

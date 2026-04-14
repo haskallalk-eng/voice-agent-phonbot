@@ -53,7 +53,7 @@ export const FAQ_ITEMS = [
   },
   {
     q: 'Kann ich meine bisherige Telefonnummer behalten?',
-    a: 'Ja. Richte eine Rufweiterleitung zu deiner Chipy-Nummer ein. Deine bestehende Nummer bleibt unverändert.',
+    a: 'Ja. Richte eine Rufweiterleitung zu deiner Phonbot-Nummer ein. Deine bestehende Nummer bleibt unverändert.',
   },
   {
     q: 'Was passiert, wenn der Agent eine Frage nicht beantworten kann?',
@@ -61,15 +61,19 @@ export const FAQ_ITEMS = [
   },
   {
     q: 'Wie funktioniert die Kalender-Integration?',
-    a: 'Chipy verbindet sich mit Google Calendar oder Cal.com. Termine werden direkt eingetragen — ohne dass du eingreifen musst.',
+    a: 'Phonbot verbindet sich mit Google Calendar, Microsoft Outlook oder Cal.com. Termine werden direkt eingetragen — ohne dass du eingreifen musst.',
   },
   {
-    q: 'Ist Chipy DSGVO-konform?',
+    q: 'Ist Phonbot DSGVO-konform?',
     a: 'Ja. Server stehen in Deutschland (EU). Gesprächsdaten werden verschlüsselt gespeichert und können auf Wunsch jederzeit gelöscht werden.',
   },
   {
+    q: 'Für welche Branchen ist Phonbot geeignet?',
+    a: 'Phonbot ist optimiert für Friseure, Handwerker, Arztpraxen, Kanzleien, Gastronomie, Kosmetikstudios und alle kleinen Unternehmen die Anrufe und Terminbuchungen bearbeiten müssen. Der Agent passt sich deiner Branche über den Agent Builder an.',
+  },
+  {
     q: 'Kann ich den Agenten auf mehrere Sprachen einstellen?',
-    a: 'Chipy unterstützt Deutsch, Englisch und weitere EU-Sprachen. Du stellst die Hauptsprache im Agent Builder ein.',
+    a: 'Phonbot unterstützt Deutsch, Englisch, Französisch, Spanisch, Italienisch, Türkisch, Polnisch und Niederländisch. Du stellst die Hauptsprache im Agent Builder ein.',
   },
   {
     q: 'Gibt es eine Mindestlaufzeit?',

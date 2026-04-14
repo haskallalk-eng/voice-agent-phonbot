@@ -46,35 +46,37 @@ export function LandingPage({ onGoToRegister, onGoToLogin, onGoToContact }: Prop
       {/* ── NAV ── */}
       <NavHeader onGoToRegister={onGoToRegister} onGoToLogin={onGoToLogin} onGoToContact={onGoToContact} />
 
-      {/* ── HERO + TRUST BAR ── */}
-      <HeroSection onGoToRegister={onGoToRegister} onShowDemoModal={() => setShowDemoModal(true)} />
+      <main id="main" role="main">
+        {/* ── HERO + TRUST BAR ── */}
+        <HeroSection onGoToRegister={onGoToRegister} onShowDemoModal={() => setShowDemoModal(true)} />
 
-      {/* ── WAVEFORM + DEMO ── */}
-      <DemoSection onGoToRegister={onGoToRegister} />
+        {/* ── WAVEFORM + DEMO ── */}
+        <DemoSection onGoToRegister={onGoToRegister} />
 
-      {/* ── HOW IT WORKS (scroll-triggered) ── */}
-      <HowSection />
+        {/* ── HOW IT WORKS (scroll-triggered) ── */}
+        <HowSection />
 
-      {/* ── FEATURES ── */}
-      <FeaturesSection />
+        {/* ── FEATURES ── */}
+        <FeaturesSection />
 
-      {/* ── SAVINGS CALCULATOR ── */}
-      <SavingsCalculator onCTA={onGoToRegister} />
+        {/* ── SAVINGS CALCULATOR ── */}
+        <SavingsCalculator onCTA={onGoToRegister} />
 
-      {/* ── STATS (count-up) ── */}
-      <StatsSection />
+        {/* ── STATS (count-up) ── */}
+        <StatsSection />
 
-      {/* ── FAQ ── */}
-      <FaqSection />
+        {/* ── FAQ ── */}
+        <FaqSection />
 
-      {/* ── PRICING ── */}
-      <PricingSection onGoToRegister={onGoToRegister} />
+        {/* ── PRICING ── */}
+        <PricingSection onGoToRegister={onGoToRegister} />
 
-      {/* ── RÜCKRUF-FORMULAR ── */}
-      <CallbackSection />
+        {/* ── RÜCKRUF-FORMULAR ── */}
+        <CallbackSection />
 
-      {/* ── FINAL CTA ── */}
-      <FinalCTA onGoToRegister={onGoToRegister} />
+        {/* ── FINAL CTA ── */}
+        <FinalCTA onGoToRegister={onGoToRegister} />
+      </main>
 
       {/* ── FOOTER ── */}
       <FooterSection onShowLegal={setLegalPage} onGoToContact={onGoToContact} />
