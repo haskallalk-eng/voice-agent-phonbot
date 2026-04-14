@@ -22,6 +22,22 @@
         reverse_proxy api:3001
     }
 
+    # SEO/AI static files — must be served as text/plain
+    @textfiles {
+        path /llms.txt /llms-full.txt /ai.txt /robots.txt
+        path_regexp key ^/[a-f0-9]{16,}\.txt$
+    }
+    handle @textfiles {
+        header Content-Type "text/plain; charset=utf-8"
+        reverse_proxy web:80
+    }
+
+    # .well-known files (security.txt etc.)
+    handle /.well-known/* {
+        header Content-Type "text/plain; charset=utf-8"
+        reverse_proxy web:80
+    }
+
     # Everything else → frontend SPA
     handle {
         reverse_proxy web:80

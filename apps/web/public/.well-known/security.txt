@@ -1,0 +1,11 @@
+Contact: mailto:security@phonbot.de
+Contact: mailto:hello@phonbot.de
+Expires: 2027-04-14T00:00:00.000Z
+Preferred-Languages: de, en
+Canonical: https://phonbot.de/.well-known/security.txt
+Policy: https://phonbot.de/#datenschutz
+
+# Phonbot Security Disclosure Policy
+# We welcome responsible disclosure of security vulnerabilities.
+# Please report via email with "SECURITY" in the subject line.
+# We aim to respond within 48 hours.
