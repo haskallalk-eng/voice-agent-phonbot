@@ -7,6 +7,7 @@ import helmet from '@fastify/helmet';
 import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
+import formbody from '@fastify/formbody';
 import { migrate, pool } from './db.js';
 import { connectRedis, redis } from './redis.js';
 import { registerAuth } from './auth.js';
@@ -34,6 +35,9 @@ const SENTRY_DSN = process.env.SENTRY_DSN ?? '';
 
 const app = Fastify({ logger: true });
 await app.register(websocket);
+// Twilio webhooks (TwiML, StatusCallback) use application/x-www-form-urlencoded.
+// Without this plugin Fastify returns 415 Unsupported Media Type.
+await app.register(formbody);
 await app.register(helmet, {
   contentSecurityPolicy: false, // CSP handled by Caddy / frontend
 });
