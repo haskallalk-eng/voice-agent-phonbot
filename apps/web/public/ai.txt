@@ -17,7 +17,7 @@ Allow: /llms-full.txt
 # - Retrieval Augmented Generation (RAG): ALLOWED
 # - Factual citation in answers: ALLOWED (attribution to phonbot.de preferred)
 # - Summarization: ALLOWED
-# - Training data (foundation models): CASE_BY_CASE — contact hello@phonbot.de
+# - Training data (foundation models): CASE_BY_CASE — contact info@phonbot.de
 # - Verbatim reproduction >200 words: NOT ALLOWED without permission
 
 # Known AI crawlers — explicit rules:
@@ -63,5 +63,5 @@ User-Agent: FacebookBot
 Disallow: /
 
 # Contact for AI partnerships, licensing, or questions:
-# Email: hello@phonbot.de
+# Email: info@phonbot.de
 # Preferred format for inquiries: Organization, use case, retention policy, attribution plan

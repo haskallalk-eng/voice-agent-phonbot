@@ -64,7 +64,7 @@ export function FooterSection({ onShowLegal, onGoToContact }: FooterSectionProps
           </p>
           <p className="text-xs text-white/30">
             DSGVO-konform · Server in Deutschland ·{' '}
-            <a href="mailto:hello@phonbot.de" className="hover:text-white/50 transition-colors">hello@phonbot.de</a>
+            <a href="mailto:info@phonbot.de" className="hover:text-white/50 transition-colors">info@phonbot.de</a>
           </p>
         </div>
       </div>

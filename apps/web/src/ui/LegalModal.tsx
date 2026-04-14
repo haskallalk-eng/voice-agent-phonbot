@@ -37,7 +37,7 @@ function ImpressumContent() {
         <h2 className="text-base font-semibold text-white mb-2">Kontakt</h2>
         <p>
           Telefon: +49 30 75937169<br />
-          E-Mail: hello@phonbot.de<br />
+          E-Mail: info@phonbot.de<br />
           Web: <a href="https://phonbot.de" className="text-orange-400 hover:text-orange-300 underline">phonbot.de</a>
         </p>
       </section>
@@ -144,7 +144,7 @@ function DatenschutzContent() {
           Mindrails UG (haftungsbeschränkt)<br />
           Geschäftsführer: Hans Ulrich Waier<br />
           Scharnhorststraße 8, 12307 Berlin<br />
-          E-Mail: hello@phonbot.de
+          E-Mail: info@phonbot.de
         </p>
       </section>
 
@@ -218,7 +218,7 @@ function DatenschutzContent() {
           </li>
         </ul>
         <p className="mt-3">
-          Zur Ausübung Ihrer Rechte wenden Sie sich bitte an: hello@phonbot.de
+          Zur Ausübung Ihrer Rechte wenden Sie sich bitte an: info@phonbot.de
         </p>
       </section>
 
@@ -271,7 +271,7 @@ function DatenschutzContent() {
           z. Hd. Hans Ulrich Waier<br />
           Scharnhorststraße 8, 12307 Berlin<br />
           Telefon: +49 30 75937169<br />
-          E-Mail: hello@phonbot.de
+          E-Mail: info@phonbot.de
         </p>
         <p className="mt-2 text-white/50 text-xs">
           Stand: April 2026
@@ -366,7 +366,7 @@ function AgbContent() {
         <p>
           Verträge werden auf unbestimmte Zeit geschlossen und können jeweils zum Ende des
           Abrechnungszeitraums (Monat) gekündigt werden. Die Kündigung kann jederzeit im Nutzerkonto
-          oder per E-Mail an hello@phonbot.de erfolgen.
+          oder per E-Mail an info@phonbot.de erfolgen.
         </p>
         <p className="mt-2">
           Das Recht zur außerordentlichen Kündigung aus wichtigem Grund bleibt beiderseits unberührt.

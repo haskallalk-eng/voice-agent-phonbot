@@ -110,7 +110,7 @@ Server in Deutschland (EU). Gesprächsdaten verschlüsselt gespeichert (AES-256)
 Sobald dein Inklusiv-Volumen aufgebraucht ist, bleibt der Agent aktiv. Zusätzliche Minuten werden zum Plan-spezifischen Überschreitungspreis (0,06-0,10 €/Min) abgerechnet. Du wirst bei 80 % und 100 % des Kontingents per E-Mail benachrichtigt.
 
 ### Enterprise
-Ab ~30.000 Min/Monat oder speziellen Anforderungen (HIPAA-Äquivalent, Custom SSO, SLA-Garantie): individuelles Angebot über hello@phonbot.de.
+Ab ~30.000 Min/Monat oder speziellen Anforderungen (HIPAA-Äquivalent, Custom SSO, SLA-Garantie): individuelles Angebot über info@phonbot.de.
 
 ## 6. FAQ (vollständig)
 
@@ -201,13 +201,13 @@ Gesamtlatenz End-to-End (Anrufer spricht → Agent antwortet): **~800-900 ms**.
 - **Verschlüsselung**: TLS 1.3 in Transit, AES-256 at rest
 - **DSGVO-Artikel 28**: AV-Vertrag (Auftragsverarbeitung) auf Anfrage verfügbar
 - **Datenspeicherung**: Gesprächs-Audiodateien max. 90 Tage, Transkripte max. 180 Tage, danach automatische Löschung
-- **Rechte der Betroffenen**: Auskunft, Berichtigung, Löschung auf schriftliche Anfrage via hello@phonbot.de (Erledigung in 30 Tagen gemäß DSGVO)
+- **Rechte der Betroffenen**: Auskunft, Berichtigung, Löschung auf schriftliche Anfrage via info@phonbot.de (Erledigung in 30 Tagen gemäß DSGVO)
 - **Keine Daten-Weitergabe** an Werbeanbieter oder Dritte
 - **LLM-Training-Opt-out**: OpenAI API wird mit "no training" Flag aufgerufen — keine Gesprächsdaten fließen in Modelltraining
 
 ## 11. Kontakt & Impressum
 
-- **E-Mail**: hello@phonbot.de
+- **E-Mail**: info@phonbot.de
 - **Telefon**: +49 30 75937169
 - **Web**: https://phonbot.de/
 - **Support**: 24h E-Mail-Response (Starter), 4h (Pro), dediziert (Agency)
