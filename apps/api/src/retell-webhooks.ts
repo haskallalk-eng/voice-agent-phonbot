@@ -34,7 +34,13 @@ type RawBodyRequest = FastifyRequest & { rawBody?: Buffer | string };
  * Returns true when valid or when RETELL_API_KEY is not configured (dev mode).
  */
 function verifyRetellSignature(req: RawBodyRequest): boolean {
-  if (!RETELL_API_KEY) return process.env.NODE_ENV !== 'production'; // dev: skip, prod: reject
+  // Always require signature — no NODE_ENV bypass. Misconfigured env would otherwise
+  // let attackers forge call_ended webhooks (manipulate minutes_used, inject transcripts, etc.).
+  if (!RETELL_API_KEY) {
+    // Dev-only escape: require explicit opt-in via ALLOW_UNSIGNED_WEBHOOKS=true
+    if (process.env.ALLOW_UNSIGNED_WEBHOOKS === 'true' && process.env.NODE_ENV !== 'production') return true;
+    return false;
+  }
 
   const signature = (req.headers['x-retell-signature'] as string) ?? '';
   const rawBody: string =

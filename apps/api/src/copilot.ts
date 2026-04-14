@@ -5,15 +5,25 @@ import type { JwtPayload } from './auth.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+// Role restricted to user/assistant — clients MUST NOT inject 'system' or 'tool' roles
+// (would override our SYSTEM_PROMPT and turn the copilot into generic ChatGPT on our bill).
 const ChatMessageSchema = z.object({
-  role: z.enum(['user', 'assistant', 'system']),
-  content: z.string(),
+  role: z.enum(['user', 'assistant']),
+  content: z.string().max(2000),
 });
+
+const MAX_HISTORY_TOTAL_CHARS = 8000; // hard cap across all history messages
 
 const CopilotChatBody = z.object({
   message: z.string().min(1).max(2000),
-  history: z.array(ChatMessageSchema).max(50).optional(),
-});
+  history: z.array(ChatMessageSchema).max(20).optional(),
+}).refine(
+  (data) => {
+    const total = (data.history ?? []).reduce((sum, m) => sum + m.content.length, 0);
+    return total <= MAX_HISTORY_TOTAL_CHARS;
+  },
+  { message: `History too long (max ${MAX_HISTORY_TOTAL_CHARS} chars total)` },
+);
 
 type ChatMessage = z.infer<typeof ChatMessageSchema>;
 

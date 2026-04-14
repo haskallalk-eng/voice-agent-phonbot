@@ -156,6 +156,37 @@ export async function registerTwilioBridge(app: FastifyInstance) {
     reply.header('Content-Type', 'text/xml; charset=utf-8').send(xml);
   });
 
+  // POST /outbound/status/:sessionId — Twilio StatusCallback (application/x-www-form-urlencoded)
+  // Updates outbound_calls.status to the final disposition (completed/failed/no-answer/busy/canceled).
+  // Without this, calls that never connect (VoiceMail, busy, network) remain status='calling' forever.
+  app.post('/outbound/status/:sessionId', async (req, reply) => {
+    const { sessionId } = req.params as { sessionId: string };
+    const body = (req.body ?? {}) as Record<string, string>;
+    const callStatus = body.CallStatus ?? 'unknown';
+    // Twilio statuses: queued, ringing, in-progress, completed, busy, failed, no-answer, canceled
+    const terminal = ['completed', 'busy', 'failed', 'no-answer', 'canceled'].includes(callStatus);
+
+    const session = await getSession(sessionId);
+    if (pool && session?.outboundRecordId) {
+      const mappedStatus = callStatus === 'completed' ? 'completed'
+        : callStatus === 'busy' ? 'busy'
+        : callStatus === 'no-answer' ? 'no_answer'
+        : callStatus === 'canceled' ? 'canceled'
+        : callStatus === 'failed' ? 'failed'
+        : callStatus;
+      await pool.query(
+        `UPDATE outbound_calls SET status = $1 WHERE id = $2`,
+        [mappedStatus, session.outboundRecordId],
+      ).catch((err: Error) => app.log.warn({ err: err.message, sessionId }, 'status update failed'));
+    }
+
+    if (terminal) {
+      await deleteSession(sessionId).catch(() => {});
+    }
+
+    reply.code(200).send('');
+  });
+
   // WS /outbound/ws/:sessionId
   // Twilio connects here with a bidirectional audio stream (mulaw 8kHz).
   // We forward it to OpenAI Realtime API.

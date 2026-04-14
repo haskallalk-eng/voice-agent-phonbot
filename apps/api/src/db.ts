@@ -61,10 +61,49 @@ if (DATABASE_URL) {
   });
 }
 
-// Proxy object: awaits pool initialization before first use
+// Proxy: awaits lazy pool init, forwards both async methods (query, connect, end)
+// and synchronous EventEmitter methods (on, off, addListener, removeListener, emit)
+// so that pool.on('error', …) works correctly (avoids Node crash on idle-disconnect).
+const EMITTER_METHODS = new Set<string | symbol>([
+  'on', 'off', 'addListener', 'removeListener', 'once', 'emit', 'removeAllListeners',
+  'listeners', 'rawListeners', 'eventNames', 'listenerCount', 'prependListener', 'prependOnceListener',
+  'setMaxListeners', 'getMaxListeners',
+]);
+
+// Register error listener once pool is ready (prevents unhandled 'error' crash)
+let _errorHandlerAttached = false;
+function attachPoolErrorHandler() {
+  if (!_pool || _errorHandlerAttached) return;
+  _errorHandlerAttached = true;
+  _pool.on('error', (err: Error) => {
+    process.stderr.write(`[pg pool] Idle client error: ${err.message}\n`);
+  });
+}
+
 export const pool = DATABASE_URL ? new Proxy({} as pg.Pool, {
   get(_target, prop) {
     if (prop === 'then') return undefined; // not a Promise
+
+    // EventEmitter methods must be forwarded synchronously (can't await — returns `this` for chaining).
+    if (typeof prop === 'string' && EMITTER_METHODS.has(prop)) {
+      return (...args: unknown[]) => {
+        const callFn = (p: pg.Pool) => {
+          const fn = (p as unknown as Record<string, unknown>)[prop];
+          if (typeof fn === 'function') return (fn as (...a: unknown[]) => unknown).call(p, ...args);
+          return undefined;
+        };
+        if (!_pool) {
+          if (!_poolReady) throw new Error('Pool not initialized — DNS init not started');
+          _poolReady.then(() => {
+            attachPoolErrorHandler();
+            if (_pool) callFn(_pool);
+          });
+          return _target;
+        }
+        return callFn(_pool);
+      };
+    }
+
     // connect() returns a PoolClient directly — needs special handling
     if (prop === 'connect') {
       return async () => {
@@ -76,6 +115,8 @@ export const pool = DATABASE_URL ? new Proxy({} as pg.Pool, {
     return async (...args: unknown[]) => {
       if (_poolReady) await _poolReady;
       if (!_pool) throw new Error('Pool not initialized');
+      // Register error handler lazily after first query (pool is definitely ready)
+      attachPoolErrorHandler();
       return (_pool[prop as keyof pg.Pool] as (...a: unknown[]) => unknown)(...args);
     };
   },

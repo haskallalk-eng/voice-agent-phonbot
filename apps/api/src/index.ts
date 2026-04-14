@@ -46,7 +46,13 @@ await app.register(cors, {
 await app.register(rateLimit, {
   max: 100,
   timeWindow: '1 minute',
-  allowList: (req, _key) => req.url.startsWith('/retell/'),
+  // Allowlist server-to-server webhooks (have their own signature/auth checks)
+  allowList: (req, _key) =>
+    req.url.startsWith('/retell/') ||
+    req.url.startsWith('/billing/webhook') ||
+    req.url.startsWith('/outbound/twiml/') ||
+    req.url.startsWith('/outbound/ws/') ||
+    req.url.startsWith('/outbound/status/'),
 });
 
 // Raw-body capture for Stripe webhook signature verification
@@ -114,16 +120,44 @@ for (const fn of [migratePhone, migrateCalendar, migrateOutbound]) {
   try { await fn(); } catch (e) { app.log.error({ err: (e as Error).message }, `Migration failed: ${fn.name}`); }
 }
 
-// Global error handler
+// Global error handler — generic messages in prod to prevent DB/schema leaks
+const IS_PROD = process.env.NODE_ENV === 'production';
 app.setErrorHandler((error: FastifyError, request, reply) => {
   if (SENTRY_DSN) {
     Sentry.captureException(error);
   }
   request.log.error(error);
-  reply.status(error.statusCode ?? 500).send({
-    error: error.message ?? 'Internal Server Error',
-  });
+  const status = error.statusCode ?? 500;
+  // Client-safe responses: keep Zod validation errors (4xx) verbose; hide 5xx internals in prod.
+  const isClientError = status >= 400 && status < 500;
+  const message = isClientError
+    ? (error.message ?? 'Bad Request')
+    : (IS_PROD ? 'Internal Server Error' : (error.message ?? 'Internal Server Error'));
+  reply.status(status).send({ error: message });
 });
+
+// Hourly cleanup: mark outbound_calls stuck in 'calling' > 1h as 'timeout'
+// (Handles cases where Twilio StatusCallback is missed — VoiceMail, network drop, etc.)
+if (pool) {
+  const cleanupStuck = async () => {
+    try {
+      const res = await pool!.query(
+        `UPDATE outbound_calls
+         SET status = 'timeout'
+         WHERE status IN ('calling', 'initiated')
+           AND created_at < now() - interval '1 hour'`,
+      );
+      if ((res as { rowCount?: number }).rowCount) {
+        app.log.info({ rows: (res as { rowCount?: number }).rowCount }, 'Cleaned up stuck outbound_calls');
+      }
+    } catch (e) {
+      app.log.warn({ err: (e as Error).message }, 'outbound_calls cleanup failed');
+    }
+  };
+  setInterval(cleanupStuck, 60 * 60 * 1000); // every hour
+  // Run once on startup (best-effort, non-blocking)
+  setTimeout(cleanupStuck, 30_000);
+}
 
 app.get('/health', async () => {
   const checks: Record<string, string> = {};
