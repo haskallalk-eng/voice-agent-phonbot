@@ -33,7 +33,9 @@ import { registerAdmin } from './admin.js';
 initSentry();
 const SENTRY_DSN = process.env.SENTRY_DSN ?? '';
 
-const app = Fastify({ logger: true });
+// trustProxy: behind Caddy reverse-proxy we need real client IPs (for rate-limit + logs).
+// 'true' trusts all hops — safe here because only Caddy can reach the API container.
+const app = Fastify({ logger: true, trustProxy: true });
 await app.register(websocket);
 // Twilio webhooks (TwiML, StatusCallback) use application/x-www-form-urlencoded.
 // Without this plugin Fastify returns 415 Unsupported Media Type.

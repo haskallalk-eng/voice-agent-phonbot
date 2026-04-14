@@ -16,15 +16,22 @@ async function resolveHost(dbUrl: string): Promise<pg.PoolConfig> {
   const parsed = new URL(dbUrl);
   const hostname = parsed.hostname;
 
+  // Time-boxed DNS resolution (5s). Without this, a DNS outage would hang
+  // the module import indefinitely and block server startup.
+  const dnsWithTimeout = <T>(p: Promise<T>, label: string): Promise<T | null> =>
+    Promise.race<T | null>([
+      p.catch(() => null),
+      new Promise<null>((resolve) => setTimeout(() => { resolve(null); process.stderr.write(`[db] ${label} DNS timeout\n`); }, 5000)),
+    ]);
+
   let resolvedHost = hostname;
   try {
-    // Try IPv4 first, fall back to IPv6
-    const v4 = await dns.resolve4(hostname).catch(() => null);
+    const v4 = await dnsWithTimeout(dns.resolve4(hostname), 'resolve4');
     if (v4 && v4.length > 0) {
       resolvedHost = v4[0]!;
     } else {
-      const v6 = await dns.resolve6(hostname);
-      if (v6.length > 0) resolvedHost = v6[0]!;
+      const v6 = await dnsWithTimeout(dns.resolve6(hostname), 'resolve6');
+      if (v6 && v6.length > 0) resolvedHost = v6[0]!;
     }
   } catch {
     // Keep original hostname — let pg try

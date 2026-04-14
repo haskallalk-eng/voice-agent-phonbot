@@ -339,23 +339,74 @@ export async function registerAuth(app: FastifyInstance) {
       }
     }
 
-    // Delete Retell agent if deployed (non-critical)
-    const agentRow = await pool.query(
-      `SELECT data->>'retellAgentId' as retell_agent_id FROM agent_configs WHERE org_id = $1 LIMIT 1`,
+    // Delete Retell agents (main + callback) for this org
+    const agentsRes = await pool.query(
+      `SELECT data->>'retellAgentId' as a, data->>'retellCallbackAgentId' as b, data->>'retellLlmId' as c, data->>'retellCallbackLlmId' as d
+       FROM agent_configs WHERE org_id = $1`,
       [orgId],
     );
-    const retellAgentId = agentRow.rows[0]?.retell_agent_id as string | null;
-    if (retellAgentId) {
-      try {
-        const retellKey = process.env.RETELL_API_KEY;
-        if (retellKey) {
-          await fetch(`https://api.retellai.com/delete-agent/${retellAgentId}`, {
-            method: 'DELETE',
-            headers: { Authorization: `Bearer ${retellKey}` },
-          });
-        }
-      } catch {
-        // Non-critical
+    const retellKey = process.env.RETELL_API_KEY;
+    if (retellKey) {
+      const idsToDelete = new Set<string>();
+      for (const row of agentsRes.rows) {
+        for (const id of [row.a, row.b]) if (id) idsToDelete.add(id as string);
+      }
+      for (const id of idsToDelete) {
+        await fetch(`https://api.retellai.com/delete-agent/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${retellKey}` },
+        }).catch(() => {/* non-critical */});
+      }
+      // Also delete LLM configs (zombie costs)
+      const llmsToDelete = new Set<string>();
+      for (const row of agentsRes.rows) {
+        for (const id of [row.c, row.d]) if (id) llmsToDelete.add(id as string);
+      }
+      for (const id of llmsToDelete) {
+        await fetch(`https://api.retellai.com/delete-retell-llm/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${retellKey}` },
+        }).catch(() => {/* non-critical */});
+      }
+    }
+
+    // Release Twilio phone numbers + delete Retell phone-number assignments
+    // Prevents monthly Twilio charges (~1 €/number) for deleted accounts.
+    const phonesRes = await pool.query(
+      `SELECT number FROM phone_numbers WHERE org_id = $1`,
+      [orgId],
+    );
+    const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+    const twilioToken = process.env.TWILIO_AUTH_TOKEN;
+    for (const row of phonesRes.rows) {
+      const number = row.number as string | null;
+      if (!number) continue;
+
+      // Find Twilio IncomingPhoneNumber SID and release it
+      if (twilioSid && twilioToken) {
+        try {
+          const auth = 'Basic ' + Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64');
+          const listRes = await fetch(
+            `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/IncomingPhoneNumbers.json?PhoneNumber=${encodeURIComponent(number)}`,
+            { headers: { Authorization: auth } },
+          );
+          const listData = await listRes.json() as { incoming_phone_numbers?: Array<{ sid: string }> };
+          const phoneSid = listData.incoming_phone_numbers?.[0]?.sid;
+          if (phoneSid) {
+            await fetch(
+              `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/IncomingPhoneNumbers/${phoneSid}.json`,
+              { method: 'DELETE', headers: { Authorization: auth } },
+            );
+          }
+        } catch {/* non-critical */}
+      }
+
+      // Delete phone number registration in Retell
+      if (retellKey) {
+        await fetch(
+          `https://api.retellai.com/delete-phone-number/${encodeURIComponent(number)}`,
+          { method: 'DELETE', headers: { Authorization: `Bearer ${retellKey}` } },
+        ).catch(() => {/* non-critical */});
       }
     }
 

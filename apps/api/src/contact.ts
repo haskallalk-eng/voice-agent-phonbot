@@ -15,6 +15,12 @@ const ContactBody = z.object({
   message: z.string().min(1).max(5000),
 });
 
+// Strip header-splitting characters (CR/LF/\0) that could be used to inject
+// extra Bcc: / Cc: headers via the subject/name fields.
+function sanitizeHeaderValue(s: string): string {
+  return s.replace(/[\r\n\0]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+}
+
 export async function registerContact(app: FastifyInstance) {
   app.post('/contact', {
     config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
@@ -30,12 +36,16 @@ export async function registerContact(app: FastifyInstance) {
       return { ok: true };
     }
 
+    // Sanitize anything that could end up in an email header (subject, reply-to)
+    const safeName = name ? sanitizeHeaderValue(name) : '';
+    const safeEmail = sanitizeHeaderValue(email);
+
     try {
       await resend.emails.send({
         from: FROM_EMAIL,
         to: CONTACT_TO,
-        replyTo: email,
-        subject: `Kontaktanfrage von ${name || email}`,
+        replyTo: safeEmail,
+        subject: `Kontaktanfrage von ${safeName || safeEmail}`,
         html: `
           <div style="font-family: system-ui, sans-serif; max-width: 500px;">
             <h2 style="color: #F97316;">Neue Kontaktanfrage</h2>

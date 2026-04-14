@@ -3,6 +3,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { pool } from './db.js';
 import type { JwtPayload } from './auth.js';
+import { encrypt as encryptToken, decrypt as decryptToken } from './crypto.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -109,13 +110,23 @@ export async function migrateCalendar(): Promise<void> {
 
 // ── Internal DB helpers ───────────────────────────────────────────────────────
 
+// Decrypts sensitive fields in-place. Works transparently for both encrypted
+// and legacy-plaintext rows (decrypt() passes plaintext through if unprefixed).
+function decryptConn(row: CalendarConnection | null): CalendarConnection | null {
+  if (!row) return null;
+  if (row.access_token) row.access_token = decryptToken(row.access_token) ?? '';
+  if (row.refresh_token) row.refresh_token = decryptToken(row.refresh_token);
+  if (row.api_key !== undefined && row.api_key !== null) row.api_key = decryptToken(row.api_key);
+  return row;
+}
+
 async function getConnection(orgId: string): Promise<CalendarConnection | null> {
   if (!pool) return null;
   const res = await pool.query<CalendarConnection>(
     `SELECT * FROM calendar_connections WHERE org_id = $1 LIMIT 1`,
     [orgId],
   );
-  return res.rows[0] ?? null;
+  return decryptConn(res.rows[0] ?? null);
 }
 
 async function getAllConnections(orgId: string): Promise<CalendarConnection[]> {
@@ -124,7 +135,7 @@ async function getAllConnections(orgId: string): Promise<CalendarConnection[]> {
     `SELECT * FROM calendar_connections WHERE org_id = $1 ORDER BY created_at`,
     [orgId],
   );
-  return res.rows;
+  return res.rows.map((r) => decryptConn(r)!).filter((r): r is CalendarConnection => r !== null);
 }
 
 // ── Token Management (Microsoft) ─────────────────────────────────────────────
@@ -135,7 +146,7 @@ async function getValidMsToken(orgId: string): Promise<string | null> {
     `SELECT * FROM calendar_connections WHERE org_id = $1 AND provider = 'microsoft' LIMIT 1`,
     [orgId],
   );
-  const conn = res.rows[0] ?? null;
+  const conn = decryptConn(res.rows[0] ?? null);
   if (!conn) return null;
 
   const fiveMinFromNow = new Date(Date.now() + 5 * 60 * 1000);
@@ -166,7 +177,7 @@ async function getValidMsToken(orgId: string): Promise<string | null> {
         `UPDATE calendar_connections
          SET access_token = $1, refresh_token = COALESCE($2, refresh_token), token_expires_at = $3
          WHERE org_id = $4 AND provider = 'microsoft'`,
-        [data.access_token, data.refresh_token ?? null, expiresAt, orgId],
+        [encryptToken(data.access_token), encryptToken(data.refresh_token ?? null), expiresAt, orgId],
       );
       return data.access_token;
     } catch {
@@ -272,7 +283,7 @@ async function getValidToken(orgId: string): Promise<string | null> {
     `SELECT * FROM calendar_connections WHERE org_id = $1 AND provider = 'google' LIMIT 1`,
     [orgId],
   );
-  const conn = res.rows[0] ?? null;
+  const conn = decryptConn(res.rows[0] ?? null);
   if (!conn) return null;
 
   // Refresh if token expires within 5 minutes
@@ -304,7 +315,7 @@ async function getValidToken(orgId: string): Promise<string | null> {
         `UPDATE calendar_connections
          SET access_token = $1, refresh_token = COALESCE($2, refresh_token), token_expires_at = $3
          WHERE org_id = $4 AND provider = 'google'`,
-        [data.access_token, data.refresh_token ?? null, expiresAt, orgId],
+        [encryptToken(data.access_token), encryptToken(data.refresh_token ?? null), expiresAt, orgId],
       );
 
       return data.access_token;
@@ -1050,7 +1061,7 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
          refresh_token   = COALESCE(EXCLUDED.refresh_token, calendar_connections.refresh_token),
          token_expires_at = EXCLUDED.token_expires_at,
          email           = COALESCE(EXCLUDED.email, calendar_connections.email)`,
-      [orgId, tokens.access_token, tokens.refresh_token ?? null, expiresAt, calendarEmail],
+      [orgId, encryptToken(tokens.access_token), encryptToken(tokens.refresh_token ?? null), expiresAt, calendarEmail],
     );
 
     return reply.redirect(`${appUrl}?calendarConnected=true`);
@@ -1107,7 +1118,7 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
            email    = COALESCE(EXCLUDED.email, calendar_connections.email),
            api_key  = EXCLUDED.api_key,
            username = COALESCE(EXCLUDED.username, calendar_connections.username)`,
-        [orgId, calEmail, apiKey, calUsername],
+        [orgId, calEmail, encryptToken(apiKey), calUsername],
       );
 
       return reply.send({ ok: true, email: calEmail, username: calUsername });
@@ -1317,7 +1328,7 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
          refresh_token    = COALESCE(EXCLUDED.refresh_token, calendar_connections.refresh_token),
          token_expires_at = EXCLUDED.token_expires_at,
          email            = COALESCE(EXCLUDED.email, calendar_connections.email)`,
-      [orgId, tokens.access_token, tokens.refresh_token ?? null, expiresAt, msEmail],
+      [orgId, encryptToken(tokens.access_token), encryptToken(tokens.refresh_token ?? null), expiresAt, msEmail],
     );
 
     return reply.redirect(`${appUrl}?calendarConnected=true`);
