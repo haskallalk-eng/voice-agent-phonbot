@@ -108,6 +108,8 @@ export async function registerLearningApi(app: FastifyInstance): Promise<void> {
   );
 
   // ── POST /learning/apply-to-template/:templateId ───────────────────────────
+  // SCOPED: only applies to the caller's own org. Previously pushed prompt updates
+  // across ALL orgs using the template → cross-tenant prompt-sabotage vector.
   app.post<{ Params: { templateId: string }; Body: { limit?: number } }>(
     '/learning/apply-to-template/:templateId',
     {
@@ -118,6 +120,7 @@ export async function registerLearningApi(app: FastifyInstance): Promise<void> {
       if (!pool) return reply.status(503).send({ error: 'Database not available' });
       if (!process.env.OPENAI_API_KEY) return reply.status(503).send({ error: 'OpenAI not configured' });
 
+      const { orgId } = req.user as import('./auth.js').JwtPayload;
       const { templateId } = req.params;
       const limit = Math.min(req.body?.limit ?? 5, 20);
 
@@ -179,33 +182,25 @@ Schreibe direkte Anweisungen, keine Einleitung oder Erklärung.`,
         [ids],
       );
 
-      // Push to all orgs using this template — append to their systemPrompt and sync to Retell
-      const orgsRes = await pool.query(
-        `SELECT DISTINCT org_id FROM call_transcripts WHERE template_id = $1`,
-        [templateId],
-      );
+      // Apply ONLY to the caller's own org (was iterating across all orgs = cross-tenant bug)
       let updatedOrgs = 0;
-      for (const row of orgsRes.rows as { org_id: string }[]) {
-        try {
-          // Get current prompt
-          const cfgRes = await pool.query(
-            `SELECT data FROM agent_configs WHERE org_id = $1 ORDER BY updated_at DESC LIMIT 1`,
-            [row.org_id],
-          );
-          if (!cfgRes.rowCount) continue;
+      try {
+        const cfgRes = await pool.query(
+          `SELECT data FROM agent_configs WHERE org_id = $1 ORDER BY updated_at DESC LIMIT 1`,
+          [orgId],
+        );
+        if (cfgRes.rowCount) {
           const data = cfgRes.rows[0].data as Record<string, unknown>;
           const currentPrompt = (data.systemPrompt as string) ?? '';
           const newPrompt = currentPrompt + '\n\n' + promptAddition;
 
-          // Update DB
           await pool.query(
             `UPDATE agent_configs
              SET data = jsonb_set(data, '{systemPrompt}', to_jsonb($2::text)), updated_at = now()
              WHERE org_id = $1`,
-            [row.org_id, newPrompt],
+            [orgId, newPrompt],
           );
 
-          // Sync to Retell if deployed
           const llmId = data.retellLlmId as string | undefined;
           if (llmId) {
             const { buildAgentInstructions } = await import('./agent-instructions.js');
@@ -214,10 +209,10 @@ Schreibe direkte Anweisungen, keine Einleitung oder Erklärung.`,
             const instructions = buildAgentInstructions(updatedData as Parameters<typeof buildAgentInstructions>[0]);
             await updateLLM(llmId, { generalPrompt: instructions });
           }
-          updatedOrgs++;
-        } catch {
-          // Non-critical — continue with other orgs
+          updatedOrgs = 1;
         }
+      } catch (e) {
+        req.log.warn({ err: (e as Error).message, orgId }, 'apply-to-template: update failed');
       }
 
       return {

@@ -167,10 +167,15 @@ export async function registerTickets(app: FastifyInstance) {
     return { items: rows };
   });
 
-  // POST /tickets — used internally by Retell webhooks (no auth guard, uses tenantId from payload)
-  app.post('/tickets', async (req, reply) => {
+  // POST /tickets — authenticated. tenantId is forced to the caller's orgId from JWT
+  // (was previously unauthenticated with tenantId from body → allowed cross-tenant ticket
+  // injection + phishing emails from the phonbot.de domain + outbound toll-fraud).
+  // Retell webhooks have their own signed endpoint at /retell/tools/ticket.create.
+  app.post('/tickets', { ...auth }, async (req, reply) => {
     try {
-      const row = await createTicket(req.body as z.infer<typeof CreateTicketBody>);
+      const { orgId } = req.user as JwtPayload;
+      const body = (req.body ?? {}) as Partial<z.infer<typeof CreateTicketBody>>;
+      const row = await createTicket({ ...body, tenantId: orgId } as z.infer<typeof CreateTicketBody>);
       reply.code(201);
       return row;
     } catch (e: unknown) {

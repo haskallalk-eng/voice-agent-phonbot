@@ -55,9 +55,9 @@ export async function generateTrainingExamples(limit = 100): Promise<number> {
   if (!pool) return 0;
 
   // Fetch transcripts with scores that don't yet have training examples
-  const res = await pool.query<TranscriptRow>(
+  const res = await pool.query<TranscriptRow & { org_id: string | null }>(
     `SELECT ct.call_id, ct.transcript, ct.agent_prompt, ct.score::float AS score,
-            ct.industry, ct.direction
+            ct.industry, ct.direction, ct.org_id
      FROM call_transcripts ct
      WHERE ct.score IS NOT NULL
        AND ct.transcript IS NOT NULL
@@ -85,9 +85,11 @@ export async function generateTrainingExamples(limit = 100): Promise<number> {
 
     await pool.query(
       `INSERT INTO training_examples
-         (example_type, direction, industry, system_prompt, messages, score, quality_label, metadata)
-       VALUES ('chat_completion', $1, $2, $3, $4, $5, $6, $7)`,
+         (org_id, example_type, direction, industry, system_prompt, messages, score, quality_label, metadata)
+       VALUES ($1, 'chat_completion', $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT DO NOTHING`,
       [
+        row.org_id,
         row.direction,
         row.industry ?? null,
         row.agent_prompt ?? null,
@@ -189,6 +191,7 @@ export async function registerTrainingExport(app: FastifyInstance): Promise<void
     async (req, reply) => {
       if (!pool) return reply.status(503).send({ error: 'Database not available' });
 
+      const { orgId } = req.user as import('./auth.js').JwtPayload;
       const format = req.query.format ?? 'jsonl';
       const industry = req.query.industry ?? null;
       const quality = req.query.quality ?? null;
@@ -199,17 +202,20 @@ export async function registerTrainingExport(app: FastifyInstance): Promise<void
       // Optionally trigger generation of new examples first
       generateTrainingExamples(200).catch(() => {});
 
+      // CRITICAL: org_id filter — was previously missing, allowing any authenticated user
+      // to download ALL tenants' call transcripts as training data.
       const res = await pool.query(
         `SELECT example_type, direction, industry, system_prompt, messages, score,
                 quality_label, metadata, created_at
          FROM training_examples
-         WHERE ($1::text IS NULL OR industry = $1)
-           AND ($2::text IS NULL OR quality_label = $2)
-           AND ($3::text IS NULL OR direction = $3)
-           AND ($4::text IS NULL OR example_type = $4)
+         WHERE org_id = $1
+           AND ($2::text IS NULL OR industry = $2)
+           AND ($3::text IS NULL OR quality_label = $3)
+           AND ($4::text IS NULL OR direction = $4)
+           AND ($5::text IS NULL OR example_type = $5)
          ORDER BY created_at DESC
-         LIMIT $5`,
-        [industry, quality, direction, exampleType, limit],
+         LIMIT $6`,
+        [orgId, industry, quality, direction, exampleType, limit],
       );
 
       if (format === 'jsonl') {

@@ -412,5 +412,37 @@ export async function migrate() {
       created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // Multi-tenant isolation + GDPR cascade — so /learning/export can filter by org
+  // and org-delete cleanly removes training examples.
+  await pool.query(`ALTER TABLE training_examples ADD COLUMN IF NOT EXISTS org_id UUID;`);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'training_examples_org_fk') THEN
+        ALTER TABLE training_examples
+          ADD CONSTRAINT training_examples_org_fk
+          FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_training_industry ON training_examples(industry, quality_label);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_training_org ON training_examples(org_id);`);
+
+  // Retrofit FK on call_transcripts (added org_id originally without cascade)
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='call_transcripts' AND column_name='org_id')
+         AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'call_transcripts_org_fk') THEN
+        BEGIN
+          ALTER TABLE call_transcripts
+            ADD CONSTRAINT call_transcripts_org_fk
+            FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE;
+        EXCEPTION WHEN others THEN
+          -- ignore if rows reference missing orgs (pre-existing data); can be cleaned up manually
+          NULL;
+        END;
+      END IF;
+    END $$;
+  `);
 }

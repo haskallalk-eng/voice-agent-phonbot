@@ -58,15 +58,22 @@ export async function getTraceEvents(sessionId: string, limit: number): Promise<
 }
 
 export async function registerTraces(app: FastifyInstance) {
-  app.get('/sessions/:sessionId/events', async (req) => {
+  // Both endpoints require auth — they leak/write trace data that includes
+  // tool_call parameters (customer name, phone, booking details).
+  const auth = { onRequest: [app.authenticate] };
+
+  app.get('/sessions/:sessionId/events', { ...auth }, async (req) => {
     const params = z.object({ sessionId: z.string().min(1) }).parse(req.params);
     const q = z.object({ limit: z.coerce.number().int().min(1).max(500).default(200) }).parse(req.query);
     return { items: await getTraceEvents(params.sessionId, q.limit) };
   });
 
-  app.post('/sessions/:sessionId/events', async (req, reply) => {
+  app.post('/sessions/:sessionId/events', {
+    ...auth,
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
     const params = z.object({ sessionId: z.string().min(1) }).parse(req.params);
-    const body = TraceEventSchema.parse({ ...(req.body as any), sessionId: params.sessionId });
+    const body = TraceEventSchema.parse({ ...(req.body as Record<string, unknown>), sessionId: params.sessionId });
     await appendTraceEvent(body);
     reply.code(201);
     return { ok: true };

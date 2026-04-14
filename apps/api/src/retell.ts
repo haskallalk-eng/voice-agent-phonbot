@@ -13,6 +13,10 @@ function getApiKey(): string {
   return key;
 }
 
+// 15s timeout on every Retell call — prevents server-wide hang on API outage
+// (would otherwise cascade into Fastify worker saturation + Stripe webhook retries).
+const RETELL_TIMEOUT_MS = 15_000;
+
 async function retellRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${RETELL_API}${path}`, {
     ...init,
@@ -21,6 +25,12 @@ async function retellRequest<T>(path: string, init?: RequestInit): Promise<T> {
       'Content-Type': 'application/json',
       ...init?.headers,
     },
+    signal: AbortSignal.timeout(RETELL_TIMEOUT_MS),
+  }).catch((e: Error) => {
+    if (e.name === 'AbortError' || e.name === 'TimeoutError') {
+      throw new Error(`Retell API timeout after ${RETELL_TIMEOUT_MS}ms at ${path}`);
+    }
+    throw e;
   });
   if (!res.ok) {
     const text = await res.text();
