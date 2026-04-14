@@ -20,7 +20,7 @@ const AgentConfigSchema = z.object({
   tenantId: z.string().min(1).default('demo'),
   name: z.string().min(1).default('Demo Agent'),
   language: z.enum(['de', 'en', 'fr', 'es', 'it', 'tr', 'pl', 'nl']).default('de'),
-  voice: z.string().min(1).default('custom_voice_ca7baccd54690ff5035768d2ef'),
+  voice: z.string().min(1).default('custom_voice_28bd4920fa6523c6ac8c4e527b'),
   businessName: z.string().min(1).default('Demo Business'),
   businessDescription: z.string().min(1).default('Local service business for appointments, FAQs, and callbacks.'),
   address: z.string().optional().default(''),

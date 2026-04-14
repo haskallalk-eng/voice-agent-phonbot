@@ -93,7 +93,7 @@ app.get('/my-route', { onRequest: [app.authenticate] }, async (req, reply) => {
 - Auth Token aus `localStorage.getItem('vas_token')`
 - Dark Theme: `bg-[#0a0a12]` als Basis, Glass-Effekte mit `bg-white/5 backdrop-blur-xl border border-white/10`
 - Brand-Farbe: Orange (`#F97316`, `#FB923C`) — NICHT Indigo/Lila für Hauptelemente
-- Chippy (Maskottchen) ist ein goldener Hamster → `FoxLogo.tsx`
+- Chipy (Maskottchen) ist ein goldener Hamster → `FoxLogo.tsx`
 - Navigation über Page-State in `App.tsx`, KEIN React Router
 
 ### 11. RATE LIMITING
@@ -138,4 +138,4 @@ Wenn nicht → Fix die Fehler BEVOR du weitermachst.
 - **Buttons Secondary:** `bg-white/5 border border-white/10 hover:bg-white/10`
 - **Font:** System font stack (kein Custom Font)
 - **Icons:** Custom SVG Icons in `PhonbotIcons.tsx`
-- **Maskottchen:** Chippy (Hamster) → `FoxLogo.tsx`
+- **Maskottchen:** Chipy (Hamster) → `FoxLogo.tsx`

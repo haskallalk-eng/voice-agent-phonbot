@@ -125,7 +125,7 @@ export async function createAgent(config: {
     body: JSON.stringify({
       agent_name: config.name,
       response_engine: { type: 'retell-llm', llm_id: config.llmId },
-      voice_id: config.voiceId ?? 'custom_voice_ca7baccd54690ff5035768d2ef',
+      voice_id: config.voiceId ?? 'custom_voice_28bd4920fa6523c6ac8c4e527b',
       language: config.language ?? 'de-DE',
       interruption_sensitivity: 1.0,
       enable_backchannel: true,
@@ -224,7 +224,7 @@ export async function listVoices(): Promise<RetellVoice[]> {
 export async function createVoice(
   name: string,
   audioBuffer: Buffer,
-  provider: string = 'elevenlabs',
+  provider: string = 'cartesia',
 ): Promise<RetellVoice> {
   const formData = new FormData();
   formData.append('voice_name', name);

@@ -412,42 +412,42 @@ export function getMicrosoftCalendarAuthUrl() {
 
 // --- Chipy Calendar ---
 
-export type ChippyDaySchedule = { enabled: boolean; start: string; end: string };
-export type ChippySchedule = Record<string, ChippyDaySchedule>;
-export type ChippyBlock = {
+export type ChipyDaySchedule = { enabled: boolean; start: string; end: string };
+export type ChipySchedule = Record<string, ChipyDaySchedule>;
+export type ChipyBlock = {
   id: string;
   date: string;
   start_time: string | null;
   end_time: string | null;
   reason: string | null;
 };
-export type ChippyBooking = {
+export type ChipyBooking = {
   id: string; customer_name: string; customer_phone: string;
   service: string | null; notes: string | null; slot_time: string;
 };
 
-export function getChippyCalendar() {
-  return request<{ schedule: ChippySchedule; blocks: ChippyBlock[]; bookings: ChippyBooking[] }>('/calendar/chippy');
+export function getChipyCalendar() {
+  return request<{ schedule: ChipySchedule; blocks: ChipyBlock[]; bookings: ChipyBooking[] }>('/calendar/chippy');
 }
-export function saveChippySchedule(schedule: ChippySchedule) {
+export function saveChipySchedule(schedule: ChipySchedule) {
   return request<{ ok: boolean }>('/calendar/chippy', { method: 'PUT', body: JSON.stringify({ schedule }) });
 }
-export function addChippyBlock(date: string, opts?: { start_time?: string; end_time?: string; reason?: string }) {
+export function addChipyBlock(date: string, opts?: { start_time?: string; end_time?: string; reason?: string }) {
   return request<{ ok: boolean; id: string }>('/calendar/chippy/block', {
     method: 'POST',
     body: JSON.stringify({ date, ...opts }),
   });
 }
-export function removeChippyBlock(id: string) {
+export function removeChipyBlock(id: string) {
   return request<{ ok: boolean }>(`/calendar/chippy/block/${id}`, { method: 'DELETE' });
 }
-export function getChippyBookings(from: string, to: string) {
-  return request<{ bookings: ChippyBooking[] }>(`/calendar/chippy/bookings?from=${from}&to=${to}`);
+export function getChipyBookings(from: string, to: string) {
+  return request<{ bookings: ChipyBooking[] }>(`/calendar/chippy/bookings?from=${from}&to=${to}`);
 }
-export function createChippyBooking(data: { customer_name: string; customer_phone: string; service?: string; notes?: string; slot_time: string }) {
-  return request<{ ok: boolean; booking: ChippyBooking }>('/calendar/chippy/bookings', { method: 'POST', body: JSON.stringify(data) });
+export function createChipyBooking(data: { customer_name: string; customer_phone: string; service?: string; notes?: string; slot_time: string }) {
+  return request<{ ok: boolean; booking: ChipyBooking }>('/calendar/chippy/bookings', { method: 'POST', body: JSON.stringify(data) });
 }
-export function deleteChippyBooking(id: string) {
+export function deleteChipyBooking(id: string) {
   return request<{ ok: boolean }>(`/calendar/chippy/bookings/${id}`, { method: 'DELETE' });
 }
 
@@ -516,7 +516,7 @@ export function getVoices() {
   return request<{ voices: Voice[] }>('/voices');
 }
 
-export async function cloneVoice(name: string, audioFile: File, provider = 'elevenlabs'): Promise<Voice> {
+export async function cloneVoice(name: string, audioFile: File, provider = 'cartesia'): Promise<Voice> {
   const form = new FormData();
   form.append('name', name);
   form.append('provider', provider);

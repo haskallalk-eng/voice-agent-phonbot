@@ -3,8 +3,8 @@ import { cloneVoice, type Voice } from '../../lib/api.js';
 import { IconMicUpload, IconRefresh } from './shared.js';
 
 const VOICE_PROVIDERS = [
-  { value: 'elevenlabs', label: 'ElevenLabs (empfohlen)' },
-  { value: 'cartesia', label: 'Cartesia' },
+  { value: 'cartesia', label: 'Cartesia (empfohlen)' },
+  { value: 'elevenlabs', label: 'ElevenLabs' },
   { value: 'minimax', label: 'MiniMax' },
   { value: 'fish_audio', label: 'Fish Audio' },
 ] as const;
@@ -15,7 +15,7 @@ export interface VoiceClonePanelProps {
 
 export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
   const [mode, setMode] = useState<'idle' | 'upload' | 'record'>('idle');
-  const [provider, setProvider] = useState('elevenlabs');
+  const [provider, setProvider] = useState('cartesia');
 
   // Upload state
   const [uploadFile, setUploadFile] = useState<File | null>(null);

@@ -348,15 +348,15 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
         </div>
       )}
 
-      {/* Body: fixed sidebar + scrollable content */}
-      <div className="flex flex-1 min-h-0">
-        {/* Left: Tab list — fixed, never scrolls */}
-        <div className="w-40 shrink-0 border-r border-white/[0.05] py-4 px-3 space-y-0.5 overflow-y-auto">
+      {/* Body: sidebar (col on desktop, top row on mobile) + scrollable content */}
+      <div className="flex flex-col md:flex-row flex-1 min-h-0">
+        {/* Tab list — horizontal scroll on mobile, vertical sidebar on desktop */}
+        <div className="w-full md:w-40 shrink-0 border-b md:border-b-0 md:border-r border-white/[0.05] flex md:block gap-1 md:gap-0 md:space-y-0.5 px-2 md:px-3 py-2 md:py-4 overflow-x-auto md:overflow-y-auto scrollbar-thin">
           {TABS.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-medium transition-all text-left cursor-pointer relative ${
+              className={`shrink-0 md:w-full flex items-center gap-2 md:gap-2.5 px-3 py-2 md:py-2.5 rounded-xl text-xs font-medium transition-all md:text-left cursor-pointer relative whitespace-nowrap ${
                 tab === t.id
                   ? 'bg-white/8 text-white border border-white/10'
                   : 'text-white/35 hover:text-white/65 hover:bg-white/[0.04] border border-transparent'
@@ -365,7 +365,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
               <t.Icon size={14} className={tab === t.id ? 'text-orange-400' : ''} />
               {t.label}
               {t.id === 'behavior' && pendingSuggestions > 0 && (
-                <span className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-[9px] font-bold text-white">
+                <span className="ml-1 md:ml-0 md:absolute md:right-2 md:top-1/2 md:-translate-y-1/2 flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-[9px] font-bold text-white">
                   {pendingSuggestions > 9 ? '9+' : pendingSuggestions}
                 </span>
               )}
@@ -373,8 +373,8 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
           ))}
         </div>
 
-        {/* Right: Content — this is the only part that scrolls */}
-        <div className="flex-1 min-w-0 overflow-y-auto px-6 py-5">
+        {/* Content — scrollable */}
+        <div className="flex-1 min-w-0 overflow-y-auto px-4 md:px-6 py-4 md:py-5">
 
       {tab === 'identity' && (
         <IdentityTab

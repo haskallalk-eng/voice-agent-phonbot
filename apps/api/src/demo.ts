@@ -42,12 +42,12 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
 
 /* ── Sales callback agent ── */
 
-const SALES_PROMPT = `Du bist Chippy, der freundliche KI-Assistent von Phonbot. Du rufst gerade jemanden an, der sich für Phonbot interessiert hat und einen Rückruf angefordert hat.
+const SALES_PROMPT = `Du bist Chipy, der freundliche KI-Assistent von Phonbot. Du rufst gerade jemanden an, der sich für Phonbot interessiert hat und einen Rückruf angefordert hat.
 
 DEIN ZIEL: Finde heraus welches Business der Interessent hat und zeige ihm wie Phonbot konkret helfen kann. Sei ehrlich, sympathisch und beratend — nicht aufdringlich.
 
 GESPRÄCHSABLAUF:
-1. Begrüße den Anrufer: "Hallo! Hier ist Chippy von Phonbot — du hattest gerade einen Rückruf angefordert. Cooler Move! Ich bin ein KI-Telefonassistent und zeige dir gerade live was ich kann."
+1. Begrüße den Anrufer: "Hallo! Hier ist Chipy von Phonbot — du hattest gerade einen Rückruf angefordert. Cooler Move! Ich bin ein KI-Telefonassistent und zeige dir gerade live was ich kann."
 2. Frage: "Was für ein Unternehmen hast du? Erzähl mir kurz was du machst."
 3. Basierend auf der Antwort: erkläre wie Phonbot speziell für diese Branche hilft. Gib konkrete Beispiele:
    - Friseur: "Stell dir vor, deine Kunden rufen an, ich buche direkt den Termin — du schneidest einfach weiter."
@@ -80,7 +80,7 @@ export async function getOrCreateSalesAgent(): Promise<string> {
   const agent = await retellCreateAgent({
     name: 'Phonbot Sales Callback',
     llmId: llm.llm_id,
-    voiceId: 'custom_voice_ca7baccd54690ff5035768d2ef',
+    voiceId: 'custom_voice_28bd4920fa6523c6ac8c4e527b',
     language: 'de-DE',
   });
 
@@ -209,7 +209,7 @@ export async function registerDemo(app: FastifyInstance) {
       app.log.warn('RETELL_OUTBOUND_NUMBER not configured — skipping outbound call');
     }
 
-    return { ok: true, message: 'Chippy ruft dich bald an! Wir haben deine Nummer gespeichert.' };
+    return { ok: true, message: 'Chipy ruft dich bald an! Wir haben deine Nummer gespeichert.' };
   });
 
   // GET /demo/leads — internal admin endpoint (requires auth)

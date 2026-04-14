@@ -46,7 +46,7 @@ export async function registerVoices(app: FastifyInstance) {
       // Read name + provider from fields
       const fields = data.fields as Record<string, { value: string } | undefined>;
       const name = (fields['name']?.value ?? '').trim();
-      const provider = (fields['provider']?.value ?? 'elevenlabs').trim();
+      const provider = (fields['provider']?.value ?? 'cartesia').trim();
 
       if (!name) {
         return reply.status(400).send({ error: 'Voice name is required' });

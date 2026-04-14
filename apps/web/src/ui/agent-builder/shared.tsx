@@ -50,6 +50,19 @@ export const LANGUAGES = [
   { id: 'nl', label: '🇳🇱 Nederlands' },
 ] as const;
 
+export const CHIPY_VOICE_ID = 'custom_voice_28bd4920fa6523c6ac8c4e527b';
+
+export const LANGUAGE_VOICE_RECOMMENDATIONS: Record<string, { voiceId: string; native: boolean }> = {
+  de: { voiceId: CHIPY_VOICE_ID,   native: true  },
+  en: { voiceId: 'cartesia-Cleo',  native: true  },
+  fr: { voiceId: 'cartesia-Emma',  native: true  },
+  es: { voiceId: 'cartesia-Isabel', native: true },
+  it: { voiceId: CHIPY_VOICE_ID,   native: false },
+  tr: { voiceId: CHIPY_VOICE_ID,   native: false },
+  pl: { voiceId: CHIPY_VOICE_ID,   native: false },
+  nl: { voiceId: CHIPY_VOICE_ID,   native: false },
+};
+
 export const KNOWN_TOOLS = ['calendar.findSlots', 'calendar.book', 'ticket.create'] as const;
 
 export const PROMPT_TEMPLATES: { id: string; Icon: IconComp; accent: string; name: string; prompt: string }[] = [

@@ -5,13 +5,13 @@ import {
   getCalls,
   getTickets,
   getAgentConfig,
-  getChippyBookings,
+  getChipyBookings,
   getPhoneNumbers,
   type BillingStatus,
   type RetellCall,
   type Ticket,
   type AgentConfig,
-  type ChippyBooking,
+  type ChipyBooking,
   type PhoneNumber,
 } from '../lib/api.js';
 import type { Page } from './App.js';
@@ -102,7 +102,7 @@ export function DashboardHome({ onNavigate }: Props) {
         getCalls().catch((err) => { console.error('getCalls failed', err); return { items: [] as RetellCall[] }; }),
         getTickets().catch((err) => { console.error('getTickets failed', err); return { items: [] as Ticket[] }; }),
         getAgentConfig().catch((err) => { console.error('getAgentConfig failed', err); return null; }),
-        getChippyBookings(bookingsFrom, bookingsTo).catch(() => ({ bookings: [] as ChippyBooking[] })),
+        getChipyBookings(bookingsFrom, bookingsTo).catch(() => ({ bookings: [] as ChipyBooking[] })),
         getPhoneNumbers().catch((err) => { console.error('getPhoneNumbers failed', err); return { items: [] as PhoneNumber[] }; }),
       ]);
       return {

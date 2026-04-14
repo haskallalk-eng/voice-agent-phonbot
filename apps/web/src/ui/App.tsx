@@ -19,7 +19,7 @@ import { InsightsPage } from './InsightsPage.js';
 import { OutboundPage } from './OutboundPage.js';
 import { ToastProvider } from './Toast.js';
 import { FoxLogo, PhonbotBrand } from './FoxLogo.js';
-import { ChippyCopilot } from '../components/ChippyCopilot.js';
+import { ChipyCopilot } from '../components/ChipyCopilot.js';
 import { AdminPage } from './AdminPage.js';
 
 const queryClient = new QueryClient({
@@ -86,8 +86,8 @@ function Dashboard() {
     return 'home';
   };
   const [page, setPage] = useState<Page>(initialPage);
-  const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null);
   const [showVerifyBanner, setShowVerifyBanner] = useState(false);
   const [emailVerified, setEmailVerified] = useState<boolean | null>(null);
   const [verifySent, setVerifySent] = useState(false);
@@ -244,7 +244,7 @@ function Dashboard() {
       </main>
 
       {/* Chipy Copilot — floating chat assistant, visible on all dashboard pages */}
-      <ChippyCopilot />
+      <ChipyCopilot />
     </div>
   );
 }

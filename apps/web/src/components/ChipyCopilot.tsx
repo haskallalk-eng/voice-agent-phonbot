@@ -85,7 +85,7 @@ function MessageBubble({ message }: { message: Message }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function ChippyCopilot() {
+export function ChipyCopilot() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {

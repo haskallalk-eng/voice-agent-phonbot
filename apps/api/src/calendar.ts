@@ -55,7 +55,7 @@ export async function migrateCalendar(): Promise<void> {
     ALTER TABLE calendar_connections ADD COLUMN IF NOT EXISTS username TEXT;
   `);
 
-  // ── Chippy Kalender ─────────────────────────────────────────────────────────
+  // ── Chipy Kalender ─────────────────────────────────────────────────────────
   // Simple built-in calendar for orgs without Google/Microsoft/Cal.com
   await pool.query(`
     CREATE TABLE IF NOT EXISTS chippy_schedules (
@@ -389,17 +389,17 @@ function parseSlotTime(slot: string): Date | null {
   return result;
 }
 
-// ── Chippy Calendar helpers ───────────────────────────────────────────────────
+// ── Chipy Calendar helpers ───────────────────────────────────────────────────
 
-interface ChippyDaySchedule {
+interface ChipyDaySchedule {
   enabled: boolean;
   start: string; // "09:00"
   end: string;   // "17:00"
 }
 
-type ChippySchedule = Record<string, ChippyDaySchedule>; // key = "0".."6" (day of week)
+type ChipySchedule = Record<string, ChipyDaySchedule>; // key = "0".."6" (day of week)
 
-const DEFAULT_CHIPPY_SCHEDULE: ChippySchedule = {
+const DEFAULT_CHIPPY_SCHEDULE: ChipySchedule = {
   '0': { enabled: false, start: '09:00', end: '17:00' }, // So
   '1': { enabled: true,  start: '09:00', end: '17:00' }, // Mo
   '2': { enabled: true,  start: '09:00', end: '17:00' }, // Di
@@ -409,9 +409,9 @@ const DEFAULT_CHIPPY_SCHEDULE: ChippySchedule = {
   '6': { enabled: false, start: '09:00', end: '17:00' }, // Sa
 };
 
-type ChippyBlock = { date: string; start_time: string | null; end_time: string | null };
+type ChipyBlock = { date: string; start_time: string | null; end_time: string | null };
 
-async function getChippySchedule(orgId: string): Promise<{ schedule: ChippySchedule; blocks: string[]; timeBlocks: ChippyBlock[] }> {
+async function getChipySchedule(orgId: string): Promise<{ schedule: ChipySchedule; blocks: string[]; timeBlocks: ChipyBlock[] }> {
   if (!pool) return { schedule: DEFAULT_CHIPPY_SCHEDULE, blocks: [], timeBlocks: [] };
 
   const [schedRes, blockRes] = await Promise.all([
@@ -422,17 +422,17 @@ async function getChippySchedule(orgId: string): Promise<{ schedule: ChippySched
     ),
   ]);
 
-  const schedule: ChippySchedule = (schedRes.rows[0]?.schedule as ChippySchedule | undefined) ?? DEFAULT_CHIPPY_SCHEDULE;
+  const schedule: ChipySchedule = (schedRes.rows[0]?.schedule as ChipySchedule | undefined) ?? DEFAULT_CHIPPY_SCHEDULE;
   // Full-day blocks (no start_time)
   const blocks: string[] = blockRes.rows.filter((r) => !r.start_time).map((r) => r.date as string);
   // Time-specific blocks
-  const timeBlocks: ChippyBlock[] = blockRes.rows.filter((r) => r.start_time).map((r) => ({
+  const timeBlocks: ChipyBlock[] = blockRes.rows.filter((r) => r.start_time).map((r) => ({
     date: r.date as string, start_time: r.start_time as string, end_time: r.end_time as string,
   }));
   return { schedule, blocks, timeBlocks };
 }
 
-function generateChippySlots(schedule: ChippySchedule, blocks: string[], timeBlocks: ChippyBlock[] = []): string[] {
+function generateChipySlots(schedule: ChipySchedule, blocks: string[], timeBlocks: ChipyBlock[] = []): string[] {
   const slots: string[] = [];
   const now = new Date();
   const blockedSet = new Set(blocks);
@@ -625,16 +625,16 @@ export async function findFreeSlots(
   orgId: string,
   opts: { date?: string; range?: string; service?: string },
 ): Promise<{ slots: string[]; source: string }> {
-  // Search ALL connected calendars + Chippy, merge results
+  // Search ALL connected calendars + Chipy, merge results
   const connections = await getAllConnections(orgId);
   const allSlots: string[] = [];
   const sources: string[] = [];
 
-  // Always check Chippy built-in calendar first
-  const { schedule, blocks, timeBlocks } = await getChippySchedule(orgId);
-  const hasChippy = Object.values(schedule).some((d) => d.enabled);
-  if (hasChippy) {
-    allSlots.push(...generateChippySlots(schedule, blocks, timeBlocks));
+  // Always check Chipy built-in calendar first
+  const { schedule, blocks, timeBlocks } = await getChipySchedule(orgId);
+  const hasChipy = Object.values(schedule).some((d) => d.enabled);
+  if (hasChipy) {
+    allSlots.push(...generateChipySlots(schedule, blocks, timeBlocks));
     sources.push('chippy');
   }
 
@@ -734,7 +734,7 @@ export async function bookSlot(
   const connections = await getAllConnections(orgId);
   const slotTime = parseSlotTime(opts.time);
 
-  // No external calendars — book directly into Chippy
+  // No external calendars — book directly into Chipy
   if (connections.length === 0) {
     if (!slotTime) return { ok: false, error: `Cannot parse time: ${opts.time}` };
     let chippyBookingId: string | undefined;
@@ -774,7 +774,7 @@ export async function bookSlot(
       );
       chippyBookingId = res.rows[0]?.id as string | undefined;
     } catch {
-      // Chippy record is best-effort; external booking already succeeded
+      // Chipy record is best-effort; external booking already succeeded
     }
   }
 
@@ -1131,17 +1131,17 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
 
       const conn = await getConnection(orgId);
 
-      // Check if Chippy built-in calendar has configured hours
-      const { schedule } = await getChippySchedule(orgId);
-      const hasChippy = Object.values(schedule).some((d) => d.enabled);
+      // Check if Chipy built-in calendar has configured hours
+      const { schedule } = await getChipySchedule(orgId);
+      const hasChipy = Object.values(schedule).some((d) => d.enabled);
 
       if (!conn) {
-        // No external calendar — report Chippy status
+        // No external calendar — report Chipy status
         return reply.send({
-          connected: hasChippy,
-          provider: hasChippy ? 'chippy' : null,
+          connected: hasChipy,
+          provider: hasChipy ? 'chippy' : null,
           email: null,
-          chippy: { configured: hasChippy, schedule },
+          chippy: { configured: hasChipy, schedule },
         });
       }
 
@@ -1157,10 +1157,10 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
 
       const base = {
         connected: connectionValid,
-        provider: connectionValid ? conn.provider : (hasChippy ? 'chippy' : null),
+        provider: connectionValid ? conn.provider : (hasChipy ? 'chippy' : null),
         email: connectionValid ? (conn.email ?? null) : null,
         calendarId: conn.calendar_id ?? null,
-        chippy: { configured: hasChippy, schedule },
+        chippy: { configured: hasChipy, schedule },
         ...((!connectionValid && conn.provider) ? { expired: true, expiredProvider: conn.provider } : {}),
       };
 
@@ -1323,14 +1323,14 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
     return reply.redirect(`${appUrl}?calendarConnected=true`);
   });
 
-  // ── Chippy Calendar Routes ─────────────────────────────────────────────────
+  // ── Chipy Calendar Routes ─────────────────────────────────────────────────
 
   const auth = { onRequest: [app.authenticate] };
 
   /** GET /calendar/chippy — get schedule + blocks + upcoming bookings */
   app.get('/calendar/chippy', { ...auth }, async (req: FastifyRequest) => {
     const { orgId } = req.user as JwtPayload;
-    const { schedule } = await getChippySchedule(orgId);
+    const { schedule } = await getChipySchedule(orgId);
 
     let bookings: unknown[] = [];
     if (pool) {
@@ -1355,7 +1355,7 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
   /** PUT /calendar/chippy — save weekly schedule */
   app.put('/calendar/chippy', { ...auth }, async (req: FastifyRequest) => {
     const { orgId } = req.user as JwtPayload;
-    const body = req.body as { schedule: ChippySchedule };
+    const body = req.body as { schedule: ChipySchedule };
     if (!pool) return { ok: true };
 
     await pool.query(

@@ -15,6 +15,9 @@
     handle /webhook* {
         reverse_proxy api:3001
     }
+    handle /outbound* {
+        reverse_proxy api:3001
+    }
     handle /health {
         reverse_proxy api:3001
     }

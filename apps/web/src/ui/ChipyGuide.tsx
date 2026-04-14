@@ -2,13 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { FoxLogo } from './FoxLogo.js';
 
 /**
- * ChippyGuide — Chipy rolls dynamically through the landing page.
+ * ChipyGuide — Chipy rolls dynamically through the landing page.
  * 
  * NOT a fixed corner widget. Instead, Chipy is embedded between sections
  * and "rolls" across the screen as you scroll. Speech bubbles appear inline.
  * He never covers content — he lives in dedicated gaps between sections.
  * 
- * Usage: Place <ChippyWaypoint /> components between sections in LandingPage.
+ * Usage: Place <ChipyWaypoint /> components between sections in LandingPage.
  * Each waypoint is a "stop" where Chipy appears, rolls in, shows a bubble.
  */
 
@@ -22,7 +22,7 @@ interface WaypointProps {
  * A single Chipy waypoint — place between sections.
  * Chipy rolls in from left or right, pauses, shows speech bubble, then the user scrolls on.
  */
-export function ChippyWaypoint({ message, from = 'left', size = 52 }: WaypointProps) {
+export function ChipyWaypoint({ message, from = 'left', size = 52 }: WaypointProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const [bubbleShow, setBubbleShow] = useState(false);
@@ -130,7 +130,7 @@ export function ChippyWaypoint({ message, from = 'left', size = 52 }: WaypointPr
  * Inject the bounce keyframes into <head> once.
  * Call this component once at the top level (e.g. in LandingPage).
  */
-export function ChippyStyles() {
+export function ChipyStyles() {
   return (
     <style>{`
       @keyframes chippy-bounce {

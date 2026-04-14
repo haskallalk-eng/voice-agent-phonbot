@@ -2,10 +2,10 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   getCalendarStatus, connectCalcom, disconnectCalendar,
   getGoogleCalendarAuthUrl, getMicrosoftCalendarAuthUrl,
-  getChippyCalendar, saveChippySchedule, addChippyBlock, removeChippyBlock,
-  getChippyBookings, createChippyBooking, deleteChippyBooking,
+  getChipyCalendar, saveChipySchedule, addChipyBlock, removeChipyBlock,
+  getChipyBookings, createChipyBooking, deleteChipyBooking,
 } from '../lib/api.js';
-import type { ChippySchedule, ChippyBlock, ChippyBooking } from '../lib/api.js';
+import type { ChipySchedule, ChipyBlock, ChipyBooking } from '../lib/api.js';
 import { FoxLogo } from './FoxLogo.js';
 
 type CalendarStatus = { connected: boolean; provider: string | null; email: string | null; expired?: boolean; expiredProvider?: string; chippy?: { configured: boolean } };
@@ -52,7 +52,7 @@ function BookingModal({
 }: {
   date: Date;
   onClose: () => void;
-  onSave: (booking: ChippyBooking) => void;
+  onSave: (booking: ChipyBooking) => void;
 }) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -71,7 +71,7 @@ function BookingModal({
     setError(null);
     try {
       const slotTime = new Date(`${dateStr}T${time}:00`).toISOString();
-      const res = await createChippyBooking({ customer_name: name, customer_phone: phone, service: service || undefined, notes: notes || undefined, slot_time: slotTime });
+      const res = await createChipyBooking({ customer_name: name, customer_phone: phone, service: service || undefined, notes: notes || undefined, slot_time: slotTime });
       onSave(res.booking);
     } catch (e: unknown) {
       setError((e instanceof Error ? e.message : null) ?? 'Fehler beim Speichern');
@@ -142,8 +142,8 @@ function DayDrawer({
   date, bookings, blocks, onClose, onAddBooking, onDeleteBooking, onAddBlock, onRemoveBlock,
 }: {
   date: Date;
-  bookings: ChippyBooking[];
-  blocks: ChippyBlock[];
+  bookings: ChipyBooking[];
+  blocks: ChipyBlock[];
   onClose: () => void;
   onAddBooking: () => void;
   onDeleteBooking: (id: string) => void;
@@ -327,8 +327,8 @@ function DayDrawer({
 function MonthlyCalendar({
   bookings, blocks, onDayClick,
 }: {
-  bookings: ChippyBooking[];
-  blocks: ChippyBlock[];
+  bookings: ChipyBooking[];
+  blocks: ChipyBlock[];
   onDayClick: (date: Date) => void;
 }) {
   const today = new Date();
@@ -344,7 +344,7 @@ function MonthlyCalendar({
   const timeBlockedSet = useMemo(() => new Set(blocks.filter(b => !!b.start_time).map(b => b.date)), [blocks]);
 
   const bookingsByDay = useMemo(() => {
-    const map = new Map<string, ChippyBooking[]>();
+    const map = new Map<string, ChipyBooking[]>();
     for (const b of bookings) {
       const ds = b.slot_time.slice(0, 10);
       const arr = map.get(ds);
@@ -454,7 +454,7 @@ const DAY_NAMES: Record<string, string> = {
   '4': 'Donnerstag', '5': 'Freitag', '6': 'Samstag', '0': 'Sonntag',
 };
 const DAY_ORDER = ['1','2','3','4','5','6','0'];
-const DEFAULT_SCHEDULE: ChippySchedule = {
+const DEFAULT_SCHEDULE: ChipySchedule = {
   '0': { enabled: false, start: '09:00', end: '17:00' },
   '1': { enabled: true,  start: '09:00', end: '17:00' },
   '2': { enabled: true,  start: '09:00', end: '17:00' },
@@ -467,10 +467,10 @@ const DEFAULT_SCHEDULE: ChippySchedule = {
 function SettingsPanel({
   schedule, setSchedule, blocks, setBlocks,
 }: {
-  schedule: ChippySchedule;
-  setSchedule: React.Dispatch<React.SetStateAction<ChippySchedule>>;
-  blocks: ChippyBlock[];
-  setBlocks: React.Dispatch<React.SetStateAction<ChippyBlock[]>>;
+  schedule: ChipySchedule;
+  setSchedule: React.Dispatch<React.SetStateAction<ChipySchedule>>;
+  blocks: ChipyBlock[];
+  setBlocks: React.Dispatch<React.SetStateAction<ChipyBlock[]>>;
 }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -486,7 +486,7 @@ function SettingsPanel({
   async function handleSave() {
     setSaving(true); setSaved(false); setSaveError(null);
     try {
-      await saveChippySchedule(schedule);
+      await saveChipySchedule(schedule);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (e: unknown) {
@@ -498,7 +498,7 @@ function SettingsPanel({
     if (!newBlockDate) return;
     setBlockError(null);
     try {
-      const res = await addChippyBlock(newBlockDate, { reason: newBlockReason || undefined });
+      const res = await addChipyBlock(newBlockDate, { reason: newBlockReason || undefined });
       setBlocks(prev => [...prev, { id: res.id, date: newBlockDate, start_time: null, end_time: null, reason: newBlockReason || null }]);
       setNewBlockDate(''); setNewBlockReason('');
     } catch (e: unknown) {
@@ -513,10 +513,10 @@ function SettingsPanel({
       // Create a block for each day in the range
       const start = new Date(newBlockDate + 'T00:00:00');
       const end = new Date(newBlockEndDate + 'T00:00:00');
-      const newBlocks: ChippyBlock[] = [];
+      const newBlocks: ChipyBlock[] = [];
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
         const dateStr = isoDate(d);
-        const res = await addChippyBlock(dateStr, { reason: newBlockReason || undefined });
+        const res = await addChipyBlock(dateStr, { reason: newBlockReason || undefined });
         newBlocks.push({ id: res.id, date: dateStr, start_time: null, end_time: null, reason: newBlockReason || null });
       }
       setBlocks(prev => [...prev, ...newBlocks]);
@@ -530,7 +530,7 @@ function SettingsPanel({
     if (!newBlockDate || !newBlockStartTime || !newBlockEndTime) return;
     setBlockError(null);
     try {
-      const res = await addChippyBlock(newBlockDate, {
+      const res = await addChipyBlock(newBlockDate, {
         start_time: newBlockStartTime,
         end_time: newBlockEndTime,
         reason: newBlockReason || undefined,
@@ -543,7 +543,7 @@ function SettingsPanel({
   }
 
   async function handleRemoveBlock(id: string) {
-    try { await removeChippyBlock(id); setBlocks(prev => prev.filter(b => b.id !== id)); } catch (e: unknown) {
+    try { await removeChipyBlock(id); setBlocks(prev => prev.filter(b => b.id !== id)); } catch (e: unknown) {
       setBlockError((e instanceof Error ? e.message : null) ?? 'Sperre konnte nicht entfernt werden');
     }
   }
@@ -892,9 +892,9 @@ export function CalendarPage() {
   const [calendarStatus, setCalendarStatus] = useState<CalendarStatus | null>(null);
 
   // Chipy data (shared between calendar + settings)
-  const [schedule, setSchedule] = useState<ChippySchedule>(DEFAULT_SCHEDULE);
-  const [blocks, setBlocks] = useState<ChippyBlock[]>([]);
-  const [bookings, setBookings] = useState<ChippyBooking[]>([]);
+  const [schedule, setSchedule] = useState<ChipySchedule>(DEFAULT_SCHEDULE);
+  const [blocks, setBlocks] = useState<ChipyBlock[]>([]);
+  const [bookings, setBookings] = useState<ChipyBooking[]>([]);
   const [calendarError, setCalendarError] = useState<string | null>(null);
 
   // Modal state
@@ -905,8 +905,8 @@ export function CalendarPage() {
   const loadChipy = useCallback(async () => {
     try {
       const [chippy, bkgs] = await Promise.all([
-        getChippyCalendar(),
-        getChippyBookings(
+        getChipyCalendar(),
+        getChipyBookings(
           isoDate(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1)),
           isoDate(new Date(new Date().getFullYear(), new Date().getMonth() + 3, 0)),
         ),
@@ -923,7 +923,7 @@ export function CalendarPage() {
 
   async function handleDeleteBooking(id: string) {
     try {
-      await deleteChippyBooking(id);
+      await deleteChipyBooking(id);
       setBookings(prev => prev.filter(b => b.id !== id));
     } catch (e: unknown) {
       setCalendarError((e instanceof Error ? e.message : null) ?? 'Termin konnte nicht gelöscht werden');
@@ -933,7 +933,7 @@ export function CalendarPage() {
   async function handleAddBlock(date: Date, opts?: { start_time?: string; end_time?: string; reason?: string }) {
     const dateStr = isoDate(date);
     try {
-      const res = await addChippyBlock(dateStr, opts);
+      const res = await addChipyBlock(dateStr, opts);
       setBlocks(prev => [...prev, {
         id: res.id, date: dateStr,
         start_time: opts?.start_time ?? null,
@@ -945,7 +945,7 @@ export function CalendarPage() {
     }
   }
 
-  function handleBookingSaved(booking: ChippyBooking) {
+  function handleBookingSaved(booking: ChipyBooking) {
     setBookings(prev => [...prev, booking].sort((a, b) => a.slot_time.localeCompare(b.slot_time)));
     setShowAddBooking(false);
     setSelectedDay(null);
@@ -1106,7 +1106,7 @@ export function CalendarPage() {
           onAddBooking={() => setShowAddBooking(true)}
           onDeleteBooking={handleDeleteBooking}
           onAddBlock={(opts) => { handleAddBlock(selectedDay, opts); if (!opts?.start_time) setSelectedDay(null); }}
-          onRemoveBlock={async (id) => { await removeChippyBlock(id); setBlocks(prev => prev.filter(b => b.id !== id)); }}
+          onRemoveBlock={async (id) => { await removeChipyBlock(id); setBlocks(prev => prev.filter(b => b.id !== id)); }}
         />
       )}
 

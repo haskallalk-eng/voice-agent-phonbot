@@ -1,6 +1,6 @@
 import React from 'react';
 import type { AgentConfig, Voice } from '../../lib/api.js';
-import { SectionCard, Field, Input, TextArea, Select, Badge, LANGUAGES, IconAgent, IconBuilding } from './shared.js';
+import { SectionCard, Field, Input, TextArea, Select, Badge, LANGUAGES, LANGUAGE_VOICE_RECOMMENDATIONS, IconAgent, IconBuilding } from './shared.js';
 import { VoiceDropdown } from './VoiceDropdown.js';
 import { VoiceClonePanel } from './VoiceClonePanel.js';
 
@@ -35,7 +35,11 @@ export function IdentityTab({
             <Input value={config.name} onChange={(e) => onUpdate({ name: e.target.value })} placeholder="z.B. Lisa" />
           </Field>
           <Field label="Sprache">
-            <Select value={config.language} onChange={(e) => onUpdate({ language: e.target.value as AgentConfig['language'] })}>
+            <Select value={config.language} onChange={(e) => {
+              const newLang = e.target.value as AgentConfig['language'];
+              const rec = LANGUAGE_VOICE_RECOMMENDATIONS[newLang];
+              onUpdate(rec ? { language: newLang, voice: rec.voiceId } : { language: newLang });
+            }}>
               {LANGUAGES.map((l) => <option key={l.id} value={l.id}>{l.label}</option>)}
             </Select>
           </Field>
@@ -51,6 +55,16 @@ export function IdentityTab({
             />
           </Field>
         </div>
+        {LANGUAGE_VOICE_RECOMMENDATIONS[config.language]?.native === false && (
+          <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200/90">
+            <span className="text-base leading-none">💡</span>
+            <span>
+              Für diese Sprache gibt es keine speziell optimierte native Stimme.
+              Für beste Qualität empfehlen wir, unten im Bereich <strong>Eigene Stimme klonen</strong> eine
+              muttersprachliche Aufnahme hochzuladen (ca. 30 Sekunden reichen).
+            </span>
+          </div>
+        )}
         {config.retellAgentId && (
           <div className="mt-3 flex items-center gap-3 text-xs text-white/50">
             <Badge color="green">Deployed</Badge>
