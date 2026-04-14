@@ -24,29 +24,29 @@
 
     # SEO/AI static files — must be served as text/plain
     @textfiles {
-        path /llms.txt /llms-full.txt /ai.txt /robots.txt
+        path /llms.txt /llms-full.txt /ai.txt /robots.txt /humans.txt
         path_regexp key ^/[a-f0-9]{16,}\.txt$
     }
     handle @textfiles {
-        header Content-Type "text/plain; charset=utf-8"
+        header >Content-Type "text/plain; charset=utf-8"
         reverse_proxy web:80
     }
 
     # .well-known files (security.txt etc.)
     handle /.well-known/* {
-        header Content-Type "text/plain; charset=utf-8"
+        header >Content-Type "text/plain; charset=utf-8"
         reverse_proxy web:80
     }
 
     # PWA manifest — correct Content-Type for Lighthouse/browsers
     handle /manifest.webmanifest {
-        header Content-Type "application/manifest+json; charset=utf-8"
+        header >Content-Type "application/manifest+json; charset=utf-8"
         reverse_proxy web:80
     }
 
     # OG image SVG
     handle /og-image.svg {
-        header Content-Type "image/svg+xml; charset=utf-8"
+        header >Content-Type "image/svg+xml; charset=utf-8"
         reverse_proxy web:80
     }
 
