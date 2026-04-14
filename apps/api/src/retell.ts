@@ -225,11 +225,13 @@ export async function createVoice(
   name: string,
   audioBuffer: Buffer,
   provider: string = 'cartesia',
+  mime: string = 'audio/wav',
+  ext: string = 'wav',
 ): Promise<RetellVoice> {
   const formData = new FormData();
   formData.append('voice_name', name);
   formData.append('voice_provider', provider);
-  formData.append('files', new Blob([new Uint8Array(audioBuffer)], { type: 'audio/wav' }), 'voice.wav');
+  formData.append('files', new Blob([new Uint8Array(audioBuffer)], { type: mime }), `voice.${ext}`);
 
   const res = await fetch('https://api.retellai.com/clone-voice', {
     method: 'POST',

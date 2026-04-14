@@ -4,6 +4,35 @@ import { z } from 'zod';
 import { pool } from './db.js';
 import type { JwtPayload } from './auth.js';
 import { encrypt as encryptToken, decrypt as decryptToken } from './crypto.js';
+import crypto from 'node:crypto';
+
+// OAuth state uses separate HMAC key (defense-in-depth vs global JWT_SECRET leak).
+// Falls back to JWT_SECRET if OAUTH_STATE_SECRET not set.
+const OAUTH_STATE_KEY = process.env.OAUTH_STATE_SECRET || process.env.JWT_SECRET || 'dev-oauth-state';
+const OAUTH_STATE_TTL_SEC = 600;
+
+function signOAuthState(orgId: string, provider: 'google' | 'microsoft'): string {
+  const payload = { orgId, provider, exp: Math.floor(Date.now() / 1000) + OAUTH_STATE_TTL_SEC };
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const mac = crypto.createHmac('sha256', OAUTH_STATE_KEY).update(body).digest('base64url');
+  return `${body}.${mac}`;
+}
+
+function verifyOAuthState(state: string, expectedProvider: 'google' | 'microsoft'): { orgId: string } | null {
+  const parts = state.split('.');
+  if (parts.length !== 2) return null;
+  const [body, mac] = parts as [string, string];
+  const expectedMac = crypto.createHmac('sha256', OAUTH_STATE_KEY).update(body).digest('base64url');
+  const a = Buffer.from(mac);
+  const b = Buffer.from(expectedMac);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as { orgId: string; provider: string; exp: number };
+    if (payload.exp < Math.floor(Date.now() / 1000)) return null;
+    if (payload.provider !== expectedProvider) return null;
+    return { orgId: payload.orgId };
+  } catch { return null; }
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -924,10 +953,7 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
 
       const { orgId } = req.user as JwtPayload;
 
-      const state = app.jwt.sign(
-        { orgId, userId: '', role: '', purpose: 'oauth-state' } as { userId: string; orgId: string; role: string; purpose: string },
-        { expiresIn: '10m' },
-      );
+      const state = signOAuthState(orgId, 'google');
 
       const params = new URLSearchParams({
         client_id: clientId,
@@ -958,11 +984,8 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
 
       const { orgId } = req.user as JwtPayload;
 
-      // Short-lived state token to prevent CSRF
-      const state = app.jwt.sign(
-        { orgId, userId: '', role: '', purpose: 'oauth-state' } as { userId: string; orgId: string; role: string; purpose: string },
-        { expiresIn: '10m' },
-      );
+      // Short-lived HMAC state token (separate secret to prevent CSRF / JWT-leak cross-contamination)
+      const state = signOAuthState(orgId, 'google');
 
       const params = new URLSearchParams({
         client_id: clientId,
@@ -996,17 +1019,12 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
       return reply.redirect(`${appUrl}?calendarError=not_configured`);
     }
 
-    // Verify state → extract orgId
-    let orgId: string;
-    try {
-      const decoded = app.jwt.verify<{ orgId: string; purpose?: string }>(state);
-      if (decoded.purpose !== 'oauth-state') {
-        return reply.redirect(`${appUrl}?calendarError=invalid_state`);
-      }
-      orgId = decoded.orgId;
-    } catch {
+    // Verify HMAC state → extract orgId (rejects expired/forged/wrong-provider states)
+    const verified = verifyOAuthState(state, 'google');
+    if (!verified) {
       return reply.redirect(`${appUrl}?calendarError=invalid_state`);
     }
+    const orgId = verified.orgId;
 
     // Exchange authorization code for tokens
     const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
@@ -1228,10 +1246,7 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
       }
 
       const { orgId } = req.user as JwtPayload;
-      const state = app.jwt.sign(
-        { orgId, userId: '', role: '', purpose: 'oauth-state' } as { userId: string; orgId: string; role: string; purpose: string },
-        { expiresIn: '10m' },
-      );
+      const state = signOAuthState(orgId, 'microsoft');
 
       const params = new URLSearchParams({
         client_id: msClientId,
@@ -1263,16 +1278,11 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
       return reply.redirect(`${appUrl}?calendarError=not_configured`);
     }
 
-    let orgId: string;
-    try {
-      const decoded = app.jwt.verify<{ orgId: string; purpose?: string }>(state);
-      if (decoded.purpose !== 'oauth-state') {
-        return reply.redirect(`${appUrl}?calendarError=invalid_state`);
-      }
-      orgId = decoded.orgId;
-    } catch {
+    const verified = verifyOAuthState(state, 'microsoft');
+    if (!verified) {
       return reply.redirect(`${appUrl}?calendarError=invalid_state`);
     }
+    const orgId = verified.orgId;
 
     // Exchange code for tokens
     const tokenResp = await fetch(
@@ -1430,12 +1440,24 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
     }).safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: 'Ungültige Daten', details: parsed.error.flatten() });
     if (!pool) return { ok: true, id: 'mock' };
-    const res = await pool.query(
-      `INSERT INTO chippy_bookings (org_id, customer_name, customer_phone, service, notes, slot_time)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, customer_name, customer_phone, service, notes, slot_time`,
-      [orgId, parsed.data.customer_name, parsed.data.customer_phone, parsed.data.service ?? null, parsed.data.notes ?? null, parsed.data.slot_time],
-    );
-    return { ok: true, booking: res.rows[0] };
+    try {
+      const res = await pool.query(
+        `INSERT INTO chippy_bookings (org_id, customer_name, customer_phone, service, notes, slot_time)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, customer_name, customer_phone, service, notes, slot_time`,
+        [orgId, parsed.data.customer_name, parsed.data.customer_phone, parsed.data.service ?? null, parsed.data.notes ?? null, parsed.data.slot_time],
+      );
+      return { ok: true, booking: res.rows[0] };
+    } catch (e: unknown) {
+      // Unique constraint violation on (org_id, slot_time) → slot already booked
+      const err = e as { code?: string; constraint?: string };
+      if (err.code === '23505') {
+        return reply.status(409).send({
+          error: 'Dieser Zeitslot ist bereits gebucht. Bitte wähle einen anderen Slot.',
+          code: 'SLOT_TAKEN',
+        });
+      }
+      throw e;
+    }
   });
 
   /** DELETE /calendar/chippy/bookings/:id — delete a manual booking */

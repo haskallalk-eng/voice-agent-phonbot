@@ -40,8 +40,25 @@ await app.register(websocket);
 // Twilio webhooks (TwiML, StatusCallback) use application/x-www-form-urlencoded.
 // Without this plugin Fastify returns 415 Unsupported Media Type.
 await app.register(formbody);
+// Helmet with CSP — mitigates XSS → token-exfiltration (localStorage JWT is at risk).
+// Allows: self, inline scripts/styles (React build), Google Fonts, Retell web-call WS, own api.
 await app.register(helmet, {
-  contentSecurityPolicy: false, // CSP handled by Caddy / frontend
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      connectSrc: ["'self'", 'wss://*.retellai.com', 'https://*.retellai.com', 'wss://phonbot.de'],
+      frameSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // avoid blocking 3rd-party voice audio
 });
 await app.register(cors, {
   origin: (process.env.APP_URL ?? 'http://localhost:5173').split(',').map(s => s.trim()),
@@ -76,9 +93,14 @@ app.addContentTypeParser(
   },
 );
 
-// JWT — secret must be set in production
+// JWT — secret MUST be set in production (refuse to boot otherwise)
 const jwtSecret = process.env.JWT_SECRET;
-if (!jwtSecret) app.log.warn('JWT_SECRET not set; using insecure default (dev only)');
+if (!jwtSecret) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET is required in production — refusing to start with insecure default');
+  }
+  app.log.warn('JWT_SECRET not set; using insecure default (dev only)');
+}
 await app.register(jwt, { secret: jwtSecret ?? 'dev-secret-change-in-prod' });
 
 // Attach app.authenticate decorator used by protected routes

@@ -95,23 +95,16 @@ export async function getOrCreateSalesAgent(): Promise<string> {
   return salesAgentId;
 }
 
-// In-memory lead store (replace with DB later)
-interface DemoLead {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  createdAt: Date;
-  status: 'pending' | 'called';
-}
-
-/** Max in-memory leads to prevent unbounded memory growth. */
-const MAX_DEMO_LEADS = 1000;
-
-const demoLeads: DemoLead[] = [];
+// Demo leads are persisted in crm_leads (DB). No in-memory duplicate —
+// that was redundant and didn't survive restarts or horizontal scaling.
 
 const DemoCallBody = z.object({
-  templateId: z.string().min(1),
+  // Whitelist templateId against known TEMPLATES to prevent unbounded Retell
+  // agent creation (each unknown templateId used to create a new Retell LLM + Agent → cost)
+  templateId: z.string().min(1).refine(
+    (id) => TEMPLATES.some((t) => t.id === id),
+    { message: 'Unknown templateId' },
+  ),
 });
 
 const DemoCallbackBody = z.object({
@@ -175,26 +168,15 @@ export async function registerDemo(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Aktuell nur Telefonnummern aus der DACH-Region (DE/AT/CH) unterstützt' });
     }
 
-    if (demoLeads.length >= MAX_DEMO_LEADS) {
-      // Drop oldest lead to prevent unbounded memory growth
-      demoLeads.shift();
-    }
+    const leadId = crypto.randomUUID();
+    app.log.info({ leadId, name, email, phone }, 'New demo callback lead');
 
-    const lead: DemoLead = {
-      id: crypto.randomUUID(),
-      name, email, phone,
-      createdAt: new Date(),
-      status: 'pending',
-    };
-    demoLeads.push(lead);
-    app.log.info({ lead }, 'New demo callback lead');
-
-    // Persist lead in CRM database
+    // Persist lead in CRM database (single source of truth; org_id=NULL = platform-anonymous)
     if (pool) {
       pool.query(
         `INSERT INTO crm_leads (name, email, phone, source, status) VALUES ($1, $2, $3, 'demo-callback', 'new')`,
         [name, email, phone],
-      ).catch(() => {});
+      ).catch((err: Error) => app.log.warn({ err: err.message }, 'crm_leads insert failed'));
     }
 
     // Try outbound call via Retell
@@ -206,10 +188,16 @@ export async function registerDemo(app: FastifyInstance) {
           agentId,
           toNumber: phone,
           fromNumber,
-          metadata: { leadId: lead.id, leadName: name },
+          metadata: { leadId, leadName: name },
         });
         app.log.info({ callId: call.call_id, phone }, 'Outbound sales call initiated');
-        lead.status = 'called';
+        // Mark lead as called
+        if (pool) {
+          pool.query(
+            `UPDATE crm_leads SET status = 'contacted', call_id = $1 WHERE email = $2 AND phone = $3 AND status = 'new'`,
+            [call.call_id, email, phone],
+          ).catch(() => {/* non-critical */});
+        }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'unknown error';
         app.log.warn({ err: msg, phone }, 'Outbound call failed');
@@ -221,8 +209,5 @@ export async function registerDemo(app: FastifyInstance) {
     return { ok: true, message: 'Chipy ruft dich bald an! Wir haben deine Nummer gespeichert.' };
   });
 
-  // GET /demo/leads — internal admin endpoint (requires auth)
-  app.get('/demo/leads', { onRequest: [app.authenticate] }, async () => {
-    return { leads: demoLeads, total: demoLeads.length };
-  });
+  // Note: /demo/leads was removed — use /admin/leads instead (platform-admin only, reads from crm_leads DB).
 }

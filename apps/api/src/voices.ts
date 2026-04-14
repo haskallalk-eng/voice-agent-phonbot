@@ -33,10 +33,18 @@ export async function registerVoices(app: FastifyInstance) {
     },
   );
 
-  /* ── POST /voices/clone ── */
+  // Voice-clone provider whitelist — keep in sync with Retell's supported set.
+  // Provider influences Retell-billing cost: cartesia ($0.015/min) vs elevenlabs ($0.040/min).
+  const ALLOWED_PROVIDERS = ['cartesia', 'elevenlabs', 'minimax', 'fish_audio', 'platform'] as const;
+  type AllowedProvider = (typeof ALLOWED_PROVIDERS)[number];
+
+  /* ── POST /voices/clone — rate-limited to prevent abuse (per-org Retell cost leak) ── */
   app.post(
     '/voices/clone',
-    { onRequest: [app.authenticate] },
+    {
+      onRequest: [app.authenticate],
+      config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
+    },
     async (req, reply) => {
       const data = await req.file();
       if (!data) {
@@ -46,16 +54,35 @@ export async function registerVoices(app: FastifyInstance) {
       // Read name + provider from fields
       const fields = data.fields as Record<string, { value: string } | undefined>;
       const name = (fields['name']?.value ?? '').trim();
-      const provider = (fields['provider']?.value ?? 'cartesia').trim();
+      const providerRaw = (fields['provider']?.value ?? 'cartesia').trim();
 
       if (!name) {
         return reply.status(400).send({ error: 'Voice name is required' });
       }
 
+      // Sanitize name (avoid prompt-injection + header issues when Retell echoes it)
+      if (!/^[\p{L}\p{N}\s_'-]{1,50}$/u.test(name)) {
+        return reply.status(400).send({ error: 'Voice name: max 50 chars, letters/digits/space only' });
+      }
+
+      if (!ALLOWED_PROVIDERS.includes(providerRaw as AllowedProvider)) {
+        return reply.status(400).send({ error: `Provider must be one of: ${ALLOWED_PROVIDERS.join(', ')}` });
+      }
+      const provider = providerRaw as AllowedProvider;
+
       // Accept mp3, wav, webm, ogg (frontend converts to wav, but be lenient here)
       const mime = data.mimetype;
-      const allowed = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav', 'audio/webm', 'audio/ogg'];
-      if (!allowed.includes(mime)) {
+      const mimeToFormat: Record<string, { ext: string; mime: string }> = {
+        'audio/mpeg':  { ext: 'mp3',  mime: 'audio/mpeg' },
+        'audio/mp3':   { ext: 'mp3',  mime: 'audio/mpeg' },
+        'audio/wav':   { ext: 'wav',  mime: 'audio/wav' },
+        'audio/wave':  { ext: 'wav',  mime: 'audio/wav' },
+        'audio/x-wav': { ext: 'wav',  mime: 'audio/wav' },
+        'audio/webm':  { ext: 'webm', mime: 'audio/webm' },
+        'audio/ogg':   { ext: 'ogg',  mime: 'audio/ogg' },
+      };
+      const format = mimeToFormat[mime];
+      if (!format) {
         return reply.status(400).send({ error: `Unsupported file type: ${mime}. Use mp3 or wav.` });
       }
 
@@ -71,7 +98,7 @@ export async function registerVoices(app: FastifyInstance) {
 
       let voice: RetellVoice;
       try {
-        voice = await createVoice(name, audioBuffer, provider);
+        voice = await createVoice(name, audioBuffer, provider, format.mime, format.ext);
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Voice cloning failed';
         return reply.status(502).send({ error: msg });

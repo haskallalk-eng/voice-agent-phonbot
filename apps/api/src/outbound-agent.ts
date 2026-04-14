@@ -91,6 +91,22 @@ export async function migrateOutbound() {
       converted_at  TIMESTAMPTZ
     );
   `);
+  // Index call_id for Retell webhook lookups (UPDATE ... WHERE call_id = $1). Without this → full table scan.
+  await pool.query(`CREATE INDEX IF NOT EXISTS outbound_calls_call_id_idx ON outbound_calls(call_id);`);
+  // UNIQUE to match call_transcripts.call_id and prevent duplicate rows from webhook retries.
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'outbound_calls_call_id_uniq') THEN
+        BEGIN
+          CREATE UNIQUE INDEX outbound_calls_call_id_uniq ON outbound_calls(call_id) WHERE call_id IS NOT NULL;
+        EXCEPTION WHEN unique_violation THEN
+          NULL; -- pre-existing duplicates; leave idx off until cleanup
+        END;
+      END IF;
+    END $$;
+  `);
+
   // org_id: nullable for anonymous platform-level leads (e.g. Phonbot's own demo/callback);
   // required for future multi-tenant embed. ON DELETE CASCADE ensures GDPR right-to-erasure cleanup.
   await pool.query(`ALTER TABLE crm_leads ADD COLUMN IF NOT EXISTS org_id UUID;`);

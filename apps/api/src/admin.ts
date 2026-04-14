@@ -2,7 +2,11 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { pool } from './db.js';
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? 'phonbot-admin-2026';
+// ADMIN_PASSWORD is required in production (no default — defaulted pw = instant platform-compromise)
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+if (!ADMIN_PASSWORD && process.env.NODE_ENV === 'production') {
+  throw new Error('ADMIN_PASSWORD is required in production — refusing to start');
+}
 
 /** Middleware: verify admin JWT token */
 async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
@@ -27,10 +31,17 @@ export async function registerAdmin(app: FastifyInstance) {
     const parsed = z.object({ password: z.string().min(1) }).safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: 'Password required' });
 
-    if (parsed.data.password !== ADMIN_PASSWORD) {
+    // Constant-time compare to prevent timing-attacks + reject when password not set
+    if (!ADMIN_PASSWORD) return reply.status(503).send({ error: 'Admin login disabled (not configured)' });
+    const providedBuf = Buffer.from(parsed.data.password);
+    const expectedBuf = Buffer.from(ADMIN_PASSWORD);
+    const match = providedBuf.length === expectedBuf.length
+      && (await import('node:crypto')).timingSafeEqual(providedBuf, expectedBuf);
+    if (!match) {
       return reply.status(401).send({ error: 'Invalid admin password' });
     }
 
+    // admin:true marker separates admin-tokens from user-tokens (verified by requireAdmin middleware)
     const token = app.jwt.sign({ admin: true }, { expiresIn: '24h' });
     return { token };
   });
