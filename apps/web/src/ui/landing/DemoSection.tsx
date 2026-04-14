@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { RetellWebClient } from 'retell-client-js-sdk';
 import { createDemoCall } from '../../lib/api.js';
 import { FoxLogo } from '../FoxLogo.js';
@@ -20,15 +20,14 @@ function WaveformViz({ active }: { active: boolean }) {
 }
 
 type TemplateCardProps = {
-  template: { id: string; Icon: React.ComponentType<{ size?: number; className?: string }>; name: string; description: string };
-  onClick: () => void;
+  template: { id: string; slug: string; Icon: React.ComponentType<{ size?: number; className?: string }>; name: string; description: string };
+  onDemoStart: () => void;
 };
 
-function TemplateCard({ template, onClick }: TemplateCardProps) {
+function TemplateCard({ template, onDemoStart }: TemplateCardProps) {
   const [hovered, setHovered] = useState(false);
   return (
-    <button
-      onClick={onClick}
+    <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       className="gradient-border group relative flex flex-col items-center gap-4 p-8 rounded-2xl glass
@@ -36,6 +35,13 @@ function TemplateCard({ template, onClick }: TemplateCardProps) {
         hover:scale-[1.03] transition-all duration-300 text-center"
       style={{ zIndex: hovered ? 30 : 1 }}
     >
+      {/* Whole card clickable → sub-page (primary action) */}
+      <a
+        href={`/${template.slug}/`}
+        className="absolute inset-0 z-10 rounded-2xl"
+        aria-label={`Mehr über Phonbot für ${template.name}`}
+      />
+
       <div
         className="w-16 h-16 rounded-2xl flex items-center justify-center"
         style={{
@@ -50,7 +56,7 @@ function TemplateCard({ template, onClick }: TemplateCardProps) {
         <p className="text-xs text-white/45 leading-snug">{template.description}</p>
       </div>
 
-      {/* Speech bubble preview — below the card */}
+      {/* Speech bubble preview */}
       <div
         style={{
           opacity: hovered ? 1 : 0,
@@ -77,10 +83,19 @@ function TemplateCard({ template, onClick }: TemplateCardProps) {
         </div>
       </div>
 
-      <span className="absolute bottom-4 right-4 text-xs text-orange-400/70 opacity-0 group-hover:opacity-100 transition-opacity duration-200 font-medium">
-        ▶ Demo starten
-      </span>
-    </button>
+      {/* Secondary action: direct demo without page navigation */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onDemoStart();
+        }}
+        className="relative z-20 mt-1 inline-flex items-center gap-1 text-xs font-medium text-orange-400/80 hover:text-orange-300 px-3 py-1.5 rounded-full bg-orange-500/10 border border-orange-500/20 hover:bg-orange-500/20 transition-all"
+      >
+        ▶ Demo jetzt starten
+      </button>
+    </div>
   );
 }
 
@@ -153,6 +168,23 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
     setAgentTalking(false);
   }
 
+  // Auto-start demo from URL param (?demo=hairdresser) — triggered when user comes from sub-landing
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const demoTemplate = params.get('demo');
+    if (demoTemplate && TEMPLATES.some((t) => t.id === demoTemplate)) {
+      // Scroll to demo section after a brief delay, then auto-start
+      setTimeout(() => {
+        document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setTimeout(() => handleTemplateClick(demoTemplate), 800);
+      }, 300);
+      // Clean up URL so reload doesn't re-trigger
+      const newUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, '', newUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <>
       {/* ── WAVEFORM VIZ (between hero and demo) ── */}
@@ -194,7 +226,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-x-4 gap-y-16 pb-10" style={{ overflow: 'visible' }}>
               {TEMPLATES.map((t) => (
-                <TemplateCard key={t.id} template={t} onClick={() => handleTemplateClick(t.id)} />
+                <TemplateCard key={t.id} template={t} onDemoStart={() => handleTemplateClick(t.id)} />
               ))}
             </div>
             {/* Reassurance */}

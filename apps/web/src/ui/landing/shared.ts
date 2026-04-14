@@ -14,12 +14,12 @@ export type FeatureItem = {
 // ── Constants ────────────────────────────────────────────────────────────────
 
 export const TEMPLATES = [
-  { id: 'hairdresser', Icon: IconScissors, name: 'Friseur', description: 'Terminbuchungen & Öffnungszeiten' },
-  { id: 'tradesperson', Icon: IconWrench, name: 'Handwerker', description: 'Auftragsannahme & Notdienst' },
-  { id: 'medical', Icon: IconMedical, name: 'Arztpraxis', description: 'Terminvergabe & Sprechzeiten' },
-  { id: 'cleaning', Icon: IconBroom, name: 'Reinigung', description: 'Angebote & Terminplanung' },
-  { id: 'restaurant', Icon: IconRestaurant, name: 'Restaurant', description: 'Reservierungen & Bestellungen' },
-  { id: 'auto', Icon: IconCar, name: 'Autowerkstatt', description: 'Terminvereinbarung & Kostenvoranschläge' },
+  { id: 'hairdresser',  slug: 'friseur',       Icon: IconScissors,   name: 'Friseur',       description: 'Terminbuchungen & Öffnungszeiten' },
+  { id: 'tradesperson', slug: 'handwerker',    Icon: IconWrench,     name: 'Handwerker',    description: 'Auftragsannahme & Notdienst' },
+  { id: 'medical',      slug: 'arztpraxis',    Icon: IconMedical,    name: 'Arztpraxis',    description: 'Terminvergabe & Sprechzeiten' },
+  { id: 'cleaning',     slug: 'reinigung',     Icon: IconBroom,      name: 'Reinigung',     description: 'Angebote & Terminplanung' },
+  { id: 'restaurant',   slug: 'restaurant',    Icon: IconRestaurant, name: 'Restaurant',    description: 'Reservierungen & Bestellungen' },
+  { id: 'auto',         slug: 'autowerkstatt', Icon: IconCar,        name: 'Autowerkstatt', description: 'Terminvereinbarung & Kostenvoranschläge' },
 ] as const;
 
 export const TEMPLATE_PREVIEWS: Record<string, string> = {

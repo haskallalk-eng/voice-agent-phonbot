@@ -21,10 +21,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"Service","name":"KI-Telefonassistent für Friseursalons","serviceType":"AI Voice Agent für Friseure","provider":{"@type":"Organization","name":"Phonbot","url":"https://phonbot.de/","parentOrganization":{"@type":"Organization","name":"Mindrails UG (haftungsbeschränkt)","url":"https://mindrails.de/"}},"areaServed":{"@type":"Country","name":"Deutschland"},"description":"KI-Telefonassistent speziell für Friseursalons. Bucht Termine in Google Calendar, nimmt Walk-in-Anfragen entgegen, beantwortet Öffnungszeiten — 24/7 auf Deutsch.","audience":{"@type":"BusinessAudience","audienceType":"Friseursalons"},"offers":{"@type":"Offer","price":"49","priceCurrency":"EUR","priceSpecification":{"@type":"UnitPriceSpecification","price":"49","priceCurrency":"EUR","unitText":"MONTH"}}}
+{"@context":"https://schema.org","@type":"Service","name":"KI-Telefonassistent für Friseursalons","serviceType":"AI Voice Agent","provider":{"@type":"Organization","name":"Phonbot","url":"https://phonbot.de/","parentOrganization":{"@type":"Organization","name":"Mindrails UG (haftungsbeschränkt)","url":"https://mindrails.de/"}},"areaServed":{"@type":"Country","name":"Deutschland"},"description":"Phonbot ist der KI-Telefonassistent speziell für Friseure & Salons. Bucht Termine direkt in Google Calendar, nimmt Walk-in-Anfragen an, beantwortet Öffnungszeiten — 24/7 auf Deutsch. Ab 49 €/Monat.","audience":{"@type":"BusinessAudience","audienceType":"Friseursalons & Barbershops"},"offers":{"@type":"Offer","price":"49","priceCurrency":"EUR","priceSpecification":{"@type":"UnitPriceSpecification","price":"49","priceCurrency":"EUR","unitText":"MONTH"}}}
 </script>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
+<style>*{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#0A0A0F;color:#fff;line-height:1.6;overflow-x:hidden}
 a{color:inherit;text-decoration:none}
 .container{max-width:960px;margin:0 auto;padding:0 1.5rem}
@@ -36,6 +35,8 @@ nav .container{display:flex;align-items:center;justify-content:space-between;pad
 .btn-primary:hover{transform:scale(1.03);box-shadow:0 0 40px rgba(249,115,22,.4)}
 .btn-ghost{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.85)}
 .btn-ghost:hover{background:rgba(255,255,255,.08);color:#fff}
+.btn-demo{background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.4);color:#FDBA74;display:inline-flex;align-items:center;gap:.5rem}
+.btn-demo:hover{background:rgba(249,115,22,.2);color:#fff;transform:scale(1.03)}
 header.hero{padding:5rem 0 3rem;text-align:center;position:relative}
 .hero-eyebrow{display:inline-block;padding:.4rem 1rem;border-radius:999px;background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.25);font-size:.8rem;color:#FDBA74;margin-bottom:1.5rem}
 h1{font-size:clamp(2.25rem,5vw,3.75rem);font-weight:800;letter-spacing:-.02em;line-height:1.1;margin-bottom:1.25rem}
@@ -64,7 +65,7 @@ footer a:hover{color:#fff}
 .breadcrumb{font-size:.8rem;color:rgba(255,255,255,.4);padding:1rem 0}
 .breadcrumb a{color:rgba(255,255,255,.6)}
 .breadcrumb a:hover{color:#F97316}
-</style>
+.demo-hint{display:inline-block;padding:.5rem 1rem;border-radius:.5rem;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);font-size:.85rem;color:#67E8F9;margin-top:1rem}</style>
 </head>
 <body>
 <nav>
@@ -76,7 +77,7 @@ footer a:hover{color:#fff}
 
 <div class="container">
   <nav class="breadcrumb" aria-label="Brotkrumennavigation">
-    <a href="/">Phonbot</a> › <a href="/#features">Branchen</a> › <span>Friseursalons</span>
+    <a href="/">Phonbot</a> › <a href="/#demo">Branchen</a> › <span>Friseure</span>
   </nav>
 </div>
 
@@ -86,36 +87,21 @@ footer a:hover{color:#fff}
     <h1>Nie wieder das <span class="accent">Telefon abnehmen</span> zwischen den Schnitten.</h1>
     <p class="subtitle">Phonbot nimmt Anrufe an, bucht Termine direkt in deinen Kalender und beantwortet Standardfragen — während du föhnst, färbst oder schneidest. 24/7 auf Deutsch. Ab 49 €/Monat.</p>
     <div class="cta-row">
+      <a href="/?demo=hairdresser#demo" class="btn btn-demo">▶ Chipy live hören</a>
       <a href="/" class="btn btn-primary">Kostenlos testen</a>
-      <a href="/#demo" class="btn btn-ghost">Demo anhören</a>
     </div>
+    <div class="demo-hint">🎙️ Klick „live hören" — Phonbot spricht mit dir im Browser (Mikrofon nötig)</div>
   </div>
 </header>
 
 <section>
   <div class="container">
-    <h2>Typische Anrufe in deinem Salon — automatisch bearbeitet</h2>
+    <h2>Typische Anrufe — automatisch bearbeitet</h2>
     <div class="features">
-      <div class="feature">
-        <div class="feature-icon">📅</div>
-        <h3>Terminbuchung</h3>
-        <p>„Einen Haarschnitt am Donnerstag nachmittag?" — Phonbot prüft Kalender-Slots und bucht direkt. Keine Rückrufe nötig.</p>
-      </div>
-      <div class="feature">
-        <div class="feature-icon">🕒</div>
-        <h3>Öffnungszeiten</h3>
-        <p>„Wann habt ihr Samstag offen?" — Phonbot antwortet sofort mit deinen konkreten Öffnungszeiten. Auch an Feiertagen.</p>
-      </div>
-      <div class="feature">
-        <div class="feature-icon">💶</div>
-        <h3>Preisauskunft</h3>
-        <p>„Was kostet bei euch Färben?" — Phonbot kennt dein Leistungsverzeichnis und gibt präzise Preise weiter.</p>
-      </div>
-      <div class="feature">
-        <div class="feature-icon">↩️</div>
-        <h3>Rückruf-Tickets</h3>
-        <p>Für komplexe Anfragen (Beratungstermin, Spezial-Services) erstellt Phonbot automatisch ein Ticket mit allen Infos.</p>
-      </div>
+      <div class="feature"><div class="feature-icon">📅</div><h3>Terminbuchung</h3><p>„Einen Haarschnitt am Donnerstag nachmittag?" — Phonbot prüft Kalender-Slots und bucht direkt. Keine Rückrufe nötig.</p></div>
+        <div class="feature"><div class="feature-icon">🕒</div><h3>Öffnungszeiten</h3><p>„Wann habt ihr Samstag offen?" — Phonbot antwortet sofort mit deinen konkreten Öffnungszeiten. Auch an Feiertagen.</p></div>
+        <div class="feature"><div class="feature-icon">💶</div><h3>Preisauskunft</h3><p>„Was kostet bei euch Färben?" — Phonbot kennt dein Leistungsverzeichnis und gibt präzise Preise weiter.</p></div>
+        <div class="feature"><div class="feature-icon">↩️</div><h3>Rückruf-Tickets</h3><p>Für komplexe Anfragen (Beratungstermin, Spezial-Services) erstellt Phonbot automatisch ein Ticket mit allen Infos.</p></div>
     </div>
   </div>
 </section>
@@ -123,69 +109,60 @@ footer a:hover{color:#fff}
 <section>
   <div class="container">
     <h2>So klingt Phonbot am Telefon</h2>
-    <p>Ein echter Dialog aus einem Friseursalon:</p>
     <div class="dialogue">
-      <p class="user">📞 <em>„Hi, ich hätte gern einen Schnitt nächste Woche, am besten Donnerstag nachmittag."</em></p>
+      <p class="user">📞 Kundin: „Hi, ich hätte gern einen Schnitt nächste Woche, am besten Donnerstag nachmittag."</p>
       <p class="bot">Phonbot: „Klar! Donnerstag haben wir um 14 Uhr und 16:30 Uhr frei — welche Zeit passt dir?"</p>
-      <p class="user">📞 <em>„16:30 Uhr."</em></p>
+      <p class="user">📞 Kundin: „16:30 Uhr."</p>
       <p class="bot">Phonbot: „Super, 16:30 Uhr Donnerstag ist gebucht. Dein Name bitte?"</p>
-      <p class="user">📞 <em>„Julia Müller."</em></p>
+      <p class="user">📞 Kundin: „Julia Müller."</p>
       <p class="bot">Phonbot: „Danke Julia. Du bekommst gleich eine Bestätigungs-SMS. Bis Donnerstag!"</p>
     </div>
     <p style="text-align:center;margin-top:1.5rem;font-size:.9rem;color:rgba(255,255,255,.5)">→ Termin automatisch in Google Calendar eingetragen · Dauer: 28 Sekunden</p>
+    <div style="text-align:center;margin-top:1.5rem">
+      <a href="/?demo=hairdresser#demo" class="btn btn-demo">▶ Chipy live am Telefon hören</a>
+    </div>
   </div>
 </section>
 
 <section>
   <div class="container">
-    <h2>Rechnet sich das für einen Salon?</h2>
+    <h2>Rechnet sich das?</h2>
     <p>Ein durchschnittlicher Salon mit 300 Anrufen/Monat kostet:</p>
     <ul style="margin-top:1rem;padding-left:1.25rem;color:rgba(255,255,255,.75)">
       <li>👤 <strong>Teilzeit-Rezeption</strong>: ~1.500 €/Monat</li>
-      <li>📞 <strong>Phonbot Starter</strong>: 49 €/Monat (500 Min inkl., reicht für ca. 500 Anrufe)</li>
-      <li>💰 <strong>Ersparnis</strong>: ~1.450 €/Monat</li>
+        <li>📞 <strong>Phonbot Starter</strong>: 49 €/Monat (500 Min inkl.)</li>
+        <li>💰 <strong>Ersparnis</strong>: ~1.450 €/Monat</li>
     </ul>
-    <span class="pricing-hint">Plus: Keine Sprechpause, keine Krankheit, keine Urlaub — rund um die Uhr.</span>
+    <span class="pricing-hint">Plus: Keine Sprechpause, keine Krankheit, kein Urlaub — rund um die Uhr.</span>
   </div>
 </section>
 
 <section>
   <div class="container">
-    <h2>Häufige Fragen von Friseuren</h2>
+    <h2>Häufige Fragen</h2>
     <div class="faq-list">
-      <div class="faq-item">
-        <h3>Kann Phonbot mehrere Stylisten im Salon unterscheiden?</h3>
-        <p>Ja. Im Agent Builder legst du Mitarbeiter-Profile an, Phonbot bucht jedem den eigenen Kalender-Slot.</p>
-      </div>
-      <div class="faq-item">
-        <h3>Was wenn ein Kunde sofort jemanden sprechen will?</h3>
-        <p>Phonbot bietet Rückruf an („Ich notiere Dich, ruf dich in 30 Min zurück") oder erstellt ein Prioritäts-Ticket.</p>
-      </div>
-      <div class="faq-item">
-        <h3>Versteht Phonbot regionale Ausdrücke (Pony, Waschen & Föhnen etc.)?</h3>
-        <p>Ja. Die KI ist nativ auf deutschem Sprachgebrauch trainiert, inkl. Dialekte und Friseur-Fachbegriffe.</p>
-      </div>
-      <div class="faq-item">
-        <h3>Kann ich meine bisherige Salon-Nummer behalten?</h3>
-        <p>Ja. Rufweiterleitung bei deinem Telefonanbieter einrichten, fertig. Kein Nummernwechsel nötig.</p>
-      </div>
+      <div class="faq-item"><h3>Kann Phonbot mehrere Stylisten im Salon unterscheiden?</h3><p>Ja. Im Agent Builder legst du Mitarbeiter-Profile an, Phonbot bucht jedem den eigenen Kalender-Slot.</p></div>
+      <div class="faq-item"><h3>Was wenn eine Kundin sofort jemanden sprechen will?</h3><p>Phonbot bietet Rückruf an („Ich notiere dich, ruf dich in 30 Min zurück") oder erstellt ein Prioritäts-Ticket.</p></div>
+      <div class="faq-item"><h3>Versteht Phonbot Friseur-Fachbegriffe (Pony, Balayage, Keratin)?</h3><p>Ja. Die KI ist nativ auf deutschem Sprachgebrauch trainiert, inkl. Dialekte und Friseur-Fachbegriffe.</p></div>
+      <div class="faq-item"><h3>Kann ich meine bisherige Salon-Nummer behalten?</h3><p>Ja. Rufweiterleitung bei deinem Telefonanbieter einrichten, fertig. Kein Nummernwechsel nötig.</p></div>
     </div>
   </div>
 </section>
 
 <section style="text-align:center;padding:4rem 0">
   <div class="container">
-    <h2>Kostenlos ausprobieren — 100 Freiminuten</h2>
+    <h2>Salon-Agent einrichten — 100 Freiminuten</h2>
     <p style="margin-bottom:1.5rem">Registrierung in unter 2 Minuten · Keine Kreditkarte · Monatlich kündbar</p>
     <div class="cta-row">
-      <a href="/" class="btn btn-primary">Jetzt Salon-Agent einrichten</a>
+      <a href="/" class="btn btn-primary">Jetzt einrichten</a>
+      <a href="/?demo=hairdresser#demo" class="btn btn-demo">Erst Chipy testen</a>
     </div>
   </div>
 </section>
 
 <footer>
   <div class="container">
-    <p>© 2026 Phonbot · Ein Produkt der <a href="https://mindrails.de" rel="noopener">Mindrails UG</a> · <a href="/">Zur Hauptseite</a> · <a href="/#faq">Allgemeine FAQ</a></p>
+    <p>© 2026 Phonbot · Ein Produkt der <a href="https://mindrails.de" rel="noopener">Mindrails UG</a> · <a href="/">Zur Hauptseite</a> · <a href="/#faq">FAQ</a> · <a href="/#pricing">Preise</a></p>
     <p style="margin-top:.5rem">DSGVO-konform · Server in Deutschland · <a href="mailto:info@phonbot.de">info@phonbot.de</a></p>
   </div>
 </footer>

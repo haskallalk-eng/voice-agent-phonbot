@@ -4,15 +4,15 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0A0A0F" />
-<title>KI-Telefonassistent für Kanzleien & Anwälte | Phonbot</title>
-<meta name="description" content="Phonbot ist der KI-Telefonassistent für Kanzleien. Qualifiziert Mandats-Anfragen, bucht Erstberatungs-Termine, entlastet dein Sekretariat — diskret und DSGVO-konform. Ab 49 €/Monat." />
-<link rel="canonical" href="https://phonbot.de/kanzlei/" />
-<link rel="alternate" hreflang="de" href="https://phonbot.de/kanzlei/" />
+<title>KI-Telefonassistent für Reinigungsfirmen | Phonbot</title>
+<meta name="description" content="Phonbot ist der KI-Telefonassistent für Reinigungsbetriebe. Nimmt Auftragsanfragen entgegen, erfasst Objekt-Details (Größe, Frequenz), plant Besichtigungstermine — 24/7 auf Deutsch. Ab 49 €/Monat." />
+<link rel="canonical" href="https://phonbot.de/reinigung/" />
+<link rel="alternate" hreflang="de" href="https://phonbot.de/reinigung/" />
 <meta property="og:type" content="website" />
 <meta property="og:locale" content="de_DE" />
-<meta property="og:url" content="https://phonbot.de/kanzlei/" />
-<meta property="og:title" content="KI-Telefonassistent für Kanzleien · Phonbot" />
-<meta property="og:description" content="Keine Mandats-Anfrage mehr verloren. Phonbot qualifiziert, bucht Erstberatung, entlastet Sekretariat." />
+<meta property="og:url" content="https://phonbot.de/reinigung/" />
+<meta property="og:title" content="KI-Telefonassistent für Reinigungsfirmen · Phonbot" />
+<meta property="og:description" content="Während du putzt, nimmt Phonbot Anfragen an, erfasst Objekt-Details und plant Termine." />
 <meta property="og:image" content="https://phonbot.de/og-image.svg" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="robots" content="index, follow, max-image-preview:large" />
@@ -21,7 +21,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"Service","name":"KI-Telefonassistent für Kanzleien","serviceType":"AI Voice Agent","provider":{"@type":"Organization","name":"Phonbot","url":"https://phonbot.de/","parentOrganization":{"@type":"Organization","name":"Mindrails UG (haftungsbeschränkt)","url":"https://mindrails.de/"}},"areaServed":{"@type":"Country","name":"Deutschland"},"description":"Phonbot ist der KI-Telefonassistent für Kanzleien. Qualifiziert Mandats-Anfragen, bucht Erstberatungs-Termine, entlastet dein Sekretariat — diskret und DSGVO-konform. Ab 49 €/Monat.","audience":{"@type":"BusinessAudience","audienceType":"Rechtsanwaltskanzleien, Notare, Steuerberater"},"offers":{"@type":"Offer","price":"49","priceCurrency":"EUR","priceSpecification":{"@type":"UnitPriceSpecification","price":"49","priceCurrency":"EUR","unitText":"MONTH"}}}
+{"@context":"https://schema.org","@type":"Service","name":"KI-Telefonassistent für Reinigungsbetriebe","serviceType":"AI Voice Agent","provider":{"@type":"Organization","name":"Phonbot","url":"https://phonbot.de/","parentOrganization":{"@type":"Organization","name":"Mindrails UG (haftungsbeschränkt)","url":"https://mindrails.de/"}},"areaServed":{"@type":"Country","name":"Deutschland"},"description":"Phonbot ist der KI-Telefonassistent für Reinigungsbetriebe. Nimmt Auftragsanfragen entgegen, erfasst Objekt-Details (Größe, Frequenz), plant Besichtigungstermine — 24/7 auf Deutsch. Ab 49 €/Monat.","audience":{"@type":"BusinessAudience","audienceType":"Gebäudereinigung, Büroreinigung, Privatreinigung, Glasreinigung"},"offers":{"@type":"Offer","price":"49","priceCurrency":"EUR","priceSpecification":{"@type":"UnitPriceSpecification","price":"49","priceCurrency":"EUR","unitText":"MONTH"}}}
 </script>
 <style>*{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#0A0A0F;color:#fff;line-height:1.6;overflow-x:hidden}
@@ -35,6 +35,8 @@ nav .container{display:flex;align-items:center;justify-content:space-between;pad
 .btn-primary:hover{transform:scale(1.03);box-shadow:0 0 40px rgba(249,115,22,.4)}
 .btn-ghost{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.85)}
 .btn-ghost:hover{background:rgba(255,255,255,.08);color:#fff}
+.btn-demo{background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.4);color:#FDBA74;display:inline-flex;align-items:center;gap:.5rem}
+.btn-demo:hover{background:rgba(249,115,22,.2);color:#fff;transform:scale(1.03)}
 header.hero{padding:5rem 0 3rem;text-align:center;position:relative}
 .hero-eyebrow{display:inline-block;padding:.4rem 1rem;border-radius:999px;background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.25);font-size:.8rem;color:#FDBA74;margin-bottom:1.5rem}
 h1{font-size:clamp(2.25rem,5vw,3.75rem);font-weight:800;letter-spacing:-.02em;line-height:1.1;margin-bottom:1.25rem}
@@ -62,7 +64,8 @@ footer a{color:rgba(255,255,255,.65);text-decoration:underline;text-decoration-c
 footer a:hover{color:#fff}
 .breadcrumb{font-size:.8rem;color:rgba(255,255,255,.4);padding:1rem 0}
 .breadcrumb a{color:rgba(255,255,255,.6)}
-.breadcrumb a:hover{color:#F97316}</style>
+.breadcrumb a:hover{color:#F97316}
+.demo-hint{display:inline-block;padding:.5rem 1rem;border-radius:.5rem;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);font-size:.85rem;color:#67E8F9;margin-top:1rem}</style>
 </head>
 <body>
 <nav>
@@ -74,19 +77,20 @@ footer a:hover{color:#fff}
 
 <div class="container">
   <nav class="breadcrumb" aria-label="Brotkrumennavigation">
-    <a href="/">Phonbot</a> › <a href="/#features">Branchen</a> › <span>Kanzleien</span>
+    <a href="/">Phonbot</a> › <a href="/#demo">Branchen</a> › <span>Reinigung</span>
   </nav>
 </div>
 
 <header class="hero">
   <div class="container">
-    <span class="hero-eyebrow">⚖️ KI-Telefonassistent für Kanzleien</span>
-    <h1>Dein <span class="accent">Sekretariat</span> schafft nicht mehr alle Mandats-Anfragen.</h1>
-    <p class="subtitle">Phonbot nimmt Anrufe an während dein Sekretariat in Meetings ist, qualifiziert neue Mandats-Anfragen nach Rechtsgebiet und Dringlichkeit, und bucht Erstberatungs-Termine direkt.</p>
+    <span class="hero-eyebrow">🧹 KI-Telefonassistent für Reinigung</span>
+    <h1>Keine <span class="accent">Auftragsanfrage</span> mehr verpassen — auch beim Putzen.</h1>
+    <p class="subtitle">Phonbot nimmt Auftragsanfragen an, erfasst Objekt-Details und Leistungswünsche, und bucht Besichtigungstermine — während dein Team bei Kunden vor Ort putzt. 24/7 auf Deutsch.</p>
     <div class="cta-row">
+      <a href="/?demo=cleaning#demo" class="btn btn-demo">▶ Chipy live hören</a>
       <a href="/" class="btn btn-primary">Kostenlos testen</a>
-      <a href="/#demo" class="btn btn-ghost">Demo anhören</a>
     </div>
+    <div class="demo-hint">🎙️ Klick „live hören" — Phonbot spricht mit dir im Browser (Mikrofon nötig)</div>
   </div>
 </header>
 
@@ -94,10 +98,10 @@ footer a:hover{color:#fff}
   <div class="container">
     <h2>Typische Anrufe — automatisch bearbeitet</h2>
     <div class="features">
-      <div class="feature"><div class="feature-icon">📋</div><h3>Mandats-Qualifizierung</h3><p>Phonbot erfasst Rechtsgebiet, Streitwert, Zeithorizont — du siehst vorher ob der Fall passt.</p></div>
-        <div class="feature"><div class="feature-icon">📅</div><h3>Erstberatung buchen</h3><p>Passt der Fall, wird automatisch ein Erstberatungs-Termin im Anwalts-Kalender eingetragen.</p></div>
-        <div class="feature"><div class="feature-icon">🎯</div><h3>Rechtsgebiete filtern</h3><p>Nur Fälle deiner Spezialisierung werden weitergeleitet, andere bekommen höflich einen Verweis.</p></div>
-        <div class="feature"><div class="feature-icon">🔒</div><h3>Verschwiegenheit</h3><p>Alle Gespräche vertraulich, DSGVO-konform, anwaltliche Schweigepflicht-Flows unterstützt.</p></div>
+      <div class="feature"><div class="feature-icon">📋</div><h3>Angebots-Anfrage</h3><p>Phonbot erfasst Objekt-Art, Quadratmeter, Reinigungs-Intervall, Spezialwünsche — du schickst das Angebot.</p></div>
+        <div class="feature"><div class="feature-icon">📅</div><h3>Besichtigung buchen</h3><p>Für größere Aufträge bucht Phonbot automatisch Vor-Ort-Termine im Kalender.</p></div>
+        <div class="feature"><div class="feature-icon">🏢</div><h3>Kundenarten unterscheiden</h3><p>Privatkunde, Gewerbe, Eigentümergemeinschaft — jede Branche mit eigenen Rückfragen.</p></div>
+        <div class="feature"><div class="feature-icon">↩️</div><h3>Reklamations-Tickets</h3><p>Bei Qualitäts-Beschwerden wird sofort ein Ticket mit Priorität erstellt — der Teamleiter wird benachrichtigt.</p></div>
     </div>
   </div>
 </section>
@@ -106,27 +110,30 @@ footer a:hover{color:#fff}
   <div class="container">
     <h2>So klingt Phonbot am Telefon</h2>
     <div class="dialogue">
-      <p class="user">📞 Interessent: „Guten Tag, ich wurde abgemahnt wegen eines Fotos auf meinem Blog."</p>
-      <p class="bot">Phonbot: „Das ist Urheberrecht — ein Schwerpunkt unserer Kanzlei. Ich nehme kurz Details auf. Wie hoch ist die geforderte Summe?"</p>
-      <p class="user">📞 Interessent: „Etwa 1.200 Euro."</p>
-      <p class="bot">Phonbot: „Verstanden. Ich buche dir einen Erstberatungs-Termin für morgen 14 Uhr mit Herrn Dr. Weber. OK?"</p>
-      <p class="user">📞 Interessent: „Ja, passt."</p>
-      <p class="bot">Phonbot: „Gebucht. Du bekommst eine Bestätigung per E-Mail mit Vorbereitungshinweisen."</p>
+      <p class="user">📞 Kunde: „Hallo, ich suche für unser Büro eine wöchentliche Reinigung."</p>
+      <p class="bot">Phonbot: „Gern. Wie groß ist das Büro in Quadratmetern?"</p>
+      <p class="user">📞 Kunde: „Ca. 200 qm, 8 Arbeitsplätze, 2 Meetingräume."</p>
+      <p class="bot">Phonbot: „Verstanden. Gibt es besondere Wünsche — Glas, Teppich-Tiefenreinigung?"</p>
+      <p class="user">📞 Kunde: „Teppich alle 3 Monate, Glas monatlich."</p>
+      <p class="bot">Phonbot: „Perfekt. Ich notiere alles. Unser Team schickt dir bis morgen ein konkretes Angebot."</p>
     </div>
-    <p style="text-align:center;margin-top:1.5rem;font-size:.9rem;color:rgba(255,255,255,.5)">→ Termin in Outlook-Kalender · qualifiziertes Mandat vorab im CRM · Dauer: 41 Sek</p>
+    <p style="text-align:center;margin-top:1.5rem;font-size:.9rem;color:rgba(255,255,255,.5)">→ Detailliertes Ticket im Dashboard · Angebot-E-Mail automatisch an Vertrieb · Dauer: 44 Sek</p>
+    <div style="text-align:center;margin-top:1.5rem">
+      <a href="/?demo=cleaning#demo" class="btn btn-demo">▶ Chipy live am Telefon hören</a>
+    </div>
   </div>
 </section>
 
 <section>
   <div class="container">
     <h2>Rechnet sich das?</h2>
-    <p>Typische Kanzlei mit 150 Anrufen/Monat:</p>
+    <p>Typische Reinigungsfirma mit 150 Auftragsanfragen/Monat:</p>
     <ul style="margin-top:1rem;padding-left:1.25rem;color:rgba(255,255,255,.75)">
-      <li>👤 <strong>Sekretariats-Verstärkung</strong>: ~2.200 €/Monat</li>
+      <li>👤 <strong>Verwaltung/Disposition</strong>: ~1.800 €/Monat</li>
         <li>📞 <strong>Phonbot Starter</strong>: 49 €/Monat</li>
-        <li>💰 <strong>Ersparnis</strong>: ~2.150 €/Monat</li>
+        <li>💰 <strong>Ersparnis</strong>: ~1.750 €/Monat</li>
     </ul>
-    <span class="pricing-hint">Plus: Mandanten warten nie in der Schleife — wichtiges Qualitätssignal.</span>
+    <span class="pricing-hint">Plus: Keine Anfragen gehen verloren wenn das Team unterwegs ist.</span>
   </div>
 </section>
 
@@ -134,27 +141,28 @@ footer a:hover{color:#fff}
   <div class="container">
     <h2>Häufige Fragen</h2>
     <div class="faq-list">
-      <div class="faq-item"><h3>Ist das mit der anwaltlichen Schweigepflicht vereinbar?</h3><p>Ja. Phonbot ist Datenverarbeiter im Sinne der DSGVO mit AV-Vertrag. Erste Mandats-Details werden verschlüsselt gespeichert, der finale Mandatsvertrag bleibt wie gewohnt direkter Anwalt-Mandant-Bezug.</p></div>
-      <div class="faq-item"><h3>Kann Phonbot zwischen verschiedenen Rechtsgebieten unterscheiden?</h3><p>Ja. Im Agent Builder legst du deine Spezialisierungen fest (z.B. IT-Recht, Arbeitsrecht). Phonbot qualifiziert eingehende Fälle entsprechend.</p></div>
-      <div class="faq-item"><h3>Was bei Fristen-Fällen (z.B. Klagefrist)?</h3><p>Fristen-relevante Keywords lösen Prioritäts-Ticket aus. Anwalt bekommt sofortige Push-Nachricht für dringliche Kontaktaufnahme.</p></div>
-      <div class="faq-item"><h3>Können wir eigene Fragen stellen lassen (z.B. zur RSV)?</h3><p>Ja. Im Agent Builder definierst du eigene Pflichtfragen für die Mandats-Qualifizierung (Rechtsschutz, Mandanten-Historie, etc.).</p></div>
+      <div class="faq-item"><h3>Kann Phonbot nach Reinigungs-Art filtern (Unterhaltsreinigung vs. Grundreinigung)?</h3><p>Ja. Im Agent Builder definierst du deine Leistungspakete mit Fragen zur Unterscheidung.</p></div>
+      <div class="faq-item"><h3>Was bei Notdienst-Reinigung (z.B. Wasserschaden)?</h3><p>Phonbot flaggt Notfälle automatisch als Priorität-hoch. Du bekommst sofortige Push-Nachricht.</p></div>
+      <div class="faq-item"><h3>Kann ich verschiedene Service-Gebiete abdecken?</h3><p>Ja. Phonbot fragt die PLZ ab und leitet je nach Gebiet an das richtige Team weiter (Agent Builder Routing-Regeln).</p></div>
+      <div class="faq-item"><h3>Lässt sich Phonbot für Hausreinigung UND Gewerbe gleichzeitig nutzen?</h3><p>Ja. Im Pro-Plan hast du 3 Agents — z.B. einer für Privatkunden, einer für Gewerbe.</p></div>
     </div>
   </div>
 </section>
 
 <section style="text-align:center;padding:4rem 0">
   <div class="container">
-    <h2>Kanzlei entlasten — 100 Freiminuten</h2>
+    <h2>Reinigungs-Telefon automatisieren — 100 Freiminuten</h2>
     <p style="margin-bottom:1.5rem">Registrierung in unter 2 Minuten · Keine Kreditkarte · Monatlich kündbar</p>
     <div class="cta-row">
       <a href="/" class="btn btn-primary">Jetzt einrichten</a>
+      <a href="/?demo=cleaning#demo" class="btn btn-demo">Erst Chipy testen</a>
     </div>
   </div>
 </section>
 
 <footer>
   <div class="container">
-    <p>© 2026 Phonbot · Ein Produkt der <a href="https://mindrails.de" rel="noopener">Mindrails UG</a> · <a href="/">Zur Hauptseite</a> · <a href="/#faq">Allgemeine FAQ</a></p>
+    <p>© 2026 Phonbot · Ein Produkt der <a href="https://mindrails.de" rel="noopener">Mindrails UG</a> · <a href="/">Zur Hauptseite</a> · <a href="/#faq">FAQ</a> · <a href="/#pricing">Preise</a></p>
     <p style="margin-top:.5rem">DSGVO-konform · Server in Deutschland · <a href="mailto:info@phonbot.de">info@phonbot.de</a></p>
   </div>
 </footer>
