@@ -13,6 +13,13 @@
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="googlebot" content="index, follow" />
     <link rel="canonical" href="https://phonbot.de/" />
+    <link rel="alternate" hreflang="de" href="https://phonbot.de/" />
+    <link rel="alternate" hreflang="de-DE" href="https://phonbot.de/" />
+    <link rel="alternate" hreflang="x-default" href="https://phonbot.de/" />
+
+    <!-- AI & LLM discovery -->
+    <link rel="alternate" type="text/markdown" title="LLM-friendly description (concise)" href="/llms.txt" />
+    <link rel="alternate" type="text/markdown" title="LLM-friendly full content" href="/llms-full.txt" />
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
@@ -47,6 +54,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
 
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="alternate" type="application/rss+xml" title="Phonbot" href="https://phonbot.de/" />
+
     <!-- Structured Data: Organization + SoftwareApplication + FAQPage + WebSite -->
     <script type="application/ld+json">
     {
@@ -63,14 +73,17 @@
             "width": 1200,
             "height": 630
           },
+          "alternateName": ["Phonbot KI-Telefonassistent", "Phonbot Voice AI"],
           "description": "KI-Telefonassistent für kleine Unternehmen. Bucht Termine, beantwortet Fragen, erstellt Tickets — 24/7 auf Deutsch.",
           "areaServed": {
             "@type": "Country",
             "name": "Deutschland"
           },
+          "knowsLanguage": ["de", "en", "fr", "es", "it", "tr", "pl", "nl"],
           "contactPoint": {
             "@type": "ContactPoint",
             "telephone": "+49-30-75937169",
+            "email": "hello@phonbot.de",
             "contactType": "Kundenservice",
             "areaServed": "DE",
             "availableLanguage": ["German", "English"]
@@ -217,6 +230,89 @@
               "item": "https://phonbot.de/"
             }
           ]
+        },
+        {
+          "@type": "HowTo",
+          "@id": "https://phonbot.de/#howto",
+          "name": "Phonbot in 3 Schritten einrichten",
+          "description": "So bringst du deinen KI-Telefonassistenten in unter 2 Minuten live.",
+          "totalTime": "PT2M",
+          "inLanguage": "de-DE",
+          "step": [
+            {
+              "@type": "HowToStep",
+              "position": 1,
+              "name": "Template wählen",
+              "text": "Friseur, Handwerker, Arztpraxis — wähle ein passendes Template im Phonbot Dashboard.",
+              "url": "https://phonbot.de/#how"
+            },
+            {
+              "@type": "HowToStep",
+              "position": 2,
+              "name": "Business-Daten eingeben",
+              "text": "Name, Öffnungszeiten, Services. Dauert unter 2 Minuten im Agent Builder.",
+              "url": "https://phonbot.de/#how"
+            },
+            {
+              "@type": "HowToStep",
+              "position": 3,
+              "name": "Agent ist live",
+              "text": "Dein Phonbot-Agent beantwortet Anrufe sofort — rund um die Uhr, mit deiner bisherigen Nummer oder einer neuen.",
+              "url": "https://phonbot.de/#how"
+            }
+          ]
+        },
+        {
+          "@type": "Service",
+          "@id": "https://phonbot.de/#service-terminbuchung",
+          "name": "Automatische Terminbuchung per KI-Telefon",
+          "serviceType": "KI-Telefonassistent",
+          "provider": { "@id": "https://phonbot.de/#organization" },
+          "areaServed": { "@type": "Country", "name": "Deutschland" },
+          "description": "Phonbot nimmt Anrufe an, versteht natürlich gesprochene deutsche Sprache und trägt Termine direkt in Google Calendar, Outlook oder Cal.com ein.",
+          "availableChannel": {
+            "@type": "ServiceChannel",
+            "serviceUrl": "https://phonbot.de/",
+            "servicePhone": { "@type": "ContactPoint", "telephone": "+49-30-75937169" },
+            "availableLanguage": ["de", "en"]
+          },
+          "audience": {
+            "@type": "BusinessAudience",
+            "audienceType": "Friseure, Handwerker, Arztpraxen, Kanzleien, Gastronomie, Kosmetikstudios"
+          }
+        },
+        {
+          "@type": "Service",
+          "@id": "https://phonbot.de/#service-anrufannahme",
+          "name": "24/7 KI-Anrufannahme für kleine Unternehmen",
+          "serviceType": "AI Voice Agent",
+          "provider": { "@id": "https://phonbot.de/#organization" },
+          "areaServed": { "@type": "Country", "name": "Deutschland" },
+          "description": "Nie wieder einen Anruf verpassen — Phonbot ist rund um die Uhr erreichbar, auch nachts und am Wochenende. Jeder Anruf wird beantwortet, analysiert und dokumentiert."
+        },
+        {
+          "@type": "Service",
+          "@id": "https://phonbot.de/#service-ticketing",
+          "name": "Automatische Rückruf- und Ticket-Erstellung",
+          "serviceType": "Call Ticketing",
+          "provider": { "@id": "https://phonbot.de/#organization" },
+          "description": "Was der KI-Agent nicht sofort lösen kann, wird zum strukturierten Ticket mit Kontext, Kundendaten und Rückrufwunsch — kein Zettelchaos mehr."
+        },
+        {
+          "@type": "WebPage",
+          "@id": "https://phonbot.de/#webpage",
+          "url": "https://phonbot.de/",
+          "name": "Phonbot · KI-Telefonassistent für kleine Unternehmen",
+          "isPartOf": { "@id": "https://phonbot.de/#website" },
+          "inLanguage": "de-DE",
+          "primaryImageOfPage": {
+            "@type": "ImageObject",
+            "url": "https://phonbot.de/og-image.svg"
+          },
+          "speakable": {
+            "@type": "SpeakableSpecification",
+            "cssSelector": ["h1", "h2", ".hero-subtitle"]
+          }
         }
       ]
     }

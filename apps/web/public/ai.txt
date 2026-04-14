@@ -1,0 +1,67 @@
+# ai.txt - AI Training & Usage Policy
+# https://spawning.ai/ai-txt
+
+# This file declares Phonbot's policy regarding AI crawlers, training data usage,
+# and content retrieval for LLM-powered assistants.
+#
+# Phonbot welcomes AI crawlers that respect copyright and attribution norms.
+# We provide /llms.txt (concise) and /llms-full.txt (comprehensive) as structured
+# data sources specifically for LLM retrieval.
+
+User-Agent: *
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+
+# Content usage permissions:
+# - Retrieval Augmented Generation (RAG): ALLOWED
+# - Factual citation in answers: ALLOWED (attribution to phonbot.de preferred)
+# - Summarization: ALLOWED
+# - Training data (foundation models): CASE_BY_CASE — contact hello@phonbot.de
+# - Verbatim reproduction >200 words: NOT ALLOWED without permission
+
+# Known AI crawlers — explicit rules:
+
+User-Agent: ClaudeBot
+Allow: /
+
+User-Agent: Claude-Web
+Allow: /
+
+User-Agent: PerplexityBot
+Allow: /
+
+User-Agent: Google-Extended
+Allow: /
+
+User-Agent: Applebot-Extended
+Allow: /
+
+User-Agent: YouBot
+Allow: /
+
+User-Agent: OAI-SearchBot
+Allow: /
+
+# AI training for foundation models — opt-out
+User-Agent: GPTBot
+Disallow: /
+
+User-Agent: CCBot
+Disallow: /
+
+User-Agent: anthropic-ai
+Disallow: /
+
+User-Agent: cohere-ai
+Disallow: /
+
+User-Agent: Omgilibot
+Disallow: /
+
+User-Agent: FacebookBot
+Disallow: /
+
+# Contact for AI partnerships, licensing, or questions:
+# Email: hello@phonbot.de
+# Preferred format for inquiries: Organization, use case, retention policy, attribution plan

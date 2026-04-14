@@ -1,0 +1,42 @@
+{
+  "name": "Phonbot · KI-Telefonassistent",
+  "short_name": "Phonbot",
+  "description": "KI-Telefonassistent für kleine Unternehmen. Bucht Termine, beantwortet Fragen, erstellt Tickets — 24/7 auf Deutsch.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0A0A0F",
+  "theme_color": "#0A0A0F",
+  "lang": "de-DE",
+  "dir": "ltr",
+  "categories": ["business", "productivity", "communication"],
+  "icons": [
+    {
+      "src": "/og-image.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Zum Phonbot Dashboard",
+      "url": "/"
+    },
+    {
+      "name": "Agent Builder",
+      "short_name": "Agent",
+      "description": "KI-Agent konfigurieren",
+      "url": "/#agent"
+    },
+    {
+      "name": "Anrufe",
+      "short_name": "Anrufe",
+      "description": "Call-Log anzeigen",
+      "url": "/#logs"
+    }
+  ]
+}

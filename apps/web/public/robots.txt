@@ -19,3 +19,8 @@ User-agent: Google-Extended
 Allow: /
 
 Sitemap: https://phonbot.de/sitemap.xml
+
+# LLM-friendly documentation (llmstxt.org standard):
+# https://phonbot.de/llms.txt       — concise summary
+# https://phonbot.de/llms-full.txt  — full content
+# https://phonbot.de/ai.txt         — AI training policy
