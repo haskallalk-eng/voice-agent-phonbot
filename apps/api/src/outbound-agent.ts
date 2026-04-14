@@ -91,8 +91,22 @@ export async function migrateOutbound() {
       converted_at  TIMESTAMPTZ
     );
   `);
+  // org_id: nullable for anonymous platform-level leads (e.g. Phonbot's own demo/callback);
+  // required for future multi-tenant embed. ON DELETE CASCADE ensures GDPR right-to-erasure cleanup.
+  await pool.query(`ALTER TABLE crm_leads ADD COLUMN IF NOT EXISTS org_id UUID;`);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'crm_leads_org_fk') THEN
+        ALTER TABLE crm_leads
+          ADD CONSTRAINT crm_leads_org_fk
+          FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
   await pool.query(`CREATE INDEX IF NOT EXISTS crm_leads_email_idx ON crm_leads(email);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS crm_leads_status_idx ON crm_leads(status);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS crm_leads_org_idx ON crm_leads(org_id);`);
 }
 
 // ── Base Sales Prompt ─────────────────────────────────────────────────────────
@@ -434,11 +448,12 @@ export async function registerOutbound(app: FastifyInstance) {
     const parsed = z.object({
       phone: z.string().min(5).max(30),
       email: z.string().email().max(200),
-      name: z.string().max(100).optional(),
+      // Sanitize name: only letters, numbers, spaces, hyphens, apostrophes, umlauts (prompt-injection mitigation)
+      name: z.string().max(50).regex(/^[\p{L}\p{N}\s'-]+$/u, 'Invalid characters in name').optional(),
     }).safeParse(req.body);
 
     if (!parsed.success) {
-      return reply.status(400).send({ error: 'E-Mail und Telefonnummer erforderlich' });
+      return reply.status(400).send({ error: 'E-Mail und Telefonnummer erforderlich (Name nur mit Buchstaben/Ziffern)' });
     }
 
     // Normalize phone to E.164
@@ -446,6 +461,13 @@ export async function registerOutbound(app: FastifyInstance) {
     if (phone.startsWith('00')) phone = '+' + phone.slice(2);
     else if (phone.startsWith('0') && !phone.startsWith('+')) phone = '+49' + phone.slice(1);
     if (!phone.startsWith('+')) phone = '+49' + phone;
+
+    // Abuse guard: country whitelist (default DACH region — configurable via env)
+    const ALLOWED_PREFIXES = (process.env.ALLOWED_PHONE_PREFIXES ?? '+49,+43,+41').split(',').map((p) => p.trim()).filter(Boolean);
+    if (!ALLOWED_PREFIXES.some((p) => phone.startsWith(p))) {
+      app.log.warn({ phone, ip: req.ip }, 'Rejected website-callback: non-allowed country prefix');
+      return reply.status(400).send({ error: 'Aktuell nur Telefonnummern aus der DACH-Region (DE/AT/CH) unterstützt' });
+    }
 
     const fromNumber = process.env.RETELL_OUTBOUND_NUMBER;
     if (!fromNumber) {
@@ -508,28 +530,37 @@ export async function registerOutbound(app: FastifyInstance) {
 
   // ── CRM Leads API (admin only) ──────────────────────────────────────────
 
-  // GET /outbound/leads — list all leads
+  // GET /outbound/leads — list leads scoped to the caller's org only
+  // (anonymous platform-level leads with org_id IS NULL are visible only via /admin/leads)
   app.get('/outbound/leads', { ...auth }, async (req: FastifyRequest) => {
     if (!pool) return { items: [], total: 0 };
+    const { orgId } = req.user as JwtPayload;
     const q = z.object({
-      status: z.string().optional(),
+      status: z.enum(['new', 'contacted', 'converted', 'lost']).optional(),
       limit: z.coerce.number().int().min(1).max(500).default(100),
       offset: z.coerce.number().int().min(0).default(0),
     }).parse(req.query);
 
-    const where = q.status ? `WHERE status = '${q.status === 'new' ? 'new' : q.status === 'contacted' ? 'contacted' : q.status === 'converted' ? 'converted' : q.status === 'lost' ? 'lost' : 'new'}'` : '';
+    const values: unknown[] = [orgId];
+    let where = `WHERE org_id = $1`;
+    if (q.status) {
+      values.push(q.status);
+      where += ` AND status = $${values.length}`;
+    }
+    values.push(q.limit, q.offset);
     const { rows } = await pool.query(
       `SELECT id, created_at, name, email, phone, source, status, notes, call_id, converted_at
-       FROM crm_leads ${where} ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
-      [q.limit, q.offset],
+       FROM crm_leads ${where} ORDER BY created_at DESC LIMIT $${values.length - 1} OFFSET $${values.length}`,
+      values,
     );
-    const countRes = await pool.query(`SELECT COUNT(*) as cnt FROM crm_leads ${where}`);
+    const countRes = await pool.query(`SELECT COUNT(*) as cnt FROM crm_leads ${where}`, values.slice(0, -2));
     return { items: rows, total: parseInt(String(countRes.rows[0]?.cnt ?? '0'), 10) };
   });
 
-  // PATCH /outbound/leads/:id — update lead status/notes
+  // PATCH /outbound/leads/:id — update lead status/notes (org-scoped)
   app.patch('/outbound/leads/:id', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
+    const { orgId } = req.user as JwtPayload;
     const { id } = req.params as { id: string };
     const body = z.object({
       status: z.enum(['new', 'contacted', 'converted', 'lost']).optional(),
@@ -555,24 +586,27 @@ export async function registerOutbound(app: FastifyInstance) {
 
     if (updates.length === 0) return { ok: true };
 
-    values.push(id);
-    await pool.query(`UPDATE crm_leads SET ${updates.join(', ')} WHERE id = $${idx}`, values);
+    values.push(id, orgId);
+    await pool.query(`UPDATE crm_leads SET ${updates.join(', ')} WHERE id = $${idx} AND org_id = $${idx + 1}`, values);
     return { ok: true };
   });
 
-  // DELETE /outbound/leads/:id — delete a lead
+  // DELETE /outbound/leads/:id — delete a lead (org-scoped)
   app.delete('/outbound/leads/:id', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
+    const { orgId } = req.user as JwtPayload;
     const { id } = req.params as { id: string };
-    await pool.query(`DELETE FROM crm_leads WHERE id = $1`, [id]);
+    await pool.query(`DELETE FROM crm_leads WHERE id = $1 AND org_id = $2`, [id, orgId]);
     return { ok: true };
   });
 
-  // GET /outbound/leads/stats — lead funnel stats
-  app.get('/outbound/leads/stats', { ...auth }, async () => {
+  // GET /outbound/leads/stats — lead funnel stats (org-scoped)
+  app.get('/outbound/leads/stats', { ...auth }, async (req: FastifyRequest) => {
     if (!pool) return { total: 0, new: 0, contacted: 0, converted: 0, lost: 0 };
+    const { orgId } = req.user as JwtPayload;
     const { rows } = await pool.query(
-      `SELECT status, COUNT(*) as cnt FROM crm_leads GROUP BY status`,
+      `SELECT status, COUNT(*) as cnt FROM crm_leads WHERE org_id = $1 GROUP BY status`,
+      [orgId],
     );
     const stats: Record<string, number> = { new: 0, contacted: 0, converted: 0, lost: 0 };
     for (const r of rows) stats[r.status as string] = parseInt(String(r.cnt), 10);

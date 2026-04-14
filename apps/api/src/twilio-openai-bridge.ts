@@ -12,6 +12,10 @@ import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import WS from 'ws';
 import { pool } from './db.js';
+import { redis } from './redis.js';
+
+// Pin OpenAI Realtime model via env var (avoids silent breakage when "preview" alias changes)
+const OPENAI_REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL ?? 'gpt-4o-realtime-preview-2024-12-17';
 
 // ── Sales prompt for website callback ─────────────────────────────────────────
 
@@ -37,7 +41,10 @@ REGELN:
 - Sei ehrlich: wenn Phonbot nicht passt, sag das
 - Halte das Gespräch unter 3 Minuten`;
 
-// ── In-memory session store ───────────────────────────────────────────────────
+// ── Session store (Redis with in-memory fallback for dev) ─────────────────────
+//
+// Why Redis: bridge sessions must survive across horizontally-scaled API containers.
+// A call started on container A might be routed by Twilio to container B on reconnect.
 
 interface CallSession {
   name?: string;
@@ -47,13 +54,34 @@ interface CallSession {
   outboundRecordId?: string;
 }
 
-const sessions = new Map<string, CallSession>();
-const SESSION_TTL = 1000 * 60 * 10; // 10 min
+const SESSION_PREFIX = 'bridge_session:';
+const SESSION_TTL_SEC = 600; // 10 min
+const inMemSessions = new Map<string, CallSession>();
 
-export function createSession(sessionId: string, data: CallSession) {
-  sessions.set(sessionId, data);
-  // Auto-cleanup
-  setTimeout(() => sessions.delete(sessionId), SESSION_TTL);
+export async function createSession(sessionId: string, data: CallSession): Promise<void> {
+  if (redis?.isOpen) {
+    await redis.set(SESSION_PREFIX + sessionId, JSON.stringify(data), { EX: SESSION_TTL_SEC });
+  } else {
+    inMemSessions.set(sessionId, data);
+    setTimeout(() => inMemSessions.delete(sessionId), SESSION_TTL_SEC * 1000);
+  }
+}
+
+async function getSession(sessionId: string): Promise<CallSession | null> {
+  if (redis?.isOpen) {
+    const raw = await redis.get(SESSION_PREFIX + sessionId);
+    if (!raw) return null;
+    try { return JSON.parse(raw) as CallSession; } catch { return null; }
+  }
+  return inMemSessions.get(sessionId) ?? null;
+}
+
+async function deleteSession(sessionId: string): Promise<void> {
+  if (redis?.isOpen) {
+    await redis.del(SESSION_PREFIX + sessionId);
+  } else {
+    inMemSessions.delete(sessionId);
+  }
 }
 
 /**
@@ -71,7 +99,7 @@ export async function triggerBridgeCall(params: {
   outboundRecordId?: string;
 }): Promise<{ ok: boolean; sessionId: string; twilioCallSid?: string; error?: string }> {
   const sessionId = crypto.randomUUID();
-  createSession(sessionId, { phone: params.toNumber, name: params.name, prompt: params.prompt, createdAt: Date.now(), outboundRecordId: params.outboundRecordId });
+  await createSession(sessionId, { phone: params.toNumber, name: params.name, prompt: params.prompt, createdAt: Date.now(), outboundRecordId: params.outboundRecordId });
 
   const twimlUrl = `${params.webhookBase}/outbound/twiml/${sessionId}`;
   const statusCallback = params.outboundRecordId ? `${params.webhookBase}/outbound/status/${sessionId}` : undefined;
@@ -96,7 +124,7 @@ export async function triggerBridgeCall(params: {
 
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    sessions.delete(sessionId);
+    await deleteSession(sessionId);
     return { ok: false, sessionId, error: body };
   }
 
@@ -131,9 +159,9 @@ export async function registerTwilioBridge(app: FastifyInstance) {
   // WS /outbound/ws/:sessionId
   // Twilio connects here with a bidirectional audio stream (mulaw 8kHz).
   // We forward it to OpenAI Realtime API.
-  app.get('/outbound/ws/:sessionId', { websocket: true }, (socket, req) => {
+  app.get('/outbound/ws/:sessionId', { websocket: true }, async (socket, req) => {
     const { sessionId } = req.params as { sessionId: string };
-    const session = sessions.get(sessionId);
+    const session = await getSession(sessionId);
     const openaiKey = process.env.OPENAI_API_KEY;
 
     if (!openaiKey) {
@@ -142,11 +170,11 @@ export async function registerTwilioBridge(app: FastifyInstance) {
       return;
     }
 
-    app.log.info({ sessionId, caller: session?.name }, 'Twilio audio stream connected — opening OpenAI bridge');
+    app.log.info({ sessionId, caller: session?.name, model: OPENAI_REALTIME_MODEL }, 'Twilio audio stream connected — opening OpenAI bridge');
 
     // Open OpenAI Realtime WebSocket (uses ws for custom headers support)
     const openai = new WS(
-      'wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview',
+      `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(OPENAI_REALTIME_MODEL)}`,
       {
         headers: {
           Authorization: `Bearer ${openaiKey}`,
@@ -292,7 +320,7 @@ export async function registerTwilioBridge(app: FastifyInstance) {
         }).catch(() => {});
       }
 
-      sessions.delete(sessionId);
+      deleteSession(sessionId).catch(() => {});
     });
 
     socket.on('error', (err) => {

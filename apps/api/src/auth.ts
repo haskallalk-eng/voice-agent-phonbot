@@ -359,8 +359,20 @@ export async function registerAuth(app: FastifyInstance) {
       }
     }
 
+    // GDPR right-to-erasure: also delete anonymous platform-level CRM leads that
+    // match the user's email (in case they filled out a demo form before signup).
+    // Org-owned crm_leads are cascaded by the FK below.
+    const userRow = await pool.query('SELECT email FROM users WHERE id = $1', [userId]);
+    const userEmail = userRow.rows[0]?.email as string | undefined;
+    if (userEmail) {
+      await pool.query(
+        `DELETE FROM crm_leads WHERE email = $1 AND org_id IS NULL`,
+        [userEmail],
+      ).catch(() => {/* non-critical */});
+    }
+
     // Deleting the org cascades to: users, tickets, agent_configs,
-    // calendar_connections, phone_numbers, password_resets
+    // calendar_connections, phone_numbers, password_resets, crm_leads (via FK)
     await pool.query('DELETE FROM orgs WHERE id = $1', [orgId]);
 
     // Also hard-delete the user record in case org cascade didn't catch it

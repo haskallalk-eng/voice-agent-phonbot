@@ -115,8 +115,10 @@ const DemoCallBody = z.object({
 });
 
 const DemoCallbackBody = z.object({
-  name: z.string().min(1).max(200),
-  email: z.string().email(),
+  // Sanitize name: only letters, digits, spaces, hyphens, apostrophes, umlauts
+  // (prompt-injection mitigation — name is interpolated into agent prompt)
+  name: z.string().min(1).max(50).regex(/^[\p{L}\p{N}\s'-]+$/u, 'Invalid characters in name'),
+  email: z.string().email().max(200),
   phone: z.string().min(5).max(30),
 });
 
@@ -157,7 +159,7 @@ export async function registerDemo(app: FastifyInstance) {
   }, async (req, reply) => {
     const parsed = DemoCallbackBody.safeParse(req.body);
     if (!parsed.success) {
-      return reply.status(400).send({ error: 'name, email and phone required', details: parsed.error.flatten() });
+      return reply.status(400).send({ error: 'name, email and phone required (name only letters/digits)', details: parsed.error.flatten() });
     }
     const { name, email } = parsed.data;
     // Normalize phone to E.164 format
@@ -165,6 +167,13 @@ export async function registerDemo(app: FastifyInstance) {
     if (phone.startsWith('00')) phone = '+' + phone.slice(2);
     else if (phone.startsWith('0') && !phone.startsWith('+')) phone = '+49' + phone.slice(1);
     if (!phone.startsWith('+')) phone = '+49' + phone;
+
+    // Abuse guard: country whitelist (default DACH — configurable via ALLOWED_PHONE_PREFIXES)
+    const ALLOWED_PREFIXES = (process.env.ALLOWED_PHONE_PREFIXES ?? '+49,+43,+41').split(',').map((p) => p.trim()).filter(Boolean);
+    if (!ALLOWED_PREFIXES.some((p) => phone.startsWith(p))) {
+      app.log.warn({ phone, ip: req.ip }, 'Rejected demo/callback: non-allowed country prefix');
+      return reply.status(400).send({ error: 'Aktuell nur Telefonnummern aus der DACH-Region (DE/AT/CH) unterstützt' });
+    }
 
     if (demoLeads.length >= MAX_DEMO_LEADS) {
       // Drop oldest lead to prevent unbounded memory growth
