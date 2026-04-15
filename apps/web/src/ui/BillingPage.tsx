@@ -84,7 +84,11 @@ export function BillingPage() {
       const { url } = await createCheckoutSession(planId, billingInterval);
       window.location.href = url;
     } catch (e: unknown) {
-      setFlash({ type: 'error', text: (e instanceof Error ? e.message : null) ?? 'Fehler beim Öffnen des Checkouts' });
+      // F4: don't echo raw `e.message` into the UI — pg-error / stack traces
+      // would leak schema/internal details to the user. Log to console for dev,
+      // show a user-safe generic to the human.
+      if (typeof console !== 'undefined') console.warn('billing checkout failed', e);
+      setFlash({ type: 'error', text: 'Checkout konnte nicht geöffnet werden. Bitte versuche es erneut oder kontaktiere uns.' });
       setActionLoading(null);
     }
   }
@@ -95,7 +99,8 @@ export function BillingPage() {
       const { url } = await createPortalSession();
       window.location.href = url;
     } catch (e: unknown) {
-      setFlash({ type: 'error', text: (e instanceof Error ? e.message : null) ?? 'Fehler beim Öffnen des Portals' });
+      if (typeof console !== 'undefined') console.warn('billing portal failed', e);
+      setFlash({ type: 'error', text: 'Billing-Portal konnte nicht geöffnet werden. Bitte versuche es erneut.' });
       setActionLoading(null);
     }
   }

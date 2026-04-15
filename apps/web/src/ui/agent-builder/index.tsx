@@ -131,7 +131,10 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
       savedConfigRef.current = JSON.stringify(merged);
       setView('edit');
     } catch (e: unknown) {
-      setStatus({ type: 'error', text: e instanceof Error ? e.message : 'Fehler beim Erstellen' });
+      // F4: avoid echoing raw error message into the UI (could leak server
+      // internals, ApiError body, etc). Log to console for dev introspection.
+      if (typeof console !== 'undefined') console.warn('createNewAgent failed', e);
+      setStatus({ type: 'error', text: 'Agent konnte nicht erstellt werden. Bitte erneut versuchen.' });
     } finally {
       setCreatingAgent(false);
     }
@@ -216,8 +219,11 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
       });
       setStatus({ type: 'ok', text: `Deployed — Agent: ${result.retellAgentId ?? '–'}` });
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Unbekannter Fehler';
-      setStatus({ type: 'error', text: `Deploy fehlgeschlagen: ${msg}` });
+      // F4: Retell-API-errors / pg-errors carry implementation details that
+      // shouldn't surface to the customer-facing UI. Console-log for ops,
+      // generic message for the user.
+      if (typeof console !== 'undefined') console.warn('agent deploy failed', e);
+      setStatus({ type: 'error', text: 'Deploy fehlgeschlagen — bitte erneut versuchen oder Support kontaktieren.' });
     } finally {
       setDeploying(false);
     }
