@@ -9,6 +9,7 @@ import { createWebCall, createLLM, createAgent as retellCreateAgent, createPhone
 import { TEMPLATES } from './templates.js';
 import { pool } from './db.js';
 import { redis } from './redis.js';
+import { verifyTurnstile } from './captcha.js';
 
 // Demo agent cache — Redis-backed so horizontal scaling (multiple API containers)
 // doesn't create duplicate Retell agents. Falls back to in-memory Map when Redis down.
@@ -157,6 +158,9 @@ const DemoCallBody = z.object({
     (id) => TEMPLATES.some((t) => t.id === id),
     { message: 'Unknown templateId' },
   ),
+  // Cloudflare Turnstile token from the widget. Required in prod (server gates
+  // via verifyTurnstile()); dev with no TURNSTILE_SECRET_KEY skips the check.
+  turnstileToken: z.string().optional(),
 });
 
 const DemoCallbackBody = z.object({
@@ -165,6 +169,7 @@ const DemoCallbackBody = z.object({
   name: z.string().min(1).max(50).regex(/^[\p{L}\p{N}\s'-]+$/u, 'Invalid characters in name'),
   email: z.string().email().max(200),
   phone: z.string().min(5).max(30),
+  turnstileToken: z.string().optional(),
 });
 
 // Global hourly cost cap across ALL IPs — the per-IP rate-limit (10/h) is
@@ -197,7 +202,8 @@ export async function registerDemo(app: FastifyInstance) {
   });
 
   // POST /demo/call — create a web call with a demo agent (no auth)
-  // Per-IP rate limit (10/h) + global hourly cap to stop botnet cost-amplification.
+  // Per-IP rate limit (10/h) + global hourly cap + Turnstile CAPTCHA to stop
+  // botnet cost-amplification (each demo call burns OpenAI + Retell spend).
   app.post('/demo/call', {
     config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
   }, async (req, reply) => {
@@ -205,7 +211,15 @@ export async function registerDemo(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'templateId required' });
     }
-    const { templateId } = parsed.data;
+    const { templateId, turnstileToken } = parsed.data;
+
+    // CAPTCHA-Gate (N6). In dev without TURNSTILE_SECRET_KEY this is a no-op;
+    // in prod a missing/invalid token is rejected.
+    const captchaOk = await verifyTurnstile(turnstileToken, req.ip);
+    if (!captchaOk) {
+      app.log.warn({ ip: req.ip }, 'demo/call captcha verification failed');
+      return reply.status(403).send({ error: 'captcha_failed', message: 'Bitte Captcha bestätigen.' });
+    }
 
     const cap = await enforceGlobalDemoCap('call');
     if (!cap.ok) {
@@ -230,6 +244,12 @@ export async function registerDemo(app: FastifyInstance) {
     const parsed = DemoCallbackBody.safeParse(req.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: 'name, email and phone required (name only letters/digits)', details: parsed.error.flatten() });
+    }
+
+    const captchaOk = await verifyTurnstile(parsed.data.turnstileToken, req.ip);
+    if (!captchaOk) {
+      app.log.warn({ ip: req.ip }, 'demo/callback captcha verification failed');
+      return reply.status(403).send({ error: 'captcha_failed', message: 'Bitte Captcha bestätigen.' });
     }
 
     const cap = await enforceGlobalDemoCap('callback');

@@ -277,10 +277,10 @@ export function getDemoTemplates() {
   return request<{ templates: DemoTemplate[] }>('/demo/templates');
 }
 
-export function createDemoCall(templateId: string) {
+export function createDemoCall(templateId: string, turnstileToken?: string) {
   return request<{ ok: boolean; call_id?: string; access_token?: string }>('/demo/call', {
     method: 'POST',
-    body: JSON.stringify({ templateId }),
+    body: JSON.stringify({ templateId, turnstileToken }),
   });
 }
 

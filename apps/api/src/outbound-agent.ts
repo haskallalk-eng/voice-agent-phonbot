@@ -17,6 +17,7 @@ import { z } from 'zod';
 import { pool } from './db.js';
 import type { JwtPayload } from './auth.js';
 import { triggerBridgeCall } from './twilio-openai-bridge.js';
+import { verifyTurnstile } from './captcha.js';
 
 // ── DB Migration ─────────────────────────────────────────────────────────────
 
@@ -517,10 +518,19 @@ export async function registerOutbound(app: FastifyInstance) {
       email: z.string().email().max(200),
       // Sanitize name: only letters, numbers, spaces, hyphens, apostrophes, umlauts (prompt-injection mitigation)
       name: z.string().max(50).regex(/^[\p{L}\p{N}\s'-]+$/u, 'Invalid characters in name').optional(),
+      turnstileToken: z.string().optional(),
     }).safeParse(req.body);
 
     if (!parsed.success) {
       return reply.status(400).send({ error: 'E-Mail und Telefonnummer erforderlich (Name nur mit Buchstaben/Ziffern)' });
+    }
+
+    // CAPTCHA-Gate (N6) — same Turnstile flow as /demo/*. Dev without
+    // TURNSTILE_SECRET_KEY: skip; prod: required.
+    const captchaOk = await verifyTurnstile(parsed.data.turnstileToken, req.ip);
+    if (!captchaOk) {
+      app.log.warn({ ip: req.ip }, 'website-callback captcha verification failed');
+      return reply.status(403).send({ error: 'captcha_failed', message: 'Bitte Captcha bestätigen.' });
     }
 
     // Normalize phone to E.164

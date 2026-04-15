@@ -85,12 +85,14 @@ await app.register(helmet, {
     useDefaults: true,
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
+      // Cloudflare Turnstile (CAPTCHA) lädt JS von challenges.cloudflare.com.
+      scriptSrc: ["'self'", "'unsafe-inline'", 'https://challenges.cloudflare.com'],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
       imgSrc: ["'self'", 'data:', 'https:'],
-      connectSrc: ["'self'", 'wss://*.retellai.com', 'https://*.retellai.com', 'wss://phonbot.de'],
-      frameSrc: ["'self'"],
+      connectSrc: ["'self'", 'wss://*.retellai.com', 'https://*.retellai.com', 'wss://phonbot.de', 'https://challenges.cloudflare.com'],
+      // Turnstile rendert sich in einem iframe von challenges.cloudflare.com.
+      frameSrc: ["'self'", 'https://challenges.cloudflare.com'],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
       formAction: ["'self'"],

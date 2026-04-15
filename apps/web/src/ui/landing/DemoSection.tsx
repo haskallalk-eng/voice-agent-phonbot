@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { RetellWebClient } from 'retell-client-js-sdk';
 import { createDemoCall } from '../../lib/api.js';
 import { FoxLogo } from '../FoxLogo.js';
 import { IconPhone } from '../PhonbotIcons.js';
+import { TurnstileWidget } from '../TurnstileWidget.js';
 import { TEMPLATES, TEMPLATE_PREVIEWS, type CallState } from './shared.js';
 
 // ── Sub-components ─────────────────────────────────────────────────────────
@@ -110,6 +111,11 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
   const [agentTalking, setAgentTalking] = useState(false);
   const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Cloudflare Turnstile token (cleared on expiry/reset). Empty string = no
+  // token yet → demo button stays disabled in prod. Dev without site-key
+  // configured: widget renders nothing, token stays '' but backend skips.
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const handleToken = useCallback((token: string) => setTurnstileToken(token), []);
   const clientRef = useRef<RetellWebClient | null>(null);
 
   const isInCall = callState === 'connecting' || callState === 'active' || callState === 'ended' || callState === 'error';
@@ -143,7 +149,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
         }
       }
 
-      const res = await createDemoCall(templateId);
+      const res = await createDemoCall(templateId, turnstileToken || undefined);
       if (!res.access_token) {
         throw new Error('Kein Zugriffstoken erhalten');
       }
@@ -232,6 +238,11 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
           <p className="text-white/60 text-lg max-w-xl mx-auto">
             Kein Account nötig. Einfach klicken, sprechen, überzeugen lassen.
           </p>
+          {/* Cloudflare Turnstile — silent challenge for normal users; renders
+              nothing in dev when VITE_TURNSTILE_SITE_KEY is unset. */}
+          <div className="mt-4 flex justify-center">
+            <TurnstileWidget onToken={handleToken} theme="dark" />
+          </div>
         </div>
 
         {/* Template grid — shown when idle or error */}
