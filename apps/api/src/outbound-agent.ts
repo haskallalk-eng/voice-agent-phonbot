@@ -248,6 +248,16 @@ export async function triggerSalesCall(params: {
 
   if (!pool) return { ok: false, error: 'DB_NOT_CONFIGURED' };
 
+  // Anti-toll-fraud: whitelist the target number's country. Defense-in-depth so
+  // a future caller (campaign-worker, webhook, internal job) that skipped the
+  // route-level check cannot make Phonbot dial +1-900-* / +44-9-* premium-rate
+  // numbers on behalf of any org. See memory/fix-specs.md:T-32.
+  const ALLOWED_PHONE_PREFIXES = (process.env.ALLOWED_PHONE_PREFIXES ?? '+49,+43,+41')
+    .split(',').map(p => p.trim()).filter(Boolean);
+  if (!ALLOWED_PHONE_PREFIXES.some(p => params.toNumber.startsWith(p))) {
+    return { ok: false, error: 'PHONE_PREFIX_NOT_ALLOWED' };
+  }
+
   // Check usage limits before making outbound call
   const { checkUsageLimit } = await import('./usage.js');
   const usage = await checkUsageLimit(params.orgId);
@@ -523,6 +533,23 @@ export async function registerOutbound(app: FastifyInstance) {
     if (!fromNumber) {
       app.log.warn('RETELL_OUTBOUND_NUMBER not configured — cannot make callback');
       return reply.status(503).send({ error: 'Rückruf aktuell nicht verfügbar' });
+    }
+
+    // Dedup — same phone within 24h won't retrigger a callback. Mirrors
+    // demo/callback's dedup (memory/fix-specs.md:E2) so both public entry
+    // points are consistent against botnet CRM spam. 200 ok w/o call so the
+    // response-time is indistinguishable (no enumeration signal).
+    if (pool) {
+      const dup = await pool.query(
+        `SELECT 1 FROM crm_leads
+         WHERE phone = $1 AND source = 'website-callback' AND created_at > now() - interval '24 hours'
+         LIMIT 1`,
+        [phone],
+      );
+      if (dup.rowCount) {
+        app.log.info({ phone, ip: req.ip }, 'website-callback dedup hit — skipping outbound call');
+        return { ok: true };
+      }
     }
 
     try {
