@@ -65,13 +65,51 @@ footer a:hover{color:#fff}
 .breadcrumb{font-size:.8rem;color:rgba(255,255,255,.4);padding:1rem 0}
 .breadcrumb a{color:rgba(255,255,255,.6)}
 .breadcrumb a:hover{color:#F97316}
-.demo-hint{display:inline-block;padding:.5rem 1rem;border-radius:.5rem;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);font-size:.85rem;color:#67E8F9;margin-top:1rem}</style>
+.demo-hint{display:inline-block;padding:.5rem 1rem;border-radius:.5rem;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);font-size:.85rem;color:#67E8F9;margin-top:1rem}
+.site-nav .container{justify-content:flex-start!important;gap:0}
+.site-nav-links{flex:1;display:flex;justify-content:center;gap:1.75rem;list-style:none;margin:0 1.5rem;padding:0;align-items:center}
+.site-nav-links>li{position:relative;margin:0}
+.site-nav-links a,.site-nav-links .dropdown-toggle{color:rgba(255,255,255,.65);font-size:.875rem;background:none;border:none;cursor:pointer;padding:.25rem 0;font-family:inherit;font-weight:500;transition:color .2s;display:inline-flex;align-items:center;gap:.25rem}
+.site-nav-links a:hover,.site-nav-links .dropdown-toggle:hover,.site-nav-links a.is-current{color:#fff}
+.site-nav-links a.is-current{font-weight:600}
+.dropdown-menu{list-style:none;position:absolute;top:calc(100% + .75rem);left:50%;transform:translateX(-50%);min-width:14rem;padding:.5rem;background:rgba(10,10,15,.96);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.1);border-radius:1rem;opacity:0;pointer-events:none;transition:opacity .15s;box-shadow:0 8px 32px rgba(0,0,0,.4);margin:0}
+.has-dropdown:hover .dropdown-menu,.has-dropdown:focus-within .dropdown-menu{opacity:1;pointer-events:auto}
+.dropdown-menu li{margin:0}
+.dropdown-menu a{display:block;padding:.625rem .875rem;border-radius:.5rem;font-size:.875rem;color:rgba(255,255,255,.78);transition:all .15s}
+.dropdown-menu a:hover{background:rgba(255,255,255,.05);color:#fff}
+.site-nav-cta{display:flex;align-items:center;gap:1rem}
+.site-nav-cta .nav-link{color:rgba(255,255,255,.65);font-size:.875rem;font-weight:500;transition:color .2s}
+.site-nav-cta .nav-link:hover{color:#fff}
+.mobile-toggle{display:none;background:none;border:none;color:#fff;font-size:1.5rem;cursor:pointer;padding:.25rem .5rem;margin-left:auto}
+@media (max-width:840px){.site-nav-links,.site-nav-cta .nav-link{display:none}.mobile-toggle{display:block}body.nav-open .site-nav-links{display:flex;flex-direction:column;position:absolute;top:100%;left:0;right:0;background:rgba(10,10,15,.98);border-bottom:1px solid rgba(255,255,255,.08);padding:1rem 1.5rem;gap:.25rem;align-items:stretch;margin:0}body.nav-open .site-nav-links a,body.nav-open .dropdown-toggle{padding:.75rem 0;border-bottom:1px solid rgba(255,255,255,.05)}body.nav-open .dropdown-menu{position:static;transform:none;opacity:1;pointer-events:auto;background:transparent;border:none;padding:.25rem 0 .5rem 1rem;min-width:auto;box-shadow:none}}</style>
 </head>
 <body>
-<nav>
+<nav class="site-nav" role="navigation" aria-label="Hauptnavigation">
   <div class="container">
     <a href="/" class="brand">Phonbot</a>
-    <a href="/" class="btn btn-ghost">Kostenlos testen</a>
+    <ul class="site-nav-links">
+      <li><a href="/#demo">Demo</a></li>
+      <li><a href="/#features">Features</a></li>
+      <li><a href="/#preise">Preise</a></li>
+      <li><a href="/#faq">FAQ</a></li>
+      <li class="has-dropdown">
+        <button type="button" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">Branchen <span aria-hidden="true">▾</span></button>
+        <ul class="dropdown-menu">
+          <li><a href="/friseur/" class="is-current">Friseur</a></li>
+          <li><a href="/handwerker/">Handwerker</a></li>
+          <li><a href="/arztpraxis/">Arztpraxis</a></li>
+          <li><a href="/reinigung/">Reinigung</a></li>
+          <li><a href="/restaurant/">Restaurant</a></li>
+          <li><a href="/autowerkstatt/">Autowerkstatt</a></li>
+        </ul>
+      </li>
+      <li><a href="/?page=contact">Kontakt</a></li>
+    </ul>
+    <div class="site-nav-cta">
+      <a href="/?page=login" class="nav-link">Einloggen</a>
+      <a href="/?page=register" class="btn btn-primary">Kostenlos testen</a>
+    </div>
+    <button type="button" class="mobile-toggle" aria-label="Menü umschalten" onclick="document.body.classList.toggle('nav-open')">☰</button>
   </div>
 </nav>
 

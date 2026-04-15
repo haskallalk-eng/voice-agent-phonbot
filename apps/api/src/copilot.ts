@@ -394,6 +394,8 @@ export async function registerCopilot(app: FastifyInstance) {
             max_tokens: 1024,
             temperature: 0.7,
           }),
+          // Per-iteration timeout — guards against hung Copilot worker blocking Fastify.
+          signal: AbortSignal.timeout(30_000),
         });
 
         if (!openaiRes.ok) {

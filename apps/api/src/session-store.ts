@@ -3,6 +3,10 @@
  *
  * Uses Redis when REDIS_URL is configured, falls back to in-memory for dev.
  * All public functions are async.
+ *
+ * Tenant isolation: all read/mutate operations enforce `tenantId` match.
+ * A caller with tenantId X cannot read, clear, or write to a session owned by tenantId Y
+ * (even if they know the sessionId). Previously: only the sessionId gate existed.
  */
 
 import { redis } from './redis.js';
@@ -40,32 +44,44 @@ setInterval(() => {
   }
 }, 10 * 60 * 1000).unref();
 
-function memGetOrCreate(sessionId: string, tenantId: string): Session {
-  let s = sessions.get(sessionId);
-  if (!s) {
-    s = { tenantId, messages: [], createdAt: Date.now(), lastActiveAt: Date.now() };
-    sessions.set(sessionId, s);
-  }
-  s.lastActiveAt = Date.now();
-  return s;
-}
-
-// ── Redis helpers ─────────────────────────────────────────────────────────────
-
 function redisKey(sessionId: string) {
   return `session:${sessionId}`;
 }
 
-async function redisGetOrCreate(sessionId: string, tenantId: string): Promise<Session> {
-  const raw = await redis!.get(redisKey(sessionId));
-  if (raw) {
+// ── Internal: read-with-tenant-check ─────────────────────────────────────────
+// Returns null if session doesn't exist OR belongs to a different tenant.
+// Prevents cross-tenant leak when sessionId is known but ownership isn't.
+
+async function readSession(sessionId: string, tenantId: string): Promise<Session | null> {
+  if (redis) {
+    const raw = await redis.get(redisKey(sessionId));
+    if (!raw) return null;
     const s: Session = JSON.parse(raw);
-    s.lastActiveAt = Date.now();
-    await redis!.setEx(redisKey(sessionId), SESSION_TTL_SECONDS, JSON.stringify(s));
+    if (s.tenantId !== tenantId) return null;   // ← tenant isolation
     return s;
   }
+  const s = sessions.get(sessionId);
+  if (!s) return null;
+  if (s.tenantId !== tenantId) return null;
+  return s;
+}
+
+async function writeSession(sessionId: string, s: Session): Promise<void> {
+  s.lastActiveAt = Date.now();
+  if (redis) {
+    await redis.setEx(redisKey(sessionId), SESSION_TTL_SECONDS, JSON.stringify(s));
+  } else {
+    sessions.set(sessionId, s);
+  }
+}
+
+async function getOrCreate(sessionId: string, tenantId: string): Promise<Session> {
+  const existing = await readSession(sessionId, tenantId);
+  if (existing) { existing.lastActiveAt = Date.now(); await writeSession(sessionId, existing); return existing; }
+  // If a session with same id exists under another tenant, we treat it as "not ours" and create a new one under our tenant.
+  // (Collisions are possible only if sessionIds aren't random — our generator uses crypto.randomUUID so it's safe.)
   const s: Session = { tenantId, messages: [], createdAt: Date.now(), lastActiveAt: Date.now() };
-  await redis!.setEx(redisKey(sessionId), SESSION_TTL_SECONDS, JSON.stringify(s));
+  await writeSession(sessionId, s);
   return s;
 }
 
@@ -76,35 +92,26 @@ export async function pushMessage(
   tenantId: string,
   msg: ConversationMessage,
 ): Promise<void> {
-  if (redis) {
-    const s = await redisGetOrCreate(sessionId, tenantId);
-    s.messages.push(msg);
-    if (s.messages.length > MAX_MESSAGES) {
-      s.messages = s.messages.slice(-MAX_MESSAGES);
-    }
-    s.lastActiveAt = Date.now();
-    await redis.setEx(redisKey(sessionId), SESSION_TTL_SECONDS, JSON.stringify(s));
-  } else {
-    const s = memGetOrCreate(sessionId, tenantId);
-    s.messages.push(msg);
-    if (s.messages.length > MAX_MESSAGES) {
-      s.messages = s.messages.slice(-MAX_MESSAGES);
-    }
+  const s = await getOrCreate(sessionId, tenantId);
+  s.messages.push(msg);
+  if (s.messages.length > MAX_MESSAGES) {
+    s.messages = s.messages.slice(-MAX_MESSAGES);
   }
+  await writeSession(sessionId, s);
 }
 
 export async function getMessages(
   sessionId: string,
   tenantId: string,
 ): Promise<ConversationMessage[]> {
-  if (redis) {
-    const s = await redisGetOrCreate(sessionId, tenantId);
-    return s.messages;
-  }
-  return memGetOrCreate(sessionId, tenantId).messages;
+  const s = await readSession(sessionId, tenantId);
+  return s ? s.messages : [];
 }
 
-export async function clearSession(sessionId: string): Promise<void> {
+/** Delete session — only if caller owns it (tenantId must match). */
+export async function clearSession(sessionId: string, tenantId: string): Promise<void> {
+  const s = await readSession(sessionId, tenantId);
+  if (!s) return;   // not found OR not ours — no-op (don't leak existence)
   if (redis) {
     await redis.del(redisKey(sessionId));
   } else {
@@ -113,7 +120,7 @@ export async function clearSession(sessionId: string): Promise<void> {
 }
 
 export async function listSessions(
-  tenantId?: string,
+  tenantId: string,
 ): Promise<{ sessionId: string; messageCount: number; lastActiveAt: number }[]> {
   if (redis) {
     const result: { sessionId: string; messageCount: number; lastActiveAt: number }[] = [];
@@ -125,7 +132,7 @@ export async function listSessions(
         const raw = await redis.get(key);
         if (!raw) continue;
         const s: Session = JSON.parse(raw);
-        if (tenantId && s.tenantId !== tenantId) continue;
+        if (s.tenantId !== tenantId) continue;
         const sessionId = key.replace(/^session:/, '');
         result.push({ sessionId, messageCount: s.messages.length, lastActiveAt: s.lastActiveAt });
       }
@@ -135,7 +142,7 @@ export async function listSessions(
 
   const result: { sessionId: string; messageCount: number; lastActiveAt: number }[] = [];
   for (const [id, s] of sessions) {
-    if (tenantId && s.tenantId !== tenantId) continue;
+    if (s.tenantId !== tenantId) continue;
     result.push({ sessionId: id, messageCount: s.messages.length, lastActiveAt: s.lastActiveAt });
   }
   return result.sort((a, b) => b.lastActiveAt - a.lastActiveAt);

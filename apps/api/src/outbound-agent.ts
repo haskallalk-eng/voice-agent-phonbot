@@ -231,6 +231,14 @@ export async function triggerSalesCall(params: {
   campaign?: string;
   campaignContext?: string;
 }): Promise<{ ok: boolean; callId?: string; outboundRecordId?: string; error?: string }> {
+  // Defense-in-depth: customer outbound sales calls are off unless feature flag is on.
+  // Routes already gate on requireCustomerOutbound, but this function is also imported
+  // from worker paths (auto-improve loops, scheduled campaigns); refusing at the
+  // function edge prevents silent reactivation through a future caller.
+  if (process.env.CUSTOMER_OUTBOUND_ENABLED !== 'true') {
+    return { ok: false, error: 'FEATURE_DISABLED' };
+  }
+
   if (!pool) return { ok: false, error: 'DB_NOT_CONFIGURED' };
 
   // Check usage limits before making outbound call
@@ -345,7 +353,12 @@ export async function registerOutbound(app: FastifyInstance) {
     if (!parsed.success) return reply.status(400).send({ error: 'toNumber required' });
 
     const result = await triggerSalesCall({ orgId, ...parsed.data });
-    if (!result.ok) return reply.status(result.error === 'NO_OUTBOUND_NUMBER' ? 422 : 500).send(result);
+    if (!result.ok) {
+      const statusCode = result.error === 'FEATURE_DISABLED' ? 503
+        : result.error === 'NO_OUTBOUND_NUMBER' ? 422
+        : 500;
+      return reply.status(statusCode).send(result);
+    }
     return result;
   });
 

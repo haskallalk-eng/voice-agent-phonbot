@@ -355,6 +355,7 @@ export async function registerAuth(app: FastifyInstance) {
         await fetch(`https://api.retellai.com/delete-agent/${encodeURIComponent(id)}`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${retellKey}` },
+          signal: AbortSignal.timeout(10_000),
         }).catch(() => {/* non-critical */});
       }
       // Also delete LLM configs (zombie costs)
@@ -366,6 +367,7 @@ export async function registerAuth(app: FastifyInstance) {
         await fetch(`https://api.retellai.com/delete-retell-llm/${encodeURIComponent(id)}`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${retellKey}` },
+          signal: AbortSignal.timeout(10_000),
         }).catch(() => {/* non-critical */});
       }
     }
@@ -388,14 +390,14 @@ export async function registerAuth(app: FastifyInstance) {
           const auth = 'Basic ' + Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64');
           const listRes = await fetch(
             `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/IncomingPhoneNumbers.json?PhoneNumber=${encodeURIComponent(number)}`,
-            { headers: { Authorization: auth } },
+            { headers: { Authorization: auth }, signal: AbortSignal.timeout(10_000) },
           );
           const listData = await listRes.json() as { incoming_phone_numbers?: Array<{ sid: string }> };
           const phoneSid = listData.incoming_phone_numbers?.[0]?.sid;
           if (phoneSid) {
             await fetch(
               `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/IncomingPhoneNumbers/${phoneSid}.json`,
-              { method: 'DELETE', headers: { Authorization: auth } },
+              { method: 'DELETE', headers: { Authorization: auth }, signal: AbortSignal.timeout(10_000) },
             );
           }
         } catch {/* non-critical */}
@@ -405,7 +407,7 @@ export async function registerAuth(app: FastifyInstance) {
       if (retellKey) {
         await fetch(
           `https://api.retellai.com/delete-phone-number/${encodeURIComponent(number)}`,
-          { method: 'DELETE', headers: { Authorization: `Bearer ${retellKey}` } },
+          { method: 'DELETE', headers: { Authorization: `Bearer ${retellKey}` }, signal: AbortSignal.timeout(10_000) },
         ).catch(() => {/* non-critical */});
       }
     }

@@ -197,6 +197,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     await appendTraceEvent({
       type: 'tool_call',
       sessionId: (args._retell_call_id as string | undefined) ?? 'retell',
+      tenantId: orgIdForSlots ?? undefined,
       tool: 'calendar.findSlots',
       input: args,
       at: now(),
@@ -226,6 +227,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     await appendTraceEvent({
       type: 'tool_result',
       sessionId: (args._retell_call_id as string | undefined) ?? 'retell',
+      tenantId: orgIdForSlots ?? undefined,
       tool: 'calendar.findSlots',
       output: result,
       at: now(),
@@ -249,6 +251,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     await appendTraceEvent({
       type: 'tool_call',
       sessionId: (args._retell_call_id as string | undefined) ?? 'retell',
+      tenantId: orgIdForBook ?? undefined,
       tool: 'calendar.book',
       input: args,
       at: now(),
@@ -292,6 +295,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     await appendTraceEvent({
       type: 'tool_result',
       sessionId: (args._retell_call_id as string | undefined) ?? 'retell',
+      tenantId: orgIdForBook ?? undefined,
       tool: 'calendar.book',
       output: result,
       at: now(),
@@ -309,18 +313,19 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const body = req.body as RetellEventBody;
     const args = (body?.args ?? body ?? {}) as Record<string, unknown>;
 
-    await appendTraceEvent({
-      type: 'tool_call',
-      sessionId: (args._retell_call_id as string | undefined) ?? 'retell',
-      tool: 'ticket.create',
-      input: args,
-      at: now(),
-    } as Parameters<typeof appendTraceEvent>[0]);
-
     // Resolve tenantId from the agent_id in the request (falls back to 'demo' for backward compat)
     const agentId = (args._retell_agent_id as string | undefined) ?? (args.agent_id as string | undefined);
     const orgId = agentId ? await getOrgIdByAgentId(agentId) : null;
     const tenantId = orgId ?? 'demo';
+
+    await appendTraceEvent({
+      type: 'tool_call',
+      sessionId: (args._retell_call_id as string | undefined) ?? 'retell',
+      tenantId: orgId ?? undefined,
+      tool: 'ticket.create',
+      input: args,
+      at: now(),
+    } as Parameters<typeof appendTraceEvent>[0]);
 
     try {
       const preferredTime = args.preferredTime as string | undefined;
@@ -362,6 +367,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       await appendTraceEvent({
         type: 'tool_result',
         sessionId: (args._retell_call_id as string | undefined) ?? 'retell',
+        tenantId: orgId ?? undefined,
         tool: 'ticket.create',
         output: result,
         at: now(),

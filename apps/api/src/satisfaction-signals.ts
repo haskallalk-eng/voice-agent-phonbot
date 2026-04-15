@@ -72,6 +72,7 @@ export async function extractSignalsFromCall(
     from_number?: string;
     call_id?: string;
     silence_duration_ms?: number;
+    org_id?: string;
   },
   gptSignals: GptSatisfactionSignals,
 ): Promise<SatisfactionSignals> {
@@ -86,17 +87,21 @@ export async function extractSignalsFromCall(
       ? callData.silence_duration_ms / (callData.duration_ms ?? 1)
       : 0;
 
-  // Repeat caller — same number called in the last 7 days (excluding this call)
+  // Repeat caller — same number called THIS org in the last 7 days (excluding this call).
+  // CRITICAL: scope by org_id. Otherwise a caller who dialled Org A yesterday and Org B
+  // today would be flagged as a repeat caller for Org B → wrongly penalises Org B's score
+  // and pollutes cross-org training signals.
   let repeatCaller = false;
-  if (pool && callData.from_number && callData.call_id) {
+  if (pool && callData.from_number && callData.call_id && callData.org_id) {
     try {
       const res = await pool.query(
         `SELECT 1 FROM call_transcripts
          WHERE from_number = $1
+           AND org_id = $2
            AND created_at > now() - interval '7 days'
-           AND call_id != $2
+           AND call_id != $3
          LIMIT 1`,
-        [callData.from_number, callData.call_id],
+        [callData.from_number, callData.org_id, callData.call_id],
       );
       repeatCaller = res.rows.length > 0;
     } catch { /* default false */ }
@@ -120,24 +125,29 @@ export async function extractSignalsFromCall(
  */
 export async function storeSatisfactionData(
   callId: string,
+  orgId: string,
   score: number,
   signals: SatisfactionSignals,
   disconnectionReason: string | null | undefined,
 ): Promise<void> {
   if (!pool) return;
+  // Scope UPDATE by org_id too — defense in depth. Retell call_ids are UUIDs
+  // (collision-unlikely) but a cross-tenant update would be catastrophic, so
+  // always require the org match.
   await pool.query(
     `UPDATE call_transcripts
      SET satisfaction_score     = $1,
          satisfaction_signals   = $2,
          repeat_caller          = $3,
          disconnection_reason   = $4
-     WHERE call_id = $5`,
+     WHERE call_id = $5 AND org_id = $6`,
     [
       score,
       JSON.stringify(signals),
       signals.repeatCaller,
       disconnectionReason ?? null,
       callId,
+      orgId,
     ],
   );
 }

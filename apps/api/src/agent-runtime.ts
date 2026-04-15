@@ -78,7 +78,7 @@ export async function runAgentTurn(input: {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     const reply = 'Der Voice-Agent ist gerade nicht konfiguriert. Bitte API-Key hinterlegen.';
-    await appendTraceEvent({ type: 'agent_text', sessionId: input.sessionId, text: reply, at: now() } as Parameters<typeof appendTraceEvent>[0]);
+    await appendTraceEvent({ type: 'agent_text', sessionId: input.sessionId, tenantId: input.tenantId, text: reply, at: now() } as Parameters<typeof appendTraceEvent>[0]);
     return { text: reply };
   }
 
@@ -109,6 +109,9 @@ export async function runAgentTurn(input: {
         input: apiInput,
         tools: tools.length ? tools : undefined,
       }),
+      // Per-round 30s timeout — prevents an OpenAI hang from stalling a /chat
+      // Fastify worker indefinitely (cascading pool saturation on outage).
+      signal: AbortSignal.timeout(30_000),
     });
 
     if (!res.ok) {
@@ -129,7 +132,7 @@ export async function runAgentTurn(input: {
         const toolArgs = call?.arguments ? (JSON.parse(call.arguments) as Record<string, unknown>) : {};
 
         await appendTraceEvent({
-          type: 'tool_call', sessionId: input.sessionId,
+          type: 'tool_call', sessionId: input.sessionId, tenantId: input.tenantId,
           tool: toolName, input: toolArgs, at: now(),
         } as Parameters<typeof appendTraceEvent>[0]);
 
@@ -143,7 +146,7 @@ export async function runAgentTurn(input: {
         });
 
         await appendTraceEvent({
-          type: 'tool_result', sessionId: input.sessionId,
+          type: 'tool_result', sessionId: input.sessionId, tenantId: input.tenantId,
           tool: toolName, output: result, at: now(),
         } as Parameters<typeof appendTraceEvent>[0]);
 

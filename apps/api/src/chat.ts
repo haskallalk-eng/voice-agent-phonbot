@@ -29,6 +29,7 @@ export async function registerChat(app: FastifyInstance) {
     await appendTraceEvent({
       type: 'user_transcript_final',
       sessionId: body.sessionId,
+      tenantId: orgId,
       text: body.text,
       at: Date.now(),
     } as TraceEvent);
@@ -43,6 +44,7 @@ export async function registerChat(app: FastifyInstance) {
     await appendTraceEvent({
       type: 'agent_text',
       sessionId: body.sessionId,
+      tenantId: orgId,
       text: reply.text,
       at: Date.now(),
     } as TraceEvent);
@@ -58,10 +60,11 @@ export async function registerChat(app: FastifyInstance) {
     return { sessionId: params.sessionId, messages };
   });
 
-  // Clear / reset a conversation session (scoped via session ownership at store level).
+  // Clear / reset a conversation session (scoped to caller's org — no-op if session belongs elsewhere).
   app.delete('/chat/:sessionId', { ...auth }, async (req: FastifyRequest, reply) => {
+    const { orgId } = req.user as JwtPayload;
     const params = z.object({ sessionId: z.string().min(1) }).parse(req.params);
-    await clearSession(params.sessionId);
+    await clearSession(params.sessionId, orgId);
     reply.code(204);
     return;
   });

@@ -1,5 +1,5 @@
 import React from 'react';
-import { PhonbotBrand } from '../FoxLogo.js';
+import { NavHeader } from './NavHeader.js';
 import { FooterSection } from './FooterSection.js';
 import { ContactSection } from './ContactSection.js';
 import { LegalModal } from '../LegalModal.js';
@@ -24,29 +24,24 @@ export function ContactPage({ onGoToRegister, onGoToLogin, onBack }: Props) {
           style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.08) 0%, transparent 70%)', animationDelay: '1.5s' }} />
       </div>
 
-      {/* Simple nav — links go back to landing */}
-      <header className="relative z-20 border-b border-white/5 backdrop-blur-md bg-[#0A0A0F]/80 sticky top-0">
-        <div className="flex items-center justify-between px-6 py-4 max-w-6xl mx-auto">
-          <button onClick={onBack} className="cursor-pointer">
-            <PhonbotBrand size="sm" />
-          </button>
-          <nav className="hidden md:flex items-center gap-8">
-            <button onClick={onBack} className="text-sm text-white/60 hover:text-white transition-colors duration-200">Demo</button>
-            <button onClick={onBack} className="text-sm text-white/60 hover:text-white transition-colors duration-200">Features</button>
-            <button onClick={onBack} className="text-sm text-white/60 hover:text-white transition-colors duration-200">Preise</button>
-            <button onClick={onBack} className="text-sm text-white/60 hover:text-white transition-colors duration-200">FAQ</button>
-            <span className="text-sm text-white font-medium">Kontakt</span>
-          </nav>
-          <div className="flex items-center gap-4">
-            <button onClick={onGoToLogin} className="text-sm text-white/60 hover:text-white transition-colors duration-200 hidden sm:block">Einloggen</button>
-            <button onClick={onGoToRegister}
-              className="text-sm font-semibold text-white rounded-full px-5 py-2.5 transition-all duration-300 hover:shadow-[0_0_24px_rgba(249,115,22,0.5)] hover:scale-105 hidden sm:block"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
-              Kostenlos testen
-            </button>
-          </div>
-        </div>
-      </header>
+      <NavHeader
+        onGoToRegister={onGoToRegister}
+        onGoToLogin={onGoToLogin}
+        onGoToContact={() => { /* already here */ }}
+        activePage="contact"
+        onNavigate={(anchor) => {
+          // Go back to landing, then let the hash scroll it into place.
+          window.location.hash = anchor;
+          onBack();
+        }}
+        onSelectIndustry={(id) => {
+          // Navigate back to landing with ?demo=<id> — DemoSection auto-triggers on mount.
+          const url = new URL(window.location.href);
+          url.searchParams.set('demo', id);
+          window.history.replaceState({}, '', url.toString());
+          onBack();
+        }}
+      />
 
       <div className="flex-1">
         <ContactSection />

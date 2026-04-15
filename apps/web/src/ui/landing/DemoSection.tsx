@@ -168,20 +168,25 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
     setAgentTalking(false);
   }
 
-  // Auto-start demo from URL param (?demo=hairdresser) — triggered when user comes from sub-landing
+  // Auto-start demo from URL param (?demo=hairdresser) — triggered either on initial
+  // mount (sub-landing link) or via the 'phonbot:demo-param-updated' custom event
+  // (Branchen dropdown in NavHeader, which updates the URL in-place without unmount).
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const demoTemplate = params.get('demo');
-    if (demoTemplate && TEMPLATES.some((t) => t.id === demoTemplate)) {
-      // Scroll to demo section after a brief delay, then auto-start
+    const triggerFromUrl = () => {
+      const params = new URLSearchParams(window.location.search);
+      const demoTemplate = params.get('demo');
+      if (!demoTemplate || !TEMPLATES.some((t) => t.id === demoTemplate)) return;
       setTimeout(() => {
         document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         setTimeout(() => handleTemplateClick(demoTemplate), 800);
       }, 300);
-      // Clean up URL so reload doesn't re-trigger
+      // Clean up URL so reload / re-emit doesn't re-trigger
       const newUrl = window.location.pathname + window.location.hash;
       window.history.replaceState({}, '', newUrl);
-    }
+    };
+    triggerFromUrl();
+    window.addEventListener('phonbot:demo-param-updated', triggerFromUrl);
+    return () => window.removeEventListener('phonbot:demo-param-updated', triggerFromUrl);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -220,7 +220,9 @@ export async function registerTickets(app: FastifyInstance) {
     });
 
     if (!result.ok) {
-      const statusCode = result.error === 'NO_OUTBOUND_NUMBER' ? 422 : 500;
+      const statusCode = result.error === 'FEATURE_DISABLED' ? 503
+        : result.error === 'NO_OUTBOUND_NUMBER' ? 422
+        : 500;
       return reply.status(statusCode).send(result);
     }
 

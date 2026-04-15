@@ -35,7 +35,26 @@ const SENTRY_DSN = process.env.SENTRY_DSN ?? '';
 
 // trustProxy: behind Caddy reverse-proxy we need real client IPs (for rate-limit + logs).
 // 'true' trusts all hops — safe here because only Caddy can reach the API container.
-const app = Fastify({ logger: true, trustProxy: true });
+const app = Fastify({
+  // Redact secrets from structured log output so Sentry/docker-logs/stdout don't
+  // archive Bearer tokens or cookie jars. Pino redacts by full path; `*.authorization`
+  // covers both inbound req.headers and outbound fetch breadcrumbs.
+  logger: {
+    redact: {
+      paths: [
+        'req.headers.authorization',
+        'req.headers.cookie',
+        'req.headers["x-api-key"]',
+        'req.headers["x-retell-signature"]',
+        'req.headers["stripe-signature"]',
+        '*.authorization',
+        '*.password',
+      ],
+      censor: '[REDACTED]',
+    },
+  },
+  trustProxy: true,
+});
 await app.register(websocket);
 // Twilio webhooks (TwiML, StatusCallback) use application/x-www-form-urlencoded.
 // Without this plugin Fastify returns 415 Unsupported Media Type.

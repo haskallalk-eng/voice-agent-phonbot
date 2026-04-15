@@ -31,4 +31,12 @@ ENV NODE_ENV=production
 ENV PORT=3001
 EXPOSE 3001
 
+# Drop root — the `node` user (uid 1000) is built into node:*-alpine images.
+# Prevents container-escape attacker from owning root on the host.
+USER node
+
+# Container-level health check so Docker/Compose restarts stuck processes.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -qO- http://localhost:3001/health >/dev/null 2>&1 || exit 1
+
 CMD ["node", "apps/api/dist/index.js"]

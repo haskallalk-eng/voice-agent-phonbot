@@ -44,7 +44,23 @@ export function LandingPage({ onGoToRegister, onGoToLogin, onGoToContact }: Prop
       </div>
 
       {/* ── NAV ── */}
-      <NavHeader onGoToRegister={onGoToRegister} onGoToLogin={onGoToLogin} onGoToContact={onGoToContact} />
+      <NavHeader
+        onGoToRegister={onGoToRegister}
+        onGoToLogin={onGoToLogin}
+        onGoToContact={onGoToContact}
+        activePage="landing"
+        onSelectIndustry={(id) => {
+          // Set ?demo=<id> and jump to the demo section — DemoSection already
+          // picks the param up and auto-triggers the web call, then strips it.
+          const url = new URL(window.location.href);
+          url.searchParams.set('demo', id);
+          window.history.replaceState({}, '', url.toString());
+          document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' });
+          // Fire a popstate-ish signal so DemoSection re-reads the URL if it listens,
+          // otherwise a scroll is enough — the param will be read on next mount.
+          window.dispatchEvent(new Event('phonbot:demo-param-updated'));
+        }}
+      />
 
       <main id="main" role="main">
         {/* ── HERO + TRUST BAR ── */}

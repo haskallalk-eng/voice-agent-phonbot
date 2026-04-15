@@ -140,6 +140,15 @@ async function retellImportPhoneNumber(phoneNumber: string, agentId?: string) {
   const key = process.env.RETELL_API_KEY;
   if (!key) throw new Error('RETELL_API_KEY not set');
 
+  // SIP trunk credentials must be explicit — defaulting to the published example
+  // ('phonbot_retell') effectively publishes our trunk password in the repo and
+  // lets anyone register to anfangtelebot.pstn.twilio.com → inbound call hijack.
+  const sipUser = process.env.SIP_TRUNK_USERNAME;
+  const sipPass = process.env.SIP_TRUNK_PASSWORD;
+  if (!sipUser || !sipPass) {
+    throw new Error('SIP_TRUNK_USERNAME and SIP_TRUNK_PASSWORD must be set — refusing to import phone number with default creds');
+  }
+
   // Import as custom SIP number with Twilio trunk config
   const res = await fetch(`${RETELL_API}/import-phone-number`, {
     method: 'POST',
@@ -147,11 +156,12 @@ async function retellImportPhoneNumber(phoneNumber: string, agentId?: string) {
     body: JSON.stringify({
       phone_number: phoneNumber,
       termination_uri: process.env.SIP_TERMINATION_URI ?? 'anfangtelebot.pstn.twilio.com',
-      sip_trunk_auth_username: process.env.SIP_TRUNK_USERNAME ?? 'phonbot_retell',
-      sip_trunk_auth_password: process.env.SIP_TRUNK_PASSWORD ?? 'phonbot_retell',
+      sip_trunk_auth_username: sipUser,
+      sip_trunk_auth_password: sipPass,
       sip_trunk_transport: 'TCP',
       ...(agentId ? { inbound_agent_id: agentId } : {}),
     }),
+    signal: AbortSignal.timeout(15_000),
   });
 
   if (!res.ok) throw new Error(`Retell: ${res.status} ${await res.text()}`);
@@ -695,11 +705,13 @@ export async function registerPhone(app: FastifyInstance) {
     }
   });
 
-  // POST /phone/admin/seed-pool — add existing phone numbers to the pool (admin only)
-  // Used to seed pool with numbers already purchased in Twilio
+  // POST /phone/admin/seed-pool — add existing phone numbers to the pool (platform-admin only)
+  // Gated on payload.admin (set only by /admin/login) — NOT on role:'owner' since every
+  // registered user automatically becomes 'owner' of their own org (previous check was
+  // effectively no-op → anyone could seed the shared pool with junk numbers).
   app.post('/phone/admin/seed-pool', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { role } = req.user as JwtPayload;
-    if (role !== 'owner') return reply.status(403).send({ error: 'Admin only' });
+    const payload = req.user as Record<string, unknown>;
+    if (!payload.admin) return reply.status(403).send({ error: 'Platform-admin only' });
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
     const parsed = z.object({
@@ -735,10 +747,12 @@ export async function registerPhone(app: FastifyInstance) {
     return { ok: true, results };
   });
 
-  // GET /phone/admin/pool — list all pool numbers (admin only)
+  // GET /phone/admin/pool — list all pool numbers (platform-admin only)
+  // Leaks every org's phone-number → org_id mapping if gated only by role:'owner',
+  // since every user is owner of their own org. Require payload.admin (platform admin).
   app.get('/phone/admin/pool', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { role } = req.user as JwtPayload;
-    if (role !== 'owner') return reply.status(403).send({ error: 'Admin only' });
+    const payload = req.user as Record<string, unknown>;
+    if (!payload.admin) return reply.status(403).send({ error: 'Platform-admin only' });
     if (!pool) return { items: [] };
 
     const { rows } = await pool.query(

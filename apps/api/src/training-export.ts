@@ -143,22 +143,25 @@ async function _generateTrainingExamplesImpl(limit: number): Promise<number> {
 async function generateDpoPairs(): Promise<void> {
   if (!pool) return;
 
-  // Find industries with both good and bad examples not yet paired
-  const industriesRes = await pool.query(
-    `SELECT industry FROM training_examples
-     WHERE quality_label IN ('good', 'bad') AND industry IS NOT NULL
-     GROUP BY industry
+  // Find (org_id, industry) pairs that have BOTH good and bad examples.
+  // CRITICAL: group by org_id too — never pair a good example from tenant A
+  // with a bad example from tenant B, which would leak cross-tenant transcripts
+  // through the DPO rejected-completion field.
+  const pairsRes = await pool.query(
+    `SELECT org_id, industry FROM training_examples
+     WHERE quality_label IN ('good', 'bad') AND industry IS NOT NULL AND org_id IS NOT NULL
+     GROUP BY org_id, industry
      HAVING COUNT(DISTINCT quality_label) = 2`,
   );
 
-  for (const row of industriesRes.rows as Array<{ industry: string }>) {
-    const industry = row.industry;
+  for (const row of pairsRes.rows as Array<{ org_id: string; industry: string }>) {
+    const { org_id: orgId, industry } = row;
 
-    // Get one good and one bad example for this industry
+    // Get one good and one bad example for this (org, industry) pair
     const [goodRes, badRes] = await Promise.all([
       pool.query(
         `SELECT id, messages, system_prompt, score FROM training_examples
-         WHERE industry = $1 AND quality_label = 'good'
+         WHERE org_id = $1 AND industry = $2 AND quality_label = 'good'
            AND id NOT IN (
              SELECT (metadata->>'good_id')::uuid FROM training_examples
              WHERE example_type = 'dpo_pair'
@@ -166,11 +169,11 @@ async function generateDpoPairs(): Promise<void> {
                AND metadata->>'good_id' ~ '^[0-9a-f]{8}-'
            )
          ORDER BY score DESC LIMIT 1`,
-        [industry],
+        [orgId, industry],
       ),
       pool.query(
         `SELECT id, messages, system_prompt, score FROM training_examples
-         WHERE industry = $1 AND quality_label = 'bad'
+         WHERE org_id = $1 AND industry = $2 AND quality_label = 'bad'
            AND id NOT IN (
              SELECT (metadata->>'bad_id')::uuid FROM training_examples
              WHERE example_type = 'dpo_pair'
@@ -178,7 +181,7 @@ async function generateDpoPairs(): Promise<void> {
                AND metadata->>'bad_id' ~ '^[0-9a-f]{8}-'
            )
          ORDER BY score ASC LIMIT 1`,
-        [industry],
+        [orgId, industry],
       ),
     ]);
 
@@ -188,9 +191,10 @@ async function generateDpoPairs(): Promise<void> {
 
     await pool.query(
       `INSERT INTO training_examples
-         (example_type, direction, industry, system_prompt, messages, quality_label, metadata)
-       VALUES ('dpo_pair', 'inbound', $1, $2, $3, 'dpo', $4)`,
+         (org_id, example_type, direction, industry, system_prompt, messages, quality_label, metadata)
+       VALUES ($1, 'dpo_pair', 'inbound', $2, $3, $4, 'dpo', $5)`,
       [
+        orgId,
         industry,
         good.system_prompt ?? null,
         JSON.stringify({ chosen: good.messages, rejected: bad.messages }),

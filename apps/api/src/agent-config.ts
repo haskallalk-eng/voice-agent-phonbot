@@ -267,6 +267,14 @@ export async function triggerCallback(params: {
   reason?: string | null;
   service?: string | null;
 }): Promise<{ ok: boolean; callId?: string; error?: string }> {
+  // Customer-outbound feature flag. Phonbot ist INBOUND-only; Kunden-Rückrufe sind
+  // aktuell nicht als Produkt-Feature freigegeben. Einziger legitimer Outbound-Pfad
+  // ist der Sales-Callback vom Landingpage-Demo-Formular (siehe demo.ts → getOrCreateSalesAgent),
+  // der nicht über triggerCallback läuft. Zum Reaktivieren: CUSTOMER_OUTBOUND_ENABLED=true.
+  if (process.env.CUSTOMER_OUTBOUND_ENABLED !== 'true') {
+    return { ok: false, error: 'FEATURE_DISABLED' };
+  }
+
   try {
     // Get the org's first deployed config
     let config: AgentConfig | null = null;

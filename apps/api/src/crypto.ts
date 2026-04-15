@@ -13,11 +13,18 @@ const PREFIX = 'enc:v1:';
 let key: Buffer | null = null;
 if (ENCRYPTION_KEY_HEX) {
   if (!/^[0-9a-fA-F]{64}$/.test(ENCRYPTION_KEY_HEX)) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('[crypto] ENCRYPTION_KEY must be 64 hex chars — refusing to boot in production with invalid key');
+    }
     process.stderr.write('[crypto] ENCRYPTION_KEY must be 64 hex chars (32 bytes) — encryption DISABLED\n');
   } else {
     key = Buffer.from(ENCRYPTION_KEY_HEX, 'hex');
   }
 } else {
+  // Fail closed in prod — silent plaintext storage of OAuth tokens is unacceptable.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('[crypto] ENCRYPTION_KEY is required in production (openssl rand -hex 32) — refusing to boot with plaintext token storage');
+  }
   process.stderr.write('[crypto] ENCRYPTION_KEY not set — tokens stored plaintext. Generate: openssl rand -hex 32\n');
 }
 

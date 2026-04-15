@@ -6,9 +6,18 @@ import type { JwtPayload } from './auth.js';
 import { encrypt as encryptToken, decrypt as decryptToken } from './crypto.js';
 import crypto from 'node:crypto';
 
-// OAuth state uses separate HMAC key (defense-in-depth vs global JWT_SECRET leak).
-// Falls back to JWT_SECRET if OAUTH_STATE_SECRET not set.
-const OAUTH_STATE_KEY = process.env.OAUTH_STATE_SECRET || process.env.JWT_SECRET || 'dev-oauth-state';
+// OAuth state uses a SEPARATE HMAC key (defense-in-depth: a JWT_SECRET leak must
+// not also grant OAuth-state forgery, which would let an attacker bind their
+// calendar to someone else's org). In production we require OAUTH_STATE_SECRET
+// explicitly — falling back to JWT_SECRET defeats the isolation and 'dev-oauth-state'
+// is only acceptable for local development.
+const OAUTH_STATE_KEY = (() => {
+  if (process.env.OAUTH_STATE_SECRET) return process.env.OAUTH_STATE_SECRET;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('OAUTH_STATE_SECRET is required in production — refusing to reuse JWT_SECRET for OAuth state HMAC');
+  }
+  return process.env.JWT_SECRET || 'dev-oauth-state';
+})();
 const OAUTH_STATE_TTL_SEC = 600;
 
 function signOAuthState(orgId: string, provider: 'google' | 'microsoft'): string {

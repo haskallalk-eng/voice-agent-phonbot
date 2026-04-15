@@ -7,6 +7,12 @@
 
 const RETELL_API = 'https://api.retellai.com';
 
+// Default voice for new demo agents + fallback when an agent config has no explicit voice.
+// "chipy" (Cartesia clone of user's recording) — if the voice is deleted at Retell, set
+// RETELL_DEFAULT_VOICE_ID in the env to a different voice without a code deploy.
+export const DEFAULT_VOICE_ID =
+  process.env.RETELL_DEFAULT_VOICE_ID ?? 'custom_voice_28bd4920fa6523c6ac8c4e527b';
+
 function getApiKey(): string {
   const key = process.env.RETELL_API_KEY;
   if (!key) throw new Error('RETELL_API_KEY not set');
@@ -135,7 +141,7 @@ export async function createAgent(config: {
     body: JSON.stringify({
       agent_name: config.name,
       response_engine: { type: 'retell-llm', llm_id: config.llmId },
-      voice_id: config.voiceId ?? 'custom_voice_28bd4920fa6523c6ac8c4e527b',
+      voice_id: config.voiceId ?? DEFAULT_VOICE_ID,
       language: config.language ?? 'de-DE',
       interruption_sensitivity: 1.0,
       enable_backchannel: true,

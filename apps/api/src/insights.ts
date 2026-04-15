@@ -843,7 +843,7 @@ Falls keine Probleme: bad_moments leer. satisfaction_signals ist immer auszufül
     `UPDATE call_transcripts SET
        score = $1, bad_moments = $2, agent_prompt = $3,
        industry = $4, template_id = $5, outcome = $6
-     WHERE call_id = $7`,
+     WHERE call_id = $7 AND org_id = $8`,
     [
       analysis.score,
       JSON.stringify(analysis.bad_moments),
@@ -852,17 +852,18 @@ Falls keine Probleme: bad_moments leer. satisfaction_signals ist immer auszufül
       ctx.templateId ?? null,
       analysis.overall_feedback?.toLowerCase().includes('ticket') ? 'ticket' : 'resolved',
       callId,
+      orgId,
     ],
   ).catch(() => {});
 
   // Compute and store implicit satisfaction score (fire-and-forget)
   if (callMeta) {
     extractSignalsFromCall(
-      { ...callMeta, call_id: callId },
+      { ...callMeta, call_id: callId, org_id: orgId },
       analysis.satisfaction_signals ?? {},
     ).then(signals => {
       const satScore = computeSatisfactionScore(signals);
-      return storeSatisfactionData(callId, satScore, signals, callMeta.disconnection_reason ?? null);
+      return storeSatisfactionData(callId, orgId, satScore, signals, callMeta.disconnection_reason ?? null);
     }).catch(() => {});
   }
 

@@ -29,9 +29,14 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const TOKEN_KEY = 'vas_token';
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  // 10s timeout — prevents hung logins/me-calls from freezing the UI indefinitely
+  // if the API is unreachable (e.g. during deploy). AbortSignal.timeout is widely
+  // supported in all modern browsers; we use `any` fallback to combine with a
+  // caller-supplied signal if one was passed.
   const res = await fetch(`/api${path}`, {
     ...init,
     headers: { 'content-type': 'application/json', ...init?.headers },
+    signal: init?.signal ?? AbortSignal.timeout(10_000),
   });
   const text = await res.text();
   let data: Record<string, unknown> | null = null;

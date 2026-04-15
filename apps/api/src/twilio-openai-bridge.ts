@@ -195,6 +195,16 @@ export async function registerTwilioBridge(app: FastifyInstance) {
     const session = await getSession(sessionId);
     const openaiKey = process.env.OPENAI_API_KEY;
 
+    // Require a valid, server-created session. Without this, anyone with a guessable
+    // sessionId could open a WS → pipe audio to OpenAI on our dime and exfiltrate TTS.
+    // Twilio Media Streams don't send an Origin header, so we can't use origin checks;
+    // rely on the UUID session secret + existence-in-Redis as the authenticator.
+    if (!session) {
+      app.log.warn({ sessionId, ip: req.ip }, 'Rejecting outbound WS — session not found or expired');
+      socket.close();
+      return;
+    }
+
     if (!openaiKey) {
       app.log.warn('OPENAI_API_KEY not set — closing bridge WebSocket');
       socket.close();

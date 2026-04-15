@@ -8,10 +8,23 @@
  *   POST /learning/apply-to-template/:templateId    — apply top learnings to a template
  */
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import OpenAI from 'openai';
 import { pool } from './db.js';
-import type { JwtPayload } from './auth.js';
+
+// Gate cross-tenant aggregate reads (template_learnings + conversation_patterns
+// pool data across all orgs, so only platform admins may read them directly).
+async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
+  try {
+    await req.jwtVerify();
+    const payload = req.user as Record<string, unknown>;
+    if (!payload.admin) {
+      reply.status(403).send({ error: 'Admin access required' });
+    }
+  } catch {
+    reply.status(401).send({ error: 'Unauthorized' });
+  }
+}
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? '' });
 const MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
@@ -21,7 +34,7 @@ export async function registerLearningApi(app: FastifyInstance): Promise<void> {
   // ── GET /learning/templates/:templateId/learnings ──────────────────────────
   app.get<{ Params: { templateId: string }; Querystring: { status?: string; limit?: string } }>(
     '/learning/templates/:templateId/learnings',
-    { onRequest: [app.authenticate] },
+    { onRequest: [requireAdmin] },
     async (req, reply) => {
       if (!pool) return reply.status(503).send({ error: 'Database not available' });
 
@@ -46,7 +59,7 @@ export async function registerLearningApi(app: FastifyInstance): Promise<void> {
   // ── GET /learning/patterns ─────────────────────────────────────────────────
   app.get<{ Querystring: { industry?: string; pattern_type?: string; limit?: string } }>(
     '/learning/patterns',
-    { onRequest: [app.authenticate] },
+    { onRequest: [requireAdmin] },
     async (req, reply) => {
       if (!pool) return reply.status(503).send({ error: 'Database not available' });
 
@@ -72,7 +85,7 @@ export async function registerLearningApi(app: FastifyInstance): Promise<void> {
   // ── GET /learning/stats ────────────────────────────────────────────────────
   app.get(
     '/learning/stats',
-    { onRequest: [app.authenticate] },
+    { onRequest: [requireAdmin] },
     async (_req, reply) => {
       if (!pool) return reply.status(503).send({ error: 'Database not available' });
 

@@ -5,7 +5,7 @@
 import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { createWebCall, createLLM, createAgent as retellCreateAgent, createPhoneCall, updatePhoneNumber } from './retell.js';
+import { createWebCall, createLLM, createAgent as retellCreateAgent, createPhoneCall, updatePhoneNumber, DEFAULT_VOICE_ID } from './retell.js';
 import { TEMPLATES } from './templates.js';
 import { pool } from './db.js';
 import { redis } from './redis.js';
@@ -103,7 +103,7 @@ export async function getOrCreateSalesAgent(): Promise<string> {
   const agent = await retellCreateAgent({
     name: 'Phonbot Sales Callback',
     llmId: llm.llm_id,
-    voiceId: 'custom_voice_28bd4920fa6523c6ac8c4e527b',
+    voiceId: DEFAULT_VOICE_ID,
     language: 'de-DE',
   });
 

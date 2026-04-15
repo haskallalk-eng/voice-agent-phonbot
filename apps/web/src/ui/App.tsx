@@ -254,7 +254,21 @@ type Gate = 'landing' | 'login' | 'register' | 'contact' | 'app';
 
 function AppGate() {
   const { token, user } = useAuth();
-  const [gate, setGate] = useState<Gate>('landing');
+  // Initial gate can be deep-linked from static sub-pages (industry landings) via
+  // ?page=contact | login | register. Let /?page=contact → ContactPage on first load
+  // so the industry-page nav can link straight to those gates.
+  const [gate, setGate] = useState<Gate>(() => {
+    if (typeof window === 'undefined') return 'landing';
+    const p = new URLSearchParams(window.location.search).get('page');
+    if (p === 'contact' || p === 'login' || p === 'register') {
+      // Strip the param so a reload doesn't re-force the gate.
+      const url = new URL(window.location.href);
+      url.searchParams.delete('page');
+      window.history.replaceState({}, '', url.toString());
+      return p as Gate;
+    }
+    return 'landing';
+  });
 
   if (token && !user) {
     return (
