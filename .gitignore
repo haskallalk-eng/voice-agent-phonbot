@@ -14,3 +14,9 @@ logs & Database
 .log
 # pnpm-lock.yaml intentionally tracked (needed for Docker --frozen-lockfile)
 
+
+# Live agent coordination — never tracked.
+# `.coordination/` was vaso's bootstrap path, superseded by termi's `.collab/`
+# on 2026-04-15. Both patterns are ignored defensively.
+.coordination/
+.collab/

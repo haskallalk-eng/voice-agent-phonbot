@@ -12,7 +12,7 @@ services:
     restart: unless-stopped
     expose:
       - "3001"
-    env_file: .env
+    env_file: apps/api/.env
     environment:
       - NODE_ENV=production
     depends_on:

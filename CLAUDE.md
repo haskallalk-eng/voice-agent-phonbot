@@ -13,8 +13,8 @@ voice-agent-saas/
 │   ├── shared/       # Shared types & utils (@vas/shared)
 │   ├── ui/           # Shared UI components (@vas/ui)
 │   └── voice-core/   # Voice engine (@vas/voice-core)
-├── .env              # Root env (fallback, meist leer oder minimal)
-├── apps/api/.env     # ECHTE API-Konfiguration (alle Keys hier!)
+├── apps/api/.env     # ALLE API-Keys hier (Single Source — keine Root .env)
+├── apps/web/.env     # Vite-spezifische Frontend-Vars (VITE_*)
 └── CLAUDE.md         # Diese Datei
 ```
 
@@ -53,11 +53,12 @@ Committe NICHTS was nicht typecheckt.
 - Starte die API nur neu wenn du Backend-Dateien änderst
 
 ### 5. .ENV DATEIEN
-- Die ECHTE Konfiguration liegt in `apps/api/.env`
-- Die Root `.env` ist nur ein Fallback
-- Ändere API-Keys NUR in `apps/api/.env`
-- `dotenv` lädt `apps/api/.env` zuerst mit `override: true`
-- Es gibt auch System-Umgebungsvariablen die ggf. gesetzt sind
+- **Single source of truth: `apps/api/.env`** — kein Root `.env` mehr
+- Docker prod (`docker-compose.yml`) liest direkt `apps/api/.env`
+- Dev (`apps/api/src/env.ts`) lädt nur `apps/api/.env` (kein Fallback — fail loud bei fehlenden Keys)
+- Web hat ein eigenes `apps/web/.env` für Vite-spezifische Vars (`VITE_*`)
+- Templates liegen unter `apps/api/.env.example` und `apps/web/.env.example`
+- System-Umgebungsvariablen können `.env`-Werte überschreiben (Standard-dotenv-Verhalten ohne `override`)
 
 ### 6. DATEIGRÖSSE BEACHTEN
 Einige Dateien sind SEHR groß (AgentBuilder.tsx ~2000+ Zeilen). Wenn du Änderungen machst:
@@ -117,7 +118,7 @@ Wenn du eine neue Route-Datei erstellst:
 - ❌ `pool.query()` ohne `if (!pool)` Guard
 - ❌ Hardcoded API URLs statt den `request()` Helper zu nutzen
 - ❌ Indigo/Lila als Hauptfarbe (ist Orange!)
-- ❌ Root `.env` editieren statt `apps/api/.env`
+- ❌ Eine neue Root `.env` anlegen — alles gehört in `apps/api/.env`
 - ❌ Ganze Dateien überschreiben statt gezielter Edits
 
 ### 14. VOR JEDEM COMMIT

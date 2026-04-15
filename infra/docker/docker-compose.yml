@@ -34,7 +34,7 @@ services:
     ports:
       - "127.0.0.1:3001:3001"
     env_file:
-      - ../../.env
+      - ../../apps/api/.env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-voice_agent}
       REDIS_URL: redis://redis:6379
