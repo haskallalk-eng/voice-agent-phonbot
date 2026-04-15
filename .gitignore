@@ -16,7 +16,9 @@ logs & Database
 
 
 # Live agent coordination — never tracked.
-# `.coordination/` was vaso's bootstrap path, superseded by termi's `.collab/`
-# on 2026-04-15. Both patterns are ignored defensively.
+# `.coordination/` is the canonical inter-agent scratch (vaso+termi); see
+# `.coordination/memory/RULES.md` §15. `.collab/` was a short-lived parallel
+# termi-bootstrap on 2026-04-15 that got consolidated into `.coordination/`
+# the same day. Both patterns ignored defensively.
 .coordination/
 .collab/
