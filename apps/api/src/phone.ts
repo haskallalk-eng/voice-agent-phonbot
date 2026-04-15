@@ -6,6 +6,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import twilio from 'twilio';
 import { pool } from './db.js';
+import { redis } from './redis.js';
 import type { JwtPayload } from './auth.js';
 
 // ── Twilio client (lazy init) ────────────────────────────────────────────────
@@ -15,6 +16,19 @@ function getTwilioClient() {
   const token = process.env.TWILIO_AUTH_TOKEN;
   if (!sid || !token) throw new Error('Twilio credentials not configured');
   return twilio(sid, token);
+}
+
+// ── Phone-prefix whitelist (anti-toll-fraud) ─────────────────────────────────
+// Any route that initiates a real outbound Twilio call on a user-supplied number
+// MUST validate it against this list. Without this, an authenticated user can
+// POST arbitrary +1-900-* / +44-9-* premium-rate numbers and drain the Twilio
+// budget (classic IRSF). Environment-override for legitimate international
+// expansion.
+const ALLOWED_PHONE_PREFIXES = (process.env.ALLOWED_PHONE_PREFIXES ?? '+49,+43,+41')
+  .split(',').map(p => p.trim()).filter(Boolean);
+
+function isPhonePrefixAllowed(number: string): boolean {
+  return ALLOWED_PHONE_PREFIXES.some(p => number.startsWith(p));
 }
 
 // ── DB Migration ────────────────────────────────────────────────────────────
@@ -89,9 +103,24 @@ async function syncTwilioNumbersToDb() {
 /**
  * Release excess pool numbers from Twilio to save costs.
  * Keeps MAX_POOL_SIZE unassigned numbers, releases the rest.
+ *
+ * Concurrency: two containers booting simultaneously would otherwise both
+ * enumerate the same "excess" set and each issue the same remove() calls →
+ * phone numbers lost / double-billed cancel. Guard with Redis advisory lock.
+ * TTL 5 min so a crashed holder releases eventually.
  */
 async function trimPool(client?: ReturnType<typeof getTwilioClient>) {
   if (!pool) return;
+
+  // Only one container trims at a time.
+  if (redis?.isOpen) {
+    const gotLock = await redis.set('phone:trim-lock', String(Date.now()), { NX: true, EX: 300 }).catch(() => null);
+    if (!gotLock) {
+      process.stdout.write('[phone] trimPool skipped — another instance holds the lock\n');
+      return;
+    }
+  }
+
   try {
     // Get all unassigned pool numbers, oldest first
     const poolNumbers = await pool.query(
@@ -129,6 +158,8 @@ async function trimPool(client?: ReturnType<typeof getTwilioClient>) {
     }
   } catch (e) {
     process.stderr.write(`[phone] Pool trim failed: ${e instanceof Error ? e.message : String(e)}\n`);
+  } finally {
+    if (redis?.isOpen) await redis.del('phone:trim-lock').catch(() => {});
   }
 }
 
@@ -305,10 +336,19 @@ export async function registerPhone(app: FastifyInstance) {
     const agentTenantId = parsed.success ? parsed.data.agentTenantId : undefined;
     req.log.info({ agentTenantId, body: req.body }, '[phone/provision] received');
 
-    // Get the agent ID — if agentTenantId specified, find that specific agent
+    // Get the agent ID — if agentTenantId specified, find that specific agent.
+    // CRITICAL: scope by org_id. Without this, a user could bind a phone number
+    // they just provisioned to another org's Retell agent (cross-tenant hijack
+    // → incoming calls route to victim's agent → PII leak).
     let agentId: string | null = null;
     if (agentTenantId) {
-      const res = await pool.query(`SELECT data FROM agent_configs WHERE tenant_id = $1 LIMIT 1`, [agentTenantId]);
+      const res = await pool.query(
+        `SELECT data FROM agent_configs WHERE tenant_id = $1 AND org_id = $2 LIMIT 1`,
+        [agentTenantId, orgId],
+      );
+      if (!res.rowCount) {
+        return reply.status(403).send({ error: 'Dieser Agent gehört nicht zu deiner Organisation.' });
+      }
       agentId = res.rows[0]?.data?.retellAgentId ?? null;
     } else {
       // No specific agent — get the first deployed one for this org
@@ -430,7 +470,12 @@ export async function registerPhone(app: FastifyInstance) {
   });
 
   // POST /phone/forward — register an existing number with call forwarding
-  app.post('/phone/forward', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  // Rate-limited: the persisted forwarding number is later dialled by /phone/verify.
+  // Spamming forward inserts + verify-triggers is a classic toll-fraud fan-out.
+  app.post('/phone/forward', {
+    ...auth,
+    config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
@@ -440,6 +485,13 @@ export async function registerPhone(app: FastifyInstance) {
     }).safeParse(req.body);
     if (!fwdParsed.success) return reply.status(400).send({ error: 'number required' });
     const { number, phoneId } = fwdParsed.data;
+
+    // Anti-toll-fraud: reject non-whitelisted prefixes. /phone/verify dials this
+    // number back to test forwarding; an unvalidated entry turns the verify
+    // endpoint into an arbitrary-dial vector (premium-rate / IRSF).
+    if (!isPhonePrefixAllowed(number)) {
+      return reply.status(400).send({ error: 'Aktuell nur Telefonnummern aus DACH (DE/AT/CH) unterstützt.' });
+    }
 
     // Get the Phonbot number to forward to (specific or first available)
     const existingQuery = phoneId
@@ -592,11 +644,16 @@ export async function registerPhone(app: FastifyInstance) {
     if (!phoneRow.rowCount) return reply.status(404).send({ error: 'Nummer nicht gefunden' });
     const phoneNumber = phoneRow.rows[0].number;
 
-    // Get the new agent's retell ID
+    // Get the new agent's retell ID. CRITICAL: scope by org_id so a user cannot
+    // reassign their own phone to a foreign org's agent (same hijack pattern as
+    // /phone/provision).
     const agentRow = await pool.query(
-      `SELECT data FROM agent_configs WHERE tenant_id = $1 LIMIT 1`,
-      [parsed.data.agentTenantId],
+      `SELECT data FROM agent_configs WHERE tenant_id = $1 AND org_id = $2 LIMIT 1`,
+      [parsed.data.agentTenantId, orgId],
     );
+    if (!agentRow.rowCount) {
+      return reply.status(403).send({ error: 'Dieser Agent gehört nicht zu deiner Organisation.' });
+    }
     const newRetellAgentId = agentRow.rows[0]?.data?.retellAgentId;
     if (!newRetellAgentId) return reply.status(400).send({ error: 'Agent hat keine Retell-ID. Bitte erst deployen.' });
 
@@ -623,8 +680,14 @@ export async function registerPhone(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // POST /phone/verify-forwarding — call customer's number to test if forwarding works
-  app.post('/phone/verify-forwarding', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  // POST /phone/verify-forwarding — call customer's number to test if forwarding works.
+  // Rate-limited + prefix-whitelisted: without these, a user can POST arbitrary
+  // +1-900-*/+44-9-* premium-rate numbers and trigger Twilio to dial them →
+  // toll-fraud / IRSF attack.
+  app.post('/phone/verify-forwarding', {
+    ...auth,
+    config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
@@ -633,6 +696,10 @@ export async function registerPhone(app: FastifyInstance) {
       phonbotNumberId: z.string().uuid(),
     }).safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: 'customerNumber and phonbotNumberId required' });
+
+    if (!isPhonePrefixAllowed(parsed.data.customerNumber)) {
+      return reply.status(400).send({ error: 'Aktuell nur Telefonnummern aus DACH (DE/AT/CH) unterstützt.' });
+    }
 
     const phonbotNum = await pool.query(
       `SELECT number FROM phone_numbers WHERE id = $1 AND org_id = $2`,
@@ -658,8 +725,14 @@ export async function registerPhone(app: FastifyInstance) {
     }
   });
 
-  // POST /phone/verify — make a real test call to verify call forwarding is working
-  app.post('/phone/verify', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  // POST /phone/verify — make a real test call to verify call forwarding is working.
+  // Rate-limited: triggers a Twilio outbound dial to the forwarding number that
+  // /phone/forward persisted. Prefix-whitelisting happened at forward-time, but
+  // rate-limit here as additional defense against automation.
+  app.post('/phone/verify', {
+    ...auth,
+    config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
@@ -680,7 +753,12 @@ export async function registerPhone(app: FastifyInstance) {
       return { ok: true, verified: true };
     }
 
-    // For forwarding numbers: make an actual Twilio call to check the redirect works
+    // For forwarding numbers: make an actual Twilio call to check the redirect works.
+    // Defense-in-depth: re-validate prefix even though /phone/forward already did.
+    if (!isPhonePrefixAllowed(number)) {
+      return reply.status(400).send({ error: 'Nummer ausserhalb erlaubter Länder (DACH).' });
+    }
+
     const fromNumber = process.env.TWILIO_FROM_NUMBER;
     if (!fromNumber) {
       // No Twilio number configured — just mark as verified optimistically
