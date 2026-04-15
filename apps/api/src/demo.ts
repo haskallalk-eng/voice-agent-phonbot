@@ -8,16 +8,31 @@ import { z } from 'zod';
 import { createWebCall, createLLM, createAgent as retellCreateAgent, createPhoneCall, updatePhoneNumber } from './retell.js';
 import { TEMPLATES } from './templates.js';
 import { pool } from './db.js';
+import { redis } from './redis.js';
 
-// Cache demo agents so we don't re-create them on every request
-const demoAgentCache = new Map<string, { agentId: string; createdAt: number }>();
-const CACHE_TTL = 1000 * 60 * 60 * 24; // 24h
+// Demo agent cache — Redis-backed so horizontal scaling (multiple API containers)
+// doesn't create duplicate Retell agents. Falls back to in-memory Map when Redis down.
+const CACHE_TTL_SEC = 24 * 60 * 60;
+const inMemDemoAgents = new Map<string, { agentId: string; createdAt: number }>();
+
+async function readDemoAgent(templateId: string): Promise<string | null> {
+  if (redis?.isOpen) {
+    const v = await redis.get(`demo_agent:${templateId}`).catch(() => null);
+    if (v) return v;
+  }
+  const cached = inMemDemoAgents.get(templateId);
+  if (cached && Date.now() - cached.createdAt < CACHE_TTL_SEC * 1000) return cached.agentId;
+  return null;
+}
+
+async function writeDemoAgent(templateId: string, agentId: string): Promise<void> {
+  inMemDemoAgents.set(templateId, { agentId, createdAt: Date.now() });
+  if (redis?.isOpen) await redis.set(`demo_agent:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {});
+}
 
 async function getOrCreateDemoAgent(templateId: string): Promise<string> {
-  const cached = demoAgentCache.get(templateId);
-  if (cached && Date.now() - cached.createdAt < CACHE_TTL) {
-    return cached.agentId;
-  }
+  const cached = await readDemoAgent(templateId);
+  if (cached) return cached;
 
   const template = TEMPLATES.find((t) => t.id === templateId);
   if (!template) throw new Error('Unknown template');
@@ -36,7 +51,7 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
     language: template.language === 'de' ? 'de-DE' : 'en-US',
   });
 
-  demoAgentCache.set(templateId, { agentId: agent.agent_id, createdAt: Date.now() });
+  await writeDemoAgent(templateId, agent.agent_id);
   return agent.agent_id;
 }
 
@@ -65,10 +80,18 @@ REGELN:
 - Halte das Gespräch unter 2 Minuten
 `;
 
-let salesAgentId: string | null = null;
+// Sales agent ID — Redis-backed (shared across containers, survives restarts)
+// In-memory fallback for when Redis is down.
+let salesAgentIdMem: string | null = null;
+const SALES_AGENT_KEY = 'sales_agent:phonbot';
 
 export async function getOrCreateSalesAgent(): Promise<string> {
-  if (salesAgentId) return salesAgentId;
+  if (redis?.isOpen) {
+    const cached = await redis.get(SALES_AGENT_KEY).catch(() => null);
+    if (cached) { salesAgentIdMem = cached; return cached; }
+  } else if (salesAgentIdMem) {
+    return salesAgentIdMem;
+  }
 
   const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';
   const llm = await createLLM({
@@ -84,15 +107,16 @@ export async function getOrCreateSalesAgent(): Promise<string> {
     language: 'de-DE',
   });
 
-  salesAgentId = agent.agent_id;
+  salesAgentIdMem = agent.agent_id;
+  if (redis?.isOpen) await redis.set(SALES_AGENT_KEY, agent.agent_id).catch(() => {}); // no TTL — persistent
 
   // Register as outbound agent on the configured phone number
   const outboundNumber = process.env.RETELL_OUTBOUND_NUMBER;
   if (outboundNumber) {
-    await updatePhoneNumber(outboundNumber, { outboundAgentId: salesAgentId });
+    await updatePhoneNumber(outboundNumber, { outboundAgentId: agent.agent_id });
   }
 
-  return salesAgentId;
+  return agent.agent_id;
 }
 
 // Demo leads are persisted in crm_leads (DB). No in-memory duplicate —

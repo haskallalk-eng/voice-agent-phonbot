@@ -14,6 +14,22 @@
 
 import type { FastifyInstance } from 'fastify';
 import { pool } from './db.js';
+import { redis } from './redis.js';
+
+// Distributed lock for generateTrainingExamples — prevents duplicate inserts when
+// multiple /learning/export requests fire the fire-and-forget generator concurrently.
+const LOCK_KEY = 'lock:generate_training_examples';
+const LOCK_TTL_SEC = 300;
+
+async function acquireLock(): Promise<boolean> {
+  if (!redis?.isOpen) return true; // no redis → best-effort, proceed
+  // SET NX with TTL — atomic. Returns 'OK' if acquired, null otherwise.
+  const res = await redis.set(LOCK_KEY, '1', { NX: true, EX: LOCK_TTL_SEC });
+  return res === 'OK';
+}
+async function releaseLock(): Promise<void> {
+  if (redis?.isOpen) await redis.del(LOCK_KEY).catch(() => {});
+}
 
 // ── Training example generation ───────────────────────────────────────────────
 
@@ -53,6 +69,17 @@ function buildMessages(transcript: string): Array<{ role: string; content: strin
  */
 export async function generateTrainingExamples(limit = 100): Promise<number> {
   if (!pool) return 0;
+  // Skip if another worker is already running the generator
+  if (!(await acquireLock())) return 0;
+  try {
+    return await _generateTrainingExamplesImpl(limit);
+  } finally {
+    await releaseLock();
+  }
+}
+
+async function _generateTrainingExamplesImpl(limit: number): Promise<number> {
+  if (!pool) return 0;
 
   // Fetch transcripts with scores that don't yet have training examples
   const res = await pool.query<TranscriptRow & { org_id: string | null }>(
@@ -81,7 +108,12 @@ export async function generateTrainingExamples(limit = 100): Promise<number> {
     else if (score <= 4) qualityLabel = 'bad';
     else continue; // Skip middle-ground scores
 
-    const messages = buildMessages(row.transcript);
+    // Build messages then redact PII (phone/email/IBAN/CC/address/DOB) before persisting.
+    // Training data must be free of customer-identifying info even if export is org-scoped —
+    // in case we ever fine-tune + share derived models.
+    const { redactMessages, redactPII } = await import('./pii.js');
+    const messages = redactMessages(buildMessages(row.transcript));
+    const safeSystemPrompt = redactPII(row.agent_prompt ?? null);
 
     await pool.query(
       `INSERT INTO training_examples
@@ -92,7 +124,7 @@ export async function generateTrainingExamples(limit = 100): Promise<number> {
         row.org_id,
         row.direction,
         row.industry ?? null,
-        row.agent_prompt ?? null,
+        safeSystemPrompt,
         JSON.stringify(messages),
         score.toFixed(2),
         qualityLabel,
