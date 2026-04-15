@@ -133,6 +133,7 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
                   <input
                     type="email"
                     placeholder="du@beispiel.de"
+                    autoComplete="email"
                     className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/30
                       focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200"
                     {...registerForgot('forgotEmail', { required: true })}
@@ -190,6 +191,7 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
                 <input
                   type="email"
                   placeholder="du@beispiel.de"
+                  autoComplete="email"
                   className={`w-full rounded-xl bg-white/5 border px-4 py-2.5 text-sm text-white placeholder-white/30
                     focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${errors.email ? 'border-red-500/60' : 'border-white/10'}`}
                   {...register('email', {
@@ -210,6 +212,7 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
                 <input
                   type="password"
                   placeholder={mode === 'register' ? 'Min. 8 Zeichen' : '••••••••'}
+                  autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
                   className={`w-full rounded-xl bg-white/5 border px-4 py-2.5 text-sm text-white placeholder-white/30
                     focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${errors.password ? 'border-red-500/60' : 'border-white/10'}`}
                   {...register('password', {
