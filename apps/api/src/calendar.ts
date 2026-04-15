@@ -7,6 +7,17 @@ import { encrypt as encryptToken, decrypt as decryptToken } from './crypto.js';
 import { redis } from './redis.js';
 import crypto from 'node:crypto';
 
+// CAL-04: every outbound HTTP to Google/Microsoft/Cal.com goes through this
+// helper so a hung upstream can't pin a Fastify worker indefinitely. 10s is
+// generous (Google Calendar p99 is well under 2s) but short enough that a
+// truly stuck remote turns into a timed-out request instead of a leaked
+// connection. Caller-supplied `signal` wins, default otherwise.
+const CAL_FETCH_TIMEOUT_MS = 10_000;
+async function calFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const signal = init.signal ?? AbortSignal.timeout(CAL_FETCH_TIMEOUT_MS);
+  return fetch(url, { ...init, signal });
+}
+
 // OAuth state uses a SEPARATE HMAC key (defense-in-depth: a JWT_SECRET leak must
 // not also grant OAuth-state forgery, which would let an attacker bind their
 // calendar to someone else's org). In production we require OAUTH_STATE_SECRET
@@ -217,7 +228,7 @@ async function getValidMsToken(orgId: string): Promise<string | null> {
   if (needsRefresh) {
     if (!conn.refresh_token) return null;
     try {
-      const resp = await fetch(
+      const resp = await calFetch(
         'https://login.microsoftonline.com/common/oauth2/v2.0/token',
         {
           method: 'POST',
@@ -256,7 +267,7 @@ async function msFindSlots(token: string, email: string): Promise<string[]> {
   const timeMax = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
   try {
-    const resp = await fetch('https://graph.microsoft.com/v1.0/me/calendar/getSchedule', {
+    const resp = await calFetch('https://graph.microsoft.com/v1.0/me/calendar/getSchedule', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -301,7 +312,7 @@ async function msBookSlot(
   const endTime = new Date(startTime.getTime() + 30 * 60 * 1000);
 
   try {
-    const resp = await fetch('https://graph.microsoft.com/v1.0/me/calendar/events', {
+    const resp = await calFetch('https://graph.microsoft.com/v1.0/me/calendar/events', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -356,7 +367,7 @@ async function getValidToken(orgId: string): Promise<string | null> {
     if (!conn.refresh_token) return null;
 
     try {
-      const resp = await fetch('https://oauth2.googleapis.com/token', {
+      const resp = await calFetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
@@ -416,6 +427,10 @@ function generateFreeSlots(
         const isBusy = busyPeriods.some((bp) => {
           const bStart = new Date(bp.start);
           const bEnd = new Date(bp.end);
+          // CAL-11: Invalid Date compares as NaN → comparison returns false →
+          // the whole slot would be marked free even though Google/MS sent us
+          // a malformed busy-period. Fail-closed: treat unparseable as busy.
+          if (Number.isNaN(bStart.getTime()) || Number.isNaN(bEnd.getTime())) return true;
           return slotStart < bEnd && slotEnd > bStart;
         });
 
@@ -575,7 +590,7 @@ async function calcomFindSlots(
 
   try {
     const params = new URLSearchParams({ apiKey, dateFrom, dateTo });
-    const resp = await fetch(`https://api.cal.com/v1/availability?${params}`, {
+    const resp = await calFetch(`https://api.cal.com/v1/availability?${params}`, {
       headers: { 'Content-Type': 'application/json' },
     });
 
@@ -631,7 +646,7 @@ async function calcomBookSlot(
   opts: CalcomBookingOpts,
 ): Promise<{ ok: boolean; bookingId?: number; error?: string }> {
   try {
-    const resp = await fetch(`https://api.cal.com/v1/bookings?apiKey=${encodeURIComponent(apiKey)}`, {
+    const resp = await calFetch(`https://api.cal.com/v1/bookings?apiKey=${encodeURIComponent(apiKey)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -675,7 +690,7 @@ interface CalcomEventTypesResponse {
 
 async function calcomGetEventTypes(apiKey: string): Promise<CalcomEventType[]> {
   try {
-    const resp = await fetch(
+    const resp = await calFetch(
       `https://api.cal.com/v1/event-types?apiKey=${encodeURIComponent(apiKey)}`,
       { headers: { 'Content-Type': 'application/json' } },
     );
@@ -767,7 +782,7 @@ async function findSlotsForConnection(
   const timeMax = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
   try {
-    const resp = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
+    const resp = await calFetch('https://www.googleapis.com/calendar/v3/freeBusy', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -926,7 +941,7 @@ async function bookSlotForConnection(
     .join('\n');
 
   try {
-    const resp = await fetch(
+    const resp = await calFetch(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(conn.calendar_id)}/events`,
       {
         method: 'POST',
@@ -1039,8 +1054,17 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
    * No JWT auth required — the state param carries orgId.
    */
   app.get('/calendar/google/callback', async (req: FastifyRequest, reply: FastifyReply) => {
-    const query = req.query as Record<string, string>;
-    const { code, state, error } = query;
+    // CAL-06: cap the incoming code/state so an attacker can't POST an
+    // oversize query (Google caps at ~500 chars anyway; 1000 is a safe ceiling).
+    const parsed = z.object({
+      code: z.string().max(1000).optional(),
+      state: z.string().max(500).optional(),
+      error: z.string().max(100).optional(),
+    }).safeParse(req.query);
+    if (!parsed.success) {
+      return reply.redirect(`${appUrl}?calendarError=invalid_callback`);
+    }
+    const { code, state, error } = parsed.data;
 
     if (error || !code || !state) {
       const reason = encodeURIComponent(error ?? 'missing_params');
@@ -1059,7 +1083,7 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
     const orgId = verified.orgId;
 
     // Exchange authorization code for tokens
-    const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
+    const tokenResp = await calFetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -1086,7 +1110,7 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
     // Fetch the Google account email (non-critical)
     let calendarEmail: string | null = null;
     try {
-      const profileResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      const profileResp = await calFetch('https://www.googleapis.com/oauth2/v3/userinfo', {
         headers: { Authorization: `Bearer ${tokens.access_token}` },
       });
       if (profileResp.ok) {
@@ -1126,20 +1150,24 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
     { onRequest: [app.authenticate] },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { orgId } = req.user as JwtPayload;
-      const body = req.body as Record<string, unknown>;
-      const apiKey = typeof body.apiKey === 'string' ? body.apiKey : '';
-      const usernameInput = typeof body.username === 'string' ? body.username : undefined;
-
-      if (!apiKey) {
-        return reply.status(400).send({ error: 'apiKey is required' });
+      // CAL-03: bound apiKey length so a 1MB string can't land in the DB and
+      // be decrypted + sent upstream on every request. Cal.com keys follow
+      // `cal_live_<uuid>` / `cal_test_<uuid>` — ~40 chars — 10..200 covers all.
+      const parsed = z.object({
+        apiKey: z.string().min(10).max(200),
+        username: z.string().max(100).optional(),
+      }).safeParse(req.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'apiKey required (10-200 chars)' });
       }
+      const { apiKey, username: usernameInput } = parsed.data;
 
       // Validate key via Cal.com /me
       let calEmail: string | null = null;
       let calUsername: string | null = usernameInput ?? null;
 
       try {
-        const meResp = await fetch(
+        const meResp = await calFetch(
           `https://api.cal.com/v1/me?apiKey=${encodeURIComponent(apiKey)}`,
           { headers: { 'Content-Type': 'application/json' } },
         );
@@ -1299,8 +1327,16 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
    * Microsoft redirects here with ?code=...&state=...
    */
   app.get('/calendar/microsoft/callback', async (req: FastifyRequest, reply: FastifyReply) => {
-    const query = req.query as Record<string, string>;
-    const { code, state, error } = query;
+    // CAL-06: bound callback params (Microsoft emits ~400 chars for code).
+    const parsed = z.object({
+      code: z.string().max(1000).optional(),
+      state: z.string().max(500).optional(),
+      error: z.string().max(100).optional(),
+    }).safeParse(req.query);
+    if (!parsed.success) {
+      return reply.redirect(`${appUrl}?calendarError=invalid_callback`);
+    }
+    const { code, state, error } = parsed.data;
 
     if (error || !code || !state) {
       return reply.redirect(`${appUrl}?calendarError=${encodeURIComponent(error ?? 'missing_params')}`);
@@ -1317,7 +1353,7 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
     const orgId = verified.orgId;
 
     // Exchange code for tokens
-    const tokenResp = await fetch(
+    const tokenResp = await calFetch(
       'https://login.microsoftonline.com/common/oauth2/v2.0/token',
       {
         method: 'POST',
@@ -1348,7 +1384,7 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
     // Fetch Microsoft account email
     let msEmail: string | null = null;
     try {
-      const meResp = await fetch('https://graph.microsoft.com/v1.0/me', {
+      const meResp = await calFetch('https://graph.microsoft.com/v1.0/me', {
         headers: { Authorization: `Bearer ${tokens.access_token}` },
       });
       if (meResp.ok) {
