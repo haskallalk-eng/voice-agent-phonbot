@@ -12,7 +12,7 @@ import crypto from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { createTicket } from './tickets.js';
 import { appendTraceEvent } from './traces.js';
-import { incrementMinutesUsed } from './usage.js';
+import { reconcileMinutes, DEFAULT_CALL_RESERVE_MINUTES } from './usage.js';
 import { pool } from './db.js';
 import { findFreeSlots, bookSlot } from './calendar.js';
 import { triggerCallback } from './agent-config.js';
@@ -130,7 +130,10 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
         const orgId = await getOrgIdByAgentId(agentId);
         if (orgId) {
-          await incrementMinutesUsed(orgId, minutes);
+          // Pre-call reserved DEFAULT_CALL_RESERVE_MINUTES (E7). Reconcile
+          // delta now: actual ≤ reserved → refund the over-reservation;
+          // actual > reserved → top up the difference.
+          await reconcileMinutes(orgId, DEFAULT_CALL_RESERVE_MINUTES, minutes);
         }
 
         // AI analysis — fire and forget, never blocks the webhook response

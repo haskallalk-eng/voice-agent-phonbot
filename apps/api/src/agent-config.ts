@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { JwtPayload } from './auth.js';
 import { pool } from './db.js';
 import { buildAgentInstructions } from './agent-instructions.js';
-import { checkUsageLimit } from './usage.js';
+import { tryReserveMinutes, DEFAULT_CALL_RESERVE_MINUTES } from './usage.js';
 import {
   createLLM,
   updateLLM,
@@ -586,14 +586,16 @@ export async function registerAgentConfig(app: FastifyInstance) {
   app.post('/agent-config/web-call', { ...auth }, async (req: FastifyRequest) => {
     const { orgId } = req.user as JwtPayload;
 
-    // Enforce usage limit before creating the call
-    const usage = await checkUsageLimit(orgId);
-    if (!usage.allowed) {
+    // Atomically reserve DEFAULT_CALL_RESERVE_MINUTES (E7). Closes the race
+    // where parallel pre-call checks could each pass and exceed the limit
+    // post-deduct. Webhook reconciles to actual minutes at call_ended.
+    const reserve = await tryReserveMinutes(orgId, DEFAULT_CALL_RESERVE_MINUTES);
+    if (!reserve.allowed) {
       return {
         ok: false,
         error: 'USAGE_LIMIT_REACHED',
-        minutesUsed: usage.minutesUsed,
-        minutesLimit: usage.minutesLimit,
+        minutesUsed: reserve.minutesUsed,
+        minutesLimit: reserve.minutesLimit,
       };
     }
 

@@ -99,6 +99,12 @@ export async function migrateOutbound() {
       converted_at  TIMESTAMPTZ
     );
   `);
+  // Composite index for the 24h phone-dedup query in /demo/callback +
+  // /outbound/website-callback (E2 + T-38). Without this the dedup is
+  // O(n) seq scan per request — fine at 100 leads, slow at 10k+.
+  // (phone, created_at DESC) supports both `WHERE phone = $1` and the
+  // recency predicate.
+  await pool.query(`CREATE INDEX IF NOT EXISTS crm_leads_phone_created_idx ON crm_leads(phone, created_at DESC);`);
   // Index call_id for Retell webhook lookups (UPDATE ... WHERE call_id = $1). Without this → full table scan.
   await pool.query(`CREATE INDEX IF NOT EXISTS outbound_calls_call_id_idx ON outbound_calls(call_id);`);
   // UNIQUE to match call_transcripts.call_id and prevent duplicate rows from webhook retries.
@@ -259,10 +265,11 @@ export async function triggerSalesCall(params: {
     return { ok: false, error: 'PHONE_PREFIX_NOT_ALLOWED' };
   }
 
-  // Check usage limits before making outbound call
-  const { checkUsageLimit } = await import('./usage.js');
-  const usage = await checkUsageLimit(params.orgId);
-  if (!usage.allowed) return { ok: false, error: 'USAGE_LIMIT_REACHED' };
+  // Atomically reserve minutes (E7) — closes the race vs. parallel calls.
+  // Webhook reconciles to actual at call_ended.
+  const { tryReserveMinutes, DEFAULT_CALL_RESERVE_MINUTES } = await import('./usage.js');
+  const reserve = await tryReserveMinutes(params.orgId, DEFAULT_CALL_RESERVE_MINUTES);
+  if (!reserve.allowed) return { ok: false, error: 'USAGE_LIMIT_REACHED' };
 
   // Get from number (org's provisioned number)
   const phoneRes = await pool.query(
@@ -552,14 +559,15 @@ export async function registerOutbound(app: FastifyInstance) {
       return reply.status(503).send({ error: 'Rückruf aktuell nicht verfügbar' });
     }
 
-    // Dedup — same phone within 24h won't retrigger a callback. Mirrors
-    // demo/callback's dedup (memory/fix-specs.md:E2) so both public entry
-    // points are consistent against botnet CRM spam. 200 ok w/o call so the
-    // response-time is indistinguishable (no enumeration signal).
+    // Dedup — same phone within 24h won't retrigger a callback. Identical to
+    // demo/callback's dedup (E2): phone is the identity, source is metadata
+    // and intentionally NOT in the WHERE so an attacker can't bypass the
+    // window by spoofing source. Both public entry points must apply the
+    // same predicate or the gap is exploitable (T-38).
     if (pool) {
       const dup = await pool.query(
         `SELECT 1 FROM crm_leads
-         WHERE phone = $1 AND source = 'website-callback' AND created_at > now() - interval '24 hours'
+         WHERE phone = $1 AND created_at > now() - interval '24 hours'
          LIMIT 1`,
         [phone],
       );
