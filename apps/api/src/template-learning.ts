@@ -11,6 +11,7 @@
 
 import OpenAI from 'openai';
 import { pool } from './db.js';
+import { redactPII } from './pii.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? '' });
 const MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
@@ -48,6 +49,19 @@ export async function processTemplateLearning(
 ): Promise<void> {
   if (!pool) return;
   if (!process.env.OPENAI_API_KEY) return;
+
+  // GDPR opt-in gate. Cross-org learning takes one tenant's call data and
+  // turns it into shared patterns or aggregated learnings consumed by other
+  // tenants. Without explicit consent (orgs.share_patterns), do nothing.
+  try {
+    const consentRes = await pool.query(
+      `SELECT share_patterns FROM orgs WHERE id = $1 LIMIT 1`,
+      [orgId],
+    );
+    if (!consentRes.rows[0]?.share_patterns) return;
+  } catch {
+    return; // fail closed — never extract without verified consent
+  }
 
   try {
     // Run both paths concurrently
@@ -137,10 +151,14 @@ async function checkAndCreateTemplateLearning(
   );
   if (existing.rows.length > 0) return; // Already captured
 
-  // Collect prompt_fix suggestions from this call for the category
+  // Collect prompt_fix suggestions from this call for the category.
+  // prompt_fix is GPT-generated but can echo customer quotes/names from
+  // bad_moments. Redact before persisting to a cross-org table — other orgs
+  // in the same industry read these entries. Belt: redact+sanitize to remove
+  // organisation-identifying phrasing too (company names, specific dates).
   const fixes = analysis.bad_moments
     .filter((m) => m.category === category && m.prompt_fix)
-    .map((m) => m.prompt_fix ?? '')
+    .map((m) => redactPII(m.prompt_fix ?? ''))
     .filter(Boolean);
 
   const content = fixes.length > 0
@@ -184,6 +202,12 @@ async function extractConversationPattern(
 
   if (!transcript || transcript.length < 100) return;
 
+  // Cross-org pattern extraction leaves the originating org. Strip caller PII
+  // (name, phone, email, address, IBAN, DOB) BEFORE sending to OpenAI so the
+  // resulting pattern stored in conversation_patterns can't expose one tenant's
+  // customer data to another tenant via reused prompt fragments.
+  const safeTranscript = redactPII(transcript).slice(0, 4000);
+
   try {
     const resp = await openai.chat.completions.create({
       model: MODEL,
@@ -197,7 +221,7 @@ async function extractConversationPattern(
         {
           role: 'user',
           content: `Transkript eines sehr erfolgreichen Gesprächs (Score ≥9):
-${transcript.slice(0, 4000)}
+${safeTranscript}
 
 Extrahiere das wiederverwendbare Gesprächsmuster als JSON:
 {
@@ -222,6 +246,12 @@ Extrahiere das wiederverwendbare Gesprächsmuster als JSON:
 
     if (!pattern.situation || !pattern.agent_response) return;
 
+    // Belt-and-suspenders: even though the input was redacted, OpenAI sometimes
+    // hallucinates plausible-looking PII (fake phone numbers, names). Re-redact
+    // the output before persisting to a cross-org table.
+    const safeSituation = redactPII(pattern.situation).slice(0, 500);
+    const safeResponse = redactPII(pattern.agent_response).slice(0, 500);
+
     await pool.query(
       `INSERT INTO conversation_patterns
          (direction, industry, pattern_type, situation, agent_response, effectiveness, source_calls)
@@ -229,8 +259,8 @@ Extrahiere das wiederverwendbare Gesprächsmuster als JSON:
       [
         industry,
         (pattern.pattern_type ?? 'other').slice(0, 50),
-        pattern.situation.slice(0, 500),
-        pattern.agent_response.slice(0, 500),
+        safeSituation,
+        safeResponse,
         _analysis.score,
       ],
     );

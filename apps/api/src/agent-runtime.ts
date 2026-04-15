@@ -73,7 +73,13 @@ export async function runAgentTurn(input: {
   text: string;
   source: 'web' | 'phone' | 'system';
 }) {
-  const cfg = await readConfig(input.tenantId);
+  // INVARIANT: this function has exactly one caller (chat.ts) and that caller
+  // MUST pass tenantId = JWT.orgId. We rely on this so readConfig's ownership
+  // check (second arg = orgId) actually enforces something. If you add a new
+  // caller (Retell webhook, queue worker, CLI), DO NOT pass a body-supplied
+  // tenant — derive it from a verified server-side source or redesign this API
+  // to take tenantId + orgId separately.
+  const cfg = await readConfig(input.tenantId, input.tenantId);
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {

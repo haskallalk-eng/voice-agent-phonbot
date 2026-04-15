@@ -130,11 +130,33 @@ export async function getLLM(llmId: string): Promise<RetellLLMConfig> {
 
 // --- Agent ---
 
+// Retell agent-tuning defaults — overridable per-call and via env (RETELL_AGENT_*)
+// so we can A/B voice behaviour without a code deploy. Also lets individual agents
+// differ (a sleepy arztpraxis shouldn't interrupt as eagerly as a hairdresser).
+function defaultInterruption(): number {
+  const raw = process.env.RETELL_AGENT_INTERRUPTION_SENSITIVITY;
+  if (raw === undefined || raw === '') return 1.0;
+  const v = Number(raw);
+  if (!Number.isFinite(v) || v < 0 || v > 1) {
+    // Warn once at first use so a typo (e.g. "0,5" or "auto") doesn't silently
+    // fall back to 1.0 without anyone noticing. Log to stderr (no pino here —
+    // this module is imported synchronously before app logger is wired up).
+    process.stderr.write(`[retell] RETELL_AGENT_INTERRUPTION_SENSITIVITY=${JSON.stringify(raw)} is not a number in [0,1] — using default 1.0\n`);
+    return 1.0;
+  }
+  return v;
+}
+function defaultBackchannel(): boolean {
+  return process.env.RETELL_AGENT_BACKCHANNEL !== 'false';
+}
+
 export async function createAgent(config: {
   name: string;
   llmId: string;
   voiceId?: string;
   language?: string;
+  interruptionSensitivity?: number;
+  enableBackchannel?: boolean;
 }): Promise<RetellAgent> {
   return retellRequest('/create-agent', {
     method: 'POST',
@@ -143,8 +165,8 @@ export async function createAgent(config: {
       response_engine: { type: 'retell-llm', llm_id: config.llmId },
       voice_id: config.voiceId ?? DEFAULT_VOICE_ID,
       language: config.language ?? 'de-DE',
-      interruption_sensitivity: 1.0,
-      enable_backchannel: true,
+      interruption_sensitivity: config.interruptionSensitivity ?? defaultInterruption(),
+      enable_backchannel: config.enableBackchannel ?? defaultBackchannel(),
       enable_dynamic_responsiveness: true,
     }),
   });
@@ -157,11 +179,13 @@ export async function updateAgent(
     voiceId?: string;
     language?: string;
     llmId?: string;
+    interruptionSensitivity?: number;
+    enableBackchannel?: boolean;
   },
 ): Promise<RetellAgent> {
   const body: Record<string, unknown> = {
-    interruption_sensitivity: 1.0,
-    enable_backchannel: true,
+    interruption_sensitivity: config.interruptionSensitivity ?? defaultInterruption(),
+    enable_backchannel: config.enableBackchannel ?? defaultBackchannel(),
     enable_dynamic_responsiveness: true,
   };
   if (config.name !== undefined) body.agent_name = config.name;
@@ -191,10 +215,17 @@ export type RetellCall = {
   disconnection_reason?: string;
 };
 
-export async function listCalls(agentId?: string, limit = 50): Promise<RetellCall[]> {
+export async function listCalls(agentId?: string | string[], limit = 50): Promise<RetellCall[]> {
   const body: Record<string, unknown> = { limit };
   if (agentId) {
-    body.filter_criteria = { agent_id: [agentId] };
+    // Defensive filter — drop any falsy/whitespace IDs (an undeployed agent's
+    // retellAgentId can be undefined). Without this, an empty entry could in
+    // theory be interpreted as "no filter" by Retell and leak ALL tenants'
+    // calls to a single org. The caller already filters, but defence in depth.
+    const arr = (Array.isArray(agentId) ? agentId : [agentId])
+      .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+    if (arr.length === 0) return [];
+    body.filter_criteria = { agent_id: arr };
   }
   const res = await retellRequest<RetellCall[] | { value?: RetellCall[] }>('/v2/list-calls', {
     method: 'POST',

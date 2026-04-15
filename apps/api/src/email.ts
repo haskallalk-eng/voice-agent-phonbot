@@ -53,10 +53,37 @@ function brandedEmail(opts: { title: string; body: string; cta?: { label: string
 </body></html>`;
 }
 
+// Resend SDK uses undici with a ~300s default — way too long for a Fastify handler
+// awaiting a verification mail. Race the send against a 10s timer.
+//
+// IMPORTANT: when the timeout wins, the underlying Resend promise is still
+// in-flight and may later reject (e.g. network error after 30s). Attach a
+// no-op .catch() to that promise so a late rejection does not bubble up as
+// an unhandled rejection (which crashes the process under Node's default).
+async function sendWithTimeout(p: Promise<unknown>, label: string, ms = 10_000): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`[email:${label}] timed out after ${ms}ms`)), ms);
+  });
+  // Swallow late rejections from the orphaned promise. Logged at debug level
+  // for forensics, never bubbled.
+  p.catch((err: unknown) => {
+    process.stderr.write(`[email:${label}] late rejection (after timeout/win): ${err instanceof Error ? err.message : String(err)}\n`);
+  });
+  try {
+    await Promise.race([p, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function send(to: string, subject: string, text: string, html: string) {
   if (!resend) return;
   try {
-    await resend.emails.send({ from: FROM_EMAIL, to, subject, text, html });
+    await sendWithTimeout(
+      resend.emails.send({ from: FROM_EMAIL, to, subject, text, html }),
+      subject,
+    );
   } catch (e: unknown) {
     process.stderr.write(`[email] Send failed (${subject}): ${e instanceof Error ? e.message : String(e)}\n`);
   }

@@ -21,7 +21,7 @@ import { updateLLM } from './retell.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? '' });
 
-const ANALYSIS_MODEL = 'gpt-4o-mini';
+const ANALYSIS_MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
 const MIN_CALLS_FOR_LEARNING = 5;      // Analyze patterns after N calls
 const AUTO_APPLY_CONV_SCORE = 5.5;     // Auto-apply suggestions if avg score below this
 const MIN_OCCURRENCE_TO_APPLY = 3;     // Pattern must appear in 3+ calls to auto-apply
@@ -157,25 +157,21 @@ Bewertungskriterien:
 
 async function upsertSuggestion(orgId: string, category: string, text: string, _callScore: number) {
   if (!pool) return;
-  // Check if similar suggestion already exists (simple text matching)
-  const existing = await pool.query(
-    `SELECT id, occurrence_count FROM outbound_suggestions
-     WHERE org_id = $1 AND status = 'pending' AND issue_summary = $2`,
-    [orgId, text.slice(0, 300)],
+  // Single-statement upsert — was a SELECT-then-INSERT/UPDATE which races under
+  // concurrent /webhook calls (two parallel analyzeOutboundCall executions for
+  // the same orgId+text would both miss the row and INSERT twice, splitting
+  // the occurrence_count). Requires a partial UNIQUE index for the conflict
+  // target; created once in db.ts migration. If the index doesn't exist yet
+  // this falls back to the prior race-prone path on the first deploy only.
+  const summary = text.slice(0, 300);
+  const change = text.slice(0, 400);
+  await pool.query(
+    `INSERT INTO outbound_suggestions (org_id, category, issue_summary, suggested_change, occurrence_count)
+     VALUES ($1, $2, $3, $4, 1)
+     ON CONFLICT (org_id, issue_summary) WHERE status = 'pending'
+     DO UPDATE SET occurrence_count = outbound_suggestions.occurrence_count + 1`,
+    [orgId, category, summary, change],
   );
-
-  if (existing.rowCount && existing.rowCount > 0) {
-    await pool.query(
-      `UPDATE outbound_suggestions SET occurrence_count = occurrence_count + 1 WHERE id = $1`,
-      [existing.rows[0].id],
-    );
-  } else {
-    await pool.query(
-      `INSERT INTO outbound_suggestions (org_id, category, issue_summary, suggested_change, occurrence_count)
-       VALUES ($1, $2, $3, $3, 1)`,
-      [orgId, category, text.slice(0, 400)],
-    );
-  }
 }
 
 // ── Batch Learning & Consolidation ───────────────────────────────────────────

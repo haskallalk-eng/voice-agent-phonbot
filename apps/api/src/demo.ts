@@ -30,29 +30,53 @@ async function writeDemoAgent(templateId: string, agentId: string): Promise<void
   if (redis?.isOpen) await redis.set(`demo_agent:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {});
 }
 
+// In-process dedup: when N parallel /demo/call arrive for the same template
+// with a cold cache, we want ONE createLLM+createAgent, not N. The pending
+// map holds the in-flight promise; every subsequent caller awaits the same
+// result. Per-container — horizontal scale adds at-most N agents per N
+// containers (acceptable, since the Redis cache fill from the first winner
+// suppresses further duplicates on restart).
+const pendingDemoCreate = new Map<string, Promise<string>>();
+
 async function getOrCreateDemoAgent(templateId: string): Promise<string> {
   const cached = await readDemoAgent(templateId);
   if (cached) return cached;
 
-  const template = TEMPLATES.find((t) => t.id === templateId);
-  if (!template) throw new Error('Unknown template');
+  const inflight = pendingDemoCreate.get(templateId);
+  if (inflight) return inflight;
 
-  const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';
-  const llm = await createLLM({
-    generalPrompt: template.prompt,
-    tools: [],
-    model,
-  });
+  const creation = (async () => {
+    const template = TEMPLATES.find((t) => t.id === templateId);
+    if (!template) throw new Error('Unknown template');
 
-  const agent = await retellCreateAgent({
-    name: `Demo: ${template.name}`,
-    llmId: llm.llm_id,
-    voiceId: template.voice,
-    language: template.language === 'de' ? 'de-DE' : 'en-US',
-  });
+    // Double-check under the in-flight lock: another container may have cached.
+    const cached2 = await readDemoAgent(templateId);
+    if (cached2) return cached2;
 
-  await writeDemoAgent(templateId, agent.agent_id);
-  return agent.agent_id;
+    const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';
+    const llm = await createLLM({
+      generalPrompt: template.prompt,
+      tools: [],
+      model,
+    });
+
+    const agent = await retellCreateAgent({
+      name: `Demo: ${template.name}`,
+      llmId: llm.llm_id,
+      voiceId: template.voice,
+      language: template.language === 'de' ? 'de-DE' : 'en-US',
+    });
+
+    await writeDemoAgent(templateId, agent.agent_id);
+    return agent.agent_id;
+  })();
+
+  pendingDemoCreate.set(templateId, creation);
+  try {
+    return await creation;
+  } finally {
+    pendingDemoCreate.delete(templateId);
+  }
 }
 
 /* ── Sales callback agent ── */
@@ -108,7 +132,11 @@ export async function getOrCreateSalesAgent(): Promise<string> {
   });
 
   salesAgentIdMem = agent.agent_id;
-  if (redis?.isOpen) await redis.set(SALES_AGENT_KEY, agent.agent_id).catch(() => {}); // no TTL — persistent
+  // 7-day TTL — if the Retell agent gets deleted (manual cleanup, account
+  // rotation), the cache expires and the next call regenerates it. Without
+  // TTL a stale agent_id sticks forever and every Sales call after deletion
+  // would 404 from Retell.
+  if (redis?.isOpen) await redis.set(SALES_AGENT_KEY, agent.agent_id, { EX: 7 * 24 * 60 * 60 }).catch(() => {});
 
   // Register as outbound agent on the configured phone number
   const outboundNumber = process.env.RETELL_OUTBOUND_NUMBER;
@@ -139,6 +167,25 @@ const DemoCallbackBody = z.object({
   phone: z.string().min(5).max(30),
 });
 
+// Global hourly cost cap across ALL IPs — the per-IP rate-limit (10/h) is
+// easily bypassed by a botnet, and every demo call burns OpenAI + Retell
+// spend. Env-configurable so we can raise it for campaigns.
+const DEMO_GLOBAL_HOURLY_CAP = Number(process.env.DEMO_GLOBAL_HOURLY_CAP ?? 200);
+
+async function enforceGlobalDemoCap(kind: 'call' | 'callback'): Promise<{ ok: true } | { ok: false; count: number }> {
+  if (!redis?.isOpen) return { ok: true }; // fail open when Redis down
+  const hour = new Date().toISOString().slice(0, 13); // YYYY-MM-DDTHH
+  const key = `demo:global:${kind}:${hour}`;
+  try {
+    const results = await redis.multi().incr(key).expire(key, 3700).exec();
+    const count = Number(results?.[0] ?? 0);
+    if (count > DEMO_GLOBAL_HOURLY_CAP) return { ok: false, count };
+    return { ok: true };
+  } catch {
+    return { ok: true };
+  }
+}
+
 export async function registerDemo(app: FastifyInstance) {
   // GET /demo/templates — list available templates
   app.get('/demo/templates', async () => {
@@ -150,7 +197,7 @@ export async function registerDemo(app: FastifyInstance) {
   });
 
   // POST /demo/call — create a web call with a demo agent (no auth)
-  // Rate limited to 3 calls per hour per IP via @fastify/rate-limit
+  // Per-IP rate limit (10/h) + global hourly cap to stop botnet cost-amplification.
   app.post('/demo/call', {
     config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
   }, async (req, reply) => {
@@ -159,6 +206,12 @@ export async function registerDemo(app: FastifyInstance) {
       return reply.status(400).send({ error: 'templateId required' });
     }
     const { templateId } = parsed.data;
+
+    const cap = await enforceGlobalDemoCap('call');
+    if (!cap.ok) {
+      app.log.warn({ count: cap.count, limit: DEMO_GLOBAL_HOURLY_CAP }, 'demo/call global hourly cap hit');
+      return reply.status(429).send({ error: 'Demo temporarily unavailable — please try again later.' });
+    }
 
     try {
       const agentId = await getOrCreateDemoAgent(templateId);
@@ -178,6 +231,13 @@ export async function registerDemo(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'name, email and phone required (name only letters/digits)', details: parsed.error.flatten() });
     }
+
+    const cap = await enforceGlobalDemoCap('callback');
+    if (!cap.ok) {
+      app.log.warn({ count: cap.count, limit: DEMO_GLOBAL_HOURLY_CAP }, 'demo/callback global hourly cap hit');
+      return reply.status(429).send({ error: 'Demo temporarily unavailable — please try again later.' });
+    }
+
     const { name, email } = parsed.data;
     // Normalize phone to E.164 format
     let phone = parsed.data.phone.replace(/[\s\-()]/g, '');
@@ -190,6 +250,21 @@ export async function registerDemo(app: FastifyInstance) {
     if (!ALLOWED_PREFIXES.some((p) => phone.startsWith(p))) {
       app.log.warn({ phone, ip: req.ip }, 'Rejected demo/callback: non-allowed country prefix');
       return reply.status(400).send({ error: 'Aktuell nur Telefonnummern aus der DACH-Region (DE/AT/CH) unterstützt' });
+    }
+
+    // Dedup — same phone within 24h won't retrigger a callback. Prevents a
+    // botnet from stuffing the CRM with the same victim number + burning
+    // Twilio/Retell spend on repeated calls. Caller still gets 200 so the
+    // response-time is indistinguishable (no enumeration signal).
+    if (pool) {
+      const dup = await pool.query(
+        `SELECT 1 FROM crm_leads WHERE phone = $1 AND created_at > now() - interval '24 hours' LIMIT 1`,
+        [phone],
+      );
+      if (dup.rowCount) {
+        app.log.info({ phone, ip: req.ip }, 'demo/callback dedup hit — skipping outbound call');
+        return { ok: true };
+      }
     }
 
     const leadId = crypto.randomUUID();

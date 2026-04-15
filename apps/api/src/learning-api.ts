@@ -31,6 +31,53 @@ const MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
 
 export async function registerLearningApi(app: FastifyInstance): Promise<void> {
 
+  // ── GET /learning/consent ──────────────────────────────────────────────────
+  // Returns the caller's org's pattern-sharing opt-in state. Auth-only (not
+  // admin) — the org owner needs to be able to read & toggle their own consent.
+  app.get(
+    '/learning/consent',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      if (!pool) return reply.status(503).send({ error: 'Database not available' });
+      const { orgId } = req.user as import('./auth.js').JwtPayload;
+      const res = await pool.query(
+        `SELECT share_patterns, share_patterns_consented_at
+         FROM orgs WHERE id = $1 LIMIT 1`,
+        [orgId],
+      );
+      const row = res.rows[0] ?? {};
+      return {
+        share_patterns: Boolean(row.share_patterns),
+        consented_at: row.share_patterns_consented_at ?? null,
+      };
+    },
+  );
+
+  // ── POST /learning/consent ─────────────────────────────────────────────────
+  // Toggle the opt-in. consented_at gets set on TRUE (audit trail for GDPR
+  // Art. 7 — proof of consent), cleared on FALSE so re-opt-in records a fresh
+  // timestamp.
+  app.post<{ Body: { share_patterns: boolean } }>(
+    '/learning/consent',
+    {
+      onRequest: [app.authenticate],
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    },
+    async (req, reply) => {
+      if (!pool) return reply.status(503).send({ error: 'Database not available' });
+      const { orgId } = req.user as import('./auth.js').JwtPayload;
+      const optIn = Boolean(req.body?.share_patterns);
+      await pool.query(
+        `UPDATE orgs
+         SET share_patterns = $2,
+             share_patterns_consented_at = CASE WHEN $2 THEN now() ELSE NULL END
+         WHERE id = $1`,
+        [orgId, optIn],
+      );
+      return { ok: true, share_patterns: optIn };
+    },
+  );
+
   // ── GET /learning/templates/:templateId/learnings ──────────────────────────
   app.get<{ Params: { templateId: string }; Querystring: { status?: string; limit?: string } }>(
     '/learning/templates/:templateId/learnings',

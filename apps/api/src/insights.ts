@@ -25,7 +25,7 @@ import { computeSatisfactionScore, extractSignalsFromCall, storeSatisfactionData
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? '' });
 const MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
-const EMBED_MODEL = 'text-embedding-3-small';
+const EMBED_MODEL = process.env.OPENAI_EMBED_MODEL ?? 'text-embedding-3-small';
 
 const AUTO_APPLY_THRESHOLD = 3;
 const SIMILARITY_THRESHOLD = 0.82;       // cosine similarity — same issue

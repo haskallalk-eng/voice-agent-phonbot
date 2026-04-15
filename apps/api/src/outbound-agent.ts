@@ -68,6 +68,13 @@ export async function migrateOutbound() {
       applied_at        TIMESTAMPTZ
     );
   `);
+  // Partial UNIQUE for the atomic ON CONFLICT upsert in upsertSuggestion().
+  // Scoped to pending rows so applied/rejected suggestions with the same text
+  // can coexist as historical records.
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS outbound_suggestions_pending_unique
+      ON outbound_suggestions (org_id, issue_summary) WHERE status = 'pending';
+  `);
   await pool.query(`
     ALTER TABLE orgs
       ADD COLUMN IF NOT EXISTS outbound_agent_id  TEXT,
