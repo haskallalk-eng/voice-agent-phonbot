@@ -31,8 +31,10 @@ export async function registerContact(app: FastifyInstance) {
     const { name, email, message } = parsed.data;
 
     if (!resend) {
-      req.log.warn('[contact] Resend not configured, logging contact form submission');
-      req.log.info({ name, email, message: message.slice(0, 100) }, '[contact] form submission');
+      // Don't log name/email/message plaintext — Pino redact covers name/email
+      // but message is the user-authored body and can't round-trip as plaintext
+      // to stdout/Sentry. Log only a length fingerprint for ops visibility.
+      req.log.warn({ messageLen: message.length, hasEmail: Boolean(email) }, '[contact] Resend not configured, form submission dropped');
       return { ok: true };
     }
 

@@ -244,7 +244,7 @@ export async function registerTwilioBridge(app: FastifyInstance) {
           voice: 'alloy',
           input_audio_format: 'g711_ulaw',
           output_audio_format: 'g711_ulaw',
-          input_audio_transcription: { model: 'whisper-1' },
+          input_audio_transcription: { model: process.env.OPENAI_TRANSCRIBE_MODEL ?? 'whisper-1' },
           turn_detection: {
             type: 'server_vad',
             threshold: 0.5,
@@ -343,25 +343,44 @@ export async function registerTwilioBridge(app: FastifyInstance) {
       app.log.info({ sessionId }, 'Twilio WebSocket closed');
       if (openai.readyState === WS.OPEN) openai.close();
 
-      // Save transcript to outbound_calls if this was an outbound call
+      // Save transcript to outbound_calls if this was an outbound call.
+      // Errors here are loud (not swallowed) — losing a transcript silently means
+      // no audit trail, no billing cross-check, no learning, and a stuck row at
+      // status='calling' until StatusCallback rescues it. Run as IIFE so the
+      // socket close handler doesn't await; any rejection is logged.
       const transcript = transcriptParts.join('\n');
-      if (session?.outboundRecordId && transcript && pool) {
-        pool.query(
-          `UPDATE outbound_calls SET transcript = $1, status = 'completed' WHERE id = $2`,
-          [transcript, session.outboundRecordId],
-        ).then(() => {
-          // Trigger outbound learning
-          import('./outbound-insights.js').then(({ analyzeOutboundCall }) => {
-            // Get org_id from outbound_calls
-            pool!.query(`SELECT org_id FROM outbound_calls WHERE id = $1`, [session.outboundRecordId]).then(res => {
-              const orgId = res.rows[0]?.org_id as string | undefined;
-              if (orgId) analyzeOutboundCall(orgId, session.outboundRecordId!, transcript).catch(() => {});
-            }).catch(() => {});
-          }).catch(() => {});
-        }).catch(() => {});
+      const recordId = session?.outboundRecordId;
+      if (recordId && transcript && pool) {
+        const localPool = pool;
+        (async () => {
+          try {
+            await localPool.query(
+              `UPDATE outbound_calls SET transcript = $1, status = 'completed' WHERE id = $2`,
+              [transcript, recordId],
+            );
+            const { analyzeOutboundCall } = await import('./outbound-insights.js');
+            const orgRes = await localPool.query(
+              `SELECT org_id FROM outbound_calls WHERE id = $1`,
+              [recordId],
+            );
+            const orgId = orgRes.rows[0]?.org_id as string | undefined;
+            if (orgId) {
+              await analyzeOutboundCall(orgId, recordId, transcript);
+            } else {
+              app.log.warn({ sessionId, recordId }, 'transcript persisted but no org_id — analysis skipped');
+            }
+          } catch (err) {
+            app.log.error(
+              { sessionId, recordId, err: err instanceof Error ? err.message : String(err) },
+              'transcript persist or analysis failed',
+            );
+          }
+        })();
       }
 
-      deleteSession(sessionId).catch(() => {});
+      deleteSession(sessionId).catch((err: Error) =>
+        app.log.warn({ sessionId, err: err.message }, 'session delete failed'),
+      );
     });
 
     socket.on('error', (err) => {

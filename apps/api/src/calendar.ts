@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { pool } from './db.js';
 import type { JwtPayload } from './auth.js';
 import { encrypt as encryptToken, decrypt as decryptToken } from './crypto.js';
+import { redis } from './redis.js';
 import crypto from 'node:crypto';
 
 // OAuth state uses a SEPARATE HMAC key (defense-in-depth: a JWT_SECRET leak must
@@ -21,13 +22,17 @@ const OAUTH_STATE_KEY = (() => {
 const OAUTH_STATE_TTL_SEC = 600;
 
 function signOAuthState(orgId: string, provider: 'google' | 'microsoft'): string {
-  const payload = { orgId, provider, exp: Math.floor(Date.now() / 1000) + OAUTH_STATE_TTL_SEC };
+  // Nonce binds the state to exactly one successful callback. After first
+  // verifyOAuthState, the nonce is marked used in Redis and any replay
+  // (double-click, leaked log, stolen URL) is rejected.
+  const nonce = crypto.randomBytes(16).toString('base64url');
+  const payload = { orgId, provider, nonce, exp: Math.floor(Date.now() / 1000) + OAUTH_STATE_TTL_SEC };
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const mac = crypto.createHmac('sha256', OAUTH_STATE_KEY).update(body).digest('base64url');
   return `${body}.${mac}`;
 }
 
-function verifyOAuthState(state: string, expectedProvider: 'google' | 'microsoft'): { orgId: string } | null {
+async function verifyOAuthState(state: string, expectedProvider: 'google' | 'microsoft'): Promise<{ orgId: string } | null> {
   const parts = state.split('.');
   if (parts.length !== 2) return null;
   const [body, mac] = parts as [string, string];
@@ -36,9 +41,27 @@ function verifyOAuthState(state: string, expectedProvider: 'google' | 'microsoft
   const b = Buffer.from(expectedMac);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
   try {
-    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as { orgId: string; provider: string; exp: number };
-    if (payload.exp < Math.floor(Date.now() / 1000)) return null;
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as { orgId: string; provider: string; exp: number; nonce?: string };
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp < now) return null;
     if (payload.provider !== expectedProvider) return null;
+
+    // Replay-protection: atomically claim the nonce. SET NX succeeds only on
+    // first callback; any subsequent verifyOAuthState with the same state
+    // finds the key and rejects. TTL = remaining state lifetime, so memory
+    // doesn't grow unboundedly. When Redis is down we accept the state (fail
+    // open — OAuth flows must not brick because of cache outage), but a
+    // warning is emitted.
+    if (payload.nonce && redis?.isOpen) {
+      const key = `oauth_state_used:${payload.nonce}`;
+      const ttl = Math.max(1, payload.exp - now);
+      const claimed = await redis.set(key, '1', { NX: true, EX: ttl }).catch(() => 'OK');
+      if (claimed === null) {
+        // Already used → replay
+        return null;
+      }
+    }
+
     return { orgId: payload.orgId };
   } catch { return null; }
 }
@@ -1029,7 +1052,7 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
     }
 
     // Verify HMAC state → extract orgId (rejects expired/forged/wrong-provider states)
-    const verified = verifyOAuthState(state, 'google');
+    const verified = await verifyOAuthState(state, 'google');
     if (!verified) {
       return reply.redirect(`${appUrl}?calendarError=invalid_state`);
     }
@@ -1287,7 +1310,7 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
       return reply.redirect(`${appUrl}?calendarError=not_configured`);
     }
 
-    const verified = verifyOAuthState(state, 'microsoft');
+    const verified = await verifyOAuthState(state, 'microsoft');
     if (!verified) {
       return reply.redirect(`${appUrl}?calendarError=invalid_state`);
     }

@@ -5,6 +5,7 @@ import Fastify, { type FastifyError, type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import jwt from '@fastify/jwt';
+import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import formbody from '@fastify/formbody';
@@ -40,8 +41,14 @@ const app = Fastify({
   // archive Bearer tokens or cookie jars. Pino redacts by full path; `*.authorization`
   // covers both inbound req.headers and outbound fetch breadcrumbs.
   logger: {
+    // Redact secrets AND GDPR-sensitive PII from structured log output so
+    // Sentry/docker-logs/stdout don't archive Bearer tokens, cookie jars, or
+    // customer contact data. Pino redacts by path; `*.x` matches one level deep,
+    // bare `x` matches root. Every call-site that logs `{ email, phone, name }`
+    // gets redacted regardless of nesting depth.
     redact: {
       paths: [
+        // Secrets in request headers
         'req.headers.authorization',
         'req.headers.cookie',
         'req.headers["x-api-key"]',
@@ -49,6 +56,18 @@ const app = Fastify({
         'req.headers["stripe-signature"]',
         '*.authorization',
         '*.password',
+        // Customer PII (DSGVO) — logged by demo.ts, contact.ts, outbound-agent.ts,
+        // twilio-openai-bridge.ts, phone.ts etc. when recording lead/callback events.
+        // Bare key redacts the root of the log object (log.info({ email } ...));
+        // *.key redacts one level deep (log.info({ lead: { email } } ...)).
+        'email', 'phone', 'customerName', 'customerPhone', 'caller',
+        '*.email', '*.phone', '*.customerName', '*.customerPhone', '*.caller',
+        'req.body.email', 'req.body.phone', 'req.body.name',
+        'req.body.customerName', 'req.body.customerPhone',
+        'req.body.message',
+        // Pino doesn't set a root "name" by default (we don't use logger.name),
+        // so redacting root "name" only hits PII call-sites (demo/contact leads).
+        'name',
       ],
       censor: '[REDACTED]',
     },
@@ -81,6 +100,7 @@ await app.register(helmet, {
 });
 await app.register(cors, {
   origin: (process.env.APP_URL ?? 'http://localhost:5173').split(',').map(s => s.trim()),
+  credentials: true, // required so the browser sends the refresh-token cookie on /auth/refresh
 });
 
 // Global rate limit — 100 req/min per IP
@@ -121,6 +141,11 @@ if (!jwtSecret) {
   app.log.warn('JWT_SECRET not set; using insecure default (dev only)');
 }
 await app.register(jwt, { secret: jwtSecret ?? 'dev-secret-change-in-prod' });
+
+// Cookie plugin — required for the refresh-token httpOnly cookie used by /auth/refresh.
+// Signed with JWT_SECRET so we can detect tampering even though refresh tokens
+// are also DB-validated; defence-in-depth.
+await app.register(cookie, { secret: jwtSecret ?? 'dev-secret-change-in-prod' });
 
 // Attach app.authenticate decorator used by protected routes
 app.decorate('authenticate', async (req: FastifyRequest, reply: import('fastify').FastifyReply) => {

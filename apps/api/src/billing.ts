@@ -85,8 +85,30 @@ async function getOrCreateStripeCustomer(orgId: string, email: string, orgName: 
 // NOTE: Free plan minutes are one-time (no monthly reset).
 // Paid plans reset at billing period renewal via syncSubscription.
 async function syncSubscription(sub: Stripe.Subscription) {
-  const orgId = sub.metadata?.orgId;
-  if (!orgId || !pool) return;
+  // Defence-in-depth: metadata.orgId is trusted (webhook is signed, we set it
+  // at subscription creation) but a dashboard operator can edit metadata on a
+  // live subscription. Cross-check against the stripe_customer_id → orgId
+  // mapping we persisted at customer-create time. If they disagree, prefer
+  // the DB and warn — prevents a fat-fingered metadata edit from shifting
+  // billing state onto a different org.
+  if (!pool) return;
+  const metaOrgId = sub.metadata?.orgId;
+  const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
+  let orgId = metaOrgId;
+  if (customerId) {
+    const mapRes = await pool.query(
+      `SELECT id FROM orgs WHERE stripe_customer_id = $1 LIMIT 1`,
+      [customerId],
+    );
+    const dbOrgId = mapRes.rows[0]?.id as string | undefined;
+    if (dbOrgId) {
+      if (metaOrgId && metaOrgId !== dbOrgId) {
+        process.stderr.write(`[billing] metadata.orgId=${metaOrgId} mismatch with stripe_customer_id→orgId=${dbOrgId}; trusting DB mapping\n`);
+      }
+      orgId = dbOrgId;
+    }
+  }
+  if (!orgId) return;
 
   const priceId = sub.items.data[0]?.price.id ?? null;
   // Match against both monthly AND yearly price IDs
@@ -244,6 +266,32 @@ export async function registerBilling(app: FastifyInstance) {
       event = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WEBHOOK_SECRET);
     } catch {
       return reply.status(400).send({ error: 'Invalid signature' });
+    }
+
+    // Idempotency: Stripe retries on any non-2xx or timeout. Without dedup, a
+    // retried invoice.paid would re-reset the billing period; a retried
+    // subscription.deleted would re-cascade cleanup. INSERT with ON CONFLICT
+    // DO NOTHING atomically claims the event — if no RETURNING row, we've
+    // already processed this event and skip. Respond 200 so Stripe doesn't
+    // retry further.
+    if (pool) {
+      try {
+        const claim = await pool.query(
+          `INSERT INTO processed_stripe_events (event_id, event_type)
+           VALUES ($1, $2)
+           ON CONFLICT (event_id) DO NOTHING
+           RETURNING event_id`,
+          [event.id, event.type],
+        );
+        if (!claim.rowCount) {
+          req.log.info({ eventId: event.id, type: event.type }, 'stripe webhook duplicate — skipping');
+          return reply.status(200).send({ ok: true, deduped: true });
+        }
+      } catch (err) {
+        // If dedup fails (e.g. table missing on first migrate), fall through and
+        // process the event once — better at-least-once than failing webhooks.
+        req.log.warn({ err: (err as Error).message }, 'stripe webhook dedup check failed, processing anyway');
+      }
     }
 
     switch (event.type) {

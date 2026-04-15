@@ -22,9 +22,6 @@ const eventsBySession = new Map<string, TraceEvent[]>();
 // an event carrying tenantId can read the session's traces).
 const tenantBySession = new Map<string, string>();
 
-// SSE listeners always stay in-memory (Redis Pub/Sub is overkill for MVP)
-const listeners = new Set<(event: TraceEvent) => void>();
-
 function eventsKey(sessionId: string) {
   return `traces:${sessionId}`;
 }
@@ -50,28 +47,48 @@ async function stampSessionTenant(sessionId: string, tenantId: string): Promise<
 }
 
 export async function appendTraceEvent(e: TraceEvent): Promise<void> {
-  // Notify SSE listeners regardless of storage backend
-  for (const l of listeners) l(e);
-
+  // Stamp first. This ordering is LOAD-BEARING — any future SSE/live-stream
+  // mechanism must consume events AFTER the tenant stamp exists so a listener
+  // can refuse events from a different tenant (otherwise cross-tenant leak via
+  // shared sessionId). When adding SSE, key the subscription by (tenantId,
+  // sessionId), not sessionId alone.
   if (e.tenantId) await stampSessionTenant(e.sessionId, e.tenantId);
 
   if (redis) {
-    const raw = await redis.get(eventsKey(e.sessionId));
-    const list: TraceEvent[] = raw ? JSON.parse(raw) : [];
-    list.unshift(e);
-    if (list.length > MAX_EVENTS_PER_SESSION) list.length = MAX_EVENTS_PER_SESSION;
-    await redis.setEx(eventsKey(e.sessionId), TRACES_TTL_SECONDS, JSON.stringify(list));
+    // Atomic LPUSH + LTRIM + EXPIRE — replaces a read-modify-write that lost
+    // events under concurrent writes (e.g. tool_call + agent_text in flight at
+    // the same time would overwrite each other). Multi() pipelines them in
+    // order; each command is itself atomic at the Redis side.
+    //
+    // WRONGTYPE handling: pre-migration data was stored as a JSON-string at the
+    // same key. If the legacy type is still there, DEL it once and proceed.
+    // (Deployed data has TTL=1h, so this branch is rare and short-lived.)
+    const key = eventsKey(e.sessionId);
+    try {
+      await redis.multi()
+        .lPush(key, JSON.stringify(e))
+        .lTrim(key, 0, MAX_EVENTS_PER_SESSION - 1)
+        .expire(key, TRACES_TTL_SECONDS)
+        .exec();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('WRONGTYPE')) {
+        await redis.del(key);
+        await redis.multi()
+          .lPush(key, JSON.stringify(e))
+          .lTrim(key, 0, MAX_EVENTS_PER_SESSION - 1)
+          .expire(key, TRACES_TTL_SECONDS)
+          .exec();
+      } else {
+        throw err;
+      }
+    }
   } else {
     const list = eventsBySession.get(e.sessionId) ?? [];
     list.unshift(e);
     if (list.length > MAX_EVENTS_PER_SESSION) list.length = MAX_EVENTS_PER_SESSION;
     eventsBySession.set(e.sessionId, list);
   }
-}
-
-export function onTraceEvent(handler: (event: TraceEvent) => void) {
-  listeners.add(handler);
-  return () => listeners.delete(handler);
 }
 
 /**
@@ -88,9 +105,21 @@ export async function getTraceEvents(
   if (owner !== tenantId) return [];
 
   if (redis) {
-    const raw = await redis.get(eventsKey(sessionId));
-    const list: TraceEvent[] = raw ? JSON.parse(raw) : [];
-    return list.slice(0, limit);
+    // Reads from the Redis list — paired with the LPUSH/LTRIM in appendTraceEvent.
+    // lRange(0, limit-1) returns newest-first since we LPUSH (head insert).
+    // WRONGTYPE catch covers legacy-format keys still in flight after the migration.
+    try {
+      const items = await redis.lRange(eventsKey(sessionId), 0, limit - 1);
+      const out: TraceEvent[] = [];
+      for (const raw of items) {
+        try { out.push(JSON.parse(raw) as TraceEvent); } catch { /* skip malformed */ }
+      }
+      return out;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('WRONGTYPE')) return [];
+      throw err;
+    }
   }
   return (eventsBySession.get(sessionId) ?? []).slice(0, limit);
 }

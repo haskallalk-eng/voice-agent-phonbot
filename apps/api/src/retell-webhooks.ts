@@ -43,12 +43,20 @@ function verifyRetellSignature(req: RawBodyRequest): boolean {
   }
 
   const signature = (req.headers['x-retell-signature'] as string) ?? '';
-  const rawBody: string =
-    typeof req.rawBody === 'string'
-      ? req.rawBody
-      : Buffer.isBuffer(req.rawBody)
-        ? req.rawBody.toString()
-        : JSON.stringify(req.body ?? {});
+
+  // rawBody MUST be set by the addContentTypeParser in index.ts for application/json.
+  // If it's missing, the request came over a content-type we can't reliably re-serialize
+  // (form-urlencoded, multipart) — falling back to JSON.stringify(req.body) would
+  // produce a different byte sequence than what Retell signed → every signature would
+  // fail anyway, plus we'd lose the audit trail. Refuse outright.
+  let rawBody: string;
+  if (typeof req.rawBody === 'string') {
+    rawBody = req.rawBody;
+  } else if (Buffer.isBuffer(req.rawBody)) {
+    rawBody = req.rawBody.toString();
+  } else {
+    return false;
+  }
 
   // Validate hex string before creating buffer (prevents Buffer allocation errors)
   if (!/^[0-9a-f]*$/.test(signature)) return false;
@@ -139,7 +147,9 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           const metadata = (call as RetellCallData & { metadata?: Record<string, unknown> }).metadata;
           const isOutbound = !!(metadata?.outboundRecordId);
 
-          // Store transcript for learning system (fire-and-forget)
+          // Store transcript for learning system (fire-and-forget, but LOGGED
+          // on failure — silent catches hide transcript loss, which then
+          // cascades into no audit trail, no billing check, no learning).
           if (pool) {
             pool.query(
               `INSERT INTO call_transcripts (org_id, call_id, direction, transcript, duration_sec, from_number, to_number, disconnection_reason, metadata)
@@ -156,14 +166,17 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
                 disconnectionReason ?? null,
                 JSON.stringify(metadata ?? {}),
               ],
-            ).catch(() => {});
+            ).catch((err: Error) => req.log.error({ err: err.message, orgId, callId }, 'call_transcripts insert failed'));
           }
 
           if (isOutbound) {
             // Outbound sales call — use outbound learning system
-            import('./outbound-insights.js').then(({ analyzeOutboundCall }) => {
-              analyzeOutboundCall(orgId!, callId!, transcript, durationMs ? Math.round(durationMs / 1000) : undefined).catch(() => {});
-            }).catch(() => {});
+            import('./outbound-insights.js')
+              .then(({ analyzeOutboundCall }) =>
+                analyzeOutboundCall(orgId!, callId!, transcript, durationMs ? Math.round(durationMs / 1000) : undefined)
+                  .catch((err: Error) => req.log.error({ err: err.message, orgId, callId }, 'analyzeOutboundCall failed')),
+              )
+              .catch((err: Error) => req.log.error({ err: err.message }, 'outbound-insights import failed'));
           } else {
             // Inbound call — use inbound learning system
             analyzeCall(orgId, callId, transcript, {
@@ -171,7 +184,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
               disconnection_reason: disconnectionReason ?? undefined,
               from_number: fromNumber ?? undefined,
               silence_duration_ms: silenceDurationMs ?? undefined,
-            }).catch(() => {});
+            }).catch((err: Error) => req.log.error({ err: err.message, orgId, callId }, 'analyzeCall failed'));
           }
         }
       }
@@ -313,10 +326,18 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const body = req.body as RetellEventBody;
     const args = (body?.args ?? body ?? {}) as Record<string, unknown>;
 
-    // Resolve tenantId from the agent_id in the request (falls back to 'demo' for backward compat)
+    // Resolve tenantId from the agent_id in the request. Refuse when we can't
+    // map — previously we silently fell back to tenantId='demo', which caused
+    // unknown-agent webhooks to land in the demo silo and mix with real demo
+    // tickets. Signature was already verified, so a 403 here means either a
+    // stale Retell agent (we deleted it) or a misconfigured webhook URL.
     const agentId = (args._retell_agent_id as string | undefined) ?? (args.agent_id as string | undefined);
     const orgId = agentId ? await getOrgIdByAgentId(agentId) : null;
-    const tenantId = orgId ?? 'demo';
+    if (!orgId) {
+      req.log.warn({ agentId }, 'retell ticket.create: unknown agent_id, refusing');
+      return reply.status(403).send({ error: 'unknown agent' });
+    }
+    const tenantId = orgId;
 
     await appendTraceEvent({
       type: 'tool_call',
