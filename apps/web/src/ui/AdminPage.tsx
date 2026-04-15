@@ -7,13 +7,13 @@ import {
   adminDeleteLead,
   adminGetUsers,
   adminGetOrgs,
+  setAdminToken,
+  getAdminToken,
   type AdminMetrics,
   type AdminLead,
   type AdminUser,
   type AdminOrg,
 } from '../lib/api.js';
-
-const ADMIN_TOKEN_KEY = 'phonbot_admin_token';
 
 type Tab = 'overview' | 'leads' | 'users';
 
@@ -31,7 +31,10 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
     setLoading(true);
     try {
       const { token } = await adminLogin(password);
-      localStorage.setItem(ADMIN_TOKEN_KEY, token);
+      // In-memory only — admin token never touches localStorage. Each tab
+      // requires a fresh login, which is acceptable for a low-frequency flow
+      // and closes the XSS-exfil surface (F-02).
+      setAdminToken(token);
       onLogin();
     } catch (err) {
       setError(err instanceof Error && err.message.includes('401') ? 'Falsches Passwort' : 'Verbindungsfehler — versuche es erneut');
@@ -460,11 +463,11 @@ function LoadingSpinner() {
 // ── Main AdminPage ────────────────────────────────────────────────────────────
 
 export function AdminPage() {
-  const [isAuthed, setIsAuthed] = useState(!!localStorage.getItem(ADMIN_TOKEN_KEY));
+  const [isAuthed, setIsAuthed] = useState(!!getAdminToken());
   const [tab, setTab] = useState<Tab>('overview');
 
   function handleLogout() {
-    localStorage.removeItem(ADMIN_TOKEN_KEY);
+    setAdminToken(null);
     setIsAuthed(false);
   }
 

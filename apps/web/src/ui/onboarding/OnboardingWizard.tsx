@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { RetellWebClient } from 'retell-client-js-sdk';
 import { TEMPLATES, type Template } from './templates.js';
-import { deployAgentConfig, createWebCall, connectCalcom, getMicrosoftCalendarAuthUrl, type AgentConfig } from '../../lib/api.js';
+import { deployAgentConfig, createWebCall, connectCalcom, getMicrosoftCalendarAuthUrl, getAccessToken, type AgentConfig } from '../../lib/api.js';
 import { FoxLogo } from '../FoxLogo.js';
 import {
   IconStar, IconCalendar, IconPhone, IconCapabilities,
@@ -238,9 +238,14 @@ export function OnboardingWizard({ onComplete }: Props) {
     setPhoneLoading(true);
     setPhoneError(null);
     try {
+      const token = getAccessToken();
       const res = await fetch('/api/phone/provision', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${localStorage.getItem('vas_token') ?? ''}` },
+        headers: {
+          'content-type': 'application/json',
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: 'include',
         body: JSON.stringify({ areaCode }),
       });
       if (!res.ok) throw new Error(`Fehler ${res.status}: ${await res.text()}`);

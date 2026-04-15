@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import type { AgentConfig } from '../../lib/api.js';
-import { deleteAgent } from '../../lib/api.js';
+import { deleteAgent, getAccessToken } from '../../lib/api.js';
 import { IconAgent } from './shared.js';
 
 function usePhoneNumbers() {
   const [numbers, setNumbers] = useState<{ agent_id: string | null }[]>([]);
   useEffect(() => {
-    fetch('/api/phone', { headers: { authorization: `Bearer ${localStorage.getItem('vas_token') ?? ''}` } })
+    const token = getAccessToken();
+    fetch('/api/phone', {
+      headers: token ? { authorization: `Bearer ${token}` } : {},
+      credentials: 'include',
+    })
       .then(r => r.json())
       .then(d => setNumbers(d.items ?? []))
       .catch(() => {});

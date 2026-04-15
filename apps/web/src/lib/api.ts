@@ -1,6 +1,20 @@
 const BASE = '/api';
 const REQUEST_TIMEOUT = 30_000;
 
+// In-memory access token store.
+//
+// Previously the access JWT was persisted in localStorage — an XSS vuln
+// anywhere on the origin would exfiltrate it directly. Now it only lives
+// for the lifetime of the tab's JS context; on page reload we try to
+// swap the httpOnly refresh cookie for a fresh access token (see
+// AuthProvider bootstrap + refreshAccessToken below). Fixes F-01 / F-02.
+let _accessToken: string | null = null;
+let _adminToken: string | null = null;
+export function setAccessToken(t: string | null): void { _accessToken = t; }
+export function getAccessToken(): string | null { return _accessToken; }
+export function setAdminToken(t: string | null): void { _adminToken = t; }
+export function getAdminToken(): string | null { return _adminToken; }
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -21,8 +35,7 @@ export class ApiError extends Error {
 }
 
 function authHeader(): Record<string, string> {
-  const token = localStorage.getItem('vas_token');
-  return token ? { authorization: `Bearer ${token}` } : {};
+  return _accessToken ? { authorization: `Bearer ${_accessToken}` } : {};
 }
 
 // Coalesce concurrent /auth/refresh calls — when 5 parallel requests all 401,
@@ -40,7 +53,7 @@ async function refreshAccessToken(): Promise<string | null> {
       if (!res.ok) return null;
       const data = await res.json() as { token?: string };
       if (!data.token) return null;
-      localStorage.setItem('vas_token', data.token);
+      _accessToken = data.token;
       return data.token;
     } catch {
       return null;
@@ -557,11 +570,11 @@ export async function cloneVoice(name: string, audioFile: File, provider = 'cart
   form.append('name', name);
   form.append('provider', provider);
   form.append('audio', audioFile);
-  const token = localStorage.getItem('vas_token');
   const res = await fetch('/api/voices/clone', {
     method: 'POST',
-    headers: token ? { authorization: `Bearer ${token}` } : {},
+    headers: _accessToken ? { authorization: `Bearer ${_accessToken}` } : {},
     body: form,
+    credentials: 'include',
   });
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
   return res.json() as Promise<Voice>;
@@ -772,11 +785,8 @@ export function sendCopilotMessage(message: string, history: CopilotMessage[] = 
 
 // --- Admin CRM ---
 
-const ADMIN_TOKEN_KEY = 'phonbot_admin_token';
-
 function adminAuthHeader(): Record<string, string> {
-  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
-  return token ? { authorization: `Bearer ${token}` } : {};
+  return _adminToken ? { authorization: `Bearer ${_adminToken}` } : {};
 }
 
 async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {

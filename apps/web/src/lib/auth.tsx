@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { setAccessToken } from './api';
 
 export type AuthUser = {
   id: string;
@@ -26,7 +27,10 @@ type AuthContextValue = AuthState & {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const TOKEN_KEY = 'vas_token';
+// Access JWT is held in memory only (module scope in api.ts + React state here).
+// The long-lived refresh credential lives as httpOnly cookie set by the API —
+// this means XSS cannot lift the access token from localStorage the way it
+// used to. Fixes F-01.
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   // 10s timeout — prevents hung logins/me-calls from freezing the UI indefinitely
@@ -50,11 +54,12 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
 // Try to swap the refresh cookie for a fresh access token. Returns the new
 // token on success, null on failure (refresh expired/revoked → user must log in).
+// Publishes the token into the api.ts module store so request() can pick it up.
 async function tryRefresh(): Promise<string | null> {
   try {
     const data = await apiFetch<{ token: string }>('/auth/refresh', { method: 'POST' });
     if (data?.token) {
-      localStorage.setItem(TOKEN_KEY, data.token);
+      setAccessToken(data.token);
       return data.token;
     }
   } catch { /* refresh failed → caller logs out */ }
@@ -64,32 +69,31 @@ async function tryRefresh(): Promise<string | null> {
 type AuthResponse = { token: string; user: AuthUser; org: AuthOrg };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AuthState>(() => {
-    const token = localStorage.getItem(TOKEN_KEY);
-    return { token, user: null, org: null };
-  });
+  // Access JWT starts null every session; bootstrap below tries to swap the
+  // httpOnly refresh cookie for a fresh one. Never read from localStorage.
+  const [state, setState] = useState<AuthState>({ token: null, user: null, org: null });
 
-  // On mount: try /auth/me with the current access token; if that 401s, attempt
-  // one refresh (the refresh cookie may still be valid even if the access JWT
-  // expired in localStorage). On second failure → fully log out.
+  // Keep api.ts's module-scoped token in sync with React state so request()
+  // + direct fetches via getAccessToken() see the same value. F-08: on logout
+  // this also clears the cached token used by those direct callers.
+  useEffect(() => {
+    setAccessToken(state.token);
+  }, [state.token]);
+
+  // On mount: refresh cookie → access token → /auth/me. If refresh fails,
+  // user is truly logged out. The refresh cookie is httpOnly so JS can't
+  // read it; we only probe via the /auth/refresh endpoint.
   useEffect(() => {
     let cancelled = false;
     async function bootstrap() {
-      // Even without a token, the refresh cookie might still be valid (e.g. user
-      // returns after access JWT expired). Try refresh first if no token.
-      let token = state.token;
-      if (!token) {
-        token = await tryRefresh();
-        if (!token) return; // truly logged out
-      }
-
-      const fetchMe = (t: string) => apiFetch<{ id: string; email: string; role: string; org_id: string; org_name: string; org_slug: string }>(
-        '/auth/me',
-        { headers: { authorization: `Bearer ${t}` } },
-      );
+      const token = await tryRefresh();
+      if (!token) return; // truly logged out
 
       try {
-        const me = await fetchMe(token);
+        const me = await apiFetch<{ id: string; email: string; role: string; org_id: string; org_name: string; org_slug: string }>(
+          '/auth/me',
+          { headers: { authorization: `Bearer ${token}` } },
+        );
         if (cancelled) return;
         setState({
           token,
@@ -97,27 +101,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           org: { id: me.org_id, name: me.org_name, slug: me.org_slug },
         });
       } catch {
-        // Access token expired/invalid → try refresh once
-        const refreshed = await tryRefresh();
-        if (!refreshed) {
-          if (cancelled) return;
-          localStorage.removeItem(TOKEN_KEY);
-          setState({ token: null, user: null, org: null });
-          return;
-        }
-        try {
-          const me = await fetchMe(refreshed);
-          if (cancelled) return;
-          setState({
-            token: refreshed,
-            user: { id: me.id, email: me.email, role: me.role as AuthUser['role'] },
-            org: { id: me.org_id, name: me.org_name, slug: me.org_slug },
-          });
-        } catch {
-          if (cancelled) return;
-          localStorage.removeItem(TOKEN_KEY);
-          setState({ token: null, user: null, org: null });
-        }
+        if (cancelled) return;
+        setAccessToken(null);
+        setState({ token: null, user: null, org: null });
       }
     }
     bootstrap();
@@ -130,7 +116,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    localStorage.setItem(TOKEN_KEY, data.token);
     setState({ token: data.token, user: data.user, org: data.org });
   }, []);
 
@@ -139,7 +124,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       body: JSON.stringify({ orgName, email, password }),
     });
-    localStorage.setItem(TOKEN_KEY, data.token);
     setState({ token: data.token, user: data.user, org: data.org });
   }, []);
 
@@ -147,7 +131,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Server-side: revoke refresh token + clear cookie. Fire-and-forget — local
     // logout must always succeed even if the network call fails.
     apiFetch('/auth/logout', { method: 'POST' }).catch(() => {});
-    localStorage.removeItem(TOKEN_KEY);
+    // Wipe any stale app-state keys that should not survive a logout (F-08).
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('phonbot_')) localStorage.removeItem(k);
+      }
+    } catch { /* storage unavailable */ }
+    setAccessToken(null);
     setState({ token: null, user: null, org: null });
   }, []);
 

@@ -9,6 +9,7 @@ import {
   getBillingStatus,
   getVoices,
   getInsights,
+  getAccessToken,
   type AgentConfig,
   type AgentPreview,
   type Voice,
@@ -80,10 +81,16 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
       setPendingSuggestions(d.suggestions.filter(s => s.status === 'pending').length);
     }).catch(() => {});
     // Check if any phone numbers exist
-    void fetch('/api/phone', { headers: { authorization: `Bearer ${localStorage.getItem('vas_token') ?? ''}` } })
-      .then(r => r.json())
-      .then(d => setHasPhone((d.items ?? []).length > 0))
-      .catch(() => {});
+    {
+      const token = getAccessToken();
+      void fetch('/api/phone', {
+        headers: token ? { authorization: `Bearer ${token}` } : {},
+        credentials: 'include',
+      })
+        .then(r => r.json())
+        .then(d => setHasPhone((d.items ?? []).length > 0))
+        .catch(() => {});
+    }
   }, [loadVoices]);
 
   // Close voice dropdown on outside click
