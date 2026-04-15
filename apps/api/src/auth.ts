@@ -5,15 +5,81 @@ import { pool } from './db.js';
 import { z } from 'zod';
 import { sendPasswordResetEmail, sendVerificationEmail, sendWelcomeEmail } from './email.js';
 
+// ── Token lifetime / cookie config ────────────────────────────────────────────
+//
+// Why split: a 7-day Bearer JWT in localStorage is a single point of compromise.
+// XSS → token leak → 7 days of attacker access with no revocation. Splitting:
+//   • Access JWT (1h, localStorage, Bearer header) — short blast radius.
+//   • Refresh token (30d, httpOnly cookie, DB-validated) — out of JS reach,
+//     server-side revocable, rotates on every use (replay detection).
+const ACCESS_TOKEN_TTL = '1h';
+const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const REFRESH_COOKIE = 'vas_refresh';
+const REFRESH_COOKIE_PATH = '/auth'; // sent only to /auth/refresh + /auth/logout
+
+function refreshCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict' as const,
+    path: REFRESH_COOKIE_PATH,
+    maxAge: REFRESH_TOKEN_TTL_MS / 1000,
+    signed: true,
+  };
+}
+
+function hashToken(raw: string): string {
+  return crypto.createHash('sha256').update(raw).digest('hex');
+}
+
+async function issueRefreshToken(
+  userId: string,
+  req: FastifyRequest,
+): Promise<string> {
+  if (!pool) throw new Error('Database not configured');
+  const raw = crypto.randomBytes(32).toString('hex');
+  const hash = hashToken(raw);
+  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+  await pool.query(
+    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, user_agent, ip)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [userId, hash, expiresAt, req.headers['user-agent']?.slice(0, 500) ?? null, req.ip ?? null],
+  );
+  return raw;
+}
+
+async function issueTokenPair(
+  app: FastifyInstance,
+  user: { id: string; role: 'owner' | 'admin' | 'member'; org_id: string },
+  req: FastifyRequest,
+  reply: FastifyReply,
+): Promise<{ token: string }> {
+  const accessToken = app.jwt.sign(
+    { userId: user.id, orgId: user.org_id, role: user.role },
+    { expiresIn: ACCESS_TOKEN_TTL },
+  );
+  const refreshRaw = await issueRefreshToken(user.id, req);
+  reply.setCookie(REFRESH_COOKIE, refreshRaw, refreshCookieOptions());
+  return { token: accessToken };
+}
+
+// password.max(72) — bcrypt silently truncates inputs past 72 bytes. Without
+// this cap, "SecretABCDEFGHI…<60 chars>A" and "…B" hash identically → login
+// with any >72-byte variant works, and an attacker with the hash only needs
+// the first 72 bytes. Also caps body size so z.string() doesn't try to hash
+// a gigabyte.
+const PASSWORD_MIN = 8;
+const PASSWORD_MAX = 72;
+
 const RegisterBody = z.object({
   orgName: z.string().min(2).max(100),
   email: z.string().email(),
-  password: z.string().min(8),
+  password: z.string().min(PASSWORD_MIN).max(PASSWORD_MAX),
 });
 
 const LoginBody = z.object({
   email: z.string().email(),
-  password: z.string().min(1),
+  password: z.string().min(1).max(PASSWORD_MAX),
 });
 
 export async function registerAuth(app: FastifyInstance) {
@@ -49,14 +115,23 @@ export async function registerAuth(app: FastifyInstance) {
       );
       const org = orgResult.rows[0];
 
-      // If no email service is configured (dev), mark user as already verified
+      // If no email service is configured (dev), mark user as already verified.
+      // ON CONFLICT closes the TOCTOU between the pre-check above and this
+      // INSERT — a concurrent registration with the same email can't squeak
+      // through. users.email has a UNIQUE constraint (see db.ts); on conflict
+      // we RETURNING 0 rows → we detect, roll back, and return 409.
       const emailServiceConfigured = !!process.env.RESEND_API_KEY;
       const userResult = await client.query(
         `INSERT INTO users (org_id, email, password_hash, role, email_verify_token, email_verified)
          VALUES ($1, $2, $3, 'owner', $4, $5)
+         ON CONFLICT (email) DO NOTHING
          RETURNING id, email, role`,
         [org.id, email, passwordHash, emailServiceConfigured ? verifyToken : null, !emailServiceConfigured],
       );
+      if (!userResult.rowCount) {
+        await client.query('ROLLBACK');
+        return reply.status(409).send({ error: 'Email already registered' });
+      }
       const user = userResult.rows[0];
 
       await client.query('COMMIT');
@@ -71,10 +146,7 @@ export async function registerAuth(app: FastifyInstance) {
         sendWelcomeEmail({ toEmail: email, orgName }).catch(() => {});
       }
 
-      const token = app.jwt.sign(
-        { userId: user.id, orgId: org.id, role: user.role },
-        { expiresIn: '7d' },
-      );
+      const { token } = await issueTokenPair(app, { id: user.id, role: user.role, org_id: org.id }, req, reply);
 
       return reply.status(201).send({ token, org, user: { id: user.id, email: user.email, role: user.role } });
     } catch (err) {
@@ -118,9 +190,11 @@ export async function registerAuth(app: FastifyInstance) {
 
     // Email verification is informational only — never block login
 
-    const token = app.jwt.sign(
-      { userId: user.id, orgId: user.org_id, role: user.role },
-      { expiresIn: '7d' },
+    const { token } = await issueTokenPair(
+      app,
+      { id: user.id, role: user.role, org_id: user.org_id },
+      req,
+      reply,
     );
 
     return reply.send({
@@ -156,7 +230,18 @@ export async function registerAuth(app: FastifyInstance) {
     }
     const { email } = parsed.data;
 
-    // Always return ok to prevent enumeration
+    // Always return ok to prevent account enumeration via response-body.
+    // Also prevent enumeration via RESPONSE-TIME: the existing-user path runs
+    // INSERT + fire-and-forget email (~15ms), the non-existing path returned
+    // instantly (~5ms). A timing attacker could tell them apart. Fix: bcrypt
+    // hash a dummy on BOTH paths *before* branching, so the ~100ms bcrypt cost
+    // dominates and dwarfs the ~10ms difference between the INSERT branch and
+    // the skip branch. Email send is fire-and-forget → not part of the timing.
+    //
+    // Why bcrypt and not setTimeout: bcrypt actually consumes CPU symmetrically,
+    // so the attacker can't distinguish branches via load-induced jitter either.
+    await bcrypt.hash(`enum-guard-${email}`, 10);
+
     if (!pool) return reply.send({ ok: true });
 
     const userResult = await pool.query('SELECT id FROM users WHERE email = $1 AND is_active = true', [email]);
@@ -188,7 +273,7 @@ export async function registerAuth(app: FastifyInstance) {
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = z.object({
       token: z.string().min(1),
-      password: z.string().min(8),
+      password: z.string().min(PASSWORD_MIN).max(PASSWORD_MAX),
     }).safeParse(req.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: 'Invalid input', details: parsed.error.flatten() });
@@ -197,21 +282,49 @@ export async function registerAuth(app: FastifyInstance) {
 
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
-    const resetResult = await pool.query(
-      `SELECT id, user_id FROM password_resets
-       WHERE token = $1 AND used = false AND expires_at > now()`,
-      [token],
-    );
+    // Atomically: claim the token (used=true), update password, revoke all
+    // refresh tokens for the user. Previously these were three independent
+    // queries — if the used-flag UPDATE failed after the password UPDATE,
+    // the reset link became replayable, and an attacker holding a stolen
+    // refresh cookie kept their access (since passwords change but refresh
+    // tokens weren't revoked).
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    if (!resetResult.rowCount || resetResult.rowCount === 0) {
-      return reply.status(400).send({ error: 'Invalid or expired token' });
+      // Claim-and-gate in one statement: UPDATE returns the row only if it
+      // was still unused at the moment of execution (no TOCTOU).
+      const claim = await client.query(
+        `UPDATE password_resets SET used = true
+         WHERE token = $1 AND used = false AND expires_at > now()
+         RETURNING user_id`,
+        [token],
+      );
+      if (!claim.rowCount) {
+        await client.query('ROLLBACK');
+        return reply.status(400).send({ error: 'Invalid or expired token' });
+      }
+      const userId = claim.rows[0].user_id as string;
+      const passwordHash = await bcrypt.hash(password, 12);
+
+      await client.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
+
+      // Revoke every live refresh-cookie for this user. A password reset
+      // often means "I think someone else has access"; keeping old refresh
+      // tokens alive would defeat the reset.
+      await client.query(
+        `UPDATE refresh_tokens SET revoked_at = now()
+         WHERE user_id = $1 AND revoked_at IS NULL`,
+        [userId],
+      );
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
     }
-
-    const { id: resetId, user_id: userId } = resetResult.rows[0];
-    const passwordHash = await bcrypt.hash(password, 12);
-
-    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
-    await pool.query('UPDATE password_resets SET used = true WHERE id = $1', [resetId]);
 
     return reply.send({ ok: true });
   });
@@ -274,35 +387,71 @@ export async function registerAuth(app: FastifyInstance) {
     return reply.send({ ok: true });
   });
 
-  // POST /auth/refresh — refresh a token that is within 24h of expiry
+  // POST /auth/refresh — exchange refresh-cookie for new access token + rotate refresh.
+  // No Bearer required (the access token is expected to be expired here). The
+  // refresh cookie alone authorises this endpoint; rotation invalidates the old
+  // refresh on every successful call so a stolen cookie is single-use.
   app.post('/auth/refresh', {
-    onRequest: [app.authenticate],
-    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { userId, orgId, role } = req.user as JwtPayload;
+    if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
-    // Decode the token to check its expiry
-    const decoded = app.jwt.decode<{ exp?: number }>(
-      req.headers.authorization?.replace(/^Bearer\s+/i, '') ?? '',
-    );
-    if (!decoded || typeof decoded !== 'object' || !decoded.exp) {
-      return reply.status(400).send({ error: 'Cannot decode token' });
+    const signed = req.cookies?.[REFRESH_COOKIE];
+    if (!signed) return reply.status(401).send({ error: 'No refresh token' });
+
+    const unsigned = req.unsignCookie(signed);
+    if (!unsigned.valid || !unsigned.value) {
+      return reply.status(401).send({ error: 'Invalid refresh token' });
     }
+    const raw = unsigned.value;
+    const hash = hashToken(raw);
 
-    const now = Math.floor(Date.now() / 1000);
-    const secondsUntilExpiry = decoded.exp - now;
-    const twentyFourHours = 24 * 60 * 60;
-
-    if (secondsUntilExpiry > twentyFourHours) {
-      return reply.status(400).send({ error: 'Token is not yet eligible for refresh (more than 24h until expiry)' });
-    }
-
-    const token = app.jwt.sign(
-      { userId, orgId, role },
-      { expiresIn: '7d' },
+    // Atomically delete + return the matching, unrevoked, unexpired row.
+    // If DELETE finds nothing → token is unknown/already-rotated/revoked → 401.
+    const rotateRes = await pool.query(
+      `DELETE FROM refresh_tokens
+       WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()
+       RETURNING user_id`,
+      [hash],
     );
+    if (!rotateRes.rowCount) {
+      reply.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+      return reply.status(401).send({ error: 'Refresh token invalid or expired' });
+    }
+    const userId = rotateRes.rows[0].user_id as string;
 
+    // Re-fetch user (could have been deactivated between login and refresh)
+    const userRes = await pool.query(
+      `SELECT id, role, org_id FROM users WHERE id = $1 AND is_active = true`,
+      [userId],
+    );
+    if (!userRes.rowCount) {
+      reply.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+      return reply.status(401).send({ error: 'User no longer active' });
+    }
+    const user = userRes.rows[0] as { id: string; role: 'owner' | 'admin' | 'member'; org_id: string };
+
+    const { token } = await issueTokenPair(app, user, req, reply);
     return reply.send({ token });
+  });
+
+  // POST /auth/logout — revoke refresh token + clear cookie.
+  // No Bearer required so a logout still works after the access token expired.
+  app.post('/auth/logout', {
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const signed = req.cookies?.[REFRESH_COOKIE];
+    if (signed && pool) {
+      const unsigned = req.unsignCookie(signed);
+      if (unsigned.valid && unsigned.value) {
+        await pool.query(
+          `UPDATE refresh_tokens SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL`,
+          [hashToken(unsigned.value)],
+        ).catch(() => {/* non-critical */});
+      }
+    }
+    reply.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+    return reply.send({ ok: true });
   });
 
   // DELETE /auth/account — GDPR: delete own account + org data
@@ -346,48 +495,55 @@ export async function registerAuth(app: FastifyInstance) {
       [orgId],
     );
     const retellKey = process.env.RETELL_API_KEY;
-    if (retellKey) {
-      const idsToDelete = new Set<string>();
-      for (const row of agentsRes.rows) {
-        for (const id of [row.a, row.b]) if (id) idsToDelete.add(id as string);
-      }
-      for (const id of idsToDelete) {
-        await fetch(`https://api.retellai.com/delete-agent/${encodeURIComponent(id)}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${retellKey}` },
-          signal: AbortSignal.timeout(10_000),
-        }).catch(() => {/* non-critical */});
-      }
-      // Also delete LLM configs (zombie costs)
-      const llmsToDelete = new Set<string>();
-      for (const row of agentsRes.rows) {
-        for (const id of [row.c, row.d]) if (id) llmsToDelete.add(id as string);
-      }
-      for (const id of llmsToDelete) {
-        await fetch(`https://api.retellai.com/delete-retell-llm/${encodeURIComponent(id)}`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${retellKey}` },
-          signal: AbortSignal.timeout(10_000),
-        }).catch(() => {/* non-critical */});
-      }
-    }
-
-    // Release Twilio phone numbers + delete Retell phone-number assignments
-    // Prevents monthly Twilio charges (~1 €/number) for deleted accounts.
     const phonesRes = await pool.query(
       `SELECT number FROM phone_numbers WHERE org_id = $1`,
       [orgId],
     );
     const twilioSid = process.env.TWILIO_ACCOUNT_SID;
     const twilioToken = process.env.TWILIO_AUTH_TOKEN;
+
+    // Run all external-service cleanup fan-out in parallel with Promise.allSettled.
+    // Previously: ~10 Retell agents + ~10 phone numbers × ~2 Twilio calls each
+    // were awaited serially with 10s timeouts → worst case >150s request, client
+    // timed out mid-cleanup, left zombies (Twilio numbers still billed, Retell
+    // agents still taking calls). Parallel + allSettled = bounded by the slowest
+    // single call (~10s) and every failure only takes down its own branch.
+    const cleanupTasks: Promise<unknown>[] = [];
+
+    if (retellKey) {
+      const agentIds = new Set<string>();
+      const llmIds = new Set<string>();
+      for (const row of agentsRes.rows) {
+        for (const id of [row.a, row.b]) if (id) agentIds.add(id as string);
+        for (const id of [row.c, row.d]) if (id) llmIds.add(id as string);
+      }
+      for (const id of agentIds) {
+        cleanupTasks.push(fetch(`https://api.retellai.com/delete-agent/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${retellKey}` },
+          signal: AbortSignal.timeout(10_000),
+        }));
+      }
+      for (const id of llmIds) {
+        cleanupTasks.push(fetch(`https://api.retellai.com/delete-retell-llm/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${retellKey}` },
+          signal: AbortSignal.timeout(10_000),
+        }));
+      }
+    }
+
+    // Release Twilio phone numbers + delete Retell phone-number assignments
+    // Prevents monthly Twilio charges (~1 €/number) for deleted accounts.
+    const auth = twilioSid && twilioToken
+      ? 'Basic ' + Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64')
+      : null;
     for (const row of phonesRes.rows) {
       const number = row.number as string | null;
       if (!number) continue;
 
-      // Find Twilio IncomingPhoneNumber SID and release it
-      if (twilioSid && twilioToken) {
-        try {
-          const auth = 'Basic ' + Buffer.from(`${twilioSid}:${twilioToken}`).toString('base64');
+      if (auth && twilioSid) {
+        cleanupTasks.push((async () => {
           const listRes = await fetch(
             `https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/IncomingPhoneNumbers.json?PhoneNumber=${encodeURIComponent(number)}`,
             { headers: { Authorization: auth }, signal: AbortSignal.timeout(10_000) },
@@ -400,16 +556,21 @@ export async function registerAuth(app: FastifyInstance) {
               { method: 'DELETE', headers: { Authorization: auth }, signal: AbortSignal.timeout(10_000) },
             );
           }
-        } catch {/* non-critical */}
+        })());
       }
 
-      // Delete phone number registration in Retell
       if (retellKey) {
-        await fetch(
+        cleanupTasks.push(fetch(
           `https://api.retellai.com/delete-phone-number/${encodeURIComponent(number)}`,
           { method: 'DELETE', headers: { Authorization: `Bearer ${retellKey}` }, signal: AbortSignal.timeout(10_000) },
-        ).catch(() => {/* non-critical */});
+        ));
       }
+    }
+
+    const results = await Promise.allSettled(cleanupTasks);
+    const failures = results.filter((r) => r.status === 'rejected').length;
+    if (failures) {
+      req.log.warn({ orgId, failures, total: results.length }, 'account-delete: external cleanup had partial failures');
     }
 
     // GDPR right-to-erasure: also delete anonymous platform-level CRM leads that

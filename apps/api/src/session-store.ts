@@ -66,6 +66,18 @@ async function readSession(sessionId: string, tenantId: string): Promise<Session
   return s;
 }
 
+// Distinguish "session doesn't exist" from "exists but owned by another tenant".
+// getOrCreate needs this so a cross-tenant collision can fail closed instead of
+// being silently overwritten.
+async function peekSessionOwner(sessionId: string): Promise<string | null> {
+  if (redis) {
+    const raw = await redis.get(redisKey(sessionId));
+    if (!raw) return null;
+    try { return (JSON.parse(raw) as Session).tenantId ?? null; } catch { return null; }
+  }
+  return sessions.get(sessionId)?.tenantId ?? null;
+}
+
 async function writeSession(sessionId: string, s: Session): Promise<void> {
   s.lastActiveAt = Date.now();
   if (redis) {
@@ -78,8 +90,20 @@ async function writeSession(sessionId: string, s: Session): Promise<void> {
 async function getOrCreate(sessionId: string, tenantId: string): Promise<Session> {
   const existing = await readSession(sessionId, tenantId);
   if (existing) { existing.lastActiveAt = Date.now(); await writeSession(sessionId, existing); return existing; }
-  // If a session with same id exists under another tenant, we treat it as "not ours" and create a new one under our tenant.
-  // (Collisions are possible only if sessionIds aren't random — our generator uses crypto.randomUUID so it's safe.)
+
+  // Before creating a new session under our tenant, check whether the key is
+  // already claimed by a different tenant. Previously we silently overwrote —
+  // attacker with a leaked sessionId from another org could POST /chat with
+  // the same sessionId and wipe the victim's transcript (cross-tenant DoS).
+  // sessionId is client-supplied (Zod allows any non-empty string), so we
+  // cannot rely on UUID uniqueness alone.
+  const owner = await peekSessionOwner(sessionId);
+  if (owner && owner !== tenantId) {
+    const err = new Error('SESSION_ID_COLLISION') as Error & { statusCode?: number };
+    err.statusCode = 409;
+    throw err;
+  }
+
   const s: Session = { tenantId, messages: [], createdAt: Date.now(), lastActiveAt: Date.now() };
   await writeSession(sessionId, s);
   return s;

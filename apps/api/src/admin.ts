@@ -1,11 +1,17 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
+import bcrypt from 'bcrypt';
 import { pool } from './db.js';
 
-// ADMIN_PASSWORD is required in production (no default — defaulted pw = instant platform-compromise)
+// Admin login accepts either:
+//  • ADMIN_PASSWORD_HASH (bcrypt, recommended for prod) — plaintext never in
+//    process memory, `docker inspect` or `/proc/<pid>/environ` can't leak it;
+//  • ADMIN_PASSWORD (plaintext, fine for local/dev) — kept for backward-compat.
+// In production at least one must be set, else boot fails.
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-if (!ADMIN_PASSWORD && process.env.NODE_ENV === 'production') {
-  throw new Error('ADMIN_PASSWORD is required in production — refusing to start');
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
+if (!ADMIN_PASSWORD && !ADMIN_PASSWORD_HASH && process.env.NODE_ENV === 'production') {
+  throw new Error('ADMIN_PASSWORD or ADMIN_PASSWORD_HASH is required in production — refusing to start');
 }
 
 /** Middleware: verify admin JWT token */
@@ -31,12 +37,20 @@ export async function registerAdmin(app: FastifyInstance) {
     const parsed = z.object({ password: z.string().min(1) }).safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: 'Password required' });
 
-    // Constant-time compare to prevent timing-attacks + reject when password not set
-    if (!ADMIN_PASSWORD) return reply.status(503).send({ error: 'Admin login disabled (not configured)' });
-    const providedBuf = Buffer.from(parsed.data.password);
-    const expectedBuf = Buffer.from(ADMIN_PASSWORD);
-    const match = providedBuf.length === expectedBuf.length
-      && (await import('node:crypto')).timingSafeEqual(providedBuf, expectedBuf);
+    // Prefer bcrypt-hash path (plaintext never in process memory). Fall back
+    // to plaintext ADMIN_PASSWORD only if hash not provided. bcrypt.compare
+    // is constant-time internally.
+    let match = false;
+    if (ADMIN_PASSWORD_HASH) {
+      match = await bcrypt.compare(parsed.data.password, ADMIN_PASSWORD_HASH);
+    } else if (ADMIN_PASSWORD) {
+      const providedBuf = Buffer.from(parsed.data.password);
+      const expectedBuf = Buffer.from(ADMIN_PASSWORD);
+      match = providedBuf.length === expectedBuf.length
+        && (await import('node:crypto')).timingSafeEqual(providedBuf, expectedBuf);
+    } else {
+      return reply.status(503).send({ error: 'Admin login disabled (not configured)' });
+    }
     if (!match) {
       return reply.status(401).send({ error: 'Invalid admin password' });
     }

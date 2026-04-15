@@ -136,6 +136,28 @@ export async function migrate() {
     return;
   }
 
+  // ── Encryption-key sanity check ─────────────────────────────────────────
+  // If ENCRYPTION_KEY is unset in production BUT there are already encrypted
+  // calendar rows in the DB, refuse to boot. Without this, decrypt() silently
+  // returns NULL and every calendar integration quietly breaks (user sees
+  // "calendar not connected" with no explanation). Fail loud on the server
+  // boot instead of debugging why bookings stopped working three days later.
+  if (process.env.NODE_ENV === 'production' && !process.env.ENCRYPTION_KEY) {
+    try {
+      const cnt = await pool.query(
+        `SELECT count(*)::int AS n FROM calendar_connections
+         WHERE access_token LIKE 'enc:v1:%' OR refresh_token LIKE 'enc:v1:%'`,
+      );
+      if ((cnt.rows[0]?.n ?? 0) > 0) {
+        throw new Error('[db] ENCRYPTION_KEY missing but encrypted calendar tokens exist — refusing to boot (decrypt would silently return NULL for all connections)');
+      }
+    } catch (e) {
+      // If the table doesn't exist yet this is a fresh boot — pass through.
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!msg.includes('does not exist')) throw e;
+    }
+  }
+
   // ── Multi-tenant auth ────────────────────────────────────────────────────
 
   await pool.query(`
@@ -186,6 +208,74 @@ export async function migrate() {
   await pool.query(`ALTER TABLE orgs ADD COLUMN IF NOT EXISTS business_postal_code text;`);
   await pool.query(`ALTER TABLE orgs ADD COLUMN IF NOT EXISTS business_document_url text;`);
   await pool.query(`ALTER TABLE orgs ADD COLUMN IF NOT EXISTS business_website text;`);
+
+  // Cross-org pattern sharing — opt-in (GDPR Art. 6 consent basis).
+  // When TRUE, this org's high-scoring call patterns may be redacted and
+  // contributed to the cross-tenant conversation_patterns pool. Default FALSE
+  // so existing orgs aren't auto-enrolled — they must explicitly opt in via
+  // settings (with a link to AGB §X about pattern sharing).
+  await pool.query(`ALTER TABLE orgs ADD COLUMN IF NOT EXISTS share_patterns boolean NOT NULL DEFAULT false;`);
+  await pool.query(`ALTER TABLE orgs ADD COLUMN IF NOT EXISTS share_patterns_consented_at timestamptz;`);
+
+  // Refresh tokens for the 1h-access + 30d-refresh JWT scheme. We store the
+  // SHA-256 hash so a DB read leak doesn't yield usable tokens. Rotation:
+  // /auth/refresh deletes the row + inserts a new one in one transaction.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS refresh_tokens (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id     UUID NOT NULL,
+      token_hash  TEXT NOT NULL UNIQUE,
+      expires_at  TIMESTAMPTZ NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+      revoked_at  TIMESTAMPTZ,
+      user_agent  TEXT,
+      ip          TEXT
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS refresh_tokens_user_idx ON refresh_tokens(user_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS refresh_tokens_expires_idx ON refresh_tokens(expires_at);`);
+  // FK to users + ON DELETE CASCADE — when a user is deleted (account delete,
+  // org delete cascade), all refresh tokens must go too. Without this, a
+  // deleted account's stolen refresh cookie could resurrect as long as the
+  // token row survives its own TTL.
+  //
+  // ORDER MATTERS: clean orphans BEFORE adding the FK, otherwise
+  // ADD CONSTRAINT fails on existing deployments where orphan rows exist
+  // (pre-FK users who got deleted manually). Idempotent DO block because
+  // IF NOT EXISTS isn't supported on constraints directly.
+  await pool.query(`DELETE FROM refresh_tokens WHERE user_id NOT IN (SELECT id FROM users);`).catch(() => {});
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'refresh_tokens_user_id_fkey'
+      ) THEN
+        ALTER TABLE refresh_tokens
+          ADD CONSTRAINT refresh_tokens_user_id_fkey
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  // Stripe webhook idempotency. Stripe retries events on any non-2xx (and
+  // sometimes on timeouts). Without a dedup key, a retried invoice.paid could
+  // trigger a second period-reset or a retried subscription.deleted could
+  // re-cascade cleanup. The PRIMARY KEY on event_id is the dedup mechanism.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS processed_stripe_events (
+      event_id    TEXT PRIMARY KEY,
+      event_type  TEXT NOT NULL,
+      received_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS processed_stripe_events_received_idx ON processed_stripe_events(received_at);`);
+
+  // One-time cleanup: delete orphan tickets (org_id IS NULL). These existed from
+  // pre-auth days when /tickets was unauthenticated and tenant_id was a free-form
+  // string. The legacy "OR (org_id IS NULL AND tenant_id = $orgId::text)" branches
+  // in tickets.ts let an attacker with a known orgId UUID see/modify those rows by
+  // forging tenant_id. Branches removed; rows must go too. Idempotent.
+  await pool.query(`DELETE FROM tickets WHERE org_id IS NULL;`).catch(() => {/* table may not exist yet */});
 
   // ── Minimal, idempotent schema creation (MVP) ─────────────────────────────
 
