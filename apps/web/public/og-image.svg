@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img" aria-labelledby="og-title og-desc">
+  <title id="og-title">Phonbot — KI-Telefonassistent für kleine Unternehmen</title>
+  <desc id="og-desc">Phonbot mascot Chipy alongside the Phonbot wordmark and three value propositions: 24/7 appointment booking, never miss a call, natural German voice.</desc>
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#0A0A0F"/>

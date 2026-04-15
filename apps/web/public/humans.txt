@@ -2,8 +2,8 @@
 
 /* TEAM */
 
-  Gründer & Product: Phonbot Team
-  Contact: hello [at] phonbot.de
+  Product: Phonbot (operated by Mindrails UG (haftungsbeschränkt))
+  Contact: info [at] phonbot.de
   Location: Berlin, Deutschland
 
 /* THANKS */
