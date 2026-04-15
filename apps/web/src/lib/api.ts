@@ -25,12 +25,48 @@ function authHeader(): Record<string, string> {
   return token ? { authorization: `Bearer ${token}` } : {};
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+// Coalesce concurrent /auth/refresh calls — when 5 parallel requests all 401,
+// we want ONE refresh attempt, not 5. All 5 requests then await the same promise.
+let refreshInFlight: Promise<string | null> | null = null;
+async function refreshAccessToken(): Promise<string | null> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    try {
+      const res = await fetch(`${BASE}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT),
+      });
+      if (!res.ok) return null;
+      const data = await res.json() as { token?: string };
+      if (!data.token) return null;
+      localStorage.setItem('vas_token', data.token);
+      return data.token;
+    } catch {
+      return null;
+    } finally {
+      // Reset shortly after so subsequent waves can refresh again
+      setTimeout(() => { refreshInFlight = null; }, 50);
+    }
+  })();
+  return refreshInFlight;
+}
+
+async function request<T>(path: string, init?: RequestInit, _retried = false): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
+    credentials: 'include',
     headers: { ...(init?.body ? { 'content-type': 'application/json' } : {}), ...authHeader(), ...init?.headers },
     signal: init?.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT),
   });
+  if (res.status === 401 && !_retried && !path.startsWith('/auth/')) {
+    // Access token likely expired — try one silent refresh, then retry once.
+    // Skip for /auth/* to avoid recursion (login/refresh/logout 401s are real).
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      return request<T>(path, init, true);
+    }
+  }
   if (!res.ok) {
     const body = await res.text();
     throw new ApiError(res.status, res.statusText, body);
@@ -720,10 +756,15 @@ export function resendVerification() {
 export type CopilotMessage = {
   role: 'user' | 'assistant';
   content: string;
+  // sig: HMAC the server returns with each assistant reply. Pass it back in
+  // the next turn's history so the server trusts the assistant message.
+  // Without it, the message is filtered out as potentially client-forged
+  // (E5: prompt-injection of fake assistant context).
+  sig?: string;
 };
 
 export function sendCopilotMessage(message: string, history: CopilotMessage[] = []) {
-  return request<{ ok: boolean; reply: string }>('/copilot/chat', {
+  return request<{ ok: boolean; reply: string; sig?: string }>('/copilot/chat', {
     method: 'POST',
     body: JSON.stringify({ message, history }),
   });
@@ -861,4 +902,22 @@ export type AdminOrg = {
 
 export function adminGetOrgs() {
   return adminRequest<{ items: AdminOrg[] }>('/admin/orgs');
+}
+
+// --- Learning Consent (cross-org pattern sharing opt-in) ---
+
+export type LearningConsent = {
+  share_patterns: boolean;
+  consented_at: string | null;
+};
+
+export function getLearningConsent() {
+  return request<LearningConsent>('/learning/consent');
+}
+
+export function setLearningConsent(share_patterns: boolean) {
+  return request<{ ok: true; share_patterns: boolean }>('/learning/consent', {
+    method: 'POST',
+    body: JSON.stringify({ share_patterns }),
+  });
 }

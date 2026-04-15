@@ -9,6 +9,10 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  // Server HMAC for assistant messages — stored so the next turn can
+  // present it back; without it the server filters the message out as
+  // potentially client-forged (anti prompt-injection).
+  sig?: string;
 }
 
 // ── Typing indicator ──────────────────────────────────────────────────────────
@@ -129,7 +133,7 @@ export function ChipyCopilot() {
     const history: CopilotMessage[] = messages
       .filter((m) => m.id !== 'welcome')
       .slice(-20)
-      .map((m) => ({ role: m.role, content: m.content }));
+      .map((m) => ({ role: m.role, content: m.content, sig: m.sig }));
 
     try {
       const res = await sendCopilotMessage(text, history);
@@ -140,6 +144,7 @@ export function ChipyCopilot() {
           role: 'assistant',
           content: res.reply,
           timestamp: new Date(),
+          sig: res.sig,
         },
       ]);
     } catch (err) {
