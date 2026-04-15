@@ -54,6 +54,24 @@ export async function migratePhone() {
   await pool.query(`ALTER TABLE phone_numbers ALTER COLUMN org_id DROP NOT NULL;`);
   // Unique index on number to prevent duplicates
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS phone_numbers_number_uniq ON phone_numbers(number);`);
+  // T-27: audit-trail for number lifecycle (assign / unassign / agent reassign).
+  // updated_at is auto-maintained by a trigger so application code stays clean.
+  await pool.query(`ALTER TABLE phone_numbers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();`);
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION phone_numbers_touch_updated_at() RETURNS trigger AS $$
+    BEGIN NEW.updated_at = now(); RETURN NEW; END;
+    $$ LANGUAGE plpgsql;
+  `);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'phone_numbers_touch_updated_at_trg') THEN
+        CREATE TRIGGER phone_numbers_touch_updated_at_trg
+          BEFORE UPDATE ON phone_numbers
+          FOR EACH ROW EXECUTE FUNCTION phone_numbers_touch_updated_at();
+      END IF;
+    END $$;
+  `);
 
   // Sync: ensure all Twilio numbers exist in DB (prevents buying duplicates)
   await syncTwilioNumbersToDb();
@@ -210,6 +228,11 @@ async function retellPurchasePhoneNumber(areaCode: string, agentId?: string) {
       area_code: parseInt(areaCode, 10),
       ...(agentId ? { inbound_agent_id: agentId } : {}),
     }),
+    // T-26: match retellImportPhoneNumber — 15s hard cap so a hung Retell call
+    // can't stall the provisioning request indefinitely. The caller
+    // (/phone/provision) already sets a Fastify timeout on top; this is a
+    // belt-and-suspenders deadline for the individual upstream hop.
+    signal: AbortSignal.timeout(15_000),
   });
 
   if (!res.ok) throw new Error(`Retell: ${res.status} ${await res.text()}`);
