@@ -106,6 +106,19 @@ type ModalProps = {
   size?: 'sm' | 'md' | 'lg';
 };
 
+// F-06: bullet-proof tabbable selector — excludes [disabled] and
+// [aria-hidden="true"] (which the previous version still counted), and adds
+// summary + contenteditable which are legitimately tabbable elements.
+const TABBABLE_SELECTOR =
+  'button:not([disabled]):not([aria-hidden="true"]),' +
+  '[href]:not([aria-hidden="true"]),' +
+  'input:not([disabled]):not([aria-hidden="true"]),' +
+  'select:not([disabled]):not([aria-hidden="true"]),' +
+  'textarea:not([disabled]):not([aria-hidden="true"]),' +
+  'summary:not([aria-hidden="true"]),' +
+  '[contenteditable="true"]:not([aria-hidden="true"]),' +
+  '[tabindex]:not([tabindex="-1"]):not([aria-hidden="true"])';
+
 export function Modal({ open, onClose, title, children, size = 'md' }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const prevFocus = useRef<HTMLElement | null>(null);
@@ -113,14 +126,22 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') { onClose(); return; }
     if (e.key !== 'Tab' || !dialogRef.current) return;
-    const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-    );
+    const focusable = dialogRef.current.querySelectorAll<HTMLElement>(TABBABLE_SELECTOR);
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
-    if (!first || !last) return;
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    if (!first || !last) { e.preventDefault(); return; }
+
+    // If focus drifted outside the dialog (keyboard user tabbed through a
+    // background element somehow), pull it back to the first tabbable inside.
+    const active = document.activeElement as HTMLElement | null;
+    if (!active || !dialogRef.current.contains(active)) {
+      e.preventDefault();
+      first.focus();
+      return;
+    }
+
+    if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
   }, [onClose]);
 
   useEffect(() => {
@@ -129,9 +150,7 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
     document.addEventListener('keydown', handleKeyDown);
     // Focus first focusable element
     requestAnimationFrame(() => {
-      const first = dialogRef.current?.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
+      const first = dialogRef.current?.querySelector<HTMLElement>(TABBABLE_SELECTOR);
       first?.focus();
     });
     return () => {

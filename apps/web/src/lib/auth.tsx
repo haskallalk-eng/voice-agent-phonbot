@@ -17,6 +17,12 @@ export type AuthState = {
   token: string | null;
   user: AuthUser | null;
   org: AuthOrg | null;
+  /**
+   * True while the initial `/auth/refresh → /auth/me` bootstrap is still in
+   * flight. Consumers use this to show a loading screen instead of briefly
+   * flashing the landing page before the authed Dashboard takes over (F-14).
+   */
+  bootstrapping: boolean;
 };
 
 type AuthContextValue = AuthState & {
@@ -71,7 +77,9 @@ type AuthResponse = { token: string; user: AuthUser; org: AuthOrg };
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Access JWT starts null every session; bootstrap below tries to swap the
   // httpOnly refresh cookie for a fresh one. Never read from localStorage.
-  const [state, setState] = useState<AuthState>({ token: null, user: null, org: null });
+  // bootstrapping=true blocks the app from rendering landing/login before
+  // we know whether the user still has a valid refresh cookie (F-14).
+  const [state, setState] = useState<AuthState>({ token: null, user: null, org: null, bootstrapping: true });
 
   // Keep api.ts's module-scoped token in sync with React state so request()
   // + direct fetches via getAccessToken() see the same value. F-08: on logout
@@ -87,7 +95,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     async function bootstrap() {
       const token = await tryRefresh();
-      if (!token) return; // truly logged out
+      if (!token) {
+        // truly logged out — still clear bootstrapping so landing/login can render
+        if (!cancelled) setState((s) => ({ ...s, bootstrapping: false }));
+        return;
+      }
 
       try {
         const me = await apiFetch<{ id: string; email: string; role: string; org_id: string; org_name: string; org_slug: string }>(
@@ -99,11 +111,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           token,
           user: { id: me.id, email: me.email, role: me.role as AuthUser['role'] },
           org: { id: me.org_id, name: me.org_name, slug: me.org_slug },
+          bootstrapping: false,
         });
       } catch {
         if (cancelled) return;
         setAccessToken(null);
-        setState({ token: null, user: null, org: null });
+        setState({ token: null, user: null, org: null, bootstrapping: false });
       }
     }
     bootstrap();
@@ -116,7 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    setState({ token: data.token, user: data.user, org: data.org });
+    setState({ token: data.token, user: data.user, org: data.org, bootstrapping: false });
   }, []);
 
   const register = useCallback(async (orgName: string, email: string, password: string) => {
@@ -124,7 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       body: JSON.stringify({ orgName, email, password }),
     });
-    setState({ token: data.token, user: data.user, org: data.org });
+    setState({ token: data.token, user: data.user, org: data.org, bootstrapping: false });
   }, []);
 
   const logout = useCallback(() => {
@@ -132,14 +145,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // logout must always succeed even if the network call fails.
     apiFetch('/auth/logout', { method: 'POST' }).catch(() => {});
     // Wipe any stale app-state keys that should not survive a logout (F-08).
+    // Covers localStorage and sessionStorage so a subsequent user doesn't see
+    // the previous account's onboarding progress / UI prefs.
     try {
-      for (let i = localStorage.length - 1; i >= 0; i--) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith('phonbot_')) localStorage.removeItem(k);
+      for (const store of [localStorage, sessionStorage]) {
+        for (let i = store.length - 1; i >= 0; i--) {
+          const k = store.key(i);
+          if (k && (k.startsWith('phonbot_') || k === 'vas_token')) store.removeItem(k);
+        }
       }
     } catch { /* storage unavailable */ }
     setAccessToken(null);
-    setState({ token: null, user: null, org: null });
+    setState({ token: null, user: null, org: null, bootstrapping: false });
   }, []);
 
   return (

@@ -85,9 +85,24 @@ const MAX_POOL_SIZE = 3;
  * Numbers that exist in Twilio but not in DB are added as pool numbers (org_id = NULL).
  * Then trims pool to MAX_POOL_SIZE by releasing excess numbers from Twilio.
  * Runs on every startup to prevent the "bought numbers not in DB" bug.
+ *
+ * T-22: a rolling-deploy with N replicas would otherwise call Twilio's
+ * incomingPhoneNumbers.list N times within seconds, plus N delete chains via
+ * trimPool. Twilio's REST API rate-limit (~10 req/s per account) bites fast.
+ * Redis advisory lock with a 10-min TTL coalesces the work to one container
+ * per deploy window. Fail-open if Redis is down (single instance scenario).
  */
 async function syncTwilioNumbersToDb() {
   if (!pool) return;
+
+  if (redis?.isOpen) {
+    const gotLock = await redis.set('phone:twilio-sync-lock', String(Date.now()), { NX: true, EX: 600 }).catch(() => null);
+    if (!gotLock) {
+      process.stdout.write('[phone] syncTwilioNumbersToDb skipped — another instance holds the sync lock\n');
+      return;
+    }
+  }
+
   try {
     const client = getTwilioClient();
     const twilioNumbers = await client.incomingPhoneNumbers.list({ limit: 100 });

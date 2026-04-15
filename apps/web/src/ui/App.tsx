@@ -253,7 +253,7 @@ function Dashboard() {
 type Gate = 'landing' | 'login' | 'register' | 'contact' | 'app';
 
 function AppGate() {
-  const { token, user } = useAuth();
+  const { token, user, bootstrapping } = useAuth();
   // Initial gate can be deep-linked from static sub-pages (industry landings) via
   // ?page=contact | login | register. Let /?page=contact → ContactPage on first load
   // so the industry-page nav can link straight to those gates.
@@ -270,7 +270,10 @@ function AppGate() {
     return 'landing';
   });
 
-  if (token && !user) {
+  // Wait for the auth bootstrap to finish before deciding landing-vs-Dashboard.
+  // Without this the user briefly sees the landing page on a reload even though
+  // they have a valid refresh cookie (F-14).
+  if (bootstrapping || (token && !user)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0A0A0F]">
         <p className="text-white/30 text-sm">Loading…</p>
