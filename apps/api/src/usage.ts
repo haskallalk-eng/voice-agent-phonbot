@@ -33,7 +33,12 @@ export async function checkUsageLimit(orgId: string): Promise<{
   minutesLimit: number;
 }> {
   if (!pool) {
-    // No DB — allow by default (dev mode)
+    // Production MUST have a DB — fail closed so a mis-deployed instance
+    // can't silently authorise unlimited usage. Dev keeps the permissive
+    // fallback so local developers don't need Postgres for every experiment.
+    if (process.env.NODE_ENV === 'production') {
+      return { allowed: false, minutesUsed: 0, minutesLimit: 0 };
+    }
     return { allowed: true, minutesUsed: 0, minutesLimit: 9999 };
   }
 

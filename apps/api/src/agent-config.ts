@@ -197,7 +197,12 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
 }
 
 function getWebhookBaseUrl(): string {
-  return process.env.WEBHOOK_BASE_URL?.replace(/\/$/, '') ?? 'https://your-server.example.com';
+  const raw = process.env.WEBHOOK_BASE_URL;
+  if (raw) return raw.replace(/\/$/, '');
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('WEBHOOK_BASE_URL is required in production');
+  }
+  return 'https://your-server.example.com';
 }
 
 /**
@@ -359,7 +364,11 @@ export async function triggerCallback(params: {
 
     const twilioSid = process.env.TWILIO_ACCOUNT_SID;
     const twilioToken = process.env.TWILIO_AUTH_TOKEN;
-    const webhookBase = process.env.WEBHOOK_BASE_URL ?? 'http://localhost:3001';
+    const webhookBase = process.env.WEBHOOK_BASE_URL ?? (
+      process.env.NODE_ENV === 'production'
+        ? (() => { throw new Error('WEBHOOK_BASE_URL is required in production'); })()
+        : 'http://localhost:3001'
+    );
 
     if (!twilioSid || !twilioToken) return { ok: false, error: 'TWILIO_NOT_CONFIGURED' };
 

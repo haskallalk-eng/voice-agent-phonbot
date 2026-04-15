@@ -140,7 +140,11 @@ export async function registerTwilioBridge(app: FastifyInstance) {
   // Returns TwiML that connects Twilio's audio stream to our WebSocket bridge.
   app.post('/outbound/twiml/:sessionId', async (req, reply) => {
     const { sessionId } = req.params as { sessionId: string };
-    const webhookBase = process.env.WEBHOOK_BASE_URL ?? 'http://localhost:3001';
+    const webhookBase = process.env.WEBHOOK_BASE_URL ?? (
+      process.env.NODE_ENV === 'production'
+        ? (() => { throw new Error('WEBHOOK_BASE_URL is required in production'); })()
+        : 'http://localhost:3001'
+    );
     const wsBase = webhookBase.replace(/^https?/, 'wss').replace(/^http:/, 'ws:');
     const wsUrl = `${wsBase}/outbound/ws/${sessionId}`;
 

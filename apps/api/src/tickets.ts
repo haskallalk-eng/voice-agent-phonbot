@@ -114,15 +114,19 @@ export async function createTicket(input: z.infer<typeof CreateTicketBody>): Pro
 
   const ticket = rows[0] as TicketRow;
 
-  // Fire-and-forget: email the org owner about the new ticket
-  if (pool) {
+  // Fire-and-forget: email the org owner about the new ticket.
+  // Lookup via the already-resolved `orgId` (see above). The previous OR-branch
+  // (id::text = $1 OR legacy agent_configs match) could match a legacy row
+  // where another org's tenant_id happens to equal the current org's UUID as
+  // text — leaking the new ticket's PII to the wrong owner. Resolves E9.
+  if (pool && orgId) {
     pool.query(
       `SELECT u.email, o.name as org_name
        FROM users u JOIN orgs o ON o.id = u.org_id
-       WHERE u.org_id IN (SELECT id FROM orgs WHERE id::text = $1 OR id IN (SELECT org_id FROM agent_configs WHERE tenant_id = $1))
-         AND u.role = 'owner'
+       WHERE u.org_id = $1 AND u.role = 'owner' AND u.is_active = true
+       ORDER BY u.created_at ASC
        LIMIT 1`,
-      [body.tenantId],
+      [orgId],
     ).then((res) => {
       if (res.rows[0]) {
         sendTicketNotification({
@@ -132,9 +136,14 @@ export async function createTicket(input: z.infer<typeof CreateTicketBody>): Pro
           customerPhone: ticket.customer_phone,
           reason: ticket.reason,
           service: ticket.service,
-        }).catch(() => {});
+        }).catch((e: unknown) => {
+          // Don't swallow silently — log so ops can see mail-send failures.
+          process.stderr.write(`[tickets] sendTicketNotification failed: ${e instanceof Error ? e.message : String(e)}\n`);
+        });
       }
-    }).catch((e: unknown) => { console.error('[tickets] notification error:', e instanceof Error ? e.message : String(e)); });
+    }).catch((e: unknown) => {
+      process.stderr.write(`[tickets] owner-lookup for notification failed: ${e instanceof Error ? e.message : String(e)}\n`);
+    });
   }
 
   return ticket;

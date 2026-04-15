@@ -303,7 +303,14 @@ export async function triggerSalesCall(params: {
 
   const twilioSid = process.env.TWILIO_ACCOUNT_SID;
   const twilioToken = process.env.TWILIO_AUTH_TOKEN;
-  const webhookBase = process.env.WEBHOOK_BASE_URL ?? 'http://localhost:3001';
+  // WEBHOOK_BASE_URL drives the outbound TwiML and WS URLs. A localhost fallback
+  // in prod silently breaks every call (Twilio can't reach the bridge) — refuse
+  // rather than swallow. Dev keeps the default so `pnpm dev` just works.
+  const webhookBase = process.env.WEBHOOK_BASE_URL ?? (
+    process.env.NODE_ENV === 'production'
+      ? (() => { throw new Error('WEBHOOK_BASE_URL is required in production'); })()
+      : 'http://localhost:3001'
+  );
 
   if (!twilioSid || !twilioToken) {
     await pool.query(`UPDATE outbound_calls SET status = 'failed' WHERE id = $1`, [outboundRecordId]);
@@ -553,7 +560,8 @@ export async function registerOutbound(app: FastifyInstance) {
     }
 
     try {
-      // Save lead to CRM
+      // Save lead to CRM (log rather than swallow — audit trail matters for
+      // GDPR right-of-access and for operational visibility when inserts fail).
       let leadId: string | null = null;
       if (pool) {
         const leadRes = await pool.query(
@@ -561,7 +569,10 @@ export async function registerOutbound(app: FastifyInstance) {
            VALUES ($1, $2, $3, 'website-callback', 'new')
            RETURNING id`,
           [parsed.data.name ?? null, parsed.data.email, phone],
-        ).catch(() => null);
+        ).catch((err: Error) => {
+          app.log.warn({ err: err.message, phone }, 'website-callback: crm_leads insert failed');
+          return null;
+        });
         leadId = (leadRes?.rows[0]?.id as string) ?? null;
       }
 
@@ -572,16 +583,23 @@ export async function registerOutbound(app: FastifyInstance) {
           `INSERT INTO outbound_calls (org_id, to_number, contact_name, campaign, prompt_version, status)
            VALUES (NULL, $1, $2, 'website-callback', 1, 'initiated') RETURNING id`,
           [phone, parsed.data.name ?? null],
-        ).catch(() => null);
+        ).catch((err: Error) => {
+          app.log.warn({ err: err.message, phone }, 'website-callback: outbound_calls insert failed');
+          return null;
+        });
         websiteCallId = (res?.rows[0]?.id as string) ?? null;
       }
 
       // Update lead with call reference
       if (leadId && websiteCallId && pool) {
-        pool.query(`UPDATE crm_leads SET call_id = $1 WHERE id = $2`, [websiteCallId, leadId]).catch(() => {});
+        pool.query(`UPDATE crm_leads SET call_id = $1 WHERE id = $2`, [websiteCallId, leadId])
+          .catch((err: Error) => app.log.warn({ err: err.message, leadId }, 'website-callback: link crm_leads.call_id failed'));
       }
 
-      // Use the same Retell-based sales agent as demo/callback
+      // Use the same Retell-based sales agent as demo/callback.
+      // Retell metadata is forwarded into their systems; keep it minimal and
+      // PII-free. Customer name stays in our DB only (crm_leads.name) where
+      // the DPA covers it. `outboundRecordId` is needed for webhook correlation.
       const { getOrCreateSalesAgent } = await import('./demo.js');
       const { createPhoneCall } = await import('./retell.js');
       const agentId = await getOrCreateSalesAgent();
@@ -589,11 +607,12 @@ export async function registerOutbound(app: FastifyInstance) {
         agentId,
         toNumber: phone,
         fromNumber,
-        metadata: { source: 'website-callback', name: parsed.data.name ?? '', outboundRecordId: websiteCallId ?? '' },
+        metadata: { source: 'website-callback', outboundRecordId: websiteCallId ?? '' },
       });
 
       if (websiteCallId && pool) {
-        pool.query(`UPDATE outbound_calls SET call_id = $1, status = 'calling' WHERE id = $2`, [call.call_id, websiteCallId]).catch(() => {});
+        pool.query(`UPDATE outbound_calls SET call_id = $1, status = 'calling' WHERE id = $2`, [call.call_id, websiteCallId])
+          .catch((err: Error) => app.log.warn({ err: err.message, websiteCallId }, 'website-callback: link outbound_calls.call_id failed'));
       }
 
       app.log.info({ callId: call.call_id, phone }, 'Website callback call initiated via Retell');
