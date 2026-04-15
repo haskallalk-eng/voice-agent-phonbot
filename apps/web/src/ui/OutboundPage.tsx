@@ -304,7 +304,7 @@ export function OutboundPage() {
           <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3 text-xs text-blue-400 flex items-start gap-2">
             <IconCapabilities size={13} className="shrink-0 mt-0.5" />
             Der Agent nutzt SPIN-Qualifizierung, Micro-Commitments und präzise Einwandbehandlung.
-            Nach dem Gespräch wird es automatisch analysiert und der Prompt verbessert.
+            Nach dem Gespräch wird es analysiert — Verbesserungsvorschläge erscheinen unter „Verbesserungen" und werden erst nach deiner Freigabe übernommen.
           </div>
         </div>
       )}

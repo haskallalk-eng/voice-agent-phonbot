@@ -121,6 +121,28 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
     setError(null);
 
     try {
+      // iOS Safari verliert den user-gesture nach jedem await — wenn wir den
+      // Mic-Prompt erst nach dem Token-Fetch aufrufen, wird er stumm verworfen
+      // und Retell hängt beim Verbinden. Deshalb Mic-Permission SYNCHRON hier,
+      // bevor irgendein await läuft.
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          // Sofort wieder stoppen — Retell öffnet seinen eigenen Stream.
+          // Wir wollten nur die Permission-Prompt im user-gesture-Fenster triggern.
+          stream.getTracks().forEach((t) => t.stop());
+        } catch (micErr: unknown) {
+          const name = (micErr as { name?: string })?.name ?? '';
+          if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+            throw new Error('Mikrofon-Zugriff wurde abgelehnt. Bitte erlaube den Zugriff in den Browser-Einstellungen und versuche es nochmal.');
+          }
+          if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+            throw new Error('Kein Mikrofon gefunden. Bitte verbinde ein Mikrofon und versuche es nochmal.');
+          }
+          throw new Error('Mikrofon-Zugriff nicht möglich. Bitte prüfe deine Browser-Einstellungen.');
+        }
+      }
+
       const res = await createDemoCall(templateId);
       if (!res.access_token) {
         throw new Error('Kein Zugriffstoken erhalten');
