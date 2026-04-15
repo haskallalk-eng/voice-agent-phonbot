@@ -204,7 +204,14 @@ async function retellImportPhoneNumber(phoneNumber: string, agentId?: string) {
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       phone_number: phoneNumber,
-      termination_uri: process.env.SIP_TERMINATION_URI ?? 'anfangtelebot.pstn.twilio.com',
+      // T-23: in production we refuse the legacy 'anfangtelebot.pstn.twilio.com'
+      // default — a fork or fresh deployment must explicitly point at its own SIP
+      // termination URI so calls can't accidentally route through Phonbot's trunk.
+      termination_uri: process.env.SIP_TERMINATION_URI ?? (
+        process.env.NODE_ENV === 'production'
+          ? (() => { throw new Error('SIP_TERMINATION_URI is required in production'); })()
+          : 'anfangtelebot.pstn.twilio.com'
+      ),
       sip_trunk_auth_username: sipUser,
       sip_trunk_auth_password: sipPass,
       sip_trunk_transport: 'TCP',
@@ -357,7 +364,9 @@ export async function registerPhone(app: FastifyInstance) {
     // Optional: specify which agent to connect (defaults to first deployed agent)
     const parsed = z.object({ agentTenantId: z.string().optional() }).safeParse(req.body);
     const agentTenantId = parsed.success ? parsed.data.agentTenantId : undefined;
-    req.log.info({ agentTenantId, body: req.body }, '[phone/provision] received');
+    // T-24: do not echo the full request body — future schema additions could
+    // accidentally include PII and end up in structured logs.
+    req.log.info({ agentTenantId }, '[phone/provision] received');
 
     // Get the agent ID — if agentTenantId specified, find that specific agent.
     // CRITICAL: scope by org_id. Without this, a user could bind a phone number
@@ -413,8 +422,18 @@ export async function registerPhone(app: FastifyInstance) {
     } else {
       // No free numbers in pool — try to buy a new one from Twilio
       // But if Twilio fails (no credit, auth issues), give a clear error
-      const PHONBOT_BUNDLE_SID = process.env.TWILIO_BUNDLE_SID ?? 'BUdf48e4eb15c501c7fe3b36008b728062';
-      const PHONBOT_ADDRESS_SID = process.env.TWILIO_ADDRESS_SID ?? 'AD4c5ce0dc9622cf67e55cbc07996802c8';
+      // T-25: hardcoded fallbacks fingerprint Phonbot's Twilio account in source.
+      // In prod we require explicit env so a fork can't unintentionally reuse them.
+      const PHONBOT_BUNDLE_SID = process.env.TWILIO_BUNDLE_SID ?? (
+        process.env.NODE_ENV === 'production'
+          ? (() => { throw new Error('TWILIO_BUNDLE_SID is required in production'); })()
+          : 'BUdf48e4eb15c501c7fe3b36008b728062'
+      );
+      const PHONBOT_ADDRESS_SID = process.env.TWILIO_ADDRESS_SID ?? (
+        process.env.NODE_ENV === 'production'
+          ? (() => { throw new Error('TWILIO_ADDRESS_SID is required in production'); })()
+          : 'AD4c5ce0dc9622cf67e55cbc07996802c8'
+      );
 
       try {
         const client = getTwilioClient();
