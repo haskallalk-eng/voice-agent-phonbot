@@ -28,7 +28,11 @@ const mem: TicketRow[] = [];
 const TicketStatus = z.enum(['open', 'assigned', 'done']);
 
 const CreateTicketBody = z.object({
-  tenantId: z.string().min(1).default('demo'),
+  // tenantId is REQUIRED. Previous default ('demo') was a foot-gun: any future
+  // caller of createTicket() that forgot to pass tenantId would silently land
+  // tickets in the 'demo' silo, mixing tenants. The two real callers (POST
+  // /tickets and the Retell ticket.create webhook) both provide it explicitly.
+  tenantId: z.string().min(1),
 
   // Handoff context
   source: z.enum(['phone', 'web', 'system']).optional(),
@@ -158,7 +162,7 @@ export async function registerTickets(app: FastifyInstance) {
               source, session_id, reason,
               customer_name, customer_phone, preferred_time, service, notes
        from tickets
-       where org_id = $1 or (org_id is null and tenant_id = $1::text)
+       where org_id = $1
        order by created_at desc
        limit $2`,
       [orgId, q.limit]
@@ -189,8 +193,15 @@ export async function registerTickets(app: FastifyInstance) {
     }
   });
 
-  // POST /tickets/:id/callback — manually trigger an outbound callback call
-  app.post('/tickets/:id/callback', { ...auth }, async (req: FastifyRequest, reply) => {
+  // POST /tickets/:id/callback — manually trigger an outbound callback call.
+  // Dedicated low-quota rate-limit on top of the 100/min global: a single org
+  // should not be able to fire more than 5 callbacks per hour. Without this,
+  // an insider (or a leaked JWT) could dial premium-rate numbers via our
+  // Twilio trunk at $-per-minute (IRSF/toll-fraud pattern).
+  app.post('/tickets/:id/callback', {
+    ...auth,
+    config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
+  }, async (req: FastifyRequest, reply) => {
     const { orgId } = req.user as JwtPayload;
     const params = z.object({ id: z.coerce.number().int().positive() }).parse(req.params);
 
@@ -202,7 +213,7 @@ export async function registerTickets(app: FastifyInstance) {
       const res = await pool.query(
         `SELECT id, customer_phone, customer_name, reason, service, status
          FROM tickets
-         WHERE id = $1 AND (org_id = $2 OR (org_id IS NULL AND tenant_id = $2::text))`,
+         WHERE id = $1 AND org_id = $2`,
         [params.id, orgId],
       );
       ticket = (res.rows[0] as TicketRow | undefined) ?? null;
@@ -210,6 +221,17 @@ export async function registerTickets(app: FastifyInstance) {
 
     if (!ticket) return reply.status(404).send({ ok: false, error: 'NOT_FOUND' });
     if (!ticket.customer_phone) return reply.status(400).send({ ok: false, error: 'NO_PHONE' });
+
+    // Country-prefix allowlist — isPlausiblePhone (in createTicket) blocks DE
+    // premium prefixes, but accepts any plausible international E.164. That
+    // means a user can stuff customer_phone="+1-premium-rate" into a ticket
+    // and bill it via callback. Gate here with the same DACH-default list used
+    // by /demo/callback and /outbound-agent.
+    const ALLOWED_PREFIXES = (process.env.ALLOWED_PHONE_PREFIXES ?? '+49,+43,+41').split(',').map((p) => p.trim()).filter(Boolean);
+    if (!ALLOWED_PREFIXES.some((p) => ticket!.customer_phone!.startsWith(p))) {
+      req.log.warn({ orgId, ticketId: params.id }, 'ticket callback rejected: non-DACH phone prefix');
+      return reply.status(400).send({ ok: false, error: 'PHONE_PREFIX_NOT_ALLOWED' });
+    }
 
     const result = await triggerCallback({
       orgId,
@@ -248,7 +270,7 @@ export async function registerTickets(app: FastifyInstance) {
        set status = coalesce($3, status),
            notes = coalesce($4, notes),
            updated_at = now()
-       where id = $1 and (org_id = $2 or (org_id is null and tenant_id = $2::text))
+       where id = $1 and org_id = $2
        returning id, created_at, updated_at, tenant_id, status,
                  source, session_id, reason,
                  customer_name, customer_phone, preferred_time, service, notes`,

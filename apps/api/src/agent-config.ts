@@ -12,6 +12,7 @@ import {
   createWebCall,
   listCalls,
   getCall,
+  DEFAULT_VOICE_ID,
   type RetellTool,
 } from './retell.js';
 import { triggerBridgeCall } from './twilio-openai-bridge.js';
@@ -20,7 +21,7 @@ const AgentConfigSchema = z.object({
   tenantId: z.string().min(1).default('demo'),
   name: z.string().min(1).default('Demo Agent'),
   language: z.enum(['de', 'en', 'fr', 'es', 'it', 'tr', 'pl', 'nl']).default('de'),
-  voice: z.string().min(1).default('custom_voice_28bd4920fa6523c6ac8c4e527b'),
+  voice: z.string().min(1).default(DEFAULT_VOICE_ID),
   businessName: z.string().min(1).default('Demo Business'),
   businessDescription: z.string().min(1).default('Local service business for appointments, FAQs, and callbacks.'),
   address: z.string().optional().default(''),
@@ -48,14 +49,52 @@ type AgentConfig = z.infer<typeof AgentConfigSchema>;
 
 const memory = new Map<string, AgentConfig>();
 
-export async function readConfig(tenantId: string): Promise<AgentConfig> {
+export async function readConfig(tenantId: string, orgId?: string): Promise<AgentConfig> {
   if (!pool) {
     return memory.get(tenantId) ?? AgentConfigSchema.parse({ tenantId });
   }
 
-  const res = await pool.query('select data from agent_configs where tenant_id = $1', [tenantId]);
+  // When an orgId is supplied, enforce ownership — otherwise a caller with knowledge
+  // of another tenant's id could read that tenant's config (prompt, retellAgentId,
+  // business details, knowledge sources).
+  const sql = orgId
+    ? 'select data from agent_configs where tenant_id = $1 and (org_id = $2 or tenant_id = $2::text)'
+    : 'select data from agent_configs where tenant_id = $1';
+  const params = orgId ? [tenantId, orgId] : [tenantId];
+  const res = await pool.query(sql, params);
   if (!res.rows.length) return AgentConfigSchema.parse({ tenantId });
   return AgentConfigSchema.parse(res.rows[0].data);
+}
+
+/**
+ * Returns the agent_configs row for (tenantId, orgId) or null when the caller
+ * doesn't own it. Centralises the ownership check for PUT/deploy/web-call paths.
+ */
+async function loadOwnedConfigRow(
+  tenantId: string,
+  orgId: string,
+): Promise<{ data: AgentConfig; exists: true } | { data: null; exists: false }> {
+  if (!pool) return { data: null, exists: false };
+  const res = await pool.query(
+    'SELECT data FROM agent_configs WHERE tenant_id = $1 AND (org_id = $2 OR (org_id IS NULL AND tenant_id = $2::text))',
+    [tenantId, orgId],
+  );
+  if (!res.rowCount) return { data: null, exists: false };
+  return { data: AgentConfigSchema.parse(res.rows[0].data), exists: true };
+}
+
+/**
+ * Returns true if the tenantId is unclaimed (no row yet) or already owned by orgId.
+ * Prevents hostile tenantId-takeover via PUT before the real owner created a row.
+ */
+async function tenantIdAvailableOrOwned(tenantId: string, orgId: string): Promise<boolean> {
+  if (!pool) return true;
+  const res = await pool.query(
+    'SELECT org_id FROM agent_configs WHERE tenant_id = $1',
+    [tenantId],
+  );
+  if (!res.rowCount) return true;                // unclaimed
+  return res.rows[0].org_id === orgId;           // already mine
 }
 
 async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentConfig> {
@@ -64,15 +103,27 @@ async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentCo
     return config;
   }
 
-  await pool.query(
-    `insert into agent_configs (tenant_id, org_id, data, updated_at)
-     values ($1, $2, $3, now())
-     on conflict (tenant_id)
-     do update set data = excluded.data,
-                   org_id = COALESCE(excluded.org_id, agent_configs.org_id),
-                   updated_at = now()`,
+  // Defence-in-depth: even though the HTTP handlers gate by tenantIdAvailableOrOwned,
+  // a future caller that forgets the gate must NOT be able to overwrite another org's
+  // config. The DO UPDATE WHERE clause makes the conflict path a no-op when the row
+  // is owned by a different org. RETURNING id lets us detect the no-op and throw.
+  const res = await pool.query(
+    `INSERT INTO agent_configs (tenant_id, org_id, data, updated_at)
+     VALUES ($1, $2, $3, now())
+     ON CONFLICT (tenant_id) DO UPDATE
+       SET data = EXCLUDED.data,
+           org_id = COALESCE(EXCLUDED.org_id, agent_configs.org_id),
+           updated_at = now()
+       WHERE agent_configs.org_id IS NULL
+          OR agent_configs.org_id = EXCLUDED.org_id
+     RETURNING id`,
     [config.tenantId, orgId ?? null, config],
   );
+  if (!res.rowCount) {
+    const err = new Error('TENANT_OWNED_BY_OTHER_ORG') as Error & { statusCode?: number };
+    err.statusCode = 409;
+    throw err;
+  }
   return config;
 }
 
@@ -404,18 +455,21 @@ export async function registerAgentConfig(app: FastifyInstance) {
     return cfg;
   });
 
-  // Read config (default = first for org, or specific by ?tenantId=)
+  // Read config (default = first for org, or specific by ?tenantId=).
+  // Ownership enforced via readConfig(tenantId, orgId) — returns an empty default
+  // when the tenantId belongs to a different org (prevents config-leak by
+  // iterating tenantIds).
   app.get('/agent-config', { ...auth }, async (req: FastifyRequest) => {
     const { orgId } = req.user as JwtPayload;
     const query = req.query as Record<string, string>;
     const tenantId = query.tenantId ?? orgId;
-    return readConfig(tenantId);
+    return readConfig(tenantId, orgId);
   });
 
   // Preview generated instructions
   app.get('/agent-config/preview', { ...auth }, async (req: FastifyRequest) => {
     const { orgId } = req.user as JwtPayload;
-    const config = await readConfig(orgId);
+    const config = await readConfig(orgId, orgId);
     return {
       instructions: buildAgentInstructions(config),
       tools: config.tools,
@@ -423,22 +477,53 @@ export async function registerAgentConfig(app: FastifyInstance) {
     };
   });
 
-  // Save config (local only, no Retell deploy)
-  app.put('/agent-config', { ...auth }, async (req: FastifyRequest) => {
+  // Save config (local only, no Retell deploy).
+  // Ownership: tenantId must be unclaimed or already owned by caller.orgId.
+  // Retell IDs are taken from the server-side row, NEVER from the request body —
+  // otherwise an attacker could target a victim's retellLlmId via deploy.
+  app.put('/agent-config', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
     const raw = req.body as Record<string, unknown>;
-    // Allow tenantId from body for multi-agent — fallback to orgId
     const tenantId = (typeof raw.tenantId === 'string' && raw.tenantId) ? raw.tenantId : orgId;
-    const body = AgentConfigSchema.parse({ ...raw, tenantId });
+
+    if (!(await tenantIdAvailableOrOwned(tenantId, orgId))) {
+      return reply.status(403).send({ error: 'Not your agent' });
+    }
+
+    const existing = await loadOwnedConfigRow(tenantId, orgId);
+    const serverIds = existing.exists ? existing.data : {} as Partial<AgentConfig>;
+    const body = AgentConfigSchema.parse({
+      ...raw,
+      tenantId,
+      retellLlmId: serverIds.retellLlmId,
+      retellAgentId: serverIds.retellAgentId,
+      retellCallbackLlmId: serverIds.retellCallbackLlmId,
+      retellCallbackAgentId: serverIds.retellCallbackAgentId,
+    });
     return writeConfig(body, orgId);
   });
 
-  // Deploy config to Retell AI (save + sync)
-  app.post('/agent-config/deploy', { ...auth }, async (req: FastifyRequest) => {
+  // Deploy config to Retell AI (save + sync).
+  // Same ownership gate + server-authoritative Retell IDs as PUT.
+  app.post('/agent-config/deploy', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
     const raw = req.body as Record<string, unknown>;
     const tenantId = (typeof raw.tenantId === 'string' && raw.tenantId) ? raw.tenantId : orgId;
-    const body = AgentConfigSchema.parse({ ...raw, tenantId });
+
+    if (!(await tenantIdAvailableOrOwned(tenantId, orgId))) {
+      return reply.status(403).send({ error: 'Not your agent' });
+    }
+
+    const existing = await loadOwnedConfigRow(tenantId, orgId);
+    const serverIds = existing.exists ? existing.data : {} as Partial<AgentConfig>;
+    const body = AgentConfigSchema.parse({
+      ...raw,
+      tenantId,
+      retellLlmId: serverIds.retellLlmId,
+      retellAgentId: serverIds.retellAgentId,
+      retellCallbackLlmId: serverIds.retellCallbackLlmId,
+      retellCallbackAgentId: serverIds.retellCallbackAgentId,
+    });
     const deployed = await deployToRetell(body);
     const saved = await writeConfig(deployed, orgId);
     return { ok: true, config: saved, retellAgentId: saved.retellAgentId, retellLlmId: saved.retellLlmId };
@@ -503,13 +588,17 @@ export async function registerAgentConfig(app: FastifyInstance) {
       };
     }
 
-    // Use specific agent if tenantId provided, otherwise fall back to first deployed agent
+    // Use specific agent if tenantId provided, otherwise fall back to first deployed agent.
+    // agentTenantId is user input — verify ownership before creating a web call,
+    // otherwise an attacker could open live web-call sessions against any org's agent.
     const parsed = z.object({ agentTenantId: z.string().optional() }).safeParse(req.body);
     const tenantId = parsed.success ? parsed.data.agentTenantId : undefined;
 
     let config: AgentConfig;
     if (tenantId) {
-      config = await readConfig(tenantId);
+      const owned = await loadOwnedConfigRow(tenantId, orgId);
+      if (!owned.exists) return { ok: false, error: 'NOT_YOUR_AGENT' };
+      config = owned.data;
     } else {
       // Fallback: find first deployed agent for this org
       if (!pool) return { ok: false, error: 'AGENT_NOT_DEPLOYED', message: 'Deploy the agent first.' };
@@ -517,7 +606,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
         `SELECT data FROM agent_configs WHERE org_id = $1 AND data->>'retellAgentId' IS NOT NULL ORDER BY updated_at DESC LIMIT 1`,
         [orgId],
       );
-      config = res.rows[0]?.data ? AgentConfigSchema.parse(res.rows[0].data) : await readConfig(orgId);
+      config = res.rows[0]?.data ? AgentConfigSchema.parse(res.rows[0].data) : await readConfig(orgId, orgId);
     }
 
     if (!config.retellAgentId) {
@@ -527,16 +616,48 @@ export async function registerAgentConfig(app: FastifyInstance) {
     return { ok: true, ...call };
   });
 
-  // Call history from Retell
+  // Call history from Retell — filtered to agents owned by the caller's org.
+  // Passing agent_id: [] would return everything; we short-circuit instead when
+  // the org has no deployed agents yet, and never call Retell without filter.
   app.get('/calls', { ...auth }, async (req: FastifyRequest) => {
+    const { orgId } = req.user as JwtPayload;
     const q = z.object({ limit: z.coerce.number().int().min(1).max(200).default(50) }).parse(req.query);
-    const calls = await listCalls(undefined, q.limit);
+    if (!pool) return { items: [] };
+
+    const cfgRes = await pool.query(
+      `SELECT DISTINCT data->>'retellAgentId' AS a, data->>'retellCallbackAgentId' AS b
+       FROM agent_configs WHERE org_id = $1`,
+      [orgId],
+    );
+    const agentIds = cfgRes.rows
+      .flatMap((r: { a: string | null; b: string | null }) => [r.a, r.b])
+      .filter((v): v is string => typeof v === 'string' && v.length > 0);
+    if (agentIds.length === 0) return { items: [] };
+
+    const calls = await listCalls(agentIds, q.limit);
     return { items: calls };
   });
 
-  app.get('/calls/:callId', { ...auth }, async (req: FastifyRequest) => {
+  app.get('/calls/:callId', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { orgId } = req.user as JwtPayload;
     const params = z.object({ callId: z.string().min(1) }).parse(req.params);
     const call = await getCall(params.callId);
+    if (!call) return reply.status(404).send({ error: 'Not found' });
+
+    // Verify the call's agent belongs to the caller's org — prevents reading
+    // any org's transcript + recording URL with just a guessed call_id.
+    if (!pool) return reply.status(503).send({ error: 'DB not configured' });
+    const agentId = (call as { agent_id?: string }).agent_id;
+    if (!agentId) return reply.status(404).send({ error: 'Not found' });
+
+    const owned = await pool.query(
+      `SELECT 1 FROM agent_configs
+       WHERE org_id = $1
+         AND (data->>'retellAgentId' = $2 OR data->>'retellCallbackAgentId' = $2)
+       LIMIT 1`,
+      [orgId, agentId],
+    );
+    if (!owned.rowCount) return reply.status(404).send({ error: 'Not found' });
     return call;
   });
 }
