@@ -192,7 +192,12 @@ for (const fn of [migratePhone, migrateCalendar, migrateOutbound]) {
   try { await fn(); } catch (e) { app.log.error({ err: (e as Error).message }, `Migration failed: ${fn.name}`); }
 }
 
-// Global error handler — generic messages in prod to prevent DB/schema leaks
+// Global error handler — generic messages in prod to prevent DB/schema leaks.
+// D11 hardening: Fastify validation errors expose the entire schema path
+// (e.g. `body/orgId must be string`) plus the rejected value; that's a
+// fingerprinting + introspection vector. We sanitise validation errors to a
+// fixed `'Invalid input'` (the route-level Zod handlers already produce
+// detailed-yet-safe responses where verbose feedback is genuinely useful).
 const IS_PROD = process.env.NODE_ENV === 'production';
 app.setErrorHandler((error: FastifyError, request, reply) => {
   if (SENTRY_DSN) {
@@ -200,11 +205,16 @@ app.setErrorHandler((error: FastifyError, request, reply) => {
   }
   request.log.error(error);
   const status = error.statusCode ?? 500;
-  // Client-safe responses: keep Zod validation errors (4xx) verbose; hide 5xx internals in prod.
   const isClientError = status >= 400 && status < 500;
-  const message = isClientError
-    ? (error.message ?? 'Bad Request')
-    : (IS_PROD ? 'Internal Server Error' : (error.message ?? 'Internal Server Error'));
+  const isValidation = error.validation || error.code === 'FST_ERR_VALIDATION';
+  let message: string;
+  if (isValidation) {
+    message = 'Invalid input';
+  } else if (isClientError) {
+    message = error.message ?? 'Bad Request';
+  } else {
+    message = IS_PROD ? 'Internal Server Error' : (error.message ?? 'Internal Server Error');
+  }
   reply.status(status).send({ error: message });
 });
 
