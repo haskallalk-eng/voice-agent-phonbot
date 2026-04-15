@@ -91,6 +91,7 @@ function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null);
   const [showVerifyBanner, setShowVerifyBanner] = useState(false);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
   const [emailVerified, setEmailVerified] = useState<boolean | null>(null);
   const [verifySent, setVerifySent] = useState(false);
 
@@ -120,13 +121,18 @@ function Dashboard() {
   }, [user]);
 
   async function handleResendVerification() {
+    setVerifyError(null);
     try {
       await resendVerification();
       setVerifySent(true);
       // Reset after 5 seconds so they can resend again if needed
       setTimeout(() => setVerifySent(false), 5000);
     } catch {
-      // silently fail — user can try again
+      // Surface the failure instead of swallowing — user otherwise keeps
+      // clicking and can't tell why nothing happens. Plain message, no
+      // raw error body (avoid leaking backend details). D7.
+      setVerifyError('Mail-Versand schlug fehl — bitte später erneut versuchen oder info@phonbot.de kontaktieren.');
+      setTimeout(() => setVerifyError(null), 8000);
     }
   }
 
@@ -209,7 +215,9 @@ function Dashboard() {
           <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm text-amber-300">
               <span>📧</span>
-              {verifySent ? (
+              {verifyError ? (
+                <span className="text-red-300 font-medium" role="alert">⚠ {verifyError}</span>
+              ) : verifySent ? (
                 <span className="text-green-300 font-medium">✓ E-Mail gesendet!</span>
               ) : (
                 <span>
