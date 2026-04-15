@@ -20,6 +20,9 @@
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"Service","name":"KI-Telefonassistent für Restaurants","serviceType":"AI Voice Agent","provider":{"@type":"Organization","name":"Phonbot","url":"https://phonbot.de/","parentOrganization":{"@type":"Organization","name":"Mindrails UG (haftungsbeschränkt)","url":"https://mindrails.de/"}},"areaServed":{"@type":"Country","name":"Deutschland"},"description":"Phonbot ist der KI-Telefonassistent für Restaurants. Nimmt Reservierungen an, beantwortet Speisekarten-Fragen, erfasst Take-away-Bestellungen — 24/7 auf Deutsch. Ab 49 €/Monat.","audience":{"@type":"BusinessAudience","audienceType":"Restaurants, Cafés, Bars, Lieferdienste"},"offers":{"@type":"Offer","price":"49","priceCurrency":"EUR","priceSpecification":{"@type":"UnitPriceSpecification","price":"49","priceCurrency":"EUR","unitText":"MONTH"}}}
 </script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Klappt das mit meinem Reservierungs-System (Resmio, Quandoo, OpenTable)?","acceptedAnswer":{"@type":"Answer","text":"Google Calendar und Outlook funktionieren direkt. Spezifische Reservierungs-Systeme auf Anfrage — meist via Kalender-Sync machbar."}},{"@type":"Question","name":"Was bei Sonderwünschen (Allergien, Kinderhochstuhl)?","acceptedAnswer":{"@type":"Answer","text":"Phonbot fragt standardmäßig nach Allergien und fügt Notizen zur Reservierung. Individuelle Felder definierst du im Agent Builder."}},{"@type":"Question","name":"Kann Phonbot Bestellungen für Lieferdienst annehmen?","acceptedAnswer":{"@type":"Answer","text":"Ja. Bestellungen werden als Ticket mit Artikeln + Lieferadresse an die Küche weitergeleitet."}},{"@type":"Question","name":"Versteht Phonbot Dialekte (Bayrisch, Berlinerisch)?","acceptedAnswer":{"@type":"Answer","text":"Ja. Deutsches Sprach-Modell erkennt regionale Varianten und Gerichte-Slang."}}]}
+</script>
 <style>*{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#0A0A0F;color:#fff;line-height:1.6;overflow-x:hidden}
 a{color:inherit;text-decoration:none}
@@ -199,7 +202,7 @@ footer a:hover{color:#fff}
 <footer>
   <div class="container">
     <p>© 2026 Phonbot · Ein Produkt der <a href="https://mindrails.de" rel="noopener">Mindrails UG</a> · <a href="/">Zur Hauptseite</a> · <a href="/#faq">FAQ</a> · <a href="/#pricing">Preise</a></p>
-    <p style="margin-top:.5rem">DSGVO-konform · Server in Deutschland · <a href="mailto:info@phonbot.de">info@phonbot.de</a></p>
+    <p style="margin-top:.5rem">DSGVO-konform · Server in Deutschland · <a class="obf-mail" data-u="info" data-d="phonbot.de">info (at) phonbot.de</a></p>
   </div>
 </footer>
 </body>

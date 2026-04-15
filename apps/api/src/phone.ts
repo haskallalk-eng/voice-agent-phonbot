@@ -231,7 +231,7 @@ export async function autoProvisionGermanNumber(orgId: string): Promise<void> {
 
   // Get org's deployed Retell agent ID
   const configRes = await pool.query(
-    `SELECT data FROM agent_configs WHERE org_id = $1 OR tenant_id = $1::text LIMIT 1`,
+    `SELECT data FROM agent_configs WHERE org_id = $1 LIMIT 1`,
     [orgId],
   );
   const agentId = configRes.rows[0]?.data?.retellAgentId ?? null;
@@ -556,7 +556,7 @@ export async function registerPhone(app: FastifyInstance) {
 
     // Get the org's deployed agent ID for inbound routing
     const configRes = await pool.query(
-      `SELECT data FROM agent_configs WHERE org_id = $1 OR tenant_id = $1::text LIMIT 1`,
+      `SELECT data FROM agent_configs WHERE org_id = $1 LIMIT 1`,
       [orgId],
     );
     const agentId = configRes.rows[0]?.data?.retellAgentId ?? null;

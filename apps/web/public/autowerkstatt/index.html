@@ -20,6 +20,9 @@
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"Service","name":"KI-Telefonassistent für Autowerkstätten","serviceType":"AI Voice Agent","provider":{"@type":"Organization","name":"Phonbot","url":"https://phonbot.de/","parentOrganization":{"@type":"Organization","name":"Mindrails UG (haftungsbeschränkt)","url":"https://mindrails.de/"}},"areaServed":{"@type":"Country","name":"Deutschland"},"description":"Phonbot ist der KI-Telefonassistent für Autowerkstätten. Nimmt Terminanfragen, erfasst Fahrzeug- und Problemdaten, erstellt Kostenvoranschlag-Tickets — 24/7 auf Deutsch. Ab 49 €/Monat.","audience":{"@type":"BusinessAudience","audienceType":"Autowerkstätten, Kfz-Meisterbetriebe, Reifenhändler, Lackierereien"},"offers":{"@type":"Offer","price":"49","priceCurrency":"EUR","priceSpecification":{"@type":"UnitPriceSpecification","price":"49","priceCurrency":"EUR","unitText":"MONTH"}}}
 </script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Kann Phonbot verschiedene Werkstatt-Bereiche unterscheiden?","acceptedAnswer":{"@type":"Answer","text":"Ja. Du legst im Agent Builder fest: Reifen-Express (30 Min), Inspektion (2h), Unfall-Reparatur (Termin). Phonbot routet korrekt."}},{"@type":"Question","name":"Was bei TÜV-Terminen?","acceptedAnswer":{"@type":"Answer","text":"Phonbot bucht TÜV-Vorbereitungs-Termine und erinnert auf Wunsch an ablaufende Plaketten."}},{"@type":"Question","name":"Kann der Kunde ein Kostenvoranschlag-Angebot direkt bestätigen?","acceptedAnswer":{"@type":"Answer","text":"Aktuell erstellt Phonbot ein Ticket, du schickst das Angebot per E-Mail/SMS. Auto-Bestätigung via Link kommt 2026."}},{"@type":"Question","name":"Versteht Phonbot Kfz-Fachbegriffe (Zahnriemen, Zylinderkopfdichtung)?","acceptedAnswer":{"@type":"Answer","text":"Ja. Deutsches LLM kennt Kfz-Terminologie."}}]}
+</script>
 <style>*{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#0A0A0F;color:#fff;line-height:1.6;overflow-x:hidden}
 a{color:inherit;text-decoration:none}
@@ -199,7 +202,7 @@ footer a:hover{color:#fff}
 <footer>
   <div class="container">
     <p>© 2026 Phonbot · Ein Produkt der <a href="https://mindrails.de" rel="noopener">Mindrails UG</a> · <a href="/">Zur Hauptseite</a> · <a href="/#faq">FAQ</a> · <a href="/#pricing">Preise</a></p>
-    <p style="margin-top:.5rem">DSGVO-konform · Server in Deutschland · <a href="mailto:info@phonbot.de">info@phonbot.de</a></p>
+    <p style="margin-top:.5rem">DSGVO-konform · Server in Deutschland · <a class="obf-mail" data-u="info" data-d="phonbot.de">info (at) phonbot.de</a></p>
   </div>
 </footer>
 </body>
