@@ -92,7 +92,7 @@ export const PLANS = [
     yearlyPrice: '0€',
     period: '/Monat',
     features: [
-      '100 Freiminuten (einmalig)',
+      '30 Freiminuten (einmalig)',
       '1 Agent',
       'Web-Calls only',
       'Demo & Testen',
@@ -100,6 +100,22 @@ export const PLANS = [
     cta: 'Kostenlos starten',
     highlight: false,
     badge: null as string | null,
+  },
+  {
+    name: 'Nummer',
+    price: '8,99€',
+    yearlyPrice: null,
+    period: '/Monat',
+    features: [
+      '✦ Eigene Telefonnummer',
+      '70 Min/Monat',
+      '1 Agent',
+      'Ticket-System',
+      '+0,20€/Min bei Überschreitung',
+    ],
+    cta: 'Nummer kaufen',
+    highlight: true,
+    badge: 'Beliebt',
   },
   {
     name: 'Starter',
@@ -131,8 +147,8 @@ export const PLANS = [
       '+0,08€/Min bei Überschreitung',
     ],
     cta: 'Jetzt upgraden',
-    highlight: true,
-    badge: 'Empfohlen',
+    highlight: false,
+    badge: null as string | null,
   },
   {
     name: 'Agency',

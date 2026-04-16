@@ -22,10 +22,20 @@ export const PLANS = {
     id: 'free',
     name: 'Free',
     price: 0,
-    minutesLimit: 45,
+    minutesLimit: 30,
     agentsLimit: 1,
     overchargePerMinute: 0,
     stripePriceId: null,
+    stripePriceIdYearly: null,
+  },
+  nummer: {
+    id: 'nummer',
+    name: 'Nummer',
+    price: 8.99,
+    minutesLimit: 70,
+    agentsLimit: 1,
+    overchargePerMinute: 0.20,
+    stripePriceId: process.env.STRIPE_PRICE_NUMMER ?? null,
     stripePriceIdYearly: null,
   },
   starter: {
@@ -113,7 +123,7 @@ async function syncSubscription(sub: Stripe.Subscription) {
   const priceId = sub.items.data[0]?.price.id ?? null;
   // Match against both monthly AND yearly price IDs
   const plan = Object.values(PLANS).find((p) => p.stripePriceId === priceId || p.stripePriceIdYearly === priceId)?.id ?? 'free';
-  const minutesLimit = PLANS[plan as PlanId]?.minutesLimit ?? 45;
+  const minutesLimit = PLANS[plan as PlanId]?.minutesLimit ?? 30;
 
   // Check if this is a period renewal (reset minutes_used)
   const currentPeriodEnd = (sub as unknown as { current_period_end?: number }).current_period_end ?? null;
@@ -195,7 +205,7 @@ export async function registerBilling(app: FastifyInstance) {
     if (!stripe || !pool) return reply.status(503).send({ error: 'Stripe not configured' });
 
     const parsed = z.object({
-      planId: z.enum(['starter', 'pro', 'agency']).default('starter'),
+      planId: z.enum(['nummer', 'starter', 'pro', 'agency']).default('nummer'),
       interval: z.enum(['month', 'year']).default('month'),
     }).safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: 'Invalid plan selection' });
