@@ -1,5 +1,3 @@
-version: '3.8'
-
 # SECURITY: only Caddy is exposed to the public internet.
 # API, Web, Redis, dbproxy are only reachable via the Docker network (caddy → api:3001, caddy → web:80).
 # See Caddyfile for routing. To debug locally: "docker compose exec api sh" etc.
