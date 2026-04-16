@@ -91,21 +91,49 @@ async function getOrCreate(sessionId: string, tenantId: string): Promise<Session
   const existing = await readSession(sessionId, tenantId);
   if (existing) { existing.lastActiveAt = Date.now(); await writeSession(sessionId, existing); return existing; }
 
-  // Before creating a new session under our tenant, check whether the key is
-  // already claimed by a different tenant. Previously we silently overwrote —
-  // attacker with a leaked sessionId from another org could POST /chat with
-  // the same sessionId and wipe the victim's transcript (cross-tenant DoS).
-  // sessionId is client-supplied (Zod allows any non-empty string), so we
-  // cannot rely on UUID uniqueness alone.
-  const owner = await peekSessionOwner(sessionId);
-  if (owner && owner !== tenantId) {
-    const err = new Error('SESSION_ID_COLLISION') as Error & { statusCode?: number };
-    err.statusCode = 409;
-    throw err;
+  // FINAL-01: the previous peek-then-write had a TOCTOU race — two concurrent
+  // requests from different tenants could both see null and both write. The
+  // second write overwrites the first (cross-tenant DoS).
+  //
+  // Fix: use Redis SET NX (atomic create-if-not-exists). If NX fails, someone
+  // else just created the key — re-read to check if it's ours or a collision.
+  // In-memory path uses a simple re-check since Node is single-threaded for
+  // synchronous Map ops (the async gap is between peekSessionOwner and here,
+  // but the actual Map.set is synchronous).
+  const s: Session = { tenantId, messages: [], createdAt: Date.now(), lastActiveAt: Date.now() };
+
+  if (redis) {
+    const created = await redis.set(
+      redisKey(sessionId),
+      JSON.stringify(s),
+      { NX: true, EX: SESSION_TTL_SECONDS },
+    );
+    if (!created) {
+      // Key was just created by a concurrent request — check ownership
+      const owner = await peekSessionOwner(sessionId);
+      if (owner && owner !== tenantId) {
+        const err = new Error('SESSION_ID_COLLISION') as Error & { statusCode?: number };
+        err.statusCode = 409;
+        throw err;
+      }
+      // Same tenant raced against itself (two tabs) — read back their session
+      const raced = await readSession(sessionId, tenantId);
+      if (raced) return raced;
+      // Edge: key expired between SET NX and this read — retry create
+      await redis.setEx(redisKey(sessionId), SESSION_TTL_SECONDS, JSON.stringify(s));
+    }
+  } else {
+    // In-memory: re-check after peek since another async handler may have
+    // created the session between our readSession and here.
+    const owner = sessions.get(sessionId)?.tenantId;
+    if (owner && owner !== tenantId) {
+      const err = new Error('SESSION_ID_COLLISION') as Error & { statusCode?: number };
+      err.statusCode = 409;
+      throw err;
+    }
+    sessions.set(sessionId, s);
   }
 
-  const s: Session = { tenantId, messages: [], createdAt: Date.now(), lastActiveAt: Date.now() };
-  await writeSession(sessionId, s);
   return s;
 }
 
