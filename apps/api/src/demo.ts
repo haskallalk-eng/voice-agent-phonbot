@@ -213,18 +213,21 @@ export async function registerDemo(app: FastifyInstance) {
     }
     const { templateId, turnstileToken } = parsed.data;
 
+    // Perf: check the cheap Redis cap FIRST (sub-ms), then the Cloudflare
+    // Turnstile verify (up to 5s network round-trip). On a cap-hit we skip
+    // the Cloudflare call entirely and return 429 faster.
+    const cap = await enforceGlobalDemoCap('call');
+    if (!cap.ok) {
+      app.log.warn({ count: cap.count, limit: DEMO_GLOBAL_HOURLY_CAP }, 'demo/call global hourly cap hit');
+      return reply.status(429).send({ error: 'Demo temporarily unavailable — please try again later.' });
+    }
+
     // CAPTCHA-Gate (N6). In dev without TURNSTILE_SECRET_KEY this is a no-op;
     // in prod a missing/invalid token is rejected.
     const captchaOk = await verifyTurnstile(turnstileToken, req.ip);
     if (!captchaOk) {
       app.log.warn({ ip: req.ip }, 'demo/call captcha verification failed');
       return reply.status(403).send({ error: 'captcha_failed', message: 'Bitte Captcha bestätigen.' });
-    }
-
-    const cap = await enforceGlobalDemoCap('call');
-    if (!cap.ok) {
-      app.log.warn({ count: cap.count, limit: DEMO_GLOBAL_HOURLY_CAP }, 'demo/call global hourly cap hit');
-      return reply.status(429).send({ error: 'Demo temporarily unavailable — please try again later.' });
     }
 
     try {

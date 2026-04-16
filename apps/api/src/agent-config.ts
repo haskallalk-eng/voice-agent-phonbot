@@ -223,29 +223,24 @@ async function deployToRetell(config: AgentConfig): Promise<AgentConfig> {
   let llmId = config.retellLlmId;
   let agentId = config.retellAgentId;
 
-  // Create or update LLM
-  if (llmId) {
+  if (llmId && agentId) {
+    // Both exist → parallelize the two Retell API round-trips (each ~5s).
+    // LLM update doesn't depend on agent-update and vice versa — the
+    // agent already references this llmId.
+    await Promise.all([
+      updateLLM(llmId, { generalPrompt: instructions, tools: retellTools, model }),
+      retellUpdateAgent(agentId, { name: config.name, voiceId: config.voice, language, llmId }),
+    ]);
+  } else if (llmId && !agentId) {
+    // LLM exists but no agent → update LLM, then create agent (agent needs llmId).
     await updateLLM(llmId, { generalPrompt: instructions, tools: retellTools, model });
+    const agent = await retellCreateAgent({ name: config.name, llmId, voiceId: config.voice, language });
+    agentId = agent.agent_id;
   } else {
+    // Fresh deploy: create LLM first (agent needs llmId), then create agent.
     const llm = await createLLM({ generalPrompt: instructions, tools: retellTools, model });
     llmId = llm.llm_id;
-  }
-
-  // Create or update Agent
-  if (agentId) {
-    await retellUpdateAgent(agentId, {
-      name: config.name,
-      voiceId: config.voice,
-      language,
-      llmId,
-    });
-  } else {
-    const agent = await retellCreateAgent({
-      name: config.name,
-      llmId: llmId!,
-      voiceId: config.voice,
-      language,
-    });
+    const agent = await retellCreateAgent({ name: config.name, llmId, voiceId: config.voice, language });
     agentId = agent.agent_id;
   }
 
