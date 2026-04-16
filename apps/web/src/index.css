@@ -48,6 +48,17 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   cursor: pointer;
 }
 
+/* ─── Focus-visible — keyboard-only focus ring (no blue ring on mouse click) ─── */
+:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+:focus-visible {
+  outline: 2px solid rgba(249, 115, 22, 0.5);
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+
 /* ─── Glassmorphism utility ─── */
 .glass {
   backdrop-filter: blur(24px);
