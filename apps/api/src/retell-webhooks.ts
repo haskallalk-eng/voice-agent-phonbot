@@ -96,12 +96,16 @@ async function getOrgIdByAgentId(agentId: string): Promise<string | null> {
     [agentId],
   );
   const orgId = (res.rows[0]?.org_id as string | undefined) ?? null;
-  // LRU: evict oldest when full (Map preserves insertion order)
-  if (orgIdCache.size >= ORG_ID_CACHE_MAX) {
-    const first = orgIdCache.keys().next().value;
-    if (first !== undefined) orgIdCache.delete(first);
+  // Only cache positive hits. Negative-caching (null) is risky: a brand-new
+  // agent's first webhook would permanently cache "null" until LRU eviction,
+  // making all its tool endpoints return 403 "unknown agent" in the meantime.
+  if (orgId) {
+    if (orgIdCache.size >= ORG_ID_CACHE_MAX) {
+      const first = orgIdCache.keys().next().value;
+      if (first !== undefined) orgIdCache.delete(first);
+    }
+    orgIdCache.set(agentId, orgId);
   }
-  orgIdCache.set(agentId, orgId);
   return orgId;
 }
 

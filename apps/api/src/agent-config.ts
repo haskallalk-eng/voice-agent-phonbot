@@ -4,6 +4,7 @@ import type { JwtPayload } from './auth.js';
 import { pool } from './db.js';
 import { buildAgentInstructions } from './agent-instructions.js';
 import { tryReserveMinutes, DEFAULT_CALL_RESERVE_MINUTES } from './usage.js';
+import { invalidateOrgIdCache } from './retell-webhooks.js';
 import {
   createLLM,
   updateLLM,
@@ -530,6 +531,10 @@ export async function registerAgentConfig(app: FastifyInstance) {
     });
     const deployed = await deployToRetell(body);
     const saved = await writeConfig(deployed, orgId);
+    // Flush stale agentId→orgId mapping so retell-webhooks.ts picks up the
+    // new agent on the next webhook call instead of serving from cache.
+    if (saved.retellAgentId) invalidateOrgIdCache(saved.retellAgentId);
+    if (saved.retellCallbackAgentId) invalidateOrgIdCache(saved.retellCallbackAgentId);
     return { ok: true, config: saved, retellAgentId: saved.retellAgentId, retellLlmId: saved.retellLlmId };
   });
 
