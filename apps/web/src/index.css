@@ -12,12 +12,14 @@
 /* ─── Base ─── */
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
   overflow-y: auto !important;
   height: auto !important;
 }
 
 body {
   min-height: 100vh;
+  overflow-x: hidden;
   overflow-y: auto !important;
   height: auto !important;
 }
@@ -25,7 +27,8 @@ body {
 #root {
   min-height: 100vh;
   height: auto !important;
-  overflow: visible !important;
+  overflow-x: hidden;
+  overflow-y: visible !important;
 }
 
 body {
