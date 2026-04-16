@@ -83,12 +83,24 @@ export type Page = 'home' | 'agent' | 'test' | 'tickets' | 'logs' | 'billing' | 
 
 function Dashboard() {
   const { user, org, logout } = useAuth();
+  const VALID_PAGES: Page[] = ['home', 'agent', 'test', 'tickets', 'logs', 'billing', 'phone', 'calendar', 'insights'];
   const initialPage = (): Page => {
     const params = new URLSearchParams(window.location.search);
     if (params.has('calendarConnected') || params.has('calendarError')) return 'calendar';
+    // Restore last page from URL hash (e.g. #billing → billing)
+    const hash = window.location.hash.replace('#', '') as Page;
+    if (hash && VALID_PAGES.includes(hash)) return hash;
     return 'home';
   };
   const [page, setPage] = useState<Page>(initialPage);
+
+  // Persist current page in URL hash so reload stays on the same page
+  useEffect(() => {
+    const newHash = page === 'home' ? '' : `#${page}`;
+    if (window.location.hash !== newHash) {
+      window.history.replaceState(null, '', newHash || window.location.pathname + window.location.search);
+    }
+  }, [page]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null);
   const [showVerifyBanner, setShowVerifyBanner] = useState(false);
