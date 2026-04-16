@@ -129,6 +129,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
+    // Sync token to module store BEFORE React re-render so Dashboard's
+    // initial requests already carry the Authorization header.
+    setAccessToken(data.token);
     setState({ token: data.token, user: data.user, org: data.org, bootstrapping: false });
   }, []);
 
@@ -137,6 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       method: 'POST',
       body: JSON.stringify({ orgName, email, password }),
     });
+    setAccessToken(data.token);
     setState({ token: data.token, user: data.user, org: data.org, bootstrapping: false });
   }, []);
 
