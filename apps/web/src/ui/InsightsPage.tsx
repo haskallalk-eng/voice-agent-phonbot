@@ -426,8 +426,36 @@ export function InsightsPage() {
         </div>
 
         {loading && (
-          <div className="flex items-center justify-center py-16">
-            <span className="w-6 h-6 rounded-full border-2 border-purple-400 border-t-transparent animate-spin" />
+          <div className="space-y-6 animate-pulse">
+            {/* Skeleton: suggestions */}
+            <div>
+              <div className="h-4 w-40 bg-white/10 rounded mb-3" />
+              {[1, 2].map(i => (
+                <div key={i} className="glass rounded-2xl p-5 border border-white/10 mb-3">
+                  <div className="h-4 w-3/4 bg-white/8 rounded mb-2" />
+                  <div className="h-3 w-full bg-white/5 rounded mb-1" />
+                  <div className="h-3 w-2/3 bg-white/5 rounded mb-3" />
+                  <div className="flex gap-2">
+                    <div className="h-8 w-28 bg-white/8 rounded-lg" />
+                    <div className="h-8 w-20 bg-white/5 rounded-lg" />
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Skeleton: version history */}
+            <div>
+              <div className="h-4 w-36 bg-white/10 rounded mb-3" />
+              {[1, 2, 3].map(i => (
+                <div key={i} className="glass rounded-xl p-4 border border-white/10 mb-2 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-white/8" />
+                  <div className="flex-1">
+                    <div className="h-3 w-48 bg-white/8 rounded mb-1" />
+                    <div className="h-2 w-24 bg-white/5 rounded" />
+                  </div>
+                  <div className="h-6 w-14 bg-white/5 rounded" />
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
