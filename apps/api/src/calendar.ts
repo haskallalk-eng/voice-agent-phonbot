@@ -178,12 +178,16 @@ export async function migrateCalendar(): Promise<void> {
   // PLAN #2: on existing servers, duplicate rows may already exist (before this
   // index was added). Clean them up first — keep only the newest per (org_id,
   // slot_time) so the UNIQUE INDEX creation succeeds.
+  // Deterministic dedup: keep the row with the highest `id` per (org_id,
+  // slot_time). Using `id` instead of `created_at` because multiple rows
+  // can share the same `created_at` timestamp (concurrent inserts, clock
+  // resolution) — `id` is always unique and monotonic.
   await pool.query(`
     DELETE FROM chippy_bookings a
       USING chippy_bookings b
       WHERE a.org_id = b.org_id
         AND a.slot_time = b.slot_time
-        AND a.created_at < b.created_at;
+        AND a.id < b.id;
   `).catch(() => {/* table may not exist yet on first boot */});
   await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS chippy_bookings_org_slot_uniq ON chippy_bookings(org_id, slot_time);
