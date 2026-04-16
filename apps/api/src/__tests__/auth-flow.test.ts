@@ -170,4 +170,55 @@ describe('auth flow (TEST-01)', () => {
     });
     expect(res.statusCode).toBe(401);
   });
+
+  // Edge-case: password exactly at bcrypt 72-byte limit
+  it('POST /auth/register with 72-char password succeeds', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { orgName: 'Edge Org', email: 'edge@test.de', password: 'a'.repeat(72) },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  // Edge-case: password over 72 bytes rejected (D5 guard)
+  it('POST /auth/register with >72-char password returns 400', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { orgName: 'Too Long', email: 'long@test.de', password: 'a'.repeat(73) },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  // Edge-case: missing orgName in register
+  it('POST /auth/register without orgName returns 400', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { email: 'no-org@test.de', password: 'validpass123' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  // Edge-case: invalid email format
+  it('POST /auth/register with invalid email returns 400', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { orgName: 'Bad Email', email: 'not-an-email', password: 'validpass123' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  // Edge-case: verify-email with invalid token returns 400
+  it('POST /auth/verify-email with bad token returns 400', async () => {
+    mockQuery.mockResolvedValueOnce({ rowCount: 0, rows: [] });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/verify-email',
+      payload: { token: 'nonexistent-token-abc123' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
 });
