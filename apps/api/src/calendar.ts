@@ -174,7 +174,17 @@ export async function migrateCalendar(): Promise<void> {
     );
   `);
 
-  // Prevent double bookings for the same org + slot time
+  // Prevent double bookings for the same org + slot time.
+  // PLAN #2: on existing servers, duplicate rows may already exist (before this
+  // index was added). Clean them up first — keep only the newest per (org_id,
+  // slot_time) so the UNIQUE INDEX creation succeeds.
+  await pool.query(`
+    DELETE FROM chippy_bookings a
+      USING chippy_bookings b
+      WHERE a.org_id = b.org_id
+        AND a.slot_time = b.slot_time
+        AND a.created_at < b.created_at;
+  `).catch(() => {/* table may not exist yet on first boot */});
   await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS chippy_bookings_org_slot_uniq ON chippy_bookings(org_id, slot_time);
   `);
