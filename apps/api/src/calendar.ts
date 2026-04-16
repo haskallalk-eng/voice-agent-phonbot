@@ -184,11 +184,33 @@ export async function migrateCalendar(): Promise<void> {
 
 // Decrypts sensitive fields in-place. Works transparently for both encrypted
 // and legacy-plaintext rows (decrypt() passes plaintext through if unprefixed).
+// CAL-07: decryptToken returns null on corrupt ciphertext (e.g. after a botched
+// manual DB edit or an ENCRYPTION_KEY rotation without re-encrypt). We now log
+// a warning once per load so ops can see it, instead of silently handing back
+// an empty access_token that makes every downstream call 401.
 function decryptConn(row: CalendarConnection | null): CalendarConnection | null {
   if (!row) return null;
-  if (row.access_token) row.access_token = decryptToken(row.access_token) ?? '';
-  if (row.refresh_token) row.refresh_token = decryptToken(row.refresh_token);
-  if (row.api_key !== undefined && row.api_key !== null) row.api_key = decryptToken(row.api_key);
+  if (row.access_token) {
+    const dec = decryptToken(row.access_token);
+    if (dec === null) {
+      process.stderr.write(`[calendar] decrypt access_token failed for org ${row.org_id}/${row.provider}\n`);
+    }
+    row.access_token = dec ?? '';
+  }
+  if (row.refresh_token) {
+    const dec = decryptToken(row.refresh_token);
+    if (dec === null) {
+      process.stderr.write(`[calendar] decrypt refresh_token failed for org ${row.org_id}/${row.provider}\n`);
+    }
+    row.refresh_token = dec;
+  }
+  if (row.api_key !== undefined && row.api_key !== null) {
+    const dec = decryptToken(row.api_key);
+    if (dec === null) {
+      process.stderr.write(`[calendar] decrypt api_key failed for org ${row.org_id}/${row.provider}\n`);
+    }
+    row.api_key = dec;
+  }
   return row;
 }
 
@@ -227,6 +249,25 @@ async function getValidMsToken(orgId: string): Promise<string | null> {
 
   if (needsRefresh) {
     if (!conn.refresh_token) return null;
+    // CAL-02: serialise concurrent refreshes per (org, provider). Two parallel
+    // getValidMsToken() calls used to each hit Microsoft, race on the UPDATE
+    // and potentially race-invalidate the refresh_token rotation. Redis lock
+    // with 30s TTL — fail-open if Redis is down (single-instance dev).
+    const lockKey = `cal:refresh:ms:${orgId}`;
+    let gotLock: string | null | undefined = 'skip';
+    if (redis?.isOpen) {
+      gotLock = await redis.set(lockKey, '1', { NX: true, EX: 30 }).catch(() => null);
+      if (!gotLock) {
+        // Another request is refreshing — wait briefly then re-read fresh token.
+        await new Promise((r) => setTimeout(r, 500));
+        const fresh = await pool.query<CalendarConnection>(
+          `SELECT * FROM calendar_connections WHERE org_id = $1 AND provider = 'microsoft' LIMIT 1`,
+          [orgId],
+        );
+        const refreshed = decryptConn(fresh.rows[0] ?? null);
+        return refreshed?.access_token || null;
+      }
+    }
     try {
       const resp = await calFetch(
         'https://login.microsoftonline.com/common/oauth2/v2.0/token',
@@ -254,6 +295,10 @@ async function getValidMsToken(orgId: string): Promise<string | null> {
       return data.access_token;
     } catch {
       return null;
+    } finally {
+      if (redis?.isOpen && gotLock === '1') {
+        await redis.del(lockKey).catch(() => {});
+      }
     }
   }
 
@@ -366,6 +411,24 @@ async function getValidToken(orgId: string): Promise<string | null> {
   if (needsRefresh) {
     if (!conn.refresh_token) return null;
 
+    // CAL-02: serialise Google token refresh per org. Redis SET NX EX 30 keeps
+    // two concurrent getValidToken() calls from hitting Google at once and
+    // racing on the UPDATE. Fail-open when Redis unavailable.
+    const lockKey = `cal:refresh:google:${orgId}`;
+    let gotLock: string | null | undefined = 'skip';
+    if (redis?.isOpen) {
+      gotLock = await redis.set(lockKey, '1', { NX: true, EX: 30 }).catch(() => null);
+      if (!gotLock) {
+        await new Promise((r) => setTimeout(r, 500));
+        const fresh = await pool.query<CalendarConnection>(
+          `SELECT * FROM calendar_connections WHERE org_id = $1 AND provider = 'google' LIMIT 1`,
+          [orgId],
+        );
+        const refreshed = decryptConn(fresh.rows[0] ?? null);
+        return refreshed?.access_token || null;
+      }
+    }
+
     try {
       const resp = await calFetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
@@ -393,6 +456,10 @@ async function getValidToken(orgId: string): Promise<string | null> {
       return data.access_token;
     } catch {
       return null;
+    } finally {
+      if (redis?.isOpen && gotLock === '1') {
+        await redis.del(lockKey).catch(() => {});
+      }
     }
   }
 
@@ -1395,6 +1462,13 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
 
     if (!pool) {
       return reply.redirect(`${appUrl}?calendarConnected=true&dev=true`);
+    }
+
+    // CAL-13: if Microsoft didn't grant offline_access (consent screen checkbox
+    // or admin-policy), refresh_token is null → getValidMsToken will fail once
+    // the access_token expires (~1h). Warn so ops can advise the user to reconnect.
+    if (!tokens.refresh_token) {
+      process.stderr.write(`[calendar] Microsoft callback for org ${orgId}: no refresh_token (offline_access not granted?). Calendar will stop working after ~1h.\n`);
     }
 
     await pool.query(
