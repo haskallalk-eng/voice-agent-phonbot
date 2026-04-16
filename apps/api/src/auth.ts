@@ -406,45 +406,52 @@ export async function registerAuth(app: FastifyInstance) {
   app.post('/auth/refresh', {
     config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!pool) return reply.status(503).send({ error: 'Database not configured' });
+    // Wrap entire handler: ANY unexpected error (malformed cookie, DB down,
+    // schema mismatch) must surface as 401 — never 500. The bootstrap
+    // always tries /auth/refresh on page load; a 500 here shows up as a
+    // scary console error for every unauthenticated visitor.
+    try {
+      if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
-    const signed = req.cookies?.[REFRESH_COOKIE];
-    if (!signed) return reply.status(401).send({ error: 'No refresh token' });
+      const signed = req.cookies?.[REFRESH_COOKIE];
+      if (!signed) return reply.status(401).send({ error: 'No refresh token' });
 
-    const unsigned = req.unsignCookie(signed);
-    if (!unsigned.valid || !unsigned.value) {
-      return reply.status(401).send({ error: 'Invalid refresh token' });
-    }
-    const raw = unsigned.value;
-    const hash = hashToken(raw);
+      const unsigned = req.unsignCookie(signed);
+      if (!unsigned.valid || !unsigned.value) {
+        return reply.status(401).send({ error: 'Invalid refresh token' });
+      }
+      const raw = unsigned.value;
+      const hash = hashToken(raw);
 
-    // Atomically delete + return the matching, unrevoked, unexpired row.
-    // If DELETE finds nothing → token is unknown/already-rotated/revoked → 401.
-    const rotateRes = await pool.query(
-      `DELETE FROM refresh_tokens
-       WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()
-       RETURNING user_id`,
-      [hash],
-    );
-    if (!rotateRes.rowCount) {
+      const rotateRes = await pool.query(
+        `DELETE FROM refresh_tokens
+         WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()
+         RETURNING user_id`,
+        [hash],
+      );
+      if (!rotateRes.rowCount) {
+        reply.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+        return reply.status(401).send({ error: 'Refresh token invalid or expired' });
+      }
+      const userId = rotateRes.rows[0].user_id as string;
+
+      const userRes = await pool.query(
+        `SELECT id, role, org_id FROM users WHERE id = $1 AND is_active = true`,
+        [userId],
+      );
+      if (!userRes.rowCount) {
+        reply.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+        return reply.status(401).send({ error: 'User no longer active' });
+      }
+      const user = userRes.rows[0] as { id: string; role: 'owner' | 'admin' | 'member'; org_id: string };
+
+      const { token } = await issueTokenPair(app, user, req, reply);
+      return reply.send({ token });
+    } catch (err) {
+      req.log.warn({ err: (err as Error).message }, '/auth/refresh failed unexpectedly');
       reply.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
-      return reply.status(401).send({ error: 'Refresh token invalid or expired' });
+      return reply.status(401).send({ error: 'Refresh failed' });
     }
-    const userId = rotateRes.rows[0].user_id as string;
-
-    // Re-fetch user (could have been deactivated between login and refresh)
-    const userRes = await pool.query(
-      `SELECT id, role, org_id FROM users WHERE id = $1 AND is_active = true`,
-      [userId],
-    );
-    if (!userRes.rowCount) {
-      reply.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
-      return reply.status(401).send({ error: 'User no longer active' });
-    }
-    const user = userRes.rows[0] as { id: string; role: 'owner' | 'admin' | 'member'; org_id: string };
-
-    const { token } = await issueTokenPair(app, user, req, reply);
-    return reply.send({ token });
   });
 
   // POST /auth/logout — revoke refresh token + clear cookie.
