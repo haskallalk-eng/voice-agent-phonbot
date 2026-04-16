@@ -17,6 +17,36 @@ import {
 
 type Tab = 'overview' | 'leads' | 'users';
 
+// ── Smart Search Input ───────────────────────────────────────────────────────
+
+function SearchInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <div className="relative flex-1 max-w-sm">
+      <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder ?? 'Search...'}
+        className="w-full pl-9 pr-8 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-orange-500/50 transition-colors"
+      />
+      {value && (
+        <button onClick={() => onChange('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Case-insensitive multi-field substring match */
+function matchesSearch(query: string, ...fields: (string | number | null | undefined | boolean)[]): boolean {
+  if (!query) return true;
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const haystack = fields.map(f => String(f ?? '')).join(' ').toLowerCase();
+  return terms.every(t => haystack.includes(t));
+}
+
 // ── Login Gate ────────────────────────────────────────────────────────────────
 
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
@@ -160,6 +190,7 @@ function LeadsTab() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('');
+  const [search, setSearch] = useState('');
   const [editingNotes, setEditingNotes] = useState<string | null>(null);
   const [notesValue, setNotesValue] = useState('');
 
@@ -205,10 +236,13 @@ function LeadsTab() {
     });
   }
 
+  const filtered = leads.filter(l => matchesSearch(search, l.name, l.email, l.phone, l.source, l.status, l.notes));
+
   return (
     <div className="space-y-4">
-      {/* Filters */}
+      {/* Search + Filters */}
       <div className="flex items-center gap-3 flex-wrap">
+        <SearchInput value={search} onChange={setSearch} placeholder="Name, Email, Telefon, Quelle..." />
         <span className="text-white/50 text-sm">Filter:</span>
         {['', 'new', 'contacted', 'converted', 'lost'].map((s) => (
           <button
@@ -223,13 +257,13 @@ function LeadsTab() {
             {s || 'All'}
           </button>
         ))}
-        <span className="text-white/30 text-xs ml-auto">{total} leads</span>
+        <span className="text-white/30 text-xs ml-auto">{search ? `${filtered.length} / ` : ''}{total} leads</span>
       </div>
 
       {loading ? (
         <LoadingSpinner />
-      ) : leads.length === 0 ? (
-        <p className="text-white/30 text-sm text-center py-12">No leads found.</p>
+      ) : filtered.length === 0 ? (
+        <p className="text-white/30 text-sm text-center py-12">{search ? 'Keine Treffer.' : 'No leads found.'}</p>
       ) : (
         <div className="glass rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
@@ -247,7 +281,7 @@ function LeadsTab() {
                 </tr>
               </thead>
               <tbody>
-                {leads.map((lead) => (
+                {filtered.map((lead) => (
                   <tr key={lead.id} className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
                     <td className="px-4 py-3 text-white/60 whitespace-nowrap">{formatDate(lead.created_at)}</td>
                     <td className="px-4 py-3 text-white">{lead.name || '-'}</td>
@@ -327,6 +361,7 @@ function UsersTab() {
   const [orgs, setOrgs] = useState<AdminOrg[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'users' | 'orgs'>('users');
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     Promise.all([adminGetUsers(), adminGetOrgs()])
@@ -346,23 +381,27 @@ function UsersTab() {
     });
   }
 
+  const filteredUsers = users.filter(u => matchesSearch(search, u.email, u.org_name, u.plan, u.role, u.is_active ? 'active' : 'inactive'));
+  const filteredOrgs = orgs.filter(o => matchesSearch(search, o.name, o.slug, o.plan, o.plan_status, o.is_active ? 'active' : 'inactive'));
+
   if (loading) return <LoadingSpinner />;
 
   return (
     <div className="space-y-4">
-      {/* Sub-toggle */}
-      <div className="flex items-center gap-3">
+      {/* Search + Sub-toggle */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <SearchInput value={search} onChange={setSearch} placeholder={view === 'users' ? 'Email, Org, Plan, Rolle...' : 'Name, Plan, Status...'} />
         {(['users', 'orgs'] as const).map((v) => (
           <button
             key={v}
-            onClick={() => setView(v)}
+            onClick={() => { setView(v); setSearch(''); }}
             className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors border ${
               view === v
                 ? 'bg-orange-500/20 border-orange-500/40 text-orange-300'
                 : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'
             }`}
           >
-            {v === 'users' ? `Users (${users.length})` : `Orgs (${orgs.length})`}
+            {v === 'users' ? `Users (${search ? `${filteredUsers.length}/` : ''}${users.length})` : `Orgs (${search ? `${filteredOrgs.length}/` : ''}${orgs.length})`}
           </button>
         ))}
       </div>
@@ -382,7 +421,7 @@ function UsersTab() {
                 </tr>
               </thead>
               <tbody>
-                {users.map((u) => (
+                {filteredUsers.map((u) => (
                   <tr key={u.id} className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
                     <td className="px-4 py-3 text-white">{u.email}</td>
                     <td className="px-4 py-3 text-white/60">{u.org_name || '-'}</td>
@@ -421,7 +460,7 @@ function UsersTab() {
                 </tr>
               </thead>
               <tbody>
-                {orgs.map((o) => (
+                {filteredOrgs.map((o) => (
                   <tr key={o.id} className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
                     <td className="px-4 py-3 text-white">{o.name}</td>
                     <td className="px-4 py-3">
