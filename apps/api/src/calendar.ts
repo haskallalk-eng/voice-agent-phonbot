@@ -1516,31 +1516,47 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
   });
 
   /** PUT /calendar/chippy — save weekly schedule */
-  app.put('/calendar/chippy', { ...auth }, async (req: FastifyRequest) => {
+  // CAL-09: Zod-validate the schedule blob so a 100MB JSON payload or a
+  // deeply-nested prototype-pollution object can't land in the DB.
+  const ChipyScheduleSchema = z.record(z.string(), z.object({
+    enabled: z.boolean(),
+    start: z.string().max(10),
+    end: z.string().max(10),
+  }));
+  app.put('/calendar/chippy', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
-    const body = req.body as { schedule: ChipySchedule };
+    const parsed = z.object({ schedule: ChipyScheduleSchema }).safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Invalid schedule format' });
     if (!pool) return { ok: true };
 
     await pool.query(
       `INSERT INTO chippy_schedules (org_id, schedule, updated_at)
        VALUES ($1, $2, now())
        ON CONFLICT (org_id) DO UPDATE SET schedule = $2, updated_at = now()`,
-      [orgId, JSON.stringify(body.schedule)],
+      [orgId, JSON.stringify(parsed.data.schedule)],
     );
     return { ok: true };
   });
 
   /** POST /calendar/chippy/block — block a specific date or time range */
-  app.post('/calendar/chippy/block', { ...auth }, async (req: FastifyRequest) => {
+  // CAL-09: validated with Zod to prevent arbitrary-length strings in DB.
+  const ChipyBlockSchema = z.object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    start_time: z.string().max(10).optional(),
+    end_time: z.string().max(10).optional(),
+    reason: z.string().max(500).optional(),
+  });
+  app.post('/calendar/chippy/block', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
-    const body = req.body as { date: string; start_time?: string; end_time?: string; reason?: string };
+    const parsed = ChipyBlockSchema.safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Invalid block format (date must be YYYY-MM-DD)' });
     if (!pool) return { ok: true };
 
     const res = await pool.query(
       `INSERT INTO chippy_blocks (org_id, date, start_time, end_time, reason)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING id`,
-      [orgId, body.date, body.start_time ?? null, body.end_time ?? null, body.reason ?? null],
+      [orgId, parsed.data.date, parsed.data.start_time ?? null, parsed.data.end_time ?? null, parsed.data.reason ?? null],
     );
     return { ok: true, id: res.rows[0]?.id };
   });
