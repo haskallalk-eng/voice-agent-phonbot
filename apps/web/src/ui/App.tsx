@@ -21,6 +21,7 @@ import { InsightsPage } from './InsightsPage.js';
 // When customer outbound becomes a product, re-enable: set CUSTOMER_OUTBOUND_ENABLED=true + restore import + route below.
 import { ToastProvider } from './Toast.js';
 import { FoxLogo, PhonbotBrand } from './FoxLogo.js';
+import { ConnectionStatus } from './ConnectionStatus.js';
 import { ChipyCopilot } from '../components/ChipyCopilot.js';
 import { AdminPage } from './AdminPage.js';
 
@@ -333,6 +334,7 @@ export function App() {
 
   return (
     <ErrorBoundary>
+      <ConnectionStatus />
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <ToastProvider>
