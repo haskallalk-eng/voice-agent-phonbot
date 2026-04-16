@@ -121,13 +121,15 @@ export async function reconcileMinutes(
     const thresholds = [80, 100] as const;
     for (const t of thresholds) {
       if (pct >= t) {
-        // Only send once per threshold: check Redis dedup key
+        // Only send once per threshold: check Redis dedup key.
+        // If Redis is unavailable, skip the email entirely (fail-closed).
+        // Better: user misses a notification until Redis is back, vs.
+        // getting duplicate emails on every single reconciliation.
         const { redis } = await import('./redis.js');
-        if (redis?.isOpen) {
-          const dedupKey = `usage_warn:${orgId}:${t}`;
-          const claimed = await redis.set(dedupKey, '1', { NX: true, EX: 30 * 24 * 3600 }).catch(() => null);
-          if (!claimed) continue; // already sent this cycle
-        }
+        if (!redis?.isOpen) break;
+        const dedupKey = `usage_warn:${orgId}:${t}`;
+        const claimed = await redis.set(dedupKey, '1', { NX: true, EX: 30 * 24 * 3600 }).catch(() => null);
+        if (!claimed) continue; // already sent this cycle
         // Look up owner email
         const ownerRes = await pool.query(
           `SELECT u.email FROM users u WHERE u.org_id = $1 AND u.role = 'owner' AND u.is_active = true LIMIT 1`,

@@ -74,7 +74,7 @@ describe('reconcileMinutes', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('adjusts upward when actual > reserved', async () => {
-    mockQuery.mockResolvedValueOnce({ rowCount: 1 });
+    mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [{ minutes_used: 28, minutes_limit: 45, name: 'Test' }] });
     await reconcileMinutes('org-1', 5, 8);
     const sql = mockQuery.mock.calls[0]![0] as string;
     const params = mockQuery.mock.calls[0]![1] as number[];
@@ -83,7 +83,7 @@ describe('reconcileMinutes', () => {
   });
 
   it('adjusts downward when actual < reserved (refund)', async () => {
-    mockQuery.mockResolvedValueOnce({ rowCount: 1 });
+    mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [{ minutes_used: 10, minutes_limit: 45, name: 'Test' }] });
     await reconcileMinutes('org-1', 5, 2);
     const params = mockQuery.mock.calls[0]![1] as number[];
     expect(params![1]).toBe(-3); // 2 - 5 = -3, GREATEST(0,...) protects DB
