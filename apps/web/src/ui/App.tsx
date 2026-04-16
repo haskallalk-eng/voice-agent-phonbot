@@ -97,17 +97,23 @@ function Dashboard() {
   const [verifySent, setVerifySent] = useState(false);
 
   useEffect(() => {
-    // Check if onboarding was in progress (localStorage)
-    const obState = localStorage.getItem('phonbot_onboarding');
-    if (obState) {
-      setNeedsOnboarding(true);
-      return;
-    }
+    // Always ask the server whether the user has a configured agent.
+    // Previously, a stale `phonbot_onboarding` key in localStorage would
+    // force onboarding even for users who already completed it — causing
+    // the "warum muss ich das Onboarding nochmal machen?" bug.
     getAgentConfig()
       .then((cfg: AgentConfig) => {
-        setNeedsOnboarding(!cfg.businessName || cfg.businessName === 'Demo Business');
+        const configured = cfg.businessName && cfg.businessName !== 'Demo Business';
+        if (configured) {
+          // Agent exists → clear any stale onboarding state
+          try { localStorage.removeItem('phonbot_onboarding'); } catch { /* */ }
+          setNeedsOnboarding(false);
+        } else {
+          setNeedsOnboarding(true);
+        }
       })
       .catch(() => {
+        // API error (e.g. first-time user, DB down) → show onboarding
         setNeedsOnboarding(true);
       });
   }, []);
