@@ -22,7 +22,7 @@ export function FoxLogo({ size = 'md', className = '', glow = false, animate = f
 
   return (
     <div
-      className={`inline-flex items-center justify-center select-none ${animate ? 'chippy-float' : ''} ${className}`}
+      className={`inline-flex items-center justify-center select-none ${animate ? 'chipy-float' : ''} ${className}`}
       style={{
         width: px, height: px,
         ...(glow ? { filter: 'drop-shadow(0 0 10px rgba(249,115,22,0.55)) drop-shadow(0 2px 28px rgba(249,115,22,0.2))' } : {}),
@@ -74,13 +74,13 @@ export function FoxLogo({ size = 'md', className = '', glow = false, animate = f
         <circle cx="36" cy="50" r="10" fill={`url(#${uid}-eye)`} />
         {/* Left pupil — blink via scaleY on a group */}
         <g style={{ transformOrigin: '36px 50px' }}>
-          <ellipse cx="36" cy="50" rx="6" ry="6" fill="#1C1917" className="chippy-blink-l" />
+          <ellipse cx="36" cy="50" rx="6" ry="6" fill="#1C1917" className="chipy-blink-l" />
         </g>
         {/* Left highlight */}
         <circle cx="40" cy="46" r="3" fill="white" filter={`url(#${uid}-glit)`} />
         <circle cx="33" cy="54" r="1.2" fill="white" opacity="0.5" />
         {/* Left sparkle — tiny star glint */}
-        <circle cx="41.5" cy="44.5" r="1" fill="white" className="chippy-sparkle" />
+        <circle cx="41.5" cy="44.5" r="1" fill="white" className="chipy-sparkle" />
 
         {/* Right eye white */}
         <circle cx="64" cy="50" r="13" fill="white" />
@@ -88,13 +88,13 @@ export function FoxLogo({ size = 'md', className = '', glow = false, animate = f
         <circle cx="64" cy="50" r="10" fill={`url(#${uid}-eye)`} />
         {/* Right pupil */}
         <g style={{ transformOrigin: '64px 50px' }}>
-          <ellipse cx="64" cy="50" rx="6" ry="6" fill="#1C1917" className="chippy-blink-r" />
+          <ellipse cx="64" cy="50" rx="6" ry="6" fill="#1C1917" className="chipy-blink-r" />
         </g>
         {/* Right highlight */}
         <circle cx="68" cy="46" r="3" fill="white" filter={`url(#${uid}-glit)`} />
         <circle cx="61" cy="54" r="1.2" fill="white" opacity="0.5" />
         {/* Right sparkle */}
-        <circle cx="69.5" cy="44.5" r="1" fill="white" className="chippy-sparkle chippy-sparkle-delay" />
+        <circle cx="69.5" cy="44.5" r="1" fill="white" className="chipy-sparkle chipy-sparkle-delay" />
 
         {/* ── NOSE ── */}
         <ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309" />

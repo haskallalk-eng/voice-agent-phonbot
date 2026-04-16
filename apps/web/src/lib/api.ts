@@ -476,28 +476,28 @@ export type ChipyBooking = {
 };
 
 export function getChipyCalendar() {
-  return request<{ schedule: ChipySchedule; blocks: ChipyBlock[]; bookings: ChipyBooking[] }>('/calendar/chippy');
+  return request<{ schedule: ChipySchedule; blocks: ChipyBlock[]; bookings: ChipyBooking[] }>('/calendar/chipy');
 }
 export function saveChipySchedule(schedule: ChipySchedule) {
-  return request<{ ok: boolean }>('/calendar/chippy', { method: 'PUT', body: JSON.stringify({ schedule }) });
+  return request<{ ok: boolean }>('/calendar/chipy', { method: 'PUT', body: JSON.stringify({ schedule }) });
 }
 export function addChipyBlock(date: string, opts?: { start_time?: string; end_time?: string; reason?: string }) {
-  return request<{ ok: boolean; id: string }>('/calendar/chippy/block', {
+  return request<{ ok: boolean; id: string }>('/calendar/chipy/block', {
     method: 'POST',
     body: JSON.stringify({ date, ...opts }),
   });
 }
 export function removeChipyBlock(id: string) {
-  return request<{ ok: boolean }>(`/calendar/chippy/block/${id}`, { method: 'DELETE' });
+  return request<{ ok: boolean }>(`/calendar/chipy/block/${id}`, { method: 'DELETE' });
 }
 export function getChipyBookings(from: string, to: string) {
-  return request<{ bookings: ChipyBooking[] }>(`/calendar/chippy/bookings?from=${from}&to=${to}`);
+  return request<{ bookings: ChipyBooking[] }>(`/calendar/chipy/bookings?from=${from}&to=${to}`);
 }
 export function createChipyBooking(data: { customer_name: string; customer_phone: string; service?: string; notes?: string; slot_time: string }) {
-  return request<{ ok: boolean; booking: ChipyBooking }>('/calendar/chippy/bookings', { method: 'POST', body: JSON.stringify(data) });
+  return request<{ ok: boolean; booking: ChipyBooking }>('/calendar/chipy/bookings', { method: 'POST', body: JSON.stringify(data) });
 }
 export function deleteChipyBooking(id: string) {
-  return request<{ ok: boolean }>(`/calendar/chippy/bookings/${id}`, { method: 'DELETE' });
+  return request<{ ok: boolean }>(`/calendar/chipy/bookings/${id}`, { method: 'DELETE' });
 }
 
 // --- Billing ---

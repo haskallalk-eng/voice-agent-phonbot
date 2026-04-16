@@ -39,7 +39,7 @@ function TypingIndicator() {
               style={{
                 width: 6, height: 6,
                 background: 'linear-gradient(135deg, #F97316, #FB923C)',
-                animation: 'chippy-dot-bounce 1.4s ease-in-out infinite',
+                animation: 'chipy-dot-bounce 1.4s ease-in-out infinite',
                 animationDelay: `${i * 0.18}s`,
               }}
             />
@@ -171,15 +171,15 @@ export function ChipyCopilot() {
   return (
     <>
       <style>{`
-        @keyframes chippy-dot-bounce {
+        @keyframes chipy-dot-bounce {
           0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
           30% { transform: translateY(-5px); opacity: 1; }
         }
-        @keyframes chippy-fab-glow {
+        @keyframes chipy-fab-glow {
           0%, 100% { box-shadow: 0 0 0 0 rgba(249,115,22,0.35), 0 4px 24px rgba(0,0,0,0.4); }
           50% { box-shadow: 0 0 0 10px rgba(249,115,22,0), 0 4px 24px rgba(0,0,0,0.4); }
         }
-        @keyframes chippy-window-in {
+        @keyframes chipy-window-in {
           from { opacity: 0; transform: translateY(16px) scale(0.95); }
           to   { opacity: 1; transform: translateY(0) scale(1); }
         }
@@ -196,7 +196,7 @@ export function ChipyCopilot() {
             borderRadius: '50%',
             background: 'linear-gradient(145deg, #1a1a2e 0%, #0f0f1a 100%)',
             border: '2px solid rgba(249,115,22,0.35)',
-            animation: 'chippy-fab-glow 3s ease-in-out infinite',
+            animation: 'chipy-fab-glow 3s ease-in-out infinite',
           }}
         >
           <FoxLogo size={40} animate />
@@ -216,7 +216,7 @@ export function ChipyCopilot() {
             boxShadow: '0 0 60px rgba(249,115,22,0.08), 0 8px 40px rgba(0,0,0,0.6)',
             backdropFilter: 'blur(24px)',
             WebkitBackdropFilter: 'blur(24px)',
-            animation: 'chippy-window-in 0.25s ease-out',
+            animation: 'chipy-window-in 0.25s ease-out',
           }}
         >
           {/* ── Header ── */}

@@ -74,7 +74,7 @@ export function ChipyWaypoint({ message, from = 'left', size = 52 }: WaypointPro
         {/* Chipy mascot with subtle bounce */}
         <div
           style={{
-            animation: visible ? 'chippy-bounce 2s ease-in-out infinite' : 'none',
+            animation: visible ? 'chipy-bounce 2s ease-in-out infinite' : 'none',
             animationDelay: '0.7s',
           }}
         >
@@ -133,7 +133,7 @@ export function ChipyWaypoint({ message, from = 'left', size = 52 }: WaypointPro
 export function ChipyStyles() {
   return (
     <style>{`
-      @keyframes chippy-bounce {
+      @keyframes chipy-bounce {
         0%, 100% { transform: translateY(0); }
         50% { transform: translateY(-4px); }
       }

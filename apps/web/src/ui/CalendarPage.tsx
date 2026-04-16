@@ -8,7 +8,7 @@ import {
 import type { ChipySchedule, ChipyBlock, ChipyBooking } from '../lib/api.js';
 import { FoxLogo } from './FoxLogo.js';
 
-type CalendarStatus = { connected: boolean; provider: string | null; email: string | null; expired?: boolean; expiredProvider?: string; chippy?: { configured: boolean } };
+type CalendarStatus = { connected: boolean; provider: string | null; email: string | null; expired?: boolean; expiredProvider?: string; chipy?: { configured: boolean } };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -41,7 +41,7 @@ const PROVIDER_META: Record<string, ProviderMeta> = {
   google:    { label: 'Google Calendar',   color: '#4285F4', bg: 'rgba(66,133,244,0.08)',   icon: '📅' },
   microsoft: { label: 'Microsoft Outlook', color: '#0078D4', bg: 'rgba(0,120,212,0.12)',    icon: '🪟' },
   calcom:    { label: 'Cal.com',           color: '#3B82F6', bg: 'rgba(59,130,246,0.12)',   icon: '🔵' },
-  chippy:    { label: 'Chipy Kalender',   color: '#F97316', bg: 'rgba(249,115,22,0.12)',   icon: '🐾' },
+  chipy:    { label: 'Chipy Kalender',   color: '#F97316', bg: 'rgba(249,115,22,0.12)',   icon: '🐾' },
 };
 const DEFAULT_PROVIDER_META: ProviderMeta = { label: 'Chipy Kalender', color: '#F97316', bg: 'rgba(249,115,22,0.12)', icon: '🐾' };
 
@@ -744,7 +744,7 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
       )}
 
       {/* Connected provider (if any external one) */}
-      {status?.connected && meta && status.provider !== 'chippy' && (
+      {status?.connected && meta && status.provider !== 'chipy' && (
         <div className="rounded-2xl p-5 border border-white/10" style={{ background: meta.bg }}>
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -901,18 +901,18 @@ export function CalendarPage() {
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [showAddBooking, setShowAddBooking] = useState(false);
 
-  // Load chippy data + bookings for a 3-month window
+  // Load chipy data + bookings for a 3-month window
   const loadChipy = useCallback(async () => {
     try {
-      const [chippy, bkgs] = await Promise.all([
+      const [chipy, bkgs] = await Promise.all([
         getChipyCalendar(),
         getChipyBookings(
           isoDate(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1)),
           isoDate(new Date(new Date().getFullYear(), new Date().getMonth() + 3, 0)),
         ),
       ]);
-      setSchedule({ ...DEFAULT_SCHEDULE, ...chippy.schedule });
-      setBlocks(chippy.blocks);
+      setSchedule({ ...DEFAULT_SCHEDULE, ...chipy.schedule });
+      setBlocks(chipy.blocks);
       setBookings(bkgs.bookings);
     } catch (e: unknown) {
       setCalendarError((e instanceof Error ? e.message : null) ?? 'Kalenderdaten konnten nicht geladen werden');
@@ -975,7 +975,7 @@ export function CalendarPage() {
           <div>
             <h1 className="text-2xl font-bold text-white">Kalender</h1>
             <p className="text-sm text-white/40 mt-1">
-              {calendarStatus?.provider && calendarStatus.provider !== 'chippy'
+              {calendarStatus?.provider && calendarStatus.provider !== 'chipy'
                 ? `Verbunden mit ${providerMeta.label}`
                 : calendarStatus?.connected
                   ? 'Chipy Kalender aktiv — verbinde optional einen externen Kalender'
@@ -1016,7 +1016,7 @@ export function CalendarPage() {
         )}
 
         {/* Calendar integration hint */}
-        {tab === 'calendar' && (!calendarStatus?.connected || calendarStatus?.provider === 'chippy') && (
+        {tab === 'calendar' && (!calendarStatus?.connected || calendarStatus?.provider === 'chipy') && (
           <div
             className="mb-4 rounded-2xl p-4 flex items-start gap-3"
             style={{
