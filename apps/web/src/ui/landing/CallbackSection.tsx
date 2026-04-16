@@ -1,15 +1,14 @@
 import React from 'react';
 import { FoxLogo } from '../FoxLogo.js';
 import { IconPrivacy, IconBolt, IconCheckCircle } from '../PhonbotIcons.js';
-import { TurnstileWidget } from '../TurnstileWidget.js';
+import { TurnstileWidget, type TurnstileHandle } from '../TurnstileWidget.js';
 import { useVisible } from './shared.js';
 
 export function CallbackSection() {
   const [phone, setPhone] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [name, setName] = React.useState('');
-  const [turnstileToken, setTurnstileToken] = React.useState('');
-  const handleToken = React.useCallback((token: string) => setTurnstileToken(token), []);
+  const turnstileRef = React.useRef<TurnstileHandle>(null);
   const [state, setState] = React.useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const ref = React.useRef<HTMLElement>(null);
   const visible = useVisible(ref);
@@ -19,6 +18,10 @@ export function CallbackSection() {
     if (!phone.trim() || !email.trim()) return;
     setState('loading');
     try {
+      // Execute Turnstile on-demand — only when user actually submits
+      let token = '';
+      try { token = await (turnstileRef.current?.execute() ?? Promise.resolve('')); } catch { /* proceed without */ }
+
       const res = await fetch('/api/outbound/website-callback', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -26,7 +29,7 @@ export function CallbackSection() {
           phone: phone.trim(),
           email: email.trim(),
           name: name.trim() || undefined,
-          turnstileToken: turnstileToken || undefined,
+          turnstileToken: token || undefined,
         }),
       });
       if (!res.ok) throw new Error();
@@ -160,10 +163,8 @@ export function CallbackSection() {
                       className="w-full rounded-xl bg-white/[0.05] border border-white/[0.08] px-4 py-3 text-sm text-white placeholder-white/20 focus:outline-none focus:border-orange-500/40 focus:ring-1 focus:ring-orange-500/20 transition-all"
                     />
                   </div>
-                  {/* Cloudflare Turnstile — silent challenge for the form */}
-                  <div className="flex justify-center">
-                    <TurnstileWidget onToken={handleToken} theme="dark" />
-                  </div>
+                  {/* Turnstile — invisible, execute-on-demand at submit time */}
+                  <TurnstileWidget ref={turnstileRef} mode="execute" theme="dark" />
                   {state === 'error' && (
                     <p className="text-red-400/80 text-xs bg-red-500/8 border border-red-500/15 rounded-xl px-4 py-2.5">
                       Etwas ist schiefgelaufen — bitte versuche es erneut.

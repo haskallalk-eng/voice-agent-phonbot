@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { RetellWebClient } from 'retell-client-js-sdk';
 import { createDemoCall } from '../../lib/api.js';
 import { FoxLogo } from '../FoxLogo.js';
 import { IconPhone } from '../PhonbotIcons.js';
-import { TurnstileWidget } from '../TurnstileWidget.js';
+import { TurnstileWidget, type TurnstileHandle } from '../TurnstileWidget.js';
 import { TEMPLATES, TEMPLATE_PREVIEWS, type CallState } from './shared.js';
 
 // ── Sub-components ─────────────────────────────────────────────────────────
@@ -114,15 +114,10 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
   // Cloudflare Turnstile token (cleared on expiry/reset). Empty string = no
   // token yet → demo button stays disabled in prod. Dev without site-key
   // configured: widget renders nothing, token stays '' but backend skips.
-  // Turnstile token lives in a ref so the latest value is always available
-  // inside handleTemplateClick without a stale-closure problem. State keeps
-  // React aware for any UI binding.
-  const [turnstileToken, setTurnstileToken] = useState('');
-  const turnstileRef = useRef('');
-  const handleToken = useCallback((token: string) => {
-    setTurnstileToken(token);
-    turnstileRef.current = token;
-  }, []);
+  // Turnstile in "execute" mode: widget renders invisibly, challenge only
+  // runs when user actually clicks a template (= the risky action). Casual
+  // page-readers never see or interact with Cloudflare.
+  const turnstileHandleRef = useRef<TurnstileHandle>(null);
   const clientRef = useRef<RetellWebClient | null>(null);
 
   const isInCall = callState === 'connecting' || callState === 'active' || callState === 'ended' || callState === 'error';
@@ -154,17 +149,14 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
         }
       }
 
-      // Wait for Turnstile token if it hasn't arrived yet. The widget
-      // loads asynchronously (1-3s), and auto-start from ?demo=X can fire
-      // before the token callback. Poll up to 5s; if still empty, proceed
-      // without it (backend will 403 → user sees a friendly retry message).
-      let token = turnstileRef.current;
-      if (!token) {
-        for (let i = 0; i < 25; i++) {
-          await new Promise(r => setTimeout(r, 200));
-          token = turnstileRef.current;
-          if (token) break;
-        }
+      // Execute Turnstile challenge ON-DEMAND — only when user actually
+      // clicks a template. Casual page-readers never trigger it.
+      let token = '';
+      try {
+        token = await (turnstileHandleRef.current?.execute() ?? Promise.resolve(''));
+      } catch {
+        // Turnstile unavailable (ad-blocker, network, timeout) — proceed
+        // without token. Backend will still enforce rate-limit + global-cap.
       }
 
       const res = await createDemoCall(templateId, token || undefined);
@@ -258,11 +250,10 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
           <p className="text-white/60 text-lg max-w-xl mx-auto">
             Kein Account nötig. Einfach klicken, sprechen, überzeugen lassen.
           </p>
-          {/* Cloudflare Turnstile — silent challenge for normal users; renders
-              nothing in dev when VITE_TURNSTILE_SITE_KEY is unset. */}
-          <div className="mt-4 flex justify-center">
-            <TurnstileWidget onToken={handleToken} theme="dark" />
-          </div>
+          {/* Cloudflare Turnstile — invisible, execute-on-demand. Only triggers
+              when user clicks a template (= the expensive action). Casual
+              page-readers never see or interact with Cloudflare. */}
+          <TurnstileWidget ref={turnstileHandleRef} mode="execute" theme="dark" />
         </div>
 
         {/* Template grid — shown when idle or error */}
