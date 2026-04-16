@@ -36,7 +36,7 @@ export const PLANS = {
     agentsLimit: 1,
     overchargePerMinute: 0.20,
     stripePriceId: process.env.STRIPE_PRICE_NUMMER ?? null,
-    stripePriceIdYearly: null,
+    stripePriceIdYearly: process.env.STRIPE_PRICE_NUMMER_YEARLY ?? null,
   },
   starter: {
     id: 'starter',

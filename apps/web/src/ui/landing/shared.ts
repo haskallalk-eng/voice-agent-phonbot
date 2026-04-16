@@ -104,7 +104,7 @@ export const PLANS = [
   {
     name: 'Nummer',
     price: '8,99€',
-    yearlyPrice: null,
+    yearlyPrice: '7,67€',
     period: '/Monat',
     features: [
       '✦ Eigene Telefonnummer',
