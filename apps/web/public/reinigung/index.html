@@ -26,7 +26,7 @@
 <style>*{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#0A0A0F;color:#fff;line-height:1.6;overflow-x:hidden}
 a{color:inherit;text-decoration:none}
-.container{max-width:960px;margin:0 auto;padding:0 1.5rem}
+.container{max-width:1152px;margin:0 auto;padding:0 2.5rem}
 nav{position:sticky;top:0;z-index:50;background:rgba(15,15,24,.85);backdrop-filter:blur(16px);border-bottom:1px solid rgba(255,255,255,.05)}
 nav .container{display:flex;align-items:center;justify-content:space-between;padding-top:1rem;padding-bottom:1rem}
 .brand{font-weight:800;font-size:1.25rem;background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -37,7 +37,7 @@ nav .container{display:flex;align-items:center;justify-content:space-between;pad
 .btn-ghost:hover{background:rgba(255,255,255,.08);color:#fff}
 .btn-demo{background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.4);color:#FDBA74;display:inline-flex;align-items:center;gap:.5rem}
 .btn-demo:hover{background:rgba(249,115,22,.2);color:#fff;transform:scale(1.03)}
-header.hero{padding:5rem 0 3rem;position:relative;overflow:hidden}
+header.hero{padding:6rem 0 4rem;position:relative;overflow:hidden}
 .hero-glow{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:0}
 .hero-glow::before,.hero-glow::after{content:'';position:absolute;border-radius:50%;filter:blur(80px)}
 .hero-glow::before{width:400px;height:400px;top:-100px;right:-80px;background:radial-gradient(circle,rgba(249,115,22,.12),transparent 70%)}
@@ -55,12 +55,12 @@ h1 .accent{background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background
 .cta-row{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap}
 .hero-text .cta-row{justify-content:flex-start}
 @media (max-width:768px){.hero-grid{grid-template-columns:1fr;text-align:center}.hero-mascot{order:-1}.hero-text{text-align:center}.hero-text .cta-row{justify-content:center}.subtitle{margin-left:auto;margin-right:auto}}
-section{padding:3.5rem 0}
+section{padding:5rem 0}
 h2{font-size:clamp(1.5rem,3.5vw,2.25rem);font-weight:700;margin-bottom:1.5rem;letter-spacing:-.015em}
 h3{font-size:1.125rem;font-weight:600;margin-bottom:.5rem;color:#fff}
 p{color:rgba(255,255,255,.7)}
-.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.25rem;margin-top:2rem}
-.feature{padding:1.5rem;border-radius:16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(8px);transition:all .2s}
+.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem;margin-top:2rem}
+.feature{padding:2rem;border-radius:16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(8px);transition:all .2s}
 .feature:hover{background:rgba(255,255,255,.06);border-color:rgba(249,115,22,.2);transform:translateY(-2px)}
 .feature-icon{width:40px;height:40px;border-radius:.75rem;background:linear-gradient(135deg,rgba(249,115,22,.15),rgba(6,182,212,.1));display:flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:1rem}
 .dialogue{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:1.25rem;padding:1.75rem;max-width:720px;margin:2rem auto 0}
