@@ -76,14 +76,40 @@ function verifyRetellSignature(req: RawBodyRequest): boolean {
 /**
  * Look up org_id from agent_configs by retellAgentId stored in the JSONB data column.
  * Returns null when not found.
+ *
+ * Per-request cache: a single Retell webhook dispatches call_ended → then
+ * 3 tool endpoints (calendar.findSlots, calendar.book, ticket.create), each
+ * of which calls getOrgIdByAgentId independently. Caching deduplicates the
+ * JSONB query from 4× → 1× per agentId per process lifetime (the mapping
+ * changes only on deploy, which is rare). LRU-evicts after 500 entries to
+ * cap memory.
  */
+const orgIdCache = new Map<string, string | null>();
+const ORG_ID_CACHE_MAX = 500;
+
 async function getOrgIdByAgentId(agentId: string): Promise<string | null> {
   if (!pool) return null;
+  const cached = orgIdCache.get(agentId);
+  if (cached !== undefined) return cached;
   const res = await pool.query(
     `SELECT org_id FROM agent_configs WHERE data->>'retellAgentId' = $1 LIMIT 1`,
     [agentId],
   );
-  return (res.rows[0]?.org_id as string | undefined) ?? null;
+  const orgId = (res.rows[0]?.org_id as string | undefined) ?? null;
+  // LRU: evict oldest when full (Map preserves insertion order)
+  if (orgIdCache.size >= ORG_ID_CACHE_MAX) {
+    const first = orgIdCache.keys().next().value;
+    if (first !== undefined) orgIdCache.delete(first);
+  }
+  orgIdCache.set(agentId, orgId);
+  return orgId;
+}
+
+// Invalidate cache entry on agent deploy (called from agent-config.ts after
+// writeConfig updates the retellAgentId). Without this, a re-deployed agent
+// with a new retellAgentId would miss until the old entry naturally evicts.
+export function invalidateOrgIdCache(agentId: string): void {
+  orgIdCache.delete(agentId);
 }
 
 /** Narrowed shape of the Retell event body. */
