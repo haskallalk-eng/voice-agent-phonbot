@@ -562,9 +562,14 @@ export async function registerPhone(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Du brauchst zuerst eine Phonbot-Nummer. Klicke auf "Nummer aktivieren".' });
     }
 
+    // T-29: prevent duplicate forwarding entries for the same org + number.
+    // Without ON CONFLICT the same user could POST /phone/forward 10× with
+    // the same number and pollute phone_numbers with identical rows — each
+    // later showing up as a separate "forwarding number" in the dashboard.
     await pool.query(
       `INSERT INTO phone_numbers (org_id, number, number_pretty, provider, method, verified)
-       VALUES ($1, $2, $2, 'forwarding', 'forwarding', false)`,
+       VALUES ($1, $2, $2, 'forwarding', 'forwarding', false)
+       ON CONFLICT (number) DO NOTHING`,
       [orgId, number],
     );
 
