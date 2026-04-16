@@ -242,15 +242,19 @@ function Dashboard() {
           </div>
         )}
 
-        {page === 'home' && <DashboardHome onNavigate={setPage} />}
-        {page === 'agent' && <AgentBuilder onNavigate={setPage} />}
-        {page === 'test' && <TestConsole onNavigate={setPage} />}
-        {page === 'tickets' && <TicketInbox />}
-        {page === 'logs' && <CallLog />}
-        {page === 'billing' && <BillingPage />}
-        {page === 'phone' && <PhoneManager onNavigate={setPage as (page: string) => void} />}
-        {page === 'calendar' && <CalendarPage />}
-        {page === 'insights' && <InsightsPage />}
+        {/* Page content — key forces React to remount on navigation,
+            triggering the fade-up CSS animation for a smooth transition. */}
+        <div key={page} className="fade-up">
+          {page === 'home' && <DashboardHome onNavigate={setPage} />}
+          {page === 'agent' && <AgentBuilder onNavigate={setPage} />}
+          {page === 'test' && <TestConsole onNavigate={setPage} />}
+          {page === 'tickets' && <TicketInbox />}
+          {page === 'logs' && <CallLog />}
+          {page === 'billing' && <BillingPage />}
+          {page === 'phone' && <PhoneManager onNavigate={setPage as (page: string) => void} />}
+          {page === 'calendar' && <CalendarPage />}
+          {page === 'insights' && <InsightsPage />}
+        </div>
       </main>
 
       {/* Chipy Copilot — floating chat assistant, visible on all dashboard pages */}
