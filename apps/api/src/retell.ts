@@ -183,11 +183,15 @@ export async function updateAgent(
     enableBackchannel?: boolean;
   },
 ): Promise<RetellAgent> {
+  // RET-08: only set tuning params when the caller explicitly provides them.
+  // Previously both were ALWAYS sent (defaulting from env or 1.0/true), so a
+  // name-only update silently reset any per-agent tuning the user had
+  // configured in the Retell dashboard. Now we only override when asked.
   const body: Record<string, unknown> = {
-    interruption_sensitivity: config.interruptionSensitivity ?? defaultInterruption(),
-    enable_backchannel: config.enableBackchannel ?? defaultBackchannel(),
     enable_dynamic_responsiveness: true,
   };
+  if (config.interruptionSensitivity !== undefined) body.interruption_sensitivity = config.interruptionSensitivity;
+  if (config.enableBackchannel !== undefined) body.enable_backchannel = config.enableBackchannel;
   if (config.name !== undefined) body.agent_name = config.name;
   if (config.voiceId !== undefined) body.voice_id = config.voiceId;
   if (config.language !== undefined) body.language = config.language;
@@ -280,10 +284,15 @@ export async function createVoice(
   formData.append('voice_provider', provider);
   formData.append('files', new Blob([new Uint8Array(audioBuffer)], { type: mime }), `voice.${ext}`);
 
+  // RET-01: voice-clone uploads can be slow (large audio file + server-side
+  // processing). 60s is generous but bounded — without it a hung upload pins
+  // the Fastify worker indefinitely (every other Retell call has the 15s cap
+  // via retellRequest, but this one bypasses it for FormData).
   const res = await fetch('https://api.retellai.com/clone-voice', {
     method: 'POST',
     headers: { Authorization: `Bearer ${getApiKey()}` },
     body: formData,
+    signal: AbortSignal.timeout(60_000),
   });
   if (!res.ok) throw new Error(`Retell API ${res.status}: ${await res.text()}`);
   return res.json() as Promise<RetellVoice>;
