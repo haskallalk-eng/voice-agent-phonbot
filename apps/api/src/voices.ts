@@ -7,7 +7,9 @@
 
 import type { FastifyInstance } from 'fastify';
 import multipart from '@fastify/multipart';
+import { z } from 'zod';
 import { listVoices, createVoice, type RetellVoice } from './retell.js';
+import { VOICE_CATALOG, getDefaultVoiceForLanguage, getVoicesForLanguage } from './voice-catalog.js';
 
 // Max upload: 50 MB
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
@@ -18,7 +20,7 @@ export async function registerVoices(app: FastifyInstance) {
     await app.register(multipart, { limits: { fileSize: MAX_FILE_SIZE } });
   }
 
-  /* ── GET /voices ── */
+  /* ── GET /voices ── all voices (unfiltered, for admin/power-users) */
   app.get(
     '/voices',
     { onRequest: [app.authenticate] },
@@ -30,6 +32,24 @@ export async function registerVoices(app: FastifyInstance) {
         const msg = err instanceof Error ? err.message : 'Failed to list voices';
         return reply.status(502).send({ error: msg });
       }
+    },
+  );
+
+  /* ── GET /voices/recommended?language=de ── curated, language-optimized voices */
+  app.get(
+    '/voices/recommended',
+    { onRequest: [app.authenticate] },
+    async (req, reply) => {
+      const parsed = z.object({ language: z.string().min(2).max(5).default('de') }).safeParse(req.query);
+      const language = parsed.success ? parsed.data.language : 'de';
+      const voices = getVoicesForLanguage(language);
+      const defaultVoiceId = getDefaultVoiceForLanguage(language);
+      return reply.send({
+        language,
+        defaultVoiceId,
+        voices,
+        allLanguages: Object.keys(VOICE_CATALOG),
+      });
     },
   );
 
