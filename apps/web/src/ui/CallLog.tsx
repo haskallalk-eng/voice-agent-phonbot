@@ -112,14 +112,29 @@ export function CallLog() {
         </div>
       )}
 
+      {/* Loading skeleton */}
+      {loading && calls.length === 0 && (
+        <div className="space-y-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="glass rounded-2xl p-4 animate-pulse">
+              <div className="flex items-center gap-3">
+                <div className="w-16 h-5 rounded-full bg-white/10" />
+                <div className="w-32 h-4 rounded bg-white/8" />
+                <div className="ml-auto w-20 h-4 rounded bg-white/6" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Call List */}
-      {calls.length === 0 ? (
+      {!loading && calls.length === 0 ? (
         <EmptyState
           icon={<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 5.5h18M3 12h18M3 18.5h18" strokeLinecap="round"/></svg>}
           title="Noch keine Anrufe"
-          description={loading ? 'Lade Calls…' : 'Sobald dein Agent Anrufe bearbeitet, erscheinen sie hier.'}
+          description="Sobald dein Agent Anrufe bearbeitet, erscheinen sie hier."
         />
-      ) : (
+      ) : calls.length > 0 ? (
         <>
         <div className="space-y-2">
           {calls.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((call) => (
@@ -163,7 +178,7 @@ export function CallLog() {
           </div>
         )}
         </>
-      )}
+      ) : null}
     </div>
   );
 }
