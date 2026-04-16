@@ -24,8 +24,13 @@ export async function getOrgIdByAgentId(agentId: string): Promise<string | null>
   const cached = cache.get(agentId);
   if (cached !== undefined) return cached;
 
+  // Check BOTH main and callback agent IDs — Retell sends agent_id in webhooks
+  // which could be either. Without the OR, callback-agent webhooks would always
+  // resolve to null (the query only checked retellAgentId, not retellCallbackAgentId).
   const res = await pool.query(
-    `SELECT org_id FROM agent_configs WHERE data->>'retellAgentId' = $1 LIMIT 1`,
+    `SELECT org_id FROM agent_configs
+     WHERE data->>'retellAgentId' = $1 OR data->>'retellCallbackAgentId' = $1
+     LIMIT 1`,
     [agentId],
   );
   const orgId = (res.rows[0]?.org_id as string | undefined) ?? null;
