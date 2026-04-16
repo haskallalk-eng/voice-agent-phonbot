@@ -147,7 +147,7 @@ export async function registerAuth(app: FastifyInstance) {
           toEmail: email,
           verifyUrl: `${appUrl}/verify-email?token=${verifyToken}`,
         }).catch(() => {/* already logged inside */});
-        sendWelcomeEmail({ toEmail: email, orgName }).catch(() => {});
+        sendWelcomeEmail({ toEmail: email, orgName }).catch(() => {/* logged inside email.ts */});
       }
 
       const { token } = await issueTokenPair(app, { id: user.id, role: user.role, org_id: org.id }, req, reply);
