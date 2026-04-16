@@ -200,8 +200,9 @@ export function BillingPage() {
             </div>
           )}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {plans.map((plan) => {
+        {/* ── Main plans: 3-col grid (Starter / Pro / Agency) ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+          {plans.filter(p => !['free', 'nummer'].includes(p.id)).map((plan) => {
             const isCurrent = plan.id === currentPlan;
             const features = PLAN_FEATURES[plan.id] ?? [];
             const showYearly = billingInterval === 'year' && plan.hasYearly && plan.price > 0;
@@ -220,30 +221,18 @@ export function BillingPage() {
                   <div className="flex items-center justify-between mb-1">
                     <h4 className="font-semibold text-white">{plan.name}</h4>
                     {isCurrent && (
-                      <span className="text-xs bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full">
-                        Aktuell
-                      </span>
+                      <span className="text-xs bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full">Aktuell</span>
                     )}
                   </div>
                   {showYearly ? (
                     <div>
-                      <p className="text-2xl font-bold text-white">
-                        {yearlyMonthlyPrice}€
-                        <span className="text-sm font-normal text-white/40">/Mo</span>
-                      </p>
-                      <p className="text-xs text-white/30 mt-0.5">
-                        <span className="line-through">{plan.price}€</span>
-                        {' '}· {plan.price * 10}€/Jahr
-                      </p>
+                      <p className="text-2xl font-bold text-white">{yearlyMonthlyPrice}€<span className="text-sm font-normal text-white/40">/Mo</span></p>
+                      <p className="text-xs text-white/30 mt-0.5"><span className="line-through">{plan.price}€</span> · {plan.price * 10}€/Jahr</p>
                     </div>
                   ) : (
-                    <p className="text-2xl font-bold text-white">
-                      {plan.price === 0 ? 'Gratis' : `${plan.price}€`}
-                      {plan.price > 0 && <span className="text-sm font-normal text-white/40">/Mo</span>}
-                    </p>
+                    <p className="text-2xl font-bold text-white">{plan.price}€<span className="text-sm font-normal text-white/40">/Mo</span></p>
                   )}
                 </div>
-
                 <ul className="space-y-1.5 flex-1">
                   {features.map((f) => {
                     const hl = f.startsWith('✦');
@@ -251,35 +240,25 @@ export function BillingPage() {
                     return (
                       <li key={f} className="flex items-center gap-2 text-sm">
                         {hl ? (
-                          <svg width="14" height="14" viewBox="0 0 24 24" className="shrink-0 fancy-star"><defs><linearGradient id="fgBl" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#F97316"/><stop offset="100%" stopColor="#06B6D4"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill="url(#fgBl)"/></svg>
+                          <svg width="14" height="14" viewBox="0 0 24 24" className="shrink-0"><defs><linearGradient id="fgBl" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#F97316"/><stop offset="100%" stopColor="#06B6D4"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill="url(#fgBl)"/></svg>
                         ) : (
                           <span className="text-green-400">✓</span>
                         )}
                         <span className={hl ? 'font-semibold bg-clip-text text-transparent' : 'text-white/60'}
-                          style={hl ? { backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' } : undefined}>
-                          {label}
-                        </span>
+                          style={hl ? { backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' } : undefined}>{label}</span>
                       </li>
                     );
                   })}
                 </ul>
-
-                {!isCurrent && plan.id !== 'free' && (
-                  <button
-                    onClick={() => handleUpgrade(plan.id)}
-                    disabled={!!actionLoading}
-                    className="w-full rounded-xl bg-gradient-to-r from-orange-500 to-cyan-500 hover:opacity-90 disabled:opacity-50 text-white text-sm font-medium py-2 transition-opacity"
-                  >
+                {!isCurrent && (
+                  <button onClick={() => handleUpgrade(plan.id)} disabled={!!actionLoading}
+                    className="w-full rounded-xl bg-gradient-to-r from-orange-500 to-cyan-500 hover:opacity-90 disabled:opacity-50 text-white text-sm font-medium py-2 transition-opacity">
                     {actionLoading === plan.id ? '…' : `Zu ${plan.name} wechseln`}
                   </button>
                 )}
-
                 {isCurrent && isPaid && (
-                  <button
-                    onClick={handlePortal}
-                    disabled={!!actionLoading}
-                    className="w-full rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white/60 text-sm font-medium py-2 transition-colors disabled:opacity-50"
-                  >
+                  <button onClick={handlePortal} disabled={!!actionLoading}
+                    className="w-full rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white/60 text-sm font-medium py-2 transition-colors disabled:opacity-50">
                     {actionLoading === 'portal' ? '…' : 'Verwalten'}
                   </button>
                 )}
@@ -287,11 +266,31 @@ export function BillingPage() {
             );
           })}
         </div>
+
+        {/* ── Nummer — subtle line at bottom ── */}
+        <div className="rounded-xl border border-white/8 bg-white/[0.02] px-5 py-3 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-sm">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+              <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72c.12.96.36 1.9.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.34 1.85.58 2.81.7A2 2 0 0122 16.92z"/>
+            </svg>
+            <span className="text-white/50">
+              <span className="text-white/70 font-medium">Eigene Telefonnummer</span> · 8,99€/Mo · 70 Min inkl. · +0,20€/Min Überschreitung
+            </span>
+          </div>
+          {currentPlan !== 'nummer' ? (
+            <button onClick={() => handleUpgrade('nummer')} disabled={!!actionLoading}
+              className="text-sm font-medium text-orange-400 hover:text-orange-300 transition-colors whitespace-nowrap">
+              {actionLoading === 'nummer' ? '…' : 'Nummer aktivieren →'}
+            </button>
+          ) : (
+            <span className="text-xs text-orange-300/60">Aktiv</span>
+          )}
+        </div>
       </div>
 
       {/* Overage note */}
       <p className="text-xs text-white/30">
-        Überschreitung: Starter 0,10€/Min · Pro 0,08€/Min · Agency 0,06€/Min. Alle Preise zzgl. MwSt.
+        Überschreitung: Nummer 0,20€/Min · Starter 0,10€/Min · Pro 0,08€/Min · Agency 0,06€/Min. Alle Preise zzgl. MwSt.
       </p>
     </div>
   );

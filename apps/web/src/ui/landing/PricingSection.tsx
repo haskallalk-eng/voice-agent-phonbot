@@ -68,19 +68,24 @@ export function PricingSection({ onGoToRegister }: PricingSectionProps) {
 
       {/* ── FREE PLAN — wide banner at top ── */}
       <div className="glass rounded-2xl p-6 mb-8 flex flex-col sm:flex-row items-center justify-between gap-4 border border-white/10">
-        <div className="flex items-center gap-4">
-          <div>
-            <p className="text-lg font-bold text-white">{freePlan.name}</p>
-            <p className="text-xs text-green-400/70 font-medium">Für immer kostenlos</p>
+        <div className="flex-1">
+          <div className="flex items-center gap-4 mb-2 sm:mb-0">
+            <div>
+              <p className="text-lg font-bold text-white">{freePlan.name}</p>
+              <p className="text-xs text-green-400/70 font-medium">Für immer kostenlos</p>
+            </div>
+            <div className="hidden sm:flex items-center gap-6 ml-6">
+              {freePlan.features.map(f => (
+                <span key={f} className="text-sm text-white/50 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
+                  {f}
+                </span>
+              ))}
+            </div>
           </div>
-          <div className="hidden sm:flex items-center gap-6 ml-6">
-            {freePlan.features.map(f => (
-              <span key={f} className="text-sm text-white/50 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
-                {f}
-              </span>
-            ))}
-          </div>
+          <p className="text-xs text-white/30 mt-1 sm:ml-0">
+            Für eine eigene Telefonnummer → upgraden ab 8,99€/Mo
+          </p>
         </div>
         <button
           onClick={onGoToRegister}
@@ -145,25 +150,10 @@ export function PricingSection({ onGoToRegister }: PricingSectionProps) {
         })}
       </div>
 
-      {/* ── NUMMER PLAN — subtle line at bottom ── */}
-      <div className="max-w-5xl mx-auto">
-        <div className="glass rounded-xl px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 border border-white/8">
-          <div className="flex items-center gap-3 text-sm">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72c.12.96.36 1.9.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.34 1.85.58 2.81.7A2 2 0 0122 16.92z"/>
-            </svg>
-            <span className="text-white/70">
-              <span className="text-white font-medium">Eigene Telefonnummer</span> ab {yearly && nummerPlan.yearlyPrice ? nummerPlan.yearlyPrice : nummerPlan.price}/Mo · {nummerPlan.features.find(f => f.includes('Min'))?.replace('✦ ', '') ?? '70 Min/Monat'} · +0,20€/Min bei Überschreitung
-            </span>
-          </div>
-          <button
-            onClick={onGoToRegister}
-            className="text-sm font-medium text-orange-400 hover:text-orange-300 transition-colors whitespace-nowrap"
-          >
-            Nummer hinzufügen →
-          </button>
-        </div>
-      </div>
+      {/* ── NUMMER TEASER — subtle hint, not a full plan card ── */}
+      <p className="text-center text-sm text-white/40 mt-6 max-w-xl mx-auto">
+        Eigene Telefonnummer ab 8,99€/Mo mit 70 inkl. Minuten — nach Registrierung im Dashboard aktivierbar.
+      </p>
     </section>
   );
 }

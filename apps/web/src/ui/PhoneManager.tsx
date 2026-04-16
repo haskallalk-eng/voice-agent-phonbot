@@ -368,12 +368,12 @@ export function PhoneManager({ onNavigate }: { onNavigate?: (page: string) => vo
             <div className="w-12 h-12 rounded-xl mx-auto flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.15), rgba(6,182,212,0.1))' }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth="1.75" strokeLinecap="round"><path d="M12 2v4m0 12v4m-8-10H0m24 0h-4m-2.93-6.07l2.83-2.83M4.1 19.9l2.83-2.83M19.9 19.9l-2.83-2.83M4.1 4.1l2.83 2.83"/><circle cx="12" cy="12" r="4"/></svg>
             </div>
-            <p className="text-sm font-semibold bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Telefonnummern ab dem Starter-Plan</p>
-            <p className="text-xs text-white/35">Upgrade deinen Plan um eine eigene Nummer für deinen Agent zu erhalten.</p>
+            <p className="text-sm font-semibold bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Eigene Telefonnummer ab 8,99€/Mo</p>
+            <p className="text-xs text-white/35">Mit dem Nummer-Plan bekommst du eine eigene Telefonnummer + 70 Freiminuten. Dein Agent nimmt dann echte Anrufe entgegen.</p>
             <button onClick={() => { setProvisionError(null); onNavigate?.('billing'); }}
               className="rounded-lg px-5 py-2.5 text-xs font-semibold text-white transition-all hover:scale-[1.02] cursor-pointer"
               style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)', boxShadow: '0 4px 20px rgba(249,115,22,0.2)' }}>
-              Plan upgraden
+              Nummer aktivieren — ab 8,99€/Mo
             </button>
             <button onClick={() => setProvisionError(null)} className="block mx-auto text-[11px] text-white/20 hover:text-white/40 transition-colors cursor-pointer mt-1">
               Schließen
