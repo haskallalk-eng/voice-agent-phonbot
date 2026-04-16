@@ -138,7 +138,9 @@ Bewertungskriterien:
         analysis.outcome_detected ?? null,
         callId,
       ],
-    ).catch(() => {});
+    ).catch((err: unknown) => {
+      process.stderr.write(`[outbound-insights] conv_score update failed (callId=${callId}): ${err instanceof Error ? err.message : String(err)}\n`);
+    });
 
     // Trigger batch learning after enough calls
     const { rowCount } = await pool.query(
