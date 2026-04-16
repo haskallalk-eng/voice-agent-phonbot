@@ -17,6 +17,7 @@ import { pool } from './db.js';
 import { findFreeSlots, bookSlot } from './calendar.js';
 import { triggerCallback } from './agent-config.js';
 import { analyzeCall } from './insights.js';
+import { getOrgIdByAgentId } from './org-id-cache.js';
 
 const RETELL_API_KEY = process.env.RETELL_API_KEY ?? '';
 
@@ -73,48 +74,8 @@ function verifyRetellSignature(req: RawBodyRequest): boolean {
   return crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'));
 }
 
-/**
- * Look up org_id from agent_configs by retellAgentId stored in the JSONB data column.
- * Returns null when not found.
- *
- * Per-request cache: a single Retell webhook dispatches call_ended → then
- * 3 tool endpoints (calendar.findSlots, calendar.book, ticket.create), each
- * of which calls getOrgIdByAgentId independently. Caching deduplicates the
- * JSONB query from 4× → 1× per agentId per process lifetime (the mapping
- * changes only on deploy, which is rare). LRU-evicts after 500 entries to
- * cap memory.
- */
-const orgIdCache = new Map<string, string | null>();
-const ORG_ID_CACHE_MAX = 500;
-
-async function getOrgIdByAgentId(agentId: string): Promise<string | null> {
-  if (!pool) return null;
-  const cached = orgIdCache.get(agentId);
-  if (cached !== undefined) return cached;
-  const res = await pool.query(
-    `SELECT org_id FROM agent_configs WHERE data->>'retellAgentId' = $1 LIMIT 1`,
-    [agentId],
-  );
-  const orgId = (res.rows[0]?.org_id as string | undefined) ?? null;
-  // Only cache positive hits. Negative-caching (null) is risky: a brand-new
-  // agent's first webhook would permanently cache "null" until LRU eviction,
-  // making all its tool endpoints return 403 "unknown agent" in the meantime.
-  if (orgId) {
-    if (orgIdCache.size >= ORG_ID_CACHE_MAX) {
-      const first = orgIdCache.keys().next().value;
-      if (first !== undefined) orgIdCache.delete(first);
-    }
-    orgIdCache.set(agentId, orgId);
-  }
-  return orgId;
-}
-
-// Invalidate cache entry on agent deploy (called from agent-config.ts after
-// writeConfig updates the retellAgentId). Without this, a re-deployed agent
-// with a new retellAgentId would miss until the old entry naturally evicts.
-export function invalidateOrgIdCache(agentId: string): void {
-  orgIdCache.delete(agentId);
-}
+// getOrgIdByAgentId + invalidateOrgIdCache live in org-id-cache.ts (breaks
+// the circular dependency agent-config ↔ retell-webhooks). Imported at top.
 
 /** Narrowed shape of the Retell event body. */
 interface RetellEventBody {

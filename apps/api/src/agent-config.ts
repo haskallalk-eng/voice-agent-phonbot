@@ -4,7 +4,7 @@ import type { JwtPayload } from './auth.js';
 import { pool } from './db.js';
 import { buildAgentInstructions } from './agent-instructions.js';
 import { tryReserveMinutes, DEFAULT_CALL_RESERVE_MINUTES } from './usage.js';
-import { invalidateOrgIdCache } from './retell-webhooks.js';
+import { invalidateOrgIdCache } from './org-id-cache.js';
 import {
   createLLM,
   updateLLM,
