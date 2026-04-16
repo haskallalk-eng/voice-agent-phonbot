@@ -9,6 +9,7 @@
  */
 
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { z } from 'zod';
 import OpenAI from 'openai';
 import { pool } from './db.js';
 
@@ -57,7 +58,11 @@ export async function registerLearningApi(app: FastifyInstance): Promise<void> {
   // Toggle the opt-in. consented_at gets set on TRUE (audit trail for GDPR
   // Art. 7 — proof of consent), cleared on FALSE so re-opt-in records a fresh
   // timestamp.
-  app.post<{ Body: { share_patterns: boolean } }>(
+  // INS-02: validate body with Zod — `Boolean(undefined)` is `false`, which
+  // could silently disable consent on a malformed/empty request. Explicit
+  // schema makes the intent clear and rejects ambiguous input.
+  const ConsentBody = z.object({ share_patterns: z.boolean() });
+  app.post(
     '/learning/consent',
     {
       onRequest: [app.authenticate],
@@ -66,7 +71,9 @@ export async function registerLearningApi(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       if (!pool) return reply.status(503).send({ error: 'Database not available' });
       const { orgId } = req.user as import('./auth.js').JwtPayload;
-      const optIn = Boolean(req.body?.share_patterns);
+      const parsed = ConsentBody.safeParse(req.body);
+      if (!parsed.success) return reply.status(400).send({ error: 'share_patterns (boolean) required' });
+      const optIn = parsed.data.share_patterns;
       await pool.query(
         `UPDATE orgs
          SET share_patterns = $2,

@@ -854,7 +854,12 @@ Falls keine Probleme: bad_moments leer. satisfaction_signals ist immer auszufül
       callId,
       orgId,
     ],
-  ).catch(() => {});
+  ).catch((err: unknown) => {
+    // INS-09: silent swallow here means call_transcripts.score + feedback stay
+    // null — all downstream analytics are blind to this call. Log so ops can
+    // spot systematic DB issues (constraint violations, connection drops).
+    process.stderr.write(`[insights] call_transcripts update failed (orgId=${orgId}, callId=${callId}): ${err instanceof Error ? err.message : String(err)}\n`);
+  });
 
   // Compute and store implicit satisfaction score (fire-and-forget)
   if (callMeta) {
@@ -864,12 +869,16 @@ Falls keine Probleme: bad_moments leer. satisfaction_signals ist immer auszufül
     ).then(signals => {
       const satScore = computeSatisfactionScore(signals);
       return storeSatisfactionData(callId, orgId, satScore, signals, callMeta.disconnection_reason ?? null);
-    }).catch(() => {});
+    }).catch((err: unknown) => {
+      process.stderr.write(`[insights] satisfaction persist failed (callId=${callId}): ${err instanceof Error ? err.message : String(err)}\n`);
+    });
   }
 
   // Cross-org template learning (fire-and-forget)
   import('./template-learning.js').then(({ processTemplateLearning }) => {
-    processTemplateLearning(orgId, callId, analysis).catch(() => {});
+    processTemplateLearning(orgId, callId, analysis).catch((err: unknown) => {
+      process.stderr.write(`[insights] template learning failed (orgId=${orgId}): ${err instanceof Error ? err.message : String(err)}\n`);
+    });
   }).catch(() => {});
 
   // Outlier detection — if this call's score is a statistical outlier (e.g. angry caller, bad connection),
