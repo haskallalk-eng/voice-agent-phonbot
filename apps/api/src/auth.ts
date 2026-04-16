@@ -95,7 +95,11 @@ export async function registerAuth(app: FastifyInstance) {
 
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
-    // Check email uniqueness
+    // Performance pre-check: bail early on known-duplicate emails (avoids
+    // ~200ms bcrypt + org-INSERT + ROLLBACK overhead for a common error case).
+    // NOT the primary dedup gate — the INSERT...ON CONFLICT below is (D4).
+    // This SELECT is race-prone by design (two concurrent registers can both
+    // pass it); ON CONFLICT catches the second one atomically.
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.rowCount && existing.rowCount > 0) {
       return reply.status(409).send({ error: 'Email already registered' });

@@ -60,7 +60,21 @@ export async function createTicket(input: z.infer<typeof CreateTicketBody>): Pro
     err.code = 'INVALID_PHONE';
     throw err;
   }
+
+  // Defense-in-depth: reject non-DACH phone at creation time, not just at
+  // callback-trigger time (E1). A ticket with customerPhone='+1-900-premium'
+  // would otherwise sit in the DB and be callable via /tickets/:id/callback
+  // by any user with access to the ticket — the callback endpoint does check
+  // prefixes, but if a future endpoint or batch-job reads tickets and dials
+  // without re-checking, we'd have a toll-fraud vector. Belt-and-suspenders.
+  const ALLOWED_PREFIXES = (process.env.ALLOWED_PHONE_PREFIXES ?? '+49,+43,+41')
+    .split(',').map(p => p.trim()).filter(Boolean);
   const normalizedPhone = normalizePhoneLight(body.customerPhone).normalized;
+  if (!ALLOWED_PREFIXES.some(p => normalizedPhone.startsWith(p))) {
+    const err = new Error('PHONE_COUNTRY_NOT_ALLOWED') as Error & { code: string };
+    err.code = 'PHONE_COUNTRY_NOT_ALLOWED';
+    throw err;
+  }
 
   if (!pool) {
     const now = new Date().toISOString();
