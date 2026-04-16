@@ -301,14 +301,16 @@ export async function registerBilling(app: FastifyInstance) {
         // Auto-provision a German phone number for new paying customers
         const newOrgId = newSub.metadata?.orgId;
         if (newOrgId && newSub.status === 'active') {
-          autoProvisionGermanNumber(newOrgId).catch(() => {});
-          // Send plan activation email
+          autoProvisionGermanNumber(newOrgId).catch((err: unknown) => {
+            req.log.warn({ err: (err as Error).message, orgId: newOrgId }, 'auto-provision phone after subscription.created failed');
+          });
           if (pool) {
             pool.query(`SELECT u.email, o.name, o.plan, o.minutes_limit FROM users u JOIN orgs o ON o.id = u.org_id WHERE u.org_id = $1 AND u.role = 'owner' LIMIT 1`, [newOrgId])
               .then(res => {
                 const r = res.rows[0];
-                if (r?.email) sendPlanActivatedEmail({ toEmail: r.email, orgName: r.name ?? 'Phonbot', planName: r.plan ?? 'Starter', minutesLimit: r.minutes_limit ?? 500 }).catch(() => {});
-              }).catch(() => {});
+                if (r?.email) sendPlanActivatedEmail({ toEmail: r.email, orgName: r.name ?? 'Phonbot', planName: r.plan ?? 'Starter', minutesLimit: r.minutes_limit ?? 500 })
+                  .catch((e: unknown) => req.log.warn({ err: (e as Error).message }, 'plan-activated email send failed'));
+              }).catch((e: unknown) => req.log.warn({ err: (e as Error).message, orgId: newOrgId }, 'plan-activated owner lookup failed'));
           }
         }
         break;
@@ -348,7 +350,8 @@ export async function registerBilling(app: FastifyInstance) {
             `SELECT u.email, o.name FROM users u JOIN orgs o ON o.id = u.org_id WHERE o.stripe_subscription_id = $1 AND u.role = 'owner' LIMIT 1`, [subId],
           );
           const owner = orgRes.rows[0];
-          if (owner?.email) sendPaymentFailedEmail({ toEmail: owner.email, orgName: owner.name ?? 'Phonbot' }).catch(() => {});
+          if (owner?.email) sendPaymentFailedEmail({ toEmail: owner.email, orgName: owner.name ?? 'Phonbot' })
+            .catch((e: unknown) => req.log.warn({ err: (e as Error).message }, 'payment-failed email send failed'));
         }
         break;
       }
