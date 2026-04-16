@@ -47,12 +47,11 @@
     <meta name="application-name" content="Phonbot" />
     <meta name="format-detection" content="telephone=no" />
 
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='55' r='40' fill='%23F5C842'/><ellipse cx='14' cy='62' rx='12' ry='11' fill='%23E8B32D'/><ellipse cx='86' cy='62' rx='12' ry='11' fill='%23E8B32D'/><circle cx='28' cy='22' r='9' fill='%23D49B12'/><circle cx='72' cy='22' r='9' fill='%23D49B12'/><circle cx='36' cy='50' r='13' fill='white'/><circle cx='36' cy='50' r='10' fill='%23E8A317'/><circle cx='37' cy='51' r='6' fill='%231C1917'/><circle cx='40' cy='46' r='3' fill='white'/><circle cx='64' cy='50' r='13' fill='white'/><circle cx='64' cy='50' r='10' fill='%23E8A317'/><circle cx='65' cy='51' r='6' fill='%231C1917'/><circle cx='68' cy='46' r='3' fill='white'/><ellipse cx='50' cy='64' rx='3' ry='2.2' fill='%23B45309'/></svg>" />
-    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='55' r='40' fill='%23F5C842'/><ellipse cx='14' cy='62' rx='12' ry='11' fill='%23E8B32D'/><ellipse cx='86' cy='62' rx='12' ry='11' fill='%23E8B32D'/><circle cx='28' cy='22' r='9' fill='%23D49B12'/><circle cx='72' cy='22' r='9' fill='%23D49B12'/><circle cx='36' cy='50' r='13' fill='white'/><circle cx='36' cy='50' r='10' fill='%23E8A317'/><circle cx='37' cy='51' r='6' fill='%231C1917'/><circle cx='40' cy='46' r='3' fill='white'/><circle cx='64' cy='50' r='13' fill='white'/><circle cx='64' cy='50' r='10' fill='%23E8A317'/><circle cx='65' cy='51' r='6' fill='%231C1917'/><circle cx='68' cy='46' r='3' fill='white'/><ellipse cx='50' cy='64' rx='3' ry='2.2' fill='%23B45309'/></svg>" />
-
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <!-- Chipy favicon + apple-touch-icon — matches FoxLogo.tsx design,
+         served from /icon.svg for caching + consistency. S-03: NO Google
+         Fonts CDN (removed for DSGVO; CSS fallback is system-ui). -->
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
 
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="alternate" type="application/rss+xml" title="Phonbot" href="https://phonbot.de/" />

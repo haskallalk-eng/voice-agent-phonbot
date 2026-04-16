@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Chipy — Phonbot mascot favicon/PWA icon. Optimized for 16-512px rendering.
+     Based on FoxLogo.tsx but simplified for small sizes: no speech bubble,
+     no blink animation, stronger contrast. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 8 100 92" width="512" height="512">
+  <defs>
+    <radialGradient id="h" cx="50%" cy="40%" r="65%">
+      <stop offset="0%" stop-color="#F5C842"/>
+      <stop offset="100%" stop-color="#D49B12"/>
+    </radialGradient>
+    <radialGradient id="c" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#F7D04A"/>
+      <stop offset="100%" stop-color="#D9A015"/>
+    </radialGradient>
+    <radialGradient id="e" cx="30%" cy="25%" r="75%">
+      <stop offset="0%" stop-color="#FCD34D"/>
+      <stop offset="100%" stop-color="#B45309"/>
+    </radialGradient>
+  </defs>
+  <!-- Ears -->
+  <circle cx="28" cy="22" r="9" fill="#D49B12"/>
+  <circle cx="28" cy="22" r="5.5" fill="#E8B32D"/>
+  <circle cx="72" cy="22" r="9" fill="#D49B12"/>
+  <circle cx="72" cy="22" r="5.5" fill="#E8B32D"/>
+  <!-- Head -->
+  <circle cx="50" cy="55" r="38" fill="url(#h)"/>
+  <!-- Cheek pouches -->
+  <ellipse cx="14" cy="62" rx="12" ry="11" fill="url(#c)"/>
+  <ellipse cx="86" cy="62" rx="12" ry="11" fill="url(#c)"/>
+  <!-- Left eye -->
+  <circle cx="36" cy="50" r="13" fill="white"/>
+  <circle cx="36" cy="50" r="10" fill="url(#e)"/>
+  <circle cx="37" cy="51" r="6" fill="#1C1917"/>
+  <circle cx="40" cy="46" r="3" fill="white"/>
+  <!-- Right eye -->
+  <circle cx="64" cy="50" r="13" fill="white"/>
+  <circle cx="64" cy="50" r="10" fill="url(#e)"/>
+  <circle cx="65" cy="51" r="6" fill="#1C1917"/>
+  <circle cx="68" cy="46" r="3" fill="white"/>
+  <!-- Nose -->
+  <ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309"/>
+  <!-- Smile -->
+  <path d="M44 68 Q50 73 56 68" stroke="#8B4513" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  <!-- Blush -->
+  <ellipse cx="24" cy="60" rx="5" ry="3.5" fill="#FB923C" opacity="0.25"/>
+  <ellipse cx="76" cy="60" rx="5" ry="3.5" fill="#FB923C" opacity="0.25"/>
+</svg>
