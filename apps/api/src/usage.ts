@@ -106,10 +106,48 @@ export async function reconcileMinutes(
   if (!pool) return;
   const delta = actualMinutes - reservedMinutes;
   if (delta === 0) return;
-  await pool.query(
-    `UPDATE orgs SET minutes_used = GREATEST(0, minutes_used + $2) WHERE id = $1`,
+  const res = await pool.query(
+    `UPDATE orgs SET minutes_used = GREATEST(0, minutes_used + $2)
+     WHERE id = $1
+     RETURNING minutes_used, minutes_limit, name`,
     [orgId, delta],
   );
+
+  // Usage warning emails at 80% and 100% thresholds.
+  // Fire-and-forget — never block the webhook response for an email.
+  const row = res.rows[0];
+  if (row && row.minutes_limit > 0) {
+    const pct = Math.round((row.minutes_used / row.minutes_limit) * 100);
+    const thresholds = [80, 100] as const;
+    for (const t of thresholds) {
+      if (pct >= t) {
+        // Only send once per threshold: check Redis dedup key
+        const { redis } = await import('./redis.js');
+        if (redis?.isOpen) {
+          const dedupKey = `usage_warn:${orgId}:${t}`;
+          const claimed = await redis.set(dedupKey, '1', { NX: true, EX: 30 * 24 * 3600 }).catch(() => null);
+          if (!claimed) continue; // already sent this cycle
+        }
+        // Look up owner email
+        const ownerRes = await pool.query(
+          `SELECT u.email FROM users u WHERE u.org_id = $1 AND u.role = 'owner' AND u.is_active = true LIMIT 1`,
+          [orgId],
+        );
+        const email = ownerRes.rows[0]?.email as string | undefined;
+        if (email) {
+          const { sendUsageWarningEmail } = await import('./email.js');
+          sendUsageWarningEmail({
+            toEmail: email,
+            orgName: row.name ?? 'Phonbot',
+            minutesUsed: row.minutes_used,
+            minutesLimit: row.minutes_limit,
+            percent: pct,
+          }).catch(() => {/* logged inside */});
+        }
+        break; // only send the highest-threshold email
+      }
+    }
+  }
 }
 
 /**

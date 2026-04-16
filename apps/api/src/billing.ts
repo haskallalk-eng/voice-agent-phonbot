@@ -22,7 +22,7 @@ export const PLANS = {
     id: 'free',
     name: 'Free',
     price: 0,
-    minutesLimit: 100,
+    minutesLimit: 45,
     agentsLimit: 1,
     overchargePerMinute: 0,
     stripePriceId: null,
@@ -113,7 +113,7 @@ async function syncSubscription(sub: Stripe.Subscription) {
   const priceId = sub.items.data[0]?.price.id ?? null;
   // Match against both monthly AND yearly price IDs
   const plan = Object.values(PLANS).find((p) => p.stripePriceId === priceId || p.stripePriceIdYearly === priceId)?.id ?? 'free';
-  const minutesLimit = PLANS[plan as PlanId]?.minutesLimit ?? 100;
+  const minutesLimit = PLANS[plan as PlanId]?.minutesLimit ?? 45;
 
   // Check if this is a period renewal (reset minutes_used)
   const currentPeriodEnd = (sub as unknown as { current_period_end?: number }).current_period_end ?? null;
