@@ -135,7 +135,14 @@ export async function runAgentTurn(input: {
       // Process each tool call and feed results back
       for (const call of functionCalls) {
         const toolName: string = call?.name ?? 'unknown';
-        const toolArgs = call?.arguments ? (JSON.parse(call.arguments) as Record<string, unknown>) : {};
+        let toolArgs: Record<string, unknown> = {};
+        if (call?.arguments) {
+          try {
+            toolArgs = JSON.parse(call.arguments) as Record<string, unknown>;
+          } catch {
+            toolArgs = { _parseError: true, _raw: String(call.arguments).slice(0, 200) };
+          }
+        }
 
         await appendTraceEvent({
           type: 'tool_call', sessionId: input.sessionId, tenantId: input.tenantId,

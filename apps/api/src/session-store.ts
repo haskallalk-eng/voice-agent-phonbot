@@ -56,8 +56,9 @@ async function readSession(sessionId: string, tenantId: string): Promise<Session
   if (redis) {
     const raw = await redis.get(redisKey(sessionId));
     if (!raw) return null;
-    const s: Session = JSON.parse(raw);
-    if (s.tenantId !== tenantId) return null;   // ← tenant isolation
+    let s: Session;
+    try { s = JSON.parse(raw) as Session; } catch { return null; }
+    if (s.tenantId !== tenantId) return null;
     return s;
   }
   const s = sessions.get(sessionId);
@@ -183,7 +184,8 @@ export async function listSessions(
       for (const key of reply.keys) {
         const raw = await redis.get(key);
         if (!raw) continue;
-        const s: Session = JSON.parse(raw);
+        let s: Session;
+        try { s = JSON.parse(raw) as Session; } catch { continue; }
         if (s.tenantId !== tenantId) continue;
         const sessionId = key.replace(/^session:/, '');
         result.push({ sessionId, messageCount: s.messages.length, lastActiveAt: s.lastActiveAt });
