@@ -136,7 +136,7 @@ export function BillingPage() {
             : 'bg-red-500/10 text-red-400 border-red-500/20'
         }`}>
           {effectiveFlash.text}
-          <button onClick={() => setFlash(null)} className="ml-3 opacity-50 hover:opacity-100">✕</button>
+          <button onClick={() => setFlash(null)} className="ml-3 opacity-50 hover:opacity-100" aria-label="Schließen">✕</button>
         </div>
       )}
 
