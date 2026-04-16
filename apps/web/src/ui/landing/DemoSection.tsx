@@ -114,8 +114,15 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
   // Cloudflare Turnstile token (cleared on expiry/reset). Empty string = no
   // token yet → demo button stays disabled in prod. Dev without site-key
   // configured: widget renders nothing, token stays '' but backend skips.
+  // Turnstile token lives in a ref so the latest value is always available
+  // inside handleTemplateClick without a stale-closure problem. State keeps
+  // React aware for any UI binding.
   const [turnstileToken, setTurnstileToken] = useState('');
-  const handleToken = useCallback((token: string) => setTurnstileToken(token), []);
+  const turnstileRef = useRef('');
+  const handleToken = useCallback((token: string) => {
+    setTurnstileToken(token);
+    turnstileRef.current = token;
+  }, []);
   const clientRef = useRef<RetellWebClient | null>(null);
 
   const isInCall = callState === 'connecting' || callState === 'active' || callState === 'ended' || callState === 'error';
@@ -134,8 +141,6 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
       if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          // Sofort wieder stoppen — Retell öffnet seinen eigenen Stream.
-          // Wir wollten nur die Permission-Prompt im user-gesture-Fenster triggern.
           stream.getTracks().forEach((t) => t.stop());
         } catch (micErr: unknown) {
           const name = (micErr as { name?: string })?.name ?? '';
@@ -149,7 +154,20 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
         }
       }
 
-      const res = await createDemoCall(templateId, turnstileToken || undefined);
+      // Wait for Turnstile token if it hasn't arrived yet. The widget
+      // loads asynchronously (1-3s), and auto-start from ?demo=X can fire
+      // before the token callback. Poll up to 5s; if still empty, proceed
+      // without it (backend will 403 → user sees a friendly retry message).
+      let token = turnstileRef.current;
+      if (!token) {
+        for (let i = 0; i < 25; i++) {
+          await new Promise(r => setTimeout(r, 200));
+          token = turnstileRef.current;
+          if (token) break;
+        }
+      }
+
+      const res = await createDemoCall(templateId, token || undefined);
       if (!res.access_token) {
         throw new Error('Kein Zugriffstoken erhalten');
       }
@@ -175,6 +193,8 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
       const msg = e instanceof Error ? e.message : 'Unbekannter Fehler';
       if (msg.includes('429') || msg.includes('Rate limit') || msg.includes('Too Many')) {
         setError('Du hast die Demo schon mehrfach getestet — probier es in einer Stunde nochmal oder registriere dich kostenlos für unbegrenzte Tests.');
+      } else if (msg.includes('403') || msg.includes('captcha_failed')) {
+        setError('Sicherheitscheck lädt noch — bitte in ein paar Sekunden nochmal versuchen.');
       } else {
         setError(msg);
       }
