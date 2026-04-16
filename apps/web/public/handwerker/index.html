@@ -37,19 +37,31 @@ nav .container{display:flex;align-items:center;justify-content:space-between;pad
 .btn-ghost:hover{background:rgba(255,255,255,.08);color:#fff}
 .btn-demo{background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.4);color:#FDBA74;display:inline-flex;align-items:center;gap:.5rem}
 .btn-demo:hover{background:rgba(249,115,22,.2);color:#fff;transform:scale(1.03)}
-header.hero{padding:5rem 0 3rem;text-align:center;position:relative}
+header.hero{padding:5rem 0 3rem;position:relative;overflow:hidden}
+.hero-glow{position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:0}
+.hero-glow::before,.hero-glow::after{content:'';position:absolute;border-radius:50%;filter:blur(80px)}
+.hero-glow::before{width:400px;height:400px;top:-100px;right:-80px;background:radial-gradient(circle,rgba(249,115,22,.12),transparent 70%)}
+.hero-glow::after{width:350px;height:350px;bottom:-80px;left:-60px;background:radial-gradient(circle,rgba(6,182,212,.1),transparent 70%)}
+.hero-grid{display:grid;grid-template-columns:3fr 2fr;align-items:center;gap:2rem;position:relative;z-index:1}
+.hero-text{text-align:left}
+.hero-mascot{display:flex;justify-content:center;align-items:center;position:relative}
+.mascot-wrapper{position:relative}
+.speech-bubble{position:absolute;top:-16px;left:50%;transform:translateX(-50%);white-space:nowrap;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:.5rem .875rem;font-size:.8rem;color:rgba(255,255,255,.75);backdrop-filter:blur(8px);max-width:260px;white-space:normal;text-align:center;line-height:1.35}
+.speech-bubble::after{content:'';position:absolute;bottom:-7px;left:50%;transform:translateX(-50%) rotate(45deg);width:12px;height:12px;background:rgba(255,255,255,.06);border-right:1px solid rgba(255,255,255,.1);border-bottom:1px solid rgba(255,255,255,.1)}
 .hero-eyebrow{display:inline-block;padding:.4rem 1rem;border-radius:999px;background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.25);font-size:.8rem;color:#FDBA74;margin-bottom:1.5rem}
 h1{font-size:clamp(2.25rem,5vw,3.75rem);font-weight:800;letter-spacing:-.02em;line-height:1.1;margin-bottom:1.25rem}
 h1 .accent{background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;background-clip:text;color:transparent}
-.subtitle{font-size:1.125rem;color:rgba(255,255,255,.6);max-width:640px;margin:0 auto 2.5rem}
+.subtitle{font-size:1.125rem;color:rgba(255,255,255,.6);max-width:640px;margin-bottom:2.5rem}
 .cta-row{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap}
+.hero-text .cta-row{justify-content:flex-start}
+@media (max-width:768px){.hero-grid{grid-template-columns:1fr;text-align:center}.hero-mascot{order:-1}.hero-text{text-align:center}.hero-text .cta-row{justify-content:center}.subtitle{margin-left:auto;margin-right:auto}}
 section{padding:3.5rem 0}
 h2{font-size:clamp(1.5rem,3.5vw,2.25rem);font-weight:700;margin-bottom:1.5rem;letter-spacing:-.015em}
 h3{font-size:1.125rem;font-weight:600;margin-bottom:.5rem;color:#fff}
 p{color:rgba(255,255,255,.7)}
 .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.25rem;margin-top:2rem}
-.feature{padding:1.5rem;border-radius:1rem;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);transition:border-color .3s}
-.feature:hover{border-color:rgba(249,115,22,.3)}
+.feature{padding:1.5rem;border-radius:16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(8px);transition:all .2s}
+.feature:hover{background:rgba(255,255,255,.06);border-color:rgba(249,115,22,.2);transform:translateY(-2px)}
 .feature-icon{width:40px;height:40px;border-radius:.75rem;background:linear-gradient(135deg,rgba(249,115,22,.15),rgba(6,182,212,.1));display:flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:1rem}
 .dialogue{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:1.25rem;padding:1.75rem;max-width:720px;margin:2rem auto 0}
 .dialogue p{margin-bottom:.75rem;padding:.75rem 1rem;border-radius:.75rem}
@@ -115,15 +127,26 @@ footer a:hover{color:#fff}
 </div>
 
 <header class="hero">
+  <div class="hero-glow"></div>
   <div class="container">
-    <span class="hero-eyebrow">🔧 KI-Telefonassistent für Handwerk</span>
-    <h1>Du bist auf der <span class="accent">Baustelle</span> — Phonbot nimmt den Anruf an.</h1>
-    <p class="subtitle">Phonbot nimmt Anrufe an während du auf der Baustelle bist, unterscheidet Notdienst von regulären Terminen und erstellt strukturierte Tickets mit Kundendaten und Priorität.</p>
-    <div class="cta-row">
-      <a href="/?demo=tradesperson#demo" class="btn btn-demo">▶ Chipy live hören</a>
-      <a href="/" class="btn btn-primary">Kostenlos testen</a>
+    <div class="hero-grid">
+      <div class="hero-text">
+        <span class="hero-eyebrow">&#128295; KI-Telefonassistent für Handwerk</span>
+        <h1>Du bist auf der <span class="accent">Baustelle</span> — Phonbot nimmt den Anruf an.</h1>
+        <p class="subtitle">Phonbot nimmt Anrufe an während du auf der Baustelle bist, unterscheidet Notdienst von regulären Terminen und erstellt strukturierte Tickets mit Kundendaten und Priorität.</p>
+        <div class="cta-row">
+          <a href="/?demo=tradesperson#demo" class="btn btn-demo">&#9654; Chipy live hören</a>
+          <a href="/" class="btn btn-primary">Kostenlos testen</a>
+        </div>
+        <div class="demo-hint"><svg viewBox="0 0 24 24" fill="none" width="16" height="16" style="vertical-align:middle;margin-right:4px"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" stroke="#F97316" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="#F97316" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="19" x2="12" y2="23" stroke="#F97316" stroke-width="1.8" stroke-linecap="round"/></svg> Klick &bdquo;live hören&ldquo; — Phonbot spricht mit dir im Browser (Mikrofon nötig)</div>
+      </div>
+      <div class="hero-mascot">
+        <div class="mascot-wrapper">
+          <div class="speech-bubble">Ich nehme Aufträge an, du arbeitest auf der Baustelle weiter!</div>
+          <svg viewBox="0 8 100 92" fill="none" xmlns="http://www.w3.org/2000/svg" width="120" height="120" style="margin-top:48px"><defs><radialGradient id="hd" cx="50%" cy="40%" r="65%"><stop offset="0%" stop-color="#F5C842"/><stop offset="100%" stop-color="#D49B12"/></radialGradient><radialGradient id="cd" cx="50%" cy="40%" r="70%"><stop offset="0%" stop-color="#F7D04A"/><stop offset="100%" stop-color="#D9A015"/></radialGradient><radialGradient id="ed" cx="30%" cy="25%" r="75%"><stop offset="0%" stop-color="#FCD34D"/><stop offset="100%" stop-color="#B45309"/></radialGradient></defs><circle cx="28" cy="22" r="9" fill="#D49B12"/><circle cx="28" cy="22" r="5.5" fill="#E8B32D"/><circle cx="72" cy="22" r="9" fill="#D49B12"/><circle cx="72" cy="22" r="5.5" fill="#E8B32D"/><circle cx="50" cy="55" r="38" fill="url(#hd)"/><ellipse cx="14" cy="62" rx="12" ry="11" fill="url(#cd)"/><ellipse cx="86" cy="62" rx="12" ry="11" fill="url(#cd)"/><circle cx="36" cy="50" r="13" fill="white"/><circle cx="36" cy="50" r="10" fill="url(#ed)"/><ellipse cx="36" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="40" cy="46" r="3" fill="white"/><circle cx="64" cy="50" r="13" fill="white"/><circle cx="64" cy="50" r="10" fill="url(#ed)"/><ellipse cx="64" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="68" cy="46" r="3" fill="white"/><ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309"/><path d="M44 68 Q50 73 56 68" stroke="#8B4513" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+        </div>
+      </div>
     </div>
-    <div class="demo-hint">🎙️ Klick „live hören" — Phonbot spricht mit dir im Browser (Mikrofon nötig)</div>
   </div>
 </header>
 
@@ -131,10 +154,10 @@ footer a:hover{color:#fff}
   <div class="container">
     <h2>Typische Anrufe — automatisch bearbeitet</h2>
     <div class="features">
-      <div class="feature"><div class="feature-icon">📞</div><h3>Auftragsannahme</h3><p>„Ich hab einen Wasserschaden" — Phonbot nimmt Adresse, Art des Problems und Rückrufnummer auf.</p></div>
-        <div class="feature"><div class="feature-icon">🚨</div><h3>Notdienst-Priorisierung</h3><p>Notfälle werden als Priorität "hoch" geflaggt und sofort per Push-Nachricht an dich weitergeleitet.</p></div>
-        <div class="feature"><div class="feature-icon">📅</div><h3>Terminvereinbarung</h3><p>Reguläre Aufträge landen als Ticket mit Wunschtermin im Dashboard — keine Zettel mehr.</p></div>
-        <div class="feature"><div class="feature-icon">💶</div><h3>Kostenvoranschlag-Anfrage</h3><p>Preisauskunft zu Standard-Leistungen sofort, für komplexe Angebote wird ein Termin vereinbart.</p></div>
+      <div class="feature"><div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></div><h3>Auftragsannahme</h3><p>„Ich hab einen Wasserschaden" — Phonbot nimmt Adresse, Art des Problems und Rückrufnummer auf.</p></div>
+        <div class="feature"><div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><h3>Notdienst-Priorisierung</h3><p>Notfälle werden als Priorität "hoch" geflaggt und sofort per Push-Nachricht an dich weitergeleitet.</p></div>
+        <div class="feature"><div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg></div><h3>Kostenvoranschläge</h3><p>Preisauskunft zu Standard-Leistungen sofort, für komplexe Angebote wird ein Termin vereinbart.</p></div>
+        <div class="feature"><div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72c.12.96.36 1.9.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.34 1.85.58 2.81.7A2 2 0 0122 16.92z"/></svg></div><h3>Rückruf-Tickets</h3><p>Für komplexe Anfragen erstellt Phonbot automatisch ein Ticket mit allen Infos für den Rückruf.</p></div>
     </div>
   </div>
 </section>
