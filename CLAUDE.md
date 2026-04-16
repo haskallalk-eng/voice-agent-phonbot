@@ -12,7 +12,7 @@ voice-agent-saas/
 ├── packages/
 │   ├── shared/       # Shared types & utils (@vas/shared)
 │   ├── ui/           # Shared UI components (@vas/ui)
-│   └── voice-core/   # Voice engine (@vas/voice-core)
+│   └── voice-core/   # Voice types + OpenAI Realtime provider (reference, not imported at runtime)
 ├── apps/api/.env     # ALLE API-Keys hier (Single Source — keine Root .env)
 ├── apps/web/.env     # Vite-spezifische Frontend-Vars (VITE_*)
 └── CLAUDE.md         # Diese Datei
@@ -91,7 +91,8 @@ app.get('/my-route', { onRequest: [app.authenticate] }, async (req, reply) => {
 
 ### 10. FRONTEND PATTERNS
 - Alle API-Calls über `apps/web/src/lib/api.ts` → `request<T>()` Helper
-- Auth Token aus `localStorage.getItem('vas_token')`
+- Access JWT in **memory only** (module-scope `_accessToken` in `api.ts`, synced via `setAccessToken()` from AuthProvider). NEVER in localStorage — XSS can't exfiltrate.
+- Refresh token as **httpOnly cookie** (`vas_refresh`, path=/auth, sameSite=strict). Bootstrap: `POST /auth/refresh` → fresh access JWT.
 - Dark Theme: `bg-[#0a0a12]` als Basis, Glass-Effekte mit `bg-white/5 backdrop-blur-xl border border-white/10`
 - Brand-Farbe: Orange (`#F97316`, `#FB923C`) — NICHT Indigo/Lila für Hauptelemente
 - Chipy (Maskottchen) ist ein goldener Hamster → `FoxLogo.tsx`
@@ -120,6 +121,12 @@ Wenn du eine neue Route-Datei erstellst:
 - ❌ Indigo/Lila als Hauptfarbe (ist Orange!)
 - ❌ Eine neue Root `.env` anlegen — alles gehört in `apps/api/.env`
 - ❌ Ganze Dateien überschreiben statt gezielter Edits
+- ❌ `.catch(() => {})` silent-swallow — IMMER `app.log.warn/error` mit Kontext
+- ❌ `tenantId`/`orgId` aus Body/Query/Header vertrauen — NUR aus JWT
+- ❌ `fetch()` ohne `AbortSignal.timeout()` — jeder externe Call braucht ein Timeout
+- ❌ Secrets mit hardcoded default in prod — prod MUSS `throw` wenn env fehlt
+- ❌ PII (email, phone, name) in Pino-Logs — `redactPII()` oder Pino-redact-paths nutzen
+- ❌ JWT/token in `localStorage` — nur in-memory (F-01/F-02)
 
 ### 14. VOR JEDEM COMMIT
 ```bash
@@ -128,6 +135,22 @@ cd apps/web && pnpm typecheck
 ```
 Wenn beides ohne Fehler durchläuft → OK.
 Wenn nicht → Fix die Fehler BEVOR du weitermachst.
+
+### 15. SECURITY POSTURE
+- **Multi-Tenant:** Jede DB-Query mit `WHERE org_id = $1` (aus JWT). `agent_configs` hat SQL-Level `ON CONFLICT WHERE org_id` Guard.
+- **Webhooks:** Retell (HMAC-SHA256 + timingSafeEqual), Stripe (constructEvent + rawBody), Twilio (signature). Alle mit `rawBody` capture.
+- **Encryption at rest:** AES-256-GCM (`crypto.ts`) für OAuth-Tokens + Cal.com-Keys. Prod: boot-throw wenn `ENCRYPTION_KEY` fehlt.
+- **Auth:** 1h access JWT (in-memory) + 30d refresh (httpOnly cookie, DB-rotated). Password-reset revokes all refresh tokens.
+- **DSGVO:** PII-redaction (Pino-paths + `pii.redactPII()`), Sentry `beforeSend` strips bodies/user/cookies. Account-deletion cascades via FK. Google Fonts self-hosted (no IP transfer).
+- **Anti-Toll-Fraud:** `ALLOWED_PHONE_PREFIXES` (DACH default) auf allen Twilio-dial-Pfaden. `isPlausiblePhone()` mit DE + intl premium-Blocklist.
+- **Rate-Limits:** Global 100/min per-IP + route-specific overrides. Public endpoints (demo, contact) + outbound-call-triggers mit hourly caps + Redis global counter.
+- **CAPTCHA:** Cloudflare Turnstile auf `/demo/*` + `/outbound/website-callback`. Prod fail-closed.
+- **Idempotency:** Stripe webhooks via `processed_stripe_events` ON CONFLICT. Minute-reservation via atomic `tryReserveMinutes()`.
+
+### 16. COORDINATION (Termi + Vaso)
+- **`.coordination/`** im Repo-Root (gitignored) enthält die Agent-Koordination.
+- Nicht committen. Nicht löschen. Bei Session-Start: `README.md → identity.md → RULES.md → inbox → findings.md` lesen.
+- Details: `.coordination/memory/RULES.md` (35 Regeln).
 
 ## Design System Kurzreferenz
 - **Background:** `#0a0a12` (fast schwarz)
