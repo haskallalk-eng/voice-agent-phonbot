@@ -347,46 +347,46 @@ body {
   scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
 }
 
-/* -- Chippy animations ---------------------------------------------- */
+/* -- Chipy animations ---------------------------------------------- */
 
 /* Smooth float for hero/dashboard */
-@keyframes chippy-float {
+@keyframes chipy-float {
   0%, 100% { transform: translateY(0px); }
   50%       { transform: translateY(-5px); }
 }
-.chippy-float {
-  animation: chippy-float 3.5s ease-in-out infinite;
+.chipy-float {
+  animation: chipy-float 3.5s ease-in-out infinite;
 }
 
 /* Blink � left eye pupil squishes to scaleY(0.08) then back */
-@keyframes chippy-blink-l {
+@keyframes chipy-blink-l {
   0%, 90%, 100% { transform: scaleY(1); }
   94%           { transform: scaleY(0.08); }
 }
-.chippy-blink-l {
+.chipy-blink-l {
   transform-origin: 36px 50px;
-  animation: chippy-blink-l 4.2s ease-in-out infinite;
+  animation: chipy-blink-l 4.2s ease-in-out infinite;
 }
 
 /* Blink � right eye, same but tiny offset so they blink together */
-@keyframes chippy-blink-r {
+@keyframes chipy-blink-r {
   0%, 90%, 100% { transform: scaleY(1); }
   94%           { transform: scaleY(0.08); }
 }
-.chippy-blink-r {
+.chipy-blink-r {
   transform-origin: 64px 50px;
-  animation: chippy-blink-r 4.2s ease-in-out infinite;
+  animation: chipy-blink-r 4.2s ease-in-out infinite;
 }
 
 /* Sparkle � tiny glint dot that fades in/out */
-@keyframes chippy-sparkle {
+@keyframes chipy-sparkle {
   0%, 60%, 100% { opacity: 0; transform: scale(0.5); }
   70%, 85%      { opacity: 1; transform: scale(1.4); }
 }
-.chippy-sparkle {
+.chipy-sparkle {
   transform-origin: center;
-  animation: chippy-sparkle 4.2s ease-in-out infinite;
+  animation: chipy-sparkle 4.2s ease-in-out infinite;
 }
-.chippy-sparkle-delay {
+.chipy-sparkle-delay {
   animation-delay: 0.15s;
 }
