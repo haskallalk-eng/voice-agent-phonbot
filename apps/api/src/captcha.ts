@@ -54,7 +54,17 @@ export async function verifyTurnstile(token: string | undefined, remoteIp?: stri
     if (IS_PROD) return false;
     return true;
   }
-  if (!token || token.trim().length === 0) return false;
+  // Token absent → allow (defense-in-depth, not hard-gate). Turnstile adds
+  // an extra layer against sophisticated botnets, but the primary defense is
+  // rate-limit + global-cap. Blocking on empty token breaks UX for:
+  // - Ad-blocker users (Turnstile script blocked)
+  // - Auto-start from ?demo= param (script not loaded yet on fresh pageload)
+  // - Static industry pages redirecting to SPA (/friseur/ → /?demo=hairdresser)
+  // Log the skip so we can measure how many requests come without Turnstile.
+  if (!token || token.trim().length === 0) {
+    if (IS_PROD) process.stderr.write(`[captcha] empty token from ${remoteIp ?? 'unknown'} — allowing (defense-in-depth)\n`);
+    return true;
+  }
 
   try {
     const body = new URLSearchParams({ secret: SECRET, response: token });
