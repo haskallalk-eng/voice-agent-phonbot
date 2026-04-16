@@ -126,6 +126,10 @@ app.addContentTypeParser(
   { parseAs: 'buffer' },
   (req, body: Buffer, done) => {
     (req as FastifyRequest & { rawBody: Buffer }).rawBody = body;
+    // Empty body (e.g. POST /auth/refresh with Content-Type: application/json
+    // but no payload) must not crash the parser — return null so the route
+    // handler can proceed (it may not use req.body at all).
+    if (body.length === 0) return done(null, null);
     try {
       done(null, JSON.parse(body.toString()));
     } catch (e: unknown) {
