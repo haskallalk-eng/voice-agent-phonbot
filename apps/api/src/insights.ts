@@ -89,8 +89,17 @@ function cosine(a: number[], b: number[]): number {
   return denom === 0 ? 0 : dot / denom;
 }
 
+// INS-05/06: all OpenAI calls get explicit timeouts so a hung model
+// endpoint can't stall the insight pipeline indefinitely. Embeddings are
+// faster (~2s p99), chat completions need more headroom for long prompts.
+const OPENAI_EMBED_TIMEOUT = 10_000;
+const OPENAI_CHAT_TIMEOUT = 30_000;
+
 async function embed(text: string): Promise<number[]> {
-  const resp = await openai.embeddings.create({ model: EMBED_MODEL, input: text.slice(0, 512) });
+  const resp = await openai.embeddings.create(
+    { model: EMBED_MODEL, input: text.slice(0, 512) },
+    { timeout: OPENAI_EMBED_TIMEOUT },
+  );
   return resp.data[0]?.embedding ?? [];
 }
 
@@ -401,7 +410,7 @@ Aktueller Prompt:
 ${current}`,
         },
       ],
-    });
+    }, { timeout: OPENAI_CHAT_TIMEOUT });
 
     const consolidated = resp.choices[0]?.message?.content?.trim();
     if (!consolidated || consolidated.length < 100) return;
@@ -565,7 +574,7 @@ ${currentPrompt.slice(-500)}
 Schreibe eine präzise, direkte Anweisung (2-4 Sätze) für den System-Prompt die dieses Problem dauerhaft löst. Berücksichtige den Unternehmenskontext. Antworte NUR mit dem Anweisungstext.`,
         },
       ],
-    });
+    }, { timeout: OPENAI_CHAT_TIMEOUT });
     return resp.choices[0]?.message?.content?.trim() ?? examples[0]?.prompt_fix ?? '';
   } catch {
     return examples[0]?.prompt_fix ?? '';
@@ -725,7 +734,7 @@ Identifiziere die EINE wirkungsvollste Verbesserung für dieses spezifische Unte
 }`,
         },
       ],
-    });
+    }, { timeout: OPENAI_CHAT_TIMEOUT });
 
     const raw = (resp.choices[0]?.message?.content ?? '{}')
       .replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
@@ -820,7 +829,7 @@ Analysiere das Gespräch im Kontext des Unternehmens und gib dieses JSON zurück
 Falls keine Probleme: bad_moments leer. satisfaction_signals ist immer auszufüllen.`,
         },
       ],
-    });
+    }, { timeout: OPENAI_CHAT_TIMEOUT });
 
     const raw = (resp.choices[0]?.message?.content ?? '{}')
       .replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
