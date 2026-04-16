@@ -40,6 +40,14 @@ body {
   box-sizing: border-box;
 }
 
+/* Tailwind 4 removed auto cursor-pointer on buttons. Restore globally
+   so every interactive element shows the hand cursor without needing
+   cursor-pointer on each individual class list. */
+button:not(:disabled), [role="button"]:not([aria-disabled="true"]),
+a, select, summary, [tabindex]:not([tabindex="-1"]) {
+  cursor: pointer;
+}
+
 /* ─── Glassmorphism utility ─── */
 .glass {
   backdrop-filter: blur(24px);
