@@ -150,10 +150,6 @@ export function PricingSection({ onGoToRegister }: PricingSectionProps) {
         })}
       </div>
 
-      {/* ── NUMMER TEASER — subtle hint, not a full plan card ── */}
-      <p className="text-center text-sm text-white/40 mt-6 max-w-xl mx-auto">
-        Eigene Telefonnummer ab 8,99€/Mo mit 70 inkl. Minuten — nach Registrierung im Dashboard aktivierbar.
-      </p>
     </section>
   );
 }
