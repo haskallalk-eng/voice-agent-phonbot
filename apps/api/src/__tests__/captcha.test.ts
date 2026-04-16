@@ -36,13 +36,15 @@ describe('verifyTurnstile', () => {
     expect(await verifyTurnstile('any-token')).toBe(false);
   });
 
-  it('returns false when token is empty', async () => {
+  // After 1e8e0dc: empty token → true (defense-in-depth, not hard-gate).
+  // Turnstile adds a layer but primary defense is rate-limit + global-cap.
+  it('returns true when token is empty (defense-in-depth, not hard-gate)', async () => {
     process.env.TURNSTILE_SECRET_KEY = 'test-secret';
     process.env.NODE_ENV = 'production';
     const mod = await import('../captcha.js');
     verifyTurnstile = mod.verifyTurnstile;
-    expect(await verifyTurnstile('')).toBe(false);
-    expect(await verifyTurnstile(undefined)).toBe(false);
+    expect(await verifyTurnstile('')).toBe(true);
+    expect(await verifyTurnstile(undefined)).toBe(true); // also defense-in-depth
   });
 
   it('returns true when Cloudflare responds success:true', async () => {
