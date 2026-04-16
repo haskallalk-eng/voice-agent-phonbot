@@ -14,8 +14,8 @@ const PLAN_FEATURES: Record<string, string[]> = {
   free: ['30 Freiminuten (einmalig)', '1 Agent', 'Web-Call Test', 'Community Support'],
   nummer: ['✦ Eigene Telefonnummer', '70 Minuten / Monat', '1 Agent', 'Ticket-System', '+0,20€/Min bei Überschreitung'],
   starter: ['✦ Telefonnummer inklusive', '500 Minuten / Monat', '1 Agent', 'Ticket-System', 'E-Mail Support', '+0,10€/Min bei Überschreitung'],
-  pro: ['✦ Telefonnummer inklusive', '2.000 Minuten / Monat', '3 Agents', 'Analytics Dashboard', 'Priority Support', '+0,08€/Min bei Überschreitung'],
-  agency: ['✦ Telefonnummer inklusive', '5.000 Minuten / Monat', '10 Agents', 'White-Label', 'Dedicated Support', '+0,06€/Min bei Überschreitung'],
+  pro: ['✦ Telefonnummer inklusive', '1.200 Minuten / Monat', '3 Agents', 'Analytics Dashboard', 'Priority Support', '+0,08€/Min bei Überschreitung'],
+  agency: ['✦ Telefonnummer inklusive', '3.600 Minuten / Monat', '10 Agents', 'White-Label', 'Dedicated Support', '+0,06€/Min bei Überschreitung'],
 };
 
 function UsageBar({ used, limit }: { used: number; limit: number }) {

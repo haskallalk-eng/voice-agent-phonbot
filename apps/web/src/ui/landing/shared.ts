@@ -124,7 +124,7 @@ export const PLANS = [
     period: '/Monat',
     features: [
       '✦ Telefonnummer inklusive',
-      '500 Min/Monat',
+      '360 Min/Monat',
       '1 Agent',
       'E-Mail-Benachrichtigungen',
       '+0,10€/Min bei Überschreitung',
@@ -140,7 +140,7 @@ export const PLANS = [
     period: '/Monat',
     features: [
       '✦ Telefonnummer inklusive',
-      '2.000 Min/Monat',
+      '1.200 Min/Monat',
       '3 Agents',
       'Kalender-Integration',
       'Priority Support',
@@ -157,7 +157,7 @@ export const PLANS = [
     period: '/Monat',
     features: [
       '✦ Telefonnummer inklusive',
-      '5.000 Min/Monat',
+      '3.600 Min/Monat',
       '10 Agents',
       'White-Label',
       'Dedicated Support',
