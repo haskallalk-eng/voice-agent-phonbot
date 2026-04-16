@@ -101,16 +101,16 @@ export function NavHeader({
                 {TEMPLATES.map((t) => {
                   const Icon = t.Icon;
                   return (
-                    <button
+                    <a
                       key={t.id}
-                      type="button"
-                      onClick={() => handleIndustry(t.id)}
+                      href={`/${t.slug}/`}
+                      onClick={() => { setBranchenOpen(false); setMobileMenuOpen(false); }}
                       className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-white/80 hover:bg-white/5 hover:text-white transition-colors"
                       role="menuitem"
                     >
                       <Icon size={18} className="text-orange-400 shrink-0" />
                       <span className="flex-1">{t.name}</span>
-                    </button>
+                    </a>
                   );
                 })}
               </div>
@@ -185,15 +185,15 @@ export function NavHeader({
               {TEMPLATES.map((t) => {
                 const Icon = t.Icon;
                 return (
-                  <button
+                  <a
                     key={t.id}
-                    type="button"
-                    onClick={() => handleIndustry(t.id)}
+                    href={`/${t.slug}/`}
+                    onClick={() => setMobileMenuOpen(false)}
                     className="w-full flex items-center gap-3 px-2 py-2 text-left text-sm text-white/70 hover:text-white transition-colors"
                   >
                     <Icon size={16} className="text-orange-400 shrink-0" />
                     <span>{t.name}</span>
-                  </button>
+                  </a>
                 );
               })}
             </div>
