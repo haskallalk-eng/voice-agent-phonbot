@@ -70,11 +70,57 @@ input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;bac
 
 @keyframes spin{to{transform:rotate(360deg)}}
 
-#desktop-nav,#nav-login,#nav-cta{display:none}
-#hamburger-btn{display:flex}
-@media(min-width:768px){#desktop-nav{display:flex!important}#nav-login,#nav-cta{display:block!important}#hamburger-btn{display:none!important}}
-details summary::-webkit-details-marker{display:none}
-details[open]>summary svg{transform:rotate(180deg)}
+#nav-login,#nav-cta{display:block!important}#hamburger-btn{display:none!important}}
+
+
+/* ── Nav (matches SPA NavHeader) ── */
+.ph-header{position:sticky;top:0;z-index:50;border-bottom:1px solid rgba(255,255,255,.05);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);background:rgba(10,10,15,.8)}
+.ph-header-inner{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.5rem;max-width:1152px;margin:0 auto}
+.ph-logo{display:flex;align-items:center;gap:6px;text-decoration:none}
+.ph-logo-text{font-size:18px;font-weight:800;letter-spacing:-0.5px}
+.ph-logo-text .w{color:#fff}.ph-logo-text .o{background:linear-gradient(135deg,#F97316,#FB923C);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.ph-nav{display:none;align-items:center;gap:2rem}
+.ph-nav-link{font-size:.875rem;color:rgba(255,255,255,.6);text-decoration:none;transition:color .2s;background:none;border:none;cursor:pointer;font-family:inherit;font-weight:500;padding:0;display:inline-flex;align-items:center;gap:4px}
+.ph-nav-link:hover{color:#fff}
+.ph-right{display:flex;align-items:center;gap:1rem}
+.ph-login,.ph-cta{display:none}
+.ph-login{font-size:.875rem;color:rgba(255,255,255,.6);text-decoration:none;transition:color .2s}
+.ph-login:hover{color:#fff}
+.ph-cta{font-size:.875rem;font-weight:600;color:#fff;text-decoration:none;border-radius:9999px;padding:10px 20px;background:linear-gradient(135deg,#F97316,#06B6D4);transition:all .3s}
+.ph-cta:hover{box-shadow:0 0 24px rgba(249,115,22,.5);transform:scale(1.05)}
+/* Hamburger */
+.ph-burger{display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:8px;background:none;border:none;cursor:pointer;transition:background .2s}
+.ph-burger:hover{background:rgba(255,255,255,.05)}
+.ph-burger span{display:block;width:20px;height:2px;background:rgba(255,255,255,.6);border-radius:1px;transition:all .2s}
+body.menu-open .ph-burger span:nth-child(1){transform:rotate(45deg) translateY(8px)}
+body.menu-open .ph-burger span:nth-child(2){opacity:0}
+body.menu-open .ph-burger span:nth-child(3){transform:rotate(-45deg) translateY(-8px)}
+/* Desktop dropdown */
+.ph-dd{position:relative}
+.ph-dd-menu{display:none;position:absolute;left:50%;transform:translateX(-50%);top:100%;margin-top:12px;width:256px;border-radius:16px;border:1px solid rgba(255,255,255,.1);background:rgba(10,10,15,.95);backdrop-filter:blur(24px);box-shadow:0 8px 32px rgba(0,0,0,.4);padding:8px;z-index:30}
+.ph-dd.open .ph-dd-menu{display:block}
+.ph-dd.open .ph-chevron{transform:rotate(180deg)}
+.ph-chevron{transition:transform .2s}
+.dd-item{display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:.875rem;color:rgba(255,255,255,.8);text-decoration:none;border-radius:8px;transition:all .15s}
+.dd-item:hover{background:rgba(255,255,255,.05);color:#fff}
+.dd-current{font-weight:600;color:#fff}
+/* Mobile menu */
+.ph-mobile{display:none;border-top:1px solid rgba(255,255,255,.05);background:rgba(10,10,15,.95);backdrop-filter:blur(12px);padding:1rem 1.5rem}
+body.menu-open .ph-mobile{display:block}
+.mob-link{display:block;padding:12px 0;font-size:.875rem;color:rgba(255,255,255,.6);text-decoration:none;border-bottom:1px solid rgba(255,255,255,.05)}
+.mob-link:hover{color:#fff}
+.mob-details{border-bottom:1px solid rgba(255,255,255,.05)}
+.mob-details summary{display:flex;align-items:center;justify-content:space-between;padding:12px 0;font-size:.875rem;color:rgba(255,255,255,.6);cursor:pointer;list-style:none}
+.mob-details summary::-webkit-details-marker{display:none}
+.mob-details[open] summary svg{transform:rotate(180deg)}
+.mob-dd-item{display:flex;align-items:center;gap:12px;padding:8px;font-size:.875rem;color:rgba(255,255,255,.7);text-decoration:none}
+.mob-dd-item:hover{color:#fff}
+.mob-cta-area{padding-top:12px;display:flex;flex-direction:column;gap:8px}
+.mob-login{display:block;width:100%;padding:10px;font-size:.875rem;color:rgba(255,255,255,.6);text-decoration:none;text-align:center;border-radius:12px;border:1px solid rgba(255,255,255,.1)}
+.mob-login:hover{color:#fff;border-color:rgba(255,255,255,.2)}
+.mob-cta{display:block;width:100%;padding:10px;font-size:.875rem;font-weight:600;color:#fff;text-decoration:none;text-align:center;border-radius:12px;background:linear-gradient(135deg,#F97316,#06B6D4)}
+/* Responsive */
+@media(min-width:768px){.ph-nav{display:flex}.ph-login,.ph-cta{display:block}.ph-burger{display:none}}
 </style>
 <script defer src="/nav.js"></script>
 <script type="module" src="/industry.js"></script>
@@ -84,79 +130,7 @@ details[open]>summary svg{transform:rotate(180deg)}
 </head>
 <body>
 <svg style="position:absolute;width:0;height:0" aria-hidden="true"><defs><radialGradient id="ch" cx="50%" cy="40%" r="65%"><stop offset="0%" stop-color="#F5C842"/><stop offset="100%" stop-color="#D49B12"/></radialGradient><radialGradient id="cc" cx="50%" cy="40%" r="70%"><stop offset="0%" stop-color="#F7D04A"/><stop offset="100%" stop-color="#D9A015"/></radialGradient><radialGradient id="ce" cx="30%" cy="25%" r="75%"><stop offset="0%" stop-color="#FCD34D"/><stop offset="100%" stop-color="#B45309"/></radialGradient></defs></svg>
-<header id="site-header" style="position:sticky;top:0;z-index:20;border-bottom:1px solid rgba(255,255,255,.05);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);background:rgba(10,10,15,.8)">
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 24px;max-width:1152px;margin:0 auto">
-    <!-- Logo -->
-    <a href="/" style="display:flex;align-items:center;gap:6px;text-decoration:none">
-      <svg viewBox="0 8 100 92" fill="none" xmlns="http://www.w3.org/2000/svg" width="32" height="32"><defs><radialGradient id="nh" cx="50%" cy="40%" r="65%"><stop offset="0%" stop-color="#F5C842"/><stop offset="100%" stop-color="#D49B12"/></radialGradient><radialGradient id="nc" cx="50%" cy="40%" r="70%"><stop offset="0%" stop-color="#F7D04A"/><stop offset="100%" stop-color="#D9A015"/></radialGradient><radialGradient id="ne" cx="30%" cy="25%" r="75%"><stop offset="0%" stop-color="#FCD34D"/><stop offset="100%" stop-color="#B45309"/></radialGradient></defs><circle cx="28" cy="22" r="9" fill="#D49B12"/><circle cx="28" cy="22" r="5.5" fill="#E8B32D"/><circle cx="72" cy="22" r="9" fill="#D49B12"/><circle cx="72" cy="22" r="5.5" fill="#E8B32D"/><circle cx="50" cy="55" r="38" fill="url(#nh)"/><ellipse cx="14" cy="62" rx="12" ry="11" fill="url(#nc)"/><ellipse cx="86" cy="62" rx="12" ry="11" fill="url(#nc)"/><circle cx="36" cy="50" r="13" fill="white"/><circle cx="36" cy="50" r="10" fill="url(#ne)"/><ellipse cx="36" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="40" cy="46" r="3" fill="white"/><circle cx="64" cy="50" r="13" fill="white"/><circle cx="64" cy="50" r="10" fill="url(#ne)"/><ellipse cx="64" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="68" cy="46" r="3" fill="white"/><ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309"/><path d="M44 68 Q50 73 56 68" stroke="#8B4513" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
-      <span style="font-size:18px;font-weight:800;letter-spacing:-0.5px"><span style="color:#fff">Phon</span><span style="background:linear-gradient(135deg,#F97316,#FB923C);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">bot</span></span>
-    </a>
 
-    <!-- Desktop nav -->
-    <nav id="desktop-nav" style="display:none;align-items:center;gap:32px">
-      <a href="/#demo" style="font-size:14px;color:rgba(255,255,255,.6);text-decoration:none;transition:color .2s" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,.6)'">Demo</a>
-      <a href="/#features" style="font-size:14px;color:rgba(255,255,255,.6);text-decoration:none;transition:color .2s" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,.6)'">Features</a>
-      <a href="/#preise" style="font-size:14px;color:rgba(255,255,255,.6);text-decoration:none;transition:color .2s" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,.6)'">Preise</a>
-      <a href="/#faq" style="font-size:14px;color:rgba(255,255,255,.6);text-decoration:none;transition:color .2s" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,.6)'">FAQ</a>
-      <!-- Branchen dropdown -->
-      <div style="position:relative" id="branchen-desktop">
-        <button type="button" id="branchen-toggle" style="font-size:14px;color:rgba(255,255,255,.6);background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:4px;font-family:inherit;font-weight:500;transition:color .2s;padding:0" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,.6)'" aria-haspopup="true" aria-expanded="false">
-          Branchen
-          <svg width="10" height="10" viewBox="0 0 10 10" id="branchen-chevron" style="transition:transform .2s" aria-hidden="true"><path d="M1 3l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <div id="branchen-dropdown" style="display:none;position:absolute;left:50%;transform:translateX(-50%);top:100%;margin-top:12px;width:256px;border-radius:16px;border:1px solid rgba(255,255,255,.1);background:rgba(10,10,15,.95);backdrop-filter:blur(24px);box-shadow:0 8px 32px rgba(0,0,0,.4);padding:8px;z-index:30" role="menu">
-              <a href="/friseur/" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:14px;color:rgba(255,255,255,.8);text-decoration:none;border-radius:8px;transition:all .15s" onmouseover="this.style.background='rgba(255,255,255,.05)';this.style.color='#fff'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.8)'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" style="color:#FB923C;flex-shrink:0"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg> <span style="flex:1">Friseur</span></a>
-              <a href="/handwerker/" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:14px;color:rgba(255,255,255,.8);text-decoration:none;border-radius:8px;transition:all .15s" onmouseover="this.style.background='rgba(255,255,255,.05)';this.style.color='#fff'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.8)'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" style="color:#FB923C;flex-shrink:0"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg> <span style="flex:1">Handwerker</span></a>
-              <a href="/arztpraxis/" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:14px;color:rgba(255,255,255,.8);text-decoration:none;border-radius:8px;transition:all .15s" onmouseover="this.style.background='rgba(255,255,255,.05)';this.style.color='#fff'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.8)'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" style="color:#FB923C;flex-shrink:0"><rect x="9" y="2" width="6" height="20" rx="2"/><rect x="2" y="9" width="20" height="6" rx="2"/></svg> <span style="flex:1">Arztpraxis</span></a>
-              <a href="/reinigung/" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:14px;color:rgba(255,255,255,.8);text-decoration:none;border-radius:8px;transition:all .15s" onmouseover="this.style.background='rgba(255,255,255,.05)';this.style.color='#fff'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.8)'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" style="color:#FB923C;flex-shrink:0"><path d="M3 21l7-7"/><path d="M13.5 5.5l5.19-1.04 1.04 5.2-9.23 9.23a2 2 0 01-2.83 0l-2.83-2.83a2 2 0 010-2.83z"/><path d="M7.4 13.4l4.24-4.24"/></svg> <span style="flex:1">Reinigung</span></a>
-              <a href="/restaurant/" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:14px;color:rgba(255,255,255,.8);text-decoration:none;border-radius:8px;transition:all .15s" onmouseover="this.style.background='rgba(255,255,255,.05)';this.style.color='#fff'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.8)'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" style="color:#FB923C;flex-shrink:0"><line x1="18" y1="2" x2="18" y2="22"/><path d="M22 8H14V2"/><line x1="6" y1="2" x2="6" y2="8"/><path d="M2 8a4 4 0 008 0"/><line x1="6" y1="12" x2="6" y2="22"/></svg> <span style="flex:1">Restaurant</span></a>
-              <a href="/autowerkstatt/" style="width:100%;display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:14px;color:rgba(255,255,255,.8);text-decoration:none;border-radius:8px;transition:all .15s;font-weight:600;color:#fff" onmouseover="this.style.background='rgba(255,255,255,.05)';this.style.color='#fff'" onmouseout="this.style.background='';this.style.color='#fff'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" style="color:#FB923C;flex-shrink:0"><path d="M5 17H3a2 2 0 01-2-2v-4l2.69-6.73A2 2 0 015.54 3h12.92a2 2 0 011.85 1.27L23 11v4a2 2 0 01-2 2h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="17.5" r="2.5"/></svg> <span style="flex:1">Autowerkstatt</span></a>
-        </div>
-      </div>
-      <a href="/?page=contact" style="font-size:14px;color:rgba(255,255,255,.6);text-decoration:none;transition:color .2s" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,.6)'">Kontakt</a>
-    </nav>
-
-    <!-- Right side -->
-    <div style="display:flex;align-items:center;gap:16px">
-      <a href="/?page=login" id="nav-login" style="display:none;font-size:14px;color:rgba(255,255,255,.6);text-decoration:none;transition:color .2s" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,.6)'">Einloggen</a>
-      <a href="/?page=register" id="nav-cta" style="display:none;font-size:14px;font-weight:600;color:#fff;text-decoration:none;border-radius:9999px;padding:10px 20px;transition:all .3s;background:linear-gradient(135deg,#F97316,#06B6D4)" onmouseover="this.style.boxShadow='0 0 24px rgba(249,115,22,.5)';this.style.transform='scale(1.05)'" onmouseout="this.style.boxShadow='';this.style.transform=''">Kostenlos testen</a>
-      <!-- Hamburger -->
-      <button type="button" id="hamburger-btn" style="display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:8px;background:none;border:none;cursor:pointer;transition:background .2s" onmouseover="this.style.background='rgba(255,255,255,.05)'" onmouseout="this.style.background=''" aria-label="Menü öffnen">
-        <span style="display:block;width:20px;height:2px;background:rgba(255,255,255,.6);border-radius:1px;transition:all .2s" id="hb1"></span>
-        <span style="display:block;width:20px;height:2px;background:rgba(255,255,255,.6);border-radius:1px;transition:all .2s" id="hb2"></span>
-        <span style="display:block;width:20px;height:2px;background:rgba(255,255,255,.6);border-radius:1px;transition:all .2s" id="hb3"></span>
-      </button>
-    </div>
-  </div>
-
-  <!-- Mobile menu -->
-  <div id="mobile-menu" style="display:none;border-top:1px solid rgba(255,255,255,.05);background:rgba(10,10,15,.95);backdrop-filter:blur(12px);padding:16px 24px">
-    <a href="/#demo" style="display:block;padding:12px 0;font-size:14px;color:rgba(255,255,255,.6);text-decoration:none;border-bottom:1px solid rgba(255,255,255,.05)">Demo</a>
-    <a href="/#features" style="display:block;padding:12px 0;font-size:14px;color:rgba(255,255,255,.6);text-decoration:none;border-bottom:1px solid rgba(255,255,255,.05)">Features</a>
-    <a href="/#preise" style="display:block;padding:12px 0;font-size:14px;color:rgba(255,255,255,.6);text-decoration:none;border-bottom:1px solid rgba(255,255,255,.05)">Preise</a>
-    <a href="/#faq" style="display:block;padding:12px 0;font-size:14px;color:rgba(255,255,255,.6);text-decoration:none;border-bottom:1px solid rgba(255,255,255,.05)">FAQ</a>
-    <!-- Branchen collapsible -->
-    <details style="border-bottom:1px solid rgba(255,255,255,.05)">
-      <summary style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;font-size:14px;color:rgba(255,255,255,.6);cursor:pointer;list-style:none">
-        <span>Branchen</span>
-        <svg width="10" height="10" viewBox="0 0 10 10" style="transition:transform .2s" aria-hidden="true"><path d="M1 3l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </summary>
-      <div style="padding-bottom:8px">
-                <a href="/friseur/" style="display:flex;align-items:center;gap:12px;padding:8px;font-size:14px;color:rgba(255,255,255,.7);text-decoration:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" style="color:#FB923C;flex-shrink:0"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg> <span>Friseur</span></a>
-                <a href="/handwerker/" style="display:flex;align-items:center;gap:12px;padding:8px;font-size:14px;color:rgba(255,255,255,.7);text-decoration:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" style="color:#FB923C;flex-shrink:0"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg> <span>Handwerker</span></a>
-                <a href="/arztpraxis/" style="display:flex;align-items:center;gap:12px;padding:8px;font-size:14px;color:rgba(255,255,255,.7);text-decoration:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" style="color:#FB923C;flex-shrink:0"><rect x="9" y="2" width="6" height="20" rx="2"/><rect x="2" y="9" width="20" height="6" rx="2"/></svg> <span>Arztpraxis</span></a>
-                <a href="/reinigung/" style="display:flex;align-items:center;gap:12px;padding:8px;font-size:14px;color:rgba(255,255,255,.7);text-decoration:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" style="color:#FB923C;flex-shrink:0"><path d="M3 21l7-7"/><path d="M13.5 5.5l5.19-1.04 1.04 5.2-9.23 9.23a2 2 0 01-2.83 0l-2.83-2.83a2 2 0 010-2.83z"/><path d="M7.4 13.4l4.24-4.24"/></svg> <span>Reinigung</span></a>
-                <a href="/restaurant/" style="display:flex;align-items:center;gap:12px;padding:8px;font-size:14px;color:rgba(255,255,255,.7);text-decoration:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" style="color:#FB923C;flex-shrink:0"><line x1="18" y1="2" x2="18" y2="22"/><path d="M22 8H14V2"/><line x1="6" y1="2" x2="6" y2="8"/><path d="M2 8a4 4 0 008 0"/><line x1="6" y1="12" x2="6" y2="22"/></svg> <span>Restaurant</span></a>
-                <a href="/autowerkstatt/" style="display:flex;align-items:center;gap:12px;padding:8px;font-size:14px;color:rgba(255,255,255,.7);text-decoration:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" style="color:#FB923C;flex-shrink:0"><path d="M5 17H3a2 2 0 01-2-2v-4l2.69-6.73A2 2 0 015.54 3h12.92a2 2 0 011.85 1.27L23 11v4a2 2 0 01-2 2h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="17.5" r="2.5"/></svg> <span>Autowerkstatt</span></a>
-      </div>
-    </details>
-    <a href="/?page=contact" style="display:block;padding:12px 0;font-size:14px;color:rgba(255,255,255,.6);text-decoration:none">Kontakt</a>
-    <div style="padding-top:12px;display:flex;flex-direction:column;gap:8px">
-      <a href="/?page=login" style="display:block;width:100%;padding:10px;font-size:14px;color:rgba(255,255,255,.6);text-decoration:none;text-align:center;border-radius:12px;border:1px solid rgba(255,255,255,.1)">Einloggen</a>
-      <a href="/?page=register" style="display:block;width:100%;padding:10px;font-size:14px;font-weight:600;color:#fff;text-decoration:none;text-align:center;border-radius:12px;background:linear-gradient(135deg,#F97316,#06B6D4)">Kostenlos testen</a>
-    </div>
-  </div>
-</header>
 
 
 <header class="hero" style="text-align:center">
