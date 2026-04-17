@@ -216,7 +216,7 @@ function initCalculator() {
     const stunden = Math.round(botMin / 60);
     const personal = Math.round((botMin / 60) * lohn);
     const plan = anrufe <= 5 ? 0 : anrufe <= 20 ? 79 : anrufe <= 50 ? 179 : 349;
-    const planName = plan === 0 ? 'Free' : plan === 79 ? 'Starter' : plan === 179 ? 'Pro' : 'Agency';
+    const planName = plan === 0 ? 'Free' : plan === 79 ? 'Starter' : plan === 179 ? 'Professional' : 'Agency';
     const netto = personal - plan;
 
     // Update results
@@ -263,6 +263,13 @@ function initCalculator() {
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
+
+// Clean up active call if user navigates away
+window.addEventListener('beforeunload', () => {
+  if (retellClient && (callState === 'active' || callState === 'connecting')) {
+    retellClient.stopCall();
+  }
+});
 
 document.addEventListener('DOMContentLoaded', () => {
   initFaqAccordion();
