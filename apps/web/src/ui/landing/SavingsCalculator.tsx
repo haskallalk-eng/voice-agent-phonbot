@@ -27,8 +27,8 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
   const botMin = anrufe * (dauer + nacharbeit) * (quote / 100) * 22;
   const stunden = Math.round(botMin / 60);
   const personal = Math.round((botMin / 60) * lohn);
-  const plan = anrufe <= 5 ? 0 : anrufe <= 20 ? 49 : anrufe <= 50 ? 149 : 299;
-  const planName = plan === 0 ? 'Free' : plan === 49 ? 'Starter' : plan === 149 ? 'Pro' : 'Agency';
+  const plan = anrufe <= 5 ? 0 : anrufe <= 20 ? 79 : anrufe <= 50 ? 179 : 349;
+  const planName = plan === 0 ? 'Free' : plan === 79 ? 'Starter' : plan === 179 ? 'Pro' : 'Agency';
   const netto = personal - plan;
   const roi = plan > 0 ? Math.round((netto / plan) * 100) : 0;
 

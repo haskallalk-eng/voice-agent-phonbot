@@ -129,13 +129,13 @@ export function NavHeader({
         <div className="flex items-center gap-4">
           <button
             onClick={onGoToLogin}
-            className="text-sm text-white/60 hover:text-white transition-colors duration-200 hidden sm:block"
+            className="text-sm text-white/60 hover:text-white transition-colors duration-200 hidden md:block"
           >
             Einloggen
           </button>
           <button
             onClick={onGoToRegister}
-            className="text-sm font-semibold text-white rounded-full px-5 py-2.5 transition-all duration-300 hover:shadow-[0_0_24px_rgba(249,115,22,0.5)] hover:scale-105 hidden sm:block"
+            className="text-sm font-semibold text-white rounded-full px-5 py-2.5 transition-all duration-300 hover:shadow-[0_0_24px_rgba(249,115,22,0.5)] hover:scale-105 hidden md:block"
             style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
           >
             Kostenlos testen

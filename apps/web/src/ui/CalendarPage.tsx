@@ -732,6 +732,8 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
     // Listen for postMessage from OAuth popup (the callback page closes
     // itself and sends { type: 'calendarConnected' } to the opener).
     function onMessage(e: MessageEvent) {
+      // Only accept messages from our own origin (not from random iframes/windows)
+      if (e.origin !== window.location.origin) return;
       if (e.data?.type === 'calendarConnected') {
         loadStatus();
       }

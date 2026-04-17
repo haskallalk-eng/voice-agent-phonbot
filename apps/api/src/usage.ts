@@ -131,27 +131,30 @@ export async function reconcileMinutes(
   if (!pool) return;
   const delta = actualMinutes - reservedMinutes;
   if (delta === 0) return;
-  // Fetch pre-update state so we can calculate NEW overage from this call only.
-  const preRes = await pool.query(
-    `SELECT minutes_used, minutes_limit, plan FROM orgs WHERE id = $1`,
-    [orgId],
-  );
-  const pre = preRes.rows[0];
-  const preUsed = pre?.minutes_used ?? 0;
-  const limit = pre?.minutes_limit ?? 0;
-  const plan = (pre?.plan as string) ?? 'free';
 
+  // Atomic UPDATE RETURNING captures pre- and post-state in one statement,
+  // eliminating the race condition where a parallel webhook could read stale
+  // minutes_used between a separate SELECT and UPDATE.
+  // CTE captures the pre-update state atomically, then applies the delta.
+  // No race: both reads happen in the same statement execution.
   const res = await pool.query(
-    `UPDATE orgs SET minutes_used = GREATEST(0, minutes_used + $2)
-     WHERE id = $1
-     RETURNING minutes_used, minutes_limit, name`,
+    `WITH pre AS (
+       SELECT minutes_used AS old_used, minutes_limit, plan, name
+       FROM orgs WHERE id = $1 FOR UPDATE
+     )
+     UPDATE orgs SET minutes_used = GREATEST(0, orgs.minutes_used + $2)
+     FROM pre WHERE orgs.id = $1
+     RETURNING orgs.minutes_used, pre.old_used, pre.minutes_limit, pre.plan, pre.name`,
     [orgId, delta],
   );
 
-  // Overage billing: charge only the NEW minutes that crossed the limit.
-  // pre-overage = max(0, preUsed - limit), post-overage = max(0, postUsed - limit)
-  // new overage = post - pre (only the delta that's billable).
-  const postUsed = res.rows[0]?.minutes_used ?? 0;
+  if (!res.rowCount) return;
+  const row = res.rows[0];
+  const postUsed = (row.minutes_used ?? 0) as number;
+  const preUsed = (row.old_used ?? 0) as number;
+  const limit = (row.minutes_limit ?? 0) as number;
+  const plan = (row.plan as string) ?? 'free';
+
   const overageBefore = Math.max(0, preUsed - limit);
   const overageAfter = Math.max(0, postUsed - limit);
   const newOverage = overageAfter - overageBefore;
@@ -162,9 +165,8 @@ export async function reconcileMinutes(
 
   // Usage warning emails at 80% and 100% thresholds.
   // Fire-and-forget — never block the webhook response for an email.
-  const row = res.rows[0];
-  if (row && row.minutes_limit > 0) {
-    const pct = Math.round((row.minutes_used / row.minutes_limit) * 100);
+  if (row && limit > 0) {
+    const pct = Math.round((postUsed / limit) * 100);
     const thresholds = [80, 100] as const;
     for (const t of thresholds) {
       if (pct >= t) {

@@ -255,19 +255,20 @@ export async function registerAuth(app: FastifyInstance) {
 
     const userId = userResult.rows[0].id;
     const token = crypto.randomBytes(32).toString('hex');
+    // Store SHA-256 hash of the token in DB — if DB leaks, attacker can't
+    // construct the reset URL (they'd need the pre-image). The plain token
+    // is sent to the user's email only.
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
     // DEEP-05: invalidate any existing unused reset tokens for this user.
-    // Without this, clicking "forgot password" twice creates two valid tokens;
-    // the first link stays usable until its own expiry (1h). Cleanup ensures
-    // only the LATEST link works — previous ones become dead links.
     await pool.query(
       `UPDATE password_resets SET used = true WHERE user_id = $1 AND used = false`,
       [userId],
     );
     await pool.query(
       `INSERT INTO password_resets (user_id, token, expires_at) VALUES ($1, $2, $3)`,
-      [userId, token, expiresAt],
+      [userId, tokenHash, expiresAt],
     );
 
     const appUrl = process.env.APP_URL ?? 'http://localhost:5173';
@@ -294,23 +295,18 @@ export async function registerAuth(app: FastifyInstance) {
 
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
-    // Atomically: claim the token (used=true), update password, revoke all
-    // refresh tokens for the user. Previously these were three independent
-    // queries — if the used-flag UPDATE failed after the password UPDATE,
-    // the reset link became replayable, and an attacker holding a stolen
-    // refresh cookie kept their access (since passwords change but refresh
-    // tokens weren't revoked).
+    // Hash the incoming token to match the SHA-256 hash stored in the DB.
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
-      // Claim-and-gate in one statement: UPDATE returns the row only if it
-      // was still unused at the moment of execution (no TOCTOU).
       const claim = await client.query(
         `UPDATE password_resets SET used = true
          WHERE token = $1 AND used = false AND expires_at > now()
          RETURNING user_id`,
-        [token],
+        [tokenHash],
       );
       if (!claim.rowCount) {
         await client.query('ROLLBACK');

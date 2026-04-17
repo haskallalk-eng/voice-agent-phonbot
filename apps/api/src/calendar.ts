@@ -1307,7 +1307,7 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
   <p style="color:rgba(255,255,255,.5);font-size:.875rem">Dieses Fenster schlie\u00dft sich automatisch\u2026</p>
 </div>
 <script>
-if(window.opener){try{window.opener.postMessage({type:'calendarConnected',provider:'google'},'*')}catch(e){}}
+if(window.opener){try{window.opener.postMessage({type:'calendarConnected',provider:'google'},'${appUrl}')}catch(e){}}
 setTimeout(function(){window.close()},1500);
 setTimeout(function(){window.location.href='${appUrl}?calendarConnected=true'},3000);
 </script></body></html>`);
@@ -1596,7 +1596,7 @@ setTimeout(function(){window.location.href='${appUrl}?calendarConnected=true'},3
   <p style="color:rgba(255,255,255,.5);font-size:.875rem">Dieses Fenster schlie\u00dft sich automatisch\u2026</p>
 </div>
 <script>
-if(window.opener){try{window.opener.postMessage({type:'calendarConnected',provider:'microsoft'},'*')}catch(e){}}
+if(window.opener){try{window.opener.postMessage({type:'calendarConnected',provider:'microsoft'},'${appUrl}')}catch(e){}}
 setTimeout(function(){window.close()},1500);
 setTimeout(function(){window.location.href='${appUrl}?calendarConnected=true'},3000);
 </script></body></html>`);
