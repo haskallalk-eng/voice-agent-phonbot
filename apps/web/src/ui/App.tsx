@@ -24,6 +24,7 @@ import { FoxLogo, PhonbotBrand } from './FoxLogo.js';
 import { ConnectionStatus } from './ConnectionStatus.js';
 import { ChipyCopilot } from '../components/ChipyCopilot.js';
 import { AdminPage } from './AdminPage.js';
+import { ResetPasswordPage } from './ResetPasswordPage.js';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -343,6 +344,15 @@ function AppGate() {
 }
 
 export function App() {
+  // Password reset: standalone page, no auth provider needed
+  if (window.location.pathname === '/reset-password') {
+    return (
+      <ErrorBoundary>
+        <ResetPasswordPage />
+      </ErrorBoundary>
+    );
+  }
+
   // Admin panel: standalone page, no auth provider needed
   const isAdminRoute = window.location.pathname === '/admin' || window.location.pathname.startsWith('/admin/');
 

@@ -11,31 +11,33 @@ const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
 function brandedEmail(opts: { title: string; body: string; cta?: { label: string; url: string }; footer?: string }): string {
   const safeAppUrl = escapeHtml(APP_URL);
+  const logoUrl = `${safeAppUrl}/chipy.svg`;
   return `
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
 <body style="margin:0;padding:0;background:#0A0A0F;font-family:'Inter',system-ui,-apple-system,sans-serif;">
 <div style="max-width:520px;margin:0 auto;padding:40px 24px;">
 
-  <!-- Header -->
+  <!-- Header: Chipy logo + brand text (matches navbar) -->
   <div style="text-align:center;margin-bottom:32px;">
-    <a href="${safeAppUrl}" style="text-decoration:none;">
-      <span style="font-size:22px;font-weight:800;letter-spacing:-0.5px;">
-        <span style="color:#F97316;">Phon</span><span style="color:#06B6D4;">bot</span>
+    <a href="${safeAppUrl}" style="text-decoration:none;display:inline-block;">
+      <img src="${logoUrl}" width="36" height="36" alt="Phonbot" style="display:inline-block;vertical-align:middle;margin-right:8px;" />
+      <span style="font-size:22px;font-weight:800;letter-spacing:-0.5px;vertical-align:middle;">
+        <span style="color:#ffffff;">Phon</span><span style="color:#F97316;">bot</span>
       </span>
     </a>
   </div>
 
   <!-- Card -->
-  <div style="background:#141420;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:32px 28px;">
+  <div style="background:#141420;border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:32px 28px;text-align:center;">
     <h2 style="color:#ffffff;font-size:20px;font-weight:700;margin:0 0 16px 0;">${opts.title}</h2>
-    <div style="color:rgba(255,255,255,0.6);font-size:14px;line-height:1.6;">
+    <div style="color:rgba(255,255,255,0.6);font-size:14px;line-height:1.7;">
       ${opts.body}
     </div>
     ${opts.cta ? `
-    <div style="text-align:center;margin:28px 0 8px 0;">
+    <div style="margin:28px 0 8px 0;">
       <a href="${escapeHtml(opts.cta.url)}"
-         style="display:inline-block;background:linear-gradient(135deg,#F97316,#06B6D4);color:#ffffff;padding:12px 32px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">
+         style="display:inline-block;background:linear-gradient(135deg,#F97316,#06B6D4);color:#ffffff;padding:14px 36px;border-radius:12px;text-decoration:none;font-size:14px;font-weight:600;">
         ${escapeHtml(opts.cta.label)}
       </a>
     </div>
@@ -45,7 +47,7 @@ function brandedEmail(opts: { title: string; body: string; cta?: { label: string
   <!-- Footer -->
   <div style="text-align:center;margin-top:24px;">
     <p style="color:rgba(255,255,255,0.2);font-size:11px;margin:0;">
-      ${opts.footer ? escapeHtml(opts.footer) : 'Phonbot by Mindrails · phonbot.de'}
+      ${opts.footer ? escapeHtml(opts.footer) : 'Phonbot by Mindrails \u00b7 phonbot.de'}
     </p>
   </div>
 
