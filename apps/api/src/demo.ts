@@ -13,7 +13,9 @@ import { verifyTurnstile } from './captcha.js';
 
 // Demo agent cache — Redis-backed so horizontal scaling (multiple API containers)
 // doesn't create duplicate Retell agents. Falls back to in-memory Map when Redis down.
+// H6: Cap in-memory maps to prevent OOM when Redis is unavailable.
 const CACHE_TTL_SEC = 24 * 60 * 60;
+const MAX_DEMO_AGENTS = 1000;
 const inMemDemoAgents = new Map<string, { agentId: string; createdAt: number }>();
 
 async function readDemoAgent(templateId: string): Promise<string | null> {
@@ -27,6 +29,11 @@ async function readDemoAgent(templateId: string): Promise<string | null> {
 }
 
 async function writeDemoAgent(templateId: string, agentId: string): Promise<void> {
+  // H6: Evict oldest entry when hitting the cap.
+  if (inMemDemoAgents.size >= MAX_DEMO_AGENTS && !inMemDemoAgents.has(templateId)) {
+    const firstKey = inMemDemoAgents.keys().next().value;
+    if (firstKey !== undefined) inMemDemoAgents.delete(firstKey);
+  }
   inMemDemoAgents.set(templateId, { agentId, createdAt: Date.now() });
   if (redis?.isOpen) await redis.set(`demo_agent:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {});
 }

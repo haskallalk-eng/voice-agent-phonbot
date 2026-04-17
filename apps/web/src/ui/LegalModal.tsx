@@ -251,6 +251,16 @@ function DatenschutzContent() {
           Anrufs auf die Aufzeichnung hingewiesen. Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO bzw.
           Art. 6 Abs. 1 lit. a DSGVO.
         </p>
+
+        <h3 className="text-sm font-semibold text-white/90 mt-3 mb-1">Sentry (Fehlerüberwachung)</h3>
+        <p>
+          Zur Erkennung und Behebung technischer Fehler setzen wir Sentry (Functional Software, Inc.,
+          San Francisco, USA) ein. Sentry erfasst anonymisierte Fehlerberichte (Error-Tracking), die
+          technische Informationen wie Browsertyp, Betriebssystem und Fehlermeldungen enthalten.
+          Personenbezogene Daten (E-Mail, IP-Adresse, Cookies, Auth-Token) werden vor der Übermittlung
+          entfernt (PII-Filter). Der Einsatz erfolgt auf Grundlage unseres berechtigten Interesses an
+          einem stabilen und sicheren Betrieb der Plattform. Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO.
+        </p>
       </section>
 
       <section>

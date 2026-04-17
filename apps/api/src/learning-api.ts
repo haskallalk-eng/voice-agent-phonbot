@@ -191,14 +191,14 @@ export async function registerLearningApi(app: FastifyInstance): Promise<void> {
       const { templateId } = req.params;
       const limit = Math.min(req.body?.limit ?? 5, 20);
 
-      // Fetch top pending learnings for this template
+      // Fetch top pending learnings for this template — scoped to caller's org
       const learningsRes = await pool.query(
         `SELECT id, content, source_count, confidence
          FROM template_learnings
-         WHERE template_id = $1 AND status = 'pending'
+         WHERE template_id = $1 AND status = 'pending' AND org_id = $3
          ORDER BY source_count DESC, confidence DESC
          LIMIT $2`,
-        [templateId, limit],
+        [templateId, limit, orgId],
       );
 
       if (!learningsRes.rows.length) {
@@ -241,12 +241,12 @@ Schreibe direkte Anweisungen, keine Einleitung oder Erklärung.`,
         return reply.status(500).send({ error: 'Empty synthesis result' });
       }
 
-      // Mark learnings as applied
+      // Mark learnings as applied — scoped to caller's org to prevent cross-tenant mutation
       const ids = learningsRes.rows.map((r: { id: string }) => r.id);
       await pool.query(
         `UPDATE template_learnings SET status = 'applied', applied_at = now()
-         WHERE id = ANY($1::uuid[])`,
-        [ids],
+         WHERE id = ANY($1::uuid[]) AND org_id = $2`,
+        [ids, orgId],
       );
 
       // Apply ONLY to the caller's own org (was iterating across all orgs = cross-tenant bug)

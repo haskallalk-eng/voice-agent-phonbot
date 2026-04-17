@@ -17,10 +17,21 @@ const MAX_EVENTS_PER_SESSION = 500;
 const TRACES_TTL_SECONDS = 60 * 60;
 
 // In-memory fallback store
+// H6: Cap map sizes to prevent OOM when Redis is unavailable.
+const MAX_TRACE_SESSIONS = 10000;
 const eventsBySession = new Map<string, TraceEvent[]>();
 // Per-session tenant stamp (tenant isolation — only the tenant who first wrote
 // an event carrying tenantId can read the session's traces).
 const tenantBySession = new Map<string, string>();
+
+/** Evict the oldest entry (first key) when the map hits MAX_TRACE_SESSIONS. */
+function boundedSet<V>(map: Map<string, V>, key: string, value: V): void {
+  if (map.size >= MAX_TRACE_SESSIONS && !map.has(key)) {
+    const firstKey = map.keys().next().value;
+    if (firstKey !== undefined) map.delete(firstKey);
+  }
+  map.set(key, value);
+}
 
 function eventsKey(sessionId: string) {
   return `traces:${sessionId}`;
@@ -42,7 +53,7 @@ async function stampSessionTenant(sessionId: string, tenantId: string): Promise<
   if (redis) {
     await redis.setEx(tenantKey(sessionId), TRACES_TTL_SECONDS, tenantId);
   } else {
-    tenantBySession.set(sessionId, tenantId);
+    boundedSet(tenantBySession, sessionId, tenantId);
   }
 }
 
@@ -87,7 +98,7 @@ export async function appendTraceEvent(e: TraceEvent): Promise<void> {
     const list = eventsBySession.get(e.sessionId) ?? [];
     list.unshift(e);
     if (list.length > MAX_EVENTS_PER_SESSION) list.length = MAX_EVENTS_PER_SESSION;
-    eventsBySession.set(e.sessionId, list);
+    boundedSet(eventsBySession, e.sessionId, list);
   }
 }
 

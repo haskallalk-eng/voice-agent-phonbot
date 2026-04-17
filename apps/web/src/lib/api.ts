@@ -79,6 +79,12 @@ async function request<T>(path: string, init?: RequestInit, _retried = false): P
     if (newToken) {
       return request<T>(path, init, true);
     }
+    // H7: Refresh token is expired/invalid — clear access token and redirect
+    // to login. Guard against infinite redirect by checking current location.
+    _accessToken = null;
+    if (typeof window !== 'undefined' && !window.location.search.includes('page=login') && !window.location.pathname.includes('login')) {
+      window.location.href = '/?page=login';
+    }
   }
   if (!res.ok) {
     const body = await res.text();

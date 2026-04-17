@@ -107,6 +107,10 @@ export async function registerAuth(app: FastifyInstance) {
 
     const passwordHash = await bcrypt.hash(password, 12);
     const verifyToken = crypto.randomBytes(32).toString('hex');
+    // H1: Store SHA-256 hash of the verify token in DB — if DB leaks, attacker
+    // can't construct the verify URL (they'd need the pre-image). The plain
+    // token is sent to the user's email only.
+    const verifyTokenHash = hashToken(verifyToken);
 
     const client = await pool.connect();
     try {
@@ -130,7 +134,7 @@ export async function registerAuth(app: FastifyInstance) {
          VALUES ($1, $2, $3, 'owner', $4, $5)
          ON CONFLICT (email) DO NOTHING
          RETURNING id, email, role`,
-        [org.id, email, passwordHash, emailServiceConfigured ? verifyToken : null, !emailServiceConfigured],
+        [org.id, email, passwordHash, emailServiceConfigured ? verifyTokenHash : null, !emailServiceConfigured],
       );
       if (!userResult.rowCount) {
         await client.query('ROLLBACK');
@@ -347,11 +351,14 @@ export async function registerAuth(app: FastifyInstance) {
 
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
+    // H1: Hash the incoming token to match the SHA-256 hash stored in DB.
+    const tokenHash = hashToken(token);
+
     const result = await pool.query(
       `UPDATE users SET email_verified = true, email_verify_token = null
        WHERE email_verify_token = $1
        RETURNING id`,
-      [token],
+      [tokenHash],
     );
 
     if (!result.rowCount || result.rowCount === 0) {
@@ -384,7 +391,9 @@ export async function registerAuth(app: FastifyInstance) {
     }
 
     const verifyToken = crypto.randomBytes(32).toString('hex');
-    await pool.query('UPDATE users SET email_verify_token = $1 WHERE id = $2', [verifyToken, userId]);
+    // H1: Store only the SHA-256 hash in DB; plain token goes in the email URL.
+    const verifyTokenHash = hashToken(verifyToken);
+    await pool.query('UPDATE users SET email_verify_token = $1 WHERE id = $2', [verifyTokenHash, userId]);
 
     const appUrl = process.env.APP_URL ?? 'http://localhost:5173';
     sendVerificationEmail({

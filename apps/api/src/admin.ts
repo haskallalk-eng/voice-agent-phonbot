@@ -19,7 +19,9 @@ async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
   try {
     await req.jwtVerify();
     const payload = req.user as Record<string, unknown>;
-    if (!payload.admin) {
+    // H2: Verify both admin flag AND audience claim to prevent user-JWTs
+    // from being accepted on admin endpoints.
+    if (!payload.admin || payload.aud !== 'phonbot:admin') {
       reply.status(403).send({ error: 'Admin access required' });
     }
   } catch {
@@ -55,8 +57,9 @@ export async function registerAdmin(app: FastifyInstance) {
       return reply.status(401).send({ error: 'Invalid admin password' });
     }
 
-    // admin:true marker separates admin-tokens from user-tokens (verified by requireAdmin middleware)
-    const token = app.jwt.sign({ admin: true }, { expiresIn: '24h' });
+    // H2: admin:true + aud:'phonbot:admin' separates admin-tokens from user-tokens
+    // (both verified by requireAdmin middleware to prevent user-JWT privilege escalation)
+    const token = app.jwt.sign({ admin: true, aud: 'phonbot:admin' }, { expiresIn: '24h' });
     return { token };
   });
 

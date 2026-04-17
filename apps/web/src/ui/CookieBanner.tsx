@@ -38,7 +38,10 @@ export function CookieBanner({ onShowDatenschutz }: { onShowDatenschutz?: () => 
       <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-start sm:items-center gap-4">
         {/* Text */}
         <div className="flex-1 text-sm text-white/70 leading-relaxed">
-          Wir verwenden technisch notwendige Cookies. Keine Tracking-Cookies.{' '}
+          Wir verwenden technisch notwendige Cookies.
+          Zur Fehlererkennung setzen wir Sentry ein (Error-Tracking) — dabei werden
+          anonymisierte Fehlerberichte ohne personenbezogene Daten erfasst.
+          Keine Marketing- oder Tracking-Cookies.{' '}
           <button onClick={onShowDatenschutz} className="text-orange-400 hover:text-orange-300 underline cursor-pointer transition-colors">
             Datenschutz
           </button>

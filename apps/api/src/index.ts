@@ -86,7 +86,8 @@ await app.register(helmet, {
     directives: {
       defaultSrc: ["'self'"],
       // Cloudflare Turnstile (CAPTCHA) lädt JS von challenges.cloudflare.com.
-      scriptSrc: ["'self'", "'unsafe-inline'", 'https://challenges.cloudflare.com'],
+      // H3: removed 'unsafe-inline' — XSS risk; Vite/React builds don't need it.
+      scriptSrc: ["'self'", 'https://challenges.cloudflare.com'],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
       imgSrc: ["'self'", 'data:', 'https:'],

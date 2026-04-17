@@ -34,6 +34,8 @@ const SESSION_TTL_MS = SESSION_TTL_SECONDS * 1000;
 
 // ── In-memory fallback ────────────────────────────────────────────────────────
 
+// H6: Cap in-memory sessions to prevent OOM when Redis is unavailable.
+const MAX_SESSIONS = 5000;
 const sessions = new Map<string, Session>();
 
 // Periodic cleanup every 10 minutes (in-memory only).
@@ -84,6 +86,11 @@ async function writeSession(sessionId: string, s: Session): Promise<void> {
   if (redis) {
     await redis.setEx(redisKey(sessionId), SESSION_TTL_SECONDS, JSON.stringify(s));
   } else {
+    // H6: Evict oldest entry when hitting the cap (prevents OOM without Redis).
+    if (sessions.size >= MAX_SESSIONS && !sessions.has(sessionId)) {
+      const firstKey = sessions.keys().next().value;
+      if (firstKey !== undefined) sessions.delete(firstKey);
+    }
     sessions.set(sessionId, s);
   }
 }
