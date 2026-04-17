@@ -58,10 +58,11 @@ export async function tryReserveMinutes(
     return { allowed: true, minutesUsed: 0, minutesLimit: 9999 };
   }
 
-  // The WHERE clause is the gate. RETURNING gives us the post-update state.
-  // No transaction needed — a single UPDATE is atomic in PostgreSQL and
-  // the predicate is evaluated against the current row at lock-acquisition
-  // time, so concurrent updates serialise on the row lock.
+  // Paid plans (with overage rate > 0) use a soft cap: calls are allowed past
+  // the limit, overage is billed via Stripe invoice items in reconcileMinutes.
+  // Free plan (overcharge = 0) keeps the hard block.
+  //
+  // Step 1: try the strict within-limit reservation.
   const res = await pool.query(
     `UPDATE orgs
      SET minutes_used = minutes_used + $2
@@ -77,17 +78,41 @@ export async function tryReserveMinutes(
     return { allowed: true, minutesUsed: minutes_used, minutesLimit: minutes_limit };
   }
 
-  // Reservation refused. Re-fetch so the caller can show useful numbers
-  // (over-limit message etc.). If the org doesn't exist at all → all zeros.
+  // Step 2: within-limit reservation failed. For paid plans with overage,
+  // allow the call anyway (soft cap) — overage is billed at call-end.
   const fallback = await pool.query(
-    `SELECT minutes_used, minutes_limit FROM orgs WHERE id = $1`,
+    `SELECT minutes_used, minutes_limit, plan, plan_status FROM orgs WHERE id = $1`,
     [orgId],
   );
   const row = fallback.rows[0];
+  if (!row) {
+    return { allowed: false, minutesUsed: 0, minutesLimit: 0 };
+  }
+
+  const blockedStatuses = new Set(['paused', 'past_due', 'canceled']);
+  if (blockedStatuses.has(row.plan_status)) {
+    return { allowed: false, minutesUsed: row.minutes_used, minutesLimit: row.minutes_limit };
+  }
+
+  const rate = getOverchargeRate(row.plan as string);
+  if (rate > 0) {
+    // Paid plan with overage → allow and reserve (will be billed in reconcile)
+    await pool.query(
+      `UPDATE orgs SET minutes_used = minutes_used + $2 WHERE id = $1`,
+      [orgId, minutes],
+    );
+    return {
+      allowed: true,
+      minutesUsed: (row.minutes_used as number) + minutes,
+      minutesLimit: row.minutes_limit as number,
+    };
+  }
+
+  // Free plan → hard block
   return {
     allowed: false,
-    minutesUsed: row?.minutes_used ?? 0,
-    minutesLimit: row?.minutes_limit ?? 0,
+    minutesUsed: row.minutes_used ?? 0,
+    minutesLimit: row.minutes_limit ?? 0,
   };
 }
 
