@@ -1296,7 +1296,21 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
       [orgId, encryptToken(tokens.access_token), encryptToken(tokens.refresh_token ?? null), expiresAt, calendarEmail],
     );
 
-    return reply.redirect(`${appUrl}?calendarConnected=true`);
+    // Return a small HTML page that notifies the opener (dashboard) and
+    // closes this OAuth tab automatically — much better UX than leaving
+    // a stale redirect page open.
+    return reply
+      .header('Content-Type', 'text/html; charset=utf-8')
+      .send(`<!DOCTYPE html><html><head><title>Verbunden!</title></head><body style="background:#0A0A0F;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
+<div style="text-align:center">
+  <p style="font-size:1.25rem;font-weight:600;margin-bottom:.5rem">\u2705 Google Kalender verbunden!</p>
+  <p style="color:rgba(255,255,255,.5);font-size:.875rem">Dieses Fenster schlie\u00dft sich automatisch\u2026</p>
+</div>
+<script>
+if(window.opener){try{window.opener.postMessage({type:'calendarConnected',provider:'google'},'*')}catch(e){}}
+setTimeout(function(){window.close()},1500);
+setTimeout(function(){window.location.href='${appUrl}?calendarConnected=true'},3000);
+</script></body></html>`);
   });
 
   /**
@@ -1574,7 +1588,18 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
       [orgId, encryptToken(tokens.access_token), encryptToken(tokens.refresh_token ?? null), expiresAt, msEmail],
     );
 
-    return reply.redirect(`${appUrl}?calendarConnected=true`);
+    return reply
+      .header('Content-Type', 'text/html; charset=utf-8')
+      .send(`<!DOCTYPE html><html><head><title>Verbunden!</title></head><body style="background:#0A0A0F;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">
+<div style="text-align:center">
+  <p style="font-size:1.25rem;font-weight:600;margin-bottom:.5rem">\u2705 Microsoft Kalender verbunden!</p>
+  <p style="color:rgba(255,255,255,.5);font-size:.875rem">Dieses Fenster schlie\u00dft sich automatisch\u2026</p>
+</div>
+<script>
+if(window.opener){try{window.opener.postMessage({type:'calendarConnected',provider:'microsoft'},'*')}catch(e){}}
+setTimeout(function(){window.close()},1500);
+setTimeout(function(){window.location.href='${appUrl}?calendarConnected=true'},3000);
+</script></body></html>`);
   });
 
   // ── Chipy Calendar Routes ─────────────────────────────────────────────────

@@ -728,6 +728,16 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
       if (params.get('calendarError')) setError(`OAuth fehlgeschlagen: ${params.get('calendarError')}`);
     }
     loadStatus();
+
+    // Listen for postMessage from OAuth popup (the callback page closes
+    // itself and sends { type: 'calendarConnected' } to the opener).
+    function onMessage(e: MessageEvent) {
+      if (e.data?.type === 'calendarConnected') {
+        loadStatus();
+      }
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
   }, []);
 
   if (loading) return (
