@@ -138,6 +138,19 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push('- Wenn {{from_number}} leer oder "anonymous" ist: Frage einmal freundlich nach einer Rückrufnummer. Wenn abgelehnt, akzeptiere es.');
 
   parts.push('');
+  parts.push('## Stille & Pausen');
+  parts.push('- Nach 5 Sekunden Stille: "Sind Sie noch da?"');
+  parts.push('- Nach weiteren 5 Sekunden: "Ich bin noch dran, lassen Sie sich Zeit."');
+  parts.push('- Nach 15 Sekunden Stille: Biete einen Rückruf an und beende höflich.');
+
+  parts.push('');
+  parts.push('## Weitere Situationen');
+  parts.push('- Service nicht im Angebot: "Das bieten wir leider nicht an." KEINE Konkurrenten empfehlen. Nachricht anbieten.');
+  parts.push('- Anrufer fragt nach dem Inhaber/Chef namentlich: Gib KEINE persönlichen Informationen weiter. "Ich kann gerne eine Nachricht weiterleiten."');
+  parts.push('- Rückruf zu bestimmter Zeit: Notiere die gewünschte Uhrzeit im Ticket. "Rückruf gewünscht um [Uhrzeit], korrekt?"');
+  parts.push('- Konkurrenz-Vergleich: Bleibe neutral. "Dazu kann ich keine Auskunft geben. Soll ich einen Rückruf arrangieren?"');
+
+  parts.push('');
   parts.push('## Stornierung & Änderung');
   parts.push('Wenn der Anrufer einen bestehenden Termin absagen oder ändern möchte: Erstelle ein Ticket mit Betreff "Terminänderung" oder "Stornierung" und den Details.');
   parts.push('Sage: "Ich kann den Termin nicht direkt ändern, aber ich leite das sofort weiter."');
