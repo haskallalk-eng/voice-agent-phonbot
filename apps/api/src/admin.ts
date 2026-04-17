@@ -223,10 +223,10 @@ export async function registerAdmin(app: FastifyInstance) {
     // Revenue estimate based on plan prices
     const planPrices: Record<string, number> = {
       free: 0,
-      starter: 49,
-      professional: 99,
-      business: 199,
-      enterprise: 499,
+      nummer: 8.99,
+      starter: 79,
+      pro: 179,
+      agency: 349,
     };
     let totalRevenue = 0;
     for (const [plan, count] of Object.entries(planCounts)) {

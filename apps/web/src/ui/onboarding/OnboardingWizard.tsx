@@ -1070,9 +1070,9 @@ function UpgradeModal({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState<string | null>(null);
 
   const plans = [
-    { id: 'starter', name: 'Starter', price: '49', features: ['✦ Telefonnummer inklusive', '500 Min/Monat', '1 Agent'], accent: '#F97316' },
-    { id: 'pro', name: 'Pro', price: '149', features: ['✦ Telefonnummer inklusive', '2.000 Min/Monat', '3 Agents', 'Kalender-Integration', 'Priority Support'], accent: '#06B6D4', recommended: true },
-    { id: 'agency', name: 'Agency', price: '299', features: ['✦ Telefonnummer inklusive', '5.000 Min/Monat', '10 Agents', 'White-Label', 'Dedicated Support'], accent: '#8B5CF6' },
+    { id: 'starter', name: 'Starter', price: '79', features: ['✦ Telefonnummer inklusive', '360 Min/Monat', '1 Agent'], accent: '#F97316' },
+    { id: 'pro', name: 'Professional', price: '179', features: ['✦ Telefonnummer inklusive', '1.000 Min/Monat', '3 Agents', 'Kalender-Integration', 'Priority Support'], accent: '#06B6D4', recommended: true },
+    { id: 'agency', name: 'Agency', price: '349', features: ['✦ Telefonnummer inklusive', '2.400 Min/Monat', '10 Agents', 'White-Label', 'Dedicated Support'], accent: '#8B5CF6' },
   ];
 
   async function handleSelect(planId: string) {
