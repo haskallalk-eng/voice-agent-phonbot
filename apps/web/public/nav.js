@@ -7,12 +7,28 @@
   document.addEventListener('click', function (e) {
     var el = e.target;
     while (el && el !== document) {
+      // Hamburger toggle
       if (el.hasAttribute && el.hasAttribute('data-nav-toggle')) {
         document.body.classList.toggle('nav-open');
         var btn = el;
         var expanded = document.body.classList.contains('nav-open');
         btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        // Close all dropdowns when menu closes
+        if (!expanded) {
+          var openDropdowns = document.querySelectorAll('.has-dropdown.open');
+          for (var i = 0; i < openDropdowns.length; i++) openDropdowns[i].classList.remove('open');
+        }
         return;
+      }
+      // Mobile dropdown toggle — Branchen dropdown opens/closes on click
+      if (el.classList && el.classList.contains('dropdown-toggle')) {
+        var parent = el.closest('.has-dropdown');
+        if (parent && document.body.classList.contains('nav-open')) {
+          e.preventDefault();
+          parent.classList.toggle('open');
+          el.setAttribute('aria-expanded', parent.classList.contains('open') ? 'true' : 'false');
+          return;
+        }
       }
       el = el.parentNode;
     }
