@@ -8,6 +8,7 @@ import {
   deletePhoneNumber,
   reassignPhoneAgent,
   verifyForwarding,
+  createCheckoutSession,
   type PhoneNumber,
   type AgentConfig,
 } from '../lib/api.js';
@@ -370,7 +371,13 @@ export function PhoneManager({ onNavigate }: { onNavigate?: (page: string) => vo
             </div>
             <p className="text-sm font-semibold bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Eigene Telefonnummer ab 8,99€/Mo</p>
             <p className="text-xs text-white/35">Mit dem Nummer-Plan bekommst du eine eigene Telefonnummer + 70 Freiminuten. Dein Agent nimmt dann echte Anrufe entgegen.</p>
-            <button onClick={() => { setProvisionError(null); onNavigate?.('billing'); }}
+            <p className="text-[11px] text-cyan-400/50 mt-1">Tipp: Ab dem Starter-Plan (79€/Mo) ist eine Nummer bereits gratis inklusive.</p>
+            <button onClick={async () => {
+              try {
+                const res = await createCheckoutSession('nummer', 'month');
+                if (res.url) window.location.href = res.url;
+              } catch { onNavigate?.('billing'); }
+            }}
               className="rounded-lg px-5 py-2.5 text-xs font-semibold text-white transition-all hover:scale-[1.02] cursor-pointer"
               style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)', boxShadow: '0 4px 20px rgba(249,115,22,0.2)' }}>
               Nummer aktivieren — ab 8,99€/Mo
