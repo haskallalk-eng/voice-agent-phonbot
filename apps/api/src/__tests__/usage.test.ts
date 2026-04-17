@@ -74,24 +74,20 @@ describe('reconcileMinutes', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('adjusts upward when actual > reserved', async () => {
-    // 1st call: pre-read SELECT
-    mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [{ minutes_used: 25, minutes_limit: 45, plan: 'starter' }] });
-    // 2nd call: UPDATE RETURNING
-    mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [{ minutes_used: 28, minutes_limit: 45, name: 'Test' }] });
+    // Single atomic CTE query: WITH pre AS (SELECT ... FOR UPDATE) UPDATE ... RETURNING
+    mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [{ minutes_used: 28, old_used: 25, minutes_limit: 45, plan: 'starter', name: 'Test' }] });
     await reconcileMinutes('org-1', 5, 8);
-    const sql = mockQuery.mock.calls[1]![0] as string;
-    const params = mockQuery.mock.calls[1]![1] as number[];
-    expect(sql).toContain('GREATEST(0, minutes_used + $2)');
+    const sql = mockQuery.mock.calls[0]![0] as string;
+    const params = mockQuery.mock.calls[0]![1] as number[];
+    expect(sql).toContain('GREATEST(0,');
     expect(params![1]).toBe(3); // 8 - 5 = +3
   });
 
   it('adjusts downward when actual < reserved (refund)', async () => {
-    // 1st call: pre-read SELECT
-    mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [{ minutes_used: 13, minutes_limit: 45, plan: 'starter' }] });
-    // 2nd call: UPDATE RETURNING
-    mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [{ minutes_used: 10, minutes_limit: 45, name: 'Test' }] });
+    // Single atomic CTE query
+    mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [{ minutes_used: 10, old_used: 13, minutes_limit: 45, plan: 'starter', name: 'Test' }] });
     await reconcileMinutes('org-1', 5, 2);
-    const params = mockQuery.mock.calls[1]![1] as number[];
+    const params = mockQuery.mock.calls[0]![1] as number[];
     expect(params![1]).toBe(-3); // 2 - 5 = -3, GREATEST(0,...) protects DB
   });
 
