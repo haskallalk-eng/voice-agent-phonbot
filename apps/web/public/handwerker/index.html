@@ -33,7 +33,7 @@ nav .container{display:flex;align-items:center;justify-content:space-between;pad
 .brand{font-weight:800;font-size:1.25rem;letter-spacing:-0.5px;display:inline-flex;align-items:center}
 .btn{display:inline-block;padding:.75rem 1.5rem;border-radius:999px;font-weight:600;font-size:.9rem;transition:all .3s;cursor:pointer;border:none}
 .btn-primary{background:linear-gradient(135deg,#F97316,#06B6D4);color:#fff}
-.btn-primary:hover{transform:scale(1.03);box-shadow:0 0 40px rgba(249,115,22,.4)}
+.btn-primary:hover{transform:scale(1.05);box-shadow:0 0 24px rgba(249,115,22,.5)}
 .btn-ghost{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.85)}
 .btn-ghost:hover{background:rgba(255,255,255,.08);color:#fff}
 .btn-demo{background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.4);color:#FDBA74;display:inline-flex;align-items:center;gap:.5rem}
@@ -73,45 +73,45 @@ p{color:rgba(255,255,255,.7)}
 .faq-item h3{color:#fff;margin-bottom:.5rem}
 .pricing-hint{display:inline-block;margin-top:1rem;padding:.5rem 1rem;border-radius:.5rem;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);font-size:.85rem;color:#67E8F9}
 footer{border-top:1px solid rgba(255,255,255,.05);padding:2.5rem 0;margin-top:3rem;font-size:.85rem;color:rgba(255,255,255,.4);text-align:center}
-footer a{color:rgba(255,255,255,.65);text-decoration:underline;text-decoration-color:rgba(255,255,255,.15)}
+footer a{color:rgba(255,255,255,.6);text-decoration:underline;text-decoration-color:rgba(255,255,255,.15)}
 footer a:hover{color:#fff}
 .demo-hint{display:inline-block;padding:.5rem 1rem;border-radius:.5rem;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);font-size:.85rem;color:#67E8F9;margin-top:1rem}
 .site-nav .container{justify-content:flex-start!important;gap:0}
-.site-nav-links{flex:1;display:flex;justify-content:center;gap:1.75rem;list-style:none;margin:0 1.5rem;padding:0;align-items:center}
+.site-nav-links{flex:1;display:flex;justify-content:center;gap:2rem;list-style:none;margin:0 1.5rem;padding:0;align-items:center}
 .site-nav-links>li{position:relative;margin:0}
-.site-nav-links a,.site-nav-links .dropdown-toggle{color:rgba(255,255,255,.65);font-size:.875rem;background:none;border:none;cursor:pointer;padding:.25rem 0;font-family:inherit;font-weight:500;transition:color .2s;display:inline-flex;align-items:center;gap:.25rem}
+.site-nav-links a,.site-nav-links .dropdown-toggle{color:rgba(255,255,255,.6);font-size:.875rem;background:none;border:none;cursor:pointer;padding:.25rem 0;font-family:inherit;font-weight:500;transition:color .2s;display:inline-flex;align-items:center;gap:.25rem}
 .site-nav-links a:hover,.site-nav-links .dropdown-toggle:hover,.site-nav-links a.is-current{color:#fff}
 .site-nav-links a.is-current{font-weight:600}
-.dropdown-menu{list-style:none;position:absolute;top:calc(100% + .75rem);left:50%;transform:translateX(-50%);min-width:14rem;padding:.5rem;background:rgba(10,10,15,.96);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.1);border-radius:1rem;opacity:0;pointer-events:none;transition:opacity .15s;box-shadow:0 8px 32px rgba(0,0,0,.4);margin:0}
+.dropdown-menu{list-style:none;position:absolute;top:calc(100% + .75rem);left:50%;transform:translateX(-50%);min-width:16rem;padding:.5rem;background:rgba(10,10,15,.96);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.1);border-radius:1.25rem;opacity:0;pointer-events:none;transition:opacity .15s;box-shadow:0 8px 32px rgba(0,0,0,.4);margin:0}
 .has-dropdown:hover .dropdown-menu,.has-dropdown:focus-within .dropdown-menu{opacity:1;pointer-events:auto}
 .dropdown-menu li{margin:0}
-.dropdown-menu a{display:block;padding:.625rem .875rem;border-radius:.5rem;font-size:.875rem;color:rgba(255,255,255,.78);transition:all .15s}
+.dropdown-menu a{display:flex;align-items:center;gap:.5rem;padding:.625rem .875rem;border-radius:.5rem;font-size:.875rem;color:rgba(255,255,255,.78);transition:all .15s}
 .dropdown-menu a:hover{background:rgba(255,255,255,.05);color:#fff}
 .site-nav-cta{display:flex;align-items:center;gap:1rem}
-.site-nav-cta .nav-link{color:rgba(255,255,255,.65);font-size:.875rem;font-weight:500;transition:color .2s}
+.site-nav-cta .nav-link{color:rgba(255,255,255,.6);font-size:.875rem;font-weight:500;transition:color .2s}
 .site-nav-cta .nav-link:hover{color:#fff}
-.mobile-toggle{display:none;background:none;border:none;color:#fff;font-size:1.5rem;cursor:pointer;padding:.25rem .5rem;margin-left:auto}
-@media (max-width:840px){.site-nav-links,.site-nav-cta .nav-link{display:none}.mobile-toggle{display:block}body.nav-open .site-nav-links{display:flex;flex-direction:column;position:absolute;top:100%;left:0;right:0;background:rgba(10,10,15,.98);border-bottom:1px solid rgba(255,255,255,.08);padding:1rem 1.5rem;gap:.25rem;align-items:stretch;margin:0}body.nav-open .site-nav-links a,body.nav-open .dropdown-toggle{padding:.75rem 0;border-bottom:1px solid rgba(255,255,255,.05)}body.nav-open .dropdown-menu{position:static;transform:none;opacity:1;pointer-events:auto;background:transparent;border:none;padding:.25rem 0 .5rem 1rem;min-width:auto;box-shadow:none}}</style>
+.mobile-toggle{display:none;background:none;border:none;color:#fff;cursor:pointer;padding:.5rem;margin-left:auto;flex-direction:column;gap:5px;border-radius:.5rem;transition:background .2s}.mobile-toggle:hover{background:rgba(255,255,255,.05)}.hamburger-line{display:block;width:20px;height:2px;background:rgba(255,255,255,.6);border-radius:1px;transition:all .2s}
+@media (max-width:840px){.site-nav-links,.site-nav-cta .nav-link{display:none}.mobile-toggle{display:flex}body.nav-open .site-nav-links{display:flex;flex-direction:column;position:absolute;top:100%;left:0;right:0;background:rgba(10,10,15,.98);border-bottom:1px solid rgba(255,255,255,.08);padding:1rem 1.5rem;gap:.25rem;align-items:stretch;margin:0}body.nav-open .site-nav-links a,body.nav-open .dropdown-toggle{padding:.75rem 0;border-bottom:1px solid rgba(255,255,255,.05)}body.nav-open .dropdown-menu{position:static;transform:none;opacity:1;pointer-events:auto;background:transparent;border:none;padding:.25rem 0 .5rem 1rem;min-width:auto;box-shadow:none}}</style>
 <script defer src="/nav.js"></script>
 </head>
 <body>
 <nav class="site-nav" role="navigation" aria-label="Hauptnavigation">
   <div class="container">
-    <a href="/" class="brand"><svg viewBox="0 8 100 92" fill="none" xmlns="http://www.w3.org/2000/svg" width="28" height="28" style="vertical-align:middle;margin-right:6px"><defs><radialGradient id="h" cx="50%" cy="40%" r="65%"><stop offset="0%" stop-color="#F5C842"/><stop offset="100%" stop-color="#D49B12"/></radialGradient><radialGradient id="c" cx="50%" cy="40%" r="70%"><stop offset="0%" stop-color="#F7D04A"/><stop offset="100%" stop-color="#D9A015"/></radialGradient><radialGradient id="e" cx="30%" cy="25%" r="75%"><stop offset="0%" stop-color="#FCD34D"/><stop offset="100%" stop-color="#B45309"/></radialGradient></defs><circle cx="28" cy="22" r="9" fill="#D49B12"/><circle cx="28" cy="22" r="5.5" fill="#E8B32D"/><circle cx="72" cy="22" r="9" fill="#D49B12"/><circle cx="72" cy="22" r="5.5" fill="#E8B32D"/><circle cx="50" cy="55" r="38" fill="url(#h)"/><ellipse cx="14" cy="62" rx="12" ry="11" fill="url(#c)"/><ellipse cx="86" cy="62" rx="12" ry="11" fill="url(#c)"/><circle cx="36" cy="50" r="13" fill="white"/><circle cx="36" cy="50" r="10" fill="url(#e)"/><ellipse cx="36" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="40" cy="46" r="3" fill="white"/><circle cx="64" cy="50" r="13" fill="white"/><circle cx="64" cy="50" r="10" fill="url(#e)"/><ellipse cx="64" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="68" cy="46" r="3" fill="white"/><ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309"/><path d="M44 68 Q50 73 56 68" stroke="#8B4513" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg><span style="font-weight:800;letter-spacing:-0.5px"><span style="color:#F97316">Phon</span><span style="color:#06B6D4">bot</span></span></a>
+    <a href="/" class="brand"><svg viewBox="0 8 100 92" fill="none" xmlns="http://www.w3.org/2000/svg" width="28" height="28" style="vertical-align:middle;margin-right:6px"><defs><radialGradient id="h" cx="50%" cy="40%" r="65%"><stop offset="0%" stop-color="#F5C842"/><stop offset="100%" stop-color="#D49B12"/></radialGradient><radialGradient id="c" cx="50%" cy="40%" r="70%"><stop offset="0%" stop-color="#F7D04A"/><stop offset="100%" stop-color="#D9A015"/></radialGradient><radialGradient id="e" cx="30%" cy="25%" r="75%"><stop offset="0%" stop-color="#FCD34D"/><stop offset="100%" stop-color="#B45309"/></radialGradient></defs><circle cx="28" cy="22" r="9" fill="#D49B12"/><circle cx="28" cy="22" r="5.5" fill="#E8B32D"/><circle cx="72" cy="22" r="9" fill="#D49B12"/><circle cx="72" cy="22" r="5.5" fill="#E8B32D"/><circle cx="50" cy="55" r="38" fill="url(#h)"/><ellipse cx="14" cy="62" rx="12" ry="11" fill="url(#c)"/><ellipse cx="86" cy="62" rx="12" ry="11" fill="url(#c)"/><circle cx="36" cy="50" r="13" fill="white"/><circle cx="36" cy="50" r="10" fill="url(#e)"/><ellipse cx="36" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="40" cy="46" r="3" fill="white"/><circle cx="64" cy="50" r="13" fill="white"/><circle cx="64" cy="50" r="10" fill="url(#e)"/><ellipse cx="64" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="68" cy="46" r="3" fill="white"/><ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309"/><path d="M44 68 Q50 73 56 68" stroke="#8B4513" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg><span style="font-weight:800;letter-spacing:-0.5px"><span style="color:#fff">Phon</span><span style="background:linear-gradient(135deg,#F97316,#FB923C);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">bot</span></span></a>
     <ul class="site-nav-links">
       <li><a href="/#demo">Demo</a></li>
       <li><a href="/#features">Features</a></li>
       <li><a href="/#preise">Preise</a></li>
       <li><a href="/#faq">FAQ</a></li>
       <li class="has-dropdown">
-        <button type="button" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">Branchen <span aria-hidden="true">▾</span></button>
+        <button type="button" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">Branchen <svg width="10" height="10" viewBox="0 0 10 10" style="transition:transform .2s" aria-hidden="true"><path d="M1 3l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <ul class="dropdown-menu">
-          <li><a href="/friseur/">Friseur</a></li>
-          <li><a href="/handwerker/" class="is-current">Handwerker</a></li>
-          <li><a href="/arztpraxis/">Arztpraxis</a></li>
-          <li><a href="/reinigung/">Reinigung</a></li>
-          <li><a href="/restaurant/">Restaurant</a></li>
-          <li><a href="/autowerkstatt/">Autowerkstatt</a></li>
+          <li><a href="/friseur/"><svg viewBox="0 0 24 24" fill="none" stroke="#FB923C" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" style="flex-shrink:0"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg> Friseur</a></li>
+          <li><a href="/handwerker/" class="is-current"><svg viewBox="0 0 24 24" fill="none" stroke="#FB923C" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" style="flex-shrink:0"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg> Handwerker</a></li>
+          <li><a href="/arztpraxis/"><svg viewBox="0 0 24 24" fill="none" stroke="#FB923C" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" style="flex-shrink:0"><rect x="9" y="2" width="6" height="20" rx="2"/><rect x="2" y="9" width="20" height="6" rx="2"/></svg> Arztpraxis</a></li>
+          <li><a href="/reinigung/"><svg viewBox="0 0 24 24" fill="none" stroke="#FB923C" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" style="flex-shrink:0"><path d="M3 21l7-7"/><path d="M13.5 5.5l5.19-1.04 1.04 5.2-9.23 9.23a2 2 0 01-2.83 0l-2.83-2.83a2 2 0 010-2.83z"/><path d="M7.4 13.4l4.24-4.24"/></svg> Reinigung</a></li>
+          <li><a href="/restaurant/"><svg viewBox="0 0 24 24" fill="none" stroke="#FB923C" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" style="flex-shrink:0"><line x1="18" y1="2" x2="18" y2="22"/><path d="M22 8H14V2"/><line x1="6" y1="2" x2="6" y2="8"/><path d="M2 8a4 4 0 008 0"/><line x1="6" y1="12" x2="6" y2="22"/></svg> Restaurant</a></li>
+          <li><a href="/autowerkstatt/"><svg viewBox="0 0 24 24" fill="none" stroke="#FB923C" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" style="flex-shrink:0"><path d="M5 17H3a2 2 0 01-2-2v-4l2.69-6.73A2 2 0 015.54 3h12.92a2 2 0 011.85 1.27L23 11v4a2 2 0 01-2 2h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="17.5" r="2.5"/></svg> Autowerkstatt</a></li>
         </ul>
       </li>
       <li><a href="/?page=contact">Kontakt</a></li>
@@ -120,7 +120,7 @@ footer a:hover{color:#fff}
       <a href="/?page=login" class="nav-link">Einloggen</a>
       <a href="/?page=register" class="btn btn-primary">Kostenlos testen</a>
     </div>
-    <button type="button" class="mobile-toggle" aria-label="Menü umschalten" data-nav-toggle>☰</button>
+    <button type="button" class="mobile-toggle" aria-label="Menü umschalten" data-nav-toggle><span class="hamburger-line"></span><span class="hamburger-line"></span><span class="hamburger-line"></span></button>
   </div>
 </nav>
 
