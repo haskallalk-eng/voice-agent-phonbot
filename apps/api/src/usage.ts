@@ -4,7 +4,7 @@
  */
 
 import { pool } from './db.js';
-import { PLANS, type PlanId } from './billing.js';
+import { PLANS, type PlanId, chargeOverageMinutes } from './billing.js';
 
 /**
  * Default minutes we reserve at call-start. Reconciled to actual at call-end
@@ -106,12 +106,34 @@ export async function reconcileMinutes(
   if (!pool) return;
   const delta = actualMinutes - reservedMinutes;
   if (delta === 0) return;
+  // Fetch pre-update state so we can calculate NEW overage from this call only.
+  const preRes = await pool.query(
+    `SELECT minutes_used, minutes_limit, plan FROM orgs WHERE id = $1`,
+    [orgId],
+  );
+  const pre = preRes.rows[0];
+  const preUsed = pre?.minutes_used ?? 0;
+  const limit = pre?.minutes_limit ?? 0;
+  const plan = (pre?.plan as string) ?? 'free';
+
   const res = await pool.query(
     `UPDATE orgs SET minutes_used = GREATEST(0, minutes_used + $2)
      WHERE id = $1
      RETURNING minutes_used, minutes_limit, name`,
     [orgId, delta],
   );
+
+  // Overage billing: charge only the NEW minutes that crossed the limit.
+  // pre-overage = max(0, preUsed - limit), post-overage = max(0, postUsed - limit)
+  // new overage = post - pre (only the delta that's billable).
+  const postUsed = res.rows[0]?.minutes_used ?? 0;
+  const overageBefore = Math.max(0, preUsed - limit);
+  const overageAfter = Math.max(0, postUsed - limit);
+  const newOverage = overageAfter - overageBefore;
+  if (newOverage > 0) {
+    const rate = getOverchargeRate(plan);
+    chargeOverageMinutes(orgId, newOverage, rate).catch(() => {/* logged inside */});
+  }
 
   // Usage warning emails at 80% and 100% thresholds.
   // Fire-and-forget — never block the webhook response for an email.

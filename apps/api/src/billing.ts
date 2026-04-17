@@ -92,6 +92,43 @@ async function getOrCreateStripeCustomer(orgId: string, email: string, orgName: 
   return customer.id;
 }
 
+/**
+ * Create a Stripe invoice item for overage minutes. Called from reconcileMinutes
+ * when a call pushes minutes_used past minutes_limit. The item lands on the
+ * customer's next invoice automatically.
+ *
+ * Only charges the NEW overage from this specific reconciliation, not the total.
+ */
+export async function chargeOverageMinutes(
+  orgId: string,
+  overageMinutes: number,
+  ratePerMinute: number,
+): Promise<void> {
+  if (!stripe || !pool || overageMinutes <= 0 || ratePerMinute <= 0) return;
+
+  const res = await pool.query(
+    `SELECT stripe_customer_id, plan, name FROM orgs WHERE id = $1`,
+    [orgId],
+  );
+  const row = res.rows[0];
+  if (!row?.stripe_customer_id) return; // free plan or no Stripe customer
+
+  const amountCents = Math.round(overageMinutes * ratePerMinute * 100);
+  if (amountCents <= 0) return;
+
+  try {
+    await stripe.invoiceItems.create({
+      customer: row.stripe_customer_id as string,
+      amount: amountCents,
+      currency: 'eur',
+      description: `${overageMinutes} Min Überschreitung (${ratePerMinute.toFixed(2)} €/Min)`,
+      metadata: { orgId, overageMinutes: String(overageMinutes), plan: row.plan as string },
+    });
+  } catch (err) {
+    process.stderr.write(`[billing] overage invoice item failed for org=${orgId}: ${(err as Error).message}\n`);
+  }
+}
+
 // NOTE: Free plan minutes are one-time (no monthly reset).
 // Paid plans reset at billing period renewal via syncSubscription.
 async function syncSubscription(sub: Stripe.Subscription) {
