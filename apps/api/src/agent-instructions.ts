@@ -54,6 +54,29 @@ export function buildAgentInstructions(cfg: AgentConfig) {
     parts.push(`If you cannot complete the request live, guide the conversation toward a handoff/callback (${cfg.fallback.reason}).`);
   }
 
+  // ── Call routing / transfer rules ──────────────────────────────────────
+  const routingRules = (cfg as Record<string, unknown>).callRoutingRules as
+    | Array<{ description: string; action: string; target?: string; enabled?: boolean }> | undefined;
+  const activeRules = routingRules?.filter(r => r.enabled !== false) ?? [];
+
+  if (activeRules.length > 0) {
+    parts.push('');
+    parts.push('## Anruf-Weiterleitung');
+    parts.push('Du kannst Anrufe live an eine echte Person weiterleiten. Nutze das Tool "transfer_call" wenn eine der folgenden Situationen eintritt:');
+    for (const rule of activeRules) {
+      if (rule.action === 'transfer' && rule.target) {
+        parts.push(`- ${rule.description} → Weiterleiten an ${rule.target}`);
+      } else if (rule.action === 'ticket') {
+        parts.push(`- ${rule.description} → Rückruf-Ticket erstellen`);
+      } else if (rule.action === 'hangup') {
+        parts.push(`- ${rule.description} → Gespräch höflich beenden`);
+      }
+    }
+    parts.push('');
+    parts.push('WICHTIG: Bevor du weiterleitest, sage dem Anrufer Bescheid: "Ich verbinde Sie jetzt mit [Ziel]. Einen Moment bitte."');
+    parts.push('WARNUNG: Leite NIEMALS an die Nummer weiter, von der der Anrufer bereits weitergeleitet wurde (Endlosschleife). Wenn du unsicher bist, erstelle stattdessen ein Rückruf-Ticket.');
+  }
+
   // ── Caller phone number (injected via Retell dynamic variables at call time) ──
   parts.push('');
   parts.push('## Anrufer-Telefonnummer');

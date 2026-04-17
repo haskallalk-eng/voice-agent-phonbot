@@ -194,6 +194,30 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
     });
   }
 
+  // ── Built-in Retell transfer_call tool ──────────────────────────────────
+  // When callRoutingRules contain at least one enabled 'transfer' rule,
+  // register Retell's native transfer_call so the LLM can hand off the
+  // live call to a human. The actual routing logic lives in the system
+  // prompt (see agent-instructions.ts).
+  const routingRules = (config as Record<string, unknown>).callRoutingRules as
+    | Array<{ action: string; target?: string; enabled?: boolean }> | undefined;
+  const hasTransfer = routingRules?.some(r => r.enabled !== false && r.action === 'transfer' && r.target);
+
+  if (hasTransfer) {
+    // Collect all transfer targets to pre-configure the tool
+    const targets = routingRules!
+      .filter(r => r.enabled !== false && r.action === 'transfer' && r.target)
+      .map(r => r.target!);
+
+    tools.push({
+      type: 'transfer_call',
+      name: 'transfer_call',
+      description: 'Transfer the current phone call to a human or department.',
+      number: targets.length === 1 ? targets[0] : undefined,
+      // When multiple targets, the LLM picks based on the routing rules in the prompt
+    });
+  }
+
   return tools;
 }
 
