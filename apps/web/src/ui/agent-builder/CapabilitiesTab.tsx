@@ -6,6 +6,7 @@ import {
   getMicrosoftCalendarAuthUrl,
   connectCalcom,
   disconnectCalendar,
+  getPhoneNumbers,
 } from '../../lib/api.js';
 import {
   SectionCard, Toggle,
@@ -20,6 +21,14 @@ export interface CapabilitiesTabProps {
 }
 
 export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
+  // Load org's Phonbot phone numbers for loop-detection warning
+  const [ownNumbers, setOwnNumbers] = useState<string[]>([]);
+  useEffect(() => {
+    getPhoneNumbers()
+      .then(res => setOwnNumbers((res.items ?? []).map(p => (p.number ?? '').replace(/\s/g, ''))))
+      .catch(() => {});
+  }, []);
+
   return (
     <>
       {/* Call Routing Rules */}
@@ -28,6 +37,7 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
           Definiere Regeln in natürlicher Sprache — der Agent erkennt die Situation und handelt automatisch.
         </p>
         <CallRoutingEditor
+          ownNumbers={ownNumbers}
           items={config.callRoutingRules ?? []}
           onChange={(items) => onUpdate({ callRoutingRules: items })}
         />
@@ -79,7 +89,13 @@ const ROUTING_EXAMPLES = [
   'Wenn die Anfrage medizinisch dringend ist → Ticket erstellen mit Priorität Hoch',
 ];
 
-function CallRoutingEditor({ items, onChange }: { items: CallRoutingRule[]; onChange: (v: CallRoutingRule[]) => void }) {
+function CallRoutingEditor({ items, onChange, ownNumbers = [] }: { items: CallRoutingRule[]; onChange: (v: CallRoutingRule[]) => void; ownNumbers?: string[] }) {
+  // Normalize number for comparison (strip spaces, dashes)
+  const normalize = (n: string) => n.replace(/[\s\-()]/g, '');
+  const isOwnNumber = (target: string) => {
+    const t = normalize(target);
+    return t.length > 4 && ownNumbers.some(n => normalize(n) === t);
+  };
   function add() {
     onChange([...items, {
       id: crypto.randomUUID(),
@@ -161,12 +177,27 @@ function CallRoutingEditor({ items, onChange }: { items: CallRoutingRule[]; onCh
                 </div>
               </div>
               {(rule.action === 'transfer') && (
-                <input
-                  value={rule.target ?? ''}
-                  onChange={(e) => patch(i, { target: e.target.value })}
-                  placeholder="Ziel: Telefonnummer oder Abteilung (z.B. +49 170 1234567 oder 'Vertrieb')"
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 outline-none"
-                />
+                <div className="space-y-2">
+                  <input
+                    value={rule.target ?? ''}
+                    onChange={(e) => patch(i, { target: e.target.value })}
+                    placeholder="Ziel: Telefonnummer oder Abteilung (z.B. +49 170 1234567 oder 'Vertrieb')"
+                    className={`w-full rounded-lg border bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 outline-none ${
+                      rule.target && isOwnNumber(rule.target) ? 'border-amber-500/50' : 'border-white/10'
+                    }`}
+                  />
+                  {rule.target && isOwnNumber(rule.target) && (
+                    <div className="flex gap-2 items-start rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2.5">
+                      <span className="text-amber-400 text-sm shrink-0 mt-0.5">&#9888;</span>
+                      <div className="text-xs text-amber-300/90 leading-relaxed">
+                        <strong>Endlosschleifen-Gefahr:</strong> Diese Nummer ist deine Phonbot-Nummer. Wenn du eine Rufumleitung &quot;Immer weiterleiten&quot; aktiv hast, entsteht eine Endlosschleife (Anruf → Phonbot → Transfer → Rufumleitung → Phonbot → …).
+                        <span className="block mt-1.5 text-white/50">
+                          <strong>Lösung:</strong> Trage stattdessen deine <strong>Mobilnummer</strong> oder eine <strong>Direktwahl</strong> ohne Rufumleitung ein. Oder stelle die Rufumleitung auf &quot;Bei Nichtannahme&quot; statt &quot;Immer&quot;.
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
             <button onClick={() => remove(i)} className="text-white/30 hover:text-red-400 transition-colors cursor-pointer mt-1"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
