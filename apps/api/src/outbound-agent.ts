@@ -85,6 +85,7 @@ export async function migrateOutbound() {
   `);
 
   // CRM Leads table
+  // DSGVO Art. 5: leads auto-deleted after 90 days by cleanupOldLeads() in db.ts
   await pool.query(`
     CREATE TABLE IF NOT EXISTS crm_leads (
       id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -99,6 +100,7 @@ export async function migrateOutbound() {
       converted_at  TIMESTAMPTZ
     );
   `);
+  await pool.query(`COMMENT ON TABLE crm_leads IS 'DSGVO Art. 5: 90-day retention policy. Rows older than 90 days are purged daily by cleanupOldLeads().';`);
   // Composite index for the 24h phone-dedup query in /demo/callback +
   // /outbound/website-callback (E2 + T-38). Without this the dedup is
   // O(n) seq scan per request — fine at 100 leads, slow at 10k+.

@@ -38,7 +38,8 @@ export function CallLog() {
     try {
       const res = await getCalls();
       setCalls(res.items ?? []);
-    } catch {
+    } catch (err) {
+      console.error('Failed to load calls', err);
       setCalls([]);
     } finally {
       setLoading(false);
@@ -54,8 +55,8 @@ export function CallLog() {
     try {
       const call = await getCall(callId);
       setSelectedCall(call);
-    } catch {
-      // silent
+    } catch (err) {
+      console.error('Failed to load call detail', err);
     } finally {
       setDetailLoading(false);
     }
@@ -65,7 +66,7 @@ export function CallLog() {
     <div className="max-w-4xl mx-auto px-6 py-8">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-white">Call Log</h2>
+          <h2 className="text-2xl font-bold text-white">Anrufprotokoll</h2>
           <p className="text-sm text-white/50 mt-1">Alle Calls deines Agents – Transcript, Dauer, Status.</p>
         </div>
         <button
@@ -81,7 +82,7 @@ export function CallLog() {
       {selectedCall && (
         <div className="mb-6 glass rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Call Detail</h3>
+            <h3 className="text-lg font-semibold text-white">Anruf-Details</h3>
             <button onClick={() => setSelectedCall(null)} className="text-sm text-white/40 hover:text-white/70">✕ Schließen</button>
           </div>
           <div className="grid grid-cols-2 gap-3 text-sm mb-4">

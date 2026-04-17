@@ -15,6 +15,7 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
   const { login, register: authRegister } = useAuth();
   const [mode, setMode] = useState<Mode>(initialMode);
   const [error, setError] = useState<string | null>(null);
+  const [dsgvoAccepted, setDsgvoAccepted] = useState(false);
 
   // Forgot password state
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -232,6 +233,27 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
                 )}
               </div>
 
+              {mode === 'register' && (
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dsgvoAccepted}
+                    onChange={(e) => setDsgvoAccepted(e.target.checked)}
+                    className="mt-0.5 rounded border-white/20 bg-white/5 text-orange-500 focus:ring-orange-500/50"
+                  />
+                  <span className="text-xs text-white/50 leading-relaxed">
+                    Ich akzeptiere die{' '}
+                    <a href="/?page=legal" className="text-orange-400 hover:text-orange-300 underline transition-colors">
+                      Datenschutzerkl&auml;rung
+                    </a>{' '}
+                    und{' '}
+                    <a href="/?page=legal" className="text-orange-400 hover:text-orange-300 underline transition-colors">
+                      AGB
+                    </a>.
+                  </span>
+                </label>
+              )}
+
               {error && (
                 <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5">
                   ⚠️ {error}
@@ -240,7 +262,7 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
 
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || (mode === 'register' && !dsgvoAccepted)}
                 className="w-full rounded-xl px-4 py-3 font-semibold text-white text-sm
                   disabled:opacity-50 transition-all duration-300
                   hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] hover:scale-[1.02]"

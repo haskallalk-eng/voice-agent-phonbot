@@ -9,7 +9,7 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import formbody from '@fastify/formbody';
-import { migrate, pool } from './db.js';
+import { migrate, pool, cleanupOldTranscripts, cleanupOldLeads } from './db.js';
 import { connectRedis, redis } from './redis.js';
 import { registerAuth } from './auth.js';
 import { registerTickets } from './tickets.js';
@@ -90,7 +90,8 @@ await app.register(helmet, {
       scriptSrc: ["'self'", 'https://challenges.cloudflare.com'],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
-      imgSrc: ["'self'", 'data:', 'https:'],
+      // M9: narrowed from 'https:' to specific domains to reduce attack surface
+      imgSrc: ["'self'", 'data:', 'https://phonbot.de', 'https://*.retellai.com', 'https://challenges.cloudflare.com'],
       connectSrc: ["'self'", 'wss://*.retellai.com', 'https://*.retellai.com', 'wss://phonbot.de', 'https://challenges.cloudflare.com'],
       // Turnstile rendert sich in einem iframe von challenges.cloudflare.com.
       frameSrc: ["'self'", 'https://challenges.cloudflare.com'],
@@ -246,6 +247,30 @@ if (pool) {
   setInterval(cleanupStuck, 60 * 60 * 1000); // every hour
   // Run once on startup (best-effort, non-blocking)
   setTimeout(cleanupStuck, 30_000);
+
+  // DSGVO Art. 5: purge call_transcripts older than 90 days (daily)
+  const runTranscriptCleanup = async () => {
+    try {
+      const deleted = await cleanupOldTranscripts();
+      if (deleted > 0) app.log.info({ deleted }, 'DSGVO retention: purged old call_transcripts');
+    } catch (e) {
+      app.log.warn({ err: (e as Error).message }, 'DSGVO transcript cleanup failed');
+    }
+  };
+  setInterval(runTranscriptCleanup, 24 * 60 * 60 * 1000); // every 24h
+  setTimeout(runTranscriptCleanup, 60_000); // first run 60s after startup
+
+  // DSGVO Art. 5: purge crm_leads older than 90 days (daily)
+  const runLeadsCleanup = async () => {
+    try {
+      const deleted = await cleanupOldLeads();
+      if (deleted > 0) app.log.info({ deleted }, 'DSGVO retention: purged old crm_leads');
+    } catch (e) {
+      app.log.warn({ err: (e as Error).message }, 'DSGVO leads cleanup failed');
+    }
+  };
+  setInterval(runLeadsCleanup, 24 * 60 * 60 * 1000); // every 24h
+  setTimeout(runLeadsCleanup, 65_000); // first run 65s after startup (staggered from transcripts)
 }
 
 app.get('/health', async () => {

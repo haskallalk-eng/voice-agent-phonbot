@@ -597,24 +597,37 @@ export async function registerAuth(app: FastifyInstance) {
       req.log.warn({ orgId, failures, total: results.length }, 'account-delete: external cleanup had partial failures');
     }
 
-    // GDPR right-to-erasure: also delete anonymous platform-level CRM leads that
-    // match the user's email (in case they filled out a demo form before signup).
-    // Org-owned crm_leads are cascaded by the FK below.
-    const userRow = await pool.query('SELECT email FROM users WHERE id = $1', [userId]);
-    const userEmail = userRow.rows[0]?.email as string | undefined;
-    if (userEmail) {
-      await pool.query(
-        `DELETE FROM crm_leads WHERE email = $1 AND org_id IS NULL`,
-        [userEmail],
-      ).catch(() => {/* non-critical */});
+    // GDPR right-to-erasure: wrap DB deletions in a transaction to prevent
+    // partial cleanup if a query fails mid-way (M7: pool-exhaustion + consistency).
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Delete anonymous platform-level CRM leads that match the user's email
+      // (in case they filled out a demo form before signup).
+      const userRow = await client.query('SELECT email FROM users WHERE id = $1', [userId]);
+      const userEmail = userRow.rows[0]?.email as string | undefined;
+      if (userEmail) {
+        await client.query(
+          `DELETE FROM crm_leads WHERE email = $1 AND org_id IS NULL`,
+          [userEmail],
+        ).catch(() => {/* non-critical — table may not exist */});
+      }
+
+      // Deleting the org cascades to: users, tickets, agent_configs,
+      // calendar_connections, phone_numbers, password_resets, crm_leads (via FK)
+      await client.query('DELETE FROM orgs WHERE id = $1', [orgId]);
+
+      // Also hard-delete the user record in case org cascade didn't catch it
+      await client.query('DELETE FROM users WHERE id = $1', [userId]).catch(() => {/* already gone */});
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
     }
-
-    // Deleting the org cascades to: users, tickets, agent_configs,
-    // calendar_connections, phone_numbers, password_resets, crm_leads (via FK)
-    await pool.query('DELETE FROM orgs WHERE id = $1', [orgId]);
-
-    // Also hard-delete the user record in case org cascade didn't catch it
-    await pool.query('DELETE FROM users WHERE id = $1', [userId]).catch(() => {/* already gone */});
 
     return reply.send({ ok: true });
   });

@@ -125,7 +125,7 @@ export function BillingPage() {
 
       {/* Header */}
       <div>
-        <h2 className="text-2xl font-bold text-white">Billing & Plan</h2>
+        <h2 className="text-2xl font-bold text-white">Abrechnung & Plan</h2>
         <p className="text-sm text-white/50 mt-1">Verwalte dein Abonnement und deinen Verbrauch.</p>
       </div>
 

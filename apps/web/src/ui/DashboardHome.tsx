@@ -311,7 +311,7 @@ export function DashboardHome({ onNavigate }: Props) {
               Icon={IconAgent}
               label="Erfolgsrate"
               value={`${successRate}%`}
-              sub="status=ended"
+              sub="erfolgreich beendet"
             />
             <StatCard
               Icon={IconTickets}

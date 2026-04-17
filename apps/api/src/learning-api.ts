@@ -181,7 +181,7 @@ export async function registerLearningApi(app: FastifyInstance): Promise<void> {
     '/learning/apply-to-template/:templateId',
     {
       onRequest: [app.authenticate],
-      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+      config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
     },
     async (req, reply) => {
       if (!pool) return reply.status(503).send({ error: 'Database not available' });

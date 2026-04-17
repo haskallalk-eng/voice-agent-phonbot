@@ -99,9 +99,24 @@ function Dashboard() {
   useEffect(() => {
     const newHash = page === 'home' ? '' : `#${page}`;
     if (window.location.hash !== newHash) {
-      window.history.replaceState(null, '', newHash || window.location.pathname + window.location.search);
+      // Use pushState (not replaceState) so back/forward buttons create history entries
+      window.history.pushState(null, '', newHash || window.location.pathname + window.location.search);
     }
   }, [page]);
+
+  // L7: Sync page state with browser back/forward navigation
+  useEffect(() => {
+    const onPopState = () => {
+      const hash = window.location.hash.replace('#', '') as Page;
+      if (hash && VALID_PAGES.includes(hash)) {
+        setPage(hash);
+      } else {
+        setPage('home');
+      }
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null);
   const [showVerifyBanner, setShowVerifyBanner] = useState(false);
@@ -159,7 +174,7 @@ function Dashboard() {
   if (needsOnboarding === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0A0A0F]">
-        <p className="text-white/30 text-sm">Loading…</p>
+        <p className="text-white/30 text-sm">Laden…</p>
       </div>
     );
   }
@@ -308,7 +323,7 @@ function AppGate() {
   if (bootstrapping || (token && !user)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0A0A0F]">
-        <p className="text-white/30 text-sm">Loading…</p>
+        <p className="text-white/30 text-sm">Laden…</p>
       </div>
     );
   }

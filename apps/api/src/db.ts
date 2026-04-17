@@ -43,7 +43,7 @@ async function resolveHost(dbUrl: string): Promise<pg.PoolConfig> {
     user: decodeURIComponent(parsed.username),
     password: decodeURIComponent(parsed.password),
     database: parsed.pathname.slice(1),
-    ssl: { rejectUnauthorized: false, servername: hostname },
+    ssl: { rejectUnauthorized: process.env.DB_REJECT_UNAUTHORIZED === 'false' ? false : true, servername: hostname },
     max: Number(process.env.PG_POOL_MAX ?? 20),
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
@@ -310,6 +310,10 @@ export async function migrate() {
     );
   `);
 
+  // Index for JSONB lookups on agent_configs (used by org-id-cache.ts for webhook routing)
+  await pool.query(`CREATE INDEX IF NOT EXISTS agent_configs_retell_agent_id_idx ON agent_configs ((data->>'retellAgentId'));`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS agent_configs_retell_cb_agent_id_idx ON agent_configs ((data->>'retellCallbackAgentId'));`);
+
   // Migrate agent_configs to reference orgs when possible (non-breaking).
   await pool.query(`alter table agent_configs add column if not exists org_id uuid references orgs(id) on delete cascade;`);
   await pool.query(`alter table tickets add column if not exists org_id uuid references orgs(id) on delete cascade;`);
@@ -518,6 +522,9 @@ export async function migrate() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_training_industry ON training_examples(industry, quality_label);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_training_org ON training_examples(org_id);`);
 
+  // ── DSGVO Art. 5 retention comment on call_transcripts ─────────────────
+  await pool.query(`COMMENT ON TABLE call_transcripts IS 'DSGVO Art. 5: 90-day retention policy. Rows older than 90 days are purged daily by cleanupOldTranscripts().';`);
+
   // Retrofit FK on call_transcripts (added org_id originally without cascade)
   await pool.query(`
     DO $$
@@ -535,4 +542,28 @@ export async function migrate() {
       END IF;
     END $$;
   `);
+}
+
+/**
+ * DSGVO Art. 5 — Data minimisation: delete call transcripts older than 90 days.
+ * Called on startup and then every 24 hours via setInterval in index.ts.
+ */
+export async function cleanupOldTranscripts(): Promise<number> {
+  if (!pool) return 0;
+  const res = await pool.query(
+    `DELETE FROM call_transcripts WHERE created_at < NOW() - INTERVAL '90 days'`,
+  );
+  return (res as { rowCount?: number }).rowCount ?? 0;
+}
+
+/**
+ * DSGVO Art. 5 — Data minimisation: delete CRM leads older than 90 days.
+ * Called on startup and then every 24 hours via setInterval in index.ts.
+ */
+export async function cleanupOldLeads(): Promise<number> {
+  if (!pool) return 0;
+  const res = await pool.query(
+    `DELETE FROM crm_leads WHERE created_at < NOW() - INTERVAL '90 days'`,
+  );
+  return (res as { rowCount?: number }).rowCount ?? 0;
 }

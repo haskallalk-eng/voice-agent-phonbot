@@ -162,14 +162,20 @@ function initFaqAccordion() {
     const icon = item.querySelector('.faq-icon');
     if (!btn || !answer) return;
 
+    // L6: set initial aria-expanded state for accessibility
+    btn.setAttribute('aria-expanded', 'false');
+    answer.setAttribute('role', 'region');
+
     btn.addEventListener('click', () => {
       const isOpen = answer.style.display !== 'none';
       // Close all
       items.forEach(other => {
         const a = other.querySelector('.faq-a');
         const ic = other.querySelector('.faq-icon');
+        const otherBtn = other.querySelector('.faq-q');
         if (a) a.style.display = 'none';
         if (ic) ic.style.transform = 'none';
+        if (otherBtn) otherBtn.setAttribute('aria-expanded', 'false');
         other.style.background = '';
         other.style.borderColor = '';
       });
@@ -177,6 +183,7 @@ function initFaqAccordion() {
       if (!isOpen) {
         answer.style.display = '';
         if (icon) icon.style.transform = 'rotate(45deg)';
+        btn.setAttribute('aria-expanded', 'true');
         item.style.background = 'rgba(249,115,22,0.05)';
         item.style.borderColor = 'rgba(249,115,22,0.2)';
       }

@@ -112,11 +112,13 @@ async function syncTwilioNumbersToDb() {
     const client = getTwilioClient();
     const twilioNumbers = await client.incomingPhoneNumbers.list({ limit: 100 });
 
-    // Step 1: Sync missing numbers into DB
+    // Step 1: Sync missing numbers into DB (batch check to avoid N+1 queries)
+    const existingRes = await pool.query('SELECT number FROM phone_numbers');
+    const existingNumbers = new Set(existingRes.rows.map((r: { number: string }) => r.number));
+
     let synced = 0;
     for (const num of twilioNumbers) {
-      const existing = await pool.query(`SELECT id FROM phone_numbers WHERE number = $1`, [num.phoneNumber]);
-      if (existing.rowCount && existing.rowCount > 0) continue;
+      if (existingNumbers.has(num.phoneNumber)) continue;
 
       const pretty = num.phoneNumber.replace(/^\+49/, '0').replace(/(\d{3})(\d{3})(\d+)/, '$1 $2 $3');
       await pool.query(

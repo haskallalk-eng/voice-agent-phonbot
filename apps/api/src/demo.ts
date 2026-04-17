@@ -301,6 +301,7 @@ export async function registerDemo(app: FastifyInstance) {
     app.log.info({ leadId, name, email, phone }, 'New demo callback lead');
 
     // Persist lead in CRM database (single source of truth; org_id=NULL = platform-anonymous)
+    // DSGVO Art. 5: leads are auto-deleted after 90 days by cleanupOldLeads() in db.ts
     if (pool) {
       pool.query(
         `INSERT INTO crm_leads (name, email, phone, source, status) VALUES ($1, $2, $3, 'demo-callback', 'new')`,

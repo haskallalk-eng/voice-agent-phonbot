@@ -27,6 +27,7 @@ export function FaqSection() {
           >
             <button
               onClick={() => setOpen(open === i ? null : i)}
+              aria-expanded={open === i}
               className="w-full flex items-center justify-between px-6 py-4 text-left group"
             >
               <span className="text-sm font-semibold text-white/80 group-hover:text-white transition-colors pr-4">{item.q}</span>
