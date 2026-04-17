@@ -565,6 +565,10 @@ export function getVoices() {
   return request<{ voices: Voice[] }>('/voices');
 }
 
+export function getRecommendedVoices(language: string) {
+  return request<{ voices: Array<{ id: string; name: string; gender: string; provider: string; isDefault?: boolean }> }>(`/voices/recommended?language=${encodeURIComponent(language)}`);
+}
+
 export async function cloneVoice(name: string, audioFile: File, provider = 'cartesia'): Promise<Voice> {
   const form = new FormData();
   form.append('name', name);

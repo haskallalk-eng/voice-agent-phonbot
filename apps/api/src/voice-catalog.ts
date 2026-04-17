@@ -30,30 +30,42 @@ export interface CuratedVoice {
 export const VOICE_CATALOG: Record<string, CuratedVoice[]> = {
   de: [
     { id: DEFAULT_VOICE_ID, name: 'Chipy (Standard)', gender: 'male', provider: 'cartesia', isDefault: true },
-    { id: '11labs-Adrian', name: 'Adrian', gender: 'male', provider: 'elevenlabs' },
-    { id: '11labs-Valentina', name: 'Valentina', gender: 'female', provider: 'elevenlabs' },
+    { id: 'cartesia-Eva', name: 'Eva', gender: 'female', provider: 'cartesia' },
+    { id: 'cartesia-Lina', name: 'Lina', gender: 'female', provider: 'cartesia' },
+    { id: 'minimax-Max', name: 'Max', gender: 'male', provider: 'minimax' },
+    { id: 'openai-Carola', name: 'Carola', gender: 'female', provider: 'openai' },
+    { id: '11labs-Carola', name: 'Carola (natürlich)', gender: 'female', provider: 'elevenlabs' },
   ],
   en: [
-    { id: 'retell-Marissa', name: 'Marissa', gender: 'female', provider: 'retell', isDefault: true },
-    { id: 'retell-Josh', name: 'Josh', gender: 'male', provider: 'retell' },
+    { id: 'cartesia-Cleo', name: 'Cleo', gender: 'female', provider: 'cartesia', isDefault: true },
+    { id: 'cartesia-Adam', name: 'Adam', gender: 'male', provider: 'cartesia' },
+    { id: 'openai-Nova', name: 'Nova', gender: 'female', provider: 'openai' },
+    { id: '11labs-Marissa', name: 'Marissa', gender: 'female', provider: 'elevenlabs' },
+    { id: '11labs-Anthony', name: 'Anthony', gender: 'male', provider: 'elevenlabs' },
   ],
   fr: [
-    { id: 'retell-Sophie', name: 'Sophie', gender: 'female', provider: 'retell', isDefault: true },
+    { id: 'cartesia-Emma', name: 'Emma', gender: 'female', provider: 'cartesia', isDefault: true },
+    { id: 'cartesia-Pierre', name: 'Pierre', gender: 'male', provider: 'cartesia' },
+    { id: 'minimax-Louis', name: 'Louis', gender: 'male', provider: 'minimax' },
+    { id: 'minimax-Camille', name: 'Camille', gender: 'female', provider: 'minimax' },
   ],
   es: [
-    { id: 'retell-Carlos', name: 'Carlos', gender: 'male', provider: 'retell', isDefault: true },
+    { id: 'cartesia-Isabel', name: 'Isabel', gender: 'female', provider: 'cartesia', isDefault: true },
+    { id: 'cartesia-Manuel', name: 'Manuel', gender: 'male', provider: 'cartesia' },
+    { id: 'cartesia-Elena', name: 'Elena', gender: 'female', provider: 'cartesia' },
+    { id: '11labs-Santiago', name: 'Santiago', gender: 'male', provider: 'elevenlabs' },
   ],
   it: [
-    { id: 'retell-Giulia', name: 'Giulia', gender: 'female', provider: 'retell', isDefault: true },
+    { id: 'cartesia-Eva', name: 'Eva', gender: 'female', provider: 'cartesia', isDefault: true },
   ],
   tr: [
-    { id: 'retell-Elif', name: 'Elif', gender: 'female', provider: 'retell', isDefault: true },
+    { id: 'minimax-Max', name: 'Max', gender: 'male', provider: 'minimax', isDefault: true },
   ],
   pl: [
-    { id: 'retell-Anna', name: 'Anna', gender: 'female', provider: 'retell', isDefault: true },
+    { id: 'cartesia-Lina', name: 'Lina', gender: 'female', provider: 'cartesia', isDefault: true },
   ],
   nl: [
-    { id: 'retell-Emma', name: 'Emma', gender: 'female', provider: 'retell', isDefault: true },
+    { id: 'cartesia-Emma', name: 'Emma', gender: 'female', provider: 'cartesia', isDefault: true },
   ],
 };
 

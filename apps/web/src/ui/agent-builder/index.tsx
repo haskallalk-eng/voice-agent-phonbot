@@ -8,6 +8,7 @@ import {
   getAgentPreview,
   getBillingStatus,
   getVoices,
+  getRecommendedVoices,
   getInsights,
   getAccessToken,
   type AgentConfig,
@@ -62,17 +63,39 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
     return JSON.stringify(config) !== savedConfigRef.current;
   }, [config]);
 
-  const loadVoices = useCallback(async () => {
+  const loadVoices = useCallback(async (language?: string) => {
     setVoicesLoading(true);
     try {
-      const res = await getVoices();
-      setVoices(res.voices ?? []);
+      const lang = language ?? config?.language ?? 'de';
+      // Try curated voices first, fall back to full list
+      const rec = await getRecommendedVoices(lang);
+      if (rec.voices?.length) {
+        // Map curated voices to the Voice shape the UI expects
+        const mapped: Voice[] = rec.voices.map(v => ({
+          voice_id: v.id,
+          voice_name: v.name,
+          voice_type: 'built_in' as const,
+          provider: v.provider,
+          gender: v.gender,
+        }));
+        // Also load cloned voices (they work for any language)
+        try {
+          const all = await getVoices();
+          const cloned = (all.voices ?? []).filter(v => v.voice_type === 'cloned');
+          setVoices([...mapped, ...cloned]);
+        } catch {
+          setVoices(mapped);
+        }
+      } else {
+        const res = await getVoices();
+        setVoices(res.voices ?? []);
+      }
     } catch {
-      // Non-fatal -- voice list stays empty, user can still type voice ID
+      // Non-fatal
     } finally {
       setVoicesLoading(false);
     }
-  }, []);
+  }, [config?.language]);
 
   useEffect(() => {
     void loadAllAgents(); void loadConfig(); void loadVoices();
@@ -231,6 +254,16 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
 
   function update(patch: Partial<AgentConfig>) {
     setConfig((c) => (c ? { ...c, ...patch } : c));
+    // When language changes, reload voice list for the new language
+    // and auto-select the default voice for that language.
+    if (patch.language && patch.language !== config?.language) {
+      void loadVoices(patch.language).then(() => {
+        getRecommendedVoices(patch.language!).then(rec => {
+          const def = rec.voices?.find(v => v.isDefault);
+          if (def) setConfig(c => c ? { ...c, voice: def.id } : c);
+        }).catch(() => {});
+      });
+    }
   }
 
   function togglePromptSection(sectionId: string) {
