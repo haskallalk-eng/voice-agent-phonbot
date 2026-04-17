@@ -63,14 +63,14 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
     return JSON.stringify(config) !== savedConfigRef.current;
   }, [config]);
 
+  // Stable ref — no config dependency so the init useEffect doesn't re-run on language change.
+  // Language is passed as parameter when switching.
   const loadVoices = useCallback(async (language?: string) => {
     setVoicesLoading(true);
     try {
-      const lang = language ?? config?.language ?? 'de';
-      // Try curated voices first, fall back to full list
+      const lang = language ?? 'de';
       const rec = await getRecommendedVoices(lang);
       if (rec.voices?.length) {
-        // Map curated voices to the Voice shape the UI expects
         const mapped: Voice[] = rec.voices.map(v => ({
           voice_id: v.id,
           voice_name: v.name,
@@ -78,7 +78,6 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
           provider: v.provider,
           gender: v.gender,
         }));
-        // Also load cloned voices (they work for any language)
         try {
           const all = await getVoices();
           const cloned = (all.voices ?? []).filter(v => v.voice_type === 'cloned');
@@ -95,7 +94,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
     } finally {
       setVoicesLoading(false);
     }
-  }, [config?.language]);
+  }, []);
 
   useEffect(() => {
     void loadAllAgents(); void loadConfig(); void loadVoices();
@@ -254,15 +253,16 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
 
   function update(patch: Partial<AgentConfig>) {
     setConfig((c) => (c ? { ...c, ...patch } : c));
-    // When language changes, reload voice list for the new language
-    // and auto-select the default voice for that language.
+    // When language changes, reload voice list and auto-select the default voice.
     if (patch.language && patch.language !== config?.language) {
-      void loadVoices(patch.language).then(() => {
-        getRecommendedVoices(patch.language!).then(rec => {
+      void (async () => {
+        try {
+          const rec = await getRecommendedVoices(patch.language!);
           const def = rec.voices?.find(v => v.isDefault);
           if (def) setConfig(c => c ? { ...c, voice: def.id } : c);
-        }).catch(() => {});
-      });
+          await loadVoices(patch.language);
+        } catch { /* non-fatal */ }
+      })();
     }
   }
 
