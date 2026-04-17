@@ -54,7 +54,7 @@ h1{font-size:clamp(2.25rem,5vw,3.75rem);font-weight:800;letter-spacing:-.02em;li
 h1 .accent{background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;background-clip:text;color:transparent}
 .subtitle{font-size:1.125rem;color:rgba(255,255,255,.6);max-width:640px;margin-bottom:2.5rem}
 .cta-row{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap}
-.hero-text .cta-row{justify-content:flex-start}
+.hero-text .cta-row{justify-content:center}
 @media (max-width:768px){.hero-grid{grid-template-columns:1fr;text-align:center}.hero-mascot{order:-1}.hero-text{text-align:center}.hero-text .cta-row{justify-content:center}.subtitle{margin-left:auto;margin-right:auto}}
 section{padding:5rem 0}
 h2{font-size:clamp(1.5rem,3.5vw,2.25rem);font-weight:700;margin-bottom:1.5rem;letter-spacing:-.015em}
@@ -91,8 +91,50 @@ footer a:hover{color:#fff}
 .site-nav-cta .nav-link{color:rgba(255,255,255,.6);font-size:.875rem;font-weight:500;transition:color .2s}
 .site-nav-cta .nav-link:hover{color:#fff}
 .mobile-toggle{display:none;background:none;border:none;color:#fff;cursor:pointer;padding:.5rem;margin-left:auto;flex-direction:column;gap:5px;border-radius:.5rem;transition:background .2s}.mobile-toggle:hover{background:rgba(255,255,255,.05)}.hamburger-line{display:block;width:20px;height:2px;background:rgba(255,255,255,.6);border-radius:1px;transition:all .2s}
-@media (max-width:840px){.site-nav-links,.site-nav-cta .nav-link{display:none}.mobile-toggle{display:flex}body.nav-open .site-nav-links{display:flex;flex-direction:column;position:absolute;top:100%;left:0;right:0;background:rgba(10,10,15,.98);border-bottom:1px solid rgba(255,255,255,.08);padding:1rem 1.5rem;gap:.25rem;align-items:stretch;margin:0}body.nav-open .site-nav-links a,body.nav-open .dropdown-toggle{padding:.75rem 0;border-bottom:1px solid rgba(255,255,255,.05)}body.nav-open .dropdown-menu{position:static;transform:none;opacity:1;pointer-events:auto;background:transparent;border:none;padding:.25rem 0 .5rem 1rem;min-width:auto;box-shadow:none}}</style>
+@media (max-width:840px){.site-nav-links,.site-nav-cta .nav-link{display:none}.mobile-toggle{display:flex}body.nav-open .site-nav-links{display:flex;flex-direction:column;position:absolute;top:100%;left:0;right:0;background:rgba(10,10,15,.98);border-bottom:1px solid rgba(255,255,255,.08);padding:1rem 1.5rem;gap:.25rem;align-items:stretch;margin:0}body.nav-open .site-nav-links a,body.nav-open .dropdown-toggle{padding:.75rem 0;border-bottom:1px solid rgba(255,255,255,.05)}body.nav-open .dropdown-menu{position:static;transform:none;opacity:1;pointer-events:auto;background:transparent;border:none;padding:.25rem 0 .5rem 1rem;min-width:auto;box-shadow:none}}
+.features-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1.25rem;margin-top:2rem}
+@media(max-width:640px){.features-grid{grid-template-columns:1fr}}
+#demo-section{overflow:hidden;transition:all .3s}
+.demo-card{max-width:480px;margin:0 auto;padding:2.5rem;border-radius:1.5rem;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(16px);text-align:center}
+.demo-card h3{font-size:1.25rem;margin-bottom:.5rem}
+.chipy-talking{animation:chipy-pulse 1s ease-in-out infinite}
+@keyframes chipy-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+.btn-stop{display:inline-flex;align-items:center;gap:.5rem;padding:.75rem 2rem;border-radius:999px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#FCA5A5;font-size:.875rem;font-weight:500;cursor:pointer;transition:all .2s;font-family:inherit}
+.btn-stop:hover{background:rgba(239,68,68,.25);color:#fff}
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;animation:breathe 2s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:.4}50%{opacity:1}}
+.calc-wrap{position:relative;border-radius:1.5rem;overflow:hidden;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07)}
+.calc-grid{display:grid;grid-template-columns:1fr 1fr;position:relative}
+@media(max-width:768px){.calc-grid{grid-template-columns:1fr}}
+.calc-sliders{padding:2rem 2.5rem;border-right:1px solid rgba(255,255,255,.05)}
+@media(max-width:768px){.calc-sliders{border-right:none;border-bottom:1px solid rgba(255,255,255,.05)}}
+.calc-results{padding:2rem 2.5rem;display:flex;flex-direction:column;justify-content:space-between}
+.slider-row{margin-bottom:1.75rem}
+.slider-label{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.75rem}
+.slider-label span:first-child{font-size:.8125rem;color:rgba(255,255,255,.45)}
+.slider-label span:last-child{font-size:1.0625rem;font-weight:700;color:#fff;font-variant-numeric:tabular-nums}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:3px;border-radius:2px;outline:none;cursor:pointer;background:linear-gradient(90deg,#F97316 0%,#06B6D4 var(--pct,50%),rgba(255,255,255,.06) var(--pct,50%))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:rgba(255,255,255,.9);box-shadow:0 0 12px rgba(249,115,22,.4),0 1px 3px rgba(0,0,0,.4);cursor:pointer;transition:transform .15s}
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.25)}
+input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:rgba(255,255,255,.9);box-shadow:0 0 12px rgba(249,115,22,.4);border:none;cursor:pointer}
+.calc-hero-num{font-size:clamp(2.5rem,8vw,3.5rem);font-weight:800;line-height:.9;letter-spacing:-.03em;margin-bottom:.25rem}
+.calc-breakdown{border-radius:1rem;overflow:hidden;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04)}
+.calc-row{display:flex;justify-content:space-between;align-items:center;padding:.75rem 1.25rem;border-bottom:1px solid rgba(255,255,255,.03)}
+.calc-row:last-child{border-bottom:none}
+.calc-row .label{font-size:.8125rem;color:rgba(255,255,255,.35)}
+.calc-row .value{font-size:.9rem;font-weight:600;color:rgba(255,255,255,.8);font-variant-numeric:tabular-nums}
+.faq-accordion{max-width:48rem;margin:0 auto}
+.faq-accordion .faq-item{border-radius:1rem;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.02);overflow:hidden;margin-bottom:.75rem;transition:all .2s}
+.faq-accordion .faq-q{width:100%;display:flex;align-items:center;justify-content:space-between;padding:1rem 1.5rem;background:none;border:none;cursor:pointer;text-align:left;font-family:inherit}
+.faq-accordion .faq-q span:first-child{font-size:.875rem;font-weight:600;color:rgba(255,255,255,.8);padding-right:1rem;transition:color .2s}
+.faq-accordion .faq-q:hover span:first-child{color:#fff}
+.faq-icon{flex-shrink:0;width:1.5rem;height:1.5rem;border-radius:50%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.4);font-size:1.125rem;transition:all .2s}
+.faq-accordion .faq-a{padding:0 1.5rem 1.25rem;font-size:.875rem;color:rgba(255,255,255,.55);line-height:1.6}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
 <script defer src="/nav.js"></script>
+<script type="module" src="/industry.js"></script>
 </head>
 <body>
 <nav class="site-nav" role="navigation" aria-label="Hauptnavigation">
@@ -124,37 +166,60 @@ footer a:hover{color:#fff}
   </div>
 </nav>
 
-<div class="container">
-</div>
 
-<header class="hero">
+<header class="hero" style="text-align:center">
   <div class="hero-glow"></div>
   <div class="container">
-    <div class="hero-grid">
-      <div class="hero-text">
-        <span class="hero-eyebrow">&#128295; KI-Telefonassistent für Handwerk</span>
-        <h1>Du bist auf der <span class="accent">Baustelle</span> — Phonbot nimmt den Anruf an.</h1>
-        <p class="subtitle">Phonbot nimmt Anrufe an während du auf der Baustelle bist, unterscheidet Notdienst von regulären Terminen und erstellt strukturierte Tickets mit Kundendaten und Priorität.</p>
-        <div class="cta-row">
-          <a href="/?demo=tradesperson#demo" class="btn btn-demo">&#9654; Chipy live hören</a>
-          <a href="/" class="btn btn-primary">Kostenlos testen</a>
-        </div>
-        <div class="demo-hint"><svg viewBox="0 0 24 24" fill="none" width="16" height="16" style="vertical-align:middle;margin-right:4px"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" stroke="#F97316" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="#F97316" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="19" x2="12" y2="23" stroke="#F97316" stroke-width="1.8" stroke-linecap="round"/></svg> Klick &bdquo;live hören&ldquo; — Phonbot spricht mit dir im Browser (Mikrofon nötig)</div>
+    <span class="hero-eyebrow">&#128295; KI-Telefonassistent für Handwerk</span>
+    <h1>Du bist auf der <span class="accent">Baustelle</span> — Phonbot nimmt den Anruf an.</h1>
+    <p class="subtitle" style="margin-left:auto;margin-right:auto">Phonbot nimmt Anrufe an während du auf der Baustelle bist, unterscheidet Notdienst von regulären Terminen und erstellt strukturierte Tickets mit Kundendaten und Priorität.</p>
+    <div class="cta-row" style="justify-content:center">
+      <button data-demo-toggle class="btn btn-demo" style="cursor:pointer">&#9654; Chipy live hören</button>
+      <a href="/?page=register" class="btn btn-primary">Kostenlos testen</a>
+    </div>
+    <div class="demo-hint" style="margin-top:1rem"><svg viewBox="0 0 24 24" fill="none" width="16" height="16" style="vertical-align:middle;margin-right:4px"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" stroke="#F97316" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="#F97316" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="19" x2="12" y2="23" stroke="#F97316" stroke-width="1.8" stroke-linecap="round"/></svg> Klick „live hören“ — Phonbot spricht mit dir im Browser (Mikrofon nötig)</div>
+  </div>
+</header>
+
+
+<section id="demo-section" style="display:none;padding:2rem 0 3rem">
+  <div class="container">
+    <div id="demo-widget">
+      <div id="demo-idle" class="demo-card">
+        <div style="margin-bottom:1rem"><svg viewBox="0 8 100 92" fill="none" xmlns="http://www.w3.org/2000/svg" width="80" height="80"><defs><radialGradient id="hd" cx="50%" cy="40%" r="65%"><stop offset="0%" stop-color="#F5C842"/><stop offset="100%" stop-color="#D49B12"/></radialGradient><radialGradient id="cd" cx="50%" cy="40%" r="70%"><stop offset="0%" stop-color="#F7D04A"/><stop offset="100%" stop-color="#D9A015"/></radialGradient><radialGradient id="ed" cx="30%" cy="25%" r="75%"><stop offset="0%" stop-color="#FCD34D"/><stop offset="100%" stop-color="#B45309"/></radialGradient></defs><circle cx="28" cy="22" r="9" fill="#D49B12"/><circle cx="28" cy="22" r="5.5" fill="#E8B32D"/><circle cx="72" cy="22" r="9" fill="#D49B12"/><circle cx="72" cy="22" r="5.5" fill="#E8B32D"/><circle cx="50" cy="55" r="38" fill="url(#hd)"/><ellipse cx="14" cy="62" rx="12" ry="11" fill="url(#cd)"/><ellipse cx="86" cy="62" rx="12" ry="11" fill="url(#cd)"/><circle cx="36" cy="50" r="13" fill="white"/><circle cx="36" cy="50" r="10" fill="url(#ed)"/><ellipse cx="36" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="40" cy="46" r="3" fill="white"/><circle cx="64" cy="50" r="13" fill="white"/><circle cx="64" cy="50" r="10" fill="url(#ed)"/><ellipse cx="64" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="68" cy="46" r="3" fill="white"/><ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309"/><path d="M44 68 Q50 73 56 68" stroke="#8B4513" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg></div>
+        <h3>Chipy live hören</h3>
+        <p style="color:rgba(255,255,255,.5);font-size:.875rem;margin-bottom:1.5rem">Klick auf Start — Chipy spricht mit dir im Browser. Mikrofon nötig.</p>
+        <button data-demo-start="tradesperson" class="btn btn-primary" style="width:100%;padding:.875rem;cursor:pointer">&#9654; Demo starten</button>
       </div>
-      <div class="hero-mascot">
-        <div class="mascot-wrapper">
-          <div class="speech-bubble">Ich nehme Aufträge an, du arbeitest auf der Baustelle weiter!</div>
-          <svg viewBox="0 8 100 92" fill="none" xmlns="http://www.w3.org/2000/svg" width="120" height="120" style="margin-top:48px"><defs><radialGradient id="hd" cx="50%" cy="40%" r="65%"><stop offset="0%" stop-color="#F5C842"/><stop offset="100%" stop-color="#D49B12"/></radialGradient><radialGradient id="cd" cx="50%" cy="40%" r="70%"><stop offset="0%" stop-color="#F7D04A"/><stop offset="100%" stop-color="#D9A015"/></radialGradient><radialGradient id="ed" cx="30%" cy="25%" r="75%"><stop offset="0%" stop-color="#FCD34D"/><stop offset="100%" stop-color="#B45309"/></radialGradient></defs><circle cx="28" cy="22" r="9" fill="#D49B12"/><circle cx="28" cy="22" r="5.5" fill="#E8B32D"/><circle cx="72" cy="22" r="9" fill="#D49B12"/><circle cx="72" cy="22" r="5.5" fill="#E8B32D"/><circle cx="50" cy="55" r="38" fill="url(#hd)"/><ellipse cx="14" cy="62" rx="12" ry="11" fill="url(#cd)"/><ellipse cx="86" cy="62" rx="12" ry="11" fill="url(#cd)"/><circle cx="36" cy="50" r="13" fill="white"/><circle cx="36" cy="50" r="10" fill="url(#ed)"/><ellipse cx="36" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="40" cy="46" r="3" fill="white"/><circle cx="64" cy="50" r="13" fill="white"/><circle cx="64" cy="50" r="10" fill="url(#ed)"/><ellipse cx="64" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="68" cy="46" r="3" fill="white"/><ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309"/><path d="M44 68 Q50 73 56 68" stroke="#8B4513" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
-        </div>
+      <div id="demo-connecting" class="demo-card" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:center;gap:.75rem;color:#FDBA74;margin-bottom:1rem"><span style="width:24px;height:24px;border:2px solid #F97316;border-top-color:transparent;border-radius:50%;display:inline-block;animation:spin .8s linear infinite"></span> <span style="font-weight:500">Verbinde…</span></div>
+        <p style="color:rgba(255,255,255,.5);font-size:.85rem">Mikrofon wird aktiviert</p>
+      </div>
+      <div id="demo-active" class="demo-card" style="display:none">
+        <div id="demo-chipy" style="margin-bottom:1rem;transition:transform .3s"><svg viewBox="0 8 100 92" fill="none" xmlns="http://www.w3.org/2000/svg" width="80" height="80"><defs><radialGradient id="hd" cx="50%" cy="40%" r="65%"><stop offset="0%" stop-color="#F5C842"/><stop offset="100%" stop-color="#D49B12"/></radialGradient><radialGradient id="cd" cx="50%" cy="40%" r="70%"><stop offset="0%" stop-color="#F7D04A"/><stop offset="100%" stop-color="#D9A015"/></radialGradient><radialGradient id="ed" cx="30%" cy="25%" r="75%"><stop offset="0%" stop-color="#FCD34D"/><stop offset="100%" stop-color="#B45309"/></radialGradient></defs><circle cx="28" cy="22" r="9" fill="#D49B12"/><circle cx="28" cy="22" r="5.5" fill="#E8B32D"/><circle cx="72" cy="22" r="9" fill="#D49B12"/><circle cx="72" cy="22" r="5.5" fill="#E8B32D"/><circle cx="50" cy="55" r="38" fill="url(#hd)"/><ellipse cx="14" cy="62" rx="12" ry="11" fill="url(#cd)"/><ellipse cx="86" cy="62" rx="12" ry="11" fill="url(#cd)"/><circle cx="36" cy="50" r="13" fill="white"/><circle cx="36" cy="50" r="10" fill="url(#ed)"/><ellipse cx="36" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="40" cy="46" r="3" fill="white"/><circle cx="64" cy="50" r="13" fill="white"/><circle cx="64" cy="50" r="10" fill="url(#ed)"/><ellipse cx="64" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="68" cy="46" r="3" fill="white"/><ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309"/><path d="M44 68 Q50 73 56 68" stroke="#8B4513" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg></div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:.5rem;margin-bottom:1.5rem"><span class="status-dot" style="background:#F97316"></span> <span id="demo-status" style="font-size:.875rem;font-weight:500;color:#FDBA74">Warte auf dich…</span></div>
+        <button data-demo-stop class="btn-stop">&#128222; Auflegen</button>
+      </div>
+      <div id="demo-ended" class="demo-card" style="display:none">
+        <div style="margin-bottom:1rem"><svg viewBox="0 8 100 92" fill="none" xmlns="http://www.w3.org/2000/svg" width="80" height="80"><defs><radialGradient id="hd" cx="50%" cy="40%" r="65%"><stop offset="0%" stop-color="#F5C842"/><stop offset="100%" stop-color="#D49B12"/></radialGradient><radialGradient id="cd" cx="50%" cy="40%" r="70%"><stop offset="0%" stop-color="#F7D04A"/><stop offset="100%" stop-color="#D9A015"/></radialGradient><radialGradient id="ed" cx="30%" cy="25%" r="75%"><stop offset="0%" stop-color="#FCD34D"/><stop offset="100%" stop-color="#B45309"/></radialGradient></defs><circle cx="28" cy="22" r="9" fill="#D49B12"/><circle cx="28" cy="22" r="5.5" fill="#E8B32D"/><circle cx="72" cy="22" r="9" fill="#D49B12"/><circle cx="72" cy="22" r="5.5" fill="#E8B32D"/><circle cx="50" cy="55" r="38" fill="url(#hd)"/><ellipse cx="14" cy="62" rx="12" ry="11" fill="url(#cd)"/><ellipse cx="86" cy="62" rx="12" ry="11" fill="url(#cd)"/><circle cx="36" cy="50" r="13" fill="white"/><circle cx="36" cy="50" r="10" fill="url(#ed)"/><ellipse cx="36" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="40" cy="46" r="3" fill="white"/><circle cx="64" cy="50" r="13" fill="white"/><circle cx="64" cy="50" r="10" fill="url(#ed)"/><ellipse cx="64" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="68" cy="46" r="3" fill="white"/><ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309"/><path d="M44 68 Q50 73 56 68" stroke="#8B4513" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg></div>
+        <h3 style="font-size:1.25rem;font-weight:700;margin-bottom:.5rem">Wie war dein Agent?</h3>
+        <p style="color:rgba(255,255,255,.5);font-size:.875rem;margin-bottom:1.5rem">Erstelle jetzt deinen eigenen Agenten — in unter 2 Minuten.</p>
+        <a href="/?page=register" class="btn btn-primary" style="width:100%;display:block;text-align:center;padding:.875rem;margin-bottom:.75rem">Jetzt eigenen Agenten erstellen &rarr;</a>
+        <button data-demo-reset style="background:none;border:none;color:rgba(255,255,255,.4);font-size:.85rem;cursor:pointer;font-family:inherit">Nochmal testen</button>
+      </div>
+      <div id="demo-error" class="demo-card" style="display:none">
+        <div style="font-size:2rem;color:#FCA5A5;margin-bottom:.75rem">&times;</div>
+        <p id="demo-error-msg" style="color:#FCA5A5;font-size:.875rem;margin-bottom:1.5rem"></p>
+        <button data-demo-reset style="background:none;border:none;color:rgba(255,255,255,.5);font-size:.85rem;cursor:pointer;text-decoration:underline;font-family:inherit">Zurück</button>
       </div>
     </div>
   </div>
-</header>
+</section>
 
 <section>
   <div class="container">
     <h2>Typische Anrufe — automatisch bearbeitet</h2>
-    <div class="features">
+    <div class="features-grid">
       <div class="feature"><div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></div><h3>Auftragsannahme</h3><p>„Ich hab einen Wasserschaden" — Phonbot nimmt Adresse, Art des Problems und Rückrufnummer auf.</p></div>
         <div class="feature"><div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><h3>Notdienst-Priorisierung</h3><p>Notfälle werden als Priorität "hoch" geflaggt und sofort per Push-Nachricht an dich weitergeleitet.</p></div>
         <div class="feature"><div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg></div><h3>Kostenvoranschläge</h3><p>Preisauskunft zu Standard-Leistungen sofort, für komplexe Angebote wird ein Termin vereinbart.</p></div>
@@ -163,56 +228,80 @@ footer a:hover{color:#fff}
   </div>
 </section>
 
-<section>
+
+
+
+<section style="padding:5rem 0">
   <div class="container">
-    <h2>So klingt Phonbot am Telefon</h2>
-    <div class="dialogue">
-      <p class="user">📞 Kunde: „Meine Heizung geht nicht mehr, es ist Samstag!"</p>
-      <p class="bot">Phonbot: „Oh je, das klingt dringend. Ich nehme deinen Notdienst-Fall sofort auf. Deine Adresse bitte?"</p>
-      <p class="user">📞 Kunde: „Hauptstraße 12 in Berlin."</p>
-      <p class="bot">Phonbot: „Danke. Wie heißt du und unter welcher Nummer kann der Techniker dich zurückrufen?"</p>
-      <p class="user">📞 Kunde: „Thomas Schmidt, 0176-1234567."</p>
-      <p class="bot">Phonbot: „Notdienst-Ticket ist erstellt mit Priorität hoch. Du wirst in ~15 Min zurückgerufen."</p>
+    <div style="text-align:center;margin-bottom:3rem">
+      <p style="font-size:.6875rem;font-weight:600;letter-spacing:.2em;color:rgba(249,115,22,.6);text-transform:uppercase;margin-bottom:1rem">ROI-Rechner</p>
+      <h2 style="margin-bottom:0">Lohnt sich <span class="accent">Phonbot</span> für dich?</h2>
     </div>
-    <p style="text-align:center;margin-top:1.5rem;font-size:.9rem;color:rgba(255,255,255,.5)">→ Ticket mit Priorität=high im Dashboard · Push an Handwerker · Dauer: 34 Sek</p>
-    <div style="text-align:center;margin-top:1.5rem">
-      <a href="/?demo=tradesperson#demo" class="btn btn-demo">▶ Chipy live am Telefon hören</a>
+    <div id="savings-calc" class="calc-wrap">
+      <div class="calc-grid">
+        <div class="calc-sliders">
+          <div class="slider-row"><div class="slider-label"><span>Anrufe / Tag</span><span id="val-anrufe">12</span></div><input type="range" id="calc-anrufe" min="1" max="100" step="1" value="12"></div>
+          <div class="slider-row"><div class="slider-label"><span>Gesprächsdauer</span><span id="val-dauer">4 min</span></div><input type="range" id="calc-dauer" min="1" max="15" step="1" value="4"></div>
+          <div class="slider-row"><div class="slider-label"><span>Stundenlohn</span><span id="val-lohn">28 €</span></div><input type="range" id="calc-lohn" min="10" max="80" step="1" value="28"></div>
+          <div class="slider-row"><div class="slider-label"><span>Nacharbeit</span><span id="val-nacharbeit">5 min</span></div><input type="range" id="calc-nacharbeit" min="0" max="30" step="1" value="5"></div>
+          <div class="slider-row" style="margin-bottom:0"><div class="slider-label"><span>Bot-Quote</span><span id="val-quote">55 %</span></div><input type="range" id="calc-quote" min="10" max="95" step="5" value="55"></div>
+        </div>
+        <div class="calc-results">
+          <div>
+            <p style="font-size:.75rem;color:rgba(255,255,255,.25);text-transform:uppercase;letter-spacing:.15em;margin-bottom:.75rem">Netto-Ersparnis / Monat</p>
+            <div class="calc-hero-num" id="calc-netto">0 €</div>
+            <p id="calc-plan" style="font-size:.75rem;color:rgba(255,255,255,.2);margin-bottom:2rem"></p>
+            <div class="calc-breakdown">
+              <div class="calc-row"><span class="label">Zeitersparnis</span><span class="value" id="calc-stunden">0 h / Monat</span></div>
+              <div class="calc-row"><span class="label">Personalkosten gespart</span><span class="value" id="calc-personal">0 €</span></div>
+              <div class="calc-row"><span class="label">Chipy</span><span class="value" style="color:rgba(255,255,255,.35)" id="calc-plankosten">–0 €</span></div>
+              <div class="calc-row"><span class="label" style="color:rgba(255,255,255,.5);font-weight:500">Dein Vorteil</span><span class="value" style="font-weight:700" id="calc-vorteil">+0 €</span></div>
+            </div>
+            <p id="calc-hint" style="font-size:.6875rem;color:rgba(255,255,255,.15);margin-top:1rem;text-align:center;line-height:1.5"></p>
+          </div>
+          <a href="/?page=register" class="btn btn-primary" style="display:block;text-align:center;margin-top:1.5rem;padding:1rem;border-radius:1rem">Kostenlos testen</a>
+        </div>
+      </div>
     </div>
   </div>
 </section>
 
-<section>
-  <div class="container">
-    <h2>Rechnet sich das?</h2>
-    <p>Ein Handwerker mit 200 Anrufen/Monat rechnet sich so:</p>
-    <ul style="margin-top:1rem;padding-left:1.25rem;color:rgba(255,255,255,.75)">
-      <li>👤 <strong>Angestellte Büro-Kraft</strong>: ~2.000 €/Monat</li>
-        <li>📞 <strong>Phonbot Starter</strong>: 79 €/Monat (360 Min inkl.)</li>
-        <li>💰 <strong>Ersparnis</strong>: ~1.950 €/Monat</li>
-    </ul>
-    <span class="pricing-hint">Plus: Auf der Baustelle ohne Unterbrechung weiterarbeiten.</span>
-  </div>
-</section>
 
-<section>
+<section style="padding:5rem 0">
   <div class="container">
-    <h2>Häufige Fragen</h2>
-    <div class="faq-list">
-      <div class="faq-item"><h3>Erkennt Phonbot den Unterschied zwischen Notfall und regulärem Termin?</h3><p>Ja. Keywords wie "sofort", "Wasserschaden", "brennt" lösen automatisch Priorität-hoch aus. Du kannst im Agent Builder deine eigenen Notfall-Regeln ergänzen.</p></div>
-      <div class="faq-item"><h3>Kann ich unterwegs auf Anfragen reagieren?</h3><p>Ja. Alle Tickets kommen im Dashboard an, zusätzlich per E-Mail-Benachrichtigung.</p></div>
-      <div class="faq-item"><h3>Versteht Phonbot Handwerks-Fachbegriffe (Thermostat, Siphon, etc.)?</h3><p>Ja. Das LLM kennt deutsche Handwerks-Terminologie und kann bei Unklarheit gezielt nachfragen.</p></div>
-      <div class="faq-item"><h3>Was wenn mehrere Kunden gleichzeitig anrufen?</h3><p>Phonbot nimmt mehrere Anrufe parallel an (eigener Agent pro Gespräch). Niemand hängt in der Warteschleife.</p></div>
+    <div style="text-align:center;margin-bottom:2.5rem">
+      <h2 style="margin-bottom:.75rem">Häufige Fragen</h2>
+      <p style="color:rgba(255,255,255,.5);font-size:1rem">Alles was du wissen musst — kurz und ehrlich.</p>
+    </div>
+    <div class="faq-accordion">
+
+      <div class="faq-item">
+        <button class="faq-q" type="button"><span>Erkennt Phonbot den Unterschied zwischen Notfall und regulärem Termin?</span><span class="faq-icon">+</span></button>
+        <div class="faq-a" style="display:none">Ja. Keywords wie "sofort", "Wasserschaden", "brennt" lösen automatisch Priorität-hoch aus. Du kannst im Agent Builder deine eigenen Notfall-Regeln ergänzen.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" type="button"><span>Kann ich unterwegs auf Anfragen reagieren?</span><span class="faq-icon">+</span></button>
+        <div class="faq-a" style="display:none">Ja. Alle Tickets kommen im Dashboard an, zusätzlich per E-Mail-Benachrichtigung.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" type="button"><span>Versteht Phonbot Handwerks-Fachbegriffe (Thermostat, Siphon, etc.)?</span><span class="faq-icon">+</span></button>
+        <div class="faq-a" style="display:none">Ja. Das LLM kennt deutsche Handwerks-Terminologie und kann bei Unklarheit gezielt nachfragen.</div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" type="button"><span>Was wenn mehrere Kunden gleichzeitig anrufen?</span><span class="faq-icon">+</span></button>
+        <div class="faq-a" style="display:none">Phonbot nimmt mehrere Anrufe parallel an (eigener Agent pro Gespräch). Niemand hängt in der Warteschleife.</div>
+      </div>
     </div>
   </div>
 </section>
 
 <section style="text-align:center;padding:4rem 0">
   <div class="container">
-    <h2>Handwerksbetrieb automatisieren — 100 Freiminuten</h2>
+    <h2>Handwerksbetrieb automatisieren — 30 Freiminuten</h2>
     <p style="margin-bottom:1.5rem">Registrierung in unter 2 Minuten · Keine Kreditkarte · Monatlich kündbar</p>
     <div class="cta-row">
       <a href="/" class="btn btn-primary">Jetzt einrichten</a>
-      <a href="/?demo=tradesperson#demo" class="btn btn-demo">Erst Chipy testen</a>
+      <button data-demo-toggle class="btn btn-demo" style="cursor:pointer">Erst Chipy testen</button>
     </div>
   </div>
 </section>
