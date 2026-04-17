@@ -802,12 +802,14 @@ export async function findFreeSlots(
   orgId: string,
   opts: { date?: string; range?: string; service?: string },
 ): Promise<{ slots: string[]; source: string }> {
-  // Search ALL connected calendars + Chipy, merge results
+  // Search ALL connected calendars + Chipy, merge results.
+  // Chipy calendar acts as the MASTER scheduler: blocked days/times in
+  // Chipy are removed from ALL sources (including external calendars).
   const connections = await getAllConnections(orgId);
   const allSlots: string[] = [];
   const sources: string[] = [];
 
-  // Always check Chipy built-in calendar first
+  // Always load Chipy schedule (needed for blocking even if no Chipy slots)
   const { schedule, blocks, timeBlocks } = await getChipySchedule(orgId);
   const hasChipy = Object.values(schedule).some((d) => d.enabled);
   if (hasChipy) {
@@ -833,8 +835,74 @@ export async function findFreeSlots(
   }
 
   // Deduplicate and sort slots
-  const unique = [...new Set(allSlots)].sort();
+  let unique = [...new Set(allSlots)].sort();
+
+  // ── Chipy-block filter: remove slots that fall on blocked days/times ──
+  // This ensures Chipy blocks are authoritative even when external calendars
+  // report those times as free. Without this, a blocked Monday in Chipy would
+  // still show up if Google Calendar has Monday slots.
+  if (blocks.length > 0 || timeBlocks.length > 0) {
+    const blockedDates = new Set(blocks); // full-day blocks: "2026-04-21"
+    const now = new Date();
+
+    unique = unique.filter((slot) => {
+      // Slots are formatted as "Montag 14:00" or "2026-04-21T14:00" etc.
+      // Try to resolve the slot to a concrete date for blocking checks.
+      const resolved = resolveSlotDate(slot, now);
+      if (!resolved) return true; // can't parse → keep it
+
+      const { dateStr, timeStr } = resolved;
+
+      // Full-day block check
+      if (blockedDates.has(dateStr)) return false;
+
+      // Time-range block check
+      if (timeStr) {
+        const dayBlocks = timeBlocks.filter(b => b.date === dateStr);
+        for (const b of dayBlocks) {
+          if (b.start_time && b.end_time && timeStr >= b.start_time.slice(0, 5) && timeStr < b.end_time.slice(0, 5)) {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    });
+  }
+
   return { slots: unique, source: sources.join('+') || 'chipy' };
+}
+
+/** Resolve a human-readable slot like "Montag 14:00" to a concrete date string. */
+function resolveSlotDate(slot: string, now: Date): { dateStr: string; timeStr: string | null } | null {
+  // ISO format: "2026-04-21T14:00"
+  const isoMatch = slot.match(/^(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2}))?/);
+  if (isoMatch) {
+    return { dateStr: isoMatch[1]!, timeStr: isoMatch[2] ?? null };
+  }
+
+  // German day label format: "Montag 14:00", "Dienstag 09:30"
+  const dayMap: Record<string, number> = {
+    'Sonntag': 0, 'Montag': 1, 'Dienstag': 2, 'Mittwoch': 3,
+    'Donnerstag': 4, 'Freitag': 5, 'Samstag': 6,
+  };
+  const labelMatch = slot.match(/^(\w+)\s+(\d{2}:\d{2})/);
+  if (labelMatch) {
+    const targetDow = dayMap[labelMatch[1]!];
+    if (targetDow === undefined) return null;
+    const timeStr = labelMatch[2]!;
+
+    // Find the next occurrence of this day-of-week within 14 days
+    for (let d = 0; d < 14; d++) {
+      const date = new Date(now);
+      date.setDate(now.getDate() + d);
+      if (date.getDay() === targetDow) {
+        return { dateStr: date.toISOString().slice(0, 10), timeStr };
+      }
+    }
+  }
+
+  return null;
 }
 
 async function findSlotsForConnection(
