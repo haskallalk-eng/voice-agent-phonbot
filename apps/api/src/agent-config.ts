@@ -200,22 +200,38 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
   // live call to a human. The actual routing logic lives in the system
   // prompt (see agent-instructions.ts).
   const routingRules = (config as Record<string, unknown>).callRoutingRules as
-    | Array<{ action: string; target?: string; enabled?: boolean }> | undefined;
+    | Array<{ action: string; target?: string; enabled?: boolean; description?: string }> | undefined;
   const hasTransfer = routingRules?.some(r => r.enabled !== false && r.action === 'transfer' && r.target);
 
   if (hasTransfer) {
-    // Collect all transfer targets to pre-configure the tool
-    const targets = routingRules!
-      .filter(r => r.enabled !== false && r.action === 'transfer' && r.target)
-      .map(r => r.target!);
+    const transferRules = routingRules!
+      .filter(r => r.enabled !== false && r.action === 'transfer' && r.target);
 
-    tools.push({
-      type: 'transfer_call',
-      name: 'transfer_call',
-      description: 'Transfer the current phone call to a human or department.',
-      number: targets.length === 1 ? targets[0] : undefined,
-      // When multiple targets, the LLM picks based on the routing rules in the prompt
-    });
+    // Register one transfer_call tool per unique target number.
+    // Retell requires transfer_destination + transfer_option for each.
+    const seenTargets = new Set<string>();
+    for (const rule of transferRules) {
+      const target = rule.target!;
+      if (seenTargets.has(target)) continue;
+      seenTargets.add(target);
+
+      const safeName = 'transfer_' + target.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30);
+      tools.push({
+        type: 'transfer_call',
+        name: safeName,
+        description: `Transfer call to ${target}. ${rule.description ?? ''}`.trim(),
+        transfer_destination: {
+          type: 'predefined',
+          number: target,
+        },
+        transfer_option: {
+          type: 'warm_transfer',
+          show_transferee_as_caller: true,
+        },
+        speak_during_execution: true,
+        execution_message_description: 'Ich verbinde Sie jetzt weiter. Einen Moment bitte.',
+      });
+    }
   }
 
   return tools;
