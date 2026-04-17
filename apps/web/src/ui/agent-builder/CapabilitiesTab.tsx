@@ -21,11 +21,15 @@ export interface CapabilitiesTabProps {
 }
 
 export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
-  // Load org's Phonbot phone numbers for loop-detection warning
-  const [ownNumbers, setOwnNumbers] = useState<string[]>([]);
+  // Load org's Phonbot phone numbers + forwarding info for loop-detection warning
+  const [phoneInfo, setPhoneInfo] = useState<Array<{ number: string; customerNumber?: string; forwardingType?: string }>>([]);
   useEffect(() => {
     getPhoneNumbers()
-      .then(res => setOwnNumbers((res.items ?? []).map(p => (p.number ?? '').replace(/\s/g, ''))))
+      .then(res => setPhoneInfo((res.items ?? []).map(p => ({
+        number: (p.number ?? '').replace(/\s/g, ''),
+        customerNumber: ((p as Record<string, unknown>).customer_number as string | undefined)?.replace(/\s/g, '') ?? undefined,
+        forwardingType: (p as Record<string, unknown>).forwarding_type as string | undefined,
+      }))))
       .catch(() => {});
   }, []);
 
@@ -37,7 +41,7 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
           Definiere Regeln in natürlicher Sprache — der Agent erkennt die Situation und handelt automatisch.
         </p>
         <CallRoutingEditor
-          ownNumbers={ownNumbers}
+          phoneInfo={phoneInfo}
           items={config.callRoutingRules ?? []}
           onChange={(items) => onUpdate({ callRoutingRules: items })}
         />
@@ -89,13 +93,31 @@ const ROUTING_EXAMPLES = [
   'Wenn die Anfrage medizinisch dringend ist → Ticket erstellen mit Priorität Hoch',
 ];
 
-function CallRoutingEditor({ items, onChange, ownNumbers = [] }: { items: CallRoutingRule[]; onChange: (v: CallRoutingRule[]) => void; ownNumbers?: string[] }) {
-  // Normalize number for comparison (strip spaces, dashes)
+type PhoneInfoItem = { number: string; customerNumber?: string; forwardingType?: string };
+
+function CallRoutingEditor({ items, onChange, phoneInfo = [] }: { items: CallRoutingRule[]; onChange: (v: CallRoutingRule[]) => void; phoneInfo?: PhoneInfoItem[] }) {
   const normalize = (n: string) => n.replace(/[\s\-()]/g, '');
-  const isOwnNumber = (target: string) => {
+
+  /** Check if the transfer target would cause a loop */
+  function getLoopWarning(target: string): { type: 'loop' | 'maybe_loop' | null; forwardingType?: string } {
     const t = normalize(target);
-    return t.length > 4 && ownNumbers.some(n => normalize(n) === t);
-  };
+    if (t.length < 5) return { type: null };
+
+    // Direct match: target IS one of the Phonbot numbers
+    if (phoneInfo.some(p => normalize(p.number) === t)) {
+      return { type: 'loop' };
+    }
+
+    // Target matches a customer_number that has "always" forwarding → definite loop
+    const matchedPhone = phoneInfo.find(p => p.customerNumber && normalize(p.customerNumber) === t);
+    if (matchedPhone) {
+      if (matchedPhone.forwardingType === 'always') return { type: 'loop', forwardingType: 'always' };
+      if (matchedPhone.forwardingType === 'no_answer') return { type: null, forwardingType: 'no_answer' }; // safe
+      return { type: 'maybe_loop', forwardingType: matchedPhone.forwardingType ?? 'unknown' }; // unknown → warn
+    }
+
+    return { type: null };
+  }
   function add() {
     onChange([...items, {
       id: crypto.randomUUID(),
@@ -178,25 +200,40 @@ function CallRoutingEditor({ items, onChange, ownNumbers = [] }: { items: CallRo
               </div>
               {(rule.action === 'transfer') && (
                 <div className="space-y-2">
-                  <input
-                    value={rule.target ?? ''}
-                    onChange={(e) => patch(i, { target: e.target.value })}
-                    placeholder="Ziel: Telefonnummer oder Abteilung (z.B. +49 170 1234567 oder 'Vertrieb')"
-                    className={`w-full rounded-lg border bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 outline-none ${
-                      rule.target && isOwnNumber(rule.target) ? 'border-amber-500/50' : 'border-white/10'
-                    }`}
-                  />
-                  {rule.target && isOwnNumber(rule.target) && (
-                    <div className="flex gap-2 items-start rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2.5">
-                      <span className="text-amber-400 text-sm shrink-0 mt-0.5">&#9888;</span>
-                      <div className="text-xs text-amber-300/90 leading-relaxed">
-                        <strong>Endlosschleifen-Gefahr:</strong> Diese Nummer ist deine Phonbot-Nummer. Wenn du eine Rufumleitung &quot;Immer weiterleiten&quot; aktiv hast, entsteht eine Endlosschleife (Anruf → Phonbot → Transfer → Rufumleitung → Phonbot → …).
-                        <span className="block mt-1.5 text-white/50">
-                          <strong>Lösung:</strong> Trage stattdessen deine <strong>Mobilnummer</strong> oder eine <strong>Direktwahl</strong> ohne Rufumleitung ein. Oder stelle die Rufumleitung auf &quot;Bei Nichtannahme&quot; statt &quot;Immer&quot;.
-                        </span>
-                      </div>
-                    </div>
-                  )}
+                  {(() => {
+                    const warn = rule.target ? getLoopWarning(rule.target) : { type: null };
+                    return (<>
+                      <input
+                        value={rule.target ?? ''}
+                        onChange={(e) => patch(i, { target: e.target.value })}
+                        placeholder="Ziel: Telefonnummer oder Abteilung (z.B. +49 170 1234567 oder 'Vertrieb')"
+                        className={`w-full rounded-lg border bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 outline-none ${
+                          warn.type ? 'border-amber-500/50' : 'border-white/10'
+                        }`}
+                      />
+                      {warn.type === 'loop' && (
+                        <div className="flex gap-2 items-start rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2.5">
+                          <span className="text-red-400 text-sm shrink-0 mt-0.5">&#9888;</span>
+                          <div className="text-xs text-red-300/90 leading-relaxed">
+                            <strong>Endlosschleife!</strong> {warn.forwardingType === 'always'
+                              ? 'Diese Nummer hat eine „Immer weiterleiten"-Rufumleitung zu Phonbot. Ein Transfer hierhin erzeugt eine Endlosschleife.'
+                              : 'Diese Nummer ist deine Phonbot-Nummer. Ein Transfer hierhin erzeugt eine Endlosschleife.'}
+                            <span className="block mt-1.5 text-white/50">
+                              <strong>Lösung:</strong> Trage deine <strong>Mobilnummer</strong> oder eine Nummer <strong>ohne Rufumleitung</strong> ein. Oder stelle auf &quot;Bei Nichtannahme&quot; um.
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      {warn.type === 'maybe_loop' && (
+                        <div className="flex gap-2 items-start rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2.5">
+                          <span className="text-amber-400 text-sm shrink-0 mt-0.5">&#9888;</span>
+                          <div className="text-xs text-amber-300/90 leading-relaxed">
+                            <strong>Mögliche Schleife:</strong> Diese Nummer hat eine Rufumleitung zu Phonbot (Typ: {warn.forwardingType}). Prüfe im Telefon-Tab ob die Weiterleitung auf &quot;Bei Nichtannahme&quot; steht — sonst entsteht eine Endlosschleife.
+                          </div>
+                        </div>
+                      )}
+                    </>);
+                  })()}
                 </div>
               )}
             </div>

@@ -341,7 +341,7 @@ export function reassignPhoneAgent(phoneId: string, agentTenantId: string) {
 }
 
 export function verifyForwarding(customerNumber: string, phonbotNumberId: string) {
-  return request<{ ok: boolean }>('/phone/verify-forwarding', {
+  return request<{ ok: boolean; verified?: boolean; forwardingType?: string }>('/phone/verify-forwarding', {
     method: 'POST',
     body: JSON.stringify({ customerNumber, phonbotNumberId }),
   });

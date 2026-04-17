@@ -73,6 +73,11 @@ export async function migratePhone() {
     END $$;
   `);
 
+  // forwarding_type: 'always' | 'no_answer' | 'busy' | null — detected by verify-forwarding-type endpoint
+  await pool.query(`ALTER TABLE phone_numbers ADD COLUMN IF NOT EXISTS forwarding_type TEXT;`);
+  // customer_number: the business's own number that forwards to this Phonbot number
+  await pool.query(`ALTER TABLE phone_numbers ADD COLUMN IF NOT EXISTS customer_number TEXT;`);
+
   // Sync: ensure all Twilio numbers exist in DB (prevents buying duplicates)
   await syncTwilioNumbersToDb();
 }
@@ -770,18 +775,53 @@ export async function registerPhone(app: FastifyInstance) {
     if (!phonbotNum.rowCount) return reply.status(404).send({ error: 'Phonbot-Nummer nicht gefunden' });
     const fromNumber = phonbotNum.rows[0].number;
 
+    // Save customer_number on the phone record for loop-detection later
+    await pool.query(
+      `UPDATE phone_numbers SET customer_number = $1 WHERE id = $2 AND org_id = $3`,
+      [parsed.data.customerNumber, parsed.data.phonbotNumberId, orgId],
+    );
+
     try {
       const client = getTwilioClient();
-      // Call the customer's number FROM a Twilio number (not the Phonbot number)
-      // so that if forwarding is set up, it redirects to the Phonbot number → agent picks up
       const twilioFromNumber = process.env.TWILIO_FROM_NUMBER ?? fromNumber;
+      const startTime = Date.now();
       const call = await client.calls.create({
         to: parsed.data.customerNumber,
         from: twilioFromNumber,
         twiml: '<Response><Pause length="5"/><Say language="de-DE">Weiterleitungstest erfolgreich. Dein Phonbot Agent ist korrekt verbunden.</Say><Hangup/></Response>',
-        timeout: 20,
+        timeout: 25,
       });
-      return { ok: true, verified: true, callSid: call.sid };
+
+      // Poll call status to determine ring duration → forwarding type.
+      // "always" forwarding answers within ~2-4s, "no_answer" takes 15-25s.
+      let forwardingType: string = 'unknown';
+      let answered = false;
+      for (let attempt = 0; attempt < 12; attempt++) {
+        await new Promise(r => setTimeout(r, 2500));
+        try {
+          const status = await client.calls(call.sid).fetch();
+          if (status.status === 'in-progress' || status.status === 'completed') {
+            const ringDuration = Date.now() - startTime;
+            if (ringDuration < 8000) forwardingType = 'always';
+            else if (ringDuration < 20000) forwardingType = 'no_answer';
+            else forwardingType = 'no_answer';
+            answered = true;
+            break;
+          }
+          if (status.status === 'failed' || status.status === 'busy' || status.status === 'no-answer' || status.status === 'canceled') {
+            forwardingType = status.status === 'busy' ? 'busy' : 'not_forwarded';
+            break;
+          }
+        } catch { /* retry */ }
+      }
+
+      // Store forwarding_type in DB
+      await pool.query(
+        `UPDATE phone_numbers SET forwarding_type = $1, verified = $2 WHERE id = $3 AND org_id = $4`,
+        [forwardingType, answered, parsed.data.phonbotNumberId, orgId],
+      );
+
+      return { ok: true, verified: answered, callSid: call.sid, forwardingType };
     } catch (e: unknown) {
       return reply.status(500).send({ error: e instanceof Error ? e.message : 'Anruf fehlgeschlagen', verified: false });
     }
