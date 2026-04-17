@@ -111,7 +111,7 @@ export const PLANS = [
       '70 Min/Monat',
       '1 Agent',
       'Ticket-System',
-      '+0,20€/Min bei Überschreitung',
+      '+0,22€/Min bei Überschreitung',
     ],
     cta: 'Nummer kaufen',
     highlight: false,

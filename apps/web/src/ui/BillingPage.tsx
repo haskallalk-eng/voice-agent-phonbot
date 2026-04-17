@@ -12,7 +12,7 @@ import { SkeletonCard } from '../components/ui.js';
 
 const PLAN_FEATURES: Record<string, string[]> = {
   free: ['30 Freiminuten (einmalig)', '1 Agent', 'Web-Call Test', 'Community Support'],
-  nummer: ['✦ Eigene Telefonnummer', '70 Minuten / Monat', '1 Agent', 'Ticket-System', '+0,20€/Min bei Überschreitung'],
+  nummer: ['✦ Eigene Telefonnummer', '70 Minuten / Monat', '1 Agent', 'Ticket-System', '+0,22€/Min bei Überschreitung'],
   starter: ['✦ Telefonnummer inklusive', '360 Minuten / Monat', '1 Agent', 'Ticket-System', 'E-Mail Support', '+0,22€/Min bei Überschreitung'],
   pro: ['✦ Telefonnummer inklusive', '1.000 Minuten / Monat', '3 Agents', 'Kalender-Integration', 'Priority Support', '+0,20€/Min bei Überschreitung'],
   agency: ['✦ Telefonnummer inklusive', '2.400 Minuten / Monat', '10 Agents', 'White-Label', 'Dedicated Support', '+0,15€/Min bei Überschreitung'],
