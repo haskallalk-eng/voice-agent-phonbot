@@ -286,9 +286,12 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
   }
 
   /* ── EDIT VIEW ── */
-  /* Layout: fixed header + fixed tab sidebar + scrollable content */
+  /* Layout: fixed header + fixed tab sidebar + scrollable content.
+     The parent <main> has overflow-y-auto — we need to break out of that
+     scroll context so the header/sidebar stay pinned. Using sticky + a
+     height that fills the viewport minus the mobile topbar (48px). */
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col" style={{ height: 'calc(100vh - 3rem)', position: 'sticky', top: 0 }}>
       {/* Header — fixed at top */}
       <div className="shrink-0 z-20 px-6 py-4 flex items-center justify-between flex-wrap gap-3 border-b border-white/[0.05]" style={{ background: 'rgba(10,10,15,0.95)', backdropFilter: 'blur(12px)' }}>
         <div className="flex items-center gap-3 min-w-0">
