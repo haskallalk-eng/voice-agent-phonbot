@@ -23,46 +23,86 @@ vi.mock('../billing.js', () => ({
 
 const { tryReserveMinutes, reconcileMinutes, checkUsageLimit, DEFAULT_CALL_RESERVE_MINUTES } = await import('../usage.js');
 
-describe('tryReserveMinutes', () => {
+describe('tryReserveMinutes (atomic single-statement CASE)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.NODE_ENV = 'production';
   });
 
-  it('returns allowed:true when UPDATE matches (within limit)', async () => {
+  it('allows within-limit reservation (decision=within_limit)', async () => {
     mockQuery.mockResolvedValueOnce({
-      rows: [{ minutes_used: 105, minutes_limit: 500 }],
+      rows: [{ decision: 'within_limit', minutes_used: 105, minutes_limit: 500 }],
       rowCount: 1,
     });
     const result = await tryReserveMinutes('org-1', 5);
     expect(result.allowed).toBe(true);
     expect(result.minutesUsed).toBe(105);
     expect(result.minutesLimit).toBe(500);
-    // Verify the SQL contains the atomic WHERE clause
+    // Only ONE SQL call — the whole reservation is now atomic.
+    expect(mockQuery).toHaveBeenCalledTimes(1);
     const sql = mockQuery.mock.calls[0]![0] as string;
+    expect(sql).toContain('FOR UPDATE');
     expect(sql).toContain('minutes_used + $2 <= minutes_limit');
-    expect(sql).toContain('plan_status NOT IN');
+    expect(sql).toContain("'blocked'");
+    expect(sql).toContain("'within_limit'");
+    expect(sql).toContain("'overage_allowed'");
+    expect(sql).toContain("'hard_blocked'");
   });
 
-  it('returns allowed:false when UPDATE matches 0 rows (over limit)', async () => {
-    // First call: UPDATE returns 0 rows (predicate failed)
-    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
-    // Second call: fallback SELECT for display numbers
+  it('allows paid-plan overage (decision=overage_allowed)', async () => {
+    // Starter plan past limit: row is locked, CASE decides overage_allowed, UPDATE applies.
     mockQuery.mockResolvedValueOnce({
-      rows: [{ minutes_used: 498, minutes_limit: 500 }],
+      rows: [{ decision: 'overage_allowed', minutes_used: 503, minutes_limit: 500 }],
+      rowCount: 1,
+    });
+    const result = await tryReserveMinutes('org-1', 5);
+    expect(result.allowed).toBe(true);
+    expect(result.minutesUsed).toBe(503);
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+  });
+
+  it('denies free-plan over limit (decision=hard_blocked)', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ decision: 'hard_blocked', minutes_used: 28, minutes_limit: 30 }],
+      rowCount: 1,
     });
     const result = await tryReserveMinutes('org-1', 5);
     expect(result.allowed).toBe(false);
-    expect(result.minutesUsed).toBe(498);
-    expect(result.minutesLimit).toBe(500);
+    expect(result.minutesUsed).toBe(28);
+    expect(result.minutesLimit).toBe(30);
   });
 
-  it('returns allowed:false for unknown org', async () => {
+  it('denies blocked plan status (decision=blocked)', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ decision: 'blocked', minutes_used: 10, minutes_limit: 500 }],
+      rowCount: 1,
+    });
+    const result = await tryReserveMinutes('org-1', 5);
+    expect(result.allowed).toBe(false);
+    expect(result.minutesUsed).toBe(10);
+  });
+
+  it('returns allowed:false for unknown org (0 rows)', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
-    mockQuery.mockResolvedValueOnce({ rows: [] }); // no org row
     const result = await tryReserveMinutes('ghost-org', 5);
     expect(result.allowed).toBe(false);
     expect(result.minutesUsed).toBe(0);
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes the paidPlans list as $3', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ decision: 'within_limit', minutes_used: 10, minutes_limit: 500 }],
+      rowCount: 1,
+    });
+    await tryReserveMinutes('org-1', 5);
+    const params = mockQuery.mock.calls[0]![1] as unknown[];
+    expect(params[0]).toBe('org-1');
+    expect(params[1]).toBe(5);
+    expect(Array.isArray(params[2])).toBe(true);
+    // From the billing.js mock: only 'starter' has overchargePerMinute > 0.
+    expect(params[2]).toContain('starter');
+    expect(params[2]).not.toContain('free');
   });
 
   it('uses DEFAULT_CALL_RESERVE_MINUTES as default', () => {

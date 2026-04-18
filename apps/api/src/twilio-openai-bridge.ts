@@ -56,8 +56,77 @@ function makeTwilioAuthenticator(app: FastifyInstance) {
   };
 }
 
-// Pin OpenAI Realtime model via env var (avoids silent breakage when "preview" alias changes)
+// OpenAI Realtime model chain with fallback.
+//
+// Preview-dated models get sunsetted (typically 6-12 months after release).
+// When the primary 404s, we fall back through a chain of known-working models
+// so a single OpenAI deprecation doesn't brick every inbound/outbound call.
+//
+// Chain order:
+//   1. OPENAI_REALTIME_MODEL env — operator-pinned (e.g. a specific dated version)
+//   2. 'gpt-4o-realtime-preview'   — auto-updating alias (always latest stable)
+//   3. 'gpt-4o-mini-realtime-preview' — cheaper / lighter, last-resort
+//
+// Dedupe keeps the chain tidy if operator pins the auto-alias directly.
 const OPENAI_REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL ?? 'gpt-4o-realtime-preview-2024-12-17';
+const OPENAI_REALTIME_FALLBACK_CHAIN: readonly string[] = Array.from(
+  new Set([
+    OPENAI_REALTIME_MODEL,
+    'gpt-4o-realtime-preview',
+    'gpt-4o-mini-realtime-preview',
+  ]),
+);
+
+/**
+ * Open an OpenAI Realtime WebSocket, trying each model in the fallback chain
+ * until one connects successfully or all are exhausted.
+ *
+ * Returns the live WS + the model it connected with, or null if every model
+ * failed (then the caller should close the Twilio side too — call is dead).
+ *
+ * Probe-only handlers are registered during the attempt and removed before
+ * return, so the caller can attach its own open/message/close/error handlers
+ * without interference.
+ */
+async function openRealtimeWithFallback(
+  apiKey: string,
+  log: { info: (...a: unknown[]) => void; warn: (...a: unknown[]) => void },
+  sessionId: string,
+): Promise<{ ws: WS; model: string } | null> {
+  for (const model of OPENAI_REALTIME_FALLBACK_CHAIN) {
+    const ws = new WS(
+      `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`,
+      { headers: { Authorization: `Bearer ${apiKey}`, 'OpenAI-Beta': 'realtime=v1' } },
+    );
+    const outcome = await new Promise<'open' | 'unavailable' | 'error'>((resolve) => {
+      const onOpen = () => { cleanup(); resolve('open'); };
+      const onUnexpected = (_req: unknown, res: { statusCode?: number }) => {
+        log.warn({ sessionId, model, statusCode: res.statusCode }, 'OpenAI Realtime model unavailable');
+        cleanup(); resolve('unavailable');
+      };
+      const onError = (err: Error) => {
+        log.warn({ sessionId, model, err: err.message }, 'OpenAI Realtime connection error');
+        cleanup(); resolve('error');
+      };
+      const cleanup = () => {
+        ws.off('open', onOpen);
+        ws.off('unexpected-response', onUnexpected);
+        ws.off('error', onError);
+      };
+      ws.once('open', onOpen);
+      ws.once('unexpected-response', onUnexpected);
+      ws.once('error', onError);
+    });
+
+    if (outcome === 'open') {
+      log.info({ sessionId, model }, 'OpenAI Realtime connected');
+      return { ws, model };
+    }
+    // Close this attempt and try the next model.
+    try { ws.close(); } catch { /* already closed */ }
+  }
+  return null;
+}
 
 // ── Sales prompt for website callback ─────────────────────────────────────────
 
@@ -259,31 +328,32 @@ export async function registerTwilioBridge(app: FastifyInstance) {
       return;
     }
 
-    app.log.info({ sessionId, caller: session?.name, model: OPENAI_REALTIME_MODEL }, 'Twilio audio stream connected — opening OpenAI bridge');
+    app.log.info({ sessionId, caller: session?.name, primaryModel: OPENAI_REALTIME_MODEL }, 'Twilio audio stream connected — opening OpenAI bridge');
 
-    // Open OpenAI Realtime WebSocket (uses ws for custom headers support)
-    const openai = new WS(
-      `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(OPENAI_REALTIME_MODEL)}`,
-      {
-        headers: {
-          Authorization: `Bearer ${openaiKey}`,
-          'OpenAI-Beta': 'realtime=v1',
-        },
-      },
-    );
+    // Try each model in the fallback chain until one connects. If all fail,
+    // the call is dead — close Twilio side and bail.
+    const connected = await openRealtimeWithFallback(openaiKey, app.log, sessionId);
+    if (!connected) {
+      app.log.error({ sessionId, chain: OPENAI_REALTIME_FALLBACK_CHAIN }, 'OpenAI Realtime: every model in fallback chain failed');
+      socket.close();
+      return;
+    }
+    const openai = connected.ws;
+    const activeModel = connected.model;
 
     let streamSid: string | null = null;
     const transcriptParts: string[] = [];
     let openaiReady = false;
-    const pendingAudio: string[] = []; // buffer until OpenAI is ready
+    const pendingAudio: string[] = []; // buffer until session.update is ACKed
 
     // ── OpenAI → Twilio ───────────────────────────────────────────────────────
 
-    openai.on('open', () => {
-      app.log.info({ sessionId }, 'OpenAI Realtime connected');
+    // The probe in openRealtimeWithFallback already saw 'open' — the socket is
+    // live. Run the configure/flush/greet sequence immediately.
+    {
       openaiReady = true;
+      app.log.info({ sessionId, model: activeModel }, 'OpenAI Realtime session ready');
 
-      // Configure session: use g711 mulaw (same as Twilio — no conversion needed)
       openai.send(JSON.stringify({
         type: 'session.update',
         session: {
@@ -310,7 +380,7 @@ export async function registerTwilioBridge(app: FastifyInstance) {
 
       // Trigger initial greeting
       openai.send(JSON.stringify({ type: 'response.create', response: { modalities: ['audio', 'text'] } }));
-    });
+    }
 
     openai.on('message', (raw) => {
       try {

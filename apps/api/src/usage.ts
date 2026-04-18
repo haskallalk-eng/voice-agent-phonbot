@@ -19,6 +19,26 @@ import { PLANS, type PlanId, chargeOverageMinutes } from './billing.js';
 export const DEFAULT_CALL_RESERVE_MINUTES = 5;
 
 /**
+ * Plan statuses that block usage. Mirrors Stripe subscription.status lifecycle:
+ * - `incomplete` / `incomplete_expired`: initial payment not confirmed (blocks
+ *   the subscription.created-before-checkout.completed race where plan='starter'
+ *   lands in DB before the charge is captured).
+ * - `past_due`: invoice retry in progress.
+ * - `unpaid`: all retries failed.
+ * - `paused` / `canceled`: user/operator action.
+ *
+ * Allowed: `active`, `trialing` (legitimate trial), and `free` (no Stripe sub).
+ */
+export const BLOCKED_PLAN_STATUSES = [
+  'incomplete',
+  'incomplete_expired',
+  'past_due',
+  'unpaid',
+  'paused',
+  'canceled',
+] as const;
+
+/**
  * Returns the per-minute overcharge rate for a given plan.
  */
 export function getOverchargeRate(planId: string): number {
@@ -58,61 +78,79 @@ export async function tryReserveMinutes(
     return { allowed: true, minutesUsed: 0, minutesLimit: 9999 };
   }
 
-  // Paid plans (with overage rate > 0) use a soft cap: calls are allowed past
-  // the limit, overage is billed via Stripe invoice items in reconcileMinutes.
-  // Free plan (overcharge = 0) keeps the hard block.
+  // Plan IDs that permit billable overage past the limit (soft cap). Computed
+  // from PLANS at call time so adding a new paid plan propagates automatically.
+  // Free / zero-rate plans get hard-blocked when over limit.
+  const paidPlans = Object.values(PLANS)
+    .filter((p) => p.overchargePerMinute > 0)
+    .map((p) => p.id);
+
+  // ATOMIC reservation in a single SQL statement.
   //
-  // Step 1: try the strict within-limit reservation.
+  // The old flow (fast-path UPDATE → SELECT fallback → conditional UPDATE)
+  // had a TOCTOU race window on the paid-plan soft cap: 10 parallel callers
+  // could all read the same stale minutes_used via the SELECT before any
+  // UPDATE landed, each then issue their own UPDATE, and bump the counter
+  // by 10× the intended amount — effectively unbounded overage reservation.
+  //
+  // Here everything happens inside one Postgres statement kernel:
+  //   1. `locked` CTE grabs a SELECT ... FOR UPDATE row-lock on the org.
+  //   2. `decision` CTE evaluates the branch:
+  //        - blocked status (incomplete / past_due / paused / …)  → deny
+  //        - minutes_used + reserve ≤ limit                       → allow (within)
+  //        - plan is paid (rate > 0)                              → allow (overage)
+  //        - else (free plan over limit)                          → deny (hard)
+  //   3. `applied` CTE performs the UPDATE only when the decision allows.
+  //   4. Final SELECT returns the decision + post-state to JS.
+  //
+  // Parallel callers serialize on the row lock and observe each other's
+  // deductions. No overshooting possible.
   const res = await pool.query(
-    `UPDATE orgs
-     SET minutes_used = minutes_used + $2
-     WHERE id = $1
-       AND minutes_used + $2 <= minutes_limit
-       AND plan_status NOT IN ('paused', 'past_due', 'canceled')
-     RETURNING minutes_used, minutes_limit`,
-    [orgId, minutes],
+    `WITH locked AS (
+       SELECT id, minutes_used, minutes_limit, plan, plan_status
+       FROM orgs WHERE id = $1 FOR UPDATE
+     ),
+     decision AS (
+       SELECT
+         id, minutes_used, minutes_limit,
+         CASE
+           WHEN plan_status IN ('incomplete','incomplete_expired','past_due','unpaid','paused','canceled')
+             THEN 'blocked'
+           WHEN minutes_used + $2 <= minutes_limit
+             THEN 'within_limit'
+           WHEN plan = ANY($3::text[])
+             THEN 'overage_allowed'
+           ELSE 'hard_blocked'
+         END AS decision
+       FROM locked
+     ),
+     applied AS (
+       UPDATE orgs
+       SET minutes_used = orgs.minutes_used + $2
+       FROM decision
+       WHERE orgs.id = decision.id
+         AND decision.decision IN ('within_limit', 'overage_allowed')
+       RETURNING orgs.id, orgs.minutes_used AS new_used
+     )
+     SELECT
+       d.decision AS decision,
+       COALESCE(a.new_used, d.minutes_used) AS minutes_used,
+       d.minutes_limit
+     FROM decision d
+     LEFT JOIN applied a ON a.id = d.id`,
+    [orgId, minutes, paidPlans],
   );
 
-  if (res.rows.length) {
-    const { minutes_used, minutes_limit } = res.rows[0];
-    return { allowed: true, minutesUsed: minutes_used, minutesLimit: minutes_limit };
-  }
-
-  // Step 2: within-limit reservation failed. For paid plans with overage,
-  // allow the call anyway (soft cap) — overage is billed at call-end.
-  const fallback = await pool.query(
-    `SELECT minutes_used, minutes_limit, plan, plan_status FROM orgs WHERE id = $1`,
-    [orgId],
-  );
-  const row = fallback.rows[0];
-  if (!row) {
+  if (!res.rowCount) {
+    // Org not found → deny (matches prior behaviour).
     return { allowed: false, minutesUsed: 0, minutesLimit: 0 };
   }
-
-  const blockedStatuses = new Set(['paused', 'past_due', 'canceled']);
-  if (blockedStatuses.has(row.plan_status)) {
-    return { allowed: false, minutesUsed: row.minutes_used, minutesLimit: row.minutes_limit };
-  }
-
-  const rate = getOverchargeRate(row.plan as string);
-  if (rate > 0) {
-    // Paid plan with overage → allow and reserve (will be billed in reconcile)
-    await pool.query(
-      `UPDATE orgs SET minutes_used = minutes_used + $2 WHERE id = $1`,
-      [orgId, minutes],
-    );
-    return {
-      allowed: true,
-      minutesUsed: (row.minutes_used as number) + minutes,
-      minutesLimit: row.minutes_limit as number,
-    };
-  }
-
-  // Free plan → hard block
+  const row = res.rows[0];
+  const allowed = row.decision === 'within_limit' || row.decision === 'overage_allowed';
   return {
-    allowed: false,
-    minutesUsed: row.minutes_used ?? 0,
-    minutesLimit: row.minutes_limit ?? 0,
+    allowed,
+    minutesUsed: Number(row.minutes_used ?? 0),
+    minutesLimit: Number(row.minutes_limit ?? 0),
   };
 }
 
@@ -234,7 +272,7 @@ export async function checkUsageLimit(orgId: string): Promise<{
 
   const { minutes_used, minutes_limit, plan_status } = res.rows[0];
   // Block usage if subscription is paused, past_due, or canceled
-  const blockedStatuses = new Set(['paused', 'past_due', 'canceled']);
+  const blockedStatuses = new Set<string>(BLOCKED_PLAN_STATUSES);
   const statusBlocked = blockedStatuses.has(plan_status);
 
   return {

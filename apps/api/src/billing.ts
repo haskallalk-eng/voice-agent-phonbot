@@ -305,6 +305,43 @@ export async function registerBilling(app: FastifyInstance) {
     const customerId = await getOrCreateStripeCustomer(orgId, email, name);
     const appUrl = process.env.APP_URL ?? 'http://localhost:5173';
 
+    // Professional plan-change flow: if the customer already has an active
+    // (or trialing / past_due) subscription, update it in-place via
+    // stripe.subscriptions.update with proration_behavior='create_prorations'.
+    // Stripe then credits the unused time of the old plan and charges the
+    // new plan pro-rata. Without this, every upgrade would open a SECOND
+    // Checkout session → two parallel subscriptions → double-billing until
+    // the old one is manually canceled.
+    const existing = await stripe.subscriptions.list({
+      customer: customerId,
+      status: 'all',
+      limit: 10,
+    });
+    const activeSub = existing.data.find((s) =>
+      ['active', 'trialing', 'past_due'].includes(s.status),
+    );
+
+    if (activeSub) {
+      const itemId = activeSub.items.data[0]?.id;
+      if (!itemId) {
+        return reply.status(500).send({ error: 'Existing subscription has no items — contact support' });
+      }
+      const currentPriceId = activeSub.items.data[0]?.price?.id;
+      if (currentPriceId === priceId) {
+        // No-op: user picked their current plan. Redirect back with a note.
+        return { url: `${appUrl}/billing?success=1&noop=1` };
+      }
+      await stripe.subscriptions.update(activeSub.id, {
+        items: [{ id: itemId, price: priceId }],
+        proration_behavior: 'create_prorations',
+        metadata: { orgId },
+      });
+      // The customer.subscription.updated webhook will syncSubscription() and
+      // update plan / minutes_limit / current_period_end in the DB.
+      return { url: `${appUrl}/billing?success=1&changed=1` };
+    }
+
+    // First-time subscription — open Stripe Checkout for card capture.
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'subscription',
