@@ -163,7 +163,7 @@ export const PLANS = [
       'Dedicated Support',
       '+0,15€/Min bei Überschreitung',
     ],
-    cta: 'Kontakt aufnehmen',
+    cta: 'Jetzt upgraden',
     highlight: false,
     badge: null as string | null,
   },
