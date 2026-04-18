@@ -116,28 +116,6 @@ export async function sendPasswordResetEmail(opts: { toEmail: string; resetUrl: 
   await send(opts.toEmail, 'Passwort zurücksetzen — Phonbot', `Passwort zurücksetzen: ${opts.resetUrl}\n\nDer Link ist 1 Stunde gültig.`, html);
 }
 
-export async function sendPhoneNumberActiveEmail(opts: {
-  toEmail: string; orgName: string; phoneNumber: string; phoneNumberPretty: string; city: string;
-}) {
-  const safeNumber = escapeHtml(opts.phoneNumberPretty);
-  const safeCity = escapeHtml(opts.city);
-  const safeOrg = escapeHtml(opts.orgName);
-  const html = brandedEmail({
-    title: 'Deine Nummer ist aktiv! 🎉',
-    body: `
-      <p style="margin:0 0 16px 0;">Gute Nachrichten, <strong style="color:#fff;">${safeOrg}</strong>!</p>
-      <div style="background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.15);border-radius:12px;padding:20px;text-align:center;margin:0 0 16px 0;">
-        <p style="color:rgba(255,255,255,0.4);font-size:12px;margin:0 0 4px 0;">Deine Nummer (${safeCity})</p>
-        <p style="font-size:28px;font-weight:800;color:#F97316;margin:0;letter-spacing:1px;">${safeNumber}</p>
-      </div>
-      <p style="margin:0;">Dein KI-Agent nimmt ab sofort Anrufe auf dieser Nummer entgegen. Teste es — ruf einfach an!</p>
-    `,
-    cta: { label: 'Dashboard öffnen', url: APP_URL },
-    footer: `${opts.orgName} · Phonbot Voice Agent`,
-  });
-  await send(opts.toEmail, `Nummer aktiv: ${opts.phoneNumberPretty} — Phonbot`, `Deine Nummer ${opts.phoneNumberPretty} (${opts.city}) ist jetzt aktiv!`, html);
-}
-
 export async function sendTicketNotification(opts: {
   toEmail: string; orgName: string; customerName: string | null; customerPhone: string; reason: string | null; service: string | null;
 }) {
@@ -238,17 +216,3 @@ export async function sendPaymentFailedEmail(opts: { toEmail: string; orgName: s
   await send(opts.toEmail, 'Zahlung fehlgeschlagen — Phonbot', `Deine Zahlung für ${opts.orgName} konnte nicht verarbeitet werden. Bitte aktualisiere deine Zahlungsmethode.`, html);
 }
 
-export async function sendAgentDeployedEmail(opts: { toEmail: string; orgName: string; agentName: string }) {
-  const safeOrg = escapeHtml(opts.orgName);
-  const safeName = escapeHtml(opts.agentName);
-  const html = brandedEmail({
-    title: `Agent "${safeName}" ist live! 🚀`,
-    body: `
-      <p style="margin:0 0 12px 0;"><strong style="color:#fff;">${safeOrg}</strong>, dein Agent <strong style="color:#06B6D4;">${safeName}</strong> ist jetzt bereit.</p>
-      <p style="margin:0;">Du kannst ihn sofort testen — per Web-Call im Dashboard oder mit einer verbundenen Telefonnummer.</p>
-    `,
-    cta: { label: 'Agent testen', url: `${APP_URL}/test` },
-    footer: `${opts.orgName} · Phonbot`,
-  });
-  await send(opts.toEmail, `Agent "${opts.agentName}" ist live — Phonbot`, `Dein Agent "${opts.agentName}" ist deployed und bereit!`, html);
-}

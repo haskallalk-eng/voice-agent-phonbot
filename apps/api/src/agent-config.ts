@@ -580,7 +580,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
 
   // Delete an agent config
   app.delete('/agent-config/:tenantId', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { orgId } = req.user as JwtPayload;
+    const { orgId, userId } = req.user as JwtPayload;
     const { tenantId } = req.params as { tenantId: string };
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
@@ -601,7 +601,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
       if (!body?.password) return reply.status(400).send({ error: 'password_required', message: 'Bitte Passwort eingeben um diesen Agent zu löschen.' });
 
       // Verify password
-      const userRow = await pool.query(`SELECT password_hash FROM users WHERE org_id = $1 LIMIT 1`, [orgId]);
+      const userRow = await pool.query(`SELECT password_hash FROM users WHERE id = $1`, [userId]);
       const hash = userRow.rows[0]?.password_hash;
       if (!hash) return reply.status(403).send({ error: 'Passwort konnte nicht verifiziert werden.' });
 

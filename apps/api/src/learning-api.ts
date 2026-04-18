@@ -216,6 +216,7 @@ export async function registerLearningApi(app: FastifyInstance): Promise<void> {
         const resp = await openai.chat.completions.create({
           model: MODEL,
           temperature: 0.3,
+          max_tokens: 500,
           messages: [
             {
               role: 'system',

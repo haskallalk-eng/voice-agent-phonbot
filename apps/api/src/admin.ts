@@ -249,8 +249,13 @@ export async function registerAdmin(app: FastifyInstance) {
   });
 
   // ── GET /admin/users ──────────────────────────────────────────────────────
-  app.get('/admin/users', { ...auth }, async (_req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/admin/users', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
+
+    const q = z.object({
+      limit: z.coerce.number().int().min(1).max(200).default(50),
+      offset: z.coerce.number().int().min(0).default(0),
+    }).parse(req.query);
 
     const { rows } = await pool.query(
       `SELECT u.id, u.email, u.role, u.created_at, u.is_active,
@@ -258,14 +263,20 @@ export async function registerAdmin(app: FastifyInstance) {
        FROM users u
        LEFT JOIN orgs o ON o.id = u.org_id
        ORDER BY u.created_at DESC
-       LIMIT 500`,
+       LIMIT $1 OFFSET $2`,
+      [q.limit, q.offset],
     );
     return { items: rows };
   });
 
   // ── GET /admin/orgs ───────────────────────────────────────────────────────
-  app.get('/admin/orgs', { ...auth }, async (_req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/admin/orgs', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
+
+    const q = z.object({
+      limit: z.coerce.number().int().min(1).max(200).default(50),
+      offset: z.coerce.number().int().min(0).default(0),
+    }).parse(req.query);
 
     const { rows } = await pool.query(
       `SELECT o.id, o.name, o.slug, o.plan, o.plan_status, o.is_active, o.created_at,
@@ -274,7 +285,8 @@ export async function registerAdmin(app: FastifyInstance) {
               (SELECT COUNT(*) FROM users u2 WHERE u2.org_id = o.id) as users_count
        FROM orgs o
        ORDER BY o.created_at DESC
-       LIMIT 500`,
+       LIMIT $1 OFFSET $2`,
+      [q.limit, q.offset],
     );
     return { items: rows };
   });
