@@ -98,19 +98,19 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
       </div>
 
       {/* ── 3 MAIN PLANS — side by side ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto items-start mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto items-stretch mb-8">
         {mainPlans.map((plan) => {
-          const isPopular = plan.name === 'Pro';
+          const isPopular = plan.name === 'Professional';
           return (
             <div
               key={plan.name}
-              className={`gradient-border relative glass rounded-2xl p-8 flex flex-col transition-all duration-300 hover:shadow-[0_0_40px_rgba(249,115,22,0.25)] hover:scale-[1.02] ${isPopular ? 'scale-[1.02]' : ''}`}
+              className="gradient-border relative glass rounded-2xl p-8 flex flex-col transition-all duration-300 hover:shadow-[0_0_40px_rgba(249,115,22,0.25)] hover:scale-[1.02]"
               style={
                 isPopular
                   ? {
                       border: '1px solid rgba(249,115,22,0.6)',
                       background: 'linear-gradient(160deg, rgba(249,115,22,0.14) 0%, rgba(6,182,212,0.10) 100%)',
-                      boxShadow: '0 0 0 3px rgba(249,115,22,0.25), 0 0 60px rgba(249,115,22,0.20), 0 0 120px rgba(6,182,212,0.08)',
+                      boxShadow: '0 0 0 2px rgba(249,115,22,0.25), 0 0 40px rgba(249,115,22,0.18), 0 0 80px rgba(6,182,212,0.06)',
                     }
                   : {}
               }
