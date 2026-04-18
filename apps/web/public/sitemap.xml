@@ -102,6 +102,26 @@
   </url>
 
   <url>
+    <loc>https://phonbot.de/impressum/</loc>
+    <lastmod>2026-04-18</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/impressum/" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/impressum/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/impressum/" />
+  </url>
+
+  <url>
+    <loc>https://phonbot.de/datenschutz/</loc>
+    <lastmod>2026-04-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/datenschutz/" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/datenschutz/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/datenschutz/" />
+  </url>
+
+  <url>
     <loc>https://phonbot.de/?page=contact</loc>
     <lastmod>2026-04-18</lastmod>
     <changefreq>yearly</changefreq>
