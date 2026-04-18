@@ -177,7 +177,7 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
             Phonbot für dein ganzes Unternehmen
           </h3>
           <p className="text-sm text-white/60 mb-4 max-w-2xl">
-            Ab 5.000 Minuten/Monat, mehrere Standorte oder eigene Integrationen — wir bauen's passgenau.
+            Ab 3.000 Minuten/Monat, mehrere Standorte oder eigene Integrationen — wir bauen's passgenau.
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-sm text-white/70 max-w-2xl">
             <span className="flex items-center gap-2">
