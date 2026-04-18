@@ -22,10 +22,13 @@ async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
     // H2: Verify both admin flag AND audience claim to prevent user-JWTs
     // from being accepted on admin endpoints.
     if (!payload.admin || payload.aud !== 'phonbot:admin') {
-      reply.status(403).send({ error: 'Admin access required' });
+      // Explicit return after send: Fastify does short-circuit on sent replies,
+      // but being explicit guarantees no handler code below this block ever
+      // runs after a 403/401 — a refactor-safe defence-in-depth for auth.
+      return reply.status(403).send({ error: 'Admin access required' });
     }
   } catch {
-    reply.status(401).send({ error: 'Unauthorized' });
+    return reply.status(401).send({ error: 'Unauthorized' });
   }
 }
 

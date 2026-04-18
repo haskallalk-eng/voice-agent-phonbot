@@ -9,7 +9,7 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import formbody from '@fastify/formbody';
-import { migrate, pool, cleanupOldTranscripts, cleanupOldLeads } from './db.js';
+import { migrate, pool, cleanupOldTranscripts, cleanupOldLeads, cleanupOldWebhookDedupKeys } from './db.js';
 import { connectRedis, redis } from './redis.js';
 import { registerAuth } from './auth.js';
 import { registerTickets } from './tickets.js';
@@ -287,6 +287,22 @@ if (pool) {
   };
   setInterval(runPhoneSync, 6 * 60 * 60 * 1000); // every 6h
   // Initial startup sync already runs in migratePhone(); don't double it here.
+
+  // Prune webhook-event dedup keys older than 90 days so those tables don't
+  // grow unbounded (at 10k calls/month the combined row count adds up fast).
+  // Runs daily, staggered from other nightly jobs.
+  const runWebhookDedupCleanup = async () => {
+    try {
+      const { stripe, retell } = await cleanupOldWebhookDedupKeys();
+      if (stripe > 0 || retell > 0) {
+        app.log.info({ stripe, retell }, 'Pruned old webhook dedup keys');
+      }
+    } catch (e) {
+      app.log.warn({ err: (e as Error).message }, 'webhook dedup cleanup failed');
+    }
+  };
+  setInterval(runWebhookDedupCleanup, 24 * 60 * 60 * 1000); // every 24h
+  setTimeout(runWebhookDedupCleanup, 90_000); // first run 90s after startup (staggered)
 }
 
 app.get('/health', async () => {

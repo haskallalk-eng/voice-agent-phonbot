@@ -81,9 +81,19 @@ export async function tryReserveMinutes(
   // Plan IDs that permit billable overage past the limit (soft cap). Computed
   // from PLANS at call time so adding a new paid plan propagates automatically.
   // Free / zero-rate plans get hard-blocked when over limit.
-  const paidPlans = Object.values(PLANS)
+  //
+  // Defensive guard: an empty list would make `plan = ANY($3::text[])` always
+  // false in SQL, turning every paid-plan call into 'hard_blocked'. That would
+  // be a silent billing outage. If this happens, it's a config error (e.g. all
+  // overchargePerMinute set to 0); use a sentinel that can never match a real
+  // plan id so the SQL still executes but the error is visible via logs.
+  const paidPlans: string[] = Object.values(PLANS)
     .filter((p) => p.overchargePerMinute > 0)
     .map((p) => p.id);
+  if (paidPlans.length === 0) {
+    process.stderr.write('[usage] WARNING: no paid plans have overchargePerMinute > 0; paid-plan overage will not be allowed\n');
+    paidPlans.push('__NO_PAID_PLAN_CONFIGURED__');
+  }
 
   // ATOMIC reservation in a single SQL statement.
   //

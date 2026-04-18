@@ -331,13 +331,21 @@ export async function registerBilling(app: FastifyInstance) {
         // No-op: user picked their current plan. Redirect back with a note.
         return { url: `${appUrl}/billing?success=1&noop=1` };
       }
-      await stripe.subscriptions.update(activeSub.id, {
+      const updated = await stripe.subscriptions.update(activeSub.id, {
         items: [{ id: itemId, price: priceId }],
         proration_behavior: 'create_prorations',
         metadata: { orgId },
       });
-      // The customer.subscription.updated webhook will syncSubscription() and
-      // update plan / minutes_limit / current_period_end in the DB.
+      // Sync to DB immediately using the response we already have. Without this,
+      // customer.subscription.updated lands ~500ms–2s later and the user sees
+      // the stale plan on /billing/status right after redirect. The async
+      // webhook is still fine as a consistency backstop — syncSubscription is
+      // idempotent and will no-op if the state already matches.
+      try {
+        await syncSubscription(updated);
+      } catch (err) {
+        req.log.warn({ err: (err as Error).message, orgId, subId: updated.id }, 'post-update syncSubscription failed; relying on webhook');
+      }
       return { url: `${appUrl}/billing?success=1&changed=1` };
     }
 
@@ -465,7 +473,7 @@ export async function registerBilling(app: FastifyInstance) {
             `UPDATE orgs SET plan_status = 'past_due' WHERE stripe_subscription_id = $1`,
             [subId],
           );
-          if (!r.rowCount) console.warn(`[billing] invoice.payment_failed: no org for sub ${subId}`);
+          if (!r.rowCount) req.log.warn({ subId }, 'invoice.payment_failed: no org matches stripe_subscription_id');
           // Send payment failed email
           const orgRes = await pool.query(
             `SELECT u.email, o.name FROM users u JOIN orgs o ON o.id = u.org_id WHERE o.stripe_subscription_id = $1 AND u.role = 'owner' LIMIT 1`, [subId],

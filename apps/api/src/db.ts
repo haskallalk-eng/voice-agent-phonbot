@@ -136,12 +136,42 @@ export const pool = DATABASE_URL ? new Proxy({} as pg.Pool, {
   },
 }) : null;
 
+// Fixed advisory-lock key for the migration. pg_advisory_lock is a 64-bit
+// session-scoped mutex that Postgres provides; any integer works as long as
+// every replica uses the same one. Chosen arbitrarily.
+const MIGRATION_ADVISORY_LOCK_KEY = 92541803715;
+
 export async function migrate() {
   if (!pool) {
     // Keep API usable for websocket + UI prototyping.
     // Tickets will fall back to an in-memory store.
     return;
   }
+
+  // Serialize concurrent migrate() calls across replicas. Without this, a
+  // rolling-deploy with N API containers would run every ALTER / CREATE
+  // INDEX in parallel; while each statement is idempotent (`IF NOT EXISTS`),
+  // concurrent DDL on the same objects can deadlock or race on constraint
+  // creation. pg_advisory_lock blocks until the other holder releases (or
+  // until we error out and drop the session — Postgres auto-releases).
+  //
+  // Uses a dedicated client so the lock's session scope is deterministic:
+  // lock + unlock on the same connection, regardless of pool routing.
+  const migrationClient = await pool.connect();
+  try {
+    await migrationClient.query(`SELECT pg_advisory_lock($1)`, [MIGRATION_ADVISORY_LOCK_KEY]);
+    try {
+      await runMigrationBody();
+    } finally {
+      await migrationClient.query(`SELECT pg_advisory_unlock($1)`, [MIGRATION_ADVISORY_LOCK_KEY]).catch(() => {/* already released */});
+    }
+  } finally {
+    migrationClient.release();
+  }
+}
+
+async function runMigrationBody() {
+  if (!pool) return;
 
   // ── Encryption-key sanity check ─────────────────────────────────────────
   // If ENCRYPTION_KEY is unset in production BUT there are already encrypted
@@ -196,6 +226,15 @@ export async function migrate() {
 
   // Stripe billing columns on orgs (non-breaking)
   await pool.query(`alter table orgs add column if not exists stripe_customer_id text unique;`);
+  // Partial unique index: makes the intent explicit that only non-null values
+  // must be unique. The column-level UNIQUE above already enforces this for
+  // non-nulls (Postgres treats NULLs as distinct), but naming the index
+  // clarifies and lets us reason about the guarantee in migrations.
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS orgs_stripe_customer_id_notnull_uniq
+    ON orgs (stripe_customer_id)
+    WHERE stripe_customer_id IS NOT NULL;
+  `);
   await pool.query(`alter table orgs add column if not exists stripe_subscription_id text unique;`);
   await pool.query(`alter table orgs add column if not exists plan_status text not null default 'free';`);
   // plan_status: free | trialing | active | past_due | canceled
@@ -591,6 +630,27 @@ export async function cleanupOldTranscripts(): Promise<number> {
     `DELETE FROM call_transcripts WHERE created_at < NOW() - INTERVAL '90 days'`,
   );
   return (res as { rowCount?: number }).rowCount ?? 0;
+}
+
+/**
+ * Purge processed webhook-event dedup keys older than 90 days.
+ *
+ * processed_stripe_events and processed_retell_events exist only to reject
+ * retried webhooks within the window a provider would actually retry (Stripe
+ * retries for up to 3 days, Retell typically minutes). 90 days is a generous
+ * buffer. Without this cleanup both tables grow ~300k rows per 10k
+ * calls/month and eventually degrade query plans on the PRIMARY KEY lookup.
+ */
+export async function cleanupOldWebhookDedupKeys(): Promise<{ stripe: number; retell: number }> {
+  if (!pool) return { stripe: 0, retell: 0 };
+  const [stripeRes, retellRes] = await Promise.all([
+    pool.query(`DELETE FROM processed_stripe_events WHERE received_at < NOW() - INTERVAL '90 days'`),
+    pool.query(`DELETE FROM processed_retell_events WHERE received_at < NOW() - INTERVAL '90 days'`),
+  ]);
+  return {
+    stripe: (stripeRes as { rowCount?: number }).rowCount ?? 0,
+    retell: (retellRes as { rowCount?: number }).rowCount ?? 0,
+  };
 }
 
 /**

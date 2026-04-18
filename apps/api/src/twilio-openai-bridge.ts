@@ -98,15 +98,27 @@ async function openRealtimeWithFallback(
       `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`,
       { headers: { Authorization: `Bearer ${apiKey}`, 'OpenAI-Beta': 'realtime=v1' } },
     );
+    // `settled` guards against the rare case where two probe events fire
+    // near-simultaneously (e.g. 'open' followed by 'error' during a flaky
+    // handshake). Only the first outcome wins; subsequent emissions are
+    // dropped so we don't resolve the Promise twice (no-op in strict mode
+    // but still worth being explicit).
+    let settled = false;
     const outcome = await new Promise<'open' | 'unavailable' | 'error'>((resolve) => {
-      const onOpen = () => { cleanup(); resolve('open'); };
+      const finish = (result: 'open' | 'unavailable' | 'error') => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(result);
+      };
+      const onOpen = () => finish('open');
       const onUnexpected = (_req: unknown, res: { statusCode?: number }) => {
         log.warn({ sessionId, model, statusCode: res.statusCode }, 'OpenAI Realtime model unavailable');
-        cleanup(); resolve('unavailable');
+        finish('unavailable');
       };
       const onError = (err: Error) => {
         log.warn({ sessionId, model, err: err.message }, 'OpenAI Realtime connection error');
-        cleanup(); resolve('error');
+        finish('error');
       };
       const cleanup = () => {
         ws.off('open', onOpen);
@@ -122,8 +134,9 @@ async function openRealtimeWithFallback(
       log.info({ sessionId, model }, 'OpenAI Realtime connected');
       return { ws, model };
     }
-    // Close this attempt and try the next model.
-    try { ws.close(); } catch { /* already closed */ }
+    // Failed: close the half-open WS explicitly so we don't leak a dangling
+    // socket if the library didn't tear it down on unexpected-response.
+    try { ws.terminate(); } catch { /* already closed */ }
   }
   return null;
 }

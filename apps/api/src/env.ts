@@ -34,3 +34,30 @@ if (model && !KNOWN_TOOL_CAPABLE_MODELS.has(model)) {
     `Known-good: ${[...KNOWN_TOOL_CAPABLE_MODELS].join(', ')}\n`,
   );
 }
+
+// Fail-loud boot-check for secrets that are load-bearing in production.
+// A missing RETELL/OPENAI/TWILIO key lets the app boot and serve /health OK,
+// but every voice call or AI analysis silently errors — an incident that
+// only shows up in user reports. Throwing at boot turns it into a deploy
+// failure, which is the right place to catch it.
+//
+// Dev / test: skipped so contributors don't need every key to run the app
+// locally. JWT_SECRET and DATABASE_URL are enforced elsewhere (auth / db).
+if (process.env.NODE_ENV === 'production') {
+  const REQUIRED_PROD_SECRETS = [
+    'DATABASE_URL',
+    'JWT_SECRET',
+    'ENCRYPTION_KEY',
+    'RETELL_API_KEY',
+    'OPENAI_API_KEY',
+    'TWILIO_ACCOUNT_SID',
+    'TWILIO_AUTH_TOKEN',
+    'STRIPE_SECRET_KEY',
+    'STRIPE_WEBHOOK_SECRET',
+  ] as const;
+  const missing = REQUIRED_PROD_SECRETS.filter((k) => !process.env[k] || process.env[k]!.trim() === '');
+  if (missing.length > 0) {
+    process.stderr.write(`[env] FATAL: missing required production secrets: ${missing.join(', ')}\n`);
+    throw new Error(`Missing required production env vars: ${missing.join(', ')}`);
+  }
+}
