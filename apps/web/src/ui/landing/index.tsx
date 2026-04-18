@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { OwlyDemoModal } from '../OwlyDemoModal.js';
 import { LegalModal } from '../LegalModal.js';
 import { CookieBanner } from '../CookieBanner.js';
@@ -24,6 +24,29 @@ type Props = {
 export function LandingPage({ onGoToRegister, onGoToLogin, onGoToContact }: Props) {
   const [showDemoModal, setShowDemoModal] = useState(false);
   const [legalPage, setLegalPage] = useState<'impressum' | 'datenschutz' | 'agb' | null>(null);
+
+  // When the user arrives at /#features (e.g. from a static page footer link),
+  // the browser tries to scroll before React has rendered the section — so the
+  // target doesn't exist yet and the browser gives up. We re-do the scroll
+  // after mount, once the DOM is actually there. Also handles same-page hash
+  // clicks that target in-page sections (features/demo/preise/faq).
+  useEffect(() => {
+    const SECTION_IDS = new Set(['features', 'demo', 'preise', 'faq']);
+    const tryScroll = () => {
+      const id = window.location.hash.replace('#', '');
+      if (!SECTION_IDS.has(id)) return;
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    // Hydration can still be settling — run twice, once now and once after paint.
+    tryScroll();
+    const t = setTimeout(tryScroll, 120);
+    window.addEventListener('hashchange', tryScroll);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('hashchange', tryScroll);
+    };
+  }, []);
 
   return (
     <div className="noise bg-[#0A0A0F] text-white relative">

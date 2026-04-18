@@ -22,9 +22,9 @@ export function FooterSection({ onShowLegal, onGoToContact }: FooterSectionProps
           <div>
             <h4 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">Produkt</h4>
             <ul className="space-y-2">
-              <li><a href="#features" className="text-sm text-white/40 hover:text-white/70 transition-colors">Features</a></li>
-              <li><a href="#demo" className="text-sm text-white/40 hover:text-white/70 transition-colors">Demo</a></li>
-              <li><a href="#preise" className="text-sm text-white/40 hover:text-white/70 transition-colors">Preise</a></li>
+              <li><a href="/#features" className="text-sm text-white/40 hover:text-white/70 transition-colors">Features</a></li>
+              <li><a href="/#demo" className="text-sm text-white/40 hover:text-white/70 transition-colors">Demo</a></li>
+              <li><a href="/#preise" className="text-sm text-white/40 hover:text-white/70 transition-colors">Preise</a></li>
             </ul>
           </div>
 
@@ -43,7 +43,7 @@ export function FooterSection({ onShowLegal, onGoToContact }: FooterSectionProps
             <h4 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">Kontakt</h4>
             <ul className="space-y-2">
               <li><button onClick={onGoToContact} className="text-sm text-white/40 hover:text-white/70 transition-colors">Anfragen</button></li>
-              <li><a href="#faq" className="text-sm text-white/40 hover:text-white/70 transition-colors">FAQ</a></li>
+              <li><a href="/#faq" className="text-sm text-white/40 hover:text-white/70 transition-colors">FAQ</a></li>
             </ul>
           </div>
         </div>
