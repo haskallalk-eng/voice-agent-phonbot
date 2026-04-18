@@ -3,9 +3,10 @@ import { PLANS } from './shared.js';
 
 type PricingSectionProps = {
   onGoToRegister: () => void;
+  onGoToContact?: () => void;
 };
 
-export function PricingSection({ onGoToRegister }: PricingSectionProps) {
+export function PricingSection({ onGoToRegister, onGoToContact }: PricingSectionProps) {
   const [yearly, setYearly] = useState(false);
 
   // Separate plans into layout groups
@@ -148,6 +149,81 @@ export function PricingSection({ onGoToRegister }: PricingSectionProps) {
             </div>
           );
         })}
+      </div>
+
+      {/* ── ENTERPRISE — wide card at bottom ── */}
+      <div
+        className="glass rounded-2xl p-8 mt-4 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative overflow-hidden"
+        style={{
+          border: '1px solid rgba(6,182,212,0.35)',
+          background: 'linear-gradient(135deg, rgba(6,182,212,0.08) 0%, rgba(249,115,22,0.06) 100%)',
+        }}
+      >
+        <div
+          className="absolute -top-24 -right-24 w-64 h-64 rounded-full blur-3xl opacity-30 pointer-events-none"
+          style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.5) 0%, transparent 70%)' }}
+        />
+        <div className="flex-1 relative z-10">
+          <div className="flex items-center gap-3 mb-2">
+            <span
+              className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full text-white"
+              style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }}
+            >
+              Enterprise
+            </span>
+            <span className="text-xs text-white/40">Individuelles Angebot</span>
+          </div>
+          <h3 className="text-2xl sm:text-3xl font-extrabold mb-3">
+            Phonbot für dein ganzes Unternehmen
+          </h3>
+          <p className="text-sm text-white/60 mb-4 max-w-2xl">
+            Ab 5.000 Minuten/Monat, mehrere Standorte oder eigene Integrationen — wir bauen's passgenau.
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-sm text-white/70 max-w-2xl">
+            <span className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
+              Unlimited Agents
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
+              Custom SLA
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
+              Dedicated Manager
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
+              White-Label + SSO
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
+              Custom Integrationen
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
+              AVV & On-Prem möglich
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
+              Volume-Rabatt
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
+              Priority Onboarding
+            </span>
+          </div>
+        </div>
+        <button
+          onClick={onGoToContact ?? onGoToRegister}
+          className="rounded-xl px-8 py-3.5 text-sm font-semibold text-white whitespace-nowrap transition-all duration-300 hover:scale-105 shrink-0 relative z-10"
+          style={{
+            background: 'linear-gradient(135deg, #06B6D4, #F97316)',
+            boxShadow: '0 0 30px rgba(6,182,212,0.3)',
+          }}
+        >
+          Kontakt aufnehmen →
+        </button>
       </div>
 
     </section>

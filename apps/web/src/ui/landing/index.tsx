@@ -85,7 +85,7 @@ export function LandingPage({ onGoToRegister, onGoToLogin, onGoToContact }: Prop
         <FaqSection />
 
         {/* ── PRICING ── */}
-        <PricingSection onGoToRegister={onGoToRegister} />
+        <PricingSection onGoToRegister={onGoToRegister} onGoToContact={onGoToContact} />
 
         {/* ── RÜCKRUF-FORMULAR ── */}
         <CallbackSection />
