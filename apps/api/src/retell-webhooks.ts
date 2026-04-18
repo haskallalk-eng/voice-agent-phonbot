@@ -115,6 +115,26 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       const startTs = (call as RetellCallData).start_timestamp;
       const endTs = (call as RetellCallData).end_timestamp;
       const agentId = (call as RetellCallData).agent_id;
+      const dedupCallId = (call as RetellCallData).call_id;
+
+      // Idempotency gate: Retell retries call_ended on timeout/non-2xx.
+      // Without this, a retried webhook runs reconcileMinutes twice and
+      // double-bills overages (€9 bill → €28 on 3x retry) and doubles
+      // analyzeCall (double OpenAI cost). INSERT ... ON CONFLICT returns 0
+      // rows on second call → we short-circuit.
+      if (dedupCallId && pool) {
+        const claim = await pool.query(
+          `INSERT INTO processed_retell_events (call_id, event_type)
+           VALUES ($1, $2)
+           ON CONFLICT (call_id) DO NOTHING
+           RETURNING call_id`,
+          [dedupCallId, 'call_ended'],
+        );
+        if (!claim.rowCount) {
+          req.log.info({ callId: dedupCallId }, 'retell call_ended dedup hit — skipping');
+          return { ok: true, deduped: true };
+        }
+      }
 
       if (startTs && endTs && agentId) {
         const callDurationMs = Math.max(0, endTs - startTs);

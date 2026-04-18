@@ -271,6 +271,19 @@ export async function migrate() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS processed_stripe_events_received_idx ON processed_stripe_events(received_at);`);
 
+  // Retell webhook idempotency. Retell retries call_ended on non-2xx or timeout.
+  // Without dedup, a retried call_ended runs reconcileMinutes twice -> double
+  // overage charge (€9 bill becomes €28 on 3x retries) and double analyzeCall
+  // (doubles OpenAI analysis cost). PRIMARY KEY on call_id is the dedup key.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS processed_retell_events (
+      call_id     TEXT PRIMARY KEY,
+      event_type  TEXT NOT NULL,
+      received_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS processed_retell_events_received_idx ON processed_retell_events(received_at);`);
+
   // One-time cleanup: delete orphan tickets (org_id IS NULL). These existed from
   // pre-auth days when /tickets was unauthenticated and tenant_id was a free-form
   // string. The legacy "OR (org_id IS NULL AND tenant_id = $orgId::text)" branches

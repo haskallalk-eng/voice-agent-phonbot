@@ -60,13 +60,16 @@ async function verifyOAuthState(state: string, expectedProvider: 'google' | 'mic
     // Replay-protection: atomically claim the nonce. SET NX succeeds only on
     // first callback; any subsequent verifyOAuthState with the same state
     // finds the key and rejects. TTL = remaining state lifetime, so memory
-    // doesn't grow unboundedly. When Redis is down we accept the state (fail
-    // open — OAuth flows must not brick because of cache outage), but a
-    // warning is emitted.
+    // doesn't grow unboundedly. When Redis connection is fully down (!isOpen)
+    // we skip the check (dev-friendliness, OAuth must work without Redis).
+    // But when Redis is reachable and the SET itself fails, we let the error
+    // bubble to the outer try/catch which returns null (fail-closed) — a
+    // silent catch(() => 'OK') here would mean transient Redis errors
+    // allow replay, which is worse than a brief OAuth outage.
     if (payload.nonce && redis?.isOpen) {
       const key = `oauth_state_used:${payload.nonce}`;
       const ttl = Math.max(1, payload.exp - now);
-      const claimed = await redis.set(key, '1', { NX: true, EX: ttl }).catch(() => 'OK');
+      const claimed = await redis.set(key, '1', { NX: true, EX: ttl });
       if (claimed === null) {
         // Already used → replay
         return null;

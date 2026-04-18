@@ -162,13 +162,22 @@ async function syncSubscription(sub: Stripe.Subscription) {
   const plan = Object.values(PLANS).find((p) => p.stripePriceId === priceId || p.stripePriceIdYearly === priceId)?.id ?? 'free';
   const minutesLimit = PLANS[plan as PlanId]?.minutesLimit ?? 30;
 
-  // Check if this is a period renewal (reset minutes_used)
+  // Check if this is a period renewal (reset minutes_used).
+  // Stripe sends current_period_end as Unix seconds; Postgres stores TIMESTAMPTZ.
+  // Comparing via `new Date(oldEnd).getTime() !== cpe*1000` drifts under DST
+  // transitions and can mis-fire in both directions (false reset OR missed reset).
+  // Compare via EXTRACT(EPOCH) in SQL so both sides are integer Unix seconds.
   const currentPeriodEnd = (sub as unknown as { current_period_end?: number }).current_period_end ?? null;
   let resetMinutes = false;
   if (currentPeriodEnd && pool) {
-    const existing = await pool.query(`SELECT current_period_end FROM orgs WHERE id = $1`, [orgId]);
-    const oldEnd = existing.rows[0]?.current_period_end;
-    if (oldEnd && new Date(oldEnd).getTime() !== currentPeriodEnd * 1000) {
+    const existing = await pool.query(
+      `SELECT EXTRACT(EPOCH FROM current_period_end)::bigint AS period_end_unix FROM orgs WHERE id = $1`,
+      [orgId],
+    );
+    const oldEndUnix = existing.rows[0]?.period_end_unix;
+    // oldEndUnix is null when the org has never had a period set (first subscription).
+    // We only reset when we have a previous period AND it's actually different.
+    if (oldEndUnix != null && Number(oldEndUnix) !== currentPeriodEnd) {
       resetMinutes = true; // Period changed = new billing cycle
     }
   }
