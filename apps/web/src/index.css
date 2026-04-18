@@ -12,16 +12,13 @@
 /* ─── Base ─── */
 html {
   scroll-behavior: smooth;
-  overflow-x: hidden;
-  overflow-y: auto !important;
-  height: auto !important;
+  height: auto;
 }
 
 body {
   min-height: 100vh;
-  overflow-x: hidden;
-  overflow-y: auto !important;
-  height: auto !important;
+  overflow-x: clip;
+  height: auto;
 }
 
 #root {
