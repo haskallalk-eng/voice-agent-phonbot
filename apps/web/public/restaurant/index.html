@@ -18,7 +18,7 @@
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:200" />
 <link rel="icon" href="/favicon.ico" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"Service","name":"KI-Telefonassistent für Restaurants","serviceType":"AI Voice Agent","provider":{"@type":"Organization","name":"Phonbot","url":"https://phonbot.de/","parentOrganization":{"@type":"Organization","name":"Mindrails UG (haftungsbeschränkt)","url":"https://mindrails.de/"}},"areaServed":{"@type":"Country","name":"Deutschland"},"description":"Phonbot ist der KI-Telefonassistent für Restaurants. Nimmt Reservierungen an, beantwortet Speisekarten-Fragen, erfasst Take-away-Bestellungen — 24/7 auf Deutsch. Ab 8,99 €/Monat.","audience":{"@type":"BusinessAudience","audienceType":"Restaurants, Cafés, Bars, Lieferdienste"},"offers":{"@type":"Offer","price":"8.99","priceCurrency":"EUR","priceSpecification":{"@type":"UnitPriceSpecification","price":"8.99","priceCurrency":"EUR","unitText":"MONTH"}}}
+{"@context":"https://schema.org","@type":"Service","name":"KI-Telefonassistent für Restaurants","serviceType":"AI Voice Agent","provider":{"@type":"Organization","name":"Phonbot","url":"https://phonbot.de/","parentOrganization":{"@type":"Organization","name":"Mindrails UG (haftungsbeschränkt)","url":"https://mindrails.de/"}},"areaServed":{"@type":"Country","name":"Deutschland"},"description":"Phonbot ist der KI-Telefonassistent für Restaurants. Nimmt Reservierungen an, beantwortet Speisekarten-Fragen, erfasst Take-away-Bestellungen — 24/7 auf Deutsch. Ab 8,99 €/Monat.","audience":{"@type":"BusinessAudience","audienceType":"Restaurants, Cafés, Bars, Lieferdienste"},"offers":{"@type":"AggregateOffer","lowPrice":"8.99","highPrice":"349","priceCurrency":"EUR","offerCount":"5","availability":"https://schema.org/InStock","url":"https://phonbot.de/#preise"}}
 </script>
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Klappt das mit meinem Reservierungs-System (Resmio, Quandoo, OpenTable)?","acceptedAnswer":{"@type":"Answer","text":"Google Calendar und Outlook funktionieren direkt. Spezifische Reservierungs-Systeme auf Anfrage — meist via Kalender-Sync machbar."}},{"@type":"Question","name":"Was bei Sonderwünschen (Allergien, Kinderhochstuhl)?","acceptedAnswer":{"@type":"Answer","text":"Phonbot fragt standardmäßig nach Allergien und fügt Notizen zur Reservierung. Individuelle Felder definierst du im Agent Builder."}},{"@type":"Question","name":"Kann Phonbot Bestellungen für Lieferdienst annehmen?","acceptedAnswer":{"@type":"Answer","text":"Ja. Bestellungen werden als Ticket mit Artikeln + Lieferadresse an die Küche weitergeleitet."}},{"@type":"Question","name":"Versteht Phonbot Dialekte (Bayrisch, Berlinerisch)?","acceptedAnswer":{"@type":"Answer","text":"Ja. Deutsches Sprach-Modell erkennt regionale Varianten und Gerichte-Slang."}}]}
@@ -201,7 +201,8 @@ body.mopen .ph-mob{display:block}
 </header>
 
 
-<header class="hero" style="text-align:center">
+<main id="main" role="main">
+<section class="hero" style="text-align:center">
   <div class="hero-glow"></div>
   <div class="container">
     <span class="hero-eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="#FB923C" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><line x1="18" y1="2" x2="18" y2="22"/><path d="M22 8H14V2"/><line x1="6" y1="2" x2="6" y2="8"/><path d="M2 8a4 4 0 008 0"/><line x1="6" y1="12" x2="6" y2="22"/></svg>KI-Telefonassistent für Restaurants</span>
@@ -213,7 +214,7 @@ body.mopen .ph-mob{display:block}
     </div>
     <div class="demo-hint" style="margin-top:1rem"><svg viewBox="0 0 24 24" fill="none" width="16" height="16" style="vertical-align:middle;margin-right:4px"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" stroke="#F97316" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="#F97316" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="19" x2="12" y2="23" stroke="#F97316" stroke-width="1.8" stroke-linecap="round"/></svg> Klick „live hören“ — Phonbot spricht mit dir im Browser (Mikrofon nötig)</div>
   </div>
-</header>
+</section>
 
 
 <section id="demo-section" style="display:none;padding:2rem 0 3rem">
@@ -339,10 +340,11 @@ body.mopen .ph-mob{display:block}
     </div>
   </div>
 </section>
+</main>
 
 <footer>
   <div class="container">
-    <p>© 2026 Phonbot · Ein Produkt der <a href="https://mindrails.de" rel="noopener">Mindrails UG</a> · <a href="/">Zur Hauptseite</a> · <a href="/#faq">FAQ</a> · <a href="/#pricing">Preise</a></p>
+    <p>© 2026 Phonbot · Ein Produkt der <a href="https://mindrails.de" rel="noopener">Mindrails UG</a> · <a href="/">Zur Hauptseite</a> · <a href="/#faq">FAQ</a> · <a href="/#preise">Preise</a></p>
     <p style="margin-top:.5rem">DSGVO-konform · Server in Deutschland · <a class="obf-mail" data-u="info" data-d="phonbot.de">info (at) phonbot.de</a></p>
   </div>
 </footer>

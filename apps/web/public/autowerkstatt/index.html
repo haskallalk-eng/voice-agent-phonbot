@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0A0A0F" />
-<title>KI-Telefonassistent Autowerkstatt & KFZ-Betrieb | Phonbot</title>
+<title>KI-Telefonassistent für Autowerkstätten — Termine 24/7 | Phonbot</title>
 <meta name="description" content="Phonbot erfasst Fahrzeugdaten, bucht Werkstatt-Termine und erstellt Kostenvoranschlag-Tickets. Hände am Motor, Phonbot am Telefon. 30 Freiminuten testen." />
 <link rel="canonical" href="https://phonbot.de/autowerkstatt/" />
 <link rel="alternate" hreflang="de" href="https://phonbot.de/autowerkstatt/" />
@@ -18,7 +18,7 @@
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:200" />
 <link rel="icon" href="/favicon.ico" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"Service","name":"KI-Telefonassistent für Autowerkstätten","serviceType":"AI Voice Agent","provider":{"@type":"Organization","name":"Phonbot","url":"https://phonbot.de/","parentOrganization":{"@type":"Organization","name":"Mindrails UG (haftungsbeschränkt)","url":"https://mindrails.de/"}},"areaServed":{"@type":"Country","name":"Deutschland"},"description":"Phonbot ist der KI-Telefonassistent für Autowerkstätten. Nimmt Terminanfragen, erfasst Fahrzeug- und Problemdaten, erstellt Kostenvoranschlag-Tickets — 24/7 auf Deutsch. Ab 8,99 €/Monat.","audience":{"@type":"BusinessAudience","audienceType":"Autowerkstätten, Kfz-Meisterbetriebe, Reifenhändler, Lackierereien"},"offers":{"@type":"Offer","price":"8.99","priceCurrency":"EUR","priceSpecification":{"@type":"UnitPriceSpecification","price":"8.99","priceCurrency":"EUR","unitText":"MONTH"}}}
+{"@context":"https://schema.org","@type":"Service","name":"KI-Telefonassistent für Autowerkstätten","serviceType":"AI Voice Agent","provider":{"@type":"Organization","name":"Phonbot","url":"https://phonbot.de/","parentOrganization":{"@type":"Organization","name":"Mindrails UG (haftungsbeschränkt)","url":"https://mindrails.de/"}},"areaServed":{"@type":"Country","name":"Deutschland"},"description":"Phonbot ist der KI-Telefonassistent für Autowerkstätten. Nimmt Terminanfragen, erfasst Fahrzeug- und Problemdaten, erstellt Kostenvoranschlag-Tickets — 24/7 auf Deutsch. Ab 8,99 €/Monat.","audience":{"@type":"BusinessAudience","audienceType":"Autowerkstätten, Kfz-Meisterbetriebe, Reifenhändler, Lackierereien"},"offers":{"@type":"AggregateOffer","lowPrice":"8.99","highPrice":"349","priceCurrency":"EUR","offerCount":"5","availability":"https://schema.org/InStock","url":"https://phonbot.de/#preise"}}
 </script>
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Kann Phonbot verschiedene Werkstatt-Bereiche unterscheiden?","acceptedAnswer":{"@type":"Answer","text":"Ja. Du legst im Agent Builder fest: Reifen-Express (30 Min), Inspektion (2h), Unfall-Reparatur (Termin). Phonbot routet korrekt."}},{"@type":"Question","name":"Was bei TÜV-Terminen?","acceptedAnswer":{"@type":"Answer","text":"Phonbot bucht TÜV-Vorbereitungs-Termine und erinnert auf Wunsch an ablaufende Plaketten."}},{"@type":"Question","name":"Kann der Kunde ein Kostenvoranschlag-Angebot direkt bestätigen?","acceptedAnswer":{"@type":"Answer","text":"Aktuell erstellt Phonbot ein Ticket, du schickst das Angebot per E-Mail/SMS. Auto-Bestätigung via Link kommt 2026."}},{"@type":"Question","name":"Versteht Phonbot Kfz-Fachbegriffe (Zahnriemen, Zylinderkopfdichtung)?","acceptedAnswer":{"@type":"Answer","text":"Ja. Deutsches LLM kennt Kfz-Terminologie."}}]}
@@ -201,7 +201,8 @@ body.mopen .ph-mob{display:block}
 </header>
 
 
-<header class="hero" style="text-align:center">
+<main id="main" role="main">
+<section class="hero" style="text-align:center">
   <div class="hero-glow"></div>
   <div class="container">
     <span class="hero-eyebrow"><svg viewBox="0 0 24 24" fill="none" stroke="#FB923C" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M5 17H3a2 2 0 01-2-2v-4l2.69-6.73A2 2 0 015.54 3h12.92a2 2 0 011.85 1.27L23 11v4a2 2 0 01-2 2h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="17.5" r="2.5"/></svg>KI-Telefonassistent für Autowerkstätten</span>
@@ -213,7 +214,7 @@ body.mopen .ph-mob{display:block}
     </div>
     <div class="demo-hint" style="margin-top:1rem"><svg viewBox="0 0 24 24" fill="none" width="16" height="16" style="vertical-align:middle;margin-right:4px"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" stroke="#F97316" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="#F97316" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><line x1="12" y1="19" x2="12" y2="23" stroke="#F97316" stroke-width="1.8" stroke-linecap="round"/></svg> Klick „live hören“ — Phonbot spricht mit dir im Browser (Mikrofon nötig)</div>
   </div>
-</header>
+</section>
 
 
 <section id="demo-section" style="display:none;padding:2rem 0 3rem">
@@ -339,10 +340,11 @@ body.mopen .ph-mob{display:block}
     </div>
   </div>
 </section>
+</main>
 
 <footer>
   <div class="container">
-    <p>© 2026 Phonbot · Ein Produkt der <a href="https://mindrails.de" rel="noopener">Mindrails UG</a> · <a href="/">Zur Hauptseite</a> · <a href="/#faq">FAQ</a> · <a href="/#pricing">Preise</a></p>
+    <p>© 2026 Phonbot · Ein Produkt der <a href="https://mindrails.de" rel="noopener">Mindrails UG</a> · <a href="/">Zur Hauptseite</a> · <a href="/#faq">FAQ</a> · <a href="/#preise">Preise</a></p>
     <p style="margin-top:.5rem">DSGVO-konform · Server in Deutschland · <a class="obf-mail" data-u="info" data-d="phonbot.de">info (at) phonbot.de</a></p>
   </div>
 </footer>

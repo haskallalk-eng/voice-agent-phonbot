@@ -5,17 +5,36 @@ Disallow: /admin
 Disallow: /onboarding
 Disallow: /api/
 
-# Block AI crawlers that don't respect copyright (optional - remove if you want AI models to train on your content)
+# AI crawlers — explicitly allowed. Phonbot publishes llms.txt + llms-full.txt
+# and wants to be quotable in ChatGPT, Claude, Perplexity, Google AI Overview.
 User-agent: GPTBot
-Disallow: /
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
 
 User-agent: CCBot
-Disallow: /
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
 
 User-agent: ClaudeBot
 Allow: /
 
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
 User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
 Allow: /
 
 Sitemap: https://phonbot.de/sitemap.xml
