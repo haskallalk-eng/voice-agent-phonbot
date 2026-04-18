@@ -34,7 +34,7 @@ export function FooterSection({ onShowLegal, onGoToContact }: FooterSectionProps
             <ul className="space-y-2">
               <li><a href="/datenschutz/" className="text-sm text-white/40 hover:text-white/70 transition-colors">Datenschutz</a></li>
               <li><a href="/impressum/" className="text-sm text-white/40 hover:text-white/70 transition-colors">Impressum</a></li>
-              <li><button onClick={() => onShowLegal('agb')} className="text-sm text-white/40 hover:text-white/70 transition-colors">AGB</button></li>
+              <li><a href="/agb/" className="text-sm text-white/40 hover:text-white/70 transition-colors">AGB</a></li>
             </ul>
           </div>
 
