@@ -97,7 +97,7 @@ const MAX_POOL_SIZE = 3;
  * Redis advisory lock with a 10-min TTL coalesces the work to one container
  * per deploy window. Fail-open if Redis is down (single instance scenario).
  */
-async function syncTwilioNumbersToDb() {
+export async function syncTwilioNumbersToDb() {
   if (!pool) return;
 
   if (redis?.isOpen) {

@@ -19,7 +19,7 @@ import { registerAgentConfig } from './agent-config.js';
 import { registerRetellWebhooks } from './retell-webhooks.js';
 import { registerBilling } from './billing.js';
 import { registerDemo } from './demo.js';
-import { registerPhone, migratePhone } from './phone.js';
+import { registerPhone, migratePhone, syncTwilioNumbersToDb } from './phone.js';
 import { registerCalendar, migrateCalendar } from './calendar.js';
 import { registerVoices } from './voices.js';
 import { registerInsights } from './insights.js';
@@ -275,6 +275,18 @@ if (pool) {
   };
   setInterval(runLeadsCleanup, 24 * 60 * 60 * 1000); // every 24h
   setTimeout(runLeadsCleanup, 65_000); // first run 65s after startup (staggered from transcripts)
+
+  // Twilio phone-pool sync: without this, orphan numbers (from deleted orgs or
+  // failed provisioning) keep incurring €1/month at Twilio until the next
+  // server restart. syncTwilioNumbersToDb() has a 10-min Redis advisory lock
+  // so multiple replicas can't stampede Twilio's rate limit. Every 6h is a
+  // balance between Twilio API cost and how long orphan numbers linger.
+  const runPhoneSync = async () => {
+    try { await syncTwilioNumbersToDb(); }
+    catch (e) { app.log.warn({ err: (e as Error).message }, 'scheduled phone sync failed'); }
+  };
+  setInterval(runPhoneSync, 6 * 60 * 60 * 1000); // every 6h
+  // Initial startup sync already runs in migratePhone(); don't double it here.
 }
 
 app.get('/health', async () => {

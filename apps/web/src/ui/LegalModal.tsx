@@ -405,6 +405,12 @@ function AgbContent() {
           Plattform zu sperren. Überschreitungen des gebuchten Minutenvolumens werden gemäß dem
           aktuellen Tarif im Folgemonat abgerechnet.
         </p>
+        <p className="mt-2">
+          <strong>Sekundengenaue Abrechnung:</strong> Gesprächsminuten werden sekundengenau ermittelt und
+          in Dezimalminuten (zwei Nachkommastellen) verrechnet. Ein Anruf von 61 Sekunden zählt als
+          1,02 Minuten, nicht als 2 Minuten. Der Kunde zahlt ausschließlich für die tatsächlich
+          genutzte Gesprächszeit.
+        </p>
       </section>
 
       <section>

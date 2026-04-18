@@ -78,18 +78,46 @@ async function getOrCreateStripeCustomer(orgId: string, email: string, orgName: 
   if (!stripe) throw new Error('Stripe not configured');
   if (!pool) throw new Error('Database not configured');
 
-  const res = await pool.query('SELECT stripe_customer_id FROM orgs WHERE id = $1', [orgId]);
-  const existing = res.rows[0]?.stripe_customer_id as string | null;
+  // Fast path: already bound to a Stripe Customer.
+  const fast = await pool.query('SELECT stripe_customer_id FROM orgs WHERE id = $1', [orgId]);
+  const existing = fast.rows[0]?.stripe_customer_id as string | null;
   if (existing) return existing;
 
-  const customer = await stripe.customers.create({
-    email,
-    name: orgName,
-    metadata: { orgId },
-  });
+  // Slow path with transaction + row lock to prevent TOCTOU:
+  // parallel checkouts for the same org would otherwise each see NULL,
+  // each call stripe.customers.create, and the second UPDATE would
+  // orphan the first Customer (still billable, never referenced).
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const locked = await client.query(
+      'SELECT stripe_customer_id FROM orgs WHERE id = $1 FOR UPDATE',
+      [orgId],
+    );
+    const stillExisting = locked.rows[0]?.stripe_customer_id as string | null;
+    if (stillExisting) {
+      await client.query('COMMIT');
+      return stillExisting;
+    }
 
-  await pool!.query('UPDATE orgs SET stripe_customer_id = $1 WHERE id = $2', [customer.id, orgId]);
-  return customer.id;
+    const customer = await stripe.customers.create({
+      email,
+      name: orgName,
+      metadata: { orgId },
+    });
+
+    await client.query(
+      'UPDATE orgs SET stripe_customer_id = $1 WHERE id = $2',
+      [customer.id, orgId],
+    );
+    await client.query('COMMIT');
+    return customer.id;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {/* already rolled back */});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 /**

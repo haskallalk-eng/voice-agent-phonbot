@@ -138,7 +138,10 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
       if (startTs && endTs && agentId) {
         const callDurationMs = Math.max(0, endTs - startTs);
-        const minutes = Math.ceil(callDurationMs / 60000);
+        // Second-accurate billing: 61s = 1.02 min, not 2 min. Customers pay
+        // for what they actually used. Stored as NUMERIC(10,2) in orgs.minutes_used.
+        // See AGB § 5: "sekundengenaue Abrechnung".
+        const minutes = Math.round((callDurationMs / 60000) * 100) / 100;
 
         const orgId = await getOrgIdByAgentId(agentId);
         if (orgId) {

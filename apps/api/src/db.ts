@@ -6,6 +6,12 @@ import { logBg } from './logger.js';
 
 const { Pool } = pg;
 
+// Parse Postgres NUMERIC/DECIMAL as JS number (not string). By default node-pg
+// returns NUMERIC as string to preserve arbitrary precision, but we only use
+// NUMERIC for minutes (2 decimals, small values) where float precision is fine.
+// Returning numbers avoids string-math bugs at every read site. 1700 = NUMERIC.
+pg.types.setTypeParser(1700, (val) => (val === null ? null : parseFloat(val)) as unknown as string);
+
 export const DATABASE_URL = process.env.DATABASE_URL;
 
 /**
@@ -197,6 +203,23 @@ export async function migrate() {
   await pool.query(`alter table orgs add column if not exists current_period_end timestamptz;`);
   await pool.query(`alter table orgs add column if not exists minutes_used int not null default 0;`);
   await pool.query(`alter table orgs add column if not exists minutes_limit int not null default 100;`);
+
+  // Migrate minutes_used to NUMERIC(10,2) so we can bill to-the-second accuracy
+  // instead of rounding every call up to the next full minute (Math.ceil was
+  // ~10% over-billing the customer on short calls). Idempotent: the DO block
+  // checks data_type before running ALTER. minutes_limit stays INT since
+  // plans always quote whole-minute quotas.
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF (SELECT data_type FROM information_schema.columns
+          WHERE table_name='orgs' AND column_name='minutes_used') = 'integer' THEN
+        ALTER TABLE orgs
+          ALTER COLUMN minutes_used TYPE NUMERIC(10,2)
+          USING minutes_used::NUMERIC(10,2);
+      END IF;
+    END $$;
+  `);
 
   // Twilio subaccount + regulatory compliance
   await pool.query(`ALTER TABLE orgs ADD COLUMN IF NOT EXISTS twilio_subaccount_sid text;`);
