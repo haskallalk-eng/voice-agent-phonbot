@@ -9,10 +9,52 @@
  */
 
 import crypto from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import WS from 'ws';
+import twilio from 'twilio';
 import { pool } from './db.js';
 import { redis } from './redis.js';
+
+// Twilio signs every webhook with HMAC-SHA1(authToken, fullUrl + sortedBodyParams).
+// Without validation, anyone who guesses our webhook URL can POST fake CallStatus
+// updates, e.g. mark a still-ringing call as "completed" or burn outbound minutes
+// against another org. We validate on every Twilio HTTP entrypoint.
+function makeTwilioAuthenticator(app: FastifyInstance) {
+  return async function authenticateTwilio(req: FastifyRequest, reply: FastifyReply) {
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    if (!authToken) {
+      // Fail-closed in prod: no token means we can't verify — reject.
+      if (process.env.NODE_ENV === 'production') {
+        app.log.error({ route: req.url }, 'TWILIO_AUTH_TOKEN missing — rejecting webhook');
+        return reply.code(500).send('server misconfigured');
+      }
+      app.log.warn({ route: req.url }, 'TWILIO_AUTH_TOKEN missing — skipping signature check (dev only)');
+      return;
+    }
+
+    const signature = req.headers['x-twilio-signature'];
+    if (typeof signature !== 'string') {
+      app.log.warn({ route: req.url, ip: req.ip }, 'Twilio webhook without signature header');
+      return reply.code(403).send('missing signature');
+    }
+
+    // Reconstruct the public URL Twilio hit. Behind a reverse proxy (Caddy),
+    // req.protocol is 'http' and req.hostname drops the port — use X-Forwarded-*
+    // or fall back to WEBHOOK_BASE_URL which is the canonical public base.
+    const proto = (req.headers['x-forwarded-proto'] as string | undefined) ?? req.protocol;
+    const host = (req.headers['x-forwarded-host'] as string | undefined) ?? req.headers.host ?? req.hostname;
+    const base = process.env.WEBHOOK_BASE_URL ?? `${proto}://${host}`;
+    const fullUrl = new URL(req.url, base).toString();
+
+    const params = (req.body ?? {}) as Record<string, string>;
+    const valid = twilio.validateRequest(authToken, signature, fullUrl, params);
+
+    if (!valid) {
+      app.log.warn({ route: req.url, ip: req.ip }, 'Twilio signature validation failed');
+      return reply.code(403).send('invalid signature');
+    }
+  };
+}
 
 // Pin OpenAI Realtime model via env var (avoids silent breakage when "preview" alias changes)
 const OPENAI_REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL ?? 'gpt-4o-realtime-preview-2024-12-17';
@@ -135,10 +177,12 @@ export async function triggerBridgeCall(params: {
 // ── Route registration ────────────────────────────────────────────────────────
 
 export async function registerTwilioBridge(app: FastifyInstance) {
+  const verifyTwilio = makeTwilioAuthenticator(app);
+
   // POST /outbound/twiml/:sessionId
   // Twilio fetches this when the user picks up the outbound call.
   // Returns TwiML that connects Twilio's audio stream to our WebSocket bridge.
-  app.post('/outbound/twiml/:sessionId', async (req, reply) => {
+  app.post('/outbound/twiml/:sessionId', { preHandler: verifyTwilio }, async (req, reply) => {
     const { sessionId } = req.params as { sessionId: string };
     const webhookBase = process.env.WEBHOOK_BASE_URL ?? (
       process.env.NODE_ENV === 'production'
@@ -163,7 +207,7 @@ export async function registerTwilioBridge(app: FastifyInstance) {
   // POST /outbound/status/:sessionId — Twilio StatusCallback (application/x-www-form-urlencoded)
   // Updates outbound_calls.status to the final disposition (completed/failed/no-answer/busy/canceled).
   // Without this, calls that never connect (VoiceMail, busy, network) remain status='calling' forever.
-  app.post('/outbound/status/:sessionId', async (req, reply) => {
+  app.post('/outbound/status/:sessionId', { preHandler: verifyTwilio }, async (req, reply) => {
     const { sessionId } = req.params as { sessionId: string };
     const body = (req.body ?? {}) as Record<string, string>;
     const callStatus = body.CallStatus ?? 'unknown';

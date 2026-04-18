@@ -21,6 +21,7 @@
 import type { FastifyInstance } from 'fastify';
 import OpenAI from 'openai';
 import { pool } from './db.js';
+import { logBg } from './logger.js';
 import { computeSatisfactionScore, extractSignalsFromCall, storeSatisfactionData } from './satisfaction-signals.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? '' });
@@ -377,7 +378,7 @@ async function applyPromptAddition(orgId: string, addition: string): Promise<voi
   const fixCount = await getAppliedFixCount(orgId);
   // fixCount > 0 guard prevents triggering consolidation on the very first fix (0 % 5 === 0 is a trap)
   if (updated.length > MAX_PROMPT_CHARS || (fixCount > 0 && fixCount % CONSOLIDATION_FIX_INTERVAL === 0)) {
-    consolidatePrompt(orgId).catch(() => {});
+    consolidatePrompt(orgId).catch(logBg('consolidatePrompt', { orgId }));
   }
 }
 
@@ -885,10 +886,8 @@ Falls keine Probleme: bad_moments leer. satisfaction_signals ist immer auszufül
 
   // Cross-org template learning (fire-and-forget)
   import('./template-learning.js').then(({ processTemplateLearning }) => {
-    processTemplateLearning(orgId, callId, analysis).catch((err: unknown) => {
-      process.stderr.write(`[insights] template learning failed (orgId=${orgId}): ${err instanceof Error ? err.message : String(err)}\n`);
-    });
-  }).catch(() => {});
+    processTemplateLearning(orgId, callId, analysis).catch(logBg('template-learning', { orgId, callId }));
+  }).catch(logBg('template-learning-import'));
 
   // Outlier detection — if this call's score is a statistical outlier (e.g. angry caller, bad connection),
   // double the threshold so a single freak call can't trigger prompt changes.
@@ -912,7 +911,7 @@ Falls keine Probleme: bad_moments leer. satisfaction_signals ist immer auszufül
   const appliedInThisCycle = { applied: false };
 
   // Record this call in any running A/B test before processing issues
-  await recordAbTestCall(orgId, analysis.score).catch(() => {});
+  await recordAbTestCall(orgId, analysis.score).catch(logBg('recordAbTestCall', { orgId }));
 
   // Process each bad moment with semantic matching
   for (const moment of analysis.bad_moments) {
@@ -920,11 +919,11 @@ Falls keine Probleme: bad_moments leer. satisfaction_signals ist immer auszufül
   }
 
   const totalCalls = await getTotalCallCount(orgId);
-  if (totalCalls % HOLISTIC_REVIEW_INTERVAL === 0) holisticReview(orgId).catch(() => {});
+  if (totalCalls % HOLISTIC_REVIEW_INTERVAL === 0) holisticReview(orgId).catch(logBg('holisticReview', { orgId }));
 
-  checkFixEffectiveness(orgId).catch(() => {});
-  checkScoreRollback(orgId).catch(() => {});
-  checkConsolidationQuality(orgId).catch(() => {});
+  checkFixEffectiveness(orgId).catch(logBg('checkFixEffectiveness', { orgId }));
+  checkScoreRollback(orgId).catch(logBg('checkScoreRollback', { orgId }));
+  checkConsolidationQuality(orgId).catch(logBg('checkConsolidationQuality', { orgId }));
 }
 
 // ── Learning loop with semantic matching ──────────────────────────────────────
@@ -1175,7 +1174,7 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
   app.post('/insights/consolidate', { onRequest: [app.authenticate] }, async (req, reply) => {
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
     const orgId = (req.user as { orgId: string }).orgId;
-    consolidatePrompt(orgId).catch(() => {});
+    consolidatePrompt(orgId).catch(logBg('consolidatePrompt-manual', { orgId }));
     return { ok: true };
   });
 }

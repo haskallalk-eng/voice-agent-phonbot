@@ -2,6 +2,7 @@ import pg from 'pg';
 import dns from 'node:dns/promises';
 import { URL } from 'node:url';
 import './env.js'; // ensure dotenv is loaded before we read process.env
+import { logBg } from './logger.js';
 
 const { Pool } = pg;
 
@@ -243,7 +244,7 @@ export async function migrate() {
   // ADD CONSTRAINT fails on existing deployments where orphan rows exist
   // (pre-FK users who got deleted manually). Idempotent DO block because
   // IF NOT EXISTS isn't supported on constraints directly.
-  await pool.query(`DELETE FROM refresh_tokens WHERE user_id NOT IN (SELECT id FROM users);`).catch(() => {});
+  await pool.query(`DELETE FROM refresh_tokens WHERE user_id NOT IN (SELECT id FROM users);`).catch(logBg('cleanup-orphan-refresh-tokens'));
   await pool.query(`
     DO $$
     BEGIN

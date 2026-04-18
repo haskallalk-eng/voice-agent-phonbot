@@ -246,10 +246,46 @@ function DatenschutzContent() {
 
         <h3 className="text-sm font-semibold text-white/90 mt-3 mb-1">Retell AI (KI-Telefonie)</h3>
         <p>
-          Für die KI-gestützte Sprachverarbeitung von Telefonanrufen verwenden wir Retell AI. Bei
-          Telefonanrufen werden Sprachdaten zur Verarbeitung übertragen. Nutzer werden zu Beginn eines
-          Anrufs auf die Aufzeichnung hingewiesen. Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO bzw.
-          Art. 6 Abs. 1 lit. a DSGVO.
+          Für die KI-gestützte Sprachverarbeitung von Telefonanrufen verwenden wir Retell AI Inc., USA.
+          Bei Telefonanrufen werden Sprachdaten (Audio, Transkript, Metadaten wie Nummer und Anrufdauer)
+          zur Verarbeitung übertragen. Nutzer werden zu Beginn eines Anrufs auf die Aufzeichnung
+          hingewiesen (§ 201 StGB). Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO bzw. Art. 6 Abs. 1 lit.
+          a DSGVO. Datenübermittlung in die USA auf Basis der EU-Standardvertragsklauseln
+          (Art. 46 Abs. 2 lit. c DSGVO) sowie des EU-US Data Privacy Framework, sofern der Anbieter
+          zertifiziert ist.
+        </p>
+
+        <h3 className="text-sm font-semibold text-white/90 mt-3 mb-1">Twilio (Telefonie-Infrastruktur)</h3>
+        <p>
+          Für die eigentliche Telefonverbindung (Durchleitung, Rufnummern, SIP-Trunk, SMS) verwenden
+          wir Twilio Inc. bzw. Twilio Ireland Limited. Dabei werden Verbindungsdaten (Rufnummer des
+          Anrufers, gewählte Nummer, Zeitstempel, Gesprächsdauer, Audio-Streams) verarbeitet. Ein
+          Auftragsverarbeitungsvertrag nach Art. 28 DSGVO besteht. Datenübermittlung in die USA auf
+          Basis der EU-Standardvertragsklauseln (Art. 46 Abs. 2 lit. c DSGVO) sowie des EU-US Data
+          Privacy Framework. Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO. Details:
+          twilio.com/en-us/legal/privacy.
+        </p>
+
+        <h3 className="text-sm font-semibold text-white/90 mt-3 mb-1">OpenAI (KI-Sprachverarbeitung)</h3>
+        <p>
+          Zur Analyse und Verarbeitung von Gesprächsinhalten (z. B. Intent-Erkennung, automatische
+          Antwortgenerierung, Transkript-Auswertung) setzen wir OpenAI, L.L.C., USA ein. Dabei werden
+          Gesprächstranskripte an OpenAI übermittelt. OpenAI verwendet über die API gesendete Daten
+          gemäß eigener Richtlinie nicht zum Modell-Training. Ein Auftragsverarbeitungsvertrag nach
+          Art. 28 DSGVO besteht (OpenAI Data Processing Addendum). Datenübermittlung in die USA auf
+          Basis der EU-Standardvertragsklauseln sowie des EU-US Data Privacy Framework.
+          Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO. Details: openai.com/policies/privacy-policy.
+        </p>
+
+        <h3 className="text-sm font-semibold text-white/90 mt-3 mb-1">Cloudflare (CAPTCHA &amp; DDoS-Schutz)</h3>
+        <p>
+          Zur Absicherung öffentlicher Formulare gegen Bot-Missbrauch (Demo-Anfragen, Rückruf-Formular,
+          Registrierung) setzen wir Cloudflare Turnstile der Cloudflare, Inc., USA ein. Dabei werden
+          IP-Adresse, Browser-Merkmale und eine kurzlebige Challenge-Signatur verarbeitet. Turnstile
+          verzichtet auf Tracking-Cookies. Datenübermittlung in die USA auf Basis der
+          EU-Standardvertragsklauseln sowie des EU-US Data Privacy Framework. Rechtsgrundlage: Art. 6
+          Abs. 1 lit. f DSGVO (berechtigtes Interesse an Missbrauchsschutz). Details:
+          cloudflare.com/privacypolicy.
         </p>
 
         <h3 className="text-sm font-semibold text-white/90 mt-3 mb-1">Sentry (Fehlerüberwachung)</h3>

@@ -30,6 +30,7 @@ import { registerLearningApi } from './learning-api.js';
 import { registerTrainingExport } from './training-export.js';
 import { registerContact } from './contact.js';
 import { registerAdmin } from './admin.js';
+import { setBgLogger } from './logger.js';
 
 initSentry();
 const SENTRY_DSN = process.env.SENTRY_DSN ?? '';
@@ -74,6 +75,9 @@ const app = Fastify({
   },
   trustProxy: true,
 });
+// Expose the root pino logger to module-scope code (logger.ts) so
+// background jobs can use the same pipeline (Sentry, redaction, etc.).
+setBgLogger(app.log);
 await app.register(websocket);
 // Twilio webhooks (TwiML, StatusCallback) use application/x-www-form-urlencoded.
 // Without this plugin Fastify returns 415 Unsupported Media Type.

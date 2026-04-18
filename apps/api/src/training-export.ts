@@ -15,6 +15,7 @@
 import type { FastifyInstance } from 'fastify';
 import { pool } from './db.js';
 import { redis } from './redis.js';
+import { logBg } from './logger.js';
 
 // Distributed lock for generateTrainingExamples — prevents duplicate inserts when
 // multiple /learning/export requests fire the fire-and-forget generator concurrently.
@@ -28,7 +29,7 @@ async function acquireLock(): Promise<boolean> {
   return res === 'OK';
 }
 async function releaseLock(): Promise<void> {
-  if (redis?.isOpen) await redis.del(LOCK_KEY).catch(() => {});
+  if (redis?.isOpen) await redis.del(LOCK_KEY).catch(logBg('redis-del-lock', { key: LOCK_KEY }));
 }
 
 // ── Training example generation ───────────────────────────────────────────────
@@ -236,7 +237,7 @@ export async function registerTrainingExport(app: FastifyInstance): Promise<void
       const limit = Math.min(Number(req.query.limit ?? 1000), 10000);
 
       // Optionally trigger generation of new examples first
-      generateTrainingExamples(200).catch(() => {});
+      generateTrainingExamples(200).catch(logBg('generateTrainingExamples', { batchSize: 200 }));
 
       // CRITICAL: org_id filter — was previously missing, allowing any authenticated user
       // to download ALL tenants' call transcripts as training data.

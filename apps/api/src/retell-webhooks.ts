@@ -10,6 +10,7 @@
 
 import crypto from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { logBg } from './logger.js';
 import { createTicket } from './tickets.js';
 import { appendTraceEvent } from './traces.js';
 import { reconcileMinutes, DEFAULT_CALL_RESERVE_MINUTES } from './usage.js';
@@ -368,7 +369,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           customerName: row.customer_name,
           reason: row.reason,
           service: row.service,
-        }).catch(() => {});
+        }).catch(logBg('triggerCallback', { orgId }));
       }
 
       const result = {

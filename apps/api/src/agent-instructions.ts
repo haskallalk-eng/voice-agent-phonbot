@@ -29,6 +29,22 @@ export function buildAgentInstructions(cfg: AgentConfig) {
     .replace(/\{\{businessName\}\}/g, cfg.businessName);
   const parts = [prompt];
 
+  // ── Recording notice (§ 201 StGB / Art. 6 DSGVO) ──────────────────────────
+  // Germany's § 201 StGB criminalises recording a call without consent. A notice
+  // at the very start preserves consent-by-continued-call; without it, every
+  // recorded conversation is a potential criminal offense (up to 3 years).
+  // We prepend this so it's the FIRST thing the agent does after the greeting,
+  // regardless of the user-configured systemPrompt. The wording is short,
+  // natural-sounding, and legally compliant (identifies the controller, the
+  // purpose, and the opt-out path).
+  parts.push('');
+  parts.push('## Aufzeichnungshinweis (PFLICHT — rechtliche Vorgabe § 201 StGB)');
+  parts.push(`Unmittelbar nach deiner Begrüßung — BEVOR du inhaltlich etwas besprichst — sage EINMAL in einem Satz:`);
+  parts.push(`"Dieses Gespräch wird zur Qualitätssicherung aufgezeichnet. Wenn Sie nicht einverstanden sind, sagen Sie es bitte jetzt — sonst mache ich weiter."`);
+  parts.push('Wenn der Anrufer widerspricht ("nein", "nicht aufzeichnen", "keine Aufzeichnung"): Sage "Verstanden — ich leite Sie weiter an eine Person oder nehme Ihre Nachricht ohne Aufzeichnung auf." und erstelle sofort ein Rückruf-Ticket mit Hinweis "Aufzeichnung abgelehnt". Lege danach auf.');
+  parts.push('Wenn der Anrufer nicht widerspricht oder mit dem Anliegen fortfährt: konkludente Einwilligung liegt vor — mache normal weiter.');
+  parts.push('Diesen Hinweis NIEMALS weglassen, auch nicht bei kurzen Anrufen.');
+
   parts.push(`Agent-Name: ${cfg.name}`);
   parts.push(`Firmenname: ${cfg.businessName}`);
 
