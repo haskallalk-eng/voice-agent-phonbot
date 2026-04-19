@@ -29,7 +29,7 @@ export interface CuratedVoice {
 // etc.), then add here. Quality > quantity.
 export const VOICE_CATALOG: Record<string, CuratedVoice[]> = {
   de: [
-    { id: DEFAULT_VOICE_ID, name: 'Chipy (Standard)', gender: 'male', provider: 'cartesia', isDefault: true },
+    { id: DEFAULT_VOICE_ID, name: 'Chipy (Standard)', gender: 'male', provider: 'elevenlabs', isDefault: true },
     { id: 'cartesia-Eva', name: 'Eva', gender: 'female', provider: 'cartesia' },
     { id: 'cartesia-Lina', name: 'Lina', gender: 'female', provider: 'cartesia' },
     { id: 'minimax-Max', name: 'Max', gender: 'male', provider: 'minimax' },
