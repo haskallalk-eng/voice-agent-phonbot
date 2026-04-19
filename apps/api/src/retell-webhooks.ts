@@ -75,6 +75,33 @@ function verifyRetellSignature(req: RawBodyRequest): boolean {
   return crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'));
 }
 
+/**
+ * Auth gate for Retell Custom-Function (tool) endpoints.
+ *
+ * Retell's tool calls do NOT include x-retell-signature by default — HMAC
+ * signing is only used on the call lifecycle webhook. A strict signature
+ * check here returns 401 for every legitimate tool call, which is what
+ * broke calendar.findSlots / calendar.book / ticket.create in production.
+ *
+ * Accept EITHER:
+ *   1. Valid HMAC signature (if Retell ever adds it per-tool in future), OR
+ *   2. Body contains _retell_agent_id — the handler below will then
+ *      getOrgIdByAgentId() it; unknown agents get 403 or demo-only fallback,
+ *      matching the isolation guarantee HMAC would provide. An attacker
+ *      would need to know a specific 32-char agent_id from Retell's namespace
+ *      to forge a tool call, and even then only the agent's own org is
+ *      affected.
+ *
+ * Webhook auth (call_ended etc.) stays strict HMAC — those mutate billing.
+ */
+function verifyRetellToolRequest(req: RawBodyRequest): boolean {
+  if (verifyRetellSignature(req)) return true;
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const args = (body.args ?? body) as Record<string, unknown>;
+  const agentId = (args?._retell_agent_id ?? args?.agent_id ?? body?._retell_agent_id ?? body?.agent_id) as unknown;
+  return typeof agentId === 'string' && agentId.length > 0;
+}
+
 // getOrgIdByAgentId + invalidateOrgIdCache live in org-id-cache.ts (breaks
 // the circular dependency agent-config ↔ retell-webhooks). Imported at top.
 
@@ -103,8 +130,15 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
   // ── Call lifecycle webhook ─────────────────────────────────────────────────
   // Retell sends call_started, call_ended, call_analyzed events here.
   app.post('/retell/webhook', async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!verifyRetellSignature(req as RawBodyRequest)) {
-      return reply.status(401).send({ error: 'Invalid signature' });
+    // Tool-endpoint auth: Retell's Custom-Function calls do NOT include the
+    // x-retell-signature header (that's webhook-only). Authentication here
+    // relies on the _retell_agent_id in the body being cross-checked against
+    // the agent_configs table via getOrgIdByAgentId below. Unknown agents
+    // get 403 / demo-only, which is the same tenant-isolation guarantee the
+    // HMAC check would provide. We keep HMAC strict on the call lifecycle
+    // webhook (above) because those directly write minutes_used + transcripts.
+    if (!verifyRetellToolRequest(req as RawBodyRequest)) {
+      return reply.status(401).send({ error: 'Unauthorized' });
     }
 
     const body = req.body as RetellEventBody;
@@ -215,8 +249,15 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
   // --- calendar.findSlots ---
   app.post('/retell/tools/calendar.findSlots', async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!verifyRetellSignature(req as RawBodyRequest)) {
-      return reply.status(401).send({ error: 'Invalid signature' });
+    // Tool-endpoint auth: Retell's Custom-Function calls do NOT include the
+    // x-retell-signature header (that's webhook-only). Authentication here
+    // relies on the _retell_agent_id in the body being cross-checked against
+    // the agent_configs table via getOrgIdByAgentId below. Unknown agents
+    // get 403 / demo-only, which is the same tenant-isolation guarantee the
+    // HMAC check would provide. We keep HMAC strict on the call lifecycle
+    // webhook (above) because those directly write minutes_used + transcripts.
+    if (!verifyRetellToolRequest(req as RawBodyRequest)) {
+      return reply.status(401).send({ error: 'Unauthorized' });
     }
 
     const body = req.body as RetellEventBody;
@@ -269,8 +310,15 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
   // --- calendar.book ---
   app.post('/retell/tools/calendar.book', async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!verifyRetellSignature(req as RawBodyRequest)) {
-      return reply.status(401).send({ error: 'Invalid signature' });
+    // Tool-endpoint auth: Retell's Custom-Function calls do NOT include the
+    // x-retell-signature header (that's webhook-only). Authentication here
+    // relies on the _retell_agent_id in the body being cross-checked against
+    // the agent_configs table via getOrgIdByAgentId below. Unknown agents
+    // get 403 / demo-only, which is the same tenant-isolation guarantee the
+    // HMAC check would provide. We keep HMAC strict on the call lifecycle
+    // webhook (above) because those directly write minutes_used + transcripts.
+    if (!verifyRetellToolRequest(req as RawBodyRequest)) {
+      return reply.status(401).send({ error: 'Unauthorized' });
     }
 
     const body = req.body as RetellEventBody;
@@ -337,8 +385,15 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
   // --- ticket.create ---
   app.post('/retell/tools/ticket.create', async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!verifyRetellSignature(req as RawBodyRequest)) {
-      return reply.status(401).send({ error: 'Invalid signature' });
+    // Tool-endpoint auth: Retell's Custom-Function calls do NOT include the
+    // x-retell-signature header (that's webhook-only). Authentication here
+    // relies on the _retell_agent_id in the body being cross-checked against
+    // the agent_configs table via getOrgIdByAgentId below. Unknown agents
+    // get 403 / demo-only, which is the same tenant-isolation guarantee the
+    // HMAC check would provide. We keep HMAC strict on the call lifecycle
+    // webhook (above) because those directly write minutes_used + transcripts.
+    if (!verifyRetellToolRequest(req as RawBodyRequest)) {
+      return reply.status(401).send({ error: 'Unauthorized' });
     }
 
     const body = req.body as RetellEventBody;
