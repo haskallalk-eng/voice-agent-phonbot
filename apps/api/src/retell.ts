@@ -8,10 +8,11 @@
 const RETELL_API = 'https://api.retellai.com';
 
 // Default voice for new demo agents + fallback when an agent config has no explicit voice.
-// "Chipy" is now backed by ElevenLabs "Callum" (husky trickster) via Retell's
-// 11labs-prefixed routing. Override via RETELL_DEFAULT_VOICE_ID without a deploy.
+// Reverted to the Cartesia "chipy" clone — Retell's ElevenLabs catalog has no
+// male German voice available (only 11labs-Carola female). Override via env
+// RETELL_DEFAULT_VOICE_ID without a deploy when a suitable replacement exists.
 export const DEFAULT_VOICE_ID =
-  process.env.RETELL_DEFAULT_VOICE_ID ?? '11labs-Callum';
+  process.env.RETELL_DEFAULT_VOICE_ID ?? 'custom_voice_28bd4920fa6523c6ac8c4e527b';
 
 function getApiKey(): string {
   const key = process.env.RETELL_API_KEY;
