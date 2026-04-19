@@ -4,7 +4,8 @@
  */
 
 import { pool } from './db.js';
-import { PLANS, type PlanId, chargeOverageMinutes } from './billing.js';
+import { PLANS, type PlanId, chargeOverageMinutes, chargePremiumVoiceMinutes } from './billing.js';
+import { getVoiceSurcharge } from './voice-catalog.js';
 
 /**
  * Default minutes we reserve at call-start. Reconciled to actual at call-end
@@ -175,8 +176,35 @@ export async function reconcileMinutes(
   orgId: string,
   reservedMinutes: number,
   actualMinutes: number,
+  agentId?: string,
 ): Promise<void> {
   if (!pool) return;
+
+  // Premium-voice surcharge (applied to ALL minutes of the call, not just
+  // overage). Looked up by resolving the agent's configured voice against
+  // voice-catalog.ts; voices without a surcharge field no-op. Fire-and-
+  // forget so Stripe-API slowness doesn't block the webhook response.
+  if (agentId && actualMinutes > 0) {
+    try {
+      const voiceRes = await pool.query(
+        `SELECT data->>'voice' AS voice_id FROM agent_configs
+         WHERE data->>'retellAgentId' = $1 OR data->>'retellCallbackAgentId' = $1
+         LIMIT 1`,
+        [agentId],
+      );
+      const voiceId = voiceRes.rows[0]?.voice_id as string | undefined;
+      if (voiceId) {
+        const surcharge = getVoiceSurcharge(voiceId);
+        if (surcharge > 0) {
+          chargePremiumVoiceMinutes(orgId, actualMinutes, surcharge, voiceId)
+            .catch((err: Error) => process.stderr.write(`[usage] premium-voice charge failed for org=${orgId}: ${err.message}\n`));
+        }
+      }
+    } catch (err) {
+      process.stderr.write(`[usage] premium-voice lookup failed for org=${orgId}: ${(err as Error).message}\n`);
+    }
+  }
+
   const delta = actualMinutes - reservedMinutes;
   if (delta === 0) return;
 

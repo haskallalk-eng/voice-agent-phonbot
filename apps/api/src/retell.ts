@@ -8,11 +8,13 @@
 const RETELL_API = 'https://api.retellai.com';
 
 // Default voice for new demo agents + fallback when an agent config has no explicit voice.
-// Reverted to the Cartesia "chipy" clone — Retell's ElevenLabs catalog has no
-// male German voice available (only 11labs-Carola female). Override via env
-// RETELL_DEFAULT_VOICE_ID without a deploy when a suitable replacement exists.
+// "Chipy" is now the ElevenLabs Hassieb-Kalla clone (custom voice at Retell,
+// 11labs backend) — higher audio quality than the Cartesia version, at
+// ~$0.040/min vs ~$0.015/min. Override via env RETELL_DEFAULT_VOICE_ID
+// without a code deploy; the Cartesia original still exists at Retell as
+// custom_voice_28bd4920fa6523c6ac8c4e527b for rollback if costs spike.
 export const DEFAULT_VOICE_ID =
-  process.env.RETELL_DEFAULT_VOICE_ID ?? 'custom_voice_28bd4920fa6523c6ac8c4e527b';
+  process.env.RETELL_DEFAULT_VOICE_ID ?? 'custom_voice_5269b3f4732a77b9030552fd67';
 
 function getApiKey(): string {
   const key = process.env.RETELL_API_KEY;

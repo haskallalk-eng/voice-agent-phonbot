@@ -181,8 +181,9 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         if (orgId) {
           // Pre-call reserved DEFAULT_CALL_RESERVE_MINUTES (E7). Reconcile
           // delta now: actual ≤ reserved → refund the over-reservation;
-          // actual > reserved → top up the difference.
-          await reconcileMinutes(orgId, DEFAULT_CALL_RESERVE_MINUTES, minutes);
+          // actual > reserved → top up the difference. agentId is also passed
+          // so premium-voice surcharge can be looked up and billed inside.
+          await reconcileMinutes(orgId, DEFAULT_CALL_RESERVE_MINUTES, minutes, agentId);
         }
 
         // AI analysis — fire and forget, never blocks the webhook response

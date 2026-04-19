@@ -107,7 +107,8 @@ async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentCo
   // Defence-in-depth: even though the HTTP handlers gate by tenantIdAvailableOrOwned,
   // a future caller that forgets the gate must NOT be able to overwrite another org's
   // config. The DO UPDATE WHERE clause makes the conflict path a no-op when the row
-  // is owned by a different org. RETURNING id lets us detect the no-op and throw.
+  // is owned by a different org. RETURNING tenant_id lets us detect the no-op —
+  // the table's primary key is tenant_id (there is no `id` column).
   const res = await pool.query(
     `INSERT INTO agent_configs (tenant_id, org_id, data, updated_at)
      VALUES ($1, $2, $3, now())
@@ -117,7 +118,7 @@ async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentCo
            updated_at = now()
        WHERE agent_configs.org_id IS NULL
           OR agent_configs.org_id = EXCLUDED.org_id
-     RETURNING id`,
+     RETURNING tenant_id`,
     [config.tenantId, orgId ?? null, config],
   );
   if (!res.rowCount) {

@@ -19,6 +19,14 @@ export interface CuratedVoice {
   provider: string;
   isDefault?: boolean;
   preview?: string;
+  /**
+   * Extra €/minute on top of the plan's base/overage rate when this voice
+   * is used. Covers the higher TTS cost of premium providers (ElevenLabs
+   * Multilingual v2 ≈ 2–3× Cartesia). Displayed in the UI so users opt in
+   * knowingly. Applied in reconcileMinutes() at call-end via the voice
+   * recorded on the agent config.
+   */
+  surchargePerMinute?: number;
 }
 
 // Curated voice catalog per language. Only voices that are proven to
@@ -29,12 +37,13 @@ export interface CuratedVoice {
 // etc.), then add here. Quality > quantity.
 export const VOICE_CATALOG: Record<string, CuratedVoice[]> = {
   de: [
-    { id: DEFAULT_VOICE_ID, name: 'Chipy (Standard)', gender: 'male', provider: 'cartesia', isDefault: true },
+    { id: DEFAULT_VOICE_ID, name: 'Chipy (Standard, Premium)', gender: 'male', provider: 'elevenlabs', isDefault: true, surchargePerMinute: 0.05 },
+    { id: 'custom_voice_28bd4920fa6523c6ac8c4e527b', name: 'Chipy (Cartesia, Standard)', gender: 'male', provider: 'cartesia' },
     { id: 'cartesia-Eva', name: 'Eva', gender: 'female', provider: 'cartesia' },
     { id: 'cartesia-Lina', name: 'Lina', gender: 'female', provider: 'cartesia' },
     { id: 'minimax-Max', name: 'Max', gender: 'male', provider: 'minimax' },
     { id: 'openai-Carola', name: 'Carola', gender: 'female', provider: 'openai' },
-    { id: '11labs-Carola', name: 'Carola (natürlich)', gender: 'female', provider: 'elevenlabs' },
+    { id: '11labs-Carola', name: 'Carola (ElevenLabs)', gender: 'female', provider: 'elevenlabs' },
   ],
   en: [
     { id: 'cartesia-Cleo', name: 'Cleo', gender: 'female', provider: 'cartesia', isDefault: true },
@@ -86,4 +95,22 @@ export function getDefaultVoiceForLanguage(language: string): string {
  */
 export function getVoicesForLanguage(language: string): CuratedVoice[] {
   return VOICE_CATALOG[language] ?? [];
+}
+
+/**
+ * Look up the per-minute surcharge for a given voice_id across all languages.
+ * Returns 0 for unknown voices or voices without a surcharge.
+ *
+ * Used by reconcileMinutes() at call-end: the agent's configured voice_id
+ * is resolved against this table and any surcharge is added to the Stripe
+ * invoice item on top of the plan's overage rate.
+ */
+export function getVoiceSurcharge(voiceId: string): number {
+  for (const voices of Object.values(VOICE_CATALOG)) {
+    const match = voices.find((v) => v.id === voiceId);
+    if (match?.surchargePerMinute && match.surchargePerMinute > 0) {
+      return match.surchargePerMinute;
+    }
+  }
+  return 0;
 }
