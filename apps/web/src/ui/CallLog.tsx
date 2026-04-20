@@ -63,7 +63,7 @@ export function CallLog() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-white">Anrufprotokoll</h2>
@@ -85,8 +85,8 @@ export function CallLog() {
             <h3 className="text-lg font-semibold text-white">Anruf-Details</h3>
             <button onClick={() => setSelectedCall(null)} className="text-sm text-white/40 hover:text-white/70">✕ Schließen</button>
           </div>
-          <div className="grid grid-cols-2 gap-3 text-sm mb-4">
-            <div><span className="text-white/40">Call ID:</span> <code className="font-mono text-xs text-white/70">{selectedCall.call_id}</code></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm mb-4">
+            <div className="min-w-0"><span className="text-white/40">Call ID:</span> <code className="font-mono text-xs text-white/70 break-all">{selectedCall.call_id}</code></div>
             <div><span className="text-white/40">Status:</span> <span className="text-white/80">{selectedCall.call_status}</span></div>
             <div><span className="text-white/40">Typ:</span> <span className="text-white/80">{selectedCall.call_type}</span></div>
             <div><span className="text-white/40">Dauer:</span> <span className="text-white/80">{formatDuration(selectedCall.duration_ms)}</span></div>
@@ -99,7 +99,7 @@ export function CallLog() {
           {selectedCall.transcript && (
             <div>
               <h4 className="text-sm font-medium text-white/40 mb-2">Transcript</h4>
-              <pre className="bg-black/40 border border-white/5 text-white/70 text-xs p-4 rounded-xl overflow-auto max-h-80 whitespace-pre-wrap">
+              <pre className="bg-black/40 border border-white/5 text-white/70 text-xs p-3 sm:p-4 rounded-xl overflow-auto max-h-80 max-w-full whitespace-pre-wrap break-words">
                 {selectedCall.transcript}
               </pre>
             </div>

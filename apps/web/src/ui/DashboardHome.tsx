@@ -181,7 +181,7 @@ export function DashboardHome({ onNavigate }: Props) {
   );
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 sm:py-8 space-y-6 sm:space-y-8">
       {/* Header */}
       <div className="flex items-center gap-4">
         <FoxLogo size="lg" animate />
@@ -266,7 +266,7 @@ export function DashboardHome({ onNavigate }: Props) {
       {/* Stats Grid – 2 rows */}
       <div className="space-y-4">
           {/* Row 1 */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <StatCard
               Icon={IconCalls}
               label="Calls heute"
@@ -294,7 +294,7 @@ export function DashboardHome({ onNavigate }: Props) {
           </div>
 
           {/* Row 2 */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             <StatCard
               Icon={IconCalendar}
               label="Calls diese Woche"

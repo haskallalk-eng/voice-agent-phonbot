@@ -148,9 +148,9 @@ export function TestConsole({ onNavigate }: { onNavigate?: (page: Page) => void 
     <div className="min-h-screen bg-[#0A0A0F] text-white">
       {/* Background glow */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -top-40 left-1/3 w-[500px] h-[500px] rounded-full"
+        <div className="absolute -top-40 left-1/3 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] rounded-full"
           style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.06) 0%, transparent 65%)' }} />
-        <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] rounded-full"
+        <div className="absolute bottom-0 right-1/4 w-[250px] sm:w-[400px] h-[250px] sm:h-[400px] rounded-full"
           style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.04) 0%, transparent 65%)' }} />
       </div>
 

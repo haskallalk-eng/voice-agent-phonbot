@@ -368,7 +368,7 @@ export function InsightsPage() {
       {/* Background glow */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div
-          className="absolute -top-60 right-1/4 w-[600px] h-[600px] rounded-full"
+          className="absolute -top-60 right-1/4 w-[350px] sm:w-[600px] h-[350px] sm:h-[600px] rounded-full"
           style={{ background: 'radial-gradient(circle, rgba(139,92,246,0.07) 0%, transparent 65%)' }}
         />
       </div>
@@ -410,7 +410,7 @@ export function InsightsPage() {
         {/* How it works */}
         <div className="glass rounded-2xl p-5 border border-white/10 mb-8">
           <p className="text-xs text-white/30 uppercase tracking-widest mb-3">So funktioniert es</p>
-          <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-center">
             {[
               { icon: <IconPhone size={22} />, title: 'Anruf endet', desc: 'Transkript wird analysiert' },
               { icon: <IconInsights size={22} />, title: 'Muster erkannt', desc: `Gleiches Problem ${data?.auto_apply_threshold ?? 3}× → Vorschlag` },
