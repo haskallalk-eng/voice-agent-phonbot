@@ -96,7 +96,11 @@ await app.register(helmet, {
       fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
       // M9: narrowed from 'https:' to specific domains to reduce attack surface
       imgSrc: ["'self'", 'data:', 'https://phonbot.de', 'https://*.retellai.com', 'https://challenges.cloudflare.com'],
-      connectSrc: ["'self'", 'wss://*.retellai.com', 'https://*.retellai.com', 'wss://phonbot.de', 'https://challenges.cloudflare.com'],
+      // Retell's browser SDK (retell-client-js-sdk) connects to its managed
+      // LiveKit cluster at wss://retell-ai-*.livekit.cloud for the WebRTC
+      // realtime audio pipe — without livekit.cloud in connect-src the browser
+      // CSP-blocks room.connect() and the SDK emits a vague "Error starting call".
+      connectSrc: ["'self'", 'wss://*.retellai.com', 'https://*.retellai.com', 'wss://*.livekit.cloud', 'https://*.livekit.cloud', 'wss://phonbot.de', 'https://challenges.cloudflare.com'],
       // Turnstile rendert sich in einem iframe von challenges.cloudflare.com.
       frameSrc: ["'self'", 'https://challenges.cloudflare.com'],
       objectSrc: ["'none'"],
