@@ -253,7 +253,7 @@ export function BillingPage() {
                 {!isCurrent && (
                   <button onClick={() => handleUpgrade(plan.id)} disabled={!!actionLoading}
                     className="w-full rounded-xl bg-gradient-to-r from-orange-500 to-cyan-500 hover:opacity-90 disabled:opacity-50 text-white text-sm font-medium py-2 transition-opacity">
-                    {actionLoading === plan.id ? '…' : `Zu ${plan.name} wechseln`}
+                    {actionLoading === plan.id ? '…' : 'Auswählen'}
                   </button>
                 )}
                 {isCurrent && isPaid && (
