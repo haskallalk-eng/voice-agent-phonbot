@@ -283,6 +283,7 @@ const STYLE = `*{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#0A0A0F;color:#fff;line-height:1.6;overflow-x:hidden}
 a{color:inherit;text-decoration:none}
 .container{max-width:960px;margin:0 auto;padding:0 1.5rem}
+@media(max-width:640px){.container{padding:0 1rem}header.hero{padding:3rem 0 2rem}section{padding:2.5rem 0}}
 nav{position:sticky;top:0;z-index:50;background:rgba(15,15,24,.85);backdrop-filter:blur(16px);border-bottom:1px solid rgba(255,255,255,.05)}
 nav .container{display:flex;align-items:center;justify-content:space-between;padding-top:1rem;padding-bottom:1rem}
 .brand{font-weight:800;font-size:1.25rem;background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;background-clip:text;color:transparent}
