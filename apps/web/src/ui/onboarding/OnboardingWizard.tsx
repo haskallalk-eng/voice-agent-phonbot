@@ -321,7 +321,7 @@ export function OnboardingWizard({ onComplete }: Props) {
       {/* Background glow */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div
-          className="glow-pulse absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-[700px] rounded-full"
+          className="glow-pulse absolute -top-40 left-1/2 -translate-x-1/2 w-[350px] sm:w-[700px] h-[350px] sm:h-[700px] rounded-full"
           style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.12) 0%, transparent 65%)' }}
         />
       </div>

@@ -66,7 +66,7 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
       {/* Background glow */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div
-          className="glow-pulse absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full"
+          className="glow-pulse absolute top-1/4 left-1/2 -translate-x-1/2 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] rounded-full"
           style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.1) 0%, transparent 65%)' }}
         />
       </div>

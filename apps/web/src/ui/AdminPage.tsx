@@ -564,7 +564,7 @@ export function AdminPage() {
       </div>
 
       {/* Content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
         {tab === 'overview' && <OverviewTab />}
         {tab === 'leads' && <LeadsTab />}
         {tab === 'users' && <UsersTab />}
