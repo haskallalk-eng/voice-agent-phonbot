@@ -17,6 +17,29 @@ export function getProviderLabel(voice: Voice): string {
   return map[provider.toLowerCase()] ?? provider;
 }
 
+// Voice counts as "Premium" (triggers +5 Ct/Min surcharge) when:
+//  - backend annotated it with surchargePerMinute > 0, OR
+//  - the provider is an ElevenLabs variant, OR
+//  - voice_id starts with the well-known ElevenLabs prefix, OR
+//  - it's the known premium Chipy clone.
+// Fallback chain exists because the Retell API response shape is not
+// always guaranteed — we'd rather over-flag than miss and undercharge.
+const PREMIUM_PROVIDERS = new Set(['elevenlabs', '11labs', 'eleven_labs']);
+const KNOWN_PREMIUM_IDS = new Set(['custom_voice_5269b3f4732a77b9030552fd67']);
+export function isPremiumVoice(voice: Voice): boolean {
+  if ((voice.surchargePerMinute ?? 0) > 0) return true;
+  const prov = (voice.provider ?? '').toLowerCase();
+  if (PREMIUM_PROVIDERS.has(prov)) return true;
+  const id = voice.voice_id.toLowerCase();
+  if (id.startsWith('11labs-') || id.startsWith('elevenlabs-')) return true;
+  if (KNOWN_PREMIUM_IDS.has(voice.voice_id)) return true;
+  return false;
+}
+export function voiceSurcharge(voice: Voice): number {
+  if ((voice.surchargePerMinute ?? 0) > 0) return voice.surchargePerMinute as number;
+  return isPremiumVoice(voice) ? 0.05 : 0;
+}
+
 export interface VoiceDropdownProps {
   voices: Voice[];
   loading: boolean;
@@ -51,7 +74,13 @@ export function VoiceDropdown({
   const displayLabel = currentVoice
     ? `${currentVoice.voice_name} (${getProviderLabel(currentVoice)})`
     : currentVoiceId;
-  const currentSurcharge = currentVoice?.surchargePerMinute ?? 0;
+  const currentIsPremium = currentVoice ? isPremiumVoice(currentVoice) : false;
+  const currentSurcharge = currentVoice ? voiceSurcharge(currentVoice) : 0;
+
+  // Modal state: asks the user to confirm switching to a premium voice.
+  // Only appears when the target voice is premium AND the current one isn't,
+  // so repeatedly clicking between premium voices doesn't nag.
+  const [confirmVoice, setConfirmVoice] = useState<Voice | null>(null);
 
   const searchLower = search.toLowerCase();
 
@@ -60,6 +89,15 @@ export function VoiceDropdown({
   function formatSurcharge(eurPerMin: number): string {
     const cents = Math.round(eurPerMin * 100);
     return `+${cents} Ct/Min`;
+  }
+
+  function handleSelect(v: Voice) {
+    // Ask once before switching to a premium voice from a non-premium one.
+    if (isPremiumVoice(v) && !currentIsPremium && currentVoiceId !== v.voice_id) {
+      setConfirmVoice(v);
+      return;
+    }
+    onSelect(v.voice_id);
   }
 
   // Group voices: cloned first, then by provider
@@ -83,7 +121,7 @@ export function VoiceDropdown({
       >
         <span className="truncate flex items-center gap-2">
           {loading ? 'Stimmen werden geladen…' : displayLabel}
-          {currentSurcharge > 0 && (
+          {currentIsPremium && (
             <span className="text-[10px] font-semibold text-orange-300 bg-orange-500/10 border border-orange-500/30 rounded-full px-1.5 py-0.5">
               Premium {formatSurcharge(currentSurcharge)}
             </span>
@@ -91,12 +129,66 @@ export function VoiceDropdown({
         </span>
         <IconChevronDown size={16} className="ml-2 text-white/40 shrink-0" />
       </button>
-      {currentSurcharge > 0 && (
-        <p className="mt-1.5 text-xs text-white/50 leading-snug">
-          Premium-Stimme (ElevenLabs HD) — Aufschlag von{' '}
-          <span className="text-orange-300 font-medium">{formatSurcharge(currentSurcharge)}</span>{' '}
-          zusätzlich zum Minutenpreis deines Plans.
-        </p>
+      {currentIsPremium && (
+        <div className="mt-2 flex items-start gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2">
+          <span className="text-sm leading-none" aria-hidden="true">⚡</span>
+          <p className="text-xs text-orange-100/90 leading-snug">
+            <strong className="text-orange-200">Premium-Stimme ausgewählt.</strong> ElevenLabs HD kostet{' '}
+            <span className="text-orange-200 font-semibold">{formatSurcharge(currentSurcharge)}</span>{' '}
+            zusätzlich zum Minutenpreis deines Plans. Die Abrechnung erfolgt am Monatsende über Stripe.
+          </p>
+        </div>
+      )}
+
+      {/* Confirmation modal when switching from standard → premium voice */}
+      {confirmVoice && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setConfirmVoice(null)}
+        >
+          <div
+            className="max-w-md w-full rounded-2xl border border-orange-500/40 bg-[#0F0F18] p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <span className="text-2xl leading-none" aria-hidden="true">⚡</span>
+              <div className="flex-1">
+                <h3 className="text-base font-semibold text-white mb-1">Premium-Stimme wählen?</h3>
+                <p className="text-sm text-white/70 leading-relaxed mb-4">
+                  Du hast <strong className="text-orange-300">{confirmVoice.voice_name}</strong>{' '}
+                  ({getProviderLabel(confirmVoice)}) ausgewählt. Diese HD-Stimme kostet
+                  einen Aufschlag von{' '}
+                  <strong className="text-orange-300">
+                    {formatSurcharge(voiceSurcharge(confirmVoice))}
+                  </strong>{' '}
+                  zusätzlich zum Minutenpreis deines Plans. Die Premium-Minuten werden am
+                  Monatsende über Stripe abgerechnet.
+                </p>
+                <div className="flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmVoice(null)}
+                    className="px-4 py-2 rounded-xl text-sm text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSelect(confirmVoice.voice_id);
+                      setConfirmVoice(null);
+                    }}
+                    className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:scale-[1.02]"
+                    style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                  >
+                    Premium-Stimme bestätigen
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
       {dropdownOpen && (
         <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl border border-white/10 bg-[#0F0F18] shadow-xl max-h-[60vh] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent"
@@ -124,16 +216,16 @@ export function VoiceDropdown({
                 <button
                   key={v.voice_id}
                   type="button"
-                  onClick={() => onSelect(v.voice_id)}
+                  onClick={() => handleSelect(v)}
                   className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-white/5 transition-colors text-left ${
                     currentVoiceId === v.voice_id ? 'text-cyan-300 bg-cyan-500/10' : 'text-white/80'
                   }`}
                 >
                   <span className="flex items-center gap-2 min-w-0">
                     <span className="truncate">{v.voice_name}</span>
-                    {(v.surchargePerMinute ?? 0) > 0 && (
+                    {isPremiumVoice(v) && (
                       <span className="text-[10px] font-semibold text-orange-300 bg-orange-500/10 border border-orange-500/30 rounded-full px-1.5 py-0.5 shrink-0">
-                        {formatSurcharge(v.surchargePerMinute ?? 0)}
+                        Premium {formatSurcharge(voiceSurcharge(v))}
                       </span>
                     )}
                   </span>
@@ -153,16 +245,16 @@ export function VoiceDropdown({
                 <button
                   key={v.voice_id}
                   type="button"
-                  onClick={() => onSelect(v.voice_id)}
+                  onClick={() => handleSelect(v)}
                   className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-white/5 transition-colors text-left ${
                     currentVoiceId === v.voice_id ? 'text-orange-300 bg-orange-500/10' : 'text-white/80'
                   }`}
                 >
                   <span className="flex items-center gap-2 min-w-0">
                     <span className="truncate">{v.voice_name}</span>
-                    {(v.surchargePerMinute ?? 0) > 0 && (
+                    {isPremiumVoice(v) && (
                       <span className="text-[10px] font-semibold text-orange-300 bg-orange-500/10 border border-orange-500/30 rounded-full px-1.5 py-0.5 shrink-0">
-                        {formatSurcharge(v.surchargePerMinute ?? 0)}
+                        Premium {formatSurcharge(voiceSurcharge(v))}
                       </span>
                     )}
                   </span>
