@@ -523,6 +523,48 @@ export async function registerAgentConfig(app: FastifyInstance) {
     };
   });
 
+  // Live agent stats — avg measured e2e latency across the last 20 calls,
+  // pulled straight from Retell. Each request triggers a fresh listCalls
+  // so the number in the builder header always reflects current reality.
+  // Returns callsCount=0 when the agent hasn't been deployed or had no
+  // calls yet; frontend shows "—" in that case instead of a fake estimate.
+  app.get('/agent-config/stats', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { orgId } = req.user as JwtPayload;
+    const query = req.query as Record<string, string>;
+    const tenantId = query.tenantId ?? orgId;
+    const owned = await loadOwnedConfigRow(tenantId, orgId);
+    if (!owned.exists) return reply.status(404).send({ error: 'Agent not found' });
+    const retellAgentId = owned.data.retellAgentId;
+    if (!retellAgentId) return { callsCount: 0, avgLatencyMs: null, p50LatencyMs: null };
+
+    try {
+      const calls = await listCalls(retellAgentId, 20);
+      const p50Samples: number[] = [];
+      let ended = 0;
+      for (const c of calls) {
+        if (c.call_status !== 'ended') continue;
+        ended++;
+        const p50 = c.latency?.e2e?.p50;
+        if (typeof p50 === 'number' && p50 > 0) p50Samples.push(p50);
+      }
+      if (p50Samples.length === 0) {
+        return { callsCount: ended, avgLatencyMs: null, p50LatencyMs: null };
+      }
+      // Retell returns latency in milliseconds already (not seconds) —
+      // confirmed by spot-checking a live call. Average the per-call p50.
+      const avg = p50Samples.reduce((a, b) => a + b, 0) / p50Samples.length;
+      return {
+        callsCount: ended,
+        sampleSize: p50Samples.length,
+        avgLatencyMs: Math.round(avg),
+        p50LatencyMs: Math.round(avg),
+      };
+    } catch (err) {
+      app.log.warn({ err: err instanceof Error ? err.message : String(err), tenantId }, 'listCalls failed');
+      return { callsCount: 0, avgLatencyMs: null, p50LatencyMs: null };
+    }
+  });
+
   // Save config (local only, no Retell deploy).
   // Ownership: tenantId must be unclaimed or already owned by caller.orgId.
   // Retell IDs are taken from the server-side row, NEVER from the request body —

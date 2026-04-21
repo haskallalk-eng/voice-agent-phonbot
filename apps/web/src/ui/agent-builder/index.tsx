@@ -11,10 +11,12 @@ import {
   getRecommendedVoices,
   getInsights,
   getAccessToken,
+  getAgentStats,
   type AgentConfig,
   type AgentPreview,
   type Voice,
   type BillingStatus,
+  type AgentStats,
 } from '../../lib/api.js';
 import { isPremiumVoice, voiceSurcharge } from './VoiceDropdown.js';
 import { TABS, PROMPT_SECTIONS, DEFAULT_CONFIG_VALUES, IconDeploy, IconPlay, type Tab } from './shared.js';
@@ -59,6 +61,8 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
   const [hasPhone, setHasPhone] = useState(true); // assume true until loaded
   // Billing status — drives the stats row (price/min, remaining minutes).
   const [billing, setBilling] = useState<BillingStatus | null>(null);
+  // Live agent stats (latency, calls count) — fetched from Retell on demand.
+  const [agentStats, setAgentStats] = useState<AgentStats | null>(null);
   // Track original config snapshot for dirty detection
   const savedConfigRef = useRef<string>('');
 
@@ -196,8 +200,20 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
       else setView('edit');
       const prev = await getAgentPreview();
       setPreview(prev);
+      // Pull live latency from Retell for this agent. Non-blocking —
+      // empty result just hides the chip until real calls arrive.
+      void refreshAgentStats(merged.tenantId);
     } catch {
       setStatus({ type: 'error', text: 'Config konnte nicht geladen werden' });
+    }
+  }
+
+  async function refreshAgentStats(tenantId?: string) {
+    try {
+      const stats = await getAgentStats(tenantId);
+      setAgentStats(stats);
+    } catch {
+      setAgentStats(null);
     }
   }
 
@@ -351,6 +367,8 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
             config={config}
             voices={voices}
             billing={billing}
+            stats={agentStats}
+            onRefresh={() => refreshAgentStats(config.tenantId)}
           />
           {status && (
             <span className={`text-xs px-2.5 py-1 rounded-lg font-medium ${
@@ -518,91 +536,80 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
  * Hidden below md so the builder header stays usable on mobile.
  * ─────────────────────────────────────────────────────────────────── */
 
-// Overage price per minute by plan, from shared.ts PLANS (single
-// source of truth mirrored here because shared.ts is in landing/).
-const PLAN_OVERAGE_EUR: Record<string, number> = {
-  free: 0.22, nummer: 0.22, starter: 0.22, pro: 0.20, agency: 0.15,
-};
-
-// Voice provider → extra TTS latency vs. Cartesia baseline (ms).
-// Retell pipelines STT/LLM/TTS so only the *incremental* cost of a
-// slower TTS shows up end-to-end — not the full first-chunk time.
-// Cartesia is the baseline (0 ms), ElevenLabs adds roughly 150-200 ms.
-function ttsExtraMs(provider?: string | null): number {
-  const p = (provider ?? '').toLowerCase();
-  if (p === 'elevenlabs' || p === '11labs') return 180;
-  if (p === 'cartesia') return 0;
-  if (p === 'openai') return 80;
-  if (p === 'minimax') return 50;
-  return 50;
-}
-
 function AgentStatsRow({
   config,
   voices,
   billing,
+  stats,
+  onRefresh,
 }: {
   config: AgentConfig;
   voices: Voice[];
   billing: BillingStatus | null;
+  stats: AgentStats | null;
+  onRefresh: () => void;
 }) {
   const voice = voices.find((v) => v.voice_id === config.voice);
-  const premium = voice ? isPremiumVoice(voice) : false;
   const surcharge = voice ? voiceSurcharge(voice) : 0;
 
-  // Price/Min: 0 while inside free/plan minutes, otherwise overage + surcharge.
-  const planId = (billing?.plan ?? 'free').toLowerCase();
+  // Price/Min: 0 while inside plan-included minutes, otherwise overage
+  // + premium surcharge. Overage rate comes from /billing/status which
+  // reads the canonical PLANS table on the API — handles free, nummer
+  // (8,99 €, 70 Min inkl.), starter, pro, agency without a frontend map.
   const remaining = billing?.minutesRemaining ?? 0;
-  const overage = PLAN_OVERAGE_EUR[planId] ?? 0.22;
+  const overage = billing?.overchargePerMinute ?? 0;
   const insidePlan = remaining > 0;
   const effectivePrice = insidePlan ? surcharge : overage + surcharge;
+  const priceTip = insidePlan
+    ? `Innerhalb der ${billing?.minutesLimit ?? 0} Inklusiv-Minuten deines Plans${surcharge > 0 ? ` · Premium-Aufschlag +${Math.round(surcharge * 100)} Ct/Min` : ''}`
+    : `Inklusiv-Minuten aufgebraucht — ${overage.toFixed(2)} € Überschreitung${surcharge > 0 ? ` + ${Math.round(surcharge * 100)} Ct Premium` : ''} pro Minute`;
 
-  // Latency estimate (end-to-end first-audio-byte, NOT sequential sum):
-  // Retell streams STT → LLM → TTS in parallel. Baseline is ~550 ms
-  // with Cartesia + gpt-4o-mini on a good DACH network. Slower TTS
-  // adds only its incremental streaming delta, not the full first-
-  // chunk time. 'ignore' interruption mode doesn't change raw ms but
-  // makes the agent feel slower, so we surface it as a "Standard"
-  // hint even when the number is green.
-  const baselineMs = 550; // Retell pipelined: EOT + LLM-first-token + TTS-first-chunk (Cartesia)
-  const ttsDelta = ttsExtraMs(voice?.provider);
-  const totalMs = baselineMs + ttsDelta;
-  const interruptMode = (config as AgentConfig & { interruptionMode?: string }).interruptionMode ?? 'allow';
-  const responsive = interruptMode === 'allow';
+  // Real measured latency from Retell call-analysis (avg p50 across
+  // the last ~20 ended calls for this agent). null when the agent
+  // hasn't had any call yet — we show "—" in that case instead of a
+  // fabricated estimate.
+  const measuredMs = stats?.p50LatencyMs ?? stats?.avgLatencyMs ?? null;
+  const hasData = typeof measuredMs === 'number' && measuredMs > 0 && (stats?.sampleSize ?? 0) > 0;
 
-  const latencyLabel =
-    totalMs < 650 && responsive ? 'Optimiert' :
-    totalMs < 800 && responsive ? 'Standard' :
-    'Langsam';
-  const latencyColor =
-    latencyLabel === 'Optimiert' ? 'text-green-400 bg-green-500/10 border-green-500/25' :
-    latencyLabel === 'Standard' ? 'text-white/65 bg-white/5 border-white/15' :
-    'text-yellow-400 bg-yellow-500/10 border-yellow-500/25';
+  // Re-fetch stats every 60s while the builder is open so the number
+  // stays current as new calls come in without a page reload.
+  useEffect(() => {
+    const t = setInterval(onRefresh, 60_000);
+    return () => clearInterval(t);
+  }, [onRefresh]);
 
-  const tips: string[] = [];
-  if (ttsDelta >= 150) tips.push('ElevenLabs verursacht ~180 ms zusätzlich — Cartesia ist schneller');
-  else if (ttsDelta > 0) tips.push(`TTS-Provider ${voice?.provider ?? ''} addiert ~${ttsDelta} ms`);
-  if (!responsive) tips.push(`Unterbrechungs-Modus „${interruptMode}" wirkt langsamer`);
-  const latencyTip = tips.length > 0
-    ? tips.join(' · ')
-    : 'Schnellste mögliche Konfiguration — Cartesia + gpt-4o-mini + Allow-Unterbrechung.';
+  let latencyLabel = '—';
+  let latencyColor = 'text-white/50 bg-white/5 border-white/10';
+  let latencyTip = `Latenz wird automatisch aus den letzten Calls gemessen. Bisher ${stats?.callsCount ?? 0} Calls, davon 0 mit Latenz-Daten.`;
+
+  if (hasData) {
+    const ms = measuredMs as number;
+    if (ms < 700) { latencyLabel = 'Optimiert'; latencyColor = 'text-green-400 bg-green-500/10 border-green-500/25'; }
+    else if (ms < 900) { latencyLabel = 'Standard'; latencyColor = 'text-white/65 bg-white/5 border-white/15'; }
+    else { latencyLabel = 'Langsam'; latencyColor = 'text-yellow-400 bg-yellow-500/10 border-yellow-500/25'; }
+    latencyTip = `Durchschnitt aus ${stats?.sampleSize ?? 0} Calls (von ${stats?.callsCount ?? 0} gesamt). Live-Messung von Retell.`;
+  }
 
   return (
     <div className="hidden md:flex items-stretch rounded-xl border border-white/8 bg-white/[0.03] overflow-hidden text-xs">
-      <StatChip label="Preis / Min" value={`${effectivePrice.toFixed(2)} €`} />
+      <StatChip label="Preis / Min" value={`${effectivePrice.toFixed(2)} €`} title={priceTip} />
       <Divider />
       <StatChip
         label="Frei-Min"
         value={`${Math.max(0, Math.floor(remaining))}`}
         valueClass={remaining <= 0 ? 'text-yellow-400' : undefined}
+        title={`${Math.max(0, Math.floor(remaining))} von ${billing?.minutesLimit ?? 0} Inklusiv-Minuten übrig`}
       />
       <Divider />
-      <StatChip label="Latenz" value={`${Math.round(totalMs / 10) * 10} ms`} />
+      <StatChip
+        label="Latenz (gemessen)"
+        value={hasData ? `${measuredMs} ms` : '—'}
+        title={latencyTip}
+      />
       <Divider />
       <StatChip
         label="Status"
         value={latencyLabel}
-        valueClass={latencyColor.split(' ')[0]}
         title={latencyTip}
         badgeClass={latencyColor}
       />

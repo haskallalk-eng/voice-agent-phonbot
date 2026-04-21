@@ -526,7 +526,21 @@ export type BillingStatus = {
   minutesUsed: number;
   minutesLimit: number;
   minutesRemaining: number;
+  /** €/min charged for minutes beyond the plan limit. Source: server
+   *  plan definition, not a frontend table. */
+  overchargePerMinute: number;
 };
+
+export type AgentStats = {
+  callsCount: number;
+  sampleSize?: number;
+  avgLatencyMs: number | null;
+  p50LatencyMs: number | null;
+};
+export function getAgentStats(tenantId?: string) {
+  const q = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return request<AgentStats>(`/agent-config/stats${q}`);
+}
 
 export function getBillingPlans() {
   return request<{ plans: Plan[] }>('/billing/plans');

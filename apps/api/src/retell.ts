@@ -208,6 +208,25 @@ export async function updateAgent(
 
 // --- Call History ---
 
+/** Retell exposes measured latencies per call in seconds on top-level
+ *  latency.* fields. e2e.p50 is the "first user input → first audio
+ *  byte out" metric — the number users actually hear. */
+export type RetellLatencyBreakdown = {
+  p50?: number;
+  p90?: number;
+  p95?: number;
+  max?: number;
+  num?: number;
+};
+export type RetellLatency = {
+  e2e?: RetellLatencyBreakdown;
+  llm?: RetellLatencyBreakdown;
+  llm_websocket_network_rtt?: RetellLatencyBreakdown;
+  tts?: RetellLatencyBreakdown;
+  knowledge_base?: RetellLatencyBreakdown;
+  s2s?: RetellLatencyBreakdown;
+};
+
 export type RetellCall = {
   call_id: string;
   agent_id: string;
@@ -220,6 +239,7 @@ export type RetellCall = {
   recording_url?: string;
   call_analysis?: unknown;
   disconnection_reason?: string;
+  latency?: RetellLatency;
 };
 
 export async function listCalls(agentId?: string | string[], limit = 50): Promise<RetellCall[]> {
