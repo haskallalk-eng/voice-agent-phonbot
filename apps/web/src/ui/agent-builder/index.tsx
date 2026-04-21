@@ -14,7 +14,9 @@ import {
   type AgentConfig,
   type AgentPreview,
   type Voice,
+  type BillingStatus,
 } from '../../lib/api.js';
+import { isPremiumVoice, voiceSurcharge } from './VoiceDropdown.js';
 import { TABS, PROMPT_SECTIONS, DEFAULT_CONFIG_VALUES, IconDeploy, IconPlay, type Tab } from './shared.js';
 import { AgentListView } from './AgentListView.js';
 import { IdentityTab } from './IdentityTab.js';
@@ -55,6 +57,8 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
   const [pendingSuggestions, setPendingSuggestions] = useState(0);
   // Phone numbers — check if agent has a number
   const [hasPhone, setHasPhone] = useState(true); // assume true until loaded
+  // Billing status — drives the stats row (price/min, remaining minutes).
+  const [billing, setBilling] = useState<BillingStatus | null>(null);
   // Track original config snapshot for dirty detection
   const savedConfigRef = useRef<string>('');
 
@@ -128,11 +132,12 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
 
   async function loadAllAgents() {
     try {
-      const [agentsRes, billing] = await Promise.all([getAgentConfigs(), getBillingStatus()]);
+      const [agentsRes, billingRes] = await Promise.all([getAgentConfigs(), getBillingStatus()]);
       setAllAgents(agentsRes.items);
+      setBilling(billingRes);
       // agentsLimit comes from plan definition (1/1/3/10)
       const LIMITS: Record<string, number> = { free: 1, starter: 1, pro: 3, agency: 10 };
-      setAgentsLimit(LIMITS[billing.plan] ?? 1);
+      setAgentsLimit(LIMITS[billingRes.plan] ?? 1);
     } catch {
       // Non-critical -- list stays empty
     }
@@ -340,7 +345,13 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
             <p className="text-xs text-white/30 mt-0.5 truncate">{config.businessName || 'Konfiguration'}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          {/* Live stats row (hidden on narrow screens — tabs below show them redundantly) */}
+          <AgentStatsRow
+            config={config}
+            voices={voices}
+            billing={billing}
+          />
           {status && (
             <span className={`text-xs px-2.5 py-1 rounded-lg font-medium ${
               status.type === 'ok'
@@ -490,4 +501,142 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
       </div>
     </div>
   );
+}
+
+/* ───────────────────────────────────────────────────────────────────
+ * Live agent stats row — sits inline next to "Testen" / "Speichern"
+ * in the builder header. Four chips:
+ *   1. Preis/Min         — current €/Min (0 if inside the plan limit,
+ *                          overage rate + premium surcharge if over)
+ *   2. Frei-Min          — minutes left before overage kicks in
+ *   3. Latenz            — estimated first-response latency from the
+ *                          voice provider + LLM model + interruption
+ *                          mode the user has selected
+ *   4. Latenz-Hinweis    — "Optimiert" / "Standard" / "Langsam", with
+ *                          a tooltip hint on what to tweak for faster
+ *                          response.
+ * Hidden below md so the builder header stays usable on mobile.
+ * ─────────────────────────────────────────────────────────────────── */
+
+// Overage price per minute by plan, from shared.ts PLANS (single
+// source of truth mirrored here because shared.ts is in landing/).
+const PLAN_OVERAGE_EUR: Record<string, number> = {
+  free: 0.22, nummer: 0.22, starter: 0.22, pro: 0.20, agency: 0.15,
+};
+
+// Voice provider → TTS first-chunk latency (ms). Measured ballparks.
+// Cartesia is fastest, ElevenLabs HD adds quality at the cost of ~200ms.
+function ttsLatencyMs(provider?: string | null): number {
+  const p = (provider ?? '').toLowerCase();
+  if (p === 'elevenlabs' || p === '11labs') return 400;
+  if (p === 'cartesia') return 150;
+  if (p === 'openai') return 300;
+  if (p === 'minimax') return 200;
+  return 250;
+}
+
+function AgentStatsRow({
+  config,
+  voices,
+  billing,
+}: {
+  config: AgentConfig;
+  voices: Voice[];
+  billing: BillingStatus | null;
+}) {
+  const voice = voices.find((v) => v.voice_id === config.voice);
+  const premium = voice ? isPremiumVoice(voice) : false;
+  const surcharge = voice ? voiceSurcharge(voice) : 0;
+
+  // Price/Min: 0 while inside free/plan minutes, otherwise overage + surcharge.
+  const planId = (billing?.plan ?? 'free').toLowerCase();
+  const remaining = billing?.minutesRemaining ?? 0;
+  const overage = PLAN_OVERAGE_EUR[planId] ?? 0.22;
+  const insidePlan = remaining > 0;
+  const effectivePrice = insidePlan ? surcharge : overage + surcharge;
+
+  // Latency estimate:
+  //   STT end-of-turn ~500ms + LLM first-token (gpt-4o-mini ~800ms) +
+  //   TTS first-chunk (provider-dependent).
+  // Interruption mode 'ignore' doesn't change raw latency but makes
+  // the agent feel less responsive, so we surface it as a "Standard"
+  // instead of "Optimiert" hint.
+  const sttMs = 500;
+  const llmMs = 800; // gpt-4o-mini default
+  const ttsMs = ttsLatencyMs(voice?.provider);
+  const totalMs = sttMs + llmMs + ttsMs;
+  const interruptMode = (config as AgentConfig & { interruptionMode?: string }).interruptionMode ?? 'allow';
+  const responsive = interruptMode === 'allow';
+
+  const latencyLabel =
+    totalMs < 1500 && responsive ? 'Optimiert' :
+    totalMs < 1800 && responsive ? 'Standard' :
+    'Langsam';
+  const latencyColor =
+    latencyLabel === 'Optimiert' ? 'text-green-400 bg-green-500/10 border-green-500/25' :
+    latencyLabel === 'Standard' ? 'text-white/65 bg-white/5 border-white/15' :
+    'text-yellow-400 bg-yellow-500/10 border-yellow-500/25';
+
+  const tips: string[] = [];
+  if (premium) tips.push('Premium-Stimme verursacht ~250 ms zusätzlich');
+  if (!responsive) tips.push(`Unterbrechungs-Modus „${interruptMode}" wirkt langsamer`);
+  if (ttsMs > 300 && !premium) tips.push('Cartesia wählen für schnellere Antwort');
+  const latencyTip = tips.length > 0
+    ? tips.join(' · ')
+    : 'Schnellste mögliche Konfiguration — ElevenLabs + gpt-4o-mini + Allow-Unterbrechung.';
+
+  return (
+    <div className="hidden md:flex items-stretch rounded-xl border border-white/8 bg-white/[0.03] overflow-hidden text-xs">
+      <StatChip label="Preis / Min" value={`${effectivePrice.toFixed(2)} €`} />
+      <Divider />
+      <StatChip
+        label="Frei-Min"
+        value={`${Math.max(0, Math.floor(remaining))}`}
+        valueClass={remaining <= 0 ? 'text-yellow-400' : undefined}
+      />
+      <Divider />
+      <StatChip label="Latenz" value={`${Math.round(totalMs / 10) * 10} ms`} />
+      <Divider />
+      <StatChip
+        label="Status"
+        value={latencyLabel}
+        valueClass={latencyColor.split(' ')[0]}
+        title={latencyTip}
+        badgeClass={latencyColor}
+      />
+    </div>
+  );
+}
+
+function StatChip({
+  label,
+  value,
+  valueClass,
+  title,
+  badgeClass,
+}: {
+  label: string;
+  value: string;
+  valueClass?: string;
+  title?: string;
+  badgeClass?: string;
+}) {
+  return (
+    <div className="flex flex-col px-3 py-1.5 min-w-[78px]" title={title}>
+      <span className="text-[9px] font-semibold text-white/40 uppercase tracking-wider leading-none mb-0.5">{label}</span>
+      {badgeClass ? (
+        <span className={`inline-flex items-center justify-center text-[11px] font-semibold rounded-md px-1.5 py-0.5 border leading-tight ${badgeClass}`}>
+          {value}
+        </span>
+      ) : (
+        <span className={`text-sm font-semibold text-white leading-tight tabular-nums ${valueClass ?? ''}`}>
+          {value}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function Divider() {
+  return <div className="w-px bg-white/8 my-2" />;
 }
