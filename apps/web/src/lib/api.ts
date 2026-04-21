@@ -534,16 +534,18 @@ export type BillingStatus = {
 export type AgentStats = {
   callsCount: number;
   sampleSize: number;
-  /** Primary latency number — LLM p50 averaged across recent calls.
-   *  Matches the headline metric on the Retell dashboard. */
+  /** LLM p50 of the latest ended call — what the last caller actually
+   *  experienced, not an average over the agent's lifetime. */
   latencyMs: number | null;
-  /** Full per-component breakdown (ms). */
+  /** Full per-component breakdown (ms) from the same latest call. */
   breakdownMs: {
     llm: number | null;
     tts: number | null;
     asr: number | null;
     e2e: number | null;
   };
+  /** Unix ms of the last ended call — used for the "vor X s" label. */
+  lastCallAt: number | null;
 };
 export function getAgentStats(tenantId?: string) {
   const q = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
