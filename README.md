@@ -1,6 +1,6 @@
 # Phonbot — Voice Agent SaaS
 
-KI-Telefonassistent für kleine Unternehmen. Kunden konfigurieren ihren Agent per Dashboard — kein Code, kein Techniker nötig. Nativ deutschsprachig, DSGVO-konform, ab 49 €/Monat.
+KI-Telefonassistent für kleine Unternehmen. Kunden konfigurieren ihren Agent per Dashboard — kein Code, kein Techniker nötig. Nativ deutschsprachig, DSGVO-konform, ab 79 €/Monat.
 
 **Betreiber:** Mindrails UG (haftungsbeschränkt) · [phonbot.de](https://phonbot.de)
 
