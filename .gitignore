@@ -22,3 +22,23 @@ logs & Database
 # the same day. Both patterns ignored defensively.
 .coordination/
 .collab/
+
+# ── Secret-Hygiene (CLAUDE.md §17) ───────────────────────────────────────────
+# Belt-and-suspenders on top of the pre-commit secret scanner in .githooks/.
+# Keys, certs, and throwaway DB smoke-tests must never be tracked.
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+secrets/
+.secrets/
+# Common ad-hoc DB/test scripts — have repeatedly landed with hardcoded DSNs.
+# If you need one, put it under apps/api/scratch/ (ignored) or read DATABASE_URL
+# from process.env so the pre-commit scanner lets it through.
+test-db.mjs
+test-migrate.mjs
+**/scratch/
+**/tmp-*.mjs
+**/tmp-*.ts

@@ -127,6 +127,7 @@ Wenn du eine neue Route-Datei erstellst:
 - ❌ Secrets mit hardcoded default in prod — prod MUSS `throw` wenn env fehlt
 - ❌ PII (email, phone, name) in Pino-Logs — `redactPII()` oder Pino-redact-paths nutzen
 - ❌ JWT/token in `localStorage` — nur in-memory (F-01/F-02)
+- ❌ Secrets im Code committen — Connection-Strings mit Passwort, API-Keys, JWTs, Private-Keys. Siehe §17.
 
 ### 14. VOR JEDEM COMMIT
 ```bash
@@ -146,6 +147,32 @@ Wenn nicht → Fix die Fehler BEVOR du weitermachst.
 - **Rate-Limits:** Global 100/min per-IP + route-specific overrides. Public endpoints (demo, contact) + outbound-call-triggers mit hourly caps + Redis global counter.
 - **CAPTCHA:** Cloudflare Turnstile auf `/demo/*` + `/outbound/website-callback`. Prod fail-closed.
 - **Idempotency:** Stripe webhooks via `processed_stripe_events` ON CONFLICT. Minute-reservation via atomic `tryReserveMinutes()`.
+
+### 17. SECRET-HYGIENE (DARF NIE IN GIT)
+Hintergrund: 2026-04-21 wurden drei Scripts mit hardcodetem Supabase-DB-Passwort in der Initial-Commit-History entdeckt (`scripts/test-db.mjs`, `apps/api/test-db.mjs`, `apps/api/test-migrate.mjs`). Entfernt + DB-Passwort rotiert. Nie wieder.
+
+**Absolute Verbote** (egal in welchem Kontext — Test, Debug, One-Off, Doku-Beispiel):
+- ❌ Connection-Strings mit Inline-Passwort — alles wo bei Postgres / Redis / MongoDB / MySQL ein `benutzer + doppelpunkt + passwort + @` vor dem Host steht
+- ❌ Provider-Tokens (Prefix-Matches): Stripe `sk_live`, `sk_test`, `rk_live`, `whsec`; GitHub `ghp`, `github_pat`, `gho`; AWS `AKIA…`; Google `AIza…`; Slack `xoxb/xoxp/…`; Resend `re_`; Retell `key_`
+- ❌ Signierte JWTs (drei Base64-Teile mit Punkten)
+- ❌ Private-Key-PEM-Blöcke (BEGIN RSA/EC/OPENSSH/DSA/PGP PRIVATE KEY)
+- ❌ `.env`-Dateien außerhalb von `.env.example` (Platzhalter ok)
+
+**So geht's richtig:**
+1. Echte Werte NUR in `apps/api/.env` (Single-Source) oder `apps/web/.env`
+2. Im Code via `process.env.X` lesen; prod-Bootstrap wirft wenn Var fehlt (`env.ts:47-57`)
+3. Templates als `.env.example` mit Dummy-Werten (`sk_live_...`, `PASSWORD`) sind erlaubt
+
+**Automatische Absicherung:**
+- Pre-Commit-Hook `.githooks/pre-commit` scannt jeden `git commit` auf obige Muster und bricht bei Treffern ab.
+- Aktivierung: `pnpm install` ruft `prepare`-Script, das `git config core.hooksPath .githooks` setzt. Nach frischem Clone einmal `pnpm install` ausführen.
+- `.gitignore` hat belt-and-suspenders-Patterns: `*.pem`, `*.key`, `secrets/`, `test-db.mjs`, `test-migrate.mjs`, `**/scratch/`, `**/tmp-*.{mjs,ts}`.
+- Escape-Hatch nur für verifizierte False-Positives: `git commit --no-verify` (begründen im Commit-Msg).
+
+**Wenn trotzdem was durchrutscht:**
+1. Secret SOFORT im Provider-Dashboard rotieren (Supabase/Stripe/GitHub/etc.) — History-Rewrite allein genügt nicht, weil GitHub-Clones/Forks das alte bereits haben
+2. Datei aus Working-Tree entfernen, ersetzen durch `process.env.X`
+3. Für die paranoide Säuberung optional `git filter-repo --path <file> --invert-paths` + force-push (koordinieren mit Termi + Prod-Deploy!)
 
 ### 16. COORDINATION (Termi + Vaso)
 - **`.coordination/`** im Repo-Root (gitignored) enthält die Agent-Koordination.
