@@ -24,11 +24,26 @@
 {"@context":"https://schema.org","@type":"Service","name":"KI-Telefonassistent für Restaurants","serviceType":"AI Voice Agent","provider":{"@type":"Organization","name":"Phonbot","url":"https://phonbot.de/","parentOrganization":{"@type":"Organization","name":"Mindrails UG (haftungsbeschränkt)","url":"https://mindrails.de/"}},"areaServed":{"@type":"Country","name":"Deutschland"},"description":"Phonbot ist der KI-Telefonassistent für Restaurants. Nimmt Reservierungen an, beantwortet Speisekarten-Fragen, erfasst Take-away-Bestellungen — 24/7 auf Deutsch. Ab 49 €/Monat.","audience":{"@type":"BusinessAudience","audienceType":"Restaurants, Cafés, Bars, Lieferdienste"},"offers":{"@type":"Offer","price":"49","priceCurrency":"EUR","priceSpecification":{"@type":"UnitPriceSpecification","price":"49","priceCurrency":"EUR","unitText":"MONTH"}}}
 </script>
 <style>*{margin:0;padding:0;box-sizing:border-box}
-html{overflow-x:clip;max-width:100vw}
-body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#0A0A0F;color:#fff;line-height:1.6;overflow-x:clip;max-width:100vw}
+html{overflow-x:clip;max-width:100vw;scroll-behavior:smooth}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#0A0A0F;color:#fff;line-height:1.6;overflow-x:clip;max-width:100vw;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;position:relative}
 a{color:inherit;text-decoration:none}
-.container{max-width:72rem;margin:0 auto;padding:0 1.5rem}
-@media(max-width:640px){.container{padding:0 1rem}header.hero{padding:3rem 0 2rem}section{padding:2.5rem 0}}
+::selection{background:rgba(249,115,22,0.3);color:#fff}
+.container{max-width:72rem;margin:0 auto;padding:0 1.5rem;position:relative;z-index:1}
+
+/* ── Noise overlay (keeps dark from feeling plastic) ── */
+.noise::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");opacity:.015}
+
+/* ── Ambient glow orbs (3 pulsing radials, fixed full-bleed) ── */
+.orbs{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+.orb{position:absolute;border-radius:50%;filter:blur(40px);animation:glow-pulse 3s ease-in-out infinite}
+.orb-1{width:700px;height:700px;top:-160px;left:-160px;background:radial-gradient(circle,rgba(249,115,22,.18) 0%,transparent 70%)}
+.orb-2{width:600px;height:600px;top:50%;right:-240px;background:radial-gradient(circle,rgba(6,182,212,.12) 0%,transparent 70%);animation-delay:1.5s}
+.orb-3{width:500px;height:500px;bottom:-160px;left:35%;background:radial-gradient(circle,rgba(249,115,22,.10) 0%,transparent 70%);animation-delay:3s}
+@keyframes glow-pulse{0%,100%{opacity:.3}50%{opacity:.7}}
+
+/* ── Glass utility ── */
+.glass{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10)}
+
 /* ── Nav (unified with SPA + legal pages) ── */
 /*--nav-css-begin--*/
 .ph-header{position:sticky;top:0;z-index:50;border-bottom:1px solid rgba(255,255,255,.05);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);background:rgba(10,10,15,.8)}
@@ -79,35 +94,75 @@ body.mopen .ph-mob{display:block}
 .ph-mob-cta a.login{border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.7)}
 .ph-mob-cta a.cta{background:linear-gradient(135deg,#F97316,#06B6D4);color:#fff}
 /*--nav-css-end--*/
-.btn{display:inline-block;padding:.75rem 1.5rem;border-radius:999px;font-weight:600;font-size:.9rem;transition:all .3s;cursor:pointer;border:none}
+
+/* ── Buttons (canonical gradient pill + neutral glass pill) ── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;padding:1rem 2rem;border-radius:9999px;font-weight:600;font-size:1rem;transition:all .3s;cursor:pointer;border:none;text-decoration:none}
 .btn-primary{background:linear-gradient(135deg,#F97316,#06B6D4);color:#fff}
-.btn-primary:hover{transform:scale(1.03);box-shadow:0 0 40px rgba(249,115,22,.4)}
-.btn-ghost{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.85)}
-.btn-ghost:hover{background:rgba(255,255,255,.08);color:#fff}
-.btn-demo{background:rgba(249,115,22,.12);border:1px solid rgba(249,115,22,.4);color:#FDBA74;display:inline-flex;align-items:center;gap:.5rem}
-.btn-demo:hover{background:rgba(249,115,22,.2);color:#fff;transform:scale(1.03)}
-header.hero{padding:5rem 0 3rem;text-align:center;position:relative}
-.hero-eyebrow{display:inline-block;padding:.4rem 1rem;border-radius:999px;background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.25);font-size:.8rem;color:#FDBA74;margin-bottom:1.5rem}
-h1{font-size:clamp(2.25rem,5vw,3.75rem);font-weight:800;letter-spacing:-.02em;line-height:1.1;margin-bottom:1.25rem}
+.btn-primary:hover{transform:scale(1.05);box-shadow:0 0 40px rgba(249,115,22,.5)}
+.btn-ghost{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.9);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.btn-ghost:hover{color:#fff;transform:scale(1.05)}
+.btn-sm{padding:.625rem 1.25rem;font-size:.875rem}
+
+/* ── Hero (section 1) ── */
+header.hero{padding:5rem 0 4rem;text-align:center;position:relative;z-index:1}
+@media(max-width:640px){header.hero{padding:3.5rem 0 2.5rem}}
+.hero-eyebrow{display:inline-flex;align-items:center;gap:.5rem;padding:.45rem 1rem;border-radius:9999px;background:rgba(249,115,22,.10);border:1px solid rgba(249,115,22,.25);font-size:.8125rem;color:#FDBA74;margin-bottom:1.75rem;font-weight:500;box-shadow:0 0 20px rgba(249,115,22,.15),inset 0 0 20px rgba(249,115,22,.04)}
+.hero-eyebrow .emoji{font-size:1rem;line-height:1}
+h1{font-size:clamp(2.5rem,6vw,4.5rem);font-weight:800;letter-spacing:-.025em;line-height:1.08;margin-bottom:1.5rem;max-width:48rem;margin-left:auto;margin-right:auto}
 h1 .accent{background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;background-clip:text;color:transparent}
-.subtitle{font-size:1.125rem;color:rgba(255,255,255,.6);max-width:640px;margin:0 auto 2.5rem}
-.cta-row{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap}
-section{padding:3.5rem 0}
-h2{font-size:clamp(1.5rem,3.5vw,2.25rem);font-weight:700;margin-bottom:1.5rem;letter-spacing:-.015em}
-h3{font-size:1.125rem;font-weight:600;margin-bottom:.5rem;color:#fff}
+.subtitle{font-size:1.125rem;color:rgba(255,255,255,.6);max-width:42rem;margin:0 auto 2.5rem;line-height:1.6}
+.cta-row{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;align-items:center}
+.trust-line{margin-top:1rem;font-size:.8125rem;color:rgba(255,255,255,.4)}
+
+/* ── Sections + headings ── */
+section{padding:5rem 0;position:relative;z-index:1}
+@media(max-width:640px){section{padding:3rem 0}}
+h2{font-size:clamp(1.75rem,4vw,2.5rem);font-weight:700;margin-bottom:.75rem;letter-spacing:-.02em;line-height:1.15;text-align:center}
+.section-lead{font-size:1rem;color:rgba(255,255,255,.5);text-align:center;max-width:36rem;margin:0 auto 3rem}
+h3{font-size:1.0625rem;font-weight:600;margin-bottom:.5rem;color:#fff}
 p{color:rgba(255,255,255,.7)}
-.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.25rem;margin-top:2rem}
-.feature{padding:1.5rem;border-radius:1rem;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);transition:border-color .3s}
-.feature:hover{border-color:rgba(249,115,22,.3)}
-.feature-icon{width:40px;height:40px;border-radius:.75rem;background:linear-gradient(135deg,rgba(249,115,22,.15),rgba(6,182,212,.1));display:flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:1rem}
-.dialogue{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:1.25rem;padding:1.75rem;max-width:720px;margin:2rem auto 0}
-.dialogue p{margin-bottom:.75rem;padding:.75rem 1rem;border-radius:.75rem}
+
+/* ── Features (glass cards with gradient-tinted icon tiles) ── */
+.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.25rem}
+.feature{padding:1.75rem;border-radius:1rem;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);transition:all .3s}
+.feature:hover{border-color:rgba(249,115,22,.3);background:rgba(255,255,255,.07);transform:translateY(-2px)}
+.feature-icon{width:48px;height:48px;border-radius:.875rem;background:linear-gradient(135deg,rgba(249,115,22,.18),rgba(6,182,212,.12));display:flex;align-items:center;justify-content:center;font-size:1.375rem;margin-bottom:1.25rem;border:1px solid rgba(249,115,22,.15)}
+.feature h3{font-size:1.0625rem;margin-bottom:.5rem}
+.feature p{font-size:.9375rem;line-height:1.55}
+
+/* ── Dialogue box (glass with orange-cyan tinted bot bubble) ── */
+.dialogue{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);border-radius:1.5rem;padding:2rem;max-width:720px;margin:0 auto}
+@media(max-width:640px){.dialogue{padding:1.25rem}}
+.dialogue p{margin-bottom:.75rem;padding:.875rem 1.125rem;border-radius:.875rem;font-size:.9375rem;line-height:1.55}
+.dialogue p:last-child{margin-bottom:0}
 .dialogue .user{background:rgba(255,255,255,.04);color:rgba(255,255,255,.75)}
-.dialogue .bot{background:linear-gradient(135deg,rgba(249,115,22,.08),rgba(6,182,212,.05));border-left:3px solid #F97316;color:#fff}
-.faq-list{margin-top:2rem}
-.faq-item{padding:1.25rem 0;border-bottom:1px solid rgba(255,255,255,.06)}
-.faq-item h3{color:#fff;margin-bottom:.5rem}
-.pricing-hint{display:inline-block;margin-top:1rem;padding:.5rem 1rem;border-radius:.5rem;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);font-size:.85rem;color:#67E8F9}
+.dialogue .bot{background:linear-gradient(135deg,rgba(249,115,22,.10),rgba(6,182,212,.06));border-left:3px solid #F97316;color:rgba(255,255,255,.92)}
+.dialogue-note{text-align:center;margin-top:1.5rem;font-size:.875rem;color:rgba(255,255,255,.45)}
+
+/* ── Savings card (glass with checklist + pricing hint) ── */
+.savings{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);border-radius:1.5rem;padding:2rem;max-width:640px;margin:0 auto}
+.savings .intro{color:rgba(255,255,255,.8);margin-bottom:1rem;font-size:.9375rem}
+.savings ul{list-style:none;padding:0;margin:0 0 1.25rem;color:rgba(255,255,255,.75)}
+.savings li{padding:.625rem 0;font-size:.9375rem;border-bottom:1px solid rgba(255,255,255,.06)}
+.savings li:last-child{border-bottom:none}
+.savings strong{color:#fff;font-weight:600}
+.pricing-hint{display:inline-flex;align-items:center;padding:.5rem 1rem;border-radius:.625rem;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);font-size:.8125rem;color:#67E8F9}
+
+/* ── FAQ (native <details> accordion, chipy-design tint on open) ── */
+.faq-list{max-width:48rem;margin:0 auto;display:flex;flex-direction:column;gap:.75rem}
+.faq-item{border-radius:1rem;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.02);overflow:hidden;transition:all .3s}
+.faq-item[open]{background:rgba(249,115,22,.05);border-color:rgba(249,115,22,.2)}
+.faq-item summary{list-style:none;padding:1rem 1.5rem;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:1rem;font-size:.9375rem;font-weight:600;color:rgba(255,255,255,.85);transition:color .2s}
+.faq-item summary::-webkit-details-marker{display:none}
+.faq-item summary:hover{color:#fff}
+.faq-item summary::after{content:'+';display:inline-flex;align-items:center;justify-content:center;width:1.5rem;height:1.5rem;border-radius:9999px;color:rgba(255,255,255,.4);font-size:1.25rem;font-weight:400;flex-shrink:0;transition:transform .2s}
+.faq-item[open] summary::after{transform:rotate(45deg);color:#FDBA74}
+.faq-item .answer{padding:0 1.5rem 1.25rem;font-size:.9375rem;color:rgba(255,255,255,.55);line-height:1.6}
+
+/* ── Demo hint chip ── */
+.demo-hint{display:inline-flex;align-items:center;padding:.5rem 1rem;border-radius:.625rem;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);font-size:.8125rem;color:#67E8F9;margin-top:1.25rem}
+
+/* ── Footer (shared partial) ── */
 /*--footer-css-begin--*/
 .site-footer{position:relative;z-index:10;border-top:1px solid rgba(255,255,255,.05);padding:3rem 1.5rem 2rem;margin-top:4rem;background:rgba(10,10,15,.6)}
 .site-footer .footer-container{max-width:1152px;margin:0 auto;padding:0;text-align:left}
@@ -128,10 +183,15 @@ p{color:rgba(255,255,255,.7)}
 .footer-bottom p{font-size:.75rem;color:rgba(255,255,255,.3);margin:0}
 .footer-bottom a{color:rgba(255,255,255,.5);text-decoration:underline;text-decoration-color:rgba(255,255,255,.2);transition:all .2s}
 .footer-bottom a:hover{color:rgba(255,255,255,.8);text-decoration-color:rgba(249,115,22,.6)}
-/*--footer-css-end--*/
-.demo-hint{display:inline-block;padding:.5rem 1rem;border-radius:.5rem;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);font-size:.85rem;color:#67E8F9;margin-top:1rem}</style>
+/*--footer-css-end--*/</style>
 </head>
-<body>
+<body class="noise">
+<div class="orbs" aria-hidden="true">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+</div>
+
 <!--nav-html-begin-->
 <header class="ph-header">
   <div class="ph-inner">
@@ -173,20 +233,21 @@ p{color:rgba(255,255,255,.7)}
 
 <header class="hero">
   <div class="container">
-    <span class="hero-eyebrow">🍽️ KI-Telefonassistent für Restaurants</span>
+    <span class="hero-eyebrow"><span class="emoji" aria-hidden="true">🍽️</span>KI-Telefonassistent für Restaurants</span>
     <h1>In der <span class="accent">Küche</span> das Telefon verpasst? Nie wieder.</h1>
     <p class="subtitle">Phonbot nimmt Reservierungen an während du in der Küche bist, beantwortet Fragen zur Speisekarte, erfasst Take-away-Bestellungen und bucht direkt in dein Reservierungssystem.</p>
     <div class="cta-row">
-      <a href="/?demo=restaurant#demo" class="btn btn-demo">▶ Chipy live hören</a>
       <a href="/" class="btn btn-primary">Kostenlos testen</a>
+      <a href="/?demo=restaurant#demo" class="btn btn-ghost">▶ Chipy live hören</a>
     </div>
-    <div class="demo-hint">🎙️ Klick „live hören" — Phonbot spricht mit dir im Browser (Mikrofon nötig)</div>
+    <div class="trust-line">✓ Kostenlos starten · ✓ Sofort einsatzbereit · ✓ DSGVO-konform</div>
   </div>
 </header>
 
 <section>
   <div class="container">
     <h2>Typische Anrufe — automatisch bearbeitet</h2>
+    <p class="section-lead">Was Chipy auf deiner Nummer ab Tag 1 übernimmt.</p>
     <div class="features">
       <div class="feature"><div class="feature-icon">🍴</div><h3>Reservierungen</h3><p>Tisch-Reservierung mit Uhrzeit und Gästezahl direkt im Restaurant-Kalender eingetragen.</p></div>
         <div class="feature"><div class="feature-icon">📜</div><h3>Speisekarten-Auskunft</h3><p>„Habt ihr glutenfreie Pizza?" — Phonbot kennt deine Karte und antwortet präzise.</p></div>
@@ -199,6 +260,7 @@ p{color:rgba(255,255,255,.7)}
 <section>
   <div class="container">
     <h2>So klingt Phonbot am Telefon</h2>
+    <p class="section-lead">Ein echtes Gespräch — nicht gestellt.</p>
     <div class="dialogue">
       <p class="user">📞 Gast: „Hi, ich wollte einen Tisch für 4 Personen heute um 19 Uhr reservieren."</p>
       <p class="bot">Phonbot: „Heute 19 Uhr für 4 Personen — schaue kurz. Ja, geht klar. Dein Name bitte?"</p>
@@ -207,9 +269,9 @@ p{color:rgba(255,255,255,.7)}
       <p class="user">📞 Gast: „Nein, alles gut."</p>
       <p class="bot">Phonbot: „Perfekt. Bis heute Abend 19 Uhr!"</p>
     </div>
-    <p style="text-align:center;margin-top:1.5rem;font-size:.9rem;color:rgba(255,255,255,.5)">→ Reservierung im System · SMS-Bestätigung an Gast · Dauer: 31 Sek</p>
-    <div style="text-align:center;margin-top:1.5rem">
-      <a href="/?demo=restaurant#demo" class="btn btn-demo">▶ Chipy live am Telefon hören</a>
+    <p class="dialogue-note">→ Reservierung im System · SMS-Bestätigung an Gast · Dauer: 31 Sek</p>
+    <div style="text-align:center;margin-top:2rem">
+      <a href="/?demo=restaurant#demo" class="btn btn-ghost btn-sm">▶ Chipy live am Telefon hören</a>
     </div>
   </div>
 </section>
@@ -217,35 +279,39 @@ p{color:rgba(255,255,255,.7)}
 <section>
   <div class="container">
     <h2>Rechnet sich das?</h2>
-    <p>Restaurant mit 400 Anrufen/Monat rechnet sich so:</p>
-    <ul style="margin-top:1rem;padding-left:1.25rem;color:rgba(255,255,255,.75)">
-      <li>👤 <strong>Service-Mitarbeiter nur für Telefon</strong>: ~1.700 €/Monat</li>
+    <p class="section-lead">Die Rechnung ist kurz — der Unterschied pro Monat ist nicht.</p>
+    <div class="savings">
+      <p class="intro">Restaurant mit 400 Anrufen/Monat rechnet sich so:</p>
+      <ul>
+        <li>👤 <strong>Service-Mitarbeiter nur für Telefon</strong>: ~1.700 €/Monat</li>
         <li>📞 <strong>Phonbot Starter</strong>: 49 €/Monat</li>
         <li>💰 <strong>Ersparnis</strong>: ~1.650 €/Monat</li>
-    </ul>
-    <span class="pricing-hint">Plus: Keine Warteschleife = weniger verlorene Gäste an Konkurrenz.</span>
+      </ul>
+      <span class="pricing-hint">Plus: Keine Warteschleife = weniger verlorene Gäste an Konkurrenz.</span>
+    </div>
   </div>
 </section>
 
 <section>
   <div class="container">
     <h2>Häufige Fragen</h2>
+    <p class="section-lead">Alles, was du wissen musst — kurz und ehrlich.</p>
     <div class="faq-list">
-      <div class="faq-item"><h3>Klappt das mit meinem Reservierungs-System (Resmio, Quandoo, OpenTable)?</h3><p>Google Calendar und Outlook funktionieren direkt. Spezifische Reservierungs-Systeme auf Anfrage — meist via Kalender-Sync machbar.</p></div>
-      <div class="faq-item"><h3>Was bei Sonderwünschen (Allergien, Kinderhochstuhl)?</h3><p>Phonbot fragt standardmäßig nach Allergien und fügt Notizen zur Reservierung. Individuelle Felder definierst du im Agent Builder.</p></div>
-      <div class="faq-item"><h3>Kann Phonbot Bestellungen für Lieferdienst annehmen?</h3><p>Ja. Bestellungen werden als Ticket mit Artikeln + Lieferadresse an die Küche weitergeleitet.</p></div>
-      <div class="faq-item"><h3>Versteht Phonbot Dialekte (Bayrisch, Berlinerisch)?</h3><p>Ja. Deutsches Sprach-Modell erkennt regionale Varianten und Gerichte-Slang.</p></div>
+      <details class="faq-item"><summary>Klappt das mit meinem Reservierungs-System (Resmio, Quandoo, OpenTable)?</summary><div class="answer">Google Calendar und Outlook funktionieren direkt. Spezifische Reservierungs-Systeme auf Anfrage — meist via Kalender-Sync machbar.</div></details>
+      <details class="faq-item"><summary>Was bei Sonderwünschen (Allergien, Kinderhochstuhl)?</summary><div class="answer">Phonbot fragt standardmäßig nach Allergien und fügt Notizen zur Reservierung. Individuelle Felder definierst du im Agent Builder.</div></details>
+      <details class="faq-item"><summary>Kann Phonbot Bestellungen für Lieferdienst annehmen?</summary><div class="answer">Ja. Bestellungen werden als Ticket mit Artikeln + Lieferadresse an die Küche weitergeleitet.</div></details>
+      <details class="faq-item"><summary>Versteht Phonbot Dialekte (Bayrisch, Berlinerisch)?</summary><div class="answer">Ja. Deutsches Sprach-Modell erkennt regionale Varianten und Gerichte-Slang.</div></details>
     </div>
   </div>
 </section>
 
-<section style="text-align:center;padding:4rem 0">
+<section style="text-align:center">
   <div class="container">
     <h2>Restaurant-Telefon automatisieren — 100 Freiminuten</h2>
-    <p style="margin-bottom:1.5rem">Registrierung in unter 2 Minuten · Keine Kreditkarte · Monatlich kündbar</p>
+    <p class="section-lead">Registrierung in unter 2 Minuten · Keine Kreditkarte · Monatlich kündbar.</p>
     <div class="cta-row">
       <a href="/" class="btn btn-primary">Jetzt einrichten</a>
-      <a href="/?demo=restaurant#demo" class="btn btn-demo">Erst Chipy testen</a>
+      <a href="/?demo=restaurant#demo" class="btn btn-ghost">Erst Chipy testen</a>
     </div>
   </div>
 </section>
