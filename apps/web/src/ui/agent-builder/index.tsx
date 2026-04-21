@@ -63,6 +63,8 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
   const [billing, setBilling] = useState<BillingStatus | null>(null);
   // Live agent stats (latency, calls count) — fetched from Retell on demand.
   const [agentStats, setAgentStats] = useState<AgentStats | null>(null);
+  const [statsFetchedAt, setStatsFetchedAt] = useState<number | null>(null);
+  const [statsRefreshing, setStatsRefreshing] = useState(false);
   // Track original config snapshot for dirty detection
   const savedConfigRef = useRef<string>('');
 
@@ -209,11 +211,15 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
   }
 
   async function refreshAgentStats(tenantId?: string) {
+    setStatsRefreshing(true);
     try {
       const stats = await getAgentStats(tenantId);
       setAgentStats(stats);
+      setStatsFetchedAt(Date.now());
     } catch {
       setAgentStats(null);
+    } finally {
+      setStatsRefreshing(false);
     }
   }
 
@@ -368,6 +374,8 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
             voices={voices}
             billing={billing}
             stats={agentStats}
+            fetchedAt={statsFetchedAt}
+            refreshing={statsRefreshing}
             onRefresh={() => refreshAgentStats(config.tenantId)}
           />
           {status && (
@@ -541,12 +549,16 @@ function AgentStatsRow({
   voices,
   billing,
   stats,
+  fetchedAt,
+  refreshing,
   onRefresh,
 }: {
   config: AgentConfig;
   voices: Voice[];
   billing: BillingStatus | null;
   stats: AgentStats | null;
+  fetchedAt: number | null;
+  refreshing: boolean;
   onRefresh: () => void;
 }) {
   const voice = voices.find((v) => v.voice_id === config.voice);
@@ -579,12 +591,36 @@ function AgentStatsRow({
       ].filter(Boolean).join(' · ')
     : '';
 
-  // Re-fetch stats every 60s while the builder is open so the number
-  // stays current as new calls come in without a page reload.
+  // Live updating: poll every 15 s, re-fetch instantly when the user
+  // comes back to the tab (visibilitychange) or re-focuses the window.
+  // Retell's listCalls is cheap and measured against our 20-call cap,
+  // so 15 s is safe and makes the number feel real-time to the user.
   useEffect(() => {
-    const t = setInterval(onRefresh, 60_000);
-    return () => clearInterval(t);
+    const t = setInterval(onRefresh, 15_000);
+    const onVis = () => { if (!document.hidden) onRefresh(); };
+    const onFocus = () => onRefresh();
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('focus', onFocus);
+    };
   }, [onRefresh]);
+
+  // Human-friendly "x s ago" stamp — kept on an interval so the tooltip
+  // updates without needing a full re-render.
+  const [nowTick, setNowTick] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 1_000);
+    return () => clearInterval(t);
+  }, []);
+  const ageSec = fetchedAt ? Math.max(0, Math.round((nowTick - fetchedAt) / 1000)) : null;
+  const ageStr =
+    ageSec == null ? 'noch nicht geladen' :
+    ageSec < 5 ? 'gerade eben' :
+    ageSec < 60 ? `vor ${ageSec} s` :
+    `vor ${Math.round(ageSec / 60)} min`;
 
   let latencyLabel = '—';
   let latencyColor = 'text-white/50 bg-white/5 border-white/10';
@@ -598,11 +634,25 @@ function AgentStatsRow({
     if (ms < 600) { latencyLabel = 'Optimiert'; latencyColor = 'text-green-400 bg-green-500/10 border-green-500/25'; }
     else if (ms < 900) { latencyLabel = 'Standard'; latencyColor = 'text-white/65 bg-white/5 border-white/15'; }
     else { latencyLabel = 'Langsam'; latencyColor = 'text-yellow-400 bg-yellow-500/10 border-yellow-500/25'; }
-    latencyTip = `Ø LLM p50 aus ${stats?.sampleSize ?? 0} Calls (von ${stats?.callsCount ?? 0} gesamt) — live von Retell.${breakdownStr ? `\nBreakdown (ms): ${breakdownStr}` : ''}`;
+    latencyTip = `Ø LLM p50 aus ${stats?.sampleSize ?? 0} Calls (von ${stats?.callsCount ?? 0} gesamt) — live von Retell, aktualisiert ${ageStr}.${breakdownStr ? `\nBreakdown (ms): ${breakdownStr}` : ''}`;
   }
 
   return (
-    <div className="hidden md:flex items-stretch rounded-xl border border-white/8 bg-white/[0.03] overflow-hidden text-xs">
+    <div
+      className="hidden md:flex items-stretch rounded-xl border border-white/8 bg-white/[0.03] overflow-hidden text-xs relative cursor-default"
+      title={`Live-Daten von Retell · letzte Aktualisierung ${ageStr} · klick zum sofort neu laden`}
+      onClick={onRefresh}
+    >
+      {/* Live pulse indicator — subtle green dot on the top-left corner
+          that briefly flashes orange while a refresh is in flight. */}
+      <span
+        className={`absolute top-1.5 left-1.5 w-1.5 h-1.5 rounded-full ${refreshing ? 'bg-orange-400' : 'bg-green-400'}`}
+        style={{
+          animation: refreshing ? 'spin 0.8s linear' : 'breathe 2.2s ease-in-out infinite',
+          boxShadow: refreshing ? '0 0 8px rgba(251,146,60,0.6)' : '0 0 6px rgba(74,222,128,0.5)',
+        }}
+        aria-hidden="true"
+      />
       <StatChip label="Preis / Min" value={`${effectivePrice.toFixed(2)} €`} title={priceTip} />
       <Divider />
       <StatChip
