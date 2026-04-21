@@ -9,7 +9,23 @@ import type { FastifyInstance } from 'fastify';
 import multipart from '@fastify/multipart';
 import { z } from 'zod';
 import { listVoices, createVoice, type RetellVoice } from './retell.js';
-import { VOICE_CATALOG, getDefaultVoiceForLanguage, getVoicesForLanguage } from './voice-catalog.js';
+import { VOICE_CATALOG, getDefaultVoiceForLanguage, getVoicesForLanguage, getVoiceSurcharge, isPremiumProvider, PREMIUM_VOICE_SURCHARGE_PER_MINUTE } from './voice-catalog.js';
+
+/**
+ * Annotate a Retell voice with the per-minute Phonbot surcharge. Cloned
+ * voices always carry the premium price when the underlying provider is
+ * ElevenLabs (the recommended clone provider). Built-in IDs fall through
+ * to getVoiceSurcharge() which understands the catalog + provider prefix.
+ */
+function annotateSurcharge(v: RetellVoice): RetellVoice & { surchargePerMinute: number } {
+  const id = v.voice_id;
+  const provider = (v.provider ?? '').toLowerCase();
+  // Cloned voice on a premium provider → fixed premium surcharge.
+  if (v.voice_type === 'cloned' && isPremiumProvider(provider)) {
+    return { ...v, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE };
+  }
+  return { ...v, surchargePerMinute: getVoiceSurcharge(id) };
+}
 
 // Max upload: 50 MB
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
@@ -27,7 +43,7 @@ export async function registerVoices(app: FastifyInstance) {
     async (_req, reply) => {
       try {
         const voices = await listVoices();
-        return reply.send({ voices });
+        return reply.send({ voices: voices.map(annotateSurcharge) });
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed to list voices';
         return reply.status(502).send({ error: msg });
@@ -47,6 +63,7 @@ export async function registerVoices(app: FastifyInstance) {
       return reply.send({
         language,
         defaultVoiceId,
+        premiumSurchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE,
         voices,
         allLanguages: Object.keys(VOICE_CATALOG),
       });

@@ -3,8 +3,8 @@ import { cloneVoice, type Voice } from '../../lib/api.js';
 import { IconMicUpload, IconRefresh } from './shared.js';
 
 const VOICE_PROVIDERS = [
-  { value: 'cartesia', label: 'Cartesia (empfohlen)' },
-  { value: 'elevenlabs', label: 'ElevenLabs' },
+  { value: 'cartesia', label: 'Cartesia (Standard)' },
+  { value: 'elevenlabs', label: 'ElevenLabs (HD · Premium +5 Ct/Min)' },
   { value: 'minimax', label: 'MiniMax' },
   { value: 'fish_audio', label: 'Fish Audio' },
 ] as const;
@@ -206,7 +206,19 @@ export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
               <option key={p.value} value={p.value}>{p.label}</option>
             ))}
           </select>
-          <p className="text-xs text-white/30 mt-1">ElevenLabs unterstützt bis zu 25 Audiodateien \· Cartesia & MiniMax nur 1 Datei</p>
+          <p className="text-xs text-white/30 mt-1">ElevenLabs unterstützt bis zu 25 Audiodateien · Cartesia &amp; MiniMax nur 1 Datei</p>
+          {provider === 'elevenlabs' && (
+            <div className="mt-2 flex items-start gap-2 rounded-lg border border-orange-500/25 bg-orange-500/5 px-3 py-2">
+              <span className="text-[10px] font-semibold text-orange-300 bg-orange-500/15 border border-orange-500/40 rounded-full px-1.5 py-0.5 mt-0.5 shrink-0">
+                Premium
+              </span>
+              <p className="text-xs text-orange-100/80 leading-snug">
+                ElevenLabs ist HD-Qualität mit natürlicher Betonung — Aufschlag von{' '}
+                <span className="text-orange-200 font-semibold">+5 Ct/Min</span> zusätzlich zum
+                Minutenpreis deines Plans. Die Kosten werden am Monatsende über Stripe abgerechnet.
+              </p>
+            </div>
+          )}
         </div>
       )}
 

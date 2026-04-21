@@ -565,6 +565,17 @@ export type Voice = {
   gender?: string;
   age?: string;
   preview_audio_url?: string;
+  /** €/Min surcharge on top of plan/overage rate (0 = no surcharge). */
+  surchargePerMinute?: number;
+};
+
+export type RecommendedVoice = {
+  id: string;
+  name: string;
+  gender: string;
+  provider: string;
+  isDefault?: boolean;
+  surchargePerMinute?: number;
 };
 
 export function getVoices() {
@@ -572,7 +583,13 @@ export function getVoices() {
 }
 
 export function getRecommendedVoices(language: string) {
-  return request<{ voices: Array<{ id: string; name: string; gender: string; provider: string; isDefault?: boolean }> }>(`/voices/recommended?language=${encodeURIComponent(language)}`);
+  return request<{
+    voices: RecommendedVoice[];
+    defaultVoiceId: string;
+    premiumSurchargePerMinute: number;
+    language: string;
+    allLanguages: string[];
+  }>(`/voices/recommended?language=${encodeURIComponent(language)}`);
 }
 
 export async function cloneVoice(name: string, audioFile: File, provider = 'cartesia'): Promise<Voice> {

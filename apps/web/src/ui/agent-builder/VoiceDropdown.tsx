@@ -51,8 +51,16 @@ export function VoiceDropdown({
   const displayLabel = currentVoice
     ? `${currentVoice.voice_name} (${getProviderLabel(currentVoice)})`
     : currentVoiceId;
+  const currentSurcharge = currentVoice?.surchargePerMinute ?? 0;
 
   const searchLower = search.toLowerCase();
+
+  // Format a per-minute surcharge like "+5 Ct/Min". We keep the unit
+  // in German cents since all pricing on the site is German-centric.
+  function formatSurcharge(eurPerMin: number): string {
+    const cents = Math.round(eurPerMin * 100);
+    return `+${cents} Ct/Min`;
+  }
 
   // Group voices: cloned first, then by provider
   const cloned = voices.filter((v) => v.voice_type === 'cloned' && (!search || v.voice_name.toLowerCase().includes(searchLower)));
@@ -73,9 +81,23 @@ export function VoiceDropdown({
         onClick={onOpenToggle}
         className="w-full flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-orange-500/50 outline-none"
       >
-        <span className="truncate">{loading ? 'Stimmen werden geladen…' : displayLabel}</span>
+        <span className="truncate flex items-center gap-2">
+          {loading ? 'Stimmen werden geladen…' : displayLabel}
+          {currentSurcharge > 0 && (
+            <span className="text-[10px] font-semibold text-orange-300 bg-orange-500/10 border border-orange-500/30 rounded-full px-1.5 py-0.5">
+              Premium {formatSurcharge(currentSurcharge)}
+            </span>
+          )}
+        </span>
         <IconChevronDown size={16} className="ml-2 text-white/40 shrink-0" />
       </button>
+      {currentSurcharge > 0 && (
+        <p className="mt-1.5 text-xs text-white/50 leading-snug">
+          Premium-Stimme (ElevenLabs HD) — Aufschlag von{' '}
+          <span className="text-orange-300 font-medium">{formatSurcharge(currentSurcharge)}</span>{' '}
+          zusätzlich zum Minutenpreis deines Plans.
+        </p>
+      )}
       {dropdownOpen && (
         <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl border border-white/10 bg-[#0F0F18] shadow-xl max-h-[60vh] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent"
           style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.15) transparent' }}>
@@ -107,7 +129,14 @@ export function VoiceDropdown({
                     currentVoiceId === v.voice_id ? 'text-cyan-300 bg-cyan-500/10' : 'text-white/80'
                   }`}
                 >
-                  <span>{v.voice_name}</span>
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="truncate">{v.voice_name}</span>
+                    {(v.surchargePerMinute ?? 0) > 0 && (
+                      <span className="text-[10px] font-semibold text-orange-300 bg-orange-500/10 border border-orange-500/30 rounded-full px-1.5 py-0.5 shrink-0">
+                        {formatSurcharge(v.surchargePerMinute ?? 0)}
+                      </span>
+                    )}
+                  </span>
                   <span className="text-xs text-cyan-400/60 bg-cyan-500/10 px-1.5 py-0.5 rounded shrink-0">Eigene</span>
                 </button>
               ))}
@@ -129,8 +158,15 @@ export function VoiceDropdown({
                     currentVoiceId === v.voice_id ? 'text-orange-300 bg-orange-500/10' : 'text-white/80'
                   }`}
                 >
-                  <span>{v.voice_name}</span>
-                  <span className="text-xs text-white/30">{v.accent ?? v.gender ?? ''}</span>
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="truncate">{v.voice_name}</span>
+                    {(v.surchargePerMinute ?? 0) > 0 && (
+                      <span className="text-[10px] font-semibold text-orange-300 bg-orange-500/10 border border-orange-500/30 rounded-full px-1.5 py-0.5 shrink-0">
+                        {formatSurcharge(v.surchargePerMinute ?? 0)}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-xs text-white/30 shrink-0">{v.accent ?? v.gender ?? ''}</span>
                 </button>
               ))}
             </React.Fragment>

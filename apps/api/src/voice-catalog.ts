@@ -98,6 +98,26 @@ export function getVoicesForLanguage(language: string): CuratedVoice[] {
 }
 
 /**
+ * Per-minute surcharge applied to ANY voice served by a premium provider.
+ * Cloned voices default to ElevenLabs (see VoiceClonePanel) so they all
+ * incur this surcharge, even when they're not in VOICE_CATALOG.
+ */
+export const PREMIUM_VOICE_SURCHARGE_PER_MINUTE = 0.05;
+
+/**
+ * Providers that count as "Premium" and trigger the surcharge. ElevenLabs
+ * (+ its id-prefix variants 11labs/eleven) is the only one today because
+ * it's meaningfully more expensive than Cartesia/platform TTS. Keep this
+ * list in sync with voices.ts getVoiceSurcharge() and voice-clone panel.
+ */
+const PREMIUM_PROVIDERS = new Set(['elevenlabs', '11labs', 'eleven_labs']);
+
+export function isPremiumProvider(provider: string | undefined | null): boolean {
+  if (!provider) return false;
+  return PREMIUM_PROVIDERS.has(provider.toLowerCase());
+}
+
+/**
  * Look up the per-minute surcharge for a given voice_id across all languages.
  * Returns 0 for unknown voices or voices without a surcharge.
  *
@@ -111,6 +131,13 @@ export function getVoiceSurcharge(voiceId: string): number {
     if (match?.surchargePerMinute && match.surchargePerMinute > 0) {
       return match.surchargePerMinute;
     }
+  }
+  // Fallback: voice_id prefix hints at provider (e.g. "11labs-Marissa",
+  // "elevenlabs-custom-xyz"). Retell-side voice IDs that start with a
+  // provider slug get the same surcharge as catalog entries.
+  const lower = voiceId.toLowerCase();
+  if (lower.startsWith('11labs-') || lower.startsWith('elevenlabs-')) {
+    return PREMIUM_VOICE_SURCHARGE_PER_MINUTE;
   }
   return 0;
 }
