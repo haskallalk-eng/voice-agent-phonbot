@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { cloneVoice, type Voice } from '../../lib/api.js';
-import { IconMicUpload, IconRefresh } from './shared.js';
+import { IconMicUpload, IconRefresh, IconChevronDown } from './shared.js';
 
 const VOICE_PROVIDERS = [
   { value: 'elevenlabs', label: 'ElevenLabs (HD, empfohlen · Premium +5 Ct/Min)' },
@@ -199,26 +199,20 @@ export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
       {/* Provider selector -- always visible when not idle */}
       {mode !== 'idle' && (
         <div className="mb-3">
-          <label className="block text-xs text-white/40 mb-1.5">Voice Provider</label>
-          <select
-            value={provider}
-            onChange={(e) => setProvider(e.target.value)}
-            className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
-          >
-            {VOICE_PROVIDERS.map((p) => (
-              <option key={p.value} value={p.value}>{p.label}</option>
-            ))}
-          </select>
-          <p className="text-xs text-white/30 mt-1">ElevenLabs unterstützt bis zu 25 Audiodateien · Cartesia &amp; MiniMax nur 1 Datei</p>
+          <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider mb-2">Voice Provider</label>
+          <ProviderDropdown value={provider} onChange={setProvider} />
+          <p className="text-xs text-white/40 mt-1.5 leading-snug">
+            ElevenLabs unterstützt bis zu 25 Audiodateien · Cartesia &amp; MiniMax nur 1 Datei
+          </p>
           {provider === 'elevenlabs' && (
-            <div className="mt-2 flex items-start gap-2 rounded-lg border border-orange-500/25 bg-orange-500/5 px-3 py-2">
-              <span className="text-[10px] font-semibold text-orange-300 bg-orange-500/15 border border-orange-500/40 rounded-full px-1.5 py-0.5 mt-0.5 shrink-0">
-                Premium
+            <div className="mt-3 flex items-start gap-3 rounded-xl border border-orange-500/25 bg-gradient-to-br from-orange-500/10 to-cyan-500/5 px-3.5 py-2.5">
+              <span className="text-[10px] font-bold text-orange-300 bg-orange-500/15 border border-orange-500/40 rounded-full px-2 py-0.5 mt-0.5 shrink-0 tracking-wide">
+                PREMIUM
               </span>
-              <p className="text-xs text-orange-100/80 leading-snug">
-                ElevenLabs ist HD-Qualität mit natürlicher Betonung — Aufschlag von{' '}
+              <p className="text-xs text-orange-100/85 leading-relaxed">
+                ElevenLabs liefert HD-Qualität mit natürlicher Betonung. Aufschlag von{' '}
                 <span className="text-orange-200 font-semibold">+5 Ct/Min</span> zusätzlich zum
-                Minutenpreis deines Plans. Die Kosten werden am Monatsende über Stripe abgerechnet.
+                Minutenpreis deines Plans — Abrechnung am Monatsende über Stripe.
               </p>
             </div>
           )}
@@ -419,5 +413,135 @@ export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
         </div>
       )}
     </section>
+  );
+}
+
+/* ───────────────────────────────────────────────────────────────────
+ * Custom provider dropdown — native <select> can't be styled to match
+ * the glass-card / gradient-accent design language, so we render a
+ * button + floating option list with the rest of the brand vocabulary
+ * (rounded-xl, orange focus ring, Premium pill, keyboard-accessible).
+ * ─────────────────────────────────────────────────────────────────── */
+function ProviderDropdown({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+  const current = VOICE_PROVIDERS.find((p) => p.value === value) ?? VOICE_PROVIDERS[0]!;
+  const isPremium = (val: string) => val === 'elevenlabs';
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  // Close on Escape
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
+
+  // Split label into primary + secondary ("HD, empfohlen · Premium +5 Ct/Min")
+  function splitLabel(label: string): { primary: string; meta: string } {
+    const idx = label.indexOf('(');
+    if (idx === -1) return { primary: label, meta: '' };
+    return {
+      primary: label.slice(0, idx).trim(),
+      meta: label.slice(idx + 1, label.lastIndexOf(')')).trim(),
+    };
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={`w-full flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm text-white transition-all outline-none ${
+          isPremium(current.value)
+            ? 'border border-orange-500/40 bg-gradient-to-br from-orange-500/10 to-cyan-500/5 hover:border-orange-500/60'
+            : 'border border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/[0.07]'
+        } ${open ? 'ring-2 ring-orange-500/40' : ''}`}
+      >
+        <span className="flex items-center gap-2 min-w-0">
+          <span className="truncate font-medium">{splitLabel(current.label).primary}</span>
+          {isPremium(current.value) && (
+            <span className="text-[10px] font-bold text-orange-300 bg-orange-500/15 border border-orange-500/40 rounded-full px-2 py-0.5 shrink-0 tracking-wide">
+              PREMIUM
+            </span>
+          )}
+          {splitLabel(current.label).meta && (
+            <span className="text-xs text-white/45 truncate">· {splitLabel(current.label).meta}</span>
+          )}
+        </span>
+        <IconChevronDown
+          size={16}
+          className={`ml-2 text-white/50 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {open && (
+        <div
+          role="listbox"
+          className="absolute left-0 right-0 top-full mt-2 z-40 rounded-xl overflow-hidden"
+          style={{
+            background: 'rgba(15,15,24,0.98)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.03)',
+            backdropFilter: 'blur(24px)',
+          }}
+        >
+          {/* Gradient accent line */}
+          <div
+            className="h-px w-full"
+            style={{
+              background: 'linear-gradient(90deg, transparent, rgba(249,115,22,0.5), rgba(6,182,212,0.5), transparent)',
+            }}
+          />
+          {VOICE_PROVIDERS.map((p) => {
+            const { primary, meta } = splitLabel(p.label);
+            const active = p.value === value;
+            const premium = isPremium(p.value);
+            return (
+              <button
+                key={p.value}
+                type="button"
+                role="option"
+                aria-selected={active}
+                onClick={() => { onChange(p.value); setOpen(false); }}
+                className={`w-full flex items-start gap-3 px-3.5 py-2.5 text-left transition-colors border-b border-white/5 last:border-b-0 ${
+                  active ? 'bg-orange-500/10' : 'hover:bg-white/5'
+                }`}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-sm font-medium ${active ? 'text-orange-200' : 'text-white'}`}>{primary}</span>
+                    {premium && (
+                      <span className="text-[10px] font-bold text-orange-300 bg-orange-500/15 border border-orange-500/40 rounded-full px-2 py-0.5 tracking-wide">
+                        PREMIUM +5 Ct/Min
+                      </span>
+                    )}
+                  </div>
+                  {meta && <p className="text-xs text-white/45 mt-0.5 leading-snug">{meta}</p>}
+                </div>
+                {active && (
+                  <span
+                    className="w-1.5 h-1.5 rounded-full mt-2 shrink-0"
+                    style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                    aria-hidden="true"
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
