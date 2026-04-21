@@ -13,18 +13,19 @@
 html {
   scroll-behavior: smooth;
   height: auto;
-  /* Safari/iOS doesn't honor overflow-x:clip on <html>, so we mirror it as
-     hidden here. This is the last line of defense: any child that still
-     exceeds the viewport gets clipped instead of making the whole page
-     scroll sideways. All per-page fixes remain the right place to solve
-     root causes; this just prevents UX damage in the meantime. */
-  overflow-x: hidden;
+  /* Use `clip` not `hidden`: `overflow: hidden` spawns a scroll container on
+     the ancestor, and `position: sticky` descendants then pin to THAT
+     container (which never scrolls), so the sticky nav scrolls away with
+     the page on every browser. `clip` suppresses horizontal overflow
+     without creating a scroll context. Safari ≥16 / Chrome ≥90 / Firefox
+     ≥81 — good enough for prod. */
+  overflow-x: clip;
   max-width: 100vw;
 }
 
 body {
   min-height: 100vh;
-  overflow-x: hidden;
+  overflow-x: clip;
   max-width: 100vw;
   height: auto;
 }
@@ -32,7 +33,7 @@ body {
 #root {
   min-height: 100vh;
   height: auto;
-  overflow-x: hidden;
+  overflow-x: clip;
   max-width: 100vw;
 }
 
