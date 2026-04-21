@@ -159,7 +159,7 @@ export function PhonbotBrand({ size = 'md', className = '' }: { size?: 'sm' | 'm
       <FoxLogo size={cfg.s} />
       <span className={`font-black tracking-tight leading-none ${cfg.t}`}>
         <span className="text-white">Phon</span>
-        <span style={{ background: 'linear-gradient(135deg,#F97316,#FB923C)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>bot</span>
+        <span style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>bot</span>
       </span>
     </div>
   );
