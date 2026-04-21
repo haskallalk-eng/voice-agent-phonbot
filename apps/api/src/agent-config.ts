@@ -547,20 +547,15 @@ export async function registerAgentConfig(app: FastifyInstance) {
       // newest-first so we stop at the first ended one with latency.
       const pickNum = (v: unknown): number | null =>
         typeof v === 'number' && v > 0 ? Math.round(v) : null;
-      let ended = 0;
-      let latest: (typeof calls)[number] | null = null;
-      for (const c of calls) {
-        if (c.call_status !== 'ended') continue;
-        ended++;
-        if (!latest) latest = c;
-      }
+      const endedCalls = calls.filter((c) => c.call_status === 'ended');
+      const latest = endedCalls[0];
       const l = latest?.latency;
       const llm = pickNum(l?.llm?.p50);
       const tts = pickNum(l?.tts?.p50);
       const asr = pickNum(l?.asr?.p50);
       const e2e = pickNum(l?.e2e?.p50);
       return {
-        callsCount: ended,
+        callsCount: endedCalls.length,
         sampleSize: llm != null ? 1 : 0,
         latencyMs: llm, // matches the Retell dashboard headline
         breakdownMs: { llm, tts, asr, e2e },
