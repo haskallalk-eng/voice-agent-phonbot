@@ -564,12 +564,20 @@ function AgentStatsRow({
     ? `Innerhalb der ${billing?.minutesLimit ?? 0} Inklusiv-Minuten deines Plans${surcharge > 0 ? ` · Premium-Aufschlag +${Math.round(surcharge * 100)} Ct/Min` : ''}`
     : `Inklusiv-Minuten aufgebraucht — ${overage.toFixed(2)} € Überschreitung${surcharge > 0 ? ` + ${Math.round(surcharge * 100)} Ct Premium` : ''} pro Minute`;
 
-  // Real measured latency from Retell call-analysis (avg p50 across
-  // the last ~20 ended calls for this agent). null when the agent
-  // hasn't had any call yet — we show "—" in that case instead of a
-  // fabricated estimate.
-  const measuredMs = stats?.p50LatencyMs ?? stats?.avgLatencyMs ?? null;
+  // Real measured latency from Retell. Primary = LLM p50 (matches the
+  // Retell dashboard headline). Breakdown (TTS, ASR, E2E) goes into
+  // the tooltip so users can see where the time goes.
+  const measuredMs = stats?.latencyMs ?? null;
   const hasData = typeof measuredMs === 'number' && measuredMs > 0 && (stats?.sampleSize ?? 0) > 0;
+  const bk = stats?.breakdownMs;
+  const breakdownStr = bk
+    ? [
+        bk.llm != null ? `LLM ${bk.llm}` : null,
+        bk.tts != null ? `TTS ${bk.tts}` : null,
+        bk.asr != null ? `ASR ${bk.asr}` : null,
+        bk.e2e != null ? `E2E ${bk.e2e}` : null,
+      ].filter(Boolean).join(' · ')
+    : '';
 
   // Re-fetch stats every 60s while the builder is open so the number
   // stays current as new calls come in without a page reload.
@@ -580,14 +588,17 @@ function AgentStatsRow({
 
   let latencyLabel = '—';
   let latencyColor = 'text-white/50 bg-white/5 border-white/10';
-  let latencyTip = `Latenz wird automatisch aus den letzten Calls gemessen. Bisher ${stats?.callsCount ?? 0} Calls, davon 0 mit Latenz-Daten.`;
+  let latencyTip = `LLM-Latenz wird automatisch aus den letzten Calls gemessen. Bisher ${stats?.callsCount ?? 0} Calls, 0 mit Latenz-Daten.`;
 
   if (hasData) {
     const ms = measuredMs as number;
-    if (ms < 700) { latencyLabel = 'Optimiert'; latencyColor = 'text-green-400 bg-green-500/10 border-green-500/25'; }
+    // Thresholds aligned with Retell's LLM-p50 metric (the dashboard
+    // headline). Typical ranges: fast agents 400-600, normal 600-900,
+    // slow > 900.
+    if (ms < 600) { latencyLabel = 'Optimiert'; latencyColor = 'text-green-400 bg-green-500/10 border-green-500/25'; }
     else if (ms < 900) { latencyLabel = 'Standard'; latencyColor = 'text-white/65 bg-white/5 border-white/15'; }
     else { latencyLabel = 'Langsam'; latencyColor = 'text-yellow-400 bg-yellow-500/10 border-yellow-500/25'; }
-    latencyTip = `Durchschnitt aus ${stats?.sampleSize ?? 0} Calls (von ${stats?.callsCount ?? 0} gesamt). Live-Messung von Retell.`;
+    latencyTip = `Ø LLM p50 aus ${stats?.sampleSize ?? 0} Calls (von ${stats?.callsCount ?? 0} gesamt) — live von Retell.${breakdownStr ? `\nBreakdown (ms): ${breakdownStr}` : ''}`;
   }
 
   return (
@@ -602,7 +613,7 @@ function AgentStatsRow({
       />
       <Divider />
       <StatChip
-        label="Latenz (gemessen)"
+        label="LLM-Latenz"
         value={hasData ? `${measuredMs} ms` : '—'}
         title={latencyTip}
       />

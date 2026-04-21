@@ -533,9 +533,17 @@ export type BillingStatus = {
 
 export type AgentStats = {
   callsCount: number;
-  sampleSize?: number;
-  avgLatencyMs: number | null;
-  p50LatencyMs: number | null;
+  sampleSize: number;
+  /** Primary latency number — LLM p50 averaged across recent calls.
+   *  Matches the headline metric on the Retell dashboard. */
+  latencyMs: number | null;
+  /** Full per-component breakdown (ms). */
+  breakdownMs: {
+    llm: number | null;
+    tts: number | null;
+    asr: number | null;
+    e2e: number | null;
+  };
 };
 export function getAgentStats(tenantId?: string) {
   const q = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';

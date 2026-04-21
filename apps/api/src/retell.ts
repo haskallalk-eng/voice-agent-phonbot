@@ -223,6 +223,7 @@ export type RetellLatency = {
   llm?: RetellLatencyBreakdown;
   llm_websocket_network_rtt?: RetellLatencyBreakdown;
   tts?: RetellLatencyBreakdown;
+  asr?: RetellLatencyBreakdown;
   knowledge_base?: RetellLatencyBreakdown;
   s2s?: RetellLatencyBreakdown;
 };
