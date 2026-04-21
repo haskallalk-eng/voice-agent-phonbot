@@ -8,6 +8,7 @@
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "check": "pnpm --filter @vas/api typecheck && pnpm --filter @vas/web typecheck"
+    "check": "pnpm --filter @vas/api typecheck && pnpm --filter @vas/web typecheck",
+    "prepare": "git config core.hooksPath .githooks || true"
   }
 }

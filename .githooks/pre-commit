@@ -1,0 +1,67 @@
+#!/bin/sh
+# Phonbot pre-commit secret scanner.
+# Blocks commits that introduce likely-leaked secrets into tracked files.
+# Scans ONLY added lines in the staged diff — safe to run on any branch.
+# See CLAUDE.md §17 for the full secret-hygiene policy.
+#
+# Escape hatch (use only for verified false positives):  git commit --no-verify
+
+set -u
+
+staged="$(git diff --cached -U0 --no-color --diff-filter=ACMR 2>/dev/null || true)"
+[ -z "$staged" ] && exit 0
+
+added="$(printf '%s\n' "$staged" | grep -E '^\+[^+]' || true)"
+[ -z "$added" ] && exit 0
+
+tmpfile="$(mktemp 2>/dev/null || echo "/tmp/phonbot-secret-hit-$$")"
+found=0
+
+check() {
+  pattern="$1"
+  label="$2"
+  if printf '%s\n' "$added" | grep -Ein -- "$pattern" > "$tmpfile"; then
+    echo "BLOCKED: $label"
+    sed 's|^|   |' "$tmpfile"
+    echo
+    found=1
+  fi
+}
+
+# Database / cache URLs that embed a password (user:pass@host form).
+check 'postgres(ql)?://[^[:space:]/]+:[^@[:space:]/]+@'    'Postgres URL with inline password'
+check 'mongodb(\+srv)?://[^[:space:]/]+:[^@[:space:]/]+@'  'MongoDB URL with inline password'
+check 'redis(s)?://[^[:space:]/]+:[^@[:space:]/]+@'        'Redis URL with inline password'
+check 'mysql://[^[:space:]/]+:[^@[:space:]/]+@'            'MySQL URL with inline password'
+
+# SaaS tokens — high-confidence, prefix-anchored patterns only to avoid FPs.
+check 'sk_live_[A-Za-z0-9]{16,}'              'Stripe live secret key'
+check 'rk_live_[A-Za-z0-9]{16,}'              'Stripe live restricted key'
+check 'whsec_[A-Za-z0-9]{24,}'                'Stripe webhook secret'
+check 'ghp_[A-Za-z0-9]{30,}'                  'GitHub Personal Access Token'
+check 'github_pat_[A-Za-z0-9_]{30,}'          'GitHub fine-grained PAT'
+check 'gho_[A-Za-z0-9]{30,}'                  'GitHub OAuth token'
+check 'AKIA[0-9A-Z]{16}'                      'AWS access key'
+check 'AIza[A-Za-z0-9_-]{35,}'                'Google API key'
+check 'xox[baprs]-[A-Za-z0-9-]{10,}'          'Slack token'
+check 're_[A-Za-z0-9]{20,}'                   'Resend API key'
+check 'key_[A-Za-z0-9]{40,}'                  'Retell API key'
+
+# Private-key material.
+check '-----BEGIN (RSA |EC |OPENSSH |DSA |PGP |ENCRYPTED |)PRIVATE KEY-----'  'Private key block'
+
+# Signed JWTs (three-part, payload non-empty).
+check 'eyJ[A-Za-z0-9_-]{16,}\.eyJ[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}'  'Signed JWT'
+
+rm -f "$tmpfile"
+
+if [ "$found" -eq 1 ]; then
+  echo "Pre-commit secret scanner blocked this commit."
+  echo "Move the secret into apps/api/.env (single source of truth),"
+  echo "read it via process.env in code, and re-stage."
+  echo "See CLAUDE.md section 17 for the policy. Bypass only for verified false positives:"
+  echo "    git commit --no-verify"
+  exit 1
+fi
+
+exit 0
