@@ -3,8 +3,8 @@ import { cloneVoice, type Voice } from '../../lib/api.js';
 import { IconMicUpload, IconRefresh } from './shared.js';
 
 const VOICE_PROVIDERS = [
-  { value: 'cartesia', label: 'Cartesia (Standard)' },
-  { value: 'elevenlabs', label: 'ElevenLabs (HD · Premium +5 Ct/Min)' },
+  { value: 'elevenlabs', label: 'ElevenLabs (HD, empfohlen · Premium +5 Ct/Min)' },
+  { value: 'cartesia', label: 'Cartesia (Standard, kein Aufschlag)' },
   { value: 'minimax', label: 'MiniMax' },
   { value: 'fish_audio', label: 'Fish Audio' },
 ] as const;
@@ -15,7 +15,10 @@ export interface VoiceClonePanelProps {
 
 export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
   const [mode, setMode] = useState<'idle' | 'upload' | 'record'>('idle');
-  const [provider, setProvider] = useState('cartesia');
+  // Default to ElevenLabs — HD quality, Phonbot's recommended deploy
+  // target. Users who don't want the +5 Ct/Min surcharge can pick
+  // Cartesia in the dropdown.
+  const [provider, setProvider] = useState('elevenlabs');
 
   // Upload state
   const [uploadFile, setUploadFile] = useState<File | null>(null);
