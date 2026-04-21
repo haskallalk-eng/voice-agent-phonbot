@@ -524,15 +524,17 @@ const PLAN_OVERAGE_EUR: Record<string, number> = {
   free: 0.22, nummer: 0.22, starter: 0.22, pro: 0.20, agency: 0.15,
 };
 
-// Voice provider → TTS first-chunk latency (ms). Measured ballparks.
-// Cartesia is fastest, ElevenLabs HD adds quality at the cost of ~200ms.
-function ttsLatencyMs(provider?: string | null): number {
+// Voice provider → extra TTS latency vs. Cartesia baseline (ms).
+// Retell pipelines STT/LLM/TTS so only the *incremental* cost of a
+// slower TTS shows up end-to-end — not the full first-chunk time.
+// Cartesia is the baseline (0 ms), ElevenLabs adds roughly 150-200 ms.
+function ttsExtraMs(provider?: string | null): number {
   const p = (provider ?? '').toLowerCase();
-  if (p === 'elevenlabs' || p === '11labs') return 400;
-  if (p === 'cartesia') return 150;
-  if (p === 'openai') return 300;
-  if (p === 'minimax') return 200;
-  return 250;
+  if (p === 'elevenlabs' || p === '11labs') return 180;
+  if (p === 'cartesia') return 0;
+  if (p === 'openai') return 80;
+  if (p === 'minimax') return 50;
+  return 50;
 }
 
 function AgentStatsRow({
@@ -555,22 +557,22 @@ function AgentStatsRow({
   const insidePlan = remaining > 0;
   const effectivePrice = insidePlan ? surcharge : overage + surcharge;
 
-  // Latency estimate:
-  //   STT end-of-turn ~500ms + LLM first-token (gpt-4o-mini ~800ms) +
-  //   TTS first-chunk (provider-dependent).
-  // Interruption mode 'ignore' doesn't change raw latency but makes
-  // the agent feel less responsive, so we surface it as a "Standard"
-  // instead of "Optimiert" hint.
-  const sttMs = 500;
-  const llmMs = 800; // gpt-4o-mini default
-  const ttsMs = ttsLatencyMs(voice?.provider);
-  const totalMs = sttMs + llmMs + ttsMs;
+  // Latency estimate (end-to-end first-audio-byte, NOT sequential sum):
+  // Retell streams STT → LLM → TTS in parallel. Baseline is ~550 ms
+  // with Cartesia + gpt-4o-mini on a good DACH network. Slower TTS
+  // adds only its incremental streaming delta, not the full first-
+  // chunk time. 'ignore' interruption mode doesn't change raw ms but
+  // makes the agent feel slower, so we surface it as a "Standard"
+  // hint even when the number is green.
+  const baselineMs = 550; // Retell pipelined: EOT + LLM-first-token + TTS-first-chunk (Cartesia)
+  const ttsDelta = ttsExtraMs(voice?.provider);
+  const totalMs = baselineMs + ttsDelta;
   const interruptMode = (config as AgentConfig & { interruptionMode?: string }).interruptionMode ?? 'allow';
   const responsive = interruptMode === 'allow';
 
   const latencyLabel =
-    totalMs < 1500 && responsive ? 'Optimiert' :
-    totalMs < 1800 && responsive ? 'Standard' :
+    totalMs < 650 && responsive ? 'Optimiert' :
+    totalMs < 800 && responsive ? 'Standard' :
     'Langsam';
   const latencyColor =
     latencyLabel === 'Optimiert' ? 'text-green-400 bg-green-500/10 border-green-500/25' :
@@ -578,12 +580,12 @@ function AgentStatsRow({
     'text-yellow-400 bg-yellow-500/10 border-yellow-500/25';
 
   const tips: string[] = [];
-  if (premium) tips.push('Premium-Stimme verursacht ~250 ms zusätzlich');
+  if (ttsDelta >= 150) tips.push('ElevenLabs verursacht ~180 ms zusätzlich — Cartesia ist schneller');
+  else if (ttsDelta > 0) tips.push(`TTS-Provider ${voice?.provider ?? ''} addiert ~${ttsDelta} ms`);
   if (!responsive) tips.push(`Unterbrechungs-Modus „${interruptMode}" wirkt langsamer`);
-  if (ttsMs > 300 && !premium) tips.push('Cartesia wählen für schnellere Antwort');
   const latencyTip = tips.length > 0
     ? tips.join(' · ')
-    : 'Schnellste mögliche Konfiguration — ElevenLabs + gpt-4o-mini + Allow-Unterbrechung.';
+    : 'Schnellste mögliche Konfiguration — Cartesia + gpt-4o-mini + Allow-Unterbrechung.';
 
   return (
     <div className="hidden md:flex items-stretch rounded-xl border border-white/8 bg-white/[0.03] overflow-hidden text-xs">
