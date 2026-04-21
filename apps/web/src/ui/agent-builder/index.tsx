@@ -624,7 +624,7 @@ function AgentStatsRow({
 
   let latencyLabel = '—';
   let latencyColor = 'text-white/50 bg-white/5 border-white/10';
-  let latencyTip = `LLM-Latenz wird automatisch aus den letzten Calls gemessen. Bisher ${stats?.callsCount ?? 0} Calls, 0 mit Latenz-Daten.`;
+  let latencyTip = `Latenz wird vom letzten Call gemessen — bisher ${stats?.callsCount ?? 0} Calls, keine Latenz-Daten vorhanden.`;
 
   if (hasData) {
     const ms = measuredMs as number;
@@ -634,7 +634,16 @@ function AgentStatsRow({
     if (ms < 600) { latencyLabel = 'Optimiert'; latencyColor = 'text-green-400 bg-green-500/10 border-green-500/25'; }
     else if (ms < 900) { latencyLabel = 'Standard'; latencyColor = 'text-white/65 bg-white/5 border-white/15'; }
     else { latencyLabel = 'Langsam'; latencyColor = 'text-yellow-400 bg-yellow-500/10 border-yellow-500/25'; }
-    latencyTip = `Ø LLM p50 aus ${stats?.sampleSize ?? 0} Calls (von ${stats?.callsCount ?? 0} gesamt) — live von Retell, aktualisiert ${ageStr}.${breakdownStr ? `\nBreakdown (ms): ${breakdownStr}` : ''}`;
+    // "vor X" relative to the actual call timestamp, so the user can
+    // see how recent the number is (not the poll-time).
+    let callAgo = '';
+    if (stats?.lastCallAt) {
+      const diffSec = Math.max(0, Math.round((Date.now() - stats.lastCallAt) / 1000));
+      callAgo = diffSec < 60 ? `vor ${diffSec} s`
+        : diffSec < 3600 ? `vor ${Math.round(diffSec / 60)} min`
+        : `vor ${Math.round(diffSec / 3600)} h`;
+    }
+    latencyTip = `Letzter Call ${callAgo} — LLM p50 direkt aus Retell.${breakdownStr ? `\nBreakdown (ms): ${breakdownStr}` : ''}\n(Polling: aktualisiert ${ageStr})`;
   }
 
   return (
@@ -663,7 +672,7 @@ function AgentStatsRow({
       />
       <Divider />
       <StatChip
-        label="LLM-Latenz"
+        label="Letzter Call"
         value={hasData ? `${measuredMs} ms` : '—'}
         title={latencyTip}
       />

@@ -536,43 +536,39 @@ export async function registerAgentConfig(app: FastifyInstance) {
     if (!owned.exists) return reply.status(404).send({ error: 'Agent not found' });
     const retellAgentId = owned.data.retellAgentId;
     const emptyBreakdown = { llm: null, tts: null, asr: null, e2e: null };
-    if (!retellAgentId) return { callsCount: 0, sampleSize: 0, latencyMs: null, breakdownMs: emptyBreakdown };
+    if (!retellAgentId) return { callsCount: 0, sampleSize: 0, latencyMs: null, breakdownMs: emptyBreakdown, lastCallAt: null };
 
     try {
       const calls = await listCalls(retellAgentId, 20);
-      // Retell's call.latency has 4 categories. The Retell dashboard
-      // headline is "LLM Latency" = latency.llm.p50 — that's what users
-      // recognise. We mirror that as the primary number and expose the
-      // rest in a breakdown for the tooltip.
-      const bucket = { llm: [] as number[], tts: [] as number[], asr: [] as number[], e2e: [] as number[] };
+      // Latest ended call wins — that's what the last caller actually
+      // heard. Using an average over 20 calls drags the number down
+      // with stale test sessions from days ago; users want "right now,
+      // how slow is my bot", not "in the last month". List-calls is
+      // newest-first so we stop at the first ended one with latency.
+      const pickNum = (v: unknown): number | null =>
+        typeof v === 'number' && v > 0 ? Math.round(v) : null;
       let ended = 0;
+      let latest: (typeof calls)[number] | null = null;
       for (const c of calls) {
         if (c.call_status !== 'ended') continue;
         ended++;
-        const l = c.latency;
-        if (!l) continue;
-        for (const key of ['llm', 'tts', 'asr', 'e2e'] as const) {
-          const v = l[key]?.p50;
-          if (typeof v === 'number' && v > 0) bucket[key].push(v);
-        }
+        if (!latest) latest = c;
       }
-      const avg = (arr: number[]): number | null =>
-        arr.length === 0 ? null : Math.round(arr.reduce((a, b) => a + b, 0) / arr.length);
-
-      const llm = avg(bucket.llm);
-      const tts = avg(bucket.tts);
-      const asr = avg(bucket.asr);
-      const e2e = avg(bucket.e2e);
-      const primary = llm; // matches the Retell dashboard headline
+      const l = latest?.latency;
+      const llm = pickNum(l?.llm?.p50);
+      const tts = pickNum(l?.tts?.p50);
+      const asr = pickNum(l?.asr?.p50);
+      const e2e = pickNum(l?.e2e?.p50);
       return {
         callsCount: ended,
-        sampleSize: bucket.llm.length,
-        latencyMs: primary,
+        sampleSize: llm != null ? 1 : 0,
+        latencyMs: llm, // matches the Retell dashboard headline
         breakdownMs: { llm, tts, asr, e2e },
+        lastCallAt: latest?.end_timestamp ?? null,
       };
     } catch (err) {
       app.log.warn({ err: err instanceof Error ? err.message : String(err), tenantId }, 'listCalls failed');
-      return { callsCount: 0, sampleSize: 0, latencyMs: null, breakdownMs: emptyBreakdown };
+      return { callsCount: 0, sampleSize: 0, latencyMs: null, breakdownMs: emptyBreakdown, lastCallAt: null };
     }
   });
 
