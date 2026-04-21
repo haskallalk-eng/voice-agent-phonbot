@@ -130,12 +130,12 @@ export function VoiceDropdown({
         <IconChevronDown size={16} className="ml-2 text-white/40 shrink-0" />
       </button>
       {currentIsPremium && (
-        <div className="mt-2 flex items-start gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-2">
+        <div className="mt-2 flex items-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-1.5">
           <span className="text-sm leading-none" aria-hidden="true">⚡</span>
-          <p className="text-xs text-orange-100/90 leading-snug">
-            <strong className="text-orange-200">Premium-Stimme ausgewählt.</strong> ElevenLabs HD kostet{' '}
-            <span className="text-orange-200 font-semibold">{formatSurcharge(currentSurcharge)}</span>{' '}
-            zusätzlich zum Minutenpreis deines Plans. Die Abrechnung erfolgt am Monatsende über Stripe.
+          <p className="text-xs text-orange-100/90 leading-none whitespace-nowrap overflow-hidden text-ellipsis">
+            <strong className="text-orange-200">Premium</strong>
+            <span className="text-orange-100/60 mx-1.5">·</span>
+            <span className="text-orange-200 font-semibold">{formatSurcharge(currentSurcharge)}</span>
           </p>
         </div>
       )}
