@@ -86,7 +86,10 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
         {/* Logo */}
         <div className="text-center mb-6">
           <FoxLogo size="lg" glow className="mx-auto mb-3" />
-          <h1 className="text-2xl font-extrabold text-white">Phon<span className="text-orange-400">bot</span></h1>
+          <h1 className="text-2xl font-black tracking-tight leading-none">
+            <span className="text-white">Phon</span>
+            <span style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>bot</span>
+          </h1>
         </div>
 
         {/* Tab switcher */}
