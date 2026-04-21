@@ -36,7 +36,7 @@ export function ResetPasswordPage() {
           <FoxLogo size="lg" glow />
           <span className="text-xl font-black tracking-tight">
             <span className="text-white">Phon</span>
-            <span style={{ background: 'linear-gradient(135deg,#F97316,#FB923C)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>bot</span>
+            <span style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>bot</span>
           </span>
         </div>
 
