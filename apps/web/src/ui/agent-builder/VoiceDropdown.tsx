@@ -144,47 +144,94 @@ export function VoiceDropdown({
       {confirmVoice && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(4px)' }}
+          style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(6px)' }}
           onClick={() => setConfirmVoice(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="premium-voice-title"
         >
           <div
-            className="max-w-md w-full rounded-2xl border border-orange-500/40 bg-[#0F0F18] p-6 shadow-2xl"
+            className="relative max-w-md w-full rounded-3xl overflow-hidden"
+            style={{
+              background: 'rgba(15,15,24,0.98)',
+              border: '1px solid rgba(249,115,22,0.35)',
+              boxShadow: '0 0 60px rgba(249,115,22,0.15), 0 0 0 1px rgba(255,255,255,0.05)',
+            }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start gap-3">
-              <span className="text-2xl leading-none" aria-hidden="true">⚡</span>
-              <div className="flex-1">
-                <h3 className="text-base font-semibold text-white mb-1">Premium-Stimme wählen?</h3>
-                <p className="text-sm text-white/70 leading-relaxed mb-4">
-                  Du hast <strong className="text-orange-300">{confirmVoice.voice_name}</strong>{' '}
-                  ({getProviderLabel(confirmVoice)}) ausgewählt. Diese HD-Stimme kostet
-                  einen Aufschlag von{' '}
-                  <strong className="text-orange-300">
-                    {formatSurcharge(voiceSurcharge(confirmVoice))}
-                  </strong>{' '}
-                  zusätzlich zum Minutenpreis deines Plans. Die Premium-Minuten werden am
-                  Monatsende über Stripe abgerechnet.
-                </p>
-                <div className="flex gap-2 justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setConfirmVoice(null)}
-                    className="px-4 py-2 rounded-xl text-sm text-white/70 bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-                  >
-                    Abbrechen
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSelect(confirmVoice.voice_id);
-                      setConfirmVoice(null);
-                    }}
-                    className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:scale-[1.02]"
-                    style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
-                  >
-                    Premium-Stimme bestätigen
-                  </button>
-                </div>
+            {/* Gradient top accent line */}
+            <div
+              className="absolute top-0 left-0 right-0 h-px"
+              style={{
+                background: 'linear-gradient(90deg, transparent, rgba(249,115,22,0.6), rgba(6,182,212,0.6), transparent)',
+              }}
+            />
+
+            <div className="px-8 pt-8 pb-7 flex flex-col items-center text-center">
+              {/* Icon badge */}
+              <div
+                className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(249,115,22,0.18), rgba(6,182,212,0.12))',
+                  border: '1px solid rgba(249,115,22,0.35)',
+                  boxShadow: '0 0 24px rgba(249,115,22,0.25)',
+                }}
+                aria-hidden="true"
+              >
+                <span className="text-2xl leading-none">⚡</span>
+              </div>
+
+              {/* Title */}
+              <h3 id="premium-voice-title" className="text-lg font-bold text-white mb-2">
+                Premium-Stimme wählen?
+              </h3>
+
+              {/* Voice chip */}
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/10 bg-white/5 mb-4">
+                <span className="text-sm font-medium text-white">{confirmVoice.voice_name}</span>
+                <span className="text-xs text-white/40">·</span>
+                <span className="text-xs text-white/60">{getProviderLabel(confirmVoice)}</span>
+              </div>
+
+              {/* Body */}
+              <p className="text-sm text-white/70 leading-relaxed mb-1">
+                Diese HD-Stimme kostet einen Aufschlag von
+              </p>
+              <p className="text-3xl font-extrabold mb-1"
+                style={{
+                  background: 'linear-gradient(135deg, #F97316, #06B6D4)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}
+              >
+                {formatSurcharge(voiceSurcharge(confirmVoice))}
+              </p>
+              <p className="text-sm text-white/55 leading-relaxed mb-6">
+                zusätzlich zum Minutenpreis deines Plans.<br />
+                Abrechnung am Monatsende über Stripe.
+              </p>
+
+              {/* Symmetric buttons */}
+              <div className="grid grid-cols-2 gap-3 w-full">
+                <button
+                  type="button"
+                  onClick={() => setConfirmVoice(null)}
+                  className="w-full px-4 py-2.5 rounded-xl text-sm font-medium text-white/75 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-all"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelect(confirmVoice.voice_id);
+                    setConfirmVoice(null);
+                  }}
+                  className="w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(249,115,22,0.45)]"
+                  style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                >
+                  Bestätigen
+                </button>
               </div>
             </div>
           </div>
