@@ -311,6 +311,9 @@ export async function registerBilling(app: FastifyInstance) {
       minutesUsed: row.minutes_used,
       minutesLimit: row.minutes_limit,
       minutesRemaining: Math.max(0, row.minutes_limit - row.minutes_used),
+      // Overage price (€/min) from the plan definition — single source
+      // of truth so the builder doesn't need a hardcoded table.
+      overchargePerMinute: planDef.overchargePerMinute,
     };
   });
 
