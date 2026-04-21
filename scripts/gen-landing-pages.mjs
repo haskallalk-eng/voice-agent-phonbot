@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { NAV_STYLE, NAV_HTML } from './_nav.mjs';
+import { FOOTER_STYLE, FOOTER_HTML } from './_footer.mjs';
 
 const OUT_DIR = path.resolve('apps/web/public');
 
@@ -281,9 +282,10 @@ const BRANCHEN = [
 ];
 
 const STYLE = `*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#0A0A0F;color:#fff;line-height:1.6;overflow-x:hidden}
+html{overflow-x:clip;max-width:100vw}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#0A0A0F;color:#fff;line-height:1.6;overflow-x:clip;max-width:100vw}
 a{color:inherit;text-decoration:none}
-.container{max-width:960px;margin:0 auto;padding:0 1.5rem}
+.container{max-width:72rem;margin:0 auto;padding:0 1.5rem}
 @media(max-width:640px){.container{padding:0 1rem}header.hero{padding:3rem 0 2rem}section{padding:2.5rem 0}}
 /* ── Nav (unified with SPA + legal pages) ── */
 ${NAV_STYLE}
@@ -316,9 +318,7 @@ p{color:rgba(255,255,255,.7)}
 .faq-item{padding:1.25rem 0;border-bottom:1px solid rgba(255,255,255,.06)}
 .faq-item h3{color:#fff;margin-bottom:.5rem}
 .pricing-hint{display:inline-block;margin-top:1rem;padding:.5rem 1rem;border-radius:.5rem;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);font-size:.85rem;color:#67E8F9}
-footer{border-top:1px solid rgba(255,255,255,.05);padding:2.5rem 0;margin-top:3rem;font-size:.85rem;color:rgba(255,255,255,.4);text-align:center}
-footer a{color:rgba(255,255,255,.65);text-decoration:underline;text-decoration-color:rgba(255,255,255,.15)}
-footer a:hover{color:#fff}
+${FOOTER_STYLE}
 .demo-hint{display:inline-block;padding:.5rem 1rem;border-radius:.5rem;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);font-size:.85rem;color:#67E8F9;margin-top:1rem}`;
 
 function buildPage(d) {
@@ -455,12 +455,7 @@ ${NAV_HTML}
   </div>
 </section>
 
-<footer>
-  <div class="container">
-    <p>© 2026 Phonbot · Ein Produkt der <a href="https://mindrails.de" rel="noopener">Mindrails UG</a> · <a href="/">Zur Hauptseite</a> · <a href="/#faq">FAQ</a> · <a href="/#pricing">Preise</a></p>
-    <p style="margin-top:.5rem">DSGVO-konform · Server in Deutschland · <a href="mailto:info@phonbot.de">info@phonbot.de</a></p>
-  </div>
-</footer>
+${FOOTER_HTML}
 <script src="/nav.js" defer></script>
 </body>
 </html>
