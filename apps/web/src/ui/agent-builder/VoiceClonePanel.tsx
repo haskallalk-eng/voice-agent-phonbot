@@ -2,11 +2,13 @@ import React, { useEffect, useState, useRef } from 'react';
 import { cloneVoice, type Voice } from '../../lib/api.js';
 import { IconMicUpload, IconRefresh, IconChevronDown } from './shared.js';
 
+// Backend-side supplier whitelist stays exactly as Retell expects; the
+// labels are product-facing names (no supplier literals).
 const VOICE_PROVIDERS = [
-  { value: 'elevenlabs', label: 'ElevenLabs (HD, empfohlen · Premium +5 Ct/Min)' },
-  { value: 'cartesia', label: 'Cartesia (Standard, kein Aufschlag)' },
-  { value: 'minimax', label: 'MiniMax' },
-  { value: 'fish_audio', label: 'Fish Audio' },
+  { value: 'elevenlabs', label: 'High Quality (HD, empfohlen · +5 Ct/Min)' },
+  { value: 'cartesia', label: 'Standard (kein Aufschlag)' },
+  { value: 'minimax', label: 'Standard — alternative Engine' },
+  { value: 'fish_audio', label: 'Standard — alternative Engine' },
 ] as const;
 
 export interface VoiceClonePanelProps {
@@ -15,9 +17,9 @@ export interface VoiceClonePanelProps {
 
 export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
   const [mode, setMode] = useState<'idle' | 'upload' | 'record'>('idle');
-  // Default to ElevenLabs — HD quality, Phonbot's recommended deploy
-  // target. Users who don't want the +5 Ct/Min surcharge can pick
-  // Cartesia in the dropdown.
+  // Default to High-Quality — HD quality, Phonbot's recommended deploy
+  // target. Users who don't want the +5 Ct/Min surcharge can pick a
+  // Standard engine in the dropdown.
   const [provider, setProvider] = useState('elevenlabs');
 
   // Upload state
@@ -202,15 +204,15 @@ export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
           <label className="block text-xs font-semibold text-white/50 uppercase tracking-wider mb-2">Voice Provider</label>
           <ProviderDropdown value={provider} onChange={setProvider} />
           <p className="text-xs text-white/40 mt-1.5 leading-snug">
-            ElevenLabs unterstützt bis zu 25 Audiodateien · Cartesia &amp; MiniMax nur 1 Datei
+            High Quality unterstützt bis zu 25 Audiodateien · Standard nur 1 Datei
           </p>
           {provider === 'elevenlabs' && (
             <div className="mt-3 flex items-start gap-3 rounded-xl border border-orange-500/25 bg-gradient-to-br from-orange-500/10 to-cyan-500/5 px-3.5 py-2.5">
               <span className="text-[10px] font-bold text-orange-300 bg-orange-500/15 border border-orange-500/40 rounded-full px-2 py-0.5 mt-0.5 shrink-0 tracking-wide">
-                PREMIUM
+                +5 CT/MIN
               </span>
               <p className="text-xs text-orange-100/85 leading-relaxed">
-                ElevenLabs liefert HD-Qualität mit natürlicher Betonung. Aufschlag von{' '}
+                High Quality liefert HD-Qualität mit natürlicher Betonung. Aufschlag von{' '}
                 <span className="text-orange-200 font-semibold">+5 Ct/Min</span> zusätzlich zum
                 Minutenpreis deines Plans — Abrechnung am Monatsende über Stripe.
               </p>

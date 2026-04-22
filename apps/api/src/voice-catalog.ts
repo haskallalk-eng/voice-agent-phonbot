@@ -8,6 +8,21 @@
  * Voice IDs reference Retell's built-in + custom voices. Update when
  * new high-quality voices become available. The DEFAULT_VOICE_ID (Chipy)
  * is the fallback for DE if nothing else is configured.
+ *
+ * Structure (2026-04-22 rework):
+ *  - DE: 5 High Quality (incl. Chipy HQ) + 15 Standard (incl. Chipy Basic) = 20
+ *  - Everything else: 4 High Quality + 15 Standard = 19 (no Chipy — that
+ *    voice is a German-only clone)
+ *  - No duplicate names within a language
+ *  - `name` carries NO provider literal ('ElevenLabs' / 'Cartesia' etc.)
+ *  - `tier` is the split the UI groups by ('High Quality Voice' / 'Standard')
+ *  - `gender` stays English ('male'/'female'/'neutral') for API stability —
+ *    the frontend translates to 'Männlich'/'Weiblich' at render time
+ *
+ * Note on voice_ids: every ID below is either already in use on phonbot.de
+ * or a well-known Retell supplier-prefixed voice from the Retell catalog.
+ * If an ID turns out to be wrong at deploy time, Retell will 4xx on the
+ * agent-deploy call — easy to spot + swap in one line here.
  */
 
 import { DEFAULT_VOICE_ID } from './retell.js';
@@ -15,67 +30,118 @@ import { DEFAULT_VOICE_ID } from './retell.js';
 export interface CuratedVoice {
   id: string;
   name: string;
+  tier: 'hq' | 'standard';
   gender: 'male' | 'female' | 'neutral';
+  /** Internal — which supplier the voice is served by. Kept for logging /
+   *  billing only. Never displayed to end users. */
   provider: string;
   isDefault?: boolean;
-  preview?: string;
   /**
    * Extra €/minute on top of the plan's base/overage rate when this voice
-   * is used. Covers the higher TTS cost of premium providers (ElevenLabs
-   * Multilingual v2 ≈ 2–3× Cartesia). Displayed in the UI so users opt in
-   * knowingly. Applied in reconcileMinutes() at call-end via the voice
-   * recorded on the agent config.
+   * is used. Populated for every `tier: 'hq'` voice. Applied in
+   * reconcileMinutes() at call-end via the voice recorded on the agent
+   * config.
    */
   surchargePerMinute?: number;
 }
 
-// Curated voice catalog per language. Only voices that are proven to
-// sound natural + professional for each language. No random dumps.
-//
-// To add a voice: test it with a real conversation in that language,
-// verify pronunciation of domain-specific terms (Terminbuchung, Friseur,
-// etc.), then add here. Quality > quantity.
+// Surcharge applied to every High-Quality voice (same rate across all
+// HQ voices — ElevenLabs multilingual). Kept as a constant so frontend +
+// billing + this catalog agree on one number.
+export const PREMIUM_VOICE_SURCHARGE_PER_MINUTE = 0.05;
+
+const hq = (extra: Partial<CuratedVoice>): Partial<CuratedVoice> => ({
+  tier: 'hq',
+  provider: 'elevenlabs',
+  surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE,
+  ...extra,
+});
+const std = (extra: Partial<CuratedVoice>): Partial<CuratedVoice> => ({
+  tier: 'standard',
+  ...extra,
+});
+
+// ── Shared voice pools that work across all languages ───────────────────
+// Retell's multilingual voices (ElevenLabs + Cartesia + OpenAI + Minimax)
+// handle every language we ship — naming them the same across languages
+// avoids 7× copy-paste. The per-language block below chooses a subset
+// and picks the isDefault.
+
+// High-Quality voices (non-Chipy) — available in every language.
+// 4 voices = exactly what a non-DE language needs.
+const SHARED_HQ: CuratedVoice[] = [
+  { ...hq({ name: 'Marissa', gender: 'female' }), id: '11labs-Marissa' } as CuratedVoice,
+  { ...hq({ name: 'Rachel',  gender: 'female' }), id: '11labs-Rachel'  } as CuratedVoice,
+  { ...hq({ name: 'Anthony', gender: 'male'   }), id: '11labs-Anthony' } as CuratedVoice,
+  { ...hq({ name: 'Santiago', gender: 'male'  }), id: '11labs-Santiago' } as CuratedVoice,
+];
+
+// Standard voices (non-Chipy) — available in every language.
+// 15 voices = exactly what a non-DE language needs.
+// Ordered so the UI shows all female first, then all male, neutral last.
+const SHARED_STANDARD: CuratedVoice[] = [
+  // Weiblich (8)
+  { ...std({ name: 'Eva',     gender: 'female' }), id: 'cartesia-Eva'    } as CuratedVoice,
+  { ...std({ name: 'Lina',    gender: 'female' }), id: 'cartesia-Lina'   } as CuratedVoice,
+  { ...std({ name: 'Cleo',    gender: 'female' }), id: 'cartesia-Cleo'   } as CuratedVoice,
+  { ...std({ name: 'Emma',    gender: 'female' }), id: 'cartesia-Emma'   } as CuratedVoice,
+  { ...std({ name: 'Isabel',  gender: 'female' }), id: 'cartesia-Isabel' } as CuratedVoice,
+  { ...std({ name: 'Elena',   gender: 'female' }), id: 'cartesia-Elena'  } as CuratedVoice,
+  { ...std({ name: 'Nova',    gender: 'female' }), id: 'openai-Nova'     } as CuratedVoice,
+  { ...std({ name: 'Carola',  gender: 'female' }), id: 'openai-Carola'   } as CuratedVoice,
+  // Männlich (6)
+  { ...std({ name: 'Adam',   gender: 'male' }), id: 'cartesia-Adam'   } as CuratedVoice,
+  { ...std({ name: 'Pierre', gender: 'male' }), id: 'cartesia-Pierre' } as CuratedVoice,
+  { ...std({ name: 'Manuel', gender: 'male' }), id: 'cartesia-Manuel' } as CuratedVoice,
+  { ...std({ name: 'Max',    gender: 'male' }), id: 'minimax-Max'     } as CuratedVoice,
+  { ...std({ name: 'Louis',  gender: 'male' }), id: 'minimax-Louis'   } as CuratedVoice,
+  { ...std({ name: 'Echo',   gender: 'male' }), id: 'openai-echo'     } as CuratedVoice,
+  // Neutral (1)
+  { ...std({ name: 'Alloy',  gender: 'neutral' }), id: 'openai-alloy' } as CuratedVoice,
+];
+
+// DE gets the two Chipy clones on top.
+const DE_VOICES: CuratedVoice[] = [
+  // Chipy in HQ sits up front as the default voice of the product.
+  {
+    id: DEFAULT_VOICE_ID, // ElevenLabs Hassieb-Kalla clone
+    name: 'Chipy',
+    tier: 'hq',
+    gender: 'male',
+    provider: 'elevenlabs',
+    isDefault: true,
+    surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE,
+  },
+  ...SHARED_HQ,
+  // Chipy Basic heads the Standard tier.
+  {
+    id: 'custom_voice_28bd4920fa6523c6ac8c4e527b', // Cartesia Chipy clone
+    name: 'Chipy Basic',
+    tier: 'standard',
+    gender: 'male',
+    provider: 'cartesia',
+  },
+  ...SHARED_STANDARD,
+];
+
+// Non-DE languages: same 19-voice list, different default.
+// Same IDs because the underlying Retell voices are multilingual.
+function buildLang(defaultVoiceId: string): CuratedVoice[] {
+  return [
+    ...SHARED_HQ.map((v) => ({ ...v, isDefault: v.id === defaultVoiceId })),
+    ...SHARED_STANDARD.map((v) => ({ ...v, isDefault: v.id === defaultVoiceId })),
+  ];
+}
+
 export const VOICE_CATALOG: Record<string, CuratedVoice[]> = {
-  de: [
-    { id: DEFAULT_VOICE_ID, name: 'Chipy (Standard, Premium)', gender: 'male', provider: 'elevenlabs', isDefault: true, surchargePerMinute: 0.05 },
-    { id: 'custom_voice_28bd4920fa6523c6ac8c4e527b', name: 'Chipy (Cartesia, Standard)', gender: 'male', provider: 'cartesia' },
-    { id: 'cartesia-Eva', name: 'Eva', gender: 'female', provider: 'cartesia' },
-    { id: 'cartesia-Lina', name: 'Lina', gender: 'female', provider: 'cartesia' },
-    { id: 'minimax-Max', name: 'Max', gender: 'male', provider: 'minimax' },
-    { id: 'openai-Carola', name: 'Carola', gender: 'female', provider: 'openai' },
-    { id: '11labs-Carola', name: 'Carola (ElevenLabs)', gender: 'female', provider: 'elevenlabs' },
-  ],
-  en: [
-    { id: 'cartesia-Cleo', name: 'Cleo', gender: 'female', provider: 'cartesia', isDefault: true },
-    { id: 'cartesia-Adam', name: 'Adam', gender: 'male', provider: 'cartesia' },
-    { id: 'openai-Nova', name: 'Nova', gender: 'female', provider: 'openai' },
-    { id: '11labs-Marissa', name: 'Marissa', gender: 'female', provider: 'elevenlabs' },
-    { id: '11labs-Anthony', name: 'Anthony', gender: 'male', provider: 'elevenlabs' },
-  ],
-  fr: [
-    { id: 'cartesia-Emma', name: 'Emma', gender: 'female', provider: 'cartesia', isDefault: true },
-    { id: 'cartesia-Pierre', name: 'Pierre', gender: 'male', provider: 'cartesia' },
-    { id: 'minimax-Louis', name: 'Louis', gender: 'male', provider: 'minimax' },
-    { id: 'minimax-Camille', name: 'Camille', gender: 'female', provider: 'minimax' },
-  ],
-  es: [
-    { id: 'cartesia-Isabel', name: 'Isabel', gender: 'female', provider: 'cartesia', isDefault: true },
-    { id: 'cartesia-Manuel', name: 'Manuel', gender: 'male', provider: 'cartesia' },
-    { id: 'cartesia-Elena', name: 'Elena', gender: 'female', provider: 'cartesia' },
-    { id: '11labs-Santiago', name: 'Santiago', gender: 'male', provider: 'elevenlabs' },
-  ],
-  it: [
-    { id: 'cartesia-Eva', name: 'Eva', gender: 'female', provider: 'cartesia', isDefault: true },
-  ],
-  tr: [
-    { id: 'minimax-Max', name: 'Max', gender: 'male', provider: 'minimax', isDefault: true },
-  ],
-  pl: [
-    { id: 'cartesia-Lina', name: 'Lina', gender: 'female', provider: 'cartesia', isDefault: true },
-  ],
-  nl: [
-    { id: 'cartesia-Emma', name: 'Emma', gender: 'female', provider: 'cartesia', isDefault: true },
-  ],
+  de: DE_VOICES,
+  en: buildLang('11labs-Marissa'),
+  fr: buildLang('11labs-Marissa'),
+  es: buildLang('11labs-Santiago'),
+  it: buildLang('11labs-Marissa'),
+  tr: buildLang('minimax-Max'),
+  pl: buildLang('cartesia-Lina'),
+  nl: buildLang('cartesia-Emma'),
 };
 
 /**
@@ -98,17 +164,9 @@ export function getVoicesForLanguage(language: string): CuratedVoice[] {
 }
 
 /**
- * Per-minute surcharge applied to ANY voice served by a premium provider.
- * Cloned voices default to ElevenLabs (see VoiceClonePanel) so they all
- * incur this surcharge, even when they're not in VOICE_CATALOG.
- */
-export const PREMIUM_VOICE_SURCHARGE_PER_MINUTE = 0.05;
-
-/**
- * Providers that count as "Premium" and trigger the surcharge. ElevenLabs
- * (+ its id-prefix variants 11labs/eleven) is the only one today because
- * it's meaningfully more expensive than Cartesia/platform TTS. Keep this
- * list in sync with voices.ts getVoiceSurcharge() and voice-clone panel.
+ * Providers that count as "High Quality" (triggers +5 Ct/Min surcharge).
+ * Exposed for voice-clone panel's default-provider heuristic; frontend
+ * uses the `tier` field directly.
  */
 const PREMIUM_PROVIDERS = new Set(['elevenlabs', '11labs', 'eleven_labs']);
 
@@ -132,9 +190,9 @@ export function getVoiceSurcharge(voiceId: string): number {
       return match.surchargePerMinute;
     }
   }
-  // Fallback: voice_id prefix hints at provider (e.g. "11labs-Marissa",
-  // "elevenlabs-custom-xyz"). Retell-side voice IDs that start with a
-  // provider slug get the same surcharge as catalog entries.
+  // Fallback: voice_id prefix hints at provider (e.g. "11labs-Marissa").
+  // Retell-side voice IDs that start with a premium supplier slug get the
+  // same surcharge as catalog entries.
   const lower = voiceId.toLowerCase();
   if (lower.startsWith('11labs-') || lower.startsWith('elevenlabs-')) {
     return PREMIUM_VOICE_SURCHARGE_PER_MINUTE;

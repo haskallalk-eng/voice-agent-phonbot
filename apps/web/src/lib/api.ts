@@ -627,12 +627,20 @@ export type Voice = {
   preview_audio_url?: string;
   /** €/Min surcharge on top of plan/overage rate (0 = no surcharge). */
   surchargePerMinute?: number;
+  /** 'hq' for High Quality voices (ElevenLabs), 'standard' for others.
+   *  Present when a voice comes through the curated /voices/recommended
+   *  catalog. /voices (raw) may omit it — treat undefined as 'standard'. */
+  tier?: 'hq' | 'standard';
 };
 
 export type RecommendedVoice = {
   id: string;
   name: string;
   gender: string;
+  /** 'hq' = High Quality (ElevenLabs, +0.05 €/Min surcharge).
+   *  'standard' = every other voice. Field was added 2026-04-22 so older
+   *  backends may still omit it — treat `undefined` as 'standard'. */
+  tier?: 'hq' | 'standard';
   provider: string;
   isDefault?: boolean;
   surchargePerMinute?: number;
