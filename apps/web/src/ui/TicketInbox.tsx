@@ -1,18 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { EmptyState } from '../components/ui.js';
-import { getTickets, updateTicketStatus, triggerTicketCallback, type Ticket } from '../lib/api.js';
+import { getTickets, updateTicketStatus, type Ticket } from '../lib/api.js';
 import { IconPhone, IconPhoneOff, IconRefresh, IconCheckCircle, IconAlertTriangle, IconTickets } from './PhonbotIcons.js';
-
-// User-facing German strings for the documented error codes that can come
-// back from POST /tickets/:id/callback. Anything else falls through to the
-// generic catch-all so the raw error code never reaches the UI.
-const CALLBACK_ERROR_MESSAGES: Record<string, string> = {
-  NO_OUTBOUND_NUMBER: 'Keine Outbound-Nummer konfiguriert. Provisioniere zuerst eine Telefonnummer.',
-  PHONE_PREFIX_NOT_ALLOWED: 'Rückruf nur auf DACH-Nummern möglich (+49, +43, +41).',
-  INVALID_PHONE: 'Die hinterlegte Rufnummer hat kein gültiges Format.',
-  PLAN_INACTIVE: 'Der aktuelle Plan erlaubt keinen Rückruf. Abo im Billing-Tab aktivieren.',
-  MINUTES_EXHAUSTED: 'Freiminuten aufgebraucht — Rückruf erst nach Plan-Upgrade möglich.',
-};
 
 // 'assigned' is still a valid status in the API/DB for legacy rows, but we
 // don't expose it in the UI anymore — user asked to remove "Zugewiesen"
@@ -176,26 +165,21 @@ function TicketCard({
   ticket: Ticket;
   onChangeStatus: (id: number, s: Ticket['status']) => void;
 }) {
-  const [calling, setCalling] = useState(false);
-  const [callResult, setCallResult] = useState<'ok' | 'error' | null>(null);
-  const [callError, setCallError] = useState<string | null>(null);
+  const [copyResult, setCopyResult] = useState<'ok' | 'error' | null>(null);
   const dStatus = displayStatus(t.status);
   const hasPhone = Boolean(t.customer_phone && t.customer_phone.trim().length > 0);
 
-  async function handleCallback() {
-    setCalling(true);
-    setCallResult(null);
-    setCallError(null);
+  async function handleCopyNumber() {
+    if (!hasPhone) return;
     try {
-      const res = await triggerTicketCallback(t.id);
-      setCallResult(res.ok ? 'ok' : 'error');
-      if (!res.ok) setCallError(res.error ?? 'Fehler');
-    } catch (e: unknown) {
-      setCallResult('error');
-      setCallError(e instanceof Error ? e.message : 'Fehler');
-    } finally {
-      setCalling(false);
+      await navigator.clipboard.writeText(t.customer_phone.trim());
+      setCopyResult('ok');
+    } catch {
+      setCopyResult('error');
     }
+    // Auto-hide the feedback pill after 2.5 s so the next click feels
+    // like a fresh confirmation.
+    window.setTimeout(() => setCopyResult(null), 2500);
   }
 
   return (
@@ -242,39 +226,41 @@ function TicketCard({
             {t.source && <> · Quelle: {t.source}</>}
           </div>
 
-          {/* Callback feedback */}
-          {callResult === 'ok' && (
+          {/* Copy feedback */}
+          {copyResult === 'ok' && (
             <p className="inline-flex items-center gap-1.5 text-xs text-orange-300 mt-3 bg-orange-500/10 border border-orange-500/20 rounded-full px-2.5 py-1">
               <IconCheckCircle size={14} />
-              Rückruf gestartet — Agent ruft jetzt an.
+              Nummer kopiert: <span className="font-mono tabular-nums">{t.customer_phone}</span>
             </p>
           )}
-          {callResult === 'error' && (
+          {copyResult === 'error' && (
             <p className="inline-flex items-center gap-1.5 text-xs text-red-300 mt-3 bg-red-500/10 border border-red-500/30 rounded-full px-2.5 py-1">
               <IconAlertTriangle size={14} />
-              {(callError && CALLBACK_ERROR_MESSAGES[callError]) || 'Rückruf konnte nicht gestartet werden.'}
+              Konnte Nummer nicht kopieren — manuell markieren.
             </p>
           )}
         </div>
 
         <div className="flex flex-col gap-1.5 shrink-0">
-          {/* Callback button — only for open tickets that actually have a phone
-              number. Without a number we show a small static hint instead so
-              the user knows *why* they can't click Zurückrufen. */}
-          {dStatus === 'open' && hasPhone && (
+          {/* Copy-number action — only for tickets that actually have a phone
+              number. No API call; this just drops the number into the
+              clipboard so the user can dial it manually from their own
+              phone. Without a number we show a small static hint instead so
+              the user knows *why* the action is unavailable. */}
+          {hasPhone && (
             <button
-              onClick={handleCallback}
-              disabled={calling}
-              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border border-orange-500/30 text-orange-300 hover:bg-orange-500/10 hover:border-orange-500/50 hover:text-orange-200 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60"
+              onClick={handleCopyNumber}
+              title={`Nummer in die Zwischenablage kopieren: ${t.customer_phone}`}
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border border-orange-500/30 text-orange-300 hover:bg-orange-500/10 hover:border-orange-500/50 hover:text-orange-200 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60"
             >
               <IconPhone size={12} />
-              {calling ? 'Startet…' : 'Zurückrufen'}
+              Nummer kopieren
             </button>
           )}
-          {dStatus === 'open' && !hasPhone && (
+          {!hasPhone && (
             <span
               className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-full border border-white/10 bg-white/[0.03] text-white/45 leading-tight"
-              title="Der Anrufer hat keine Rufnummer hinterlegt — ein automatischer Rückruf ist nicht möglich."
+              title="Der Anrufer hat keine Rufnummer hinterlegt — ein manueller Rückruf ist nicht möglich."
             >
               <IconPhoneOff size={12} />
               Keine Rufnummer hinterlegt
