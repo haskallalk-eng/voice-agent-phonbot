@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { RetellWebClient } from 'retell-client-js-sdk';
 import { TEMPLATES, type Template } from './templates.js';
 import { deployAgentConfig, createWebCall, connectCalcom, getMicrosoftCalendarAuthUrl, getAccessToken, type AgentConfig } from '../../lib/api.js';
+import { useWebCallCleanup } from '../../lib/use-web-call-cleanup.js';
 import { FoxLogo } from '../FoxLogo.js';
 import {
   IconStar, IconCalendar, IconPhone, IconCapabilities,
@@ -177,6 +178,7 @@ export function OnboardingWizard({ onComplete }: Props) {
   const [agentTalking, setAgentTalking] = useState(false);
   const [callError, setCallError] = useState<string | null>(null);
   const clientRef = useRef<RetellWebClient | null>(null);
+  useWebCallCleanup(clientRef);
 
   // Check ?calendarConnected=true on mount (OAuth return)
   useEffect(() => {

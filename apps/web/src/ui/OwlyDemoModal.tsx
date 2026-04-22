@@ -2,6 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { RetellWebClient } from 'retell-client-js-sdk';
 import { createDemoCall } from '../lib/api.js';
+import { useWebCallCleanup } from '../lib/use-web-call-cleanup.js';
 import { FoxLogo } from './FoxLogo.js';
 import { IconScissors, IconWrench, IconMedical, IconBroom, IconRestaurant, IconPhone, IconHeadphones, IconCar } from './PhonbotIcons.js';
 
@@ -38,6 +39,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
   const [agentTalking, setAgentTalking] = useState(false);
   const [callError, setCallError] = useState<string | null>(null);
   const clientRef = useRef<RetellWebClient | null>(null);
+  useWebCallCleanup(clientRef);
 
   // Callback state
   const [cbEmail, setCbEmail] = useState('');

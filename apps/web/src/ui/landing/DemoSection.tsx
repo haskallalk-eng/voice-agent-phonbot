@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { RetellWebClient } from 'retell-client-js-sdk';
 import { createDemoCall } from '../../lib/api.js';
+import { useWebCallCleanup } from '../../lib/use-web-call-cleanup.js';
 import { FoxLogo } from '../FoxLogo.js';
 import { IconPhone } from '../PhonbotIcons.js';
 import { TurnstileWidget, type TurnstileHandle } from '../TurnstileWidget.js';
@@ -119,6 +120,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
   // page-readers never see or interact with Cloudflare.
   const turnstileHandleRef = useRef<TurnstileHandle>(null);
   const clientRef = useRef<RetellWebClient | null>(null);
+  useWebCallCleanup(clientRef);
 
   const isInCall = callState === 'connecting' || callState === 'active' || callState === 'ended' || callState === 'error';
 

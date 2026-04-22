@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { RetellWebClient } from 'retell-client-js-sdk';
 import { createWebCall } from '../lib/api.js';
+import { useWebCallCleanup } from '../lib/use-web-call-cleanup.js';
 
 type CallState = 'idle' | 'connecting' | 'active' | 'error';
 
@@ -11,6 +12,8 @@ export function WebCallWidget({ agentTenantId }: { agentTenantId?: string } = {}
   const [seconds, setSeconds] = useState(0);
   const clientRef = useRef<RetellWebClient | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useWebCallCleanup(clientRef);
 
   useEffect(() => {
     return () => {
