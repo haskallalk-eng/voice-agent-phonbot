@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import crypto from 'node:crypto';
 import { z } from 'zod';
 import type { JwtPayload } from './auth.js';
 import { pool } from './db.js';
@@ -50,11 +51,22 @@ const AgentConfigSchema = z.object({
 
 type AgentConfig = z.infer<typeof AgentConfigSchema>;
 
+const CORE_AGENT_TOOLS = ['calendar.findSlots', 'calendar.book', 'ticket.create'] as const;
+
+function withCoreAgentTools(tools: string[] | undefined): string[] {
+  return [...new Set([...CORE_AGENT_TOOLS, ...(tools ?? [])])];
+}
+
+function parseAgentConfig(input: unknown): AgentConfig {
+  const config = AgentConfigSchema.parse(input);
+  return { ...config, tools: withCoreAgentTools(config.tools) };
+}
+
 const memory = new Map<string, AgentConfig>();
 
 export async function readConfig(tenantId: string, orgId?: string): Promise<AgentConfig> {
   if (!pool) {
-    return memory.get(tenantId) ?? AgentConfigSchema.parse({ tenantId });
+    return memory.get(tenantId) ?? parseAgentConfig({ tenantId });
   }
 
   // When an orgId is supplied, enforce ownership — otherwise a caller with knowledge
@@ -65,8 +77,8 @@ export async function readConfig(tenantId: string, orgId?: string): Promise<Agen
     : 'select data from agent_configs where tenant_id = $1';
   const params = orgId ? [tenantId, orgId] : [tenantId];
   const res = await pool.query(sql, params);
-  if (!res.rows.length) return AgentConfigSchema.parse({ tenantId });
-  return AgentConfigSchema.parse(res.rows[0].data);
+  if (!res.rows.length) return parseAgentConfig({ tenantId });
+  return parseAgentConfig(res.rows[0].data);
 }
 
 /**
@@ -83,7 +95,7 @@ async function loadOwnedConfigRow(
     [tenantId, orgId],
   );
   if (!res.rowCount) return { data: null, exists: false };
-  return { data: AgentConfigSchema.parse(res.rows[0].data), exists: true };
+  return { data: parseAgentConfig(res.rows[0].data), exists: true };
 }
 
 /**
@@ -101,9 +113,10 @@ async function tenantIdAvailableOrOwned(tenantId: string, orgId: string): Promis
 }
 
 async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentConfig> {
+  const normalized = parseAgentConfig(config);
   if (!pool) {
-    memory.set(config.tenantId, config);
-    return config;
+    memory.set(normalized.tenantId, normalized);
+    return normalized;
   }
 
   // Defence-in-depth: even though the HTTP handlers gate by tenantIdAvailableOrOwned,
@@ -121,27 +134,28 @@ async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentCo
        WHERE agent_configs.org_id IS NULL
           OR agent_configs.org_id = EXCLUDED.org_id
      RETURNING tenant_id`,
-    [config.tenantId, orgId ?? null, config],
+    [normalized.tenantId, orgId ?? null, normalized],
   );
   if (!res.rowCount) {
     const err = new Error('TENANT_OWNED_BY_OTHER_ORG') as Error & { statusCode?: number };
     err.statusCode = 409;
     throw err;
   }
-  return config;
+  return normalized;
 }
 
 /** Map our tool names to Retell custom function definitions. */
 function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTool[] {
   const tools: RetellTool[] = [];
-  const enabled = new Set(config.tools);
+  const enabled = new Set(withCoreAgentTools(config.tools));
+  const signedQuery = buildToolAuthQuery(config.tenantId);
 
   if (enabled.has('calendar.findSlots')) {
     tools.push({
       type: 'custom',
       name: 'calendar_find_slots',
       description: 'Find available appointment slots for the requested service or time range.',
-      url: `${webhookBaseUrl}/retell/tools/calendar.findSlots`,
+      url: `${webhookBaseUrl}/retell/tools/calendar.findSlots?${signedQuery}`,
       execution_message_description: 'Searching for available slots…',
       parameters: {
         type: 'object',
@@ -159,7 +173,7 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
       type: 'custom',
       name: 'calendar_book',
       description: 'Create a booking after the user confirmed a slot and service.',
-      url: `${webhookBaseUrl}/retell/tools/calendar.book`,
+      url: `${webhookBaseUrl}/retell/tools/calendar.book?${signedQuery}`,
       execution_message_description: 'Booking your appointment…',
       parameters: {
         type: 'object',
@@ -180,7 +194,7 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
       type: 'custom',
       name: 'ticket_create',
       description: 'Create a callback or handoff ticket when the user wants human follow-up.',
-      url: `${webhookBaseUrl}/retell/tools/ticket.create`,
+      url: `${webhookBaseUrl}/retell/tools/ticket.create?${signedQuery}`,
       execution_message_description: 'Creating your callback request…',
       parameters: {
         type: 'object',
@@ -237,6 +251,22 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
   }
 
   return tools;
+}
+
+function toolAuthSecret(): string {
+  return process.env.RETELL_TOOL_AUTH_SECRET || process.env.JWT_SECRET || 'dev-retell-tool-auth';
+}
+
+function signToolTenant(tenantId: string): string {
+  return crypto.createHmac('sha256', toolAuthSecret()).update(tenantId).digest('base64url');
+}
+
+function buildToolAuthQuery(tenantId: string): string {
+  const params = new URLSearchParams({
+    tenant_id: tenantId,
+    tool_sig: signToolTenant(tenantId),
+  });
+  return params.toString();
 }
 
 function getWebhookBaseUrl(): string {
@@ -377,7 +407,7 @@ export async function triggerCallback(params: {
         `SELECT data FROM agent_configs WHERE org_id = $1 OR tenant_id = $1::text ORDER BY updated_at DESC LIMIT 1`,
         [params.orgId],
       );
-      if (res.rows[0]) config = AgentConfigSchema.parse(res.rows[0].data);
+      if (res.rows[0]) config = parseAgentConfig(res.rows[0].data);
     } else {
       config = memory.get(params.orgId) ?? null;
     }
@@ -456,10 +486,10 @@ export async function registerAgentConfig(app: FastifyInstance) {
       `SELECT tenant_id, data FROM agent_configs WHERE org_id = $1 OR tenant_id = $1::text ORDER BY updated_at DESC`,
       [orgId],
     );
-    const items = res.rows.map((r) => AgentConfigSchema.parse(r.data));
+    const items = res.rows.map((r) => parseAgentConfig(r.data));
     // Always include at least the default config
     if (items.length === 0) {
-      return { items: [AgentConfigSchema.parse({ tenantId: orgId })] };
+      return { items: [parseAgentConfig({ tenantId: orgId })] };
     }
     return { items };
   });
@@ -492,7 +522,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
 
     const newTenantId = `${orgId}-${Date.now()}`;
     const body = req.body as Record<string, unknown>;
-    const cfg = AgentConfigSchema.parse({ ...body, tenantId: newTenantId });
+    const cfg = parseAgentConfig({ ...body, tenantId: newTenantId });
 
     await pool.query(
       `INSERT INTO agent_configs (tenant_id, org_id, data, updated_at) VALUES ($1, $2, $3, now())`,
@@ -653,7 +683,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
 
     const existing = await loadOwnedConfigRow(tenantId, orgId);
     const serverIds = existing.exists ? existing.data : {} as Partial<AgentConfig>;
-    const body = AgentConfigSchema.parse({
+    const body = parseAgentConfig({
       ...raw,
       tenantId,
       retellLlmId: serverIds.retellLlmId,
@@ -677,7 +707,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
 
     const existing = await loadOwnedConfigRow(tenantId, orgId);
     const serverIds = existing.exists ? existing.data : {} as Partial<AgentConfig>;
-    const body = AgentConfigSchema.parse({
+    const body = parseAgentConfig({
       ...raw,
       tenantId,
       retellLlmId: serverIds.retellLlmId,
@@ -773,7 +803,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
         `SELECT data FROM agent_configs WHERE org_id = $1 AND data->>'retellAgentId' IS NOT NULL ORDER BY updated_at DESC LIMIT 1`,
         [orgId],
       );
-      config = res.rows[0]?.data ? AgentConfigSchema.parse(res.rows[0].data) : await readConfig(orgId, orgId);
+      config = res.rows[0]?.data ? parseAgentConfig(res.rows[0].data) : await readConfig(orgId, orgId);
     }
 
     if (!config.retellAgentId) {
