@@ -327,7 +327,7 @@ function getWebhookBaseUrl(): string {
  * Deploy config to Retell AI (create or update LLM + Agent).
  * Returns the updated config with Retell IDs.
  */
-async function deployToRetell(config: AgentConfig): Promise<AgentConfig> {
+export async function deployToRetell(config: AgentConfig): Promise<AgentConfig> {
   const webhookBase = getWebhookBaseUrl();
   const instructions = buildAgentInstructions(config);
   const retellTools = buildRetellTools(config, webhookBase);
