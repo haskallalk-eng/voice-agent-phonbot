@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   getBillingPlans,
@@ -63,7 +63,24 @@ export function BillingPage() {
     }
     return initial;
   });
-  const [billingInterval, setBillingInterval] = useState<'month' | 'year'>('month');
+  // When the user came from a Pricing-Card click on the landing page we stashed
+  // the plan + interval in sessionStorage. Read it once for the initial render,
+  // wipe it so future visits aren't sticky, and stash it for the highlight effect.
+  const [preselectedPlan] = useState<string | null>(() => {
+    try {
+      const plan = sessionStorage.getItem('preselectedPlan');
+      if (plan) sessionStorage.removeItem('preselectedPlan');
+      return plan;
+    } catch { return null; }
+  });
+  const [billingInterval, setBillingInterval] = useState<'month' | 'year'>(() => {
+    try {
+      const iv = sessionStorage.getItem('preselectedInterval');
+      if (iv) sessionStorage.removeItem('preselectedInterval');
+      return iv === 'year' ? 'year' : 'month';
+    } catch { return 'month'; }
+  });
+  const planCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const { data, isLoading: loading, error: queryError } = useQuery({
     queryKey: ['billing'],
@@ -75,6 +92,16 @@ export function BillingPage() {
 
   const status = data?.status ?? null;
   const plans = data?.plans ?? [];
+
+  // Scroll the preselected plan into view so the user clearly sees which plan
+  // their landing-page click preselected. Runs once `data` is loaded and the
+  // plan cards are mounted.
+  useEffect(() => {
+    if (!preselectedPlan || !data) return;
+    const el = planCardRefs.current[preselectedPlan];
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [preselectedPlan, data]);
 
   // Merge query error into the flash display
   const effectiveFlash = flash ?? (queryError ? { type: 'error' as const, text: 'Billing-Daten konnten nicht geladen werden.' } : null);
@@ -208,13 +235,17 @@ export function BillingPage() {
             const showYearly = billingInterval === 'year' && plan.hasYearly && plan.price > 0;
             const yearlyMonthlyPrice = Math.round((plan.price * 10) / 12);
 
+            const isPreselected = plan.id === preselectedPlan && !isCurrent;
             return (
               <div
                 key={plan.id}
+                ref={(el) => { planCardRefs.current[plan.id] = el; }}
                 className={`rounded-2xl border p-5 flex flex-col gap-4 transition-all ${
                   isCurrent
                     ? 'border-orange-500/40 bg-gradient-to-b from-orange-500/10 to-cyan-500/5 shadow-lg shadow-orange-500/10'
-                    : 'border-white/10 bg-white/5 hover:bg-white/8 hover:border-white/20'
+                    : isPreselected
+                      ? 'border-cyan-400/60 bg-gradient-to-b from-cyan-500/10 to-orange-500/5 shadow-lg shadow-cyan-500/20 ring-2 ring-cyan-400/40'
+                      : 'border-white/10 bg-white/5 hover:bg-white/8 hover:border-white/20'
                 }`}
               >
                 <div>
@@ -222,6 +253,9 @@ export function BillingPage() {
                     <h4 className="font-semibold text-white">{plan.name}</h4>
                     {isCurrent && (
                       <span className="text-xs bg-orange-500/20 text-orange-300 px-2 py-0.5 rounded-full">Aktuell</span>
+                    )}
+                    {isPreselected && (
+                      <span className="text-xs bg-cyan-400/20 text-cyan-300 px-2 py-0.5 rounded-full">Vorausgewählt</span>
                     )}
                   </div>
                   {showYearly ? (

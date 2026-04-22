@@ -306,13 +306,34 @@ function AppGate() {
   // so the industry-page nav can link straight to those gates.
   const [gate, setGate] = useState<Gate>(() => {
     if (typeof window === 'undefined') return 'landing';
-    const p = new URLSearchParams(window.location.search).get('page');
+    const params = new URLSearchParams(window.location.search);
+    const p = params.get('page');
+    // Plan deep-link from branch landings (e.g. /?page=register&plan=starter)
+    // → BillingPage reads this from sessionStorage after signup. Strip from URL.
+    const plan = params.get('plan');
+    if (plan) {
+      try {
+        sessionStorage.setItem('preselectedPlan', plan);
+        const interval = params.get('interval');
+        if (interval === 'year' || interval === 'month') {
+          sessionStorage.setItem('preselectedInterval', interval);
+        }
+      } catch { /* sessionStorage may throw in privacy mode */ }
+    }
     if (p === 'contact' || p === 'login' || p === 'register') {
       // Strip the param so a reload doesn't re-force the gate.
       const url = new URL(window.location.href);
       url.searchParams.delete('page');
+      url.searchParams.delete('plan');
+      url.searchParams.delete('interval');
       window.history.replaceState({}, '', url.toString());
       return p as Gate;
+    }
+    if (plan) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('plan');
+      url.searchParams.delete('interval');
+      window.history.replaceState({}, '', url.toString());
     }
     return 'landing';
   });

@@ -6,8 +6,41 @@ type PricingSectionProps = {
   onGoToContact?: () => void;
 };
 
+// Billing reads this on mount to auto-scroll + highlight the chosen plan
+// after signup. Cleared after first read so later visits aren't sticky.
+function rememberPlan(id: string, interval: 'month' | 'year') {
+  try {
+    sessionStorage.setItem('preselectedPlan', id);
+    sessionStorage.setItem('preselectedInterval', interval);
+  } catch {
+    // sessionStorage can throw in privacy mode — not a blocker
+  }
+}
+
 export function PricingSection({ onGoToRegister, onGoToContact }: PricingSectionProps) {
   const [yearly, setYearly] = useState(false);
+
+  // Landing-page plan names → Billing API plan ids (server uses "pro", not "professional").
+  const PLAN_ID_MAP: Record<string, string> = {
+    free: 'free',
+    nummer: 'nummer',
+    starter: 'starter',
+    professional: 'pro',
+    agency: 'agency',
+  };
+
+  function pickPlan(planName: string) {
+    const id = PLAN_ID_MAP[planName.toLowerCase()] ?? planName.toLowerCase();
+    rememberPlan(id, yearly ? 'year' : 'month');
+    onGoToRegister();
+  }
+
+  function onCardKey(e: React.KeyboardEvent<HTMLDivElement>, planName: string) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      pickPlan(planName);
+    }
+  }
 
   // Separate plans into layout groups
   const freePlan = PLANS.find(p => p.name === 'Free')!;
@@ -68,7 +101,13 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
       </div>
 
       {/* ── FREE PLAN — wide banner at top ── */}
-      <div className="glass rounded-2xl p-6 mb-8 flex flex-col sm:flex-row items-center justify-between gap-4 border border-white/10">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => pickPlan('free')}
+        onKeyDown={(e) => onCardKey(e, 'free')}
+        className="glass rounded-2xl p-6 mb-8 flex flex-col sm:flex-row items-center justify-between gap-4 border border-white/10 cursor-pointer hover:bg-white/[0.07] hover:border-white/20 transition-colors"
+      >
         <div className="flex-1">
           <div className="flex items-center gap-4 mb-2 sm:mb-0">
             <div>
@@ -89,7 +128,8 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
           </p>
         </div>
         <button
-          onClick={onGoToRegister}
+          type="button"
+          onClick={(e) => { e.stopPropagation(); pickPlan('free'); }}
           className="rounded-xl px-6 py-2.5 text-sm font-semibold text-white whitespace-nowrap transition-all duration-200 hover:scale-105 shrink-0"
           style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}
         >
@@ -104,7 +144,11 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
           return (
             <div
               key={plan.name}
-              className="gradient-border relative glass rounded-2xl p-8 flex flex-col transition-all duration-300 hover:shadow-[0_0_40px_rgba(249,115,22,0.25)] hover:scale-[1.02]"
+              role="button"
+              tabIndex={0}
+              onClick={() => pickPlan(plan.name)}
+              onKeyDown={(e) => onCardKey(e, plan.name)}
+              className="gradient-border relative glass rounded-2xl p-8 flex flex-col transition-all duration-300 hover:shadow-[0_0_40px_rgba(249,115,22,0.25)] hover:scale-[1.02] cursor-pointer"
               style={
                 isPopular
                   ? {
@@ -136,7 +180,8 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
               </div>
 
               <button
-                onClick={onGoToRegister}
+                type="button"
+                onClick={(e) => { e.stopPropagation(); pickPlan(plan.name); }}
                 className="w-full rounded-xl px-6 py-3 font-semibold text-sm transition-all duration-300 hover:scale-[1.02]"
                 style={
                   isPopular
@@ -153,7 +198,16 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
 
       {/* ── ENTERPRISE — wide card at bottom ── */}
       <div
-        className="glass rounded-2xl p-8 mt-4 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative overflow-hidden"
+        role="button"
+        tabIndex={0}
+        onClick={() => (onGoToContact ?? onGoToRegister)()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            (onGoToContact ?? onGoToRegister)();
+          }
+        }}
+        className="glass rounded-2xl p-8 mt-4 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative overflow-hidden cursor-pointer hover:shadow-[0_0_30px_rgba(6,182,212,0.25)] transition-shadow"
         style={{
           border: '1px solid rgba(6,182,212,0.35)',
           background: 'linear-gradient(135deg, rgba(6,182,212,0.08) 0%, rgba(249,115,22,0.06) 100%)',
@@ -215,7 +269,8 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
           </div>
         </div>
         <button
-          onClick={onGoToContact ?? onGoToRegister}
+          type="button"
+          onClick={(e) => { e.stopPropagation(); (onGoToContact ?? onGoToRegister)(); }}
           className="rounded-xl px-8 py-3.5 text-sm font-semibold text-white whitespace-nowrap transition-all duration-300 hover:scale-105 shrink-0 relative z-10"
           style={{
             background: 'linear-gradient(135deg, #06B6D4, #F97316)',
