@@ -20,6 +20,8 @@ import {
   type RetellTool,
 } from './retell.js';
 import { triggerBridgeCall } from './twilio-openai-bridge.js';
+import { toE164 } from '@vas/shared';
+import { log } from './logger.js';
 
 const AgentConfigSchema = z.object({
   tenantId: z.string().min(1).default('demo'),
@@ -246,30 +248,42 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
   // register Retell's native transfer_call so the LLM can hand off the
   // live call to a human. The actual routing logic lives in the system
   // prompt (see agent-instructions.ts).
+  //
+  // Every target is run through toE164() first — Retell/Twilio require a
+  // proper E.164 number (`+4917676679632`), not a German local-dial
+  // string (`017676679632`). Before this normalisation the live transfer
+  // silently failed at dial time and the LLM would just hang because the
+  // tool call never resolved. Rules that don't normalise (unrecognised
+  // format) are skipped with a log warning so the deploy still works for
+  // the remaining valid rules.
   const routingRules = (config as Record<string, unknown>).callRoutingRules as
     | Array<{ action: string; target?: string; enabled?: boolean; description?: string }> | undefined;
-  const hasTransfer = routingRules?.some(r => r.enabled !== false && r.action === 'transfer' && r.target);
+  const transferRules = (routingRules ?? []).filter(
+    (r) => r.enabled !== false && r.action === 'transfer' && r.target,
+  );
 
-  if (hasTransfer) {
-    const transferRules = routingRules!
-      .filter(r => r.enabled !== false && r.action === 'transfer' && r.target);
-
-    // Register one transfer_call tool per unique target number.
-    // Retell requires transfer_destination + transfer_option for each.
+  if (transferRules.length > 0) {
     const seenTargets = new Set<string>();
     for (const rule of transferRules) {
-      const target = rule.target!;
-      if (seenTargets.has(target)) continue;
-      seenTargets.add(target);
+      const e164 = toE164(rule.target!);
+      if (!e164) {
+        log.warn(
+          { tenantId: config.tenantId, rawTarget: rule.target },
+          'agent-config: transfer rule has unparseable target, skipping',
+        );
+        continue;
+      }
+      if (seenTargets.has(e164)) continue;
+      seenTargets.add(e164);
 
-      const safeName = transferToolName(target);
+      const safeName = transferToolName(e164);
       tools.push({
         type: 'transfer_call',
         name: safeName,
-        description: `Transfer call to ${target}. ${rule.description ?? ''}`.trim(),
+        description: `Transfer call to ${e164}. ${rule.description ?? ''}`.trim(),
         transfer_destination: {
           type: 'predefined',
-          number: target,
+          number: e164,
         },
         transfer_option: {
           type: 'warm_transfer',
