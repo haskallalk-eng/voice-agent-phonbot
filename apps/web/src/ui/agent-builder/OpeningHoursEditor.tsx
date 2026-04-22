@@ -268,8 +268,14 @@ export function OpeningHoursEditor({ value, onChange }: { value: string; onChang
                   className="relative w-10 h-5 rounded-full transition-colors cursor-pointer shrink-0"
                   style={{ background: ds.open ? 'linear-gradient(135deg, #F97316, #06B6D4)' : 'rgba(255,255,255,0.12)' }}
                 >
+                  {/* Explicit left-0 (not just top): without it, the browser
+                      computes `left: auto` as the knob's static-flow offset
+                      (~20 px in this layout) and then translateX stacks on top,
+                      so the knob lands far outside the pill and covers the
+                      "Geöffnet" label. Using left-0 + top-0.5 anchors the
+                      knob firmly in the pill's origin. */}
                   <span
-                    className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
+                    className="absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
                     style={{ transform: ds.open ? 'translateX(22px)' : 'translateX(2px)' }}
                   />
                 </button>
