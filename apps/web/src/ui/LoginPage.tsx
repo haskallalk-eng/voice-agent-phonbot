@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../lib/auth.js';
-import { forgotPassword } from '../lib/api.js';
+import { forgotPassword, createCheckoutSession } from '../lib/api.js';
 import { FoxLogo } from './FoxLogo.js';
 
 type Mode = 'login' | 'register';
@@ -44,6 +44,30 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
         await login(data.email, data.password);
       } else {
         await authRegister(data.orgName, data.email, data.password);
+      }
+      // If the user came from a pricing card (landing or branch), kick off
+      // Stripe Checkout right after auth succeeds — no detour through
+      // BillingPage. sessionStorage was populated by PricingSection or
+      // the /?page=register&plan=X deep-link in App.tsx. 'free' is skipped
+      // because it doesn't need payment.
+      let plan: string | null = null;
+      let interval: 'month' | 'year' = 'month';
+      try {
+        plan = sessionStorage.getItem('preselectedPlan');
+        const iv = sessionStorage.getItem('preselectedInterval');
+        if (iv === 'year' || iv === 'month') interval = iv;
+        sessionStorage.removeItem('preselectedPlan');
+        sessionStorage.removeItem('preselectedInterval');
+      } catch { /* privacy mode — skip */ }
+      if (plan && plan !== 'free') {
+        try {
+          const { url } = await createCheckoutSession(plan, interval);
+          window.location.href = url;
+          return; // browser is about to navigate away — stop here
+        } catch {
+          // Checkout failed (e.g. backend hiccup). Fall through to the
+          // normal post-auth landing — user can retry via BillingPage.
+        }
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Etwas ist schiefgelaufen';
