@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import type { AgentConfig, KnowledgeSource } from '../../lib/api.js';
-import { SectionCard, Input, TextArea, Badge, IconBrain, IconGlobe, IconFileText, IconMessageSquare } from './shared.js';
+import { SectionCard, Input, TextArea, Badge, IconKnowledge, IconGlobe, IconFileText, IconMessageSquare } from './shared.js';
 
 export interface KnowledgeTabProps {
   config: AgentConfig;
@@ -9,7 +9,7 @@ export interface KnowledgeTabProps {
 
 export function KnowledgeTab({ config, onUpdate }: KnowledgeTabProps) {
   return (
-    <SectionCard title="Wissensquellen" icon={IconBrain}>
+    <SectionCard title="Wissensquellen" icon={IconKnowledge}>
       <p className="text-sm text-white/50 mb-4">
         Gib deinem Agent Zugang zu Informationen — er kann Inhalte von Webseiten lesen, PDFs verarbeiten oder eigene Texte nutzen.
       </p>

@@ -4,6 +4,7 @@ import {
   IconChevronDown,
   IconStar,
   IconBrain,
+  IconKnowledge,
   IconBuilding,
   IconVolume,
   IconSliders,
@@ -177,7 +178,7 @@ export const PROMPT_SECTIONS: PromptSection[] = [
 
 export const TABS: { id: Tab; label: string; Icon: SectionIconComp }[] = [
   { id: 'identity',     label: 'Identität',    Icon: IconAgent },
-  { id: 'knowledge',    label: 'Wissen',       Icon: IconBrain },
+  { id: 'knowledge',    label: 'Wissen',       Icon: IconKnowledge },
   { id: 'behavior',     label: 'Verhalten',    Icon: IconMessageSquare },
   { id: 'capabilities', label: 'Fähigkeiten',  Icon: IconCapabilities },
   { id: 'technical',    label: 'Technik',      Icon: IconSliders },
@@ -341,6 +342,7 @@ export {
   IconChevronDown,
   IconStar,
   IconBrain,
+  IconKnowledge,
   IconBuilding,
   IconVolume,
   IconSliders,
