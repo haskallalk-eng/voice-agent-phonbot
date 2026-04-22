@@ -16,4 +16,29 @@
     for(var i=0;i<nodes.length;i++){var a=nodes[i],u=a.getAttribute('data-u'),d=a.getAttribute('data-d');if(!u||!d)continue;a.href='mailto:'+u+'@'+d;a.textContent=u+'@'+d}
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',decloakMails);else decloakMails();
+
+  // Scroll-triggered stagger for the 'So klingt Phonbot' dialogue + its
+  // closing note. Matches the chipy-design §5 motion budget rule —
+  // animation only kicks in once the user has scrolled the section into
+  // view, not when the page loads.
+  function armDialogueReveal(){
+    if(!('IntersectionObserver' in window)) {
+      // Feature-detect fallback: reveal everything immediately.
+      document.querySelectorAll('.dialogue').forEach(function(el){el.classList.add('in-view')});
+      document.querySelectorAll('.dialogue-note').forEach(function(el){el.classList.add('in-view-note')});
+      return;
+    }
+    var obs=new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if(!entry.isIntersecting) return;
+        entry.target.classList.add('in-view');
+        // Promote the sibling dialogue-note so its delayed fade-in runs too.
+        var note=entry.target.parentNode && entry.target.parentNode.querySelector('.dialogue-note');
+        if(note) note.classList.add('in-view-note');
+        obs.unobserve(entry.target);
+      });
+    },{threshold:.18,rootMargin:'0px 0px -10% 0px'});
+    document.querySelectorAll('.dialogue').forEach(function(el){obs.observe(el)});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',armDialogueReveal);else armDialogueReveal();
 })();
