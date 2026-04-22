@@ -18,6 +18,7 @@ import { pool } from './db.js';
 import type { JwtPayload } from './auth.js';
 import { triggerBridgeCall } from './twilio-openai-bridge.js';
 import { verifyTurnstile } from './captcha.js';
+import { sendSignupLinkEmail } from './email.js';
 
 // ── DB Migration ─────────────────────────────────────────────────────────────
 
@@ -42,6 +43,9 @@ export async function migrateOutbound() {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS outbound_calls_org_idx ON outbound_calls(org_id);`);
+  // Website/demo callbacks are platform-level leads before signup, so org_id
+  // must be nullable for those anonymous outbound calls.
+  await pool.query(`ALTER TABLE outbound_calls ALTER COLUMN org_id DROP NOT NULL`).catch(() => {});
   await pool.query(`
     CREATE TABLE IF NOT EXISTS outbound_prompt_versions (
       id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -575,6 +579,8 @@ export async function registerOutbound(app: FastifyInstance) {
       );
       if (dup.rowCount) {
         app.log.info({ phone, ip: req.ip }, 'website-callback dedup hit — skipping outbound call');
+        sendSignupLinkEmail({ toEmail: parsed.data.email, name: parsed.data.name ?? null })
+          .catch((err: Error) => app.log.warn({ err: err.message }, 'website-callback signup-link email failed'));
         return { ok: true };
       }
     }
@@ -616,6 +622,9 @@ export async function registerOutbound(app: FastifyInstance) {
           .catch((err: Error) => app.log.warn({ err: err.message, leadId }, 'website-callback: link crm_leads.call_id failed'));
       }
 
+      sendSignupLinkEmail({ toEmail: parsed.data.email, name: parsed.data.name ?? null })
+        .catch((err: Error) => app.log.warn({ err: err.message }, 'website-callback signup-link email failed'));
+
       // Use the same Retell-based sales agent as demo/callback.
       // Retell metadata is forwarded into their systems; keep it minimal and
       // PII-free. Customer name stays in our DB only (crm_leads.name) where
@@ -628,6 +637,9 @@ export async function registerOutbound(app: FastifyInstance) {
         toNumber: phone,
         fromNumber,
         metadata: { source: 'website-callback', outboundRecordId: websiteCallId ?? '' },
+        dynamicVariables: {
+          signup_link: `${process.env.APP_URL ?? 'https://phonbot.de'}/login`,
+        },
       });
 
       if (websiteCallId && pool) {

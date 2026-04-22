@@ -166,7 +166,7 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
         required: ['preferredTime', 'service'],
         properties: {
           customerName: { type: 'string' },
-          customerPhone: { type: 'string' },
+          customerPhone: { type: 'string', description: 'Caller phone number. Optional when Retell provides from_number.' },
           preferredTime: { type: 'string', description: 'Confirmed slot/time.' },
           service: { type: 'string', description: 'Booked service.' },
           notes: { type: 'string' },
@@ -184,10 +184,9 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
       execution_message_description: 'Creating your callback request…',
       parameters: {
         type: 'object',
-        required: ['customerPhone'],
         properties: {
           customerName: { type: 'string' },
-          customerPhone: { type: 'string', description: 'Callback phone number.' },
+          customerPhone: { type: 'string', description: 'Callback phone number. Optional when Retell provides from_number.' },
           preferredTime: { type: 'string' },
           service: { type: 'string' },
           notes: { type: 'string' },
