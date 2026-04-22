@@ -176,8 +176,9 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push('');
   parts.push('## Stille & Pausen');
   parts.push('- Nach 5 Sekunden Stille: "Sind Sie noch da?"');
-  parts.push('- Nach weiteren 5 Sekunden: "Ich bin noch dran, lassen Sie sich Zeit."');
-  parts.push('- Nach 15 Sekunden Stille: Biete einen Rückruf an und beende höflich.');
+  parts.push('- Nach weiteren 10 Sekunden: "Ich bin noch dran, lassen Sie sich Zeit."');
+  parts.push('- Nach 30 Sekunden Stille: Biete einen Rückruf an und rufe das Tool "end_call" auf.');
+  parts.push('- Hartregel: Bei 60 Sekunden ununterbrochener Stille legt das System automatisch auf — du musst nichts tun.');
 
   parts.push('');
   parts.push('## Weitere Situationen');
