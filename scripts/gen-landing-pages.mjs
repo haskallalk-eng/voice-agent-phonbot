@@ -459,18 +459,20 @@ p{color:rgba(255,255,255,.7)}
 @keyframes call-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.6),0 0 0 0 rgba(239,68,68,.35)}50%{box-shadow:0 0 0 6px rgba(239,68,68,0),0 0 0 12px rgba(239,68,68,0)}}
 .dialogue-header .duration{margin-left:auto;font-variant-numeric:tabular-nums;color:rgba(255,255,255,.5);letter-spacing:.06em}
 
-.msg{display:flex;gap:.65rem;align-items:flex-end;margin-bottom:.875rem;opacity:0;transform:translateY(10px)}
+/* Messages animate in on page load, staggered — no IntersectionObserver,
+   no JS dependency. If animation never plays (prefers-reduced-motion,
+   disabled CSS, ancient browser), the final state is visible anyway. */
+.msg{display:flex;gap:.65rem;align-items:flex-end;margin-bottom:.875rem;animation:msg-in .55s cubic-bezier(.16,1,.3,1) both}
 .msg:last-child{margin-bottom:0}
-.dialogue.in-view .msg{animation:msg-in .55s cubic-bezier(.16,1,.3,1) both}
-@keyframes msg-in{to{opacity:1;transform:translateY(0)}}
-.dialogue.in-view .msg:nth-child(2){animation-delay:.40s}
-.dialogue.in-view .msg:nth-child(3){animation-delay:.90s}
-.dialogue.in-view .msg:nth-child(4){animation-delay:1.40s}
-.dialogue.in-view .msg:nth-child(5){animation-delay:1.90s}
-.dialogue.in-view .msg:nth-child(6){animation-delay:2.40s}
-.dialogue.in-view .msg:nth-child(7){animation-delay:2.90s}
-.dialogue.in-view .msg:nth-child(8){animation-delay:3.40s}
-.dialogue.in-view .msg:nth-child(9){animation-delay:3.90s}
+@keyframes msg-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.msg:nth-child(2){animation-delay:.35s}
+.msg:nth-child(3){animation-delay:.85s}
+.msg:nth-child(4){animation-delay:1.35s}
+.msg:nth-child(5){animation-delay:1.85s}
+.msg:nth-child(6){animation-delay:2.35s}
+.msg:nth-child(7){animation-delay:2.85s}
+.msg:nth-child(8){animation-delay:3.35s}
+.msg:nth-child(9){animation-delay:3.85s}
 .msg.user{flex-direction:row-reverse}
 .msg .avatar{flex-shrink:0;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);color:rgba(255,255,255,.65);position:relative}
 .msg .avatar svg{display:block;width:14px;height:14px}
@@ -491,11 +493,10 @@ p{color:rgba(255,255,255,.7)}
 .dialogue-typing span:nth-child(3){animation-delay:.3s}
 @keyframes typing-bounce{0%,80%,100%{transform:translateY(0);opacity:.5}40%{transform:translateY(-4px);opacity:1}}
 
-.dialogue-note{text-align:center;margin-top:1.5rem;font-size:.875rem;color:rgba(255,255,255,.45);opacity:0;transform:translateY(10px)}
-.in-view-note.dialogue-note{animation:msg-in .6s ease-out both;animation-delay:4.3s}
+.dialogue-note{text-align:center;margin-top:1.5rem;font-size:.875rem;color:rgba(255,255,255,.45);animation:msg-in .6s 4.3s ease-out both}
 
 @media(prefers-reduced-motion:reduce){
-  .msg,.dialogue-note,.dialogue.in-view .msg,.in-view-note.dialogue-note{animation:none!important;opacity:1!important;transform:none!important;animation-delay:0s!important}
+  .msg,.dialogue-note{animation:none!important;opacity:1!important;transform:none!important;animation-delay:0s!important}
   .dialogue-header .dot,.msg.bot .avatar,.dialogue-typing span{animation:none}
 }
 
