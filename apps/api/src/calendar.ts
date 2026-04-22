@@ -637,6 +637,17 @@ function extractTimeOfDay(value: string): { hour: number; minute: number } | nul
 }
 
 function parseAbsoluteSlotTime(value: string): Date | null {
+  const isoDateTimeMatch = value.match(
+    /^\s*(\d{4})-(\d{1,2})-(\d{1,2})[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?\s*$/,
+  );
+  if (isoDateTimeMatch) {
+    const [, year, month, day, hour, minute] = isoDateTimeMatch;
+    return buildLocalDate(Number(year), Number(month), Number(day), {
+      hour: Number(hour),
+      minute: Number(minute),
+    });
+  }
+
   const isoMatch = value.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
   if (isoMatch) {
     const rest = value.slice((isoMatch.index ?? 0) + isoMatch[0].length).replace(/^[T\s,]+/, '');
