@@ -116,7 +116,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
     }
     parts.push('');
     parts.push('WICHTIG: Bevor du weiterleitest, sage dem Anrufer Bescheid: "Ich verbinde Sie jetzt weiter. Einen Moment bitte."');
-    parts.push('Wenn das Transfer-Tool scheitert oder nicht verfügbar ist (das passiert automatisch bei Web-/Demo-Anrufen, die über den Browser laufen und keine echte Telefonleitung haben): Sage dem Anrufer wörtlich: "Im Webanruf kann ich leider nicht live weiterleiten — das funktioniert nur bei einem echten Telefonanruf. Ich erstelle Ihnen aber sofort ein dringendes Ticket, und es ruft Sie umgehend jemand zurück." Rufe danach "ticket_create" auf mit reason="Notfall/Weiterleitung im Webanruf nicht möglich" und notes mit dem ursprünglichen Anliegen. Bestätige dem Anrufer: "Das Ticket ist raus."');
+    parts.push('Wenn das Transfer-Tool scheitert oder nicht verfügbar ist (das passiert automatisch bei Web-/Demo-Anrufen, die über den Browser laufen und keine echte Telefonleitung haben): Sage dem Anrufer wörtlich: "Im Webanruf kann ich leider nicht live weiterleiten — das funktioniert nur bei einem echten Telefonanruf." Erstelle KEIN Ticket. Frage den Anrufer, ob du ihm sonst noch helfen kannst, oder beende das Gespräch.');
     parts.push('WARNUNG: Leite NIEMALS an die Nummer weiter, von der der Anrufer bereits weitergeleitet wurde (Endlosschleife). Wenn du unsicher bist, erstelle stattdessen ein Rückruf-Ticket.');
   }
 
