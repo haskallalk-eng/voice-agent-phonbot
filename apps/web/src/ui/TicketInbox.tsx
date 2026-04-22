@@ -1,7 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { EmptyState } from '../components/ui.js';
 import { getTickets, updateTicketStatus, triggerTicketCallback, type Ticket } from '../lib/api.js';
-import { IconPhone, IconRefresh, IconCheckCircle, IconAlertTriangle, IconTickets } from './PhonbotIcons.js';
+import { IconPhone, IconPhoneOff, IconRefresh, IconCheckCircle, IconAlertTriangle, IconTickets } from './PhonbotIcons.js';
+
+// User-facing German strings for the documented error codes that can come
+// back from POST /tickets/:id/callback. Anything else falls through to the
+// generic catch-all so the raw error code never reaches the UI.
+const CALLBACK_ERROR_MESSAGES: Record<string, string> = {
+  NO_OUTBOUND_NUMBER: 'Keine Outbound-Nummer konfiguriert. Provisioniere zuerst eine Telefonnummer.',
+  PHONE_PREFIX_NOT_ALLOWED: 'Rückruf nur auf DACH-Nummern möglich (+49, +43, +41).',
+  INVALID_PHONE: 'Die hinterlegte Rufnummer hat kein gültiges Format.',
+  PLAN_INACTIVE: 'Der aktuelle Plan erlaubt keinen Rückruf. Abo im Billing-Tab aktivieren.',
+  MINUTES_EXHAUSTED: 'Freiminuten aufgebraucht — Rückruf erst nach Plan-Upgrade möglich.',
+};
 
 // 'assigned' is still a valid status in the API/DB for legacy rows, but we
 // don't expose it in the UI anymore — user asked to remove "Zugewiesen"
@@ -169,6 +180,7 @@ function TicketCard({
   const [callResult, setCallResult] = useState<'ok' | 'error' | null>(null);
   const [callError, setCallError] = useState<string | null>(null);
   const dStatus = displayStatus(t.status);
+  const hasPhone = Boolean(t.customer_phone && t.customer_phone.trim().length > 0);
 
   async function handleCallback() {
     setCalling(true);
@@ -240,16 +252,16 @@ function TicketCard({
           {callResult === 'error' && (
             <p className="inline-flex items-center gap-1.5 text-xs text-red-300 mt-3 bg-red-500/10 border border-red-500/30 rounded-full px-2.5 py-1">
               <IconAlertTriangle size={14} />
-              {callError === 'NO_OUTBOUND_NUMBER'
-                ? 'Keine Outbound-Nummer konfiguriert.'
-                : `Fehler: ${callError}`}
+              {(callError && CALLBACK_ERROR_MESSAGES[callError]) || 'Rückruf konnte nicht gestartet werden.'}
             </p>
           )}
         </div>
 
         <div className="flex flex-col gap-1.5 shrink-0">
-          {/* Callback button — only for open tickets with a phone number */}
-          {dStatus === 'open' && t.customer_phone && (
+          {/* Callback button — only for open tickets that actually have a phone
+              number. Without a number we show a small static hint instead so
+              the user knows *why* they can't click Zurückrufen. */}
+          {dStatus === 'open' && hasPhone && (
             <button
               onClick={handleCallback}
               disabled={calling}
@@ -258,6 +270,15 @@ function TicketCard({
               <IconPhone size={12} />
               {calling ? 'Startet…' : 'Zurückrufen'}
             </button>
+          )}
+          {dStatus === 'open' && !hasPhone && (
+            <span
+              className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-full border border-white/10 bg-white/[0.03] text-white/45 leading-tight"
+              title="Der Anrufer hat keine Rufnummer hinterlegt — ein automatischer Rückruf ist nicht möglich."
+            >
+              <IconPhoneOff size={12} />
+              Keine Rufnummer hinterlegt
+            </span>
           )}
 
           {/* Status toggle — one binary action per state */}
