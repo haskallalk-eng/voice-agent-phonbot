@@ -12,6 +12,7 @@ import {
   IconPhone,
   IconBilling,
   IconLogout,
+  IconOutbound,
 } from './PhonbotIcons.js';
 import { deleteAccount } from '../lib/api.js';
 
@@ -27,6 +28,7 @@ const NAV_GROUPS: { label?: string; items: NavItem[] }[] = [
     label: 'ÜBERSICHT',
     items: [
       { id: 'logs', label: 'Anrufe', Icon: IconCalls },
+      { id: 'outbound', label: 'Outbound', Icon: IconOutbound },
       { id: 'tickets', label: 'Tickets', Icon: IconTickets },
       { id: 'calendar', label: 'Kalender', Icon: IconCalendar },
     ],

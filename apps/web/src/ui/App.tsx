@@ -16,9 +16,7 @@ import { BillingPage } from './BillingPage.js';
 import { PhoneManager } from './PhoneManager.js';
 import { CalendarPage } from './CalendarPage.js';
 import { InsightsPage } from './InsightsPage.js';
-// OutboundPage intentionally not imported — customer-facing outbound is disabled for now.
-// Outbound is used only for the landing-page demo callback (Mindrails-internal).
-// When customer outbound becomes a product, re-enable: set CUSTOMER_OUTBOUND_ENABLED=true + restore import + route below.
+import { OutboundPage } from './OutboundPage.js';
 import { ToastProvider } from './Toast.js';
 import { FoxLogo, PhonbotBrand } from './FoxLogo.js';
 import { ConnectionStatus } from './ConnectionStatus.js';
@@ -80,11 +78,11 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-export type Page = 'home' | 'agent' | 'test' | 'tickets' | 'logs' | 'billing' | 'phone' | 'calendar' | 'insights';
+export type Page = 'home' | 'agent' | 'test' | 'tickets' | 'logs' | 'billing' | 'phone' | 'calendar' | 'insights' | 'outbound';
 
 function Dashboard() {
   const { user, org, logout } = useAuth();
-  const VALID_PAGES: Page[] = ['home', 'agent', 'test', 'tickets', 'logs', 'billing', 'phone', 'calendar', 'insights'];
+  const VALID_PAGES: Page[] = ['home', 'agent', 'test', 'tickets', 'logs', 'billing', 'phone', 'calendar', 'insights', 'outbound'];
   const initialPage = (): Page => {
     const params = new URLSearchParams(window.location.search);
     if (params.has('calendarConnected') || params.has('calendarError')) return 'calendar';
@@ -288,6 +286,7 @@ function Dashboard() {
           {page === 'phone' && <PhoneManager onNavigate={setPage as (page: string) => void} />}
           {page === 'calendar' && <CalendarPage />}
           {page === 'insights' && <InsightsPage />}
+          {page === 'outbound' && <OutboundPage />}
         </div>
       </main>
 
