@@ -1,4 +1,5 @@
 import type { readConfig } from './agent-config.js';
+import { transferToolName } from './agent-config.js';
 
 type AgentConfig = Awaited<ReturnType<typeof readConfig>>;
 
@@ -48,7 +49,13 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push('## Aufzeichnungshinweis (PFLICHT — rechtliche Vorgabe § 201 StGB)');
   parts.push(`Unmittelbar nach deiner Begrüßung — BEVOR du inhaltlich etwas besprichst — sage EINMAL in einem Satz:`);
   parts.push(`"Dieses Gespräch wird zur Qualitätssicherung aufgezeichnet. Wenn Sie nicht einverstanden sind, sagen Sie es bitte jetzt — sonst mache ich weiter."`);
-  parts.push('Wenn der Anrufer widerspricht ("nein", "nicht aufzeichnen", "keine Aufzeichnung"): Sage "Verstanden — ich leite Sie weiter an eine Person oder nehme Ihre Nachricht ohne Aufzeichnung auf." und erstelle sofort ein Rückruf-Ticket mit Hinweis "Aufzeichnung abgelehnt". Lege danach auf.');
+  parts.push('');
+  parts.push('Wenn der Anrufer widerspricht ("nein", "nicht aufzeichnen", "keine Aufzeichnung", "ich will nicht"), führe GENAU diese Schritte aus — in dieser Reihenfolge, ohne Rückfragen, ohne Alternativangebote:');
+  parts.push('1. Sage wörtlich: "Verstanden, dann beende ich das Gespräch jetzt, damit nichts gespeichert wird. Rufen Sie uns gerne direkt auf der Geschäftsnummer an. Auf Wiederhören."');
+  parts.push('2. Rufe das Tool "recording_declined" auf (leere Parameter). Das markiert den Anruf für Löschung.');
+  parts.push('3. Rufe unmittelbar danach das Tool "end_call" auf.');
+  parts.push('VERBOTEN nach einem Widerspruch: KEIN Ticket erstellen, KEINEN Termin buchen, KEINE weiteren Fragen stellen, KEINE Nachricht aufnehmen. Das würde weiter aufzeichnen und ist ein Rechtsbruch.');
+  parts.push('');
   parts.push('Wenn der Anrufer nicht widerspricht oder mit dem Anliegen fortfährt: konkludente Einwilligung liegt vor — mache normal weiter.');
   parts.push('Diesen Hinweis NIEMALS weglassen, auch nicht bei kurzen Anrufen.');
 
@@ -90,18 +97,19 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   if (activeRules.length > 0) {
     parts.push('');
     parts.push('## Anruf-Weiterleitung');
-    parts.push('Du kannst Anrufe live an eine echte Person weiterleiten. Nutze das Tool "transfer_call" wenn eine der folgenden Situationen eintritt:');
+    parts.push('Du hast Tools zur Verfügung, die Anrufe live an eine echte Person weiterleiten. Wenn eine der folgenden Situationen eintritt, rufe das genannte Tool auf:');
     for (const rule of activeRules) {
       if (rule.action === 'transfer' && rule.target) {
-        parts.push(`- ${rule.description} → Weiterleiten an ${rule.target}`);
+        const toolName = transferToolName(rule.target);
+        parts.push(`- ${rule.description} → rufe das Tool "${toolName}" auf (leitet weiter an ${rule.target})`);
       } else if (rule.action === 'ticket') {
-        parts.push(`- ${rule.description} → Rückruf-Ticket erstellen`);
+        parts.push(`- ${rule.description} → Rückruf-Ticket erstellen (Tool "ticket_create")`);
       } else if (rule.action === 'hangup') {
-        parts.push(`- ${rule.description} → Gespräch höflich beenden`);
+        parts.push(`- ${rule.description} → Tool "end_call" aufrufen`);
       }
     }
     parts.push('');
-    parts.push('WICHTIG: Bevor du weiterleitest, sage dem Anrufer Bescheid: "Ich verbinde Sie jetzt mit [Ziel]. Einen Moment bitte."');
+    parts.push('WICHTIG: Bevor du weiterleitest, sage dem Anrufer Bescheid: "Ich verbinde Sie jetzt weiter. Einen Moment bitte."');
     parts.push('WARNUNG: Leite NIEMALS an die Nummer weiter, von der der Anrufer bereits weitergeleitet wurde (Endlosschleife). Wenn du unsicher bist, erstelle stattdessen ein Rückruf-Ticket.');
   }
 

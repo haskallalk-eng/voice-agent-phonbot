@@ -144,11 +144,42 @@ async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentCo
   return normalized;
 }
 
+/**
+ * Deterministic name for a transfer_call tool given a target number.
+ * Must stay identical on both sides: agent-config.ts registers the tool
+ * with this name; agent-instructions.ts references it by this name in
+ * the system prompt so the LLM knows which tool to invoke.
+ */
+export function transferToolName(target: string): string {
+  return 'transfer_' + target.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30);
+}
+
 /** Map our tool names to Retell custom function definitions. */
 function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTool[] {
   const tools: RetellTool[] = [];
   const enabled = new Set(withCoreAgentTools(config.tools));
   const signedQuery = buildToolAuthQuery(config.tenantId);
+
+  // Retell's built-in end_call tool — must be explicitly registered
+  // (not auto-available). Lets the LLM hang up cleanly, which is
+  // mandatory when the caller declines recording (§ 201 StGB).
+  tools.push({
+    type: 'end_call',
+    name: 'end_call',
+    description: 'End the call. Use when the conversation is naturally over or the caller declined recording.',
+  });
+
+  // Custom tool: caller refused recording. Webhook flags the call for
+  // post-call deletion of the audio + transcript. The LLM must still
+  // call end_call immediately after this to actually hang up.
+  tools.push({
+    type: 'custom',
+    name: 'recording_declined',
+    description: 'Call this BEFORE end_call when the caller refuses consent to recording. Deletes the call transcript and audio after the call ends.',
+    url: `${webhookBaseUrl}/retell/tools/recording.declined?${signedQuery}`,
+    execution_message_description: 'Markiere für Löschung.',
+    parameters: { type: 'object', properties: {} },
+  });
 
   if (enabled.has('calendar.findSlots')) {
     tools.push({
@@ -231,7 +262,7 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
       if (seenTargets.has(target)) continue;
       seenTargets.add(target);
 
-      const safeName = 'transfer_' + target.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30);
+      const safeName = transferToolName(target);
       tools.push({
         type: 'transfer_call',
         name: safeName,

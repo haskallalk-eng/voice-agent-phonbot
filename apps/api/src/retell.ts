@@ -272,6 +272,23 @@ export async function getCall(callId: string): Promise<RetellCall> {
   return retellRequest(`/v2/get-call/${encodeURIComponent(callId)}`);
 }
 
+/**
+ * Delete a call's audio recording, transcript, and metadata from Retell.
+ * Used to honour § 201 StGB / Art. 6 DSGVO when the caller declines consent
+ * to recording mid-call: we let the call finish, then scrub it.
+ * Retell docs: DELETE /v2/delete-call/{call_id} → 204.
+ */
+export async function deleteCall(callId: string): Promise<void> {
+  const res = await fetch(`${RETELL_API}/v2/delete-call/${encodeURIComponent(callId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${getApiKey()}` },
+    signal: AbortSignal.timeout(RETELL_TIMEOUT_MS),
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`Retell delete-call ${res.status}: ${await res.text()}`);
+  }
+}
+
 export async function getAgent(agentId: string): Promise<RetellAgent> {
   return retellRequest(`/get-agent/${encodeURIComponent(agentId)}`);
 }

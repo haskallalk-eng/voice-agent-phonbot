@@ -19,7 +19,7 @@ import { findFreeSlots, bookSlot } from './calendar.js';
 import { triggerCallback } from './agent-config.js';
 import { analyzeCall } from './insights.js';
 import { getOrgIdByAgentId } from './org-id-cache.js';
-import { getCall } from './retell.js';
+import { getCall, deleteCall } from './retell.js';
 
 const RETELL_API_KEY = process.env.RETELL_API_KEY ?? '';
 
@@ -309,6 +309,18 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         }
       }
 
+      // § 201 StGB compliance: caller withdrew recording consent mid-call.
+      // We still bill the used minutes (service was rendered) but skip
+      // transcript persistence + analysis and DELETE the call from Retell.
+      let recordingDeclined = false;
+      if (dedupCallId && pool) {
+        const flag = await pool.query(
+          `SELECT 1 FROM recording_declined_calls WHERE call_id = $1`,
+          [dedupCallId],
+        );
+        recordingDeclined = (flag.rowCount ?? 0) > 0;
+      }
+
       if (startTs && endTs && agentId) {
         const callDurationMs = Math.max(0, endTs - startTs);
         // Second-accurate billing: 61s = 1.02 min, not 2 min. Customers pay
@@ -334,6 +346,17 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         const toNumber = (call as RetellCallData).to_number;
         const disconnectionReason = (call as RetellCallData & { disconnection_reason?: string }).disconnection_reason;
         const silenceDurationMs = (call as RetellCallData & { silence_duration_ms?: number }).silence_duration_ms;
+
+        if (recordingDeclined && callId) {
+          // Fire-and-forget: DELETE Retell's stored audio + transcript.
+          // Keep the flag row as audit trail that deletion was requested.
+          deleteCall(callId).then(
+            () => req.log.info({ callId }, 'recording_declined → Retell call deleted'),
+            (err: Error) => req.log.error({ err: err.message, callId }, 'deleteCall failed'),
+          );
+          // Skip transcript DB insert + analyzeCall — bill minutes only.
+          return { ok: true, recordingDeclined: true };
+        }
 
         if (orgId && callId && transcript) {
           const metadata = (call as RetellCallData & { metadata?: Record<string, unknown> }).metadata;
@@ -728,5 +751,52 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       } as Parameters<typeof appendTraceEvent>[0]);
       return result;
     }
+  });
+
+  // ── recording_declined ─────────────────────────────────────────────────
+  // Agent invokes this when the caller withdraws consent to recording.
+  // We persist a flag keyed by call_id; call_ended handler reads it,
+  // skips transcript DB insert + analyzeCall, and DELETEs the call from
+  // Retell so audio + transcript are scrubbed.
+  app.post('/retell/tools/recording.declined', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!verifyRetellToolRequest(req as RawBodyRequest)) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const body = req.body as RetellEventBody;
+    const args = retellArgs(body);
+    const callId = getRetellCallId(body, args);
+    const agentId = getRetellAgentId(body, args);
+    const signedTenantId = getSignedToolTenantId(req);
+    const orgId = agentId
+      ? await getOrgIdByAgentId(agentId)
+      : signedTenantId
+        ? await getOrgIdByTenantId(signedTenantId)
+        : null;
+
+    if (!callId) {
+      req.log.warn({ agentId }, 'recording.declined: no call_id in body');
+      return { ok: true };
+    }
+
+    if (pool) {
+      await pool.query(
+        `INSERT INTO recording_declined_calls (call_id, org_id, tenant_id)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (call_id) DO NOTHING`,
+        [callId, orgId, signedTenantId ?? null],
+      ).catch((err: Error) => req.log.error({ err: err.message, callId }, 'recording_declined_calls insert failed'));
+    }
+
+    await appendTraceEvent({
+      type: 'tool_call',
+      sessionId: callId,
+      tenantId: orgId ?? undefined,
+      tool: 'recording.declined',
+      input: args,
+      at: now(),
+    } as Parameters<typeof appendTraceEvent>[0]);
+
+    return { ok: true };
   });
 }
