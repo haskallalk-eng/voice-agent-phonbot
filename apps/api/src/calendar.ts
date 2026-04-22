@@ -668,15 +668,45 @@ function parseAbsoluteSlotTime(value: string): Date | null {
 }
 
 function buildLocalDate(year: number, month: number, day: number, time: { hour: number; minute: number }): Date | null {
-  const result = new Date(year, month - 1, day, time.hour, time.minute, 0, 0);
-  if (
-    result.getFullYear() !== year ||
-    result.getMonth() !== month - 1 ||
-    result.getDate() !== day
-  ) {
-    return null;
-  }
+  const result = berlinLocalTimeToDate(year, month, day, time.hour, time.minute);
+  const parts = berlinParts(result);
+  if (parts.year !== year || parts.month !== month || parts.day !== day) return null;
   return result;
+}
+
+function berlinParts(date: Date): { year: number; month: number; day: number; hour: number; minute: number } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Berlin',
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).formatToParts(date);
+  const value = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  return {
+    year: value('year'),
+    month: value('month'),
+    day: value('day'),
+    hour: value('hour'),
+    minute: value('minute'),
+  };
+}
+
+function berlinOffsetMs(date: Date): number {
+  const parts = berlinParts(date);
+  const asUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+  return asUtc - date.getTime();
+}
+
+function berlinLocalTimeToDate(year: number, month: number, day: number, hour: number, minute: number): Date {
+  const localAsUtc = Date.UTC(year, month - 1, day, hour, minute, 0, 0);
+  let instant = new Date(localAsUtc);
+  for (let i = 0; i < 2; i++) {
+    instant = new Date(localAsUtc - berlinOffsetMs(instant));
+  }
+  return instant;
 }
 
 // ── Chipy Calendar helpers ───────────────────────────────────────────────────
@@ -818,16 +848,13 @@ function requestedDateKey(opts: { date?: string; range?: string; service?: strin
 }
 
 function localDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  const parts = berlinParts(date);
+  return `${parts.year}-${parts.month.toString().padStart(2, '0')}-${parts.day.toString().padStart(2, '0')}`;
 }
 
 function localTimeKey(date: Date): string {
-  const hour = date.getHours().toString().padStart(2, '0');
-  const minute = date.getMinutes().toString().padStart(2, '0');
-  return `${hour}:${minute}`;
+  const parts = berlinParts(date);
+  return `${parts.hour.toString().padStart(2, '0')}:${parts.minute.toString().padStart(2, '0')}`;
 }
 
 async function isChipySlotAvailable(orgId: string, slotTime: Date): Promise<boolean> {
