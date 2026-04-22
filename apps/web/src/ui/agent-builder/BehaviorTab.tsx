@@ -1,5 +1,11 @@
-import React from 'react';
-import type { AgentConfig } from '../../lib/api.js';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  getInsights,
+  applyInsightSuggestion,
+  rejectInsightSuggestion,
+  type AgentConfig,
+  type PromptSuggestion,
+} from '../../lib/api.js';
 import {
   SectionCard, TextArea, Input, Toggle,
   PROMPT_TEMPLATES, PROMPT_SECTIONS, KNOWN_TOOLS,
@@ -12,6 +18,104 @@ export interface BehaviorTabProps {
   onUpdate: (patch: Partial<AgentConfig>) => void;
   onTogglePromptSection: (sectionId: string) => void;
   onSetActivePromptSections: (sections: Set<string>) => void;
+  /** Parent refetches the agent config so the textarea shows the new prompt
+   *  after a suggestion is applied server-side (jsonb_set on agent_configs). */
+  onConfigRefresh?: () => void | Promise<void>;
+}
+
+// Suggestion banner — surfaces pending prompt-suggestions directly in the
+// Behavior tab instead of hiding them under the Insights page. Apply/Reject
+// hits the same /insights/suggestions/:id/* endpoints as the full page;
+// on apply we ask the parent to re-read the agent config so the textarea
+// reflects the server-side change.
+function SuggestionBanner({
+  suggestions,
+  onApply,
+  onReject,
+}: {
+  suggestions: PromptSuggestion[];
+  onApply: (id: string) => Promise<void>;
+  onReject: (id: string) => Promise<void>;
+}) {
+  const [loading, setLoading] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(true);
+  if (!suggestions.length) return null;
+  const s = suggestions[0]!; // focus on the newest; deeper list lives in /insights
+
+  return (
+    <div
+      className="relative glass rounded-2xl p-5 mb-5 overflow-hidden"
+      style={{
+        border: '1px solid rgba(249,115,22,0.25)',
+        background: 'linear-gradient(135deg, rgba(249,115,22,0.06) 0%, rgba(6,182,212,0.04) 100%)',
+      }}
+    >
+      {/* Soft glow edge */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-16 -right-16 w-48 h-48 rounded-full blur-3xl opacity-50"
+        style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.25) 0%, transparent 70%)' }}
+      />
+      <div className="relative flex items-start gap-3">
+        <div
+          className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center"
+          style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.2), rgba(6,182,212,0.15))', border: '1px solid rgba(249,115,22,0.2)' }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="text-orange-300">
+            <path d="M12 2l2.39 6.95H21l-5.3 4.38L17.4 20 12 15.9 6.6 20l1.7-6.67L3 8.95h6.61z" />
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-orange-300/80">Chipy hat was gelernt</span>
+            {suggestions.length > 1 && (
+              <span className="text-[10px] text-white/40">· {suggestions.length - 1} weitere</span>
+            )}
+          </div>
+          <p className="text-sm text-white/80 font-medium leading-snug">{s.issue_summary}</p>
+          {expanded && (
+            <div className="mt-3 rounded-xl bg-black/30 border border-white/[0.06] p-3">
+              <p className="text-[10px] uppercase tracking-wider text-white/30 mb-1.5">Vorgeschlagene Prompt-Ergänzung</p>
+              <p className="text-xs text-white/70 font-mono leading-relaxed whitespace-pre-wrap">{s.suggested_addition}</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="relative mt-4 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={loading !== null}
+          onClick={async () => {
+            setLoading('apply');
+            try { await onApply(s.id); } finally { setLoading(null); }
+          }}
+          className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(249,115,22,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+        >
+          {loading === 'apply' ? 'Übernimmt…' : 'Übernehmen'}
+        </button>
+        <button
+          type="button"
+          disabled={loading !== null}
+          onClick={async () => {
+            setLoading('reject');
+            try { await onReject(s.id); } finally { setLoading(null); }
+          }}
+          className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-medium text-white/55 border border-white/10 bg-white/[0.03] hover:text-white/80 hover:bg-white/[0.06] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Ablehnen
+        </button>
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="ml-auto text-[11px] text-white/40 hover:text-white/70 transition-colors"
+        >
+          {expanded ? 'Zusammenklappen' : 'Details zeigen'}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export function BehaviorTab({
@@ -20,9 +124,37 @@ export function BehaviorTab({
   onUpdate,
   onTogglePromptSection,
   onSetActivePromptSections,
+  onConfigRefresh,
 }: BehaviorTabProps) {
+  const [suggestions, setSuggestions] = useState<PromptSuggestion[]>([]);
+
+  const reloadSuggestions = useCallback(() => {
+    getInsights()
+      .then((d) => setSuggestions(d.suggestions.filter((s) => s.status === 'pending')))
+      .catch(() => { /* ignore — tab still works without the banner */ });
+  }, []);
+
+  useEffect(() => { reloadSuggestions(); }, [reloadSuggestions]);
+
+  const handleApply = useCallback(async (id: string) => {
+    await applyInsightSuggestion(id);
+    // Optimistically drop the applied row so the banner disappears even if
+    // the insight-refetch is slow. Then refetch config from server so the
+    // TextArea re-renders with the appended text.
+    setSuggestions((prev) => prev.filter((s) => s.id !== id));
+    await onConfigRefresh?.();
+    reloadSuggestions();
+  }, [onConfigRefresh, reloadSuggestions]);
+
+  const handleReject = useCallback(async (id: string) => {
+    await rejectInsightSuggestion(id);
+    setSuggestions((prev) => prev.filter((s) => s.id !== id));
+    reloadSuggestions();
+  }, [reloadSuggestions]);
+
   return (
     <>
+      <SuggestionBanner suggestions={suggestions} onApply={handleApply} onReject={handleReject} />
       {/* Base Role */}
       <SectionCard title="Grundrolle" icon={IconTemplate} collapsible>
         <p className="text-xs text-white/40 mb-3">Legt fest wofür der Agent hauptsächlich eingesetzt wird — setzt den Prompt zurück.</p>
