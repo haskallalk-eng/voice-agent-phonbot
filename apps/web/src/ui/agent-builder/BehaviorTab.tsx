@@ -38,6 +38,26 @@ export interface BehaviorTabProps {
 // we don't have to redesign on the day that changes.
 const MANUAL_PREFIX_RE = /^\[MANUAL:(\w+)\]\s*/;
 
+// Detect placeholders in a suggestion that the customer is expected to fill
+// before it makes sense to apply. Chipy sometimes drafts "Wenn nach Parkplätzen
+// gefragt wird, sage: [Parkinfo hier eintragen]" — applying that verbatim
+// would be worse than not having the suggestion at all. The banner disables
+// Übernehmen until the placeholder is replaced with real content.
+function unfilledPlaceholderHint(text: string): string | null {
+  if (!text || !text.trim()) return 'Bitte Text eintragen — Chipy hat nichts, womit er arbeiten könnte.';
+  // Curly-brace template var: {{INSERT_INFO}}
+  if (/\{\{[^{}]+\}\}/.test(text)) return 'Ersetze die Platzhalter in doppelten geschweiften Klammern mit den echten Infos.';
+  // Bracket instruction — lowercased keyword list covers the variants Chipy uses
+  if (/\[[^\]]*(eintragen|ergänzen|einfügen|ausfüllen|ergaenzen|einfuegen|bitte|hier)[^\]]*\]/i.test(text)) {
+    return 'Der Platzhalter in eckigen Klammern muss durch echte Infos ersetzt werden, bevor du übernehmen kannst.';
+  }
+  // Placeholder words alone (uppercase constants Chipy sometimes puts inline)
+  if (/\b(HIER_EINSETZEN|BITTE_EINTRAGEN|TODO|FIXME)\b/.test(text)) {
+    return 'Der Platzhalter muss durch echte Infos ersetzt werden, bevor du übernehmen kannst.';
+  }
+  return null;
+}
+
 type SuggestionKind =
   | { kind: 'prompt_addition'; addition: string }
   | { kind: 'manual_setup'; route: string; instruction: string };
@@ -79,6 +99,10 @@ function SuggestionBanner({
   const displayText = editedText ?? (kind.kind === 'manual_setup' ? kind.instruction : kind.addition);
   const originalText = kind.kind === 'manual_setup' ? kind.instruction : kind.addition;
   const dirty = editedText !== null && editedText !== originalText;
+  // Only gate the prompt-addition flow — manual-setup has its own "Zur
+  // Einstellung" path where the filling happens on the target tab.
+  const placeholderHint = kind.kind === 'prompt_addition' ? unfilledPlaceholderHint(displayText) : null;
+  const canApply = !placeholderHint;
 
   return (
     <div
@@ -154,18 +178,27 @@ function SuggestionBanner({
 
       <div className="relative mt-4 flex flex-wrap items-center gap-2">
         {kind.kind === 'prompt_addition' ? (
-          <button
-            type="button"
-            disabled={loading !== null || displayText.trim().length === 0}
-            onClick={async () => {
-              setLoading('apply');
-              try { await onApply(s.id, dirty ? displayText : undefined); } finally { setLoading(null); }
-            }}
-            className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(249,115,22,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
-          >
-            {loading === 'apply' ? 'Übernimmt…' : dirty ? 'Mit deiner Version übernehmen' : 'Übernehmen'}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={loading !== null || !canApply}
+              title={placeholderHint ?? undefined}
+              onClick={async () => {
+                if (!canApply) return;
+                setLoading('apply');
+                try { await onApply(s.id, dirty ? displayText : undefined); } finally { setLoading(null); }
+              }}
+              className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(249,115,22,0.35)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none"
+              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+            >
+              {loading === 'apply' ? 'Übernimmt…' : dirty ? 'Mit deiner Version übernehmen' : 'Übernehmen'}
+            </button>
+            {placeholderHint && (
+              <span className="text-[11px] text-amber-300/85">
+                {placeholderHint}
+              </span>
+            )}
+          </div>
         ) : (
           <button
             type="button"

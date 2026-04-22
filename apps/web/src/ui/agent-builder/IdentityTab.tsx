@@ -3,6 +3,7 @@ import type { AgentConfig, Voice } from '../../lib/api.js';
 import { SectionCard, Field, Input, TextArea, Select, Badge, LANGUAGES, LANGUAGE_VOICE_RECOMMENDATIONS, IconAgent, IconBuilding } from './shared.js';
 import { VoiceDropdown } from './VoiceDropdown.js';
 import { VoiceClonePanel } from './VoiceClonePanel.js';
+import { OpeningHoursEditor } from './OpeningHoursEditor.js';
 
 export interface IdentityTabProps {
   config: AgentConfig;
@@ -90,7 +91,10 @@ export function IdentityTab({
             <TextArea rows={2} value={config.businessDescription} onChange={(e) => onUpdate({ businessDescription: e.target.value })} placeholder="Was macht euer Unternehmen?" />
           </Field>
           <Field label="Öffnungszeiten">
-            <TextArea rows={2} value={config.openingHours} onChange={(e) => onUpdate({ openingHours: e.target.value })} placeholder="Mo–Fr 9–18 Uhr, Sa 10–14 Uhr" />
+            <OpeningHoursEditor
+              value={config.openingHours}
+              onChange={(v) => onUpdate({ openingHours: v })}
+            />
           </Field>
           <Field label="Services / Angebote">
             <TextArea rows={2} value={config.servicesText} onChange={(e) => onUpdate({ servicesText: e.target.value })} placeholder="Haarschnitt, Färben, Beratung…" />
