@@ -4,7 +4,6 @@ import {
   SectionCard, Field, Input, Select, Toggle, Slider,
   IconMic, IconVolume, IconSliders, IconBookOpen,
   IconPhoneOff, IconBuilding, IconAgent, IconGlobe,
-  IconInsights,
 } from './shared.js';
 
 export interface TechnicalTabProps {
@@ -75,19 +74,6 @@ export function TechnicalTab({ config, onUpdate }: TechnicalTabProps) {
               Anrufer können über die Telefontasten navigieren (z.B. „Drücken Sie 1 für Termine\“).
             </div>
           )}
-        </div>
-      </SectionCard>
-
-      <SectionCard title="KI-Optimierung" icon={IconInsights}>
-        <div className="space-y-4">
-          <Toggle checked={config.autoApplyInsights ?? false}
-            onChange={(v) => onUpdate({ autoApplyInsights: v })}
-            label="Prompt automatisch optimieren" />
-          <div className="bg-white/5 rounded-lg px-4 py-3 text-xs text-white/50">
-            {config.autoApplyInsights
-              ? 'Die KI analysiert Gespräche und verbessert den Prompt automatisch wenn Probleme wiederholt auftreten.'
-              : 'Die KI analysiert Gespräche und schlägt Verbesserungen vor. Du bestätigst jede Änderung manuell im Verhalten-Tab.'}
-          </div>
         </div>
       </SectionCard>
 

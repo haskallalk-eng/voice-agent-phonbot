@@ -61,15 +61,24 @@ function SuggestionBanner({
   onNavigate,
 }: {
   suggestions: PromptSuggestion[];
-  onApply: (id: string) => Promise<void>;
+  onApply: (id: string, customText?: string) => Promise<void>;
   onReject: (id: string) => Promise<void>;
   onNavigate?: (route: string) => void;
 }) {
   const [loading, setLoading] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(true);
+  const [editedText, setEditedText] = useState<string | null>(null);
+  // Reset the per-suggestion edit buffer whenever a new suggestion surfaces.
+  // Without this, dismissing suggestion A and then seeing suggestion B would
+  // show A's edited text in B's textarea.
+  useEffect(() => { setEditedText(null); }, [suggestions[0]?.id]);
+
   if (!suggestions.length) return null;
   const s = suggestions[0]!; // focus on the newest; deeper list lives in /insights
   const kind = classifySuggestion(s);
+  const displayText = editedText ?? (kind.kind === 'manual_setup' ? kind.instruction : kind.addition);
+  const originalText = kind.kind === 'manual_setup' ? kind.instruction : kind.addition;
+  const dirty = editedText !== null && editedText !== originalText;
 
   return (
     <div
@@ -111,12 +120,33 @@ function SuggestionBanner({
           <p className="text-sm text-white/85 font-medium leading-snug">{s.issue_summary}</p>
           {expanded && (
             <div className="mt-3 rounded-xl bg-black/30 border border-white/[0.06] p-3">
-              <p className="text-[10px] uppercase tracking-wider text-white/30 mb-1.5">
-                {kind.kind === 'manual_setup' ? 'Anleitung' : 'Vorgeschlagene Prompt-Ergänzung'}
-              </p>
-              <p className="text-xs text-white/70 font-mono leading-relaxed whitespace-pre-wrap">
-                {kind.kind === 'manual_setup' ? kind.instruction : kind.addition}
-              </p>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[10px] uppercase tracking-wider text-white/30">
+                  {kind.kind === 'manual_setup' ? 'Anleitung' : 'Prompt-Ergänzung — du kannst sie vor dem Übernehmen anpassen'}
+                </p>
+                {dirty && (
+                  <button
+                    type="button"
+                    onClick={() => setEditedText(null)}
+                    className="text-[10px] text-white/40 hover:text-white/70 transition-colors"
+                  >
+                    Zurücksetzen
+                  </button>
+                )}
+              </div>
+              {kind.kind === 'manual_setup' ? (
+                <p className="text-xs text-white/70 font-mono leading-relaxed whitespace-pre-wrap">
+                  {kind.instruction}
+                </p>
+              ) : (
+                <textarea
+                  value={displayText}
+                  onChange={(e) => setEditedText(e.target.value)}
+                  rows={Math.max(3, Math.min(10, displayText.split('\n').length + 1))}
+                  className="w-full resize-y rounded-lg bg-black/40 border border-white/[0.08] focus:border-orange-500/40 focus:ring-1 focus:ring-orange-500/30 outline-none text-xs text-white/80 font-mono leading-relaxed p-2.5"
+                  spellCheck={false}
+                />
+              )}
             </div>
           )}
         </div>
@@ -126,15 +156,15 @@ function SuggestionBanner({
         {kind.kind === 'prompt_addition' ? (
           <button
             type="button"
-            disabled={loading !== null}
+            disabled={loading !== null || displayText.trim().length === 0}
             onClick={async () => {
               setLoading('apply');
-              try { await onApply(s.id); } finally { setLoading(null); }
+              try { await onApply(s.id, dirty ? displayText : undefined); } finally { setLoading(null); }
             }}
             className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(249,115,22,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
           >
-            {loading === 'apply' ? 'Übernimmt…' : 'Übernehmen'}
+            {loading === 'apply' ? 'Übernimmt…' : dirty ? 'Mit deiner Version übernehmen' : 'Übernehmen'}
           </button>
         ) : (
           <button
@@ -189,8 +219,8 @@ export function BehaviorTab({
 
   useEffect(() => { reloadSuggestions(); }, [reloadSuggestions]);
 
-  const handleApply = useCallback(async (id: string) => {
-    await applyInsightSuggestion(id);
+  const handleApply = useCallback(async (id: string, customText?: string) => {
+    await applyInsightSuggestion(id, customText);
     // Optimistically drop the applied row so the banner disappears even if
     // the insight-refetch is slow. Then refetch config from server so the
     // TextArea re-renders with the appended text.
