@@ -16,7 +16,11 @@ import { stripe, PLANS, type PlanId } from './billing.js';
 const ACCESS_TOKEN_TTL = '1h';
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const REFRESH_COOKIE = 'vas_refresh';
-const REFRESH_COOKIE_PATH = '/auth'; // sent only to /auth/refresh + /auth/logout
+// Browser-visible auth URLs are /api/auth/*; Caddy strips /api before the API
+// sees the request. Cookie Path matching happens in the browser before proxying,
+// so this must use /api/auth, not the internal Fastify route /auth.
+const REFRESH_COOKIE_PATH = '/api/auth';
+const LEGACY_REFRESH_COOKIE_PATH = '/auth';
 
 function refreshCookieOptions() {
   return {
@@ -27,6 +31,13 @@ function refreshCookieOptions() {
     maxAge: REFRESH_TOKEN_TTL_MS / 1000,
     signed: true,
   };
+}
+
+function clearRefreshCookie(reply: FastifyReply) {
+  reply.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+  // Clean up cookies issued before 2026-04-22 that used the internal route
+  // path. They were not sent to /api/auth/refresh, which caused logout on reload.
+  reply.clearCookie(REFRESH_COOKIE, { path: LEGACY_REFRESH_COOKIE_PATH });
 }
 
 function hashToken(raw: string): string {
@@ -669,7 +680,7 @@ export async function registerAuth(app: FastifyInstance) {
         [hash],
       );
       if (!rotateRes.rowCount) {
-        reply.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+        clearRefreshCookie(reply);
         return reply.status(401).send({ error: 'Refresh token invalid or expired' });
       }
       const userId = rotateRes.rows[0].user_id as string;
@@ -679,7 +690,7 @@ export async function registerAuth(app: FastifyInstance) {
         [userId],
       );
       if (!userRes.rowCount) {
-        reply.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+        clearRefreshCookie(reply);
         return reply.status(401).send({ error: 'User no longer active' });
       }
       const user = userRes.rows[0] as { id: string; role: 'owner' | 'admin' | 'member'; org_id: string };
@@ -688,7 +699,7 @@ export async function registerAuth(app: FastifyInstance) {
       return reply.send({ token });
     } catch (err) {
       req.log.warn({ err: (err as Error).message }, '/auth/refresh failed unexpectedly');
-      reply.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+      clearRefreshCookie(reply);
       return reply.status(401).send({ error: 'Refresh failed' });
     }
   });
@@ -708,7 +719,7 @@ export async function registerAuth(app: FastifyInstance) {
         ).catch(() => {/* non-critical */});
       }
     }
-    reply.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
+    clearRefreshCookie(reply);
     return reply.send({ ok: true });
   });
 

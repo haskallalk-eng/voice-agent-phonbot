@@ -45,7 +45,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   // supported in all modern browsers; we use `any` fallback to combine with a
   // caller-supplied signal if one was passed.
   // credentials: 'include' so the httpOnly refresh-token cookie is sent on
-  // /auth/refresh and /auth/logout (set by backend with path=/auth, sameSite=strict).
+  // /api/auth/refresh and /api/auth/logout (backend cookie path=/api/auth).
   const res = await fetch(`/api${path}`, {
     ...init,
     credentials: 'include',
