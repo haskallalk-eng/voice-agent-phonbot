@@ -458,8 +458,24 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
               <t.Icon size={14} className={tab === t.id ? 'text-orange-400' : ''} />
               {t.label}
               {t.id === 'behavior' && pendingSuggestions > 0 && (
-                <span className="ml-1 md:ml-0 md:absolute md:right-2 md:top-1/2 md:-translate-y-1/2 flex items-center justify-center w-4 h-4 rounded-full bg-orange-500 text-[9px] font-bold text-white">
-                  {pendingSuggestions > 9 ? '9+' : pendingSuggestions}
+                <span
+                  aria-label={`${pendingSuggestions} Vorschlag${pendingSuggestions === 1 ? '' : 'e'} wartet`}
+                  title={`${pendingSuggestions} neue${pendingSuggestions === 1 ? 'r' : ''} Vorschlag${pendingSuggestions === 1 ? '' : 'e'}`}
+                  className="ml-1 md:ml-0 md:absolute md:right-2 md:top-1/2 md:-translate-y-1/2 inline-flex items-center gap-1 breathe"
+                >
+                  {/* Chipy-design: gradient sparkle instead of a loud counter pill.
+                     The banner inside the tab shows the detail, so the badge only
+                     needs to hint that something is there — breathe-pulse + dot. */}
+                  <span
+                    className="w-2 h-2 rounded-full"
+                    style={{
+                      background: 'linear-gradient(135deg, #F97316, #06B6D4)',
+                      boxShadow: '0 0 8px rgba(249,115,22,0.55)',
+                    }}
+                  />
+                  {pendingSuggestions > 1 && (
+                    <span className="text-[9px] font-semibold text-orange-300/90 leading-none">+{pendingSuggestions - 1}</span>
+                  )}
                 </span>
               )}
             </button>
@@ -500,6 +516,13 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
           onUpdate={update}
           onTogglePromptSection={togglePromptSection}
           onSetActivePromptSections={setActivePromptSections}
+          onNavigateTab={(route) => {
+            // Suggestion banner asked us to send the user to another tab
+            // (e.g. to fill in opening hours). We only honor a whitelist
+            // of known tab ids to stay resilient to backend-side typos.
+            const KNOWN = new Set(['identity', 'knowledge', 'behavior', 'capabilities', 'privacy', 'technical', 'webhooks', 'preview']);
+            if (KNOWN.has(route)) setTab(route as typeof tab);
+          }}
           onConfigRefresh={async () => {
             // Re-read agent config so the TextArea shows the server-side
             // prompt change a suggestion apply just made. Also refresh the
