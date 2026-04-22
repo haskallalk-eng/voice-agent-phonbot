@@ -138,12 +138,14 @@ export const IconPlay = icon(() => (
   </>
 ));
 
-/** Open book with small star */
+/** Stacked books with a subtle bookmark */
 export const IconKnowledge = icon(() => (
   <>
-    <path d="M12 20h-7a2 2 0 01-2-2V6a2 2 0 012-2h5l2 3h7a2 2 0 012 2v3" />
-    <path d="M12 10v10" />
-    <polygon points="18 15 19.5 18 23 18.5 20.5 21 21 24.5 18 23 15 24.5 15.5 21 13 18.5 16.5 18 18 15" transform="scale(0.55) translate(14 6)" />
+    <path d="M7 5.5h10.5a1.75 1.75 0 010 3.5H7a1.75 1.75 0 010-3.5z" />
+    <path d="M5.5 10.25h12a1.75 1.75 0 010 3.5h-12a1.75 1.75 0 010-3.5z" />
+    <path d="M6.5 15h12a1.75 1.75 0 010 3.5h-12a1.75 1.75 0 010-3.5z" />
+    <path d="M8 9h8.75M6.75 13.75H16M7.75 18.5h9.75" strokeWidth={1.2} />
+    <path d="M15.25 5.5V9l1.05-.72L17.35 9V5.5" strokeWidth={1.25} />
   </>
 ));
 
