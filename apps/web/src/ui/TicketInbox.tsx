@@ -20,6 +20,27 @@ const STATUS_BADGE: Record<DisplayStatus, string> = {
   done: 'bg-white/5 text-white/40 border border-white/10',
 };
 
+// 'unknown' occasionally arrives as a literal string for fields that
+// Chipy couldn't capture on the call. Treat it the same as null/empty
+// so the card shows a clean '–' and the ticket is flagged incomplete.
+function fieldValue(v: string | null | undefined): string {
+  if (v === null || v === undefined) return '–';
+  const trimmed = v.trim();
+  if (!trimmed) return '–';
+  if (trimmed.toLowerCase() === 'unknown' || trimmed.toLowerCase() === 'unbekannt') return '–';
+  return trimmed;
+}
+// A ticket is 'incomplete' whenever we don't have a dial-able phone
+// number — that's the one field a callback actually needs, and Chipy is
+// supposed to read it back on the call and write it down. If it's
+// empty the agent most likely hung up before the number was captured.
+function phoneUsable(phone: string | null | undefined): boolean {
+  if (!phone) return false;
+  const trimmed = phone.trim();
+  if (!trimmed) return false;
+  return trimmed.toLowerCase() !== 'unknown' && trimmed.toLowerCase() !== 'unbekannt';
+}
+
 export function TicketInbox() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
@@ -167,7 +188,8 @@ function TicketCard({
 }) {
   const [copyResult, setCopyResult] = useState<'ok' | 'error' | null>(null);
   const dStatus = displayStatus(t.status);
-  const hasPhone = Boolean(t.customer_phone && t.customer_phone.trim().length > 0);
+  const hasPhone = phoneUsable(t.customer_phone);
+  const isIncomplete = !hasPhone;
 
   async function handleCopyNumber() {
     if (!hasPhone) return;
@@ -183,7 +205,13 @@ function TicketCard({
   }
 
   return (
-    <div className="glass rounded-2xl p-5 transition-colors hover:border-white/15">
+    <div
+      className={`glass rounded-2xl p-5 transition-all duration-200 ${
+        isIncomplete
+          ? 'opacity-60 hover:opacity-80 grayscale-[40%]'
+          : 'hover:border-white/15'
+      }`}
+    >
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center flex-wrap gap-x-3 gap-y-1.5 mb-3">
@@ -191,6 +219,15 @@ function TicketCard({
             <span className={`inline-flex items-center text-xs px-2.5 py-0.5 rounded-full font-medium ${STATUS_BADGE[dStatus]}`}>
               {STATUS_LABELS[dStatus]}
             </span>
+            {isIncomplete && (
+              <span
+                className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-white/15 bg-white/[0.04] text-white/50"
+                title="Chipy konnte die Rufnummer nicht erfassen — Ticket ist unvollständig."
+              >
+                <IconAlertTriangle size={11} />
+                Unvollständig
+              </span>
+            )}
             {t.reason && (
               <span className="text-xs text-white/35 truncate">{t.reason}</span>
             )}
@@ -199,19 +236,21 @@ function TicketCard({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
             <div>
               <span className="text-white/40">Name:</span>{' '}
-              <span className="text-white/80">{t.customer_name ?? '–'}</span>
+              <span className="text-white/80">{fieldValue(t.customer_name)}</span>
             </div>
             <div>
               <span className="text-white/40">Telefon:</span>{' '}
-              <span className="text-white/80 font-mono tabular-nums">{t.customer_phone}</span>
+              <span className={`${hasPhone ? 'text-white/80' : 'text-white/35'} font-mono tabular-nums`}>
+                {hasPhone ? t.customer_phone : '–'}
+              </span>
             </div>
             <div>
               <span className="text-white/40">Wunschtermin:</span>{' '}
-              <span className="text-white/80">{t.preferred_time ?? '–'}</span>
+              <span className="text-white/80">{fieldValue(t.preferred_time)}</span>
             </div>
             <div>
               <span className="text-white/40">Service:</span>{' '}
-              <span className="text-white/80">{t.service ?? '–'}</span>
+              <span className="text-white/80">{fieldValue(t.service)}</span>
             </div>
           </div>
 
