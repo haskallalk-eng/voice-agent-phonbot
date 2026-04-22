@@ -16,7 +16,6 @@ import { BillingPage } from './BillingPage.js';
 import { PhoneManager } from './PhoneManager.js';
 import { CalendarPage } from './CalendarPage.js';
 import { InsightsPage } from './InsightsPage.js';
-import { OutboundPage } from './OutboundPage.js';
 import { ToastProvider } from './Toast.js';
 import { FoxLogo, PhonbotBrand } from './FoxLogo.js';
 import { ConnectionStatus } from './ConnectionStatus.js';
@@ -78,11 +77,11 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-export type Page = 'home' | 'agent' | 'test' | 'tickets' | 'logs' | 'billing' | 'phone' | 'calendar' | 'insights' | 'outbound';
+export type Page = 'home' | 'agent' | 'test' | 'tickets' | 'logs' | 'billing' | 'phone' | 'calendar' | 'insights';
 
 function Dashboard() {
   const { user, org, logout } = useAuth();
-  const VALID_PAGES: Page[] = ['home', 'agent', 'test', 'tickets', 'logs', 'billing', 'phone', 'calendar', 'insights', 'outbound'];
+  const VALID_PAGES: Page[] = ['home', 'agent', 'test', 'tickets', 'logs', 'billing', 'phone', 'calendar', 'insights'];
   const initialPage = (): Page => {
     const params = new URLSearchParams(window.location.search);
     if (params.has('calendarConnected') || params.has('calendarError')) return 'calendar';
@@ -286,7 +285,6 @@ function Dashboard() {
           {page === 'phone' && <PhoneManager onNavigate={setPage as (page: string) => void} />}
           {page === 'calendar' && <CalendarPage />}
           {page === 'insights' && <InsightsPage />}
-          {page === 'outbound' && <OutboundPage />}
         </div>
       </main>
 
@@ -299,7 +297,33 @@ function Dashboard() {
 type Gate = 'landing' | 'login' | 'register' | 'contact' | 'app';
 
 function AppGate() {
-  const { token, user, bootstrapping } = useAuth();
+  const { token, user, bootstrapping, finalizeCheckout } = useAuth();
+  // Stripe success redirect. Stripe substitutes {CHECKOUT_SESSION_ID} for the
+  // real id. We finalize the account creation exactly once on mount and strip
+  // the param so a reload doesn't re-fire.
+  const [finalizing, setFinalizing] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const sid = new URLSearchParams(window.location.search).get('checkoutSession');
+    if (!sid || sid === '{CHECKOUT_SESSION_ID}') return null;
+    return sid;
+  });
+  useEffect(() => {
+    if (!finalizing) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await finalizeCheckout(finalizing);
+      } catch { /* user will see the landing page with an error toast-less — non-critical */ }
+      finally {
+        if (cancelled) return;
+        const url = new URL(window.location.href);
+        url.searchParams.delete('checkoutSession');
+        window.history.replaceState({}, '', url.toString());
+        setFinalizing(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [finalizing, finalizeCheckout]);
   // Initial gate can be deep-linked from static sub-pages (industry landings) via
   // ?page=contact | login | register. Let /?page=contact → ContactPage on first load
   // so the industry-page nav can link straight to those gates.
@@ -339,11 +363,14 @@ function AppGate() {
 
   // Wait for the auth bootstrap to finish before deciding landing-vs-Dashboard.
   // Without this the user briefly sees the landing page on a reload even though
-  // they have a valid refresh cookie (F-14).
-  if (bootstrapping || (token && !user)) {
+  // they have a valid refresh cookie (F-14). Same spinner covers the short
+  // interval during which /auth/finalize-checkout is in-flight after Stripe.
+  if (bootstrapping || (token && !user) || finalizing) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0A0A0F]">
-        <p className="text-white/30 text-sm">Laden…</p>
+        <p className="text-white/30 text-sm">
+          {finalizing ? 'Zahlung bestätigt — dein Konto wird eingerichtet…' : 'Laden…'}
+        </p>
       </div>
     );
   }

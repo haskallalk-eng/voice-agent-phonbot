@@ -359,6 +359,26 @@ async function runMigrationBody() {
     );
   `);
 
+  // Stripe-first registrations: stash credentials + org details here when the
+  // user submits the register form. Real user + org rows are only created
+  // after Stripe checkout succeeds (webhook or finalize-checkout endpoint).
+  // A Stripe cancel leaves the pending row orphaned → cleaned up after 1h.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pending_registrations (
+      id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      email               TEXT NOT NULL,
+      org_name            TEXT NOT NULL,
+      password_hash       TEXT NOT NULL,
+      plan_id             TEXT NOT NULL,
+      billing_interval    TEXT NOT NULL DEFAULT 'month',
+      stripe_session_id   TEXT UNIQUE,
+      stripe_customer_id  TEXT,
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS pending_registrations_email_idx ON pending_registrations(email);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS pending_registrations_session_idx ON pending_registrations(stripe_session_id);`);
+
   // One-time cleanup: delete orphan tickets (org_id IS NULL). These existed from
   // pre-auth days when /tickets was unauthenticated and tenant_id was a free-form
   // string. The legacy "OR (org_id IS NULL AND tenant_id = $orgId::text)" branches

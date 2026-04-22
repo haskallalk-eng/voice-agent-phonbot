@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../lib/auth.js';
-import { forgotPassword, createCheckoutSession } from '../lib/api.js';
+import { forgotPassword, createCheckoutSession, startCheckoutSignup } from '../lib/api.js';
 import { FoxLogo } from './FoxLogo.js';
 
 type Mode = 'login' | 'register';
@@ -39,34 +39,61 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
 
   async function onMainSubmit(data: { orgName: string; email: string; password: string }) {
     setError(null);
+
+    // Check for pricing-card preselection BEFORE hitting any backend. If
+    // the user picked a paid plan, we skip /auth/register entirely: the
+    // account is only materialized after Stripe confirms payment. That way,
+    // a Stripe cancel returns the user to the landing page with no account
+    // persisted at all.
+    let plan: string | null = null;
+    let interval: 'month' | 'year' = 'month';
     try {
+      plan = sessionStorage.getItem('preselectedPlan');
+      const iv = sessionStorage.getItem('preselectedInterval');
+      if (iv === 'year' || iv === 'month') interval = iv;
+    } catch { /* privacy mode */ }
+
+    const wantsCheckoutFirst =
+      mode === 'register' &&
+      !!plan && plan !== 'free' &&
+      ['nummer', 'starter', 'pro', 'agency'].includes(plan);
+
+    try {
+      if (wantsCheckoutFirst) {
+        try {
+          sessionStorage.removeItem('preselectedPlan');
+          sessionStorage.removeItem('preselectedInterval');
+        } catch { /* ignore */ }
+        const { url } = await startCheckoutSignup({
+          orgName: data.orgName,
+          email: data.email,
+          password: data.password,
+          planId: plan as 'nummer' | 'starter' | 'pro' | 'agency',
+          interval,
+        });
+        window.location.href = url;
+        return; // browser navigates away
+      }
+
       if (mode === 'login') {
         await login(data.email, data.password);
       } else {
         await authRegister(data.orgName, data.email, data.password);
       }
-      // If the user came from a pricing card (landing or branch), kick off
-      // Stripe Checkout right after auth succeeds — no detour through
-      // BillingPage. sessionStorage was populated by PricingSection or
-      // the /?page=register&plan=X deep-link in App.tsx. 'free' is skipped
-      // because it doesn't need payment.
-      let plan: string | null = null;
-      let interval: 'month' | 'year' = 'month';
-      try {
-        plan = sessionStorage.getItem('preselectedPlan');
-        const iv = sessionStorage.getItem('preselectedInterval');
-        if (iv === 'year' || iv === 'month') interval = iv;
-        sessionStorage.removeItem('preselectedPlan');
-        sessionStorage.removeItem('preselectedInterval');
-      } catch { /* privacy mode — skip */ }
+
+      // Existing user logging in with a preselected plan still gets sent
+      // through the standard (authenticated) upgrade path.
       if (plan && plan !== 'free') {
+        try {
+          sessionStorage.removeItem('preselectedPlan');
+          sessionStorage.removeItem('preselectedInterval');
+        } catch { /* ignore */ }
         try {
           const { url } = await createCheckoutSession(plan, interval);
           window.location.href = url;
-          return; // browser is about to navigate away — stop here
+          return;
         } catch {
-          // Checkout failed (e.g. backend hiccup). Fall through to the
-          // normal post-auth landing — user can retry via BillingPage.
+          // Fall through to Dashboard — user can retry via BillingPage.
         }
       }
     } catch (err: unknown) {
