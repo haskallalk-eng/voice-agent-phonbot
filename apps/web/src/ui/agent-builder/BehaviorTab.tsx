@@ -21,39 +21,68 @@ export interface BehaviorTabProps {
   /** Parent refetches the agent config so the textarea shows the new prompt
    *  after a suggestion is applied server-side (jsonb_set on agent_configs). */
   onConfigRefresh?: () => void | Promise<void>;
+  /** Called when a manual-setup suggestion's "Zur Einstellung" button fires.
+   *  Route examples: 'identity' | 'knowledge' | 'capabilities' | 'phone'. */
+  onNavigateTab?: (route: string) => void;
+}
+
+// Two kinds of suggestion. Default = prompt_addition (one click → server
+// appends to systemPrompt, banner goes away). manual_setup = something the
+// user has to fill in themselves (e.g. opening hours, a calendar connection);
+// banner persists until they do it OR reject — CTA is a deep-link button
+// instead of Übernehmen.
+//
+// Detection: when the backend flags a suggestion as manual, it prefixes the
+// suggested_addition with `[MANUAL:<route>]` — e.g. `[MANUAL:knowledge]`.
+// Today the backend only produces prompt_addition, but the UI is ready so
+// we don't have to redesign on the day that changes.
+const MANUAL_PREFIX_RE = /^\[MANUAL:(\w+)\]\s*/;
+
+type SuggestionKind =
+  | { kind: 'prompt_addition'; addition: string }
+  | { kind: 'manual_setup'; route: string; instruction: string };
+
+function classifySuggestion(s: PromptSuggestion): SuggestionKind {
+  const m = s.suggested_addition.match(MANUAL_PREFIX_RE);
+  if (m) {
+    return { kind: 'manual_setup', route: m[1] ?? 'identity', instruction: s.suggested_addition.replace(MANUAL_PREFIX_RE, '') };
+  }
+  return { kind: 'prompt_addition', addition: s.suggested_addition };
 }
 
 // Suggestion banner — surfaces pending prompt-suggestions directly in the
-// Behavior tab instead of hiding them under the Insights page. Apply/Reject
-// hits the same /insights/suggestions/:id/* endpoints as the full page;
-// on apply we ask the parent to re-read the agent config so the textarea
-// reflects the server-side change.
+// Behavior tab. Apply/Reject hits /insights/suggestions/:id/* (same as the
+// Insights page). onApply calls the parent's onConfigRefresh after success
+// so the TextArea reflects the server-side jsonb_set immediately.
 function SuggestionBanner({
   suggestions,
   onApply,
   onReject,
+  onNavigate,
 }: {
   suggestions: PromptSuggestion[];
   onApply: (id: string) => Promise<void>;
   onReject: (id: string) => Promise<void>;
+  onNavigate?: (route: string) => void;
 }) {
   const [loading, setLoading] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(true);
   if (!suggestions.length) return null;
   const s = suggestions[0]!; // focus on the newest; deeper list lives in /insights
+  const kind = classifySuggestion(s);
 
   return (
     <div
       className="relative glass rounded-2xl p-5 mb-5 overflow-hidden"
       style={{
-        border: '1px solid rgba(249,115,22,0.25)',
-        background: 'linear-gradient(135deg, rgba(249,115,22,0.06) 0%, rgba(6,182,212,0.04) 100%)',
+        border: '1px solid rgba(249,115,22,0.22)',
+        background: 'linear-gradient(135deg, rgba(249,115,22,0.05) 0%, rgba(6,182,212,0.03) 100%)',
       }}
     >
-      {/* Soft glow edge */}
+      {/* Soft glow edge — hints at the orange→cyan brand without shouting */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -top-16 -right-16 w-48 h-48 rounded-full blur-3xl opacity-50"
+        className="pointer-events-none absolute -top-16 -right-16 w-48 h-48 rounded-full blur-3xl opacity-40"
         style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.25) 0%, transparent 70%)' }}
       />
       <div className="relative flex items-start gap-3">
@@ -66,35 +95,58 @@ function SuggestionBanner({
           </svg>
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] uppercase tracking-wider font-semibold text-orange-300/80">Chipy hat was gelernt</span>
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-orange-300/85">Chipy hat was gelernt</span>
+            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md border ${
+              kind.kind === 'manual_setup'
+                ? 'text-cyan-300/90 bg-cyan-400/10 border-cyan-400/20'
+                : 'text-orange-300/80 bg-orange-400/8 border-orange-400/15'
+            }`}>
+              {kind.kind === 'manual_setup' ? 'Manuelle Anpassung' : 'Auto-Anwendung'}
+            </span>
             {suggestions.length > 1 && (
               <span className="text-[10px] text-white/40">· {suggestions.length - 1} weitere</span>
             )}
           </div>
-          <p className="text-sm text-white/80 font-medium leading-snug">{s.issue_summary}</p>
+          <p className="text-sm text-white/85 font-medium leading-snug">{s.issue_summary}</p>
           {expanded && (
             <div className="mt-3 rounded-xl bg-black/30 border border-white/[0.06] p-3">
-              <p className="text-[10px] uppercase tracking-wider text-white/30 mb-1.5">Vorgeschlagene Prompt-Ergänzung</p>
-              <p className="text-xs text-white/70 font-mono leading-relaxed whitespace-pre-wrap">{s.suggested_addition}</p>
+              <p className="text-[10px] uppercase tracking-wider text-white/30 mb-1.5">
+                {kind.kind === 'manual_setup' ? 'Anleitung' : 'Vorgeschlagene Prompt-Ergänzung'}
+              </p>
+              <p className="text-xs text-white/70 font-mono leading-relaxed whitespace-pre-wrap">
+                {kind.kind === 'manual_setup' ? kind.instruction : kind.addition}
+              </p>
             </div>
           )}
         </div>
       </div>
 
       <div className="relative mt-4 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          disabled={loading !== null}
-          onClick={async () => {
-            setLoading('apply');
-            try { await onApply(s.id); } finally { setLoading(null); }
-          }}
-          className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(249,115,22,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
-        >
-          {loading === 'apply' ? 'Übernimmt…' : 'Übernehmen'}
-        </button>
+        {kind.kind === 'prompt_addition' ? (
+          <button
+            type="button"
+            disabled={loading !== null}
+            onClick={async () => {
+              setLoading('apply');
+              try { await onApply(s.id); } finally { setLoading(null); }
+            }}
+            className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(249,115,22,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+          >
+            {loading === 'apply' ? 'Übernimmt…' : 'Übernehmen'}
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={loading !== null}
+            onClick={() => onNavigate?.(kind.route)}
+            className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(6,182,212,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }}
+          >
+            Zur Einstellung →
+          </button>
+        )}
         <button
           type="button"
           disabled={loading !== null}
@@ -111,7 +163,7 @@ function SuggestionBanner({
           onClick={() => setExpanded((e) => !e)}
           className="ml-auto text-[11px] text-white/40 hover:text-white/70 transition-colors"
         >
-          {expanded ? 'Zusammenklappen' : 'Details zeigen'}
+          {expanded ? 'Weniger' : 'Details'}
         </button>
       </div>
     </div>
@@ -125,6 +177,7 @@ export function BehaviorTab({
   onTogglePromptSection,
   onSetActivePromptSections,
   onConfigRefresh,
+  onNavigateTab,
 }: BehaviorTabProps) {
   const [suggestions, setSuggestions] = useState<PromptSuggestion[]>([]);
 
@@ -154,7 +207,12 @@ export function BehaviorTab({
 
   return (
     <>
-      <SuggestionBanner suggestions={suggestions} onApply={handleApply} onReject={handleReject} />
+      <SuggestionBanner
+        suggestions={suggestions}
+        onApply={handleApply}
+        onReject={handleReject}
+        onNavigate={onNavigateTab}
+      />
       {/* Base Role */}
       <SectionCard title="Grundrolle" icon={IconTemplate} collapsible>
         <p className="text-xs text-white/40 mb-3">Legt fest wofür der Agent hauptsächlich eingesetzt wird — setzt den Prompt zurück.</p>
