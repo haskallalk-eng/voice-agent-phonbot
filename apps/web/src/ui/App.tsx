@@ -296,6 +296,26 @@ function Dashboard() {
 
 type Gate = 'landing' | 'login' | 'register' | 'contact' | 'app';
 
+function readGateFromUrl(): Gate {
+  if (typeof window === 'undefined') return 'landing';
+  const page = new URLSearchParams(window.location.search).get('page');
+  return page === 'contact' || page === 'login' || page === 'register' ? page : 'landing';
+}
+
+function writeGateToUrl(gate: Gate, mode: 'push' | 'replace' = 'push') {
+  if (typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  if (gate === 'landing' || gate === 'app') {
+    url.searchParams.delete('page');
+  } else {
+    url.searchParams.set('page', gate);
+  }
+  const next = url.toString();
+  if (next === window.location.href) return;
+  if (mode === 'replace') window.history.replaceState({}, '', next);
+  else window.history.pushState({}, '', next);
+}
+
 function AppGate() {
   const { token, user, bootstrapping, finalizeCheckout } = useAuth();
   // Stripe success redirect. Stripe substitutes {CHECKOUT_SESSION_ID} for the
@@ -344,12 +364,12 @@ function AppGate() {
       } catch { /* sessionStorage may throw in privacy mode */ }
     }
     if (p === 'contact' || p === 'login' || p === 'register') {
-      // Strip the param so a reload doesn't re-force the gate.
-      const url = new URL(window.location.href);
-      url.searchParams.delete('page');
-      url.searchParams.delete('plan');
-      url.searchParams.delete('interval');
-      window.history.replaceState({}, '', url.toString());
+      if (plan) {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('plan');
+        url.searchParams.delete('interval');
+        window.history.replaceState({}, '', url.toString());
+      }
       return p as Gate;
     }
     if (plan) {
@@ -360,6 +380,17 @@ function AppGate() {
     }
     return 'landing';
   });
+
+  useEffect(() => {
+    const onPopState = () => setGate(readGateFromUrl());
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  function navigateGate(next: Gate) {
+    setGate(next);
+    writeGateToUrl(next);
+  }
 
   // Wait for the auth bootstrap to finish before deciding landing-vs-Dashboard.
   // Without this the user briefly sees the landing page on a reload even though
@@ -380,9 +411,9 @@ function AppGate() {
   if (gate === 'landing') {
     return (
       <LandingPage
-        onGoToRegister={() => setGate('register')}
-        onGoToLogin={() => setGate('login')}
-        onGoToContact={() => setGate('contact')}
+        onGoToRegister={() => navigateGate('register')}
+        onGoToLogin={() => navigateGate('login')}
+        onGoToContact={() => navigateGate('contact')}
       />
     );
   }
@@ -390,16 +421,17 @@ function AppGate() {
   if (gate === 'contact') {
     return (
       <ContactPage
-        onGoToRegister={() => setGate('register')}
-        onGoToLogin={() => setGate('login')}
-        onBack={() => setGate('landing')}
+        onGoToRegister={() => navigateGate('register')}
+        onGoToLogin={() => navigateGate('login')}
+        onBack={() => navigateGate('landing')}
       />
     );
   }
 
   return (
     <LoginPage
-      onGoToLanding={() => setGate('landing')}
+      onGoToLanding={() => navigateGate('landing')}
+      onModeChange={(next) => navigateGate(next)}
       initialMode={gate === 'register' ? 'register' : 'login'}
     />
   );
