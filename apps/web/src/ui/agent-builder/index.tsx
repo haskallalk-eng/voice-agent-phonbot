@@ -20,6 +20,7 @@ import {
 } from '../../lib/api.js';
 import { isPremiumVoice, voiceSurcharge } from './VoiceDropdown.js';
 import { TABS, PROMPT_SECTIONS, DEFAULT_CONFIG_VALUES, IconDeploy, IconPlay, type Tab } from './shared.js';
+import { IconBolt, IconRefresh } from '../PhonbotIcons.js';
 import { AgentListView } from './AgentListView.js';
 import { IdentityTab } from './IdentityTab.js';
 import { KnowledgeTab } from './KnowledgeTab.js';
@@ -244,6 +245,9 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
         return c;
       });
       setStatus({ type: 'ok', text: 'Gespeichert ✅' });
+      // Voice/Prompt changes can shift latency — pull fresh stats so the
+      // chip reflects the new config within a second, not 15.
+      void refreshAgentStats(config.tenantId);
     } catch {
       setStatus({ type: 'error', text: 'Speichern fehlgeschlagen' });
     } finally {
@@ -267,6 +271,9 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
         return c;
       });
       setStatus({ type: 'ok', text: `Deployed — Agent: ${result.retellAgentId ?? '–'}` });
+      // Fresh deploy = new agent config live at Retell → pull stats so
+      // the chip starts showing the new agent's measurements.
+      void refreshAgentStats(config.tenantId);
     } catch (e: unknown) {
       // F4: Retell-API-errors / pg-errors carry implementation details that
       // shouldn't surface to the customer-facing UI. Console-log for ops,
@@ -624,32 +631,73 @@ function AgentStatsRow({
 
   let latencyLabel = '—';
   let latencyColor = 'text-white/50 bg-white/5 border-white/10';
-  let latencyTip = `Latenz wird vom letzten Call gemessen — bisher ${stats?.callsCount ?? 0} Calls, keine Latenz-Daten vorhanden.`;
+  // "vor X" relative to the actual call timestamp — shown in tooltip only.
+  let callAgo = '';
+  if (stats?.lastCallAt) {
+    const diffSec = Math.max(0, Math.round((Date.now() - stats.lastCallAt) / 1000));
+    callAgo = diffSec < 60 ? `vor ${diffSec} s`
+      : diffSec < 3600 ? `vor ${Math.round(diffSec / 60)} min`
+      : `vor ${Math.round(diffSec / 3600)} h`;
+  }
+  const sourceLabel = stats?.latencySource === 'values' ? 'roh' : stats?.latencySource === 'p50' ? 'p50-Fallback' : '';
+  // Short, multi-line, only-on-hover tooltip with everything the user
+  // needs to trust the number. Stays short visually, lots of info on hover.
+  const latencyTip = hasData
+    ? `E2E letzter Turn (${sourceLabel})
+${breakdownStr ? breakdownStr + '\n' : ''}${stats?.turnsInCall ? `${stats.turnsInCall} Turn${stats.turnsInCall === 1 ? '' : 's'} · ` : ''}Call ${callAgo}
+live Retell · ${ageStr}`
+    : '';
 
   if (hasData) {
     const ms = measuredMs as number;
-    // Thresholds aligned with Retell's LLM-p50 metric (the dashboard
-    // headline). Typical ranges: fast agents 400-600, normal 600-900,
-    // slow > 900.
-    if (ms < 600) { latencyLabel = 'Optimiert'; latencyColor = 'text-green-400 bg-green-500/10 border-green-500/25'; }
-    else if (ms < 900) { latencyLabel = 'Standard'; latencyColor = 'text-white/65 bg-white/5 border-white/15'; }
+    // E2E-Skala: typisch 800-1500 ms.
+    if (ms < 900) { latencyLabel = 'Schnell'; latencyColor = 'text-green-400 bg-green-500/10 border-green-500/25'; }
+    else if (ms < 1300) { latencyLabel = 'Normal'; latencyColor = 'text-white/65 bg-white/5 border-white/15'; }
     else { latencyLabel = 'Langsam'; latencyColor = 'text-yellow-400 bg-yellow-500/10 border-yellow-500/25'; }
-    // "vor X" relative to the actual call timestamp, so the user can
-    // see how recent the number is (not the poll-time).
-    let callAgo = '';
-    if (stats?.lastCallAt) {
-      const diffSec = Math.max(0, Math.round((Date.now() - stats.lastCallAt) / 1000));
-      callAgo = diffSec < 60 ? `vor ${diffSec} s`
-        : diffSec < 3600 ? `vor ${Math.round(diffSec / 60)} min`
-        : `vor ${Math.round(diffSec / 3600)} h`;
-    }
-    latencyTip = `Letzter Call ${callAgo} — LLM p50 direkt aus Retell.${breakdownStr ? `\nBreakdown (ms): ${breakdownStr}` : ''}\n(Polling: aktualisiert ${ageStr})`;
+  }
+
+  // Outer tooltip: short. Everything else lives on each chip.
+  const outerTip = `Live von Retell · ${ageStr} · klick zum Aktualisieren`;
+
+  // Empty / error states get their own minimal display — no fake 0-Chips.
+  if (stats?.error === 'not_deployed') {
+    return (
+      <LatencyEmptyState
+        icon={<IconDeploy size={14} className="text-orange-400" />}
+        label="Nicht live"
+        tooltip="Agent ist noch nicht deployt. Nach dem ersten Deploy erscheint die Latenz live."
+        onClick={onRefresh}
+        pulseClass={refreshing ? 'bg-orange-400' : 'bg-white/30'}
+      />
+    );
+  }
+  if (stats?.error === 'retell_unreachable') {
+    return (
+      <LatencyEmptyState
+        icon={<IconRefresh size={14} className="text-yellow-400" />}
+        label="Retell offline"
+        tooltip="Retell nicht erreichbar — versuche es in ein paar Sekunden nochmal. Klick zum sofort erneut laden."
+        onClick={onRefresh}
+        pulseClass={refreshing ? 'bg-orange-400' : 'bg-yellow-400'}
+      />
+    );
+  }
+  if (!hasData) {
+    return (
+      <LatencyEmptyState
+        icon={<IconPlay size={14} className="text-cyan-400" />}
+        label="Kein Call"
+        tooltip="Noch keine Calls mit Latenz-Daten. Starte einen Test-Call — die Zahl erscheint dann live."
+        onClick={onRefresh}
+        pulseClass={refreshing ? 'bg-orange-400' : 'bg-cyan-400/60'}
+      />
+    );
   }
 
   return (
     <div
-      className="hidden md:flex items-stretch rounded-xl border border-white/8 bg-white/[0.03] overflow-hidden text-xs relative cursor-default"
-      title={`Live-Daten von Retell · letzte Aktualisierung ${ageStr} · klick zum sofort neu laden`}
+      className="hidden md:flex items-stretch rounded-xl border border-white/8 bg-white/[0.03] overflow-hidden text-xs relative cursor-pointer"
+      title={outerTip}
       onClick={onRefresh}
     >
       {/* Live pulse indicator — subtle green dot on the top-left corner
@@ -672,9 +720,10 @@ function AgentStatsRow({
       />
       <Divider />
       <StatChip
-        label="Letzter Call"
+        label="Latenz"
         value={hasData ? `${measuredMs} ms` : '—'}
         title={latencyTip}
+        icon={<IconBolt size={12} className="text-orange-300/70" />}
       />
       <Divider />
       <StatChip
@@ -687,22 +736,59 @@ function AgentStatsRow({
   );
 }
 
+/** Minimal inline state shown in place of the chips row when there's
+ *  no usable latency data. Just icon + short label, tooltip on hover. */
+function LatencyEmptyState({
+  icon,
+  label,
+  tooltip,
+  onClick,
+  pulseClass,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  tooltip: string;
+  onClick: () => void;
+  pulseClass: string;
+}) {
+  return (
+    <div
+      className="hidden md:flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-white/65 hover:bg-white/[0.06] hover:border-white/20 cursor-pointer transition-colors relative"
+      title={tooltip}
+      onClick={onClick}
+    >
+      <span
+        className={`w-1.5 h-1.5 rounded-full ${pulseClass}`}
+        style={{ animation: 'breathe 2.2s ease-in-out infinite', boxShadow: '0 0 4px currentColor' }}
+        aria-hidden="true"
+      />
+      {icon}
+      <span>{label}</span>
+    </div>
+  );
+}
+
 function StatChip({
   label,
   value,
   valueClass,
   title,
   badgeClass,
+  icon,
 }: {
   label: string;
   value: string;
   valueClass?: string;
   title?: string;
   badgeClass?: string;
+  icon?: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col px-3 py-1.5 min-w-[78px]" title={title}>
-      <span className="text-[9px] font-semibold text-white/40 uppercase tracking-wider leading-none mb-0.5">{label}</span>
+      <span className="text-[9px] font-semibold text-white/40 uppercase tracking-wider leading-none mb-0.5 flex items-center gap-1">
+        {icon}
+        {label}
+      </span>
       {badgeClass ? (
         <span className={`inline-flex items-center justify-center text-[11px] font-semibold rounded-md px-1.5 py-0.5 border leading-tight ${badgeClass}`}>
           {value}

@@ -534,18 +534,28 @@ export type BillingStatus = {
 export type AgentStats = {
   callsCount: number;
   sampleSize: number;
-  /** LLM p50 of the latest ended call — what the last caller actually
-   *  experienced, not an average over the agent's lifetime. */
+  /** E2E latency of the LAST turn of the last ended call, preferring
+   *  the raw value from Retell's values[] array, falling back to p50.
+   *  Single source of truth, no aggregation, no estimation. */
   latencyMs: number | null;
-  /** Full per-component breakdown (ms) from the same latest call. */
+  /** Where did latencyMs come from — 'values' = raw last-turn,
+   *  'p50' = Retell's median for that call, 'none' = no data. */
+  latencySource: 'values' | 'p50' | 'none';
+  /** Per-component breakdown (values.at(-1) with p50 fallback). */
   breakdownMs: {
     llm: number | null;
     tts: number | null;
     asr: number | null;
     e2e: number | null;
   };
-  /** Unix ms of the last ended call — used for the "vor X s" label. */
+  /** Number of turns Retell recorded in the latest call. */
+  turnsInCall: number;
+  /** Unix ms of the last ended call. */
   lastCallAt: number | null;
+  /** Set to 'not_deployed' when the agent has no retellAgentId, or
+   *  'retell_unreachable' when the listCalls fetch threw. null when
+   *  everything succeeded (even if no calls exist yet). */
+  error: 'not_deployed' | 'retell_unreachable' | null;
 };
 export function getAgentStats(tenantId?: string) {
   const q = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
