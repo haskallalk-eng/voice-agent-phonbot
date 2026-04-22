@@ -157,7 +157,12 @@ function getRetellCallId(body: RetellEventBody, args = retellArgs(body)): string
 
 function firstStringValue(...values: unknown[]): string {
   for (const value of values) {
-    if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+    if (typeof value !== 'string') continue;
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    if (/^\{\{[^}]+\}\}$/.test(trimmed)) continue;
+    if (/^(unknown|anonymous|unbekannt|nicht angegeben)$/i.test(trimmed)) continue;
+    return trimmed;
   }
   return '';
 }
@@ -209,6 +214,15 @@ async function resolveCallerPhone(body: RetellEventBody, args: Record<string, un
   } catch {
     return '';
   }
+}
+
+function ticketPhoneOrUnknown(phone: string): string {
+  return phone.trim() || 'unknown';
+}
+
+function isCallbackSafePhone(phone: string): boolean {
+  const allowed = (process.env.ALLOWED_PHONE_PREFIXES ?? '+49,+43,+41').split(',').map((p) => p.trim()).filter(Boolean);
+  return allowed.some((prefix) => phone.startsWith(prefix));
 }
 
 function toolAuthSecret(): string {
@@ -486,11 +500,11 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
             sessionId: callId,
             reason: 'calendar-unavailable',
             customerName,
-            customerPhone,
+            customerPhone: ticketPhoneOrUnknown(customerPhone),
             preferredTime,
             service,
             notes,
-          });
+          }, { allowUnverifiedPhone: true });
 
           result = {
             ok: true,
@@ -619,17 +633,17 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         sessionId: callId,
         reason: (args.reason as string | undefined) ?? 'handoff',
         customerName: args.customerName as string | undefined,
-        customerPhone: await resolveCallerPhone(body, args, callId),
+        customerPhone: ticketPhoneOrUnknown(await resolveCallerPhone(body, args, callId)),
         preferredTime,
         service: args.service as string | undefined,
         notes: args.notes as string | undefined,
-      });
+      }, { allowUnverifiedPhone: true });
 
       // Auto-trigger callback if customer wants immediate callback
       const isImmediate = !preferredTime
         || /sofort|jetzt|now|asap|gleich|baldmöglich/i.test(preferredTime);
 
-      if (isImmediate && orgId && row.customer_phone) {
+      if (isImmediate && orgId && row.customer_phone && isCallbackSafePhone(row.customer_phone)) {
         // Fire-and-forget — don't block the agent's response
         triggerCallback({
           orgId,
