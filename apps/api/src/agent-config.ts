@@ -143,6 +143,16 @@ async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentCo
     err.statusCode = 409;
     throw err;
   }
+
+  // Keep chipy_schedules in sync with what the customer just edited in the
+  // Agent Builder. Loop-breaker + empty-string handling live in the helper —
+  // this stays a one-liner. Fire-and-forget: the openingHours string is
+  // already persisted on agent_configs, so a chipy-schedules write failure
+  // doesn't need to roll the user's save back.
+  void import('./opening-hours-sync.js').then(({ syncOpeningHoursToChipy }) =>
+    syncOpeningHoursToChipy(orgId, normalized.openingHours),
+  ).catch(() => {/* non-fatal */});
+
   return normalized;
 }
 

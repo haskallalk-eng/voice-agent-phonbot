@@ -1901,6 +1901,14 @@ setTimeout(function(){window.location.href='${appUrl}?calendarConnected=true'},3
        ON CONFLICT (org_id) DO UPDATE SET schedule = $2, updated_at = now()`,
       [orgId, JSON.stringify(parsed.data.schedule)],
     );
+
+    // Reflect the new availability back to agent_configs.openingHours so the
+    // Agent-Builder card stays in step and buildAgentInstructions reads the
+    // latest truth on the next Retell deploy.
+    void import('./opening-hours-sync.js').then(({ syncChipyToOpeningHours }) =>
+      syncChipyToOpeningHours(orgId, parsed.data.schedule),
+    ).catch(() => {/* non-fatal */});
+
     return { ok: true };
   });
 
