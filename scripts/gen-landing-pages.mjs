@@ -5,6 +5,55 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { NAV_STYLE, NAV_HTML } from './_nav.mjs';
 import { FOOTER_STYLE, FOOTER_HTML } from './_footer.mjs';
+import { icon } from './_icons.mjs';
+
+// Emoji → house-icon mapping. All user-facing emojis in the branch-page
+// data are mapped through this table so the rendered page uses our own
+// SVG icons (consistent stroke / colour / size) instead of platform-
+// specific Unicode fonts. Added 2026-04-22 as part of the chipy-design
+// polish pass. Any new emoji in BRANCHEN data MUST also get an entry
+// here — otherwise it falls through untouched and breaks visual unity.
+const EMOJI_TO_ICON = {
+  '✂️': 'scissors', '🔧': 'wrench', '🩺': 'medical', '🧹': 'broom',
+  '🍽️': 'restaurant', '🍴': 'restaurant', '🚗': 'car', '🚘': 'car',
+  '📅': 'calendar', '🕒': 'clock', '⏰': 'clock',
+  '📞': 'phone', '📱': 'phone',
+  '💶': 'euro', '💰': 'cash', '💳': 'card',
+  '🚨': 'alert', '⚠️': 'alert',
+  '↩️': 'ticket', '🎫': 'ticket',
+  '💊': 'pill',
+  '🏢': 'building', '🏠': 'home',
+  '📋': 'clipboard', '📜': 'document', '📃': 'document',
+  '🔒': 'lock', '🔐': 'lock',
+  '📦': 'package',
+  '👤': 'user', '👥': 'user',
+  '⭐': 'star', '🌟': 'star',
+  '💬': 'chat',
+  '⚡': 'bolt', '🎙️': 'bolt',
+};
+
+// Wrap an emoji in the matching SVG; pass-through if no mapping exists.
+function e2svg(emoji, size = 18) {
+  const name = EMOJI_TO_ICON[emoji];
+  return name ? icon(name, size) : emoji;
+}
+
+// Replace a leading emoji in a free-text string with a small inline SVG.
+// Handles savings bullets ('👤 <strong>…</strong>: 1.500 €') and dialogue
+// lines ('📞 Kundin: "…"') in one pass.
+const LEADING_EMOJI_RE = new RegExp(
+  '^(' + Object.keys(EMOJI_TO_ICON)
+    .map((e) => e.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&'))
+    .join('|') + ')\\s*',
+  'u',
+);
+function stripLeadingEmoji(text, inlineSize = 14) {
+  return text.replace(LEADING_EMOJI_RE, (_, emoji) => {
+    const name = EMOJI_TO_ICON[emoji];
+    if (!name) return emoji + ' ';
+    return `<span class="ic-inline">${icon(name, inlineSize)}</span>`;
+  });
+}
 
 const OUT_DIR = path.resolve('apps/web/public');
 
@@ -317,7 +366,12 @@ ${NAV_STYLE}
 header.hero{padding:5rem 0 4rem;text-align:center;position:relative;z-index:1}
 @media(max-width:640px){header.hero{padding:3.5rem 0 2.5rem}}
 .hero-eyebrow{display:inline-flex;align-items:center;gap:.5rem;padding:.45rem 1rem;border-radius:9999px;background:rgba(249,115,22,.10);border:1px solid rgba(249,115,22,.25);font-size:.8125rem;color:#FDBA74;margin-bottom:1.75rem;font-weight:500;box-shadow:0 0 20px rgba(249,115,22,.15),inset 0 0 20px rgba(249,115,22,.04)}
-.hero-eyebrow .emoji{font-size:1rem;line-height:1}
+.hero-eyebrow .ic{display:inline-flex;align-items:center;color:#FDBA74}
+.hero-eyebrow .ic svg{display:block;width:14px;height:14px}
+.ic-inline{display:inline-flex;align-items:center;vertical-align:-3px;color:rgba(255,255,255,.55);margin-right:.4rem}
+.ic-inline svg{display:block}
+.dialogue .bot .ic-inline{color:#FDBA74}
+.savings li .ic-inline{color:#FDBA74;margin-right:.55rem}
 h1{font-size:clamp(2.5rem,6vw,4.5rem);font-weight:800;letter-spacing:-.025em;line-height:1.08;margin-bottom:1.5rem;max-width:48rem;margin-left:auto;margin-right:auto}
 h1 .accent{background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;background-clip:text;color:transparent}
 .subtitle{font-size:1.125rem;color:rgba(255,255,255,.6);max-width:42rem;margin:0 auto 2.5rem;line-height:1.6}
@@ -336,7 +390,8 @@ p{color:rgba(255,255,255,.7)}
 .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.25rem}
 .feature{padding:1.75rem;border-radius:1rem;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);transition:all .3s}
 .feature:hover{border-color:rgba(249,115,22,.3);background:rgba(255,255,255,.07);transform:translateY(-2px)}
-.feature-icon{width:48px;height:48px;border-radius:.875rem;background:linear-gradient(135deg,rgba(249,115,22,.18),rgba(6,182,212,.12));display:flex;align-items:center;justify-content:center;font-size:1.375rem;margin-bottom:1.25rem;border:1px solid rgba(249,115,22,.15)}
+.feature-icon{width:48px;height:48px;border-radius:.875rem;background:linear-gradient(135deg,rgba(249,115,22,.18),rgba(6,182,212,.12));display:flex;align-items:center;justify-content:center;margin-bottom:1.25rem;border:1px solid rgba(249,115,22,.15);color:#FB923C}
+.feature-icon svg{display:block;width:22px;height:22px}
 .feature h3{font-size:1.0625rem;margin-bottom:.5rem}
 .feature p{font-size:.9375rem;line-height:1.55}
 
@@ -403,17 +458,19 @@ function buildPage(d) {
   };
 
   const features = d.features
-    .map((f) => `<div class="feature"><div class="feature-icon">${f.icon}</div><h3>${f.title}</h3><p>${f.desc}</p></div>`)
+    .map((f) => `<div class="feature"><div class="feature-icon">${e2svg(f.icon, 22)}</div><h3>${f.title}</h3><p>${f.desc}</p></div>`)
     .join('\n        ');
 
   const dialogue = d.dialogue
-    .map((line) => `<p class="${line.speaker === 'user' ? 'user' : 'bot'}">${line.text}</p>`)
+    .map((line) => `<p class="${line.speaker === 'user' ? 'user' : 'bot'}">${stripLeadingEmoji(line.text, 14)}</p>`)
     .join('\n      ');
 
   const faq = d.faq
     .map((q) => `<details class="faq-item"><summary>${q.q}</summary><div class="answer">${q.a}</div></details>`)
     .join('\n      ');
-  const savingsItems = d.savings.items.map((i) => `<li>${i}</li>`).join('\n        ');
+  const savingsItems = d.savings.items
+    .map((i) => `<li>${stripLeadingEmoji(i, 15)}</li>`)
+    .join('\n        ');
 
   return `<!doctype html>
 <html lang="de">
@@ -453,7 +510,7 @@ ${NAV_HTML}
 
 <header class="hero">
   <div class="container">
-    <span class="hero-eyebrow"><span class="emoji" aria-hidden="true">${d.emoji}</span>${d.eyebrow}</span>
+    <span class="hero-eyebrow"><span class="ic" aria-hidden="true">${e2svg(d.emoji, 14)}</span>${d.eyebrow}</span>
     <h1>${d.h1Text}</h1>
     <p class="subtitle">${d.subtitle}</p>
     <div class="cta-row">
