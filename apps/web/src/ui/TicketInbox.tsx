@@ -1,23 +1,29 @@
 import React, { useEffect, useState } from 'react';
 import { EmptyState } from '../components/ui.js';
 import { getTickets, updateTicketStatus, triggerTicketCallback, type Ticket } from '../lib/api.js';
+import { IconPhone, IconRefresh, IconCheckCircle, IconAlertTriangle, IconTickets } from './PhonbotIcons.js';
 
-const STATUS_STYLES: Record<Ticket['status'], string> = {
-  open: 'bg-green-500/20 text-green-400',
-  assigned: 'bg-yellow-500/20 text-yellow-400',
-  done: 'bg-white/10 text-white/40',
+// 'assigned' is still a valid status in the API/DB for legacy rows, but we
+// don't expose it in the UI anymore — user asked to remove "Zugewiesen"
+// (2026-04-22). Any incoming `assigned` ticket is displayed and filtered
+// as if it were `open` so nothing drops out of the inbox.
+type DisplayStatus = 'open' | 'done';
+const displayStatus = (s: Ticket['status']): DisplayStatus => (s === 'done' ? 'done' : 'open');
+
+const STATUS_LABELS: Record<DisplayStatus, string> = {
+  open: 'Offen',
+  done: 'Erledigt',
 };
 
-const STATUS_LABELS: Record<Ticket['status'], string> = {
-  open: 'Offen',
-  assigned: 'Zugewiesen',
-  done: 'Erledigt',
+const STATUS_BADGE: Record<DisplayStatus, string> = {
+  open: 'bg-orange-500/15 text-orange-400 border border-orange-500/25',
+  done: 'bg-white/5 text-white/40 border border-white/10',
 };
 
 export function TicketInbox() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<Ticket['status'] | 'all'>('all');
+  const [filter, setFilter] = useState<DisplayStatus | 'all'>('all');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
 
@@ -43,88 +49,109 @@ export function TicketInbox() {
       await load();
     } catch (err) {
       console.error('Failed to update ticket status', err);
-      // Reload to show current state even if update failed
       await load();
     }
   }
 
-  const filtered = filter === 'all' ? tickets : tickets.filter((t) => t.status === filter);
+  const filtered = filter === 'all' ? tickets : tickets.filter((t) => displayStatus(t.status) === filter);
 
   const counts = {
     all: tickets.length,
-    open: tickets.filter((t) => t.status === 'open').length,
-    assigned: tickets.filter((t) => t.status === 'assigned').length,
-    done: tickets.filter((t) => t.status === 'done').length,
+    open: tickets.filter((t) => displayStatus(t.status) === 'open').length,
+    done: tickets.filter((t) => displayStatus(t.status) === 'done').length,
   };
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
-      <div className="flex items-center justify-between mb-6">
+      {/* Header */}
+      <div className="flex items-end justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-white">Ticket-Eingang</h2>
-          <p className="text-sm text-white/50 mt-1">Callbacks und Handoffs deiner Kunden.</p>
+          <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">Ticket-Eingang</h2>
+          <p className="text-sm text-white/50 mt-1">Rückrufe und Handoffs deiner Kunden.</p>
         </div>
         <button
           onClick={load}
           disabled={loading}
-          className="text-sm text-orange-400 hover:text-orange-300 transition-colors"
+          aria-label="Tickets neu laden"
+          className="inline-flex items-center gap-2 text-sm text-white/60 hover:text-white rounded-full px-4 py-2 bg-white/5 border border-white/10 backdrop-blur-md hover:bg-white/10 transition-all disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60"
         >
-          {loading ? 'Lade…' : 'Aktualisieren'}
+          <IconRefresh size={14} className={loading ? 'animate-spin' : ''} />
+          <span className="hidden sm:inline">{loading ? 'Lade…' : 'Aktualisieren'}</span>
         </button>
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex gap-1 mb-6 bg-white/5 p-1 rounded-xl w-fit border border-white/10">
-        {(['all', 'open', 'assigned', 'done'] as const).map((s) => (
-          <button
-            key={s}
-            onClick={() => { setFilter(s); setPage(1); }}
-            className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-              filter === s
-                ? 'bg-white/10 text-white font-medium shadow-sm'
-                : 'text-white/40 hover:text-white/70'
-            }`}
-          >
-            {s === 'all' ? 'Alle' : STATUS_LABELS[s]}{' '}
-            <span className="text-xs text-white/30">({counts[s]})</span>
-          </button>
-        ))}
+      {/* Filter — segmented pill */}
+      <div
+        role="tablist"
+        aria-label="Ticket-Status filtern"
+        className="inline-flex p-1 mb-6 rounded-full bg-white/5 border border-white/10 backdrop-blur-md"
+      >
+        {(['all', 'open', 'done'] as const).map((s) => {
+          const active = filter === s;
+          const label = s === 'all' ? 'Alle' : STATUS_LABELS[s];
+          return (
+            <button
+              key={s}
+              role="tab"
+              aria-selected={active}
+              onClick={() => { setFilter(s); setPage(1); }}
+              className={`relative inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60 ${
+                active
+                  ? 'text-white font-medium bg-orange-500/15 border border-orange-500/25 shadow-[0_0_14px_rgba(249,115,22,0.18)]'
+                  : 'text-white/50 hover:text-white/80 border border-transparent'
+              }`}
+            >
+              {label}
+              <span className={`text-xs tabular-nums ${active ? 'text-orange-300' : 'text-white/30'}`}>
+                {counts[s]}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Ticket list */}
       {filtered.length === 0 ? (
         <EmptyState
-          icon={<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+          icon={<IconTickets size={48} className="text-white/30" />}
           title="Keine Tickets"
-          description={filter !== 'all' ? `Keine Tickets mit Status "${STATUS_LABELS[filter as Ticket['status']]}"` : 'Wenn Anrufer einen Rückruf wünschen, erscheinen die Tickets hier.'}
+          description={
+            filter === 'all'
+              ? 'Wenn Anrufer einen Rückruf wünschen, erscheinen die Tickets hier.'
+              : `Kein Ticket mit Status „${STATUS_LABELS[filter]}".`
+          }
         />
       ) : (
         <>
-        <div className="space-y-3">
-          {filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((t) => (
-            <TicketCard key={t.id} ticket={t} onChangeStatus={changeStatus} />
-          ))}
-        </div>
-        {filtered.length > PAGE_SIZE && (
-          <div className="flex items-center justify-between mt-4 px-2">
-            <span className="text-sm text-white/40">{filtered.length} Tickets</span>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-3 py-1.5 text-sm rounded-lg bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 disabled:opacity-30"
-              >Zurück</button>
-              <span className="px-3 py-1.5 text-sm text-white/40">
-                {page} / {Math.ceil(filtered.length / PAGE_SIZE)}
-              </span>
-              <button
-                onClick={() => setPage(p => Math.min(Math.ceil(filtered.length / PAGE_SIZE), p + 1))}
-                disabled={page >= Math.ceil(filtered.length / PAGE_SIZE)}
-                className="px-3 py-1.5 text-sm rounded-lg bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 disabled:opacity-30"
-              >Weiter</button>
-            </div>
+          <div className="space-y-3">
+            {filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((t) => (
+              <TicketCard key={t.id} ticket={t} onChangeStatus={changeStatus} />
+            ))}
           </div>
-        )}
+          {filtered.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between mt-4 px-2">
+              <span className="text-sm text-white/40 tabular-nums">{filtered.length} Tickets</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="px-3 py-1.5 text-sm rounded-full bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  Zurück
+                </button>
+                <span className="px-3 py-1.5 text-sm text-white/40 tabular-nums">
+                  {page} / {Math.ceil(filtered.length / PAGE_SIZE)}
+                </span>
+                <button
+                  onClick={() => setPage((p) => Math.min(Math.ceil(filtered.length / PAGE_SIZE), p + 1))}
+                  disabled={page >= Math.ceil(filtered.length / PAGE_SIZE)}
+                  className="px-3 py-1.5 text-sm rounded-full bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  Weiter
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -141,6 +168,7 @@ function TicketCard({
   const [calling, setCalling] = useState(false);
   const [callResult, setCallResult] = useState<'ok' | 'error' | null>(null);
   const [callError, setCallError] = useState<string | null>(null);
+  const dStatus = displayStatus(t.status);
 
   async function handleCallback() {
     setCalling(true);
@@ -159,27 +187,27 @@ function TicketCard({
   }
 
   return (
-    <div className="glass rounded-2xl p-5">
+    <div className="glass rounded-2xl p-5 transition-colors hover:border-white/15">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 mb-2">
-            <span className="text-sm font-semibold text-white/60">#{t.id}</span>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_STYLES[t.status]}`}>
-              {STATUS_LABELS[t.status]}
+          <div className="flex items-center flex-wrap gap-x-3 gap-y-1.5 mb-3">
+            <span className="text-sm font-semibold text-white/60 tabular-nums">#{t.id}</span>
+            <span className={`inline-flex items-center text-xs px-2.5 py-0.5 rounded-full font-medium ${STATUS_BADGE[dStatus]}`}>
+              {STATUS_LABELS[dStatus]}
             </span>
             {t.reason && (
-              <span className="text-xs text-white/30">{t.reason}</span>
+              <span className="text-xs text-white/35 truncate">{t.reason}</span>
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
             <div>
               <span className="text-white/40">Name:</span>{' '}
               <span className="text-white/80">{t.customer_name ?? '–'}</span>
             </div>
             <div>
               <span className="text-white/40">Telefon:</span>{' '}
-              <span className="text-white/80 font-mono">{t.customer_phone}</span>
+              <span className="text-white/80 font-mono tabular-nums">{t.customer_phone}</span>
             </div>
             <div>
               <span className="text-white/40">Wunschtermin:</span>{' '}
@@ -192,46 +220,59 @@ function TicketCard({
           </div>
 
           {t.notes && (
-            <p className="text-sm text-white/50 mt-2 bg-white/5 rounded-lg px-3 py-2">{t.notes}</p>
+            <p className="text-sm text-white/60 mt-3 bg-white/5 border border-white/10 rounded-xl px-3.5 py-2.5">
+              {t.notes}
+            </p>
           )}
 
-          <div className="text-xs text-white/30 mt-2">
+          <div className="text-xs text-white/30 mt-3 tabular-nums">
             {new Date(t.created_at).toLocaleString('de-DE')}
             {t.source && <> · Quelle: {t.source}</>}
           </div>
 
           {/* Callback feedback */}
           {callResult === 'ok' && (
-            <p className="text-xs text-green-400 mt-2">✓ Rückruf gestartet — Agent ruft jetzt an.</p>
+            <p className="inline-flex items-center gap-1.5 text-xs text-orange-300 mt-3 bg-orange-500/10 border border-orange-500/20 rounded-full px-2.5 py-1">
+              <IconCheckCircle size={14} />
+              Rückruf gestartet — Agent ruft jetzt an.
+            </p>
           )}
           {callResult === 'error' && (
-            <p className="text-xs text-red-400 mt-2">
+            <p className="inline-flex items-center gap-1.5 text-xs text-red-300 mt-3 bg-red-500/10 border border-red-500/30 rounded-full px-2.5 py-1">
+              <IconAlertTriangle size={14} />
               {callError === 'NO_OUTBOUND_NUMBER'
-                ? 'Keine Outbound-Nummer konfiguriert. Provisioniere zuerst eine Telefonnummer.'
+                ? 'Keine Outbound-Nummer konfiguriert.'
                 : `Fehler: ${callError}`}
             </p>
           )}
         </div>
 
         <div className="flex flex-col gap-1.5 shrink-0">
-          {/* Callback button — only for open/assigned tickets with a phone number */}
-          {t.status !== 'done' && t.customer_phone && (
+          {/* Callback button — only for open tickets with a phone number */}
+          {dStatus === 'open' && t.customer_phone && (
             <button
               onClick={handleCallback}
               disabled={calling}
-              className="text-xs px-3 py-1 rounded-lg border border-orange-500/30 text-orange-400 hover:bg-orange-500/10 hover:border-orange-500/50 transition-colors disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border border-orange-500/30 text-orange-300 hover:bg-orange-500/10 hover:border-orange-500/50 hover:text-orange-200 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60"
             >
-              {calling ? '…' : '📞 Zurückrufen'}
+              <IconPhone size={12} />
+              {calling ? 'Startet…' : 'Zurückrufen'}
             </button>
           )}
-          {t.status !== 'open' && (
-            <StatusButton label="Offen" onClick={() => onChangeStatus(t.id, 'open')} />
-          )}
-          {t.status !== 'assigned' && (
-            <StatusButton label="Zuweisen" onClick={() => onChangeStatus(t.id, 'assigned')} />
-          )}
-          {t.status !== 'done' && (
-            <StatusButton label="Erledigt" onClick={() => onChangeStatus(t.id, 'done')} />
+
+          {/* Status toggle — one binary action per state */}
+          {dStatus === 'open' ? (
+            <StatusButton
+              icon={<IconCheckCircle size={12} />}
+              label="Erledigt"
+              onClick={() => onChangeStatus(t.id, 'done')}
+            />
+          ) : (
+            <StatusButton
+              icon={<IconRefresh size={12} />}
+              label="Wieder öffnen"
+              onClick={() => onChangeStatus(t.id, 'open')}
+            />
           )}
         </div>
       </div>
@@ -239,12 +280,21 @@ function TicketCard({
   );
 }
 
-function StatusButton({ label, onClick }: { label: string; onClick: () => void }) {
+function StatusButton({
+  icon,
+  label,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
   return (
     <button
       onClick={onClick}
-      className="text-xs px-3 py-1 rounded-lg border border-white/10 text-white/50 hover:bg-white/5 hover:text-white/80 transition-colors"
+      className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border border-white/10 text-white/55 hover:bg-white/5 hover:text-white/85 hover:border-white/20 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60"
     >
+      {icon}
       {label}
     </button>
   );
