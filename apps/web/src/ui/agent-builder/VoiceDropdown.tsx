@@ -1,20 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Voice } from '../../lib/api.js';
 import { IconChevronDown, IconStar } from './shared.js';
+import { IconBolt } from '../PhonbotIcons.js';
 
 export function getProviderLabel(voice: Voice): string {
   if (voice.voice_type === 'cloned') return 'Eigene Stimme';
-  const provider = voice.provider ?? voice.voice_id.split('-')[0] ?? 'Retell';
-  const map: Record<string, string> = {
-    retell: 'Retell',
-    openai: 'OpenAI',
-    '11labs': 'ElevenLabs',
-    elevenlabs: 'ElevenLabs',
-    cartesia: 'Cartesia',
-    minimax: 'Minimax',
-    deepgram: 'Deepgram',
-  };
-  return map[provider.toLowerCase()] ?? provider;
+  const provider = (voice.provider ?? voice.voice_id.split('-')[0] ?? '').toLowerCase();
+  // ElevenLabs is the only premium-tier TTS supplier we carry — rebrand
+  // it to 'High Quality Voice' so users see a benefit-framed label, not a
+  // supplier name. Every other supplier (Retell native, OpenAI, Cartesia,
+  // Minimax, Deepgram) collapses under a single 'Standard' bucket so the
+  // dropdown shows just two provider groups instead of five.
+  if (provider === 'elevenlabs' || provider === '11labs' || provider === 'eleven_labs') {
+    return 'High Quality Voice';
+  }
+  return 'Standard';
 }
 
 // Voice counts as "Premium" (triggers +5 Ct/Min surcharge) when:
@@ -123,7 +123,7 @@ export function VoiceDropdown({
           {loading ? 'Stimmen werden geladen…' : displayLabel}
           {currentIsPremium && (
             <span className="text-[10px] font-semibold text-orange-300 bg-orange-500/10 border border-orange-500/30 rounded-full px-1.5 py-0.5">
-              Premium {formatSurcharge(currentSurcharge)}
+              {formatSurcharge(currentSurcharge)}
             </span>
           )}
         </span>
@@ -171,7 +171,7 @@ export function VoiceDropdown({
                 }}
                 aria-hidden="true"
               >
-                <span className="text-2xl leading-none">⚡</span>
+                <IconBolt size={24} className="text-orange-400" />
               </div>
 
               {/* Title */}
@@ -265,7 +265,7 @@ export function VoiceDropdown({
                     <span className="truncate">{v.voice_name}</span>
                     {isPremiumVoice(v) && (
                       <span className="text-[10px] font-semibold text-orange-300 bg-orange-500/10 border border-orange-500/30 rounded-full px-1.5 py-0.5 shrink-0">
-                        Premium {formatSurcharge(voiceSurcharge(v))}
+                        {formatSurcharge(voiceSurcharge(v))}
                       </span>
                     )}
                   </span>
@@ -294,7 +294,7 @@ export function VoiceDropdown({
                     <span className="truncate">{v.voice_name}</span>
                     {isPremiumVoice(v) && (
                       <span className="text-[10px] font-semibold text-orange-300 bg-orange-500/10 border border-orange-500/30 rounded-full px-1.5 py-0.5 shrink-0">
-                        Premium {formatSurcharge(voiceSurcharge(v))}
+                        {formatSurcharge(voiceSurcharge(v))}
                       </span>
                     )}
                   </span>

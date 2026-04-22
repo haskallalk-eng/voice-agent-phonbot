@@ -524,7 +524,7 @@ function ProviderDropdown({ value, onChange }: { value: string; onChange: (v: st
                     <span className={`text-sm font-medium ${active ? 'text-orange-200' : 'text-white'}`}>{primary}</span>
                     {premium && (
                       <span className="text-[10px] font-bold text-orange-300 bg-orange-500/15 border border-orange-500/40 rounded-full px-2 py-0.5 tracking-wide">
-                        PREMIUM +5 Ct/Min
+                        +5 Ct/Min
                       </span>
                     )}
                   </div>
