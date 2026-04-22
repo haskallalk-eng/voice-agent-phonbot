@@ -64,9 +64,9 @@ const BRANCHEN = [
     emoji: '✂️',
     h1Text: 'Nie wieder das <span class="accent">Telefon abnehmen</span> zwischen den Schnitten.',
     title: 'KI-Telefonassistent für Friseursalons · Termine automatisch buchen | Phonbot',
-    description: 'Phonbot ist der KI-Telefonassistent speziell für Friseure & Salons. Bucht Termine direkt in deinen Kalender, nimmt Walk-in-Anfragen an, beantwortet Öffnungszeiten — 24/7 auf Deutsch. Ab 49 €/Monat.',
+    description: 'Phonbot ist der KI-Telefonassistent speziell für Friseure & Salons. Bucht Termine direkt in deinen Kalender, nimmt Walk-in-Anfragen an, beantwortet Öffnungszeiten — 24/7 auf Deutsch. Ab 8,99 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Friseure',
-    subtitle: 'Phonbot nimmt Anrufe an, bucht Termine direkt in deinen Kalender und beantwortet Standardfragen — während du föhnst, färbst oder schneidest. 24/7 auf Deutsch. Ab 49 €/Monat.',
+    subtitle: 'Phonbot nimmt Anrufe an, bucht Termine direkt in deinen Kalender und beantwortet Standardfragen — während du föhnst, färbst oder schneidest. 24/7 auf Deutsch. Ab 8,99 €/Monat.',
     ogTitle: 'KI-Telefonassistent für Friseursalons · Phonbot',
     ogDesc: 'Nie wieder Terminanrufe zwischen den Schnitten annehmen. Phonbot nimmt Anrufe an, bucht Termine direkt — 24/7 auf Deutsch.',
     serviceName: 'KI-Telefonassistent für Friseursalons',
@@ -78,12 +78,12 @@ const BRANCHEN = [
       { icon: '↩️', title: 'Rückruf-Tickets', desc: 'Für komplexe Anfragen (Beratungstermin, Spezial-Services) erstellt Phonbot automatisch ein Ticket mit allen Infos.' },
     ],
     dialogue: [
-      { speaker: 'user', text: '📞 Kundin: „Hi, ich hätte gern einen Schnitt nächste Woche, am besten Donnerstag nachmittag."' },
-      { speaker: 'bot', text: 'Phonbot: „Klar! Donnerstag haben wir um 14 Uhr und 16:30 Uhr frei — welche Zeit passt dir?"' },
-      { speaker: 'user', text: '📞 Kundin: „16:30 Uhr."' },
-      { speaker: 'bot', text: 'Phonbot: „Super, 16:30 Uhr Donnerstag ist gebucht. Dein Name bitte?"' },
+      { speaker: 'user', text: '📞 Kundin: „Hallo, ich bräuchte einen Termin für einen Schnitt nächste Woche — am besten Donnerstag nachmittag."' },
+      { speaker: 'bot', text: 'Phonbot: „Klar! Donnerstag haben wir 14 Uhr und 16:30 Uhr frei — welche Zeit passt dir besser?"' },
+      { speaker: 'user', text: '📞 Kundin: „16:30 Uhr wäre super."' },
+      { speaker: 'bot', text: 'Phonbot: „16:30 Uhr am Donnerstag ist gebucht. Auf welchen Namen läuft das?"' },
       { speaker: 'user', text: '📞 Kundin: „Julia Müller."' },
-      { speaker: 'bot', text: 'Phonbot: „Danke Julia. Du bekommst gleich eine Bestätigungs-SMS. Bis Donnerstag!"' },
+      { speaker: 'bot', text: 'Phonbot: „Danke, Julia. Du bekommst gleich eine SMS-Bestätigung. Bis Donnerstag!"' },
     ],
     dialogueNote: '→ Termin automatisch im Kalender eingetragen · Dauer: 28 Sekunden',
     value: {
@@ -95,8 +95,8 @@ const BRANCHEN = [
       scenario: 'Typischer Salon mit 300 Anrufen pro Monat:',
       roi: [
         { icon: 'user', label: 'Teilzeit-Rezeption', amount: '1.500 €', per: '/Monat' },
-        { icon: 'chat', label: 'Phonbot Starter — 500 Min inklusive', amount: '49 €', per: '/Monat' },
-        { icon: 'star', label: 'Deine Ersparnis', amount: '1.451 €', per: '/Monat', highlight: true },
+        { icon: 'chat', label: 'Phonbot Starter — 360 Min inklusive', amount: '79 €', per: '/Monat' },
+        { icon: 'star', label: 'Deine Ersparnis', amount: '1.421 €', per: '/Monat', highlight: true },
       ],
       extras: [
         { icon: 'clock', title: 'Kein Anruf in Stoßzeiten verloren', desc: 'Während Föhnen, Färben oder Schnitt geht Chipy trotzdem dran — die Kundin bleibt.' },
@@ -118,7 +118,7 @@ const BRANCHEN = [
     emoji: '🔧',
     h1Text: 'Du bist auf der <span class="accent">Baustelle</span> — Phonbot nimmt den Anruf an.',
     title: 'KI-Telefonassistent für Handwerker & Handwerksbetriebe | Phonbot',
-    description: 'Phonbot ist der KI-Telefonassistent speziell für Handwerker. Nimmt Aufträge entgegen, priorisiert Notfälle, erstellt Tickets mit Kundendaten — 24/7 auf Deutsch. Ab 49 €/Monat.',
+    description: 'Phonbot ist der KI-Telefonassistent speziell für Handwerker. Nimmt Aufträge entgegen, priorisiert Notfälle, erstellt Tickets mit Kundendaten — 24/7 auf Deutsch. Ab 8,99 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Handwerk',
     subtitle: 'Phonbot nimmt Anrufe an während du auf der Baustelle bist, unterscheidet Notdienst von regulären Terminen und erstellt strukturierte Tickets mit Kundendaten und Priorität.',
     ogTitle: 'KI-Telefonassistent für Handwerker · Phonbot',
@@ -132,12 +132,12 @@ const BRANCHEN = [
       { icon: '💶', title: 'Kostenvoranschlag-Anfrage', desc: 'Preisauskunft zu Standard-Leistungen sofort, für komplexe Angebote wird ein Termin vereinbart.' },
     ],
     dialogue: [
-      { speaker: 'user', text: '📞 Kunde: „Meine Heizung geht nicht mehr, es ist Samstag!"' },
-      { speaker: 'bot', text: 'Phonbot: „Oh je, das klingt dringend. Ich nehme deinen Notdienst-Fall sofort auf. Deine Adresse bitte?"' },
-      { speaker: 'user', text: '📞 Kunde: „Hauptstraße 12 in Berlin."' },
-      { speaker: 'bot', text: 'Phonbot: „Danke. Wie heißt du und unter welcher Nummer kann der Techniker dich zurückrufen?"' },
-      { speaker: 'user', text: '📞 Kunde: „Thomas Schmidt, 0176-1234567."' },
-      { speaker: 'bot', text: 'Phonbot: „Notdienst-Ticket ist erstellt mit Priorität hoch. Du wirst in ~15 Min zurückgerufen."' },
+      { speaker: 'user', text: '📞 Kunde: „Hallo, meine Heizung geht seit heute Morgen nicht mehr — und es ist Samstag."' },
+      { speaker: 'bot', text: 'Phonbot: „Oh, das klingt dringend — ich nehme den Fall direkt als Notdienst auf. Wo wohnst du?"' },
+      { speaker: 'user', text: '📞 Kunde: „Hauptstraße 12 in 10115 Berlin."' },
+      { speaker: 'bot', text: 'Phonbot: „Danke. Wie heißt du, und unter welcher Nummer ist der Techniker am besten erreichbar?"' },
+      { speaker: 'user', text: '📞 Kunde: „Thomas Schmidt, 0176 12345678."' },
+      { speaker: 'bot', text: 'Phonbot: „Alles notiert, Thomas. Ich hab ein Notdienst-Ticket mit Priorität hoch erstellt — Rückruf innerhalb von 15 Minuten. Bis gleich!"' },
     ],
     dialogueNote: '→ Ticket mit Priorität=high im Dashboard · Push an Handwerker · Dauer: 34 Sek',
     value: {
@@ -149,8 +149,8 @@ const BRANCHEN = [
       scenario: 'Handwerksbetrieb mit 200 Anrufen pro Monat:',
       roi: [
         { icon: 'user', label: 'Angestellte Büro-Kraft', amount: '2.000 €', per: '/Monat' },
-        { icon: 'chat', label: 'Phonbot Starter', amount: '49 €', per: '/Monat' },
-        { icon: 'star', label: 'Deine Ersparnis', amount: '1.951 €', per: '/Monat', highlight: true },
+        { icon: 'chat', label: 'Phonbot Pro — 1.000 Min inklusive', amount: '179 €', per: '/Monat' },
+        { icon: 'star', label: 'Deine Ersparnis', amount: '1.821 €', per: '/Monat', highlight: true },
       ],
       extras: [
         { icon: 'alert', title: 'Notfälle werden sofort priorisiert', desc: 'Keywords wie „Wasserschaden" oder „Heizung aus" lösen Priorität HOCH aus — du bekommst direkt eine Push-Nachricht.' },
@@ -172,7 +172,7 @@ const BRANCHEN = [
     emoji: '🩺',
     h1Text: 'Deine <span class="accent">MFA</span> ist am Limit? Phonbot nimmt den Druck raus.',
     title: 'KI-Telefonassistent für Arztpraxen · Terminvergabe 24/7 | Phonbot',
-    description: 'Phonbot ist der KI-Telefonassistent speziell für Arztpraxen. Nimmt Terminanfragen, Rezeptwünsche und Notfälle entgegen, entlastet deine MFA — DSGVO-konform. Ab 49 €/Monat.',
+    description: 'Phonbot ist der KI-Telefonassistent speziell für Arztpraxen. Nimmt Terminanfragen, Rezeptwünsche und Notfälle entgegen, entlastet deine MFA — DSGVO-konform. Ab 8,99 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Arztpraxen',
     subtitle: 'Phonbot unterstützt dein Praxis-Team bei Spitzenzeiten: nimmt Terminanfragen entgegen, notiert Rezeptverlängerungen, triagiert Notfälle und entlastet deine MFA spürbar. DSGVO-konform, Server in Deutschland.',
     ogTitle: 'KI-Telefonassistent für Arztpraxen · Phonbot',
@@ -186,12 +186,12 @@ const BRANCHEN = [
       { icon: '🔒', title: 'DSGVO-konform', desc: 'Server in Deutschland, verschlüsselte Speicherung, PII-Redaction in Transkripten. AV-Vertrag verfügbar.' },
     ],
     dialogue: [
-      { speaker: 'user', text: '📞 Patient: „Guten Tag, ich brauche mein Blutdruck-Rezept verlängert."' },
-      { speaker: 'bot', text: 'Phonbot: „Gern. Ich notiere das als Rezept-Anfrage für die MFA. Dein Name und Geburtsdatum bitte?"' },
-      { speaker: 'user', text: '📞 Patient: „Maria Schmidt, 12.03.1962."' },
-      { speaker: 'bot', text: 'Phonbot: „Danke. Welches Medikament brauchst du?"' },
-      { speaker: 'user', text: '📞 Patient: „Ramipril, 5mg."' },
-      { speaker: 'bot', text: 'Phonbot: „Notiert. Die MFA ruft dich innerhalb von 24h mit dem fertigen Rezept zurück."' },
+      { speaker: 'user', text: '📞 Patient: „Guten Tag, ich bräuchte ein Folgerezept für mein Blutdruck-Medikament."' },
+      { speaker: 'bot', text: 'Phonbot: „Gerne, das notiere ich für die MFA. Dein Name und Geburtsdatum, bitte?"' },
+      { speaker: 'user', text: '📞 Patient: „Anna Becker, 14. März 1958."' },
+      { speaker: 'bot', text: 'Phonbot: „Danke. Um welches Medikament und welche Packungsgröße geht es?"' },
+      { speaker: 'user', text: '📞 Patient: „Ramipril 5 mg, Packung mit 100 Stück."' },
+      { speaker: 'bot', text: 'Phonbot: „Aufgenommen. Die Praxis meldet sich heute zurück — das Rezept liegt dann zur Abholung bereit. Einen schönen Tag noch!"' },
     ],
     dialogueNote: '→ Ticket für MFA · Patient muss nicht in Warteschleife · Dauer: 38 Sek',
     value: {
@@ -200,11 +200,11 @@ const BRANCHEN = [
         stat: '40 %',
         claim: 'aller Praxis-Telefonate drehen sich um Rezepte, Sprechzeiten oder Termine — genau die Routine, die deine MFA ersticken.',
       },
-      scenario: 'Mittelgroße Praxis, 500 Anrufe pro Woche:',
+      scenario: 'Mittelgroße Praxis, 500 Anrufe pro Monat:',
       roi: [
         { icon: 'user', label: 'Zweite Teilzeit-MFA', amount: '1.800 €', per: '/Monat' },
-        { icon: 'chat', label: 'Phonbot Pro — 2.000 Min inklusive', amount: '149 €', per: '/Monat' },
-        { icon: 'star', label: 'Deine Ersparnis', amount: '1.651 €', per: '/Monat', highlight: true },
+        { icon: 'chat', label: 'Phonbot Pro — 1.000 Min inklusive', amount: '179 €', per: '/Monat' },
+        { icon: 'star', label: 'Deine Ersparnis', amount: '1.621 €', per: '/Monat', highlight: true },
       ],
       extras: [
         { icon: 'pill', title: 'Rezept-Anfragen DSGVO-konform erfasst', desc: 'Patient + Medikament + Geburtsdatum landen strukturiert im Dashboard — keine Zettel auf dem Empfang.' },
@@ -226,7 +226,7 @@ const BRANCHEN = [
     emoji: '🧹',
     h1Text: 'Keine <span class="accent">Auftragsanfrage</span> mehr verpassen — auch beim Putzen.',
     title: 'KI-Telefonassistent für Reinigungsfirmen | Phonbot',
-    description: 'Phonbot ist der KI-Telefonassistent für Reinigungsbetriebe. Nimmt Auftragsanfragen entgegen, erfasst Objekt-Details (Größe, Frequenz), plant Besichtigungstermine — 24/7 auf Deutsch. Ab 49 €/Monat.',
+    description: 'Phonbot ist der KI-Telefonassistent für Reinigungsbetriebe. Nimmt Auftragsanfragen entgegen, erfasst Objekt-Details (Größe, Frequenz), plant Besichtigungstermine — 24/7 auf Deutsch. Ab 8,99 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Reinigung',
     subtitle: 'Phonbot nimmt Auftragsanfragen an, erfasst Objekt-Details und Leistungswünsche, und bucht Besichtigungstermine — während dein Team bei Kunden vor Ort putzt. 24/7 auf Deutsch.',
     ogTitle: 'KI-Telefonassistent für Reinigungsfirmen · Phonbot',
@@ -240,12 +240,12 @@ const BRANCHEN = [
       { icon: '↩️', title: 'Reklamations-Tickets', desc: 'Bei Qualitäts-Beschwerden wird sofort ein Ticket mit Priorität erstellt — der Teamleiter wird benachrichtigt.' },
     ],
     dialogue: [
-      { speaker: 'user', text: '📞 Kunde: „Hallo, ich suche für unser Büro eine wöchentliche Reinigung."' },
-      { speaker: 'bot', text: 'Phonbot: „Gern. Wie groß ist das Büro in Quadratmetern?"' },
-      { speaker: 'user', text: '📞 Kunde: „Ca. 200 qm, 8 Arbeitsplätze, 2 Meetingräume."' },
-      { speaker: 'bot', text: 'Phonbot: „Verstanden. Gibt es besondere Wünsche — Glas, Teppich-Tiefenreinigung?"' },
-      { speaker: 'user', text: '📞 Kunde: „Teppich alle 3 Monate, Glas monatlich."' },
-      { speaker: 'bot', text: 'Phonbot: „Perfekt. Ich notiere alles. Unser Team schickt dir bis morgen ein konkretes Angebot."' },
+      { speaker: 'user', text: '📞 Anrufer: „Hallo, wir suchen eine Firma für die wöchentliche Büroreinigung in Berlin-Mitte."' },
+      { speaker: 'bot', text: 'Phonbot: „Da helfen wir gerne. Wie groß ist die Fläche ungefähr — in Quadratmetern?"' },
+      { speaker: 'user', text: '📞 Anrufer: „Etwa 180 Quadratmeter: fünf Büros plus Empfang."' },
+      { speaker: 'bot', text: 'Phonbot: „Alles klar. Wer ist der Ansprechpartner, und an welche Firma dürfen wir das Angebot schicken?"' },
+      { speaker: 'user', text: '📞 Anrufer: „Martin Klein von Klein & Partner GmbH."' },
+      { speaker: 'bot', text: 'Phonbot: „Danke, Martin. Die Anfrage liegt jetzt bei uns im Dashboard — wir melden uns bis morgen Mittag mit einem konkreten Preis."' },
     ],
     dialogueNote: '→ Detailliertes Ticket im Dashboard · Angebot-E-Mail automatisch an Vertrieb · Dauer: 44 Sek',
     value: {
@@ -257,8 +257,8 @@ const BRANCHEN = [
       scenario: 'Reinigungsfirma, 150 Auftrags-Anfragen pro Monat:',
       roi: [
         { icon: 'user', label: 'Disposition / Bürokraft', amount: '1.800 €', per: '/Monat' },
-        { icon: 'chat', label: 'Phonbot Starter', amount: '49 €', per: '/Monat' },
-        { icon: 'star', label: 'Deine Ersparnis', amount: '1.751 €', per: '/Monat', highlight: true },
+        { icon: 'chat', label: 'Phonbot Starter — 360 Min inklusive', amount: '79 €', per: '/Monat' },
+        { icon: 'star', label: 'Deine Ersparnis', amount: '1.721 €', per: '/Monat', highlight: true },
       ],
       extras: [
         { icon: 'document', title: 'Angebotsanfragen sauber aufgenommen', desc: 'Objekt-Art, Quadratmeter, Frequenz — alles systematisch im Ticket, keine Excel-Liste am Abend mehr.' },
@@ -280,7 +280,7 @@ const BRANCHEN = [
     emoji: '🍽️',
     h1Text: 'In der <span class="accent">Küche</span> das Telefon verpasst? Nie wieder.',
     title: 'KI-Telefonassistent für Restaurants & Gastronomie | Phonbot',
-    description: 'Phonbot ist der KI-Telefonassistent für Restaurants. Nimmt Reservierungen an, beantwortet Speisekarten-Fragen, erfasst Take-away-Bestellungen — 24/7 auf Deutsch. Ab 49 €/Monat.',
+    description: 'Phonbot ist der KI-Telefonassistent für Restaurants. Nimmt Reservierungen an, beantwortet Speisekarten-Fragen, erfasst Take-away-Bestellungen — 24/7 auf Deutsch. Ab 8,99 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Restaurants',
     subtitle: 'Phonbot nimmt Reservierungen an während du in der Küche bist, beantwortet Fragen zur Speisekarte, erfasst Take-away-Bestellungen und bucht direkt in dein Reservierungssystem.',
     ogTitle: 'KI-Telefonassistent für Restaurants · Phonbot',
@@ -294,12 +294,12 @@ const BRANCHEN = [
       { icon: '🕒', title: 'Öffnungszeiten & Wegbeschreibung', desc: 'Standard-Fragen (Anfahrt, Parkplätze, Öffnungszeiten) — sofort beantwortet.' },
     ],
     dialogue: [
-      { speaker: 'user', text: '📞 Gast: „Hi, ich wollte einen Tisch für 4 Personen heute um 19 Uhr reservieren."' },
-      { speaker: 'bot', text: 'Phonbot: „Heute 19 Uhr für 4 Personen — schaue kurz. Ja, geht klar. Dein Name bitte?"' },
-      { speaker: 'user', text: '📞 Gast: „Martin Kaiser."' },
-      { speaker: 'bot', text: 'Phonbot: „Gebucht, Martin. Du bekommst eine Bestätigungs-SMS. Eine letzte Frage: Gibt es Allergien oder Wünsche?"' },
-      { speaker: 'user', text: '📞 Gast: „Nein, alles gut."' },
-      { speaker: 'bot', text: 'Phonbot: „Perfekt. Bis heute Abend 19 Uhr!"' },
+      { speaker: 'user', text: '📞 Gast: „Hallo, ich würde gerne heute Abend einen Tisch für vier Personen um 19 Uhr reservieren."' },
+      { speaker: 'bot', text: 'Phonbot: „Heute 19 Uhr für vier — einen Moment, ich schaue. Ja, das passt. Auf welchen Namen?"' },
+      { speaker: 'user', text: '📞 Gast: „Martin Bauer."' },
+      { speaker: 'bot', text: 'Phonbot: „Gebucht, Martin. Gibt es Allergien oder besondere Wünsche — Kinderhochstuhl, vegetarisch?"' },
+      { speaker: 'user', text: '📞 Gast: „Nichts Besonderes, danke."' },
+      { speaker: 'bot', text: 'Phonbot: „Perfekt. Du bekommst gleich eine Bestätigungs-SMS. Bis heute Abend!"' },
     ],
     dialogueNote: '→ Reservierung im System · SMS-Bestätigung an Gast · Dauer: 31 Sek',
     value: {
@@ -311,8 +311,8 @@ const BRANCHEN = [
       scenario: 'Restaurant mit 400 Anrufen pro Monat:',
       roi: [
         { icon: 'user', label: 'Service-Kraft nur fürs Telefon', amount: '1.700 €', per: '/Monat' },
-        { icon: 'chat', label: 'Phonbot Starter', amount: '49 €', per: '/Monat' },
-        { icon: 'star', label: 'Deine Ersparnis', amount: '1.651 €', per: '/Monat', highlight: true },
+        { icon: 'chat', label: 'Phonbot Starter — 360 Min inklusive', amount: '79 €', per: '/Monat' },
+        { icon: 'star', label: 'Deine Ersparnis', amount: '1.621 €', per: '/Monat', highlight: true },
       ],
       extras: [
         { icon: 'calendar', title: 'Reservierungen parallel annehmen', desc: 'Mehrere Gäste gleichzeitig — keine Warteschleife, niemand legt vor der Reservierung auf.' },
@@ -334,7 +334,7 @@ const BRANCHEN = [
     emoji: '🚗',
     h1Text: 'Der <span class="accent">Hebebühne</span> keinen Vorrang vor dem Kunden geben müssen.',
     title: 'KI-Telefonassistent für Autowerkstätten & Kfz-Meisterbetriebe | Phonbot',
-    description: 'Phonbot ist der KI-Telefonassistent für Autowerkstätten. Nimmt Terminanfragen, erfasst Fahrzeug- und Problemdaten, erstellt Kostenvoranschlag-Tickets — 24/7 auf Deutsch. Ab 49 €/Monat.',
+    description: 'Phonbot ist der KI-Telefonassistent für Autowerkstätten. Nimmt Terminanfragen, erfasst Fahrzeug- und Problemdaten, erstellt Kostenvoranschlag-Tickets — 24/7 auf Deutsch. Ab 8,99 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Autowerkstätten',
     subtitle: 'Phonbot nimmt Anrufe während du unter dem Auto liegst. Erfasst Fahrzeug (Marke, Modell, Baujahr), das Problem und den Wunschtermin — direkt als Ticket im Dashboard.',
     ogTitle: 'KI-Telefonassistent für Autowerkstätten · Phonbot',
@@ -348,12 +348,14 @@ const BRANCHEN = [
       { icon: '💶', title: 'Kostenvoranschlag-Tickets', desc: 'Für komplexe Reparaturen wird ein Ticket erstellt — du rufst mit Angebot zurück.' },
     ],
     dialogue: [
-      { speaker: 'user', text: '📞 Kunde: „Mein Auto macht komische Geräusche beim Bremsen."' },
-      { speaker: 'bot', text: 'Phonbot: „Das kann Bremsen sein — am besten gleich checken lassen. Welches Auto hast du?"' },
-      { speaker: 'user', text: '📞 Kunde: „VW Golf 7, Baujahr 2018, 85.000 km."' },
-      { speaker: 'bot', text: 'Phonbot: „Ok. Wann könntest du vorbeikommen? Ich habe morgen 10 Uhr oder Mittwoch 14 Uhr."' },
-      { speaker: 'user', text: '📞 Kunde: „Morgen 10 Uhr passt."' },
-      { speaker: 'bot', text: 'Phonbot: „Gebucht. Bring bitte den Fahrzeugschein mit. Dein Name und Telefonnummer?"' },
+      { speaker: 'user', text: '📞 Kunde: „Hallo, mein Auto macht komische Geräusche beim Bremsen."' },
+      { speaker: 'bot', text: 'Phonbot: „Das klingt nach den Bremsen — besser gleich checken lassen. Welches Modell fährst du?"' },
+      { speaker: 'user', text: '📞 Kunde: „VW Golf 7, Baujahr 2018, 85.000 Kilometer."' },
+      { speaker: 'bot', text: 'Phonbot: „Danke. Ich hätte morgen 10 Uhr oder Mittwoch 14 Uhr frei. Was passt dir?"' },
+      { speaker: 'user', text: '📞 Kunde: „Morgen 10 Uhr."' },
+      { speaker: 'bot', text: 'Phonbot: „Gebucht. Dein Name und Telefonnummer, bitte — und bring den Fahrzeugschein mit."' },
+      { speaker: 'user', text: '📞 Kunde: „Michael Fischer, 0172 9876543."' },
+      { speaker: 'bot', text: 'Phonbot: „Notiert, Michael. Du bekommst gleich eine Bestätigungs-SMS. Bis morgen!"' },
     ],
     dialogueNote: '→ Termin im Werkstatt-Kalender · Ticket mit Fahrzeug-Details · Dauer: 42 Sek',
     value: {
@@ -365,8 +367,8 @@ const BRANCHEN = [
       scenario: 'Werkstatt mit 250 Anrufen pro Monat:',
       roi: [
         { icon: 'user', label: 'Teilzeit-Tresen', amount: '1.800 €', per: '/Monat' },
-        { icon: 'chat', label: 'Phonbot Starter', amount: '49 €', per: '/Monat' },
-        { icon: 'star', label: 'Deine Ersparnis', amount: '1.751 €', per: '/Monat', highlight: true },
+        { icon: 'chat', label: 'Phonbot Pro — 1.000 Min inklusive', amount: '179 €', per: '/Monat' },
+        { icon: 'star', label: 'Deine Ersparnis', amount: '1.621 €', per: '/Monat', highlight: true },
       ],
       extras: [
         { icon: 'car', title: 'Fahrzeug-Daten systematisch erfasst', desc: 'Modell, Baujahr, Kilometerstand, Fehlerbild — strukturiert im Ticket, nie auf dem Zettel verschlampt.' },
@@ -457,24 +459,23 @@ p{color:rgba(255,255,255,.7)}
 @keyframes call-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.6),0 0 0 0 rgba(239,68,68,.35)}50%{box-shadow:0 0 0 6px rgba(239,68,68,0),0 0 0 12px rgba(239,68,68,0)}}
 .dialogue-header .duration{margin-left:auto;font-variant-numeric:tabular-nums;color:rgba(255,255,255,.5);letter-spacing:.06em}
 
-.msg{display:flex;gap:.65rem;align-items:flex-end;margin-bottom:.875rem;opacity:0;transform:translateY(10px);animation:msg-in .55s cubic-bezier(.16,1,.3,1) both}
+.msg{display:flex;gap:.65rem;align-items:flex-end;margin-bottom:.875rem;opacity:0;transform:translateY(10px)}
 .msg:last-child{margin-bottom:0}
+.dialogue.in-view .msg{animation:msg-in .55s cubic-bezier(.16,1,.3,1) both}
 @keyframes msg-in{to{opacity:1;transform:translateY(0)}}
-.msg:nth-child(2){animation-delay:.20s}
-.msg:nth-child(3){animation-delay:.45s}
-.msg:nth-child(4){animation-delay:.70s}
-.msg:nth-child(5){animation-delay:.95s}
-.msg:nth-child(6){animation-delay:1.2s}
-.msg:nth-child(7){animation-delay:1.45s}
-.msg:nth-child(8){animation-delay:1.7s}
-.msg:nth-child(9){animation-delay:1.95s}
+.dialogue.in-view .msg:nth-child(2){animation-delay:.40s}
+.dialogue.in-view .msg:nth-child(3){animation-delay:.90s}
+.dialogue.in-view .msg:nth-child(4){animation-delay:1.40s}
+.dialogue.in-view .msg:nth-child(5){animation-delay:1.90s}
+.dialogue.in-view .msg:nth-child(6){animation-delay:2.40s}
+.dialogue.in-view .msg:nth-child(7){animation-delay:2.90s}
+.dialogue.in-view .msg:nth-child(8){animation-delay:3.40s}
+.dialogue.in-view .msg:nth-child(9){animation-delay:3.90s}
 .msg.user{flex-direction:row-reverse}
 .msg .avatar{flex-shrink:0;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);color:rgba(255,255,255,.65);position:relative}
 .msg .avatar svg{display:block;width:14px;height:14px}
-.msg.bot .avatar{background:radial-gradient(circle at 50% 42%,#F5C842 0%,#D49B12 100%);border-color:rgba(249,115,22,.35);box-shadow:0 0 16px rgba(249,115,22,.25);animation:chipy-breathe 3s ease-in-out infinite}
-.msg.bot .avatar::before,.msg.bot .avatar::after{content:'';position:absolute;top:11px;width:3px;height:3px;border-radius:50%;background:#1C1917}
-.msg.bot .avatar::before{left:9px}
-.msg.bot .avatar::after{right:9px}
+.msg.bot .avatar{background:transparent;border:none;overflow:visible;width:36px;height:36px;filter:drop-shadow(0 0 8px rgba(249,115,22,.30));animation:chipy-breathe 3.5s ease-in-out infinite}
+.msg.bot .avatar svg{display:block;width:36px;height:36px}
 @keyframes chipy-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
 .msg .bubble{max-width:78%;padding:.75rem 1rem;border-radius:1rem;font-size:.9375rem;line-height:1.55;position:relative}
 .msg.user .bubble{background:rgba(255,255,255,.06);color:rgba(255,255,255,.82);border-bottom-right-radius:.375rem}
@@ -490,10 +491,11 @@ p{color:rgba(255,255,255,.7)}
 .dialogue-typing span:nth-child(3){animation-delay:.3s}
 @keyframes typing-bounce{0%,80%,100%{transform:translateY(0);opacity:.5}40%{transform:translateY(-4px);opacity:1}}
 
-.dialogue-note{text-align:center;margin-top:1.5rem;font-size:.875rem;color:rgba(255,255,255,.45);animation:msg-in .6s 2.2s ease-out both}
+.dialogue-note{text-align:center;margin-top:1.5rem;font-size:.875rem;color:rgba(255,255,255,.45);opacity:0;transform:translateY(10px)}
+.in-view-note.dialogue-note{animation:msg-in .6s ease-out both;animation-delay:4.3s}
 
 @media(prefers-reduced-motion:reduce){
-  .msg,.dialogue-note{animation:none;opacity:1;transform:none}
+  .msg,.dialogue-note,.dialogue.in-view .msg,.in-view-note.dialogue-note{animation:none!important;opacity:1!important;transform:none!important;animation-delay:0s!important}
   .dialogue-header .dot,.msg.bot .avatar,.dialogue-typing span{animation:none}
 }
 
@@ -595,7 +597,7 @@ function buildPage(d) {
       const body = m ? m[2].trim() : cleaned;
       const avatar = line.speaker === 'user'
         ? `<div class="avatar" aria-hidden="true">${icon('phone', 14)}</div>`
-        : `<div class="avatar" aria-hidden="true"></div>`;
+        : `<div class="avatar" aria-hidden="true"><svg viewBox="0 0 24 24" width="36" height="36"><circle cx="7" cy="6.5" r="2.6" fill="#D49B12"/><circle cx="7" cy="6.5" r="1.4" fill="#E8B32D"/><circle cx="17" cy="6.5" r="2.6" fill="#D49B12"/><circle cx="17" cy="6.5" r="1.4" fill="#E8B32D"/><circle cx="12" cy="13" r="8" fill="#F5C842"/><ellipse cx="4" cy="15" rx="2.6" ry="2.2" fill="#F7D04A"/><ellipse cx="20" cy="15" rx="2.6" ry="2.2" fill="#F7D04A"/><circle cx="9" cy="12" r="2.1" fill="white"/><circle cx="15" cy="12" r="2.1" fill="white"/><circle cx="9" cy="12.2" r="1.3" fill="#1C1917"/><circle cx="15" cy="12.2" r="1.3" fill="#1C1917"/><circle cx="9.6" cy="11.6" r=".5" fill="white"/><circle cx="15.6" cy="11.6" r=".5" fill="white"/><ellipse cx="12" cy="15.2" rx=".9" ry=".65" fill="#B45309"/><path d="M10.7 16.3 Q12 17.3 13.3 16.3" fill="none" stroke="#8B4513" stroke-width=".5" stroke-linecap="round"/></svg></div>`;
       return `<div class="msg ${line.speaker}">${avatar}<div class="bubble"><span class="name">${name}</span>${body}</div></div>`;
     })
     .join('\n      ');
