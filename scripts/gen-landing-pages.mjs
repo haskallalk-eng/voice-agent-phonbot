@@ -64,7 +64,7 @@ const BRANCHEN = [
     emoji: '✂️',
     h1Text: 'Nie wieder das <span class="accent">Telefon abnehmen</span> zwischen den Schnitten.',
     title: 'KI-Telefonassistent für Friseursalons · Termine automatisch buchen | Phonbot',
-    description: 'Phonbot ist der KI-Telefonassistent speziell für Friseure & Salons. Bucht Termine direkt in Google Calendar, nimmt Walk-in-Anfragen an, beantwortet Öffnungszeiten — 24/7 auf Deutsch. Ab 49 €/Monat.',
+    description: 'Phonbot ist der KI-Telefonassistent speziell für Friseure & Salons. Bucht Termine direkt in deinen Kalender, nimmt Walk-in-Anfragen an, beantwortet Öffnungszeiten — 24/7 auf Deutsch. Ab 49 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Friseure',
     subtitle: 'Phonbot nimmt Anrufe an, bucht Termine direkt in deinen Kalender und beantwortet Standardfragen — während du föhnst, färbst oder schneidest. 24/7 auf Deutsch. Ab 49 €/Monat.',
     ogTitle: 'KI-Telefonassistent für Friseursalons · Phonbot',
@@ -85,7 +85,7 @@ const BRANCHEN = [
       { speaker: 'user', text: '📞 Kundin: „Julia Müller."' },
       { speaker: 'bot', text: 'Phonbot: „Danke Julia. Du bekommst gleich eine Bestätigungs-SMS. Bis Donnerstag!"' },
     ],
-    dialogueNote: '→ Termin automatisch in Google Calendar eingetragen · Dauer: 28 Sekunden',
+    dialogueNote: '→ Termin automatisch im Kalender eingetragen · Dauer: 28 Sekunden',
     savings: {
       intro: 'Ein durchschnittlicher Salon mit 300 Anrufen/Monat kostet:',
       items: [
@@ -276,7 +276,7 @@ const BRANCHEN = [
       hint: 'Plus: Keine Warteschleife = weniger verlorene Gäste an Konkurrenz.',
     },
     faq: [
-      { q: 'Klappt das mit meinem Reservierungs-System (Resmio, Quandoo, OpenTable)?', a: 'Google Calendar und Outlook funktionieren direkt. Spezifische Reservierungs-Systeme auf Anfrage — meist via Kalender-Sync machbar.' },
+      { q: 'Klappt das mit meinem Reservierungs-System (Resmio, Quandoo, OpenTable)?', a: 'Gängige Kalender (Google, Outlook, Cal.com) funktionieren direkt. Spezifische Reservierungs-Systeme auf Anfrage — meist via Kalender-Sync machbar.' },
       { q: 'Was bei Sonderwünschen (Allergien, Kinderhochstuhl)?', a: 'Phonbot fragt standardmäßig nach Allergien und fügt Notizen zur Reservierung. Individuelle Felder definierst du im Agent Builder.' },
       { q: 'Kann Phonbot Bestellungen für Lieferdienst annehmen?', a: 'Ja. Bestellungen werden als Ticket mit Artikeln + Lieferadresse an die Küche weitergeleitet.' },
       { q: 'Versteht Phonbot Dialekte (Bayrisch, Berlinerisch)?', a: 'Ja. Deutsches Sprach-Modell erkennt regionale Varianten und Gerichte-Slang.' },
@@ -395,14 +395,53 @@ p{color:rgba(255,255,255,.7)}
 .feature h3{font-size:1.0625rem;margin-bottom:.5rem}
 .feature p{font-size:.9375rem;line-height:1.55}
 
-/* ── Dialogue box (glass with orange-cyan tinted bot bubble) ── */
-.dialogue{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);border-radius:1.5rem;padding:2rem;max-width:720px;margin:0 auto}
+/* ── Call-style dialogue (glass card with animated chat bubbles) ── */
+.dialogue{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:1.5rem;padding:1.75rem;max-width:640px;margin:0 auto;position:relative;overflow:hidden}
 @media(max-width:640px){.dialogue{padding:1.25rem}}
-.dialogue p{margin-bottom:.75rem;padding:.875rem 1.125rem;border-radius:.875rem;font-size:.9375rem;line-height:1.55}
-.dialogue p:last-child{margin-bottom:0}
-.dialogue .user{background:rgba(255,255,255,.04);color:rgba(255,255,255,.75)}
-.dialogue .bot{background:linear-gradient(135deg,rgba(249,115,22,.10),rgba(6,182,212,.06));border-left:3px solid #F97316;color:rgba(255,255,255,.92)}
-.dialogue-note{text-align:center;margin-top:1.5rem;font-size:.875rem;color:rgba(255,255,255,.45)}
+.dialogue-header{display:flex;align-items:center;gap:.6rem;padding-bottom:1rem;margin-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,.06);font-size:.7rem;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.1em;font-weight:600}
+.dialogue-header .dot{width:8px;height:8px;border-radius:50%;background:#ef4444;animation:call-pulse 2s ease-in-out infinite}
+@keyframes call-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.6),0 0 0 0 rgba(239,68,68,.35)}50%{box-shadow:0 0 0 6px rgba(239,68,68,0),0 0 0 12px rgba(239,68,68,0)}}
+.dialogue-header .duration{margin-left:auto;font-variant-numeric:tabular-nums;color:rgba(255,255,255,.5);letter-spacing:.06em}
+
+.msg{display:flex;gap:.65rem;align-items:flex-end;margin-bottom:.875rem;opacity:0;transform:translateY(10px);animation:msg-in .55s cubic-bezier(.16,1,.3,1) both}
+.msg:last-child{margin-bottom:0}
+@keyframes msg-in{to{opacity:1;transform:translateY(0)}}
+.msg:nth-child(2){animation-delay:.20s}
+.msg:nth-child(3){animation-delay:.45s}
+.msg:nth-child(4){animation-delay:.70s}
+.msg:nth-child(5){animation-delay:.95s}
+.msg:nth-child(6){animation-delay:1.2s}
+.msg:nth-child(7){animation-delay:1.45s}
+.msg:nth-child(8){animation-delay:1.7s}
+.msg:nth-child(9){animation-delay:1.95s}
+.msg.user{flex-direction:row-reverse}
+.msg .avatar{flex-shrink:0;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);color:rgba(255,255,255,.65);position:relative}
+.msg .avatar svg{display:block;width:14px;height:14px}
+.msg.bot .avatar{background:radial-gradient(circle at 50% 42%,#F5C842 0%,#D49B12 100%);border-color:rgba(249,115,22,.35);box-shadow:0 0 16px rgba(249,115,22,.25);animation:chipy-breathe 3s ease-in-out infinite}
+.msg.bot .avatar::before,.msg.bot .avatar::after{content:'';position:absolute;top:11px;width:3px;height:3px;border-radius:50%;background:#1C1917}
+.msg.bot .avatar::before{left:9px}
+.msg.bot .avatar::after{right:9px}
+@keyframes chipy-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+.msg .bubble{max-width:78%;padding:.75rem 1rem;border-radius:1rem;font-size:.9375rem;line-height:1.55;position:relative}
+.msg.user .bubble{background:rgba(255,255,255,.06);color:rgba(255,255,255,.82);border-bottom-right-radius:.375rem}
+.msg.bot .bubble{background:linear-gradient(135deg,rgba(249,115,22,.14),rgba(6,182,212,.08));color:#fff;border:1px solid rgba(249,115,22,.22);border-bottom-left-radius:.375rem;box-shadow:0 0 24px rgba(249,115,22,.08)}
+.msg .bubble .name{display:block;font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:.3rem;opacity:.65}
+.msg.user .bubble .name{color:rgba(255,255,255,.55);text-align:right}
+.msg.bot .bubble .name{color:#FDBA74}
+
+/* Typing dots — shown after final bot message with a fade-in */
+.dialogue-typing{display:inline-flex;align-items:center;gap:.25rem;padding:.6rem .8rem;border-radius:1rem;background:linear-gradient(135deg,rgba(249,115,22,.12),rgba(6,182,212,.07));border:1px solid rgba(249,115,22,.2);margin-top:.5rem}
+.dialogue-typing span{width:5px;height:5px;border-radius:50%;background:#FDBA74;animation:typing-bounce 1.2s ease-in-out infinite}
+.dialogue-typing span:nth-child(2){animation-delay:.15s}
+.dialogue-typing span:nth-child(3){animation-delay:.3s}
+@keyframes typing-bounce{0%,80%,100%{transform:translateY(0);opacity:.5}40%{transform:translateY(-4px);opacity:1}}
+
+.dialogue-note{text-align:center;margin-top:1.5rem;font-size:.875rem;color:rgba(255,255,255,.45);animation:msg-in .6s 2.2s ease-out both}
+
+@media(prefers-reduced-motion:reduce){
+  .msg,.dialogue-note{animation:none;opacity:1;transform:none}
+  .dialogue-header .dot,.msg.bot .avatar,.dialogue-typing span{animation:none}
+}
 
 /* ── Savings card (glass with checklist + pricing hint) ── */
 .savings{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);border-radius:1.5rem;padding:2rem;max-width:640px;margin:0 auto}
@@ -461,9 +500,29 @@ function buildPage(d) {
     .map((f) => `<div class="feature"><div class="feature-icon">${e2svg(f.icon, 22)}</div><h3>${f.title}</h3><p>${f.desc}</p></div>`)
     .join('\n        ');
 
+  // Dialogue → chat-style msg rows. Each line arrives as
+  //   '📞 Kundin: "…"'  or  'Phonbot: "…"' — drop the leading emoji
+  // and split the speaker label from the body so the row can render
+  // with a proper avatar + name header + bubble.
   const dialogue = d.dialogue
-    .map((line) => `<p class="${line.speaker === 'user' ? 'user' : 'bot'}">${stripLeadingEmoji(line.text, 14)}</p>`)
+    .map((line) => {
+      const cleaned = line.text.replace(/^📞\s*/, '').trim();
+      const m = cleaned.match(/^([^:]+):\s*(.*)$/);
+      const name = m ? m[1].trim() : (line.speaker === 'user' ? 'Anrufer' : 'Phonbot');
+      const body = m ? m[2].trim() : cleaned;
+      const avatar = line.speaker === 'user'
+        ? `<div class="avatar" aria-hidden="true">${icon('phone', 14)}</div>`
+        : `<div class="avatar" aria-hidden="true"></div>`;
+      return `<div class="msg ${line.speaker}">${avatar}<div class="bubble"><span class="name">${name}</span>${body}</div></div>`;
+    })
     .join('\n      ');
+
+  // Derive the call duration shown in the dialogue header from the
+  // per-branch `dialogueNote` (e.g. "… · Dauer: 28 Sekunden" → "0:28").
+  const durMatch = (d.dialogueNote || '').match(/Dauer:\s*(\d+)\s*Sek/i);
+  const callDuration = durMatch
+    ? `0:${String(durMatch[1]).padStart(2, '0')}`
+    : 'Live';
 
   const faq = d.faq
     .map((q) => `<details class="faq-item"><summary>${q.q}</summary><div class="answer">${q.a}</div></details>`)
@@ -534,13 +593,17 @@ ${NAV_HTML}
 <section>
   <div class="container">
     <h2>So klingt Phonbot am Telefon</h2>
-    <p class="section-lead">Ein echtes Gespräch — nicht gestellt.</p>
     <div class="dialogue">
+      <div class="dialogue-header">
+        <span class="dot" aria-hidden="true"></span>
+        <span>Live-Anruf · Chipy</span>
+        <span class="duration">${callDuration}</span>
+      </div>
       ${dialogue}
     </div>
     <p class="dialogue-note">${d.dialogueNote}</p>
     <div style="text-align:center;margin-top:2rem">
-      <a href="/?demo=${d.templateId}#demo" class="btn btn-ghost btn-sm">▶ Chipy live am Telefon hören</a>
+      <a href="/?demo=${d.templateId}#demo" class="btn btn-ghost btn-sm">${icon('phone', 18)}<span style="margin-left:.5rem">Chipy live am Telefon hören</span></a>
     </div>
   </div>
 </section>
