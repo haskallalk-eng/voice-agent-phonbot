@@ -550,11 +550,12 @@ export async function registerAgentConfig(app: FastifyInstance) {
 
     try {
       const calls = await listCalls(retellAgentId, 20);
-      // Single source of truth: latency.e2e.p50 of the latest ended
-      // call — the exact number Retell shows on its own dashboard.
-      // Pure passthrough, no aggregation over calls, no combining
-      // of components, no estimation. If the user opens Retell's
-      // call detail, they see the same number.
+      // Single source of truth: latency.llm.p50 of the latest ended
+      // call. Retell's own dashboard labels this field 'Latency' as
+      // its headline metric — so by mirroring it we're guaranteed to
+      // show the exact same number as what the user sees on Retell.
+      // llm covers the LLM inference time only; e2e (end-to-end with
+      // ASR + TTS + network) is exposed in the tooltip breakdown.
       const pickNum = (v: unknown): number | null =>
         typeof v === 'number' && v > 0 ? Math.round(v) : null;
 
@@ -569,9 +570,9 @@ export async function registerAgentConfig(app: FastifyInstance) {
       const turnsInCall = l?.e2e?.values?.length ?? 0;
       return {
         callsCount: endedCalls.length,
-        sampleSize: e2e != null ? 1 : 0,
-        latencyMs: e2e,
-        latencySource: e2e != null ? ('p50' as const) : ('none' as const),
+        sampleSize: llm != null ? 1 : 0,
+        latencyMs: llm,
+        latencySource: llm != null ? ('p50' as const) : ('none' as const),
         breakdownMs: { llm, tts, asr, e2e },
         turnsInCall,
         lastCallAt: latest?.end_timestamp ?? null,
