@@ -562,7 +562,13 @@ async function generateOptimizedFix(
       model: MODEL,
       temperature: 0.3,
       messages: [
-        { role: 'system', content: 'Du bist Experte für die Optimierung von KI-Sprachagenten-Prompts. Antworte NUR mit dem Anweisungstext.' },
+        { role: 'system', content: `Du bist Experte für die Optimierung von KI-Sprachagenten-Prompts. Antworte NUR mit dem Anweisungstext.
+
+PLATTFORM-REGELN:
+- Dein Output ist IMMER eine Textergänzung für den System-Prompt des Agenten — keine UI-Anleitung ("klicke auf X", "verbinde Google Calendar") und keine Infrastruktur-Empfehlung.
+- Terminbuchung funktioniert IMMER, auch ohne externen Kalender (interner Chipy-Kalender). Niemals empfehlen, einen externen Kalender zu verbinden.
+- Wenn dem Agenten konkrete Info fehlt (Parkplätze, Preise, besondere Hausregeln), verwende eine eckige-Klammern-Lücke wie "[bitte konkrete Parkinfo eintragen]" statt etwas zu erfinden. Die UI zwingt den Kunden dann, die Lücke zu füllen, bevor der Prompt angewendet wird.
+- 2-4 Sätze. Imperativ formuliert. Keine Kommentare, kein Markdown, nur die reine Anweisung.` },
         {
           role: 'user',
           content: `${businessBlock(ctx) ? businessBlock(ctx) + '\n\n' : ''}Folgendes Problem ist in ${examples.length} Gesprächen aufgetreten:
@@ -572,7 +578,7 @@ ${examples.map((e, i) => `Beispiel ${i + 1}:\n- Problem: ${e.issue}\n- Zitat: "$
 Aktueller System-Prompt (letzte 500 Zeichen):
 ${currentPrompt.slice(-500)}
 
-Schreibe eine präzise, direkte Anweisung (2-4 Sätze) für den System-Prompt die dieses Problem dauerhaft löst. Berücksichtige den Unternehmenskontext. Antworte NUR mit dem Anweisungstext.`,
+Schreibe eine präzise, direkte Anweisung für den System-Prompt die dieses Problem dauerhaft löst. Berücksichtige den Unternehmenskontext und die PLATTFORM-REGELN oben.`,
         },
       ],
     }, { timeout: OPENAI_CHAT_TIMEOUT });
@@ -798,7 +804,13 @@ export async function analyzeCall(
       model: MODEL,
       temperature: 0.2,
       messages: [
-        { role: 'system', content: 'Du bist KI-Qualitätsanalyst für Sprachagenten. Antworte ausschließlich mit JSON.' },
+        { role: 'system', content: `Du bist KI-Qualitätsanalyst für Sprachagenten. Antworte ausschließlich mit JSON.
+
+PLATTFORM-REGELN (prompt_fix muss diese respektieren):
+- Terminbuchung funktioniert IMMER, auch ohne externen Kalender — es gibt den internen Chipy-Kalender. NIE empfehlen "Google Calendar / Cal.com verbinden", wenn das eigentliche Problem an anderer Stelle liegt (z.B. fehlende Öffnungszeiten, unklarer Service-Katalog, Prompt-Regeln).
+- prompt_fix ist IMMER eine Textergänzung für den System-Prompt des Agenten. Niemals eine UI-Anleitung ("klicke auf X", "verbinde Y") — solche Infrastruktur-Änderungen gehören nicht in den Prompt.
+- Platzhalter sind erlaubt: wenn dem Agenten tatsächlich konkrete Info fehlt (Parkplätze, Preise, besondere Regeln), darf der prompt_fix eine ECKIGE-KLAMMERN-LÜCKE enthalten wie "[bitte konkrete Parkinfo eintragen]" — die UI gated das Übernehmen bis der Kunde das füllt. NIE etwas erfinden.
+- Max. 2 Sätze pro prompt_fix, imperativ formuliert ("Wenn X, dann sage Y."), nicht mehr als eine Regel pro Vorschlag.` },
         {
           role: 'user',
           content: `${businessBlock(ctx) ? businessBlock(ctx) + '\n\n' : ''}System-Prompt des Agenten:
@@ -815,7 +827,7 @@ Analysiere das Gespräch im Kontext des Unternehmens und gib dieses JSON zurück
       "quote": "<Zitat max 100 Zeichen>",
       "issue": "<was schiefgelaufen ist, präzise und spezifisch>",
       "category": "<misunderstanding|wrong_info|escalation|unanswered|frustration|other>",
-      "prompt_fix": "<konkrete Anweisung für den System-Prompt>"
+      "prompt_fix": "<konkrete Anweisung für den System-Prompt — siehe Plattform-Regeln oben>"
     }
   ],
   "overall_feedback": "<2-3 Sätze Fazit, bezogen auf dieses Unternehmen>",
