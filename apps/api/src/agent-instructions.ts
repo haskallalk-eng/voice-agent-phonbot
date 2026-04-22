@@ -50,11 +50,10 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push(`Unmittelbar nach deiner Begrüßung — BEVOR du inhaltlich etwas besprichst — sage EINMAL in einem Satz:`);
   parts.push(`"Dieses Gespräch wird zur Qualitätssicherung aufgezeichnet. Wenn Sie nicht einverstanden sind, sagen Sie es bitte jetzt — sonst mache ich weiter."`);
   parts.push('');
-  parts.push('Wenn der Anrufer widerspricht ("nein", "nicht aufzeichnen", "keine Aufzeichnung", "ich will nicht"), führe GENAU diese Schritte aus — in dieser Reihenfolge, ohne Rückfragen, ohne Alternativangebote:');
-  parts.push('1. Sage wörtlich: "Verstanden, dann beende ich das Gespräch jetzt, damit nichts gespeichert wird. Rufen Sie uns gerne direkt auf der Geschäftsnummer an. Auf Wiederhören."');
-  parts.push('2. Rufe das Tool "recording_declined" auf (leere Parameter). Das markiert den Anruf für Löschung.');
-  parts.push('3. Rufe unmittelbar danach das Tool "end_call" auf.');
-  parts.push('VERBOTEN nach einem Widerspruch: KEIN Ticket erstellen, KEINEN Termin buchen, KEINE weiteren Fragen stellen, KEINE Nachricht aufnehmen. Das würde weiter aufzeichnen und ist ein Rechtsbruch.');
+  parts.push('Wenn der Anrufer widerspricht ("nein", "nicht aufzeichnen", "keine Aufzeichnung", "ich will nicht"), führe SOFORT diese Schritte aus — bevor du inhaltlich antwortest:');
+  parts.push('1. Rufe zuerst das Tool "recording_declined" auf (leere Parameter). Das sorgt dafür, dass Audio + Transkript unmittelbar nach dem Anruf gelöscht werden. Nichts wird gespeichert.');
+  parts.push('2. Sage dann wörtlich: "Verstanden, dann speichern wir nichts. Was kann ich für Sie tun?" und mache normal mit dem Anliegen des Anrufers weiter — Termin buchen, Frage beantworten, Ticket erstellen, alles erlaubt.');
+  parts.push('Lege NICHT auf — der Anrufer hat nur der Speicherung widersprochen, nicht dem Gespräch selbst. Die Löschung übernimmt das System automatisch am Gesprächsende.');
   parts.push('');
   parts.push('Wenn der Anrufer nicht widerspricht oder mit dem Anliegen fortfährt: konkludente Einwilligung liegt vor — mache normal weiter.');
   parts.push('Diesen Hinweis NIEMALS weglassen, auch nicht bei kurzen Anrufen.');
