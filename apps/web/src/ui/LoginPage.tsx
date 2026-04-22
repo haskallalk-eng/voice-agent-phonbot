@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../lib/auth.js';
 import { forgotPassword, createCheckoutSession, startCheckoutSignup } from '../lib/api.js';
@@ -8,10 +8,11 @@ type Mode = 'login' | 'register';
 
 type Props = {
   onGoToLanding?: () => void;
+  onModeChange?: (mode: Mode) => void;
   initialMode?: Mode;
 };
 
-export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
+export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }: Props) {
   const { login, register: authRegister } = useAuth();
   const [mode, setMode] = useState<Mode>(initialMode);
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +21,13 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
   // Forgot password state
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotSuccess, setForgotSuccess] = useState(false);
+
+  useEffect(() => {
+    setMode(initialMode);
+    setError(null);
+    setShowForgotPassword(false);
+    setForgotSuccess(false);
+  }, [initialMode]);
 
   // Main login/register form
   const {
@@ -149,7 +157,7 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
             type="button"
             role="tab"
             aria-selected={mode === 'login'}
-            onClick={() => { setMode('login'); setError(null); resetMainForm(); }}
+            onClick={() => { setMode('login'); onModeChange?.('login'); setError(null); resetMainForm(); }}
             className="flex-1 py-2 rounded-lg text-sm font-semibold transition-all duration-200"
             style={mode === 'login'
               ? { background: 'linear-gradient(135deg, #F97316, #06B6D4)', color: '#fff' }
@@ -161,7 +169,7 @@ export function LoginPage({ onGoToLanding, initialMode = 'login' }: Props) {
             type="button"
             role="tab"
             aria-selected={mode === 'register'}
-            onClick={() => { setMode('register'); setError(null); resetMainForm(); }}
+            onClick={() => { setMode('register'); onModeChange?.('register'); setError(null); resetMainForm(); }}
             className="flex-1 py-2 rounded-lg text-sm font-semibold transition-all duration-200"
             style={mode === 'register'
               ? { background: 'linear-gradient(135deg, #F97316, #06B6D4)', color: '#fff' }
