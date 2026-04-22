@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { RetellWebClient } from 'retell-client-js-sdk';
 import { createWebCall, getAgentConfigs, type AgentConfig } from '../lib/api.js';
+import { useWebCallCleanup } from '../lib/use-web-call-cleanup.js';
 import { IconPhone, IconMicUpload } from './PhonbotIcons.js';
 import { FoxLogo } from './FoxLogo.js';
 
@@ -24,6 +25,7 @@ export function TestConsole({ onNavigate }: { onNavigate?: (page: Page) => void 
   const clientRef = useRef<RetellWebClient | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  useWebCallCleanup(clientRef);
 
   useEffect(() => {
     void getAgentConfigs().then(res => {

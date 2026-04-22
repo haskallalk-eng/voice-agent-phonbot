@@ -171,20 +171,24 @@ export async function createAgent(config: {
   language?: string;
   interruptionSensitivity?: number;
   enableBackchannel?: boolean;
+  webhookUrl?: string;
 }): Promise<RetellAgent> {
-  return retellRequest('/create-agent', {
-    method: 'POST',
-    body: JSON.stringify({
-      agent_name: config.name,
-      response_engine: { type: 'retell-llm', llm_id: config.llmId },
-      voice_id: config.voiceId ?? DEFAULT_VOICE_ID,
-      language: config.language ?? 'de-DE',
-      interruption_sensitivity: config.interruptionSensitivity ?? defaultInterruption(),
-      enable_backchannel: config.enableBackchannel ?? defaultBackchannel(),
-      enable_dynamic_responsiveness: true,
-      end_call_after_silence_ms: defaultEndCallSilenceMs(),
-    }),
-  });
+  const body: Record<string, unknown> = {
+    agent_name: config.name,
+    response_engine: { type: 'retell-llm', llm_id: config.llmId },
+    voice_id: config.voiceId ?? DEFAULT_VOICE_ID,
+    language: config.language ?? 'de-DE',
+    interruption_sensitivity: config.interruptionSensitivity ?? defaultInterruption(),
+    enable_backchannel: config.enableBackchannel ?? defaultBackchannel(),
+    enable_dynamic_responsiveness: true,
+    end_call_after_silence_ms: defaultEndCallSilenceMs(),
+  };
+  // webhook_url is per-agent — without it, Retell never sends call_ended
+  // (which means no billing reconcile, no transcript store, no DELETE on
+  // consent-declined calls). Agent-level is correct because web calls
+  // inherit it; phone-number-level webhooks only apply to PSTN.
+  if (config.webhookUrl) body.webhook_url = config.webhookUrl;
+  return retellRequest('/create-agent', { method: 'POST', body: JSON.stringify(body) });
 }
 
 export async function updateAgent(
@@ -196,6 +200,7 @@ export async function updateAgent(
     llmId?: string;
     interruptionSensitivity?: number;
     enableBackchannel?: boolean;
+    webhookUrl?: string;
   },
 ): Promise<RetellAgent> {
   // RET-08: only set tuning params when the caller explicitly provides them.
@@ -212,6 +217,7 @@ export async function updateAgent(
   if (config.voiceId !== undefined) body.voice_id = config.voiceId;
   if (config.language !== undefined) body.language = config.language;
   if (config.llmId !== undefined) body.response_engine = { type: 'retell-llm', llm_id: config.llmId };
+  if (config.webhookUrl !== undefined) body.webhook_url = config.webhookUrl;
 
   return retellRequest(`/update-agent/${encodeURIComponent(agentId)}`, {
     method: 'PATCH',
