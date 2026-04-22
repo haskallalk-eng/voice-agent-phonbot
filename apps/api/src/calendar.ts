@@ -751,7 +751,7 @@ function generateChipySlots(schedule: ChipySchedule, blocks: string[], timeBlock
     const dayConfig = schedule[dow] ?? DEFAULT_CHIPPY_SCHEDULE[dow];
     if (!dayConfig?.enabled) continue;
 
-    const dateStr = day.toISOString().slice(0, 10);
+    const dateStr = localDateKey(day);
     if (blockedSet.has(dateStr)) continue;
 
     const dayLabel = DAY_LABELS[day.getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6];
@@ -1150,7 +1150,7 @@ function resolveSlotDate(slot: string, now: Date): { dateStr: string; timeStr: s
       const date = new Date(now);
       date.setDate(now.getDate() + d);
       if (date.getDay() === targetDow) {
-        return { dateStr: date.toISOString().slice(0, 10), timeStr };
+        return { dateStr: localDateKey(date), timeStr };
       }
     }
   }
