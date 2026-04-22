@@ -5,16 +5,33 @@ import { IconBolt } from '../PhonbotIcons.js';
 
 export function getProviderLabel(voice: Voice): string {
   if (voice.voice_type === 'cloned') return 'Eigene Stimme';
+  // Prefer the canonical `tier` field from the curated catalog. Fall back
+  // to provider detection for /voices/raw responses that don't carry tier.
+  if (voice.tier === 'hq') return 'High Quality Voice';
+  if (voice.tier === 'standard') return 'Standard';
   const provider = (voice.provider ?? voice.voice_id.split('-')[0] ?? '').toLowerCase();
-  // ElevenLabs is the only premium-tier TTS supplier we carry — rebrand
-  // it to 'High Quality Voice' so users see a benefit-framed label, not a
-  // supplier name. Every other supplier (Retell native, OpenAI, Cartesia,
-  // Minimax, Deepgram) collapses under a single 'Standard' bucket so the
-  // dropdown shows just two provider groups instead of five.
   if (provider === 'elevenlabs' || provider === '11labs' || provider === 'eleven_labs') {
     return 'High Quality Voice';
   }
   return 'Standard';
+}
+
+/** Localise the voice's gender tag for the UI. */
+function genderLabel(voice: Voice): string {
+  const g = (voice.gender ?? '').toLowerCase();
+  if (g === 'female') return 'Weiblich';
+  if (g === 'male') return 'Männlich';
+  if (g === 'neutral') return 'Neutral';
+  return '';
+}
+
+/** Sort key: 0 = female, 1 = male, 2 = neutral, 3 = unknown. */
+function genderSortKey(voice: Voice): number {
+  const g = (voice.gender ?? '').toLowerCase();
+  if (g === 'female') return 0;
+  if (g === 'male') return 1;
+  if (g === 'neutral') return 2;
+  return 3;
 }
 
 // Voice counts as "Premium" (triggers +5 Ct/Min surcharge) when:
@@ -71,9 +88,9 @@ export function VoiceDropdown({
   }, [dropdownOpen]);
 
   const currentVoice = voices.find((v) => v.voice_id === currentVoiceId);
-  const displayLabel = currentVoice
-    ? `${currentVoice.voice_name} (${getProviderLabel(currentVoice)})`
-    : currentVoiceId;
+  // Tier comes through either via the pill (HQ surcharge) or the provider-
+  // group header in the list — no need to repeat it on the trigger label.
+  const displayLabel = currentVoice ? currentVoice.voice_name : currentVoiceId;
   const currentIsPremium = currentVoice ? isPremiumVoice(currentVoice) : false;
   const currentSurcharge = currentVoice ? voiceSurcharge(currentVoice) : 0;
 
@@ -104,13 +121,26 @@ export function VoiceDropdown({
   const cloned = voices.filter((v) => v.voice_type === 'cloned' && (!search || v.voice_name.toLowerCase().includes(searchLower)));
   const builtIn = voices.filter((v) => v.voice_type !== 'cloned' && (!search || v.voice_name.toLowerCase().includes(searchLower) || (v.accent ?? '').toLowerCase().includes(searchLower) || (v.provider ?? '').toLowerCase().includes(searchLower)));
 
-  // Group built-in by provider
+  // Group built-in by tier label, then sort each group by gender so
+  // Weiblich voices read first, Männlich below, Neutral last.
   const providerGroups: Record<string, Voice[]> = {};
   for (const v of builtIn) {
     const prov = getProviderLabel(v);
     if (!providerGroups[prov]) providerGroups[prov] = [];
     providerGroups[prov].push(v);
   }
+  for (const group of Object.values(providerGroups)) {
+    group.sort((a, b) => {
+      const g = genderSortKey(a) - genderSortKey(b);
+      if (g !== 0) return g;
+      return a.voice_name.localeCompare(b.voice_name, 'de');
+    });
+  }
+  // Force the High-Quality group to render before Standard.
+  const providerGroupsOrdered = Object.entries(providerGroups).sort(([a], [b]) => {
+    const rank = (k: string) => (k === 'High Quality Voice' ? 0 : k === 'Standard' ? 1 : 2);
+    return rank(a) - rank(b);
+  });
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -275,8 +305,8 @@ export function VoiceDropdown({
             </>
           )}
 
-          {/* Built-in voices grouped by provider */}
-          {Object.entries(providerGroups).map(([provider, provVoices]) => (
+          {/* Built-in voices grouped by tier, sorted by gender within */}
+          {providerGroupsOrdered.map(([provider, provVoices]) => (
             <React.Fragment key={provider}>
               <div className="px-4 py-1.5 bg-white/3 border-b border-t border-white/5">
                 <span className="text-xs font-semibold text-white/40 uppercase tracking-wide">{provider}</span>
@@ -298,7 +328,7 @@ export function VoiceDropdown({
                       </span>
                     )}
                   </span>
-                  <span className="text-xs text-white/30 shrink-0">{v.accent ?? v.gender ?? ''}</span>
+                  <span className="text-xs text-white/30 shrink-0">{genderLabel(v) || v.accent || ''}</span>
                 </button>
               ))}
             </React.Fragment>
