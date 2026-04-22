@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { pool } from './db.js';
 import type { JwtPayload } from './auth.js';
+import { materializePendingFromSession } from './auth.js';
 import { autoProvisionGermanNumber } from './phone.js';
 import { sendPlanActivatedEmail, sendPaymentFailedEmail } from './email.js';
 
@@ -468,11 +469,39 @@ export async function registerBilling(app: FastifyInstance) {
     }
 
     switch (event.type) {
+      case 'checkout.session.completed': {
+        // Stripe-first registration flow: the user paid via /auth/checkout-start
+        // and the pending_registrations row hasn't been materialized yet. Do it
+        // now so the user+org exist before customer.subscription.created runs
+        // (which relies on o.stripe_customer_id to find the org).
+        const session = event.data.object as Stripe.Checkout.Session;
+        const pendingId = session.metadata?.pendingRegistrationId;
+        if (pendingId) {
+          const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id ?? null;
+          try {
+            const res = await materializePendingFromSession(session.id, customerId);
+            req.log.info({ sessionId: session.id, userId: res?.userId ?? null }, 'pending registration materialized via webhook');
+          } catch (err) {
+            req.log.error({ err: (err as Error).message, sessionId: session.id }, 'materialize pending from webhook failed');
+          }
+        }
+        break;
+      }
       case 'customer.subscription.created': {
         const newSub = event.data.object as Stripe.Subscription;
         await syncSubscription(newSub);
-        // Auto-provision a German phone number for new paying customers
-        const newOrgId = newSub.metadata?.orgId;
+        // Auto-provision a German phone number for new paying customers.
+        // Stripe-first checkouts (no orgId in metadata) still get provisioned:
+        // we fall back to looking the org up via stripe_customer_id, which
+        // syncSubscription has just populated.
+        let newOrgId = newSub.metadata?.orgId;
+        if (!newOrgId && pool) {
+          const custId = typeof newSub.customer === 'string' ? newSub.customer : newSub.customer?.id;
+          if (custId) {
+            const r = await pool.query('SELECT id FROM orgs WHERE stripe_customer_id = $1', [custId]);
+            newOrgId = r.rows[0]?.id as string | undefined;
+          }
+        }
         if (newOrgId && newSub.status === 'active') {
           autoProvisionGermanNumber(newOrgId).catch((err: unknown) => {
             req.log.warn({ err: (err as Error).message, orgId: newOrgId }, 'auto-provision phone after subscription.created failed');

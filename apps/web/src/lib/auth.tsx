@@ -28,6 +28,7 @@ export type AuthState = {
 type AuthContextValue = AuthState & {
   login: (email: string, password: string) => Promise<void>;
   register: (orgName: string, email: string, password: string) => Promise<void>;
+  finalizeCheckout: (sessionId: string) => Promise<void>;
   logout: () => void;
 };
 
@@ -144,6 +145,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState({ token: data.token, user: data.user, org: data.org, bootstrapping: false });
   }, []);
 
+  // After Stripe success redirect (`/?checkoutSession=X`), swap the session id
+  // for a real token pair. Server verifies with Stripe and materializes the
+  // account if the webhook hasn't already. Retries once on 404 — the webhook
+  // may beat the browser back to the origin by a few hundred ms.
+  const finalizeCheckout = useCallback(async (sessionId: string) => {
+    const doCall = () => apiFetch<AuthResponse>('/auth/finalize-checkout', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId }),
+    });
+    let data: AuthResponse;
+    try {
+      data = await doCall();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (/not yet provisioned/i.test(msg)) {
+        await new Promise(r => setTimeout(r, 1500));
+        data = await doCall();
+      } else {
+        throw err;
+      }
+    }
+    setAccessToken(data.token);
+    setState({ token: data.token, user: data.user, org: data.org, bootstrapping: false });
+  }, []);
+
   const logout = useCallback(() => {
     // Server-side: revoke refresh token + clear cookie. Fire-and-forget — local
     // logout must always succeed even if the network call fails.
@@ -164,7 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, register, logout }}>
+    <AuthContext.Provider value={{ ...state, login, register, finalizeCheckout, logout }}>
       {children}
     </AuthContext.Provider>
   );

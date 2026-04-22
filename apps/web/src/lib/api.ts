@@ -576,6 +576,33 @@ export function createCheckoutSession(planId: string, interval: 'month' | 'year'
   });
 }
 
+// Stripe-first register flow: called from the landing page BEFORE the user
+// has an account. Payload + plan go to the server, server creates a Stripe
+// Checkout Session, returns the URL to redirect to. User + org are only
+// materialized after Stripe confirms payment (via webhook or finalizeCheckout).
+export function startCheckoutSignup(input: {
+  orgName: string;
+  email: string;
+  password: string;
+  planId: 'nummer' | 'starter' | 'pro' | 'agency';
+  interval: 'month' | 'year';
+}) {
+  return request<{ url: string }>('/auth/checkout-start', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+// Called by the landing page when Stripe redirects back with ?checkoutSession=X.
+// Server verifies the session with Stripe, creates the user + org if the
+// webhook hasn't already, and returns a fresh token pair.
+export function finalizeCheckoutSignup(sessionId: string) {
+  return request<{ token: string; user: { id: string; email: string; role: string }; org: { id: string; name: string; slug: string } }>(
+    '/auth/finalize-checkout',
+    { method: 'POST', body: JSON.stringify({ sessionId }) },
+  );
+}
+
 export function deleteAccount() {
   return request<{ ok: boolean }>('/auth/account', { method: 'DELETE', body: '{}' });
 }

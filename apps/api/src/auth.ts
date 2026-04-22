@@ -4,6 +4,7 @@ import bcrypt from 'bcrypt';
 import { pool } from './db.js';
 import { z } from 'zod';
 import { sendPasswordResetEmail, sendVerificationEmail, sendWelcomeEmail } from './email.js';
+import { stripe, PLANS, type PlanId } from './billing.js';
 
 // ── Token lifetime / cookie config ────────────────────────────────────────────
 //
@@ -77,10 +78,97 @@ const RegisterBody = z.object({
   password: z.string().min(PASSWORD_MIN).max(PASSWORD_MAX),
 });
 
+const CheckoutStartBody = z.object({
+  orgName: z.string().min(2).max(100),
+  email: z.string().email(),
+  password: z.string().min(PASSWORD_MIN).max(PASSWORD_MAX),
+  planId: z.enum(['nummer', 'starter', 'pro', 'agency']),
+  interval: z.enum(['month', 'year']).default('month'),
+});
+
+const FinalizeCheckoutBody = z.object({
+  sessionId: z.string().min(1),
+});
+
 const LoginBody = z.object({
   email: z.string().email(),
   password: z.string().min(1).max(PASSWORD_MAX),
 });
+
+/**
+ * Shared materialize step: given a Stripe Checkout session that's paid, turn
+ * the pending_registrations row into a real users + orgs pair. Called both
+ * from the webhook (fire-and-forget path) and /auth/finalize-checkout (when
+ * the user's browser hits the success URL).
+ *
+ * Idempotent: if the pending row is gone, we return null — the other path
+ * already materialized this session.
+ */
+async function materializePendingFromSession(
+  sessionId: string,
+  stripeCustomerId: string | null,
+): Promise<{ userId: string; orgId: string; email: string; role: 'owner' | 'admin' | 'member' } | null> {
+  if (!pool) throw new Error('Database not configured');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Lock the pending row so a concurrent webhook + finalize can't double-insert.
+    const pending = await client.query(
+      `SELECT id, email, org_name, password_hash, plan_id
+         FROM pending_registrations
+        WHERE stripe_session_id = $1
+        FOR UPDATE`,
+      [sessionId],
+    );
+    if (!pending.rowCount) {
+      await client.query('ROLLBACK');
+      return null; // already materialized (or never existed)
+    }
+    const p = pending.rows[0] as {
+      id: string; email: string; org_name: string; password_hash: string; plan_id: string;
+    };
+
+    // Double-check: if the email was registered elsewhere in the meantime,
+    // bail. Safer than overwriting.
+    const dup = await client.query('SELECT id FROM users WHERE email = $1', [p.email]);
+    if (dup.rowCount) {
+      await client.query('DELETE FROM pending_registrations WHERE id = $1', [p.id]);
+      await client.query('COMMIT');
+      return null;
+    }
+
+    const slug = p.org_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'org';
+    const orgRes = await client.query(
+      `INSERT INTO orgs (name, slug, stripe_customer_id)
+       VALUES ($1, $2, $3)
+       RETURNING id`,
+      [p.org_name, slug + '-' + Date.now().toString(36), stripeCustomerId],
+    );
+    const orgId = orgRes.rows[0].id as string;
+
+    // email_verified=true here: payment implies ownership of that email via
+    // Stripe's receipt flow, so the extra click-to-verify is redundant.
+    const userRes = await client.query(
+      `INSERT INTO users (org_id, email, password_hash, role, email_verified)
+       VALUES ($1, $2, $3, 'owner', true)
+       RETURNING id, role`,
+      [orgId, p.email, p.password_hash],
+    );
+    const user = userRes.rows[0] as { id: string; role: 'owner' | 'admin' | 'member' };
+
+    await client.query('DELETE FROM pending_registrations WHERE id = $1', [p.id]);
+    await client.query('COMMIT');
+    return { userId: user.id, orgId, email: p.email, role: user.role };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export { materializePendingFromSession };
 
 export async function registerAuth(app: FastifyInstance) {
   // POST /auth/register — create org + owner user
@@ -163,6 +251,152 @@ export async function registerAuth(app: FastifyInstance) {
     } finally {
       client.release();
     }
+  });
+
+  // POST /auth/checkout-start — Stripe-first register flow.
+  // Used when the user picked a paid plan on the pricing page. We do NOT
+  // create the users/orgs rows here — only after Stripe checkout completes.
+  // On cancel, the pending row is orphaned and cleaned up later (no user
+  // account visible from the landing page).
+  app.post('/auth/checkout-start', {
+    config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!stripe || !pool) return reply.status(503).send({ error: 'Payments not configured' });
+
+    const parsed = CheckoutStartBody.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid input', details: parsed.error.flatten() });
+    }
+    const { orgName, email, password, planId, interval } = parsed.data;
+
+    const plan = PLANS[planId as PlanId];
+    const priceId = interval === 'year' ? plan.stripePriceIdYearly : plan.stripePriceId;
+    if (!priceId) {
+      return reply.status(400).send({ error: 'Plan price not configured' });
+    }
+
+    // Reject immediately if email is already claimed by a real user. Pending
+    // rows are allowed to coexist — a second click while Stripe was open
+    // shouldn't 409 the user, it should just start a fresh session.
+    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    if (existing.rowCount) {
+      return reply.status(409).send({ error: 'Email already registered' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    // Create a Stripe Customer up front so the metadata on the subscription
+    // has a stable id and the portal/receipt emails go to the right inbox.
+    const customer = await stripe.customers.create({ email, name: orgName });
+
+    // Insert pending first — if Stripe call fails below we roll back here.
+    const pendingRes = await pool.query(
+      `INSERT INTO pending_registrations (email, org_name, password_hash, plan_id, billing_interval, stripe_customer_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id`,
+      [email, orgName, passwordHash, planId, interval, customer.id],
+    );
+    const pendingId = pendingRes.rows[0].id as string;
+
+    const appUrl = process.env.APP_URL ?? 'http://localhost:5173';
+    try {
+      const session = await stripe.checkout.sessions.create({
+        customer: customer.id,
+        mode: 'subscription',
+        line_items: [{ price: priceId, quantity: 1 }],
+        subscription_data: { metadata: { pendingRegistrationId: pendingId } },
+        metadata: { pendingRegistrationId: pendingId },
+        // {CHECKOUT_SESSION_ID} is a Stripe placeholder replaced server-side.
+        success_url: `${appUrl}/?checkoutSession={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${appUrl}/`,
+        allow_promotion_codes: true,
+      });
+      await pool.query(
+        'UPDATE pending_registrations SET stripe_session_id = $1 WHERE id = $2',
+        [session.id, pendingId],
+      );
+      return { url: session.url };
+    } catch (err) {
+      // Clean up the orphan pending row so the TTL job doesn't have to.
+      await pool.query('DELETE FROM pending_registrations WHERE id = $1', [pendingId]).catch(() => {});
+      req.log.error({ err: (err as Error).message, email }, 'stripe checkout create failed');
+      return reply.status(502).send({ error: 'Zahlungsdienst nicht erreichbar. Bitte erneut versuchen.' });
+    }
+  });
+
+  // POST /auth/finalize-checkout — called by the browser after Stripe redirects
+  // back with ?checkoutSession=X. Verifies the session with Stripe, materializes
+  // the pending registration into a real user + org (if the webhook didn't
+  // already), and logs the user in.
+  app.post('/auth/finalize-checkout', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!stripe || !pool) return reply.status(503).send({ error: 'Payments not configured' });
+
+    const parsed = FinalizeCheckoutBody.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid sessionId' });
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(parsed.data.sessionId).catch(() => null);
+    if (!session || session.object !== 'checkout.session') {
+      return reply.status(404).send({ error: 'Checkout session not found' });
+    }
+    // 'no_payment_required' covers trials / 100% coupons — still counts as
+    // successful checkout for our purposes.
+    if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') {
+      return reply.status(402).send({ error: 'Zahlung noch nicht abgeschlossen' });
+    }
+
+    const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id ?? null;
+
+    // First try: pending row is still there → materialize now.
+    const materialized = await materializePendingFromSession(session.id, customerId);
+
+    // Look up the (now-existing) user/org either way. Webhook may have already
+    // materialized before the browser got here; both paths land on the same row.
+    let lookup: { id: string; org_id: string; role: 'owner' | 'admin' | 'member'; email: string; org_name: string; org_slug: string } | null = null;
+    if (materialized) {
+      const r = await pool.query(
+        `SELECT u.id, u.org_id, u.role, u.email, o.name as org_name, o.slug as org_slug
+           FROM users u JOIN orgs o ON o.id = u.org_id
+          WHERE u.id = $1`,
+        [materialized.userId],
+      );
+      lookup = r.rows[0] ?? null;
+    } else if (customerId) {
+      const r = await pool.query(
+        `SELECT u.id, u.org_id, u.role, u.email, o.name as org_name, o.slug as org_slug
+           FROM users u JOIN orgs o ON o.id = u.org_id
+          WHERE o.stripe_customer_id = $1 AND u.role = 'owner'
+          ORDER BY u.created_at
+          LIMIT 1`,
+        [customerId],
+      );
+      lookup = r.rows[0] ?? null;
+    }
+
+    if (!lookup) {
+      return reply.status(404).send({ error: 'Account not yet provisioned — try again in a moment' });
+    }
+
+    const { token } = await issueTokenPair(
+      app,
+      { id: lookup.id, role: lookup.role, org_id: lookup.org_id },
+      req,
+      reply,
+    );
+
+    // Best-effort: send welcome email on first login after checkout.
+    if (process.env.RESEND_API_KEY) {
+      sendWelcomeEmail({ toEmail: lookup.email, orgName: lookup.org_name }).catch(() => {/* logged in email.ts */});
+    }
+
+    return reply.send({
+      token,
+      org: { id: lookup.org_id, name: lookup.org_name, slug: lookup.org_slug },
+      user: { id: lookup.id, email: lookup.email, role: lookup.role },
+    });
   });
 
   // POST /auth/login
