@@ -657,42 +657,13 @@ live Retell · ${ageStr}`
   }
 
   // Outer tooltip: short. Everything else lives on each chip.
-  const outerTip = `Live von Retell · ${ageStr} · klick zum Aktualisieren`;
-
-  // Empty / error states get their own minimal display — no fake 0-Chips.
-  if (stats?.error === 'not_deployed') {
-    return (
-      <LatencyEmptyState
-        icon={<IconDeploy size={14} className="text-orange-400" />}
-        label="Nicht live"
-        tooltip="Agent ist noch nicht deployt. Nach dem ersten Deploy erscheint die Latenz live."
-        onClick={onRefresh}
-        pulseClass={refreshing ? 'bg-orange-400' : 'bg-white/30'}
-      />
-    );
-  }
-  if (stats?.error === 'retell_unreachable') {
-    return (
-      <LatencyEmptyState
-        icon={<IconRefresh size={14} className="text-yellow-400" />}
-        label="Retell offline"
-        tooltip="Retell nicht erreichbar — versuche es in ein paar Sekunden nochmal. Klick zum sofort erneut laden."
-        onClick={onRefresh}
-        pulseClass={refreshing ? 'bg-orange-400' : 'bg-yellow-400'}
-      />
-    );
-  }
-  if (!hasData) {
-    return (
-      <LatencyEmptyState
-        icon={<IconPlay size={14} className="text-cyan-400" />}
-        label="Kein Call"
-        tooltip="Noch keine Calls mit Latenz-Daten. Starte einen Test-Call — die Zahl erscheint dann live."
-        onClick={onRefresh}
-        pulseClass={refreshing ? 'bg-orange-400' : 'bg-cyan-400/60'}
-      />
-    );
-  }
+  const outerTip = hasData
+    ? `Live von Retell · ${ageStr} · klick zum Aktualisieren`
+    : stats?.error === 'not_deployed'
+      ? 'Agent noch nicht deployt — Zahl erscheint sobald der erste Call über Retell lief.'
+      : stats?.error === 'retell_unreachable'
+        ? 'Retell gerade nicht erreichbar — wird automatisch weiter versucht, klick für sofortigen Retry.'
+        : 'Noch keine Latenz-Daten von Retell — erscheint sobald der erste Call ausgewertet ist.';
 
   return (
     <div
@@ -722,48 +693,16 @@ live Retell · ${ageStr}`
       <StatChip
         label="Latenz"
         value={hasData ? `${measuredMs} ms` : '—'}
-        title={latencyTip}
+        title={hasData ? latencyTip : outerTip}
         icon={<IconBolt size={12} className="text-orange-300/70" />}
       />
       <Divider />
       <StatChip
         label="Status"
         value={latencyLabel}
-        title={latencyTip}
+        title={hasData ? latencyTip : outerTip}
         badgeClass={latencyColor}
       />
-    </div>
-  );
-}
-
-/** Minimal inline state shown in place of the chips row when there's
- *  no usable latency data. Just icon + short label, tooltip on hover. */
-function LatencyEmptyState({
-  icon,
-  label,
-  tooltip,
-  onClick,
-  pulseClass,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  tooltip: string;
-  onClick: () => void;
-  pulseClass: string;
-}) {
-  return (
-    <div
-      className="hidden md:flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-white/65 hover:bg-white/[0.06] hover:border-white/20 cursor-pointer transition-colors relative"
-      title={tooltip}
-      onClick={onClick}
-    >
-      <span
-        className={`w-1.5 h-1.5 rounded-full ${pulseClass}`}
-        style={{ animation: 'breathe 2.2s ease-in-out infinite', boxShadow: '0 0 4px currentColor' }}
-        aria-hidden="true"
-      />
-      {icon}
-      <span>{label}</span>
     </div>
   );
 }
