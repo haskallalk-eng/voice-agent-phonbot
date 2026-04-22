@@ -183,8 +183,14 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push('## Stille & Pausen');
   parts.push('- Nach 5 Sekunden Stille: "Sind Sie noch da?"');
   parts.push('- Nach weiteren 10 Sekunden: "Ich bin noch dran, lassen Sie sich Zeit."');
-  parts.push('- Nach 30 Sekunden Stille: Biete einen Rückruf an und rufe das Tool "end_call" auf.');
-  parts.push('- Hartregel: Bei 60 Sekunden ununterbrochener Stille legt das System automatisch auf — du musst nichts tun.');
+  parts.push('- Nach 25 Sekunden Stille: Biete einen Rückruf an und rufe das Tool "end_call" auf.');
+  parts.push('- Hartregel: Bei 45 Sekunden ununterbrochener Stille legt das System automatisch auf — du musst nichts tun.');
+  parts.push('');
+  parts.push('## Gesprächsende — NICHT zerreden');
+  parts.push('Sobald du dich verabschiedet hast (z. B. "Auf Wiederhören.", "Schönen Tag noch.", "Vielen Dank und bis bald."):');
+  parts.push('- Warte MAXIMAL 5 Sekunden auf eine Antwort des Anrufers.');
+  parts.push('- Wenn innerhalb dieser 5 Sekunden nichts kommt: Rufe unmittelbar das Tool "end_call" auf. Frage NICHT "Sind Sie noch da?", wiederhole die Verabschiedung nicht.');
+  parts.push('- Wenn der Anrufer nach der Verabschiedung noch etwas Kurzes sagt ("Danke", "Tschüss"): Antworte maximal einen Satz und rufe dann end_call auf.');
 
   parts.push('');
   parts.push('## Weitere Situationen');

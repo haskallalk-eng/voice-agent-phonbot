@@ -154,13 +154,13 @@ function defaultBackchannel(): boolean {
 }
 
 /** Hard timeout — Retell hangs up after N ms of unbroken silence.
- *  Default 60 s so a caller who wandered off / dropped the line can't
+ *  Default 45 s so a caller who wandered off / dropped the line can't
  *  rack up open minutes forever. */
 function defaultEndCallSilenceMs(): number {
   const raw = process.env.RETELL_AGENT_END_CALL_SILENCE_MS;
-  if (raw === undefined || raw === '') return 60_000;
+  if (raw === undefined || raw === '') return 45_000;
   const v = Number(raw);
-  if (!Number.isFinite(v) || v < 10_000) return 60_000;
+  if (!Number.isFinite(v) || v < 10_000) return 45_000;
   return v;
 }
 
