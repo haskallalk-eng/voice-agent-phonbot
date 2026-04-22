@@ -98,7 +98,8 @@ function verifyRetellToolRequest(req: RawBodyRequest): boolean {
   if (verifyRetellSignature(req)) return true;
   const body = (req.body ?? {}) as Record<string, unknown>;
   const args = (body.args ?? body) as Record<string, unknown>;
-  const agentId = (args?._retell_agent_id ?? args?.agent_id ?? body?._retell_agent_id ?? body?.agent_id) as unknown;
+  const call = (body.call ?? {}) as Record<string, unknown>;
+  const agentId = (args?._retell_agent_id ?? args?.agent_id ?? body?._retell_agent_id ?? body?.agent_id ?? call.agent_id) as unknown;
   return typeof agentId === 'string' && agentId.length > 0;
 }
 
@@ -124,6 +125,42 @@ interface RetellCallData {
   agent_id?: string;
   from_number?: string;
   to_number?: string;
+}
+
+function retellArgs(body: RetellEventBody): Record<string, unknown> {
+  return (body?.args ?? body ?? {}) as Record<string, unknown>;
+}
+
+function getRetellCall(body: RetellEventBody): RetellCallData | Record<string, unknown> {
+  return (body?.call ?? body) as RetellCallData | Record<string, unknown>;
+}
+
+function getRetellAgentId(body: RetellEventBody, args = retellArgs(body)): string | undefined {
+  const call = getRetellCall(body) as Record<string, unknown>;
+  const value =
+    args._retell_agent_id ??
+    args.agent_id ??
+    body._retell_agent_id ??
+    body.agent_id ??
+    call.agent_id;
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function getRetellCallId(body: RetellEventBody, args = retellArgs(body)): string | undefined {
+  const call = getRetellCall(body) as Record<string, unknown>;
+  const value = args._retell_call_id ?? body._retell_call_id ?? call.call_id;
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function getCallerPhone(body: RetellEventBody, args = retellArgs(body)): string {
+  const call = getRetellCall(body) as Record<string, unknown>;
+  const value =
+    args.customerPhone ??
+    args.customer_phone ??
+    args.from_number ??
+    body.from_number ??
+    call.from_number;
+  return typeof value === 'string' ? value : '';
 }
 
 export async function registerRetellWebhooks(app: FastifyInstance) {
@@ -262,14 +299,14 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     }
 
     const body = req.body as RetellEventBody;
-    const args = (body?.args ?? body ?? {}) as Record<string, unknown>;
-
-    const agentIdForSlots = (args._retell_agent_id as string | undefined) ?? (args.agent_id as string | undefined);
+    const args = retellArgs(body);
+    const callId = getRetellCallId(body, args) ?? 'retell';
+    const agentIdForSlots = getRetellAgentId(body, args);
     const orgIdForSlots = agentIdForSlots ? await getOrgIdByAgentId(agentIdForSlots) : null;
 
     await appendTraceEvent({
       type: 'tool_call',
-      sessionId: (args._retell_call_id as string | undefined) ?? 'retell',
+      sessionId: callId,
       tenantId: orgIdForSlots ?? undefined,
       tool: 'calendar.findSlots',
       input: args,
@@ -280,7 +317,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
     if (orgIdForSlots) {
       const { slots, source } = await findFreeSlots(orgIdForSlots, {
-        date: args.date as string | undefined,
+        date: (args.date as string | undefined) ?? (args.preferredTime as string | undefined),
         range: args.range as string | undefined,
         service: args.service as string | undefined,
       });
@@ -299,7 +336,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
     await appendTraceEvent({
       type: 'tool_result',
-      sessionId: (args._retell_call_id as string | undefined) ?? 'retell',
+      sessionId: callId,
       tenantId: orgIdForSlots ?? undefined,
       tool: 'calendar.findSlots',
       output: result,
@@ -323,14 +360,14 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     }
 
     const body = req.body as RetellEventBody;
-    const args = (body?.args ?? body ?? {}) as Record<string, unknown>;
-
-    const agentIdForBook = (args._retell_agent_id as string | undefined) ?? (args.agent_id as string | undefined);
+    const args = retellArgs(body);
+    const callId = getRetellCallId(body, args) ?? 'retell';
+    const agentIdForBook = getRetellAgentId(body, args);
     const orgIdForBook = agentIdForBook ? await getOrgIdByAgentId(agentIdForBook) : null;
 
     await appendTraceEvent({
       type: 'tool_call',
-      sessionId: (args._retell_call_id as string | undefined) ?? 'retell',
+      sessionId: callId,
       tenantId: orgIdForBook ?? undefined,
       tool: 'calendar.book',
       input: args,
@@ -340,24 +377,82 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     let result: Record<string, unknown>;
 
     if (orgIdForBook) {
+      const customerName = (args.customerName as string | undefined) ?? 'Unbekannt';
+      const customerPhone = getCallerPhone(body, args);
+      const preferredTime = (args.preferredTime as string | undefined) ?? (args.time as string | undefined) ?? '';
+      const service = (args.service as string | undefined) ?? '';
+      const notes = args.notes as string | undefined;
       const booking = await bookSlot(orgIdForBook, {
-        customerName: (args.customerName as string | undefined) ?? 'Unbekannt',
-        customerPhone: (args.customerPhone as string | undefined) ?? '',
-        time: (args.preferredTime as string | undefined) ?? (args.time as string | undefined) ?? '',
-        service: (args.service as string | undefined) ?? '',
-        notes: args.notes as string | undefined,
+        customerName,
+        customerPhone,
+        time: preferredTime,
+        service,
+        notes,
       });
-      result = {
-        ok: booking.ok,
-        status: booking.ok ? 'confirmed' : 'failed',
-        eventId: booking.eventId ?? null,
-        bookingId: booking.bookingId ?? null,
-        error: booking.error ?? null,
-        customerName: args.customerName ?? null,
-        customerPhone: args.customerPhone ?? null,
-        preferredTime: args.preferredTime ?? args.time ?? null,
-        service: args.service ?? null,
-      };
+
+      if (!booking.ok) {
+        try {
+          const ticket = await createTicket({
+            tenantId: orgIdForBook,
+            source: 'phone',
+            sessionId: callId,
+            reason: 'calendar-unavailable',
+            customerName,
+            customerPhone,
+            preferredTime,
+            service,
+            notes,
+          });
+
+          result = {
+            ok: true,
+            status: 'fallback_ticket_created',
+            fallback: true,
+            ticketId: ticket.id,
+            ticketStatus: ticket.status,
+            error: booking.error ?? null,
+            message: 'Kalenderbuchung fehlgeschlagen, Rueckruf-Ticket wurde erstellt.',
+            customerName,
+            customerPhone: ticket.customer_phone,
+            preferredTime,
+            service,
+          };
+        } catch (e: unknown) {
+          const code = (e as { code?: string })?.code;
+          req.log.error(
+            {
+              err: e instanceof Error ? e.message : String(e),
+              code,
+              orgId: orgIdForBook,
+              callId,
+            },
+            'retell calendar.book fallback ticket failed',
+          );
+          result = {
+            ok: false,
+            status: 'failed',
+            fallback: false,
+            error: booking.error ?? 'CALENDAR_BOOK_FAILED',
+            fallbackError: code ?? 'TICKET_CREATE_FAILED',
+            customerName,
+            customerPhone,
+            preferredTime,
+            service,
+          };
+        }
+      } else {
+        result = {
+          ok: booking.ok,
+          status: booking.ok ? 'confirmed' : 'failed',
+          eventId: booking.eventId ?? null,
+          bookingId: booking.bookingId ?? null,
+          error: booking.error ?? null,
+          customerName,
+          customerPhone,
+          preferredTime,
+          service,
+        };
+      }
     } else {
       // Fallback: no org/calendar — confirm as demo
       result = {
@@ -374,7 +469,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
     await appendTraceEvent({
       type: 'tool_result',
-      sessionId: (args._retell_call_id as string | undefined) ?? 'retell',
+      sessionId: callId,
       tenantId: orgIdForBook ?? undefined,
       tool: 'calendar.book',
       output: result,
@@ -398,14 +493,15 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     }
 
     const body = req.body as RetellEventBody;
-    const args = (body?.args ?? body ?? {}) as Record<string, unknown>;
+    const args = retellArgs(body);
+    const callId = getRetellCallId(body, args) ?? 'retell';
 
     // Resolve tenantId from the agent_id in the request. Refuse when we can't
     // map — previously we silently fell back to tenantId='demo', which caused
     // unknown-agent webhooks to land in the demo silo and mix with real demo
     // tickets. Signature was already verified, so a 403 here means either a
     // stale Retell agent (we deleted it) or a misconfigured webhook URL.
-    const agentId = (args._retell_agent_id as string | undefined) ?? (args.agent_id as string | undefined);
+    const agentId = getRetellAgentId(body, args);
     const orgId = agentId ? await getOrgIdByAgentId(agentId) : null;
     if (!orgId) {
       req.log.warn({ agentId }, 'retell ticket.create: unknown agent_id, refusing');
@@ -415,7 +511,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
     await appendTraceEvent({
       type: 'tool_call',
-      sessionId: (args._retell_call_id as string | undefined) ?? 'retell',
+      sessionId: callId,
       tenantId: orgId ?? undefined,
       tool: 'ticket.create',
       input: args,
@@ -427,10 +523,10 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       const row = await createTicket({
         tenantId,
         source: 'phone',
-        sessionId: args._retell_call_id as string | undefined,
+        sessionId: callId,
         reason: (args.reason as string | undefined) ?? 'handoff',
         customerName: args.customerName as string | undefined,
-        customerPhone: (args.customerPhone as string | undefined) ?? '',
+        customerPhone: getCallerPhone(body, args),
         preferredTime,
         service: args.service as string | undefined,
         notes: args.notes as string | undefined,
@@ -461,7 +557,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
       await appendTraceEvent({
         type: 'tool_result',
-        sessionId: (args._retell_call_id as string | undefined) ?? 'retell',
+        sessionId: callId,
         tenantId: orgId ?? undefined,
         tool: 'ticket.create',
         output: result,

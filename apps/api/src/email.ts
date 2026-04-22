@@ -161,6 +161,23 @@ export async function sendWelcomeEmail(opts: { toEmail: string; orgName: string 
   await send(opts.toEmail, 'Willkommen bei Phonbot!', `Willkommen bei Phonbot, ${opts.orgName}! Dein Agent wartet auf dich.`, html);
 }
 
+export async function sendSignupLinkEmail(opts: { toEmail: string; name?: string | null }) {
+  const safeName = opts.name ? escapeHtml(opts.name) : null;
+  const signupUrl = `${APP_URL}/login`;
+  const html = brandedEmail({
+    title: 'Dein Phonbot-Testlink',
+    body: `
+      <p style="margin:0 0 12px 0;">${safeName ? `Hey <strong style="color:#fff;">${safeName}</strong>,` : 'Hey,'}</p>
+      <p style="margin:0 0 16px 0;">hier ist der Link, den Chipy dir im Demo-Rückruf angekündigt hat. Du kannst Phonbot kostenlos testen und deinen ersten Telefonagenten einrichten.</p>
+      <p style="margin:0;color:rgba(255,255,255,0.5);font-size:13px;">Der Test startet direkt im Dashboard. Keine Kreditkarte nötig.</p>
+    `,
+    cta: { label: 'Phonbot kostenlos testen', url: signupUrl },
+    footer: 'Demo-Rückruf angefordert · Phonbot',
+  });
+  const text = `Dein Phonbot-Testlink: ${signupUrl}\n\nDu kannst Phonbot kostenlos testen und deinen ersten Telefonagenten einrichten.`;
+  await send(opts.toEmail, 'Dein Phonbot-Testlink', text, html);
+}
+
 export async function sendPlanActivatedEmail(opts: { toEmail: string; orgName: string; planName: string; minutesLimit: number }) {
   const safeOrg = escapeHtml(opts.orgName);
   const safePlan = escapeHtml(opts.planName);
@@ -215,4 +232,3 @@ export async function sendPaymentFailedEmail(opts: { toEmail: string; orgName: s
   });
   await send(opts.toEmail, 'Zahlung fehlgeschlagen — Phonbot', `Deine Zahlung für ${opts.orgName} konnte nicht verarbeitet werden. Bitte aktualisiere deine Zahlungsmethode.`, html);
 }
-

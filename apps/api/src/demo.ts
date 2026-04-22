@@ -10,6 +10,7 @@ import { TEMPLATES } from './templates.js';
 import { pool } from './db.js';
 import { redis } from './redis.js';
 import { verifyTurnstile } from './captcha.js';
+import { sendSignupLinkEmail } from './email.js';
 
 // Demo agent cache — Redis-backed so horizontal scaling (multiple API containers)
 // doesn't create duplicate Retell agents. Falls back to in-memory Map when Redis down.
@@ -110,12 +111,13 @@ REGELN:
 - Sei ehrlich: wenn Phonbot für jemanden keinen Sinn macht, sag das
 - Kein Druck, keine Tricks — einfach zeigen was möglich ist
 - Halte das Gespräch unter 2 Minuten
+- Wenn der Interessent den Link möchte: Sage, dass der Testlink bereits an die angegebene E-Mail geschickt wurde. Nenne bei Bedarf diesen Link: {{signup_link}}
 `;
 
 // Sales agent ID — Redis-backed (shared across containers, survives restarts)
 // In-memory fallback for when Redis is down.
 let salesAgentIdMem: string | null = null;
-const SALES_AGENT_KEY = 'sales_agent:phonbot';
+const SALES_AGENT_KEY = 'sales_agent:phonbot:v2';
 
 export async function getOrCreateSalesAgent(): Promise<string> {
   if (redis?.isOpen) {
@@ -293,6 +295,8 @@ export async function registerDemo(app: FastifyInstance) {
       );
       if (dup.rowCount) {
         app.log.info({ phone, ip: req.ip }, 'demo/callback dedup hit — skipping outbound call');
+        sendSignupLinkEmail({ toEmail: email, name })
+          .catch((err: Error) => app.log.warn({ err: err.message }, 'demo/callback signup-link email failed'));
         return { ok: true };
       }
     }
@@ -309,6 +313,9 @@ export async function registerDemo(app: FastifyInstance) {
       ).catch((err: Error) => app.log.warn({ err: err.message }, 'crm_leads insert failed'));
     }
 
+    sendSignupLinkEmail({ toEmail: email, name })
+      .catch((err: Error) => app.log.warn({ err: err.message }, 'demo/callback signup-link email failed'));
+
     // Try outbound call via Retell
     const fromNumber = process.env.RETELL_OUTBOUND_NUMBER; // e.g. "+4930123456"
     if (fromNumber) {
@@ -319,6 +326,9 @@ export async function registerDemo(app: FastifyInstance) {
           toNumber: phone,
           fromNumber,
           metadata: { leadId, leadName: name },
+          dynamicVariables: {
+            signup_link: `${process.env.APP_URL ?? 'https://phonbot.de'}/login`,
+          },
         });
         app.log.info({ callId: call.call_id, phone }, 'Outbound sales call initiated');
         // Mark lead as called

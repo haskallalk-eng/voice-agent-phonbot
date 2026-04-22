@@ -66,6 +66,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
 
   parts.push(`Hauptsprache: ${cfg.language === 'de' ? 'Deutsch' : 'Englisch'}`);
   parts.push('Bleibe immer kurz, gesprochen und praxisnah. Maximal 2 Sätze pro Antwort.');
+  parts.push('Wenn eine Terminbuchung technisch fehlschlägt, behaupte NIEMALS der Termin sei gebucht. Sage kurz, dass du den Terminwunsch als Rückruf-Ticket aufgenommen hast und jemand den Termin bestätigt.');
 
   if (cfg.fallback.enabled) {
     parts.push(`Wenn du die Anfrage nicht direkt lösen kannst, leite das Gespräch in Richtung Rückruf/Weiterleitung (${cfg.fallback.reason}).`);
