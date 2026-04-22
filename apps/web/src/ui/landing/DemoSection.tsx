@@ -280,7 +280,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
             </div>
             {/* Reassurance */}
             <p className="text-center text-xs text-white/35 mt-2">
-              🔒 Kein Account, kein Risiko — einfach ausprobieren
+              🔒 Kein Risiko, keine Daten — einfach ausprobieren
             </p>
             {/* Mic hint */}
             <p className="text-center text-xs text-white/30 mt-2 italic">
