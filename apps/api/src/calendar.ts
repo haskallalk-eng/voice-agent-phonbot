@@ -258,6 +258,26 @@ async function getAllConnections(orgId: string): Promise<CalendarConnection[]> {
   return res.rows.map((r) => decryptConn(r)!).filter((r): r is CalendarConnection => r !== null);
 }
 
+async function canCheckConnection(conn: CalendarConnection, orgId: string): Promise<boolean> {
+  if (conn.provider === 'calcom') return !!conn.api_key;
+  if (conn.provider === 'microsoft') return !!(await getValidMsToken(orgId));
+  return !!(await getValidToken(orgId));
+}
+
+async function getCheckableConnections(orgId: string): Promise<CalendarConnection[]> {
+  const connections = await getAllConnections(orgId);
+  const usable: CalendarConnection[] = [];
+  for (const conn of connections) {
+    try {
+      if (await canCheckConnection(conn, orgId)) usable.push(conn);
+    } catch {
+      // A broken/stale integration must not make the agent unusable. Treat it
+      // as disconnected and fall back to Chipy for this call.
+    }
+  }
+  return usable;
+}
+
 // ── Token Management (Microsoft) ─────────────────────────────────────────────
 
 async function getValidMsToken(orgId: string): Promise<string | null> {
@@ -890,7 +910,7 @@ export async function findFreeSlots(
   // Search ALL connected calendars + Chipy, merge results.
   // Chipy calendar acts as the MASTER scheduler: blocked days/times in
   // Chipy are removed from ALL sources (including external calendars).
-  const connections = await getAllConnections(orgId);
+  const connections = await getCheckableConnections(orgId);
   const allSlots: string[] = [];
   const sources: string[] = [];
 
@@ -962,7 +982,7 @@ async function findFreeSlotsByContract(
   orgId: string,
   _opts: { date?: string; range?: string; service?: string },
 ): Promise<{ slots: string[]; source: string }> {
-  const connections = await getAllConnections(orgId);
+  const connections = await getCheckableConnections(orgId);
   const sources = ['chipy'];
   const { schedule, blocks, timeBlocks } = await getChipySchedule(orgId);
   let slots = generateChipySlots(schedule, blocks, timeBlocks);
@@ -1096,7 +1116,7 @@ export async function bookSlot(
     notes?: string;
   },
 ): Promise<{ ok: boolean; eventId?: string; bookingId?: number; error?: string }> {
-  const connections = await getAllConnections(orgId);
+  const connections = await getCheckableConnections(orgId);
   const slotTime = parseSlotTime(opts.time);
 
   // No external calendars — book directly into Chipy

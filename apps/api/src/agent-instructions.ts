@@ -28,6 +28,13 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   const prompt = (cfg.systemPrompt || DEFAULT_INSTRUCTIONS)
     .replace(/\{\{businessName\}\}/g, cfg.businessName);
   const parts = [prompt];
+  const today = new Intl.DateTimeFormat('de-DE', {
+    timeZone: 'Europe/Berlin',
+    weekday: 'long',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
 
   // ── Recording notice (§ 201 StGB / Art. 6 DSGVO) ──────────────────────────
   // Germany's § 201 StGB criminalises recording a call without consent. A notice
@@ -47,6 +54,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
 
   parts.push(`Agent-Name: ${cfg.name}`);
   parts.push(`Firmenname: ${cfg.businessName}`);
+  parts.push(`Aktuelles Datum: ${today}. Interpretiere relative Terminwuensche wie "morgen", "naechste Woche" und Wochentage immer von diesem Datum aus.`);
 
   if (cfg.businessDescription?.trim()) {
     parts.push(`Beschreibung: ${cfg.businessDescription.trim()}`);
@@ -101,6 +109,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push('Die Telefonnummer des Anrufers ist: {{from_number}}');
   parts.push('Nutze diese Nummer direkt wenn ein Ticket, Rückruf oder Termin erstellt wird.');
   parts.push('Frage NIEMALS nach der Telefonnummer — du hast sie bereits.');
+  parts.push('Wenn dort wortwoertlich "{{from_number}}", "anonymous" oder leer steht, behandle die Nummer als unbekannt und erstelle trotzdem ein Ticket mit den vorhandenen Details.');
   parts.push('Wenn du die Nummer bestätigen willst, sage z.B. "Ich habe Ihre Nummer bereits gespeichert."');
 
   // ── End-of-call feedback (non-intrusive) ──────────────────────────────────
@@ -152,7 +161,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push('- Bei Beschwerden: Höre geduldig zu, zeige Verständnis, erstelle ein Ticket mit Priorität hoch. Versprich KEINE Lösungen.');
   parts.push('- Bei Spam/Werbeanrufen: "Das ist ein automatischer Assistent. Bitte rufen Sie nicht mehr an. Auf Wiederhören."');
   parts.push('- Wenn du den Anrufer schlecht verstehst: "Entschuldigung, könnten Sie das bitte wiederholen?" Maximal 3 Mal, dann Rückruf anbieten.');
-  parts.push('- Wenn {{from_number}} leer oder "anonymous" ist: Frage einmal freundlich nach einer Rückrufnummer. Wenn abgelehnt, akzeptiere es.');
+  parts.push('- Wenn {{from_number}} leer, "anonymous" oder wortwoertlich "{{from_number}}" ist: Erstelle das Ticket trotzdem mit Name, Anliegen und Notizen. Frage nur nach der Nummer, wenn der Kunde aktiv einen Rueckruf will und sie noch nicht genannt hat.');
 
   parts.push('');
   parts.push('## Stille & Pausen');

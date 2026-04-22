@@ -52,13 +52,34 @@ const UpdateTicketBody = z.object({
   notes: z.string().min(1).optional(),
 });
 
-export async function createTicket(input: z.infer<typeof CreateTicketBody>): Promise<TicketRow> {
+function normalizeTicketPhoneForStorage(input: string): string {
+  const { digits, normalized } = normalizePhoneLight(input);
+  if (!digits) return 'unknown';
+  if (normalized.startsWith('+')) return normalized;
+  if (digits.startsWith('00')) return `+${digits.slice(2)}`;
+  if (digits.startsWith('0')) return `+49${digits.slice(1)}`;
+  return normalized;
+}
+
+function safeUnverifiedPhone(input: string): string {
+  const normalized = normalizeTicketPhoneForStorage(input);
+  return normalized.length > 64 ? normalized.slice(0, 64) : normalized;
+}
+
+export async function createTicket(
+  input: z.infer<typeof CreateTicketBody>,
+  opts: { allowUnverifiedPhone?: boolean } = {},
+): Promise<TicketRow> {
   const body = CreateTicketBody.parse(input);
 
   if (!isPlausiblePhone(body.customerPhone)) {
-    const err = new Error('INVALID_PHONE') as Error & { code: string };
-    err.code = 'INVALID_PHONE';
-    throw err;
+    if (opts.allowUnverifiedPhone) {
+      body.customerPhone = safeUnverifiedPhone(body.customerPhone);
+    } else {
+      const err = new Error('INVALID_PHONE') as Error & { code: string };
+      err.code = 'INVALID_PHONE';
+      throw err;
+    }
   }
 
   // Defense-in-depth: reject non-DACH phone at creation time, not just at
@@ -69,12 +90,20 @@ export async function createTicket(input: z.infer<typeof CreateTicketBody>): Pro
   // without re-checking, we'd have a toll-fraud vector. Belt-and-suspenders.
   const ALLOWED_PREFIXES = (process.env.ALLOWED_PHONE_PREFIXES ?? '+49,+43,+41')
     .split(',').map(p => p.trim()).filter(Boolean);
-  const normalizedPhone = normalizePhoneLight(body.customerPhone).normalized;
+  const normalizedPhone = normalizeTicketPhoneForStorage(body.customerPhone);
   if (!ALLOWED_PREFIXES.some(p => normalizedPhone.startsWith(p))) {
-    const err = new Error('PHONE_COUNTRY_NOT_ALLOWED') as Error & { code: string };
-    err.code = 'PHONE_COUNTRY_NOT_ALLOWED';
-    throw err;
+    if (opts.allowUnverifiedPhone) {
+      body.customerPhone = safeUnverifiedPhone(body.customerPhone);
+    } else {
+      const err = new Error('PHONE_COUNTRY_NOT_ALLOWED') as Error & { code: string };
+      err.code = 'PHONE_COUNTRY_NOT_ALLOWED';
+      throw err;
+    }
   }
+
+  const finalPhone = opts.allowUnverifiedPhone
+    ? safeUnverifiedPhone(body.customerPhone)
+    : normalizedPhone;
 
   if (!pool) {
     const now = new Date().toISOString();
@@ -88,7 +117,7 @@ export async function createTicket(input: z.infer<typeof CreateTicketBody>): Pro
       session_id: body.sessionId ?? null,
       reason: body.reason ?? null,
       customer_name: body.customerName ?? null,
-      customer_phone: normalizedPhone,
+      customer_phone: finalPhone,
       preferred_time: body.preferredTime ?? null,
       service: body.service ?? null,
       notes: body.notes ?? null,
@@ -118,7 +147,7 @@ export async function createTicket(input: z.infer<typeof CreateTicketBody>): Pro
       body.sessionId ?? null,
       body.reason ?? null,
       body.customerName ?? null,
-      normalizedPhone,
+      finalPhone,
       body.preferredTime ?? null,
       body.service ?? null,
       body.notes ?? null,
