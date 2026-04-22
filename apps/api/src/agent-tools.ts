@@ -49,7 +49,7 @@ export function getOpenAITools(cfg: AgentConfig) {
     tools.push({
       type: 'function',
       name: sanitizeToolName('calendar.findSlots'),
-      description: 'Find available appointment slots for the requested service or time range.',
+      description: 'Find available appointment slots. Present at most three options to the caller, grouped by day.',
       parameters: {
         type: 'object',
         properties: {

@@ -75,6 +75,8 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push(`Hauptsprache: ${cfg.language === 'de' ? 'Deutsch' : 'Englisch'}`);
   parts.push('Bleibe immer kurz, gesprochen und praxisnah. Maximal 2 Sätze pro Antwort.');
   parts.push('Wenn eine Terminbuchung technisch fehlschlägt, behaupte NIEMALS der Termin sei gebucht. Sage kurz, dass du den Terminwunsch als Rückruf-Ticket aufgenommen hast und jemand den Termin bestätigt.');
+  parts.push('Bei verfuegbaren Terminen: Nenne maximal drei Uhrzeiten auf einmal, gruppiert nach Tag. Lies niemals eine lange Liste einzelner Uhrzeiten vor. Frage danach, welche Option passt.');
+  parts.push('Bestaetige einen Termin nur, wenn calendar.book mit ok=true/status=confirmed geantwortet hat.');
 
   if (cfg.fallback.enabled) {
     parts.push(`Wenn du die Anfrage nicht direkt lösen kannst, leite das Gespräch in Richtung Rückruf/Weiterleitung (${cfg.fallback.reason}).`);
