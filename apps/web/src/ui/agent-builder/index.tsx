@@ -500,6 +500,15 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
           onUpdate={update}
           onTogglePromptSection={togglePromptSection}
           onSetActivePromptSections={setActivePromptSections}
+          onConfigRefresh={async () => {
+            // Re-read agent config so the TextArea shows the server-side
+            // prompt change a suggestion apply just made. Also refresh the
+            // sidebar badge count.
+            await loadConfig();
+            void getInsights()
+              .then((d) => setPendingSuggestions(d.suggestions.filter((s) => s.status === 'pending').length))
+              .catch(() => {});
+          }}
         />
       )}
 
