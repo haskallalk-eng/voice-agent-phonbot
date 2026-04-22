@@ -60,3 +60,42 @@ export function isPlausiblePhone(input: string): boolean {
 
   return true;
 }
+
+/**
+ * Best-effort conversion of a user-typed phone string to E.164 (+<cc><digits>).
+ *
+ * Retell `transfer_call` and Twilio both require E.164 — feeding them a raw
+ * German local number like `017676679632` makes the live transfer fail
+ * silently, which is the #1 reason the 'weiter­leiten'-Regel im Agent Builder
+ * nicht griff (2026-04-22). Normalising at deploy time + instruction-build
+ * time keeps the raw string in the DB but always ships a valid E.164 to the
+ * outside world.
+ *
+ * Returns null when the input clearly isn't a phone number (too short/long
+ * or an unparseable leading run). Callers should treat null as "skip this
+ * rule and warn the user to fix the number".
+ *
+ * Rules:
+ *  - Already starts with '+'      → strip non-digits, prepend '+'.
+ *  - Leading '0049'               → '+49' + rest.
+ *  - Leading '49' (10+ digits)    → '+' + digits.
+ *  - Leading '0'                  → treat as German local (default), '+49' + rest.
+ *  - Anything else                → null.
+ */
+export function toE164(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  const hasPlus = trimmed.startsWith('+');
+  const digits = trimmed.replace(/\D/g, '');
+  if (digits.length < 7 || digits.length > 15) return null;
+
+  if (hasPlus) return '+' + digits;
+  if (digits.startsWith('0049')) return '+' + digits.slice(2);
+  // '49…' without leading '0' — assume E.164 minus the '+', but only when the
+  // total length plausibly fits a German number (country code 49 + at least
+  // 9 subscriber digits).
+  if (digits.startsWith('49') && digits.length >= 11) return '+' + digits;
+  // Leading '0' is the German local-dial prefix → swap for '+49'.
+  if (digits.startsWith('0')) return '+49' + digits.slice(1);
+  return null;
+}

@@ -1,5 +1,6 @@
 import type { readConfig } from './agent-config.js';
 import { transferToolName } from './agent-config.js';
+import { toE164 } from '@vas/shared';
 
 type AgentConfig = Awaited<ReturnType<typeof readConfig>>;
 
@@ -99,8 +100,14 @@ export function buildAgentInstructions(cfg: AgentConfig) {
     parts.push('Du hast Tools zur Verfügung, die Anrufe live an eine echte Person weiterleiten. Wenn eine der folgenden Situationen eintritt, rufe das genannte Tool auf:');
     for (const rule of activeRules) {
       if (rule.action === 'transfer' && rule.target) {
-        const toolName = transferToolName(rule.target);
-        parts.push(`- ${rule.description} → rufe das Tool "${toolName}" auf (leitet weiter an ${rule.target})`);
+        // Normalise the target the same way buildRetellTools does so the
+        // tool name in the prompt matches the tool name registered with
+        // Retell. If the number isn't parseable we skip the rule — the
+        // LLM can't hand off to a phantom tool.
+        const e164 = toE164(rule.target);
+        if (!e164) continue;
+        const toolName = transferToolName(e164);
+        parts.push(`- ${rule.description} → rufe das Tool "${toolName}" auf (leitet weiter an ${e164})`);
       } else if (rule.action === 'ticket') {
         parts.push(`- ${rule.description} → Rückruf-Ticket erstellen (Tool "ticket_create")`);
       } else if (rule.action === 'hangup') {
