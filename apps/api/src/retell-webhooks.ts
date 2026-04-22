@@ -19,6 +19,7 @@ import { findFreeSlots, bookSlot } from './calendar.js';
 import { triggerCallback } from './agent-config.js';
 import { analyzeCall } from './insights.js';
 import { getOrgIdByAgentId } from './org-id-cache.js';
+import { getCall } from './retell.js';
 
 const RETELL_API_KEY = process.env.RETELL_API_KEY ?? '';
 
@@ -125,6 +126,7 @@ interface RetellCallData {
   end_timestamp?: number;
   agent_id?: string;
   from_number?: string;
+  fromNumber?: string;
   to_number?: string;
 }
 
@@ -153,15 +155,60 @@ function getRetellCallId(body: RetellEventBody, args = retellArgs(body)): string
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function firstStringValue(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+  }
+  return '';
+}
+
+function stringField(source: unknown, keys: string[]): string {
+  if (!source || typeof source !== 'object') return '';
+  const record = source as Record<string, unknown>;
+  return firstStringValue(...keys.map((key) => record[key]));
+}
+
 function getCallerPhone(body: RetellEventBody, args = retellArgs(body)): string {
   const call = getRetellCall(body) as Record<string, unknown>;
-  const value =
-    args.customerPhone ??
-    args.customer_phone ??
-    args.from_number ??
-    body.from_number ??
-    call.from_number;
-  return typeof value === 'string' ? value : '';
+  const phoneKeys = [
+    'customerPhone',
+    'customer_phone',
+    'customer_phone_number',
+    'customerNumber',
+    'customer_number',
+    'phone',
+    'phoneNumber',
+    'phone_number',
+    'callerPhone',
+    'caller_phone',
+    'callerNumber',
+    'caller_number',
+    'fromNumber',
+    'from_number',
+    'caller',
+    'ani',
+  ];
+
+  return firstStringValue(
+    stringField(args, phoneKeys),
+    stringField(args.customer, phoneKeys),
+    stringField(args.contact, phoneKeys),
+    stringField(body, phoneKeys),
+    stringField(call, phoneKeys),
+  );
+}
+
+async function resolveCallerPhone(body: RetellEventBody, args: Record<string, unknown>, callId?: string): Promise<string> {
+  const fromPayload = getCallerPhone(body, args);
+  if (fromPayload) return fromPayload;
+  if (!callId || callId === 'retell') return '';
+
+  try {
+    const call = await getCall(callId);
+    return stringField(call, ['from_number', 'fromNumber', 'caller_number', 'callerNumber', 'phone', 'phoneNumber']);
+  } catch {
+    return '';
+  }
 }
 
 function toolAuthSecret(): string {
@@ -419,7 +466,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
     if (orgIdForBook) {
       const customerName = (args.customerName as string | undefined) ?? 'Unbekannt';
-      const customerPhone = getCallerPhone(body, args);
+      const customerPhone = await resolveCallerPhone(body, args, callId);
       const preferredTime = (args.preferredTime as string | undefined) ?? (args.time as string | undefined) ?? '';
       const service = (args.service as string | undefined) ?? '';
       const notes = args.notes as string | undefined;
@@ -434,7 +481,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       if (!booking.ok) {
         try {
           const ticket = await createTicket({
-            tenantId: orgIdForBook,
+            tenantId: signedTenantIdForBook ?? orgIdForBook,
             source: 'phone',
             sessionId: callId,
             reason: 'calendar-unavailable',
@@ -572,7 +619,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         sessionId: callId,
         reason: (args.reason as string | undefined) ?? 'handoff',
         customerName: args.customerName as string | undefined,
-        customerPhone: getCallerPhone(body, args),
+        customerPhone: await resolveCallerPhone(body, args, callId),
         preferredTime,
         service: args.service as string | undefined,
         notes: args.notes as string | undefined,
@@ -613,7 +660,32 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       return result;
     } catch (e: unknown) {
       const code = (e as { code?: string })?.code;
-      return { ok: false, error: code === 'INVALID_PHONE' ? 'INVALID_PHONE' : 'INTERNAL' };
+      const result = {
+        ok: false,
+        error: code === 'INVALID_PHONE' ? 'INVALID_PHONE' : 'INTERNAL',
+        message: code === 'INVALID_PHONE'
+          ? 'Telefonnummer fehlt oder ist ungueltig. Bitte nach einer Rueckrufnummer fragen.'
+          : 'Ticket konnte nicht erstellt werden.',
+      };
+      req.log.warn(
+        {
+          err: e instanceof Error ? e.message : String(e),
+          code,
+          orgId,
+          tenantId,
+          callId,
+        },
+        'retell ticket.create failed',
+      );
+      await appendTraceEvent({
+        type: 'tool_result',
+        sessionId: callId,
+        tenantId: orgId ?? undefined,
+        tool: 'ticket.create',
+        output: result,
+        at: now(),
+      } as Parameters<typeof appendTraceEvent>[0]);
+      return result;
     }
   });
 }

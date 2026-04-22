@@ -542,30 +542,110 @@ function generateFreeSlots(
 // ── Parse slot time string → Date ────────────────────────────────────────────
 
 function parseSlotTime(slot: string): Date | null {
-  // Accepts e.g. "Mo 10:00", "Di 14:30"
-  const dayIndex: Record<string, number> = {
-    So: 0, Mo: 1, Di: 2, Mi: 3, Do: 4, Fr: 5, Sa: 6,
-  };
+  const raw = slot.trim();
+  if (!raw) return null;
 
-  const match = slot.match(/^(\w{2})\s+(\d{1,2}):(\d{2})$/);
-  if (!match) return null;
+  const absolute = parseAbsoluteSlotTime(raw);
+  if (absolute) return absolute;
 
-  const [, dayStr, hourStr, minStr] = match;
-  if (!dayStr || !hourStr || !minStr) return null;
-  const targetDay = dayIndex[dayStr];
-  if (targetDay === undefined) return null;
+  const normalized = normalizeSlotText(raw);
+  const time = extractTimeOfDay(normalized);
+  if (!time) return null;
 
   const now = new Date();
+  const relativeMatch = normalized.match(/\b(heute|morgen|uebermorgen)\b/);
+  if (relativeMatch) {
+    const daysAhead = relativeMatch[1] === 'heute' ? 0 : relativeMatch[1] === 'morgen' ? 1 : 2;
+    const result = new Date(now);
+    result.setDate(now.getDate() + daysAhead);
+    result.setHours(time.hour, time.minute, 0, 0);
+    if (daysAhead === 0 && result <= now) result.setDate(result.getDate() + 7);
+    return result;
+  }
+
+  const dayIndex: Record<string, number> = {
+    sonntag: 0,
+    so: 0,
+    montag: 1,
+    mo: 1,
+    dienstag: 2,
+    di: 2,
+    mittwoch: 3,
+    mi: 3,
+    donnerstag: 4,
+    do: 4,
+    freitag: 5,
+    fr: 5,
+    samstag: 6,
+    sa: 6,
+  };
+
+  const dayMatch = normalized.match(/\b(sonntag|montag|dienstag|mittwoch|donnerstag|freitag|samstag|so|mo|di|mi|do|fr|sa)\b/);
+  if (!dayMatch) return null;
+
+  const targetDay = dayIndex[dayMatch[1]!];
+  if (targetDay === undefined) return null;
+
   const result = new Date(now);
-  result.setHours(parseInt(hourStr, 10), parseInt(minStr, 10), 0, 0);
-  result.setSeconds(0, 0);
+  result.setHours(time.hour, time.minute, 0, 0);
 
   let daysAhead = targetDay - now.getDay();
-  if (daysAhead < 0 || (daysAhead === 0 && result <= now)) {
-    daysAhead += 7;
-  }
+  if (daysAhead < 0 || (daysAhead === 0 && result <= now)) daysAhead += 7;
   result.setDate(result.getDate() + daysAhead);
 
+  return result;
+}
+
+function normalizeSlotText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss');
+}
+
+function extractTimeOfDay(value: string): { hour: number; minute: number } | null {
+  const match = value.match(/\b(\d{1,2})(?:(?::|\.)(\d{2})|\s*(?:uhr|h)(?:\s*(\d{1,2}))?)?\b/);
+  if (!match) return null;
+
+  const hour = Number(match[1]);
+  const minute = match[2] !== undefined ? Number(match[2]) : match[3] !== undefined ? Number(match[3]) : 0;
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+
+  return { hour, minute };
+}
+
+function parseAbsoluteSlotTime(value: string): Date | null {
+  const isoMatch = value.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+  if (isoMatch) {
+    const rest = value.slice((isoMatch.index ?? 0) + isoMatch[0].length).replace(/^[T\s,]+/, '');
+    const time = extractTimeOfDay(normalizeSlotText(rest));
+    if (!time) return null;
+    return buildLocalDate(Number(isoMatch[1]), Number(isoMatch[2]), Number(isoMatch[3]), time);
+  }
+
+  const germanDateMatch = value.match(/\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b/);
+  if (germanDateMatch) {
+    const rest = value.slice((germanDateMatch.index ?? 0) + germanDateMatch[0].length);
+    const time = extractTimeOfDay(normalizeSlotText(rest));
+    if (!time) return null;
+    return buildLocalDate(Number(germanDateMatch[3]), Number(germanDateMatch[2]), Number(germanDateMatch[1]), time);
+  }
+
+  return null;
+}
+
+function buildLocalDate(year: number, month: number, day: number, time: { hour: number; minute: number }): Date | null {
+  const result = new Date(year, month - 1, day, time.hour, time.minute, 0, 0);
+  if (
+    result.getFullYear() !== year ||
+    result.getMonth() !== month - 1 ||
+    result.getDate() !== day
+  ) {
+    return null;
+  }
   return result;
 }
 
