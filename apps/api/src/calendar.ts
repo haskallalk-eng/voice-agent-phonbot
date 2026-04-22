@@ -805,6 +805,8 @@ export async function findFreeSlots(
   orgId: string,
   opts: { date?: string; range?: string; service?: string },
 ): Promise<{ slots: string[]; source: string }> {
+  return findFreeSlotsByContract(orgId, opts);
+
   // Search ALL connected calendars + Chipy, merge results.
   // Chipy calendar acts as the MASTER scheduler: blocked days/times in
   // Chipy are removed from ALL sources (including external calendars).
@@ -874,6 +876,40 @@ export async function findFreeSlots(
   }
 
   return { slots: unique, source: sources.join('+') || 'chipy' };
+}
+
+async function findFreeSlotsByContract(
+  orgId: string,
+  _opts: { date?: string; range?: string; service?: string },
+): Promise<{ slots: string[]; source: string }> {
+  const connections = await getAllConnections(orgId);
+  const sources = ['chipy'];
+  const { schedule, blocks, timeBlocks } = await getChipySchedule(orgId);
+  let slots = generateChipySlots(schedule, blocks, timeBlocks);
+
+  if (connections.length === 0) {
+    return { slots: [...new Set(slots)].sort(), source: 'chipy' };
+  }
+
+  if (slots.length === 0) {
+    return { slots: [], source: `chipy+${connections.map((c) => c.provider).join('+')}` };
+  }
+
+  for (const conn of connections) {
+    sources.push(conn.provider);
+    let connSlots: string[] = [];
+    try {
+      connSlots = await findSlotsForConnection(conn, orgId);
+    } catch {
+      connSlots = [];
+    }
+
+    const connSet = new Set(connSlots);
+    slots = slots.filter((slot) => connSet.has(slot));
+    if (slots.length === 0) break;
+  }
+
+  return { slots: [...new Set(slots)].sort(), source: sources.join('+') };
 }
 
 /** Resolve a human-readable slot like "Montag 14:00" to a concrete date string. */
@@ -1009,12 +1045,13 @@ export async function bookSlot(
     }
   }
 
-  // If at least one external booking succeeded, also create chipy record
-  const anySuccess = results.some(r => r.ok);
+  // Connected calendars are authoritative together: booking is successful only
+  // when every external calendar accepted it. Chipy is written after that.
+  const allExternalSucceeded = results.length > 0 && results.every(r => r.ok);
   const firstSuccess = results.find(r => r.ok);
 
   let chipyBookingId: string | undefined;
-  if (anySuccess && slotTime && pool) {
+  if (allExternalSucceeded && slotTime && pool) {
     try {
       const res = await pool.query(
         `INSERT INTO chipy_bookings (org_id, customer_name, customer_phone, service, notes, slot_time)
@@ -1027,23 +1064,8 @@ export async function bookSlot(
     }
   }
 
-  if (anySuccess) {
+  if (allExternalSucceeded) {
     return { ok: true, eventId: firstSuccess?.eventId ?? chipyBookingId };
-  }
-
-  // All external failed — try chipy-only as fallback
-  if (slotTime && pool) {
-    try {
-      const res = await pool.query(
-        `INSERT INTO chipy_bookings (org_id, customer_name, customer_phone, service, notes, slot_time)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-        [orgId, opts.customerName, opts.customerPhone, opts.service || null, opts.notes || null, slotTime.toISOString()],
-      );
-      chipyBookingId = res.rows[0]?.id as string | undefined;
-      return { ok: true, eventId: chipyBookingId };
-    } catch {
-      // Fall through to error
-    }
   }
 
   return { ok: false, error: results.map(r => `${r.provider}: ${r.error}`).join('; ') };
