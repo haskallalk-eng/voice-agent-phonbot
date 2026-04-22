@@ -550,35 +550,28 @@ export async function registerAgentConfig(app: FastifyInstance) {
 
     try {
       const calls = await listCalls(retellAgentId, 20);
-      // Single source of truth: Retell's measured latency for the LAST
-      // ended call, preferring the RAW last-turn value over the p50.
-      // The user doesn't want aggregates or estimates — just Retell's
-      // real measurement of what the last caller experienced.
+      // Single source of truth: latency.e2e.p50 of the latest ended
+      // call — the exact number Retell shows on its own dashboard.
+      // Pure passthrough, no aggregation over calls, no combining
+      // of components, no estimation. If the user opens Retell's
+      // call detail, they see the same number.
       const pickNum = (v: unknown): number | null =>
         typeof v === 'number' && v > 0 ? Math.round(v) : null;
-      // prefer values.at(-1) (real single-turn measurement), fall
-      // back to p50 if Retell didn't include the values array.
-      const pickValuesOrP50 = (b: { values?: number[]; p50?: number } | undefined): number | null =>
-        pickNum(b?.values?.at(-1)) ?? pickNum(b?.p50);
 
       const endedCalls = calls.filter((c) => c.call_status === 'ended');
       const latest = endedCalls[0];
       const l = latest?.latency;
 
-      const llm = pickValuesOrP50(l?.llm);
-      const tts = pickValuesOrP50(l?.tts);
-      const asr = pickValuesOrP50(l?.asr);
-      const e2e = pickValuesOrP50(l?.e2e);
+      const llm = pickNum(l?.llm?.p50);
+      const tts = pickNum(l?.tts?.p50);
+      const asr = pickNum(l?.asr?.p50);
+      const e2e = pickNum(l?.e2e?.p50);
       const turnsInCall = l?.e2e?.values?.length ?? 0;
-      const latencySource: 'values' | 'p50' | 'none' =
-        pickNum(l?.e2e?.values?.at(-1)) != null ? 'values'
-        : pickNum(l?.e2e?.p50) != null ? 'p50'
-        : 'none';
       return {
         callsCount: endedCalls.length,
         sampleSize: e2e != null ? 1 : 0,
         latencyMs: e2e,
-        latencySource,
+        latencySource: e2e != null ? ('p50' as const) : ('none' as const),
         breakdownMs: { llm, tts, asr, e2e },
         turnsInCall,
         lastCallAt: latest?.end_timestamp ?? null,
