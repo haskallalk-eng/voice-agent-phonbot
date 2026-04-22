@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { AgentConfig, CallRoutingRule, ApiIntegration, LiveWebAccess } from '../../lib/api.js';
+import { ForwardingHint } from '../ForwardingHint.js';
 import {
   getCalendarStatus,
   getGoogleCalendarAuthUrl,
@@ -12,7 +12,7 @@ import {
 import {
   SectionCard, Toggle,
   IconPhoneOut, IconPhoneOff, IconMicUpload, IconTicket, IconCalendar,
-  IconBookOpen, IconCheckCircle, IconWebhook, IconPlug, IconGlobe, IconInfo,
+  IconBookOpen, IconCheckCircle, IconWebhook, IconPlug, IconGlobe,
   type SectionIconComp,
 } from './shared.js';
 
@@ -621,73 +621,7 @@ function LiveWebAccessEditor({ config, onChange }: { config: LiveWebAccess; onCh
   );
 }
 
-/* ── Forwarding hint pill + portal-rendered hover bubble ──
- *
- * The bubble is rendered via React portal into document.body because the
- * surrounding SectionCard uses `overflow-hidden` (see shared.tsx) which
- * clips any absolute-positioned descendant. Portal + fixed positioning
- * anchored to the trigger's viewport rect side-steps the clip without
- * touching SectionCard. Matches chipy-design §18 (tooltip pattern —
- * 'no ancestor with overflow: hidden' rule).
+/* ForwardingHint is imported from ../ForwardingHint.js — shared with
+ * PhoneManager so the same orange pill + speech-bubble shows up on both
+ * the Agent-Builder routing rules AND the Phone-Tab forwarding setup.
  */
-function ForwardingHint() {
-  const triggerRef = useRef<HTMLSpanElement | null>(null);
-  const [visible, setVisible] = useState(false);
-  const [coords, setCoords] = useState<{ left: number; top: number } | null>(null);
-
-  // Recompute the bubble position whenever it becomes visible (viewport
-  // scroll / resize don't matter — the bubble only lives during hover).
-  function show() {
-    const el = triggerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    setCoords({ left: rect.left + rect.width / 2, top: rect.bottom + 10 });
-    setVisible(true);
-  }
-  function hide() { setVisible(false); }
-
-  return (
-    <>
-      <span
-        ref={triggerRef}
-        tabIndex={0}
-        role="button"
-        aria-label="Hinweis: So funktioniert die Weiterleitung wenn deine Nummer schon zu Phonbot umgeleitet ist"
-        onMouseEnter={show}
-        onMouseLeave={hide}
-        onFocus={show}
-        onBlur={hide}
-        className="inline-flex items-center gap-1 text-[11px] font-medium text-orange-300 rounded-full px-2 py-0.5 bg-orange-500/10 border border-orange-500/25 hover:bg-orange-500/15 hover:text-orange-200 transition-colors cursor-help align-middle shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60"
-      >
-        <IconInfo size={10} />
-        Hinweis
-      </span>
-      {visible && coords && typeof document !== 'undefined' && createPortal(
-        <div
-          role="tooltip"
-          style={{
-            position: 'fixed',
-            left: coords.left,
-            top: coords.top,
-            transform: 'translateX(-50%)',
-            zIndex: 9999,
-          }}
-          className="pointer-events-none w-80 max-w-[calc(100vw-2rem)] rounded-xl p-3.5 text-xs leading-relaxed text-white/85 bg-[#0A0A0F] border border-white/15 backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.6),0_0_20px_rgba(249,115,22,0.15)]"
-        >
-          <span
-            aria-hidden="true"
-            className="absolute -top-[5px] left-1/2 -translate-x-1/2 w-2 h-2 rotate-45 bg-[#0A0A0F] border-t border-l border-white/15"
-          />
-          <p className="text-white font-medium mb-1.5">Wenn deine Nummer zu Phonbot umgeleitet ist:</p>
-          <p>
-            Die Weiterleitung vom Anrufer zur Zielnummer <span className="text-orange-300">funktioniert trotzdem</span>. Chipy nimmt den Anruf an und baut einen zweiten Anruf zur Zielnummer auf — beide Leitungen werden zusammengeschaltet.
-          </p>
-          <p className="mt-2">
-            <span className="text-orange-300 font-medium">Einzige Falle:</span> die Zielnummer hat selbst eine „Immer weiterleiten"-Rufumleitung zu Phonbot — das wäre eine Endlosschleife. Am besten eine Mobilnummer ohne Rufumleitung eintragen.
-          </p>
-        </div>,
-        document.body,
-      )}
-    </>
-  );
-}

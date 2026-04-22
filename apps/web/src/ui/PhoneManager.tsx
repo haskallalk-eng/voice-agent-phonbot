@@ -13,6 +13,7 @@ import {
   type AgentConfig,
 } from '../lib/api.js';
 import { SkeletonCard, EmptyState, Card, Button, StatusBadge, PageHeader } from '../components/ui.js';
+import { ForwardingHint } from './ForwardingHint.js';
 import { IconPhone, IconAgent } from './PhonbotIcons.js';
 
 /* ── Copy Button ──────────────────────────────────────── */
@@ -174,7 +175,10 @@ function NumberCard({ num, agents, onVerify, onDelete, onRefresh }: {
       {/* Forwarding Flow — Step 1: Enter customer number */}
       {showForwarding && forwardStep === 1 && (
         <div className="mt-3 pt-3 border-t border-white/5 space-y-3">
-          <p className="text-sm font-medium text-white">Rufumleitung einrichten</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-medium text-white">Rufumleitung einrichten</p>
+            <ForwardingHint />
+          </div>
           <p className="text-xs text-white/40">Von welcher Nummer sollen Anrufe an deinen Agent weitergeleitet werden?</p>
           <input type="tel" value={testNumber} onChange={e => setTestNumber(e.target.value)}
             placeholder="Deine Nummer z.B. +49 170 1234567"
