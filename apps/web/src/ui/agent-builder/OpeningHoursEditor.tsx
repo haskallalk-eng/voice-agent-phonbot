@@ -207,16 +207,16 @@ export function OpeningHoursEditor({ value, onChange }: { value: string; onChang
   }
 
   return (
-    <div className="space-y-3">
-      {/* Presets */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[10px] uppercase tracking-wider text-white/30 mr-1">Vorlage:</span>
+    <div className="space-y-4">
+      {/* Presets — own line, more breathing room */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[10px] uppercase tracking-wider text-white/30 mr-1 shrink-0">Vorlage</span>
         {PRESETS.map((p) => (
           <button
             key={p.name}
             type="button"
             onClick={() => onChange(serialiseOpeningHours(p.apply()))}
-            className="text-[11px] px-2 py-1 rounded-full border border-white/10 bg-white/[0.03] text-white/60 hover:text-white/90 hover:border-orange-500/30 hover:bg-orange-500/8 transition-colors"
+            className="text-xs px-3 py-1.5 rounded-full border border-white/10 bg-white/[0.03] text-white/65 hover:text-white hover:border-orange-500/35 hover:bg-orange-500/10 transition-colors whitespace-nowrap"
           >
             {p.name}
           </button>
@@ -224,66 +224,79 @@ export function OpeningHoursEditor({ value, onChange }: { value: string; onChang
         <button
           type="button"
           onClick={() => setRawMode(true)}
-          className="ml-auto text-[11px] text-white/40 hover:text-white/70 transition-colors"
+          className="ml-auto text-xs text-white/40 hover:text-white/70 transition-colors whitespace-nowrap"
         >
           Freitext
         </button>
       </div>
 
-      {/* Day grid — flex-wrap lets narrow viewports stack the time block
-          under the toggle instead of overflowing the rounded border. */}
+      {/* Copy-to-weekdays moved out of the row so Monday doesn't jump in height.
+          Visible only while Monday is open (the shortcut only makes sense then). */}
+      {week.Mo!.open && (
+        <div className="flex justify-end -mb-1">
+          <button
+            type="button"
+            onClick={copyMondayToWeekdays}
+            className="inline-flex items-center gap-1 text-[11px] text-cyan-300/80 hover:text-cyan-200 transition-colors cursor-pointer px-2 py-1 rounded-md hover:bg-cyan-400/5"
+          >
+            Montag-Zeiten auf Di–Fr kopieren
+            <span aria-hidden>→</span>
+          </button>
+        </div>
+      )}
+
+      {/* Day grid — CSS grid so every row has the exact same column template.
+          No flex-wrap → no height jumps, no items spilling to second line. */}
       <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] divide-y divide-white/[0.05] overflow-hidden">
         {DAY_ORDER.map((d) => {
           const ds = week[d]!;
-          const isMonday = d === 'Mo';
           return (
-            <div key={d} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 hover:bg-white/[0.02] transition-colors">
-              <span className="w-16 sm:w-24 shrink-0 text-xs font-medium text-white/70">{DAY_LABEL[d]}</span>
-              {/* Toggle group — plain div, not label, to avoid nested <label> */}
-              <div className="flex items-center gap-2 select-none shrink-0">
+            <div
+              key={d}
+              className="grid items-center gap-3 px-4 py-3 hover:bg-white/[0.02] transition-colors"
+              style={{ gridTemplateColumns: 'minmax(5.5rem, auto) minmax(8rem, auto) 1fr' }}
+            >
+              <span className="text-xs font-medium text-white/75">{DAY_LABEL[d]}</span>
+              {/* Toggle group — plain div, not label */}
+              <div className="flex items-center gap-2 select-none">
                 <button
                   type="button"
                   role="switch"
                   aria-checked={ds.open}
                   aria-label={`${DAY_LABEL[d]}: ${ds.open ? 'geöffnet' : 'geschlossen'}`}
                   onClick={() => setDay(d, { open: !ds.open })}
-                  className="relative w-9 h-5 rounded-full transition-colors cursor-pointer shrink-0"
+                  className="relative w-10 h-5 rounded-full transition-colors cursor-pointer shrink-0"
                   style={{ background: ds.open ? 'linear-gradient(135deg, #F97316, #06B6D4)' : 'rgba(255,255,255,0.12)' }}
                 >
                   <span
                     className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
-                    style={{ transform: ds.open ? 'translateX(18px)' : 'translateX(2px)' }}
+                    style={{ transform: ds.open ? 'translateX(22px)' : 'translateX(2px)' }}
                   />
                 </button>
-                <span className="text-[11px] text-white/50 w-20">{ds.open ? 'Geöffnet' : 'Geschlossen'}</span>
+                <span className={`text-[11px] tracking-wide ${ds.open ? 'text-white/70' : 'text-white/35'}`}>
+                  {ds.open ? 'Geöffnet' : 'Geschlossen'}
+                </span>
               </div>
-              {ds.open && (
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <input
-                    type="time"
-                    value={ds.from}
-                    onChange={(e) => setDay(d, { from: e.target.value })}
-                    className="bg-white/[0.04] border border-white/10 rounded-lg px-2 py-1 text-xs text-white/80 focus:border-orange-500/40 focus:ring-1 focus:ring-orange-500/30 outline-none [color-scheme:dark] w-[6.5rem]"
-                  />
-                  <span className="text-white/30 text-xs">bis</span>
-                  <input
-                    type="time"
-                    value={ds.to}
-                    onChange={(e) => setDay(d, { to: e.target.value })}
-                    className="bg-white/[0.04] border border-white/10 rounded-lg px-2 py-1 text-xs text-white/80 focus:border-orange-500/40 focus:ring-1 focus:ring-orange-500/30 outline-none [color-scheme:dark] w-[6.5rem]"
-                  />
-                </div>
-              )}
-              {isMonday && ds.open && (
-                <button
-                  type="button"
-                  onClick={copyMondayToWeekdays}
-                  title="Dienstag bis Freitag mit denselben Zeiten füllen"
-                  className="ml-auto text-[10px] text-cyan-300/75 hover:text-cyan-200 transition-colors whitespace-nowrap cursor-pointer"
-                >
-                  → auf Di–Fr kopieren
-                </button>
-              )}
+              {/* Time inputs — always rendered so the 3rd column doesn't
+                  collapse and visibility is controlled via CSS instead.
+                  Keeps the whole row height consistent across all 7 days. */}
+              <div className={`flex items-center gap-2 justify-end ${ds.open ? '' : 'invisible'}`}>
+                <input
+                  type="time"
+                  value={ds.from}
+                  onChange={(e) => setDay(d, { from: e.target.value })}
+                  disabled={!ds.open}
+                  className="bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white/85 focus:border-orange-500/45 focus:ring-1 focus:ring-orange-500/30 outline-none [color-scheme:dark] w-[7rem]"
+                />
+                <span className="text-white/35 text-xs">bis</span>
+                <input
+                  type="time"
+                  value={ds.to}
+                  onChange={(e) => setDay(d, { to: e.target.value })}
+                  disabled={!ds.open}
+                  className="bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white/85 focus:border-orange-500/45 focus:ring-1 focus:ring-orange-500/30 outline-none [color-scheme:dark] w-[7rem]"
+                />
+              </div>
             </div>
           );
         })}
