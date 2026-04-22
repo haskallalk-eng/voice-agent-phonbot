@@ -90,12 +90,20 @@ export function IdentityTab({
           <Field label="Beschreibung">
             <TextArea rows={2} value={config.businessDescription} onChange={(e) => onUpdate({ businessDescription: e.target.value })} placeholder="Was macht euer Unternehmen?" />
           </Field>
-          <Field label="Öffnungszeiten">
-            <OpeningHoursEditor
-              value={config.openingHours}
-              onChange={(v) => onUpdate({ openingHours: v })}
-            />
-          </Field>
+          {/* Plain div wrapper instead of <Field>: OpeningHoursEditor contains
+              buttons + nested focusables, and <Field> renders a <label> that
+              would nest another label inside — invalid HTML and browser-
+              dependent layout glitches. Labelling stays via the "Öffnungszeiten"
+              heading. */}
+          <div className="block">
+            <span className="text-sm font-medium text-white/70">Öffnungszeiten</span>
+            <div className="mt-1">
+              <OpeningHoursEditor
+                value={config.openingHours}
+                onChange={(v) => onUpdate({ openingHours: v })}
+              />
+            </div>
+          </div>
           <Field label="Services / Angebote">
             <TextArea rows={2} value={config.servicesText} onChange={(e) => onUpdate({ servicesText: e.target.value })} placeholder="Haarschnitt, Färben, Beratung…" />
           </Field>
