@@ -691,16 +691,6 @@ ${NAV_HTML}
 
 <section>
   <div class="container">
-    <h2>Typische Anrufe — automatisch bearbeitet</h2>
-    <p class="section-lead">Was Chipy auf deiner Nummer ab Tag 1 übernimmt.</p>
-    <div class="features">
-      ${features}
-    </div>
-  </div>
-</section>
-
-<section>
-  <div class="container">
     <h2>So klingt Phonbot am Telefon</h2>
     <div class="dialogue">
       <div class="dialogue-header">
@@ -713,6 +703,16 @@ ${NAV_HTML}
     <p class="dialogue-note">${d.dialogueNote}</p>
     <div style="text-align:center;margin-top:2rem">
       <a href="/?demo=${d.templateId}#demo" class="btn btn-ghost btn-sm">${icon('phone', 18)}<span style="margin-left:.5rem">Chipy live am Telefon hören</span></a>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <h2>Typische Anrufe — automatisch bearbeitet</h2>
+    <p class="section-lead">Was Chipy auf deiner Nummer ab Tag 1 übernimmt.</p>
+    <div class="features">
+      ${features}
     </div>
   </div>
 </section>
