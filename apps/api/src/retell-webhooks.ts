@@ -96,6 +96,7 @@ function verifyRetellSignature(req: RawBodyRequest): boolean {
  */
 function verifyRetellToolRequest(req: RawBodyRequest): boolean {
   if (verifyRetellSignature(req)) return true;
+  if (getSignedToolTenantId(req)) return true;
   const body = (req.body ?? {}) as Record<string, unknown>;
   const args = (body.args ?? body) as Record<string, unknown>;
   const call = (body.call ?? {}) as Record<string, unknown>;
@@ -161,6 +162,36 @@ function getCallerPhone(body: RetellEventBody, args = retellArgs(body)): string 
     body.from_number ??
     call.from_number;
   return typeof value === 'string' ? value : '';
+}
+
+function toolAuthSecret(): string {
+  return process.env.RETELL_TOOL_AUTH_SECRET || process.env.JWT_SECRET || 'dev-retell-tool-auth';
+}
+
+function signToolTenant(tenantId: string): string {
+  return crypto.createHmac('sha256', toolAuthSecret()).update(tenantId).digest('base64url');
+}
+
+function getSignedToolTenantId(req: FastifyRequest): string | null {
+  const query = (req.query ?? {}) as Record<string, unknown>;
+  const tenantId = query.tenant_id;
+  const sig = query.tool_sig;
+  if (typeof tenantId !== 'string' || typeof sig !== 'string' || !tenantId || !sig) return null;
+
+  const expected = signToolTenant(tenantId);
+  const actualBuf = Buffer.from(sig);
+  const expectedBuf = Buffer.from(expected);
+  if (actualBuf.length !== expectedBuf.length) return null;
+  return crypto.timingSafeEqual(actualBuf, expectedBuf) ? tenantId : null;
+}
+
+async function getOrgIdByTenantId(tenantId: string): Promise<string | null> {
+  if (!pool) return null;
+  const res = await pool.query(
+    `SELECT org_id FROM agent_configs WHERE tenant_id = $1 LIMIT 1`,
+    [tenantId],
+  );
+  return (res.rows[0]?.org_id as string | undefined) ?? null;
 }
 
 export async function registerRetellWebhooks(app: FastifyInstance) {
@@ -302,7 +333,12 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const args = retellArgs(body);
     const callId = getRetellCallId(body, args) ?? 'retell';
     const agentIdForSlots = getRetellAgentId(body, args);
-    const orgIdForSlots = agentIdForSlots ? await getOrgIdByAgentId(agentIdForSlots) : null;
+    const signedTenantIdForSlots = getSignedToolTenantId(req);
+    const orgIdForSlots = agentIdForSlots
+      ? await getOrgIdByAgentId(agentIdForSlots)
+      : signedTenantIdForSlots
+        ? await getOrgIdByTenantId(signedTenantIdForSlots)
+        : null;
 
     await appendTraceEvent({
       type: 'tool_call',
@@ -363,7 +399,12 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const args = retellArgs(body);
     const callId = getRetellCallId(body, args) ?? 'retell';
     const agentIdForBook = getRetellAgentId(body, args);
-    const orgIdForBook = agentIdForBook ? await getOrgIdByAgentId(agentIdForBook) : null;
+    const signedTenantIdForBook = getSignedToolTenantId(req);
+    const orgIdForBook = agentIdForBook
+      ? await getOrgIdByAgentId(agentIdForBook)
+      : signedTenantIdForBook
+        ? await getOrgIdByTenantId(signedTenantIdForBook)
+        : null;
 
     await appendTraceEvent({
       type: 'tool_call',
@@ -495,6 +536,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const body = req.body as RetellEventBody;
     const args = retellArgs(body);
     const callId = getRetellCallId(body, args) ?? 'retell';
+    const signedTenantId = getSignedToolTenantId(req);
 
     // Resolve tenantId from the agent_id in the request. Refuse when we can't
     // map — previously we silently fell back to tenantId='demo', which caused
@@ -502,12 +544,16 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     // tickets. Signature was already verified, so a 403 here means either a
     // stale Retell agent (we deleted it) or a misconfigured webhook URL.
     const agentId = getRetellAgentId(body, args);
-    const orgId = agentId ? await getOrgIdByAgentId(agentId) : null;
+    const orgId = agentId
+      ? await getOrgIdByAgentId(agentId)
+      : signedTenantId
+        ? await getOrgIdByTenantId(signedTenantId)
+        : null;
     if (!orgId) {
       req.log.warn({ agentId }, 'retell ticket.create: unknown agent_id, refusing');
       return reply.status(403).send({ error: 'unknown agent' });
     }
-    const tenantId = orgId;
+    const tenantId = signedTenantId ?? orgId;
 
     await appendTraceEvent({
       type: 'tool_call',
