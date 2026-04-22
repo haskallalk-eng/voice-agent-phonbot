@@ -346,6 +346,19 @@ async function runMigrationBody() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS processed_retell_events_received_idx ON processed_retell_events(received_at);`);
 
+  // § 201 StGB / Art. 6 DSGVO: when the caller declines recording mid-call,
+  // the agent invokes the recording_declined tool. We flag the call here;
+  // the call_ended webhook reads the flag, skips transcript persistence,
+  // and DELETEs the call from Retell to scrub audio + transcript.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS recording_declined_calls (
+      call_id     TEXT PRIMARY KEY,
+      org_id      TEXT,
+      tenant_id   TEXT,
+      declined_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
   // One-time cleanup: delete orphan tickets (org_id IS NULL). These existed from
   // pre-auth days when /tickets was unauthenticated and tenant_id was a free-form
   // string. The legacy "OR (org_id IS NULL AND tenant_id = $orgId::text)" branches
