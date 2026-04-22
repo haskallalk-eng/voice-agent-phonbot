@@ -704,10 +704,20 @@ type ChipyBlock = { date: string; start_time: string | null; end_time: string | 
 async function getChipySchedule(orgId: string): Promise<{ schedule: ChipySchedule; blocks: string[]; timeBlocks: ChipyBlock[] }> {
   if (!pool) return { schedule: DEFAULT_CHIPPY_SCHEDULE, blocks: [], timeBlocks: [] };
 
-  const [schedRes, blockRes] = await Promise.all([
+  const [schedRes, blockRes, bookingRes] = await Promise.all([
     pool.query(`SELECT schedule FROM chipy_schedules WHERE org_id = $1`, [orgId]),
     pool.query(
       `SELECT date::text, start_time::text, end_time::text FROM chipy_blocks WHERE org_id = $1 AND date >= CURRENT_DATE ORDER BY date`,
+      [orgId],
+    ),
+    pool.query(
+      `SELECT
+         (slot_time AT TIME ZONE 'Europe/Berlin')::date::text AS date,
+         (slot_time AT TIME ZONE 'Europe/Berlin')::time::text AS start_time,
+         ((slot_time AT TIME ZONE 'Europe/Berlin') + interval '30 minutes')::time::text AS end_time
+       FROM chipy_bookings
+       WHERE org_id = $1 AND slot_time >= now()
+       ORDER BY slot_time`,
       [orgId],
     ),
   ]);
@@ -719,6 +729,11 @@ async function getChipySchedule(orgId: string): Promise<{ schedule: ChipySchedul
   const timeBlocks: ChipyBlock[] = blockRes.rows.filter((r) => r.start_time).map((r) => ({
     date: r.date as string, start_time: r.start_time as string, end_time: r.end_time as string,
   }));
+  timeBlocks.push(...bookingRes.rows.map((r) => ({
+    date: r.date as string,
+    start_time: r.start_time as string,
+    end_time: r.end_time as string,
+  })));
   return { schedule, blocks, timeBlocks };
 }
 
@@ -767,6 +782,92 @@ function generateChipySlots(schedule: ChipySchedule, blocks: string[], timeBlock
   }
 
   return slots;
+}
+
+function dayLabelForDate(date: Date): string {
+  return DAY_LABELS[date.getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6];
+}
+
+function requestedDayLabel(opts: { date?: string; range?: string; service?: string }): string | null {
+  const raw = `${opts.date ?? ''} ${opts.range ?? ''}`.trim();
+  if (!raw) return null;
+  const normalized = normalizeSlotText(raw);
+  const now = new Date();
+
+  if (/\bheute\b/.test(normalized)) return dayLabelForDate(now);
+  if (/\buebermorgen\b/.test(normalized)) {
+    const date = new Date(now);
+    date.setDate(now.getDate() + 2);
+    return dayLabelForDate(date);
+  }
+  if (/\bmorgen\b/.test(normalized)) {
+    const date = new Date(now);
+    date.setDate(now.getDate() + 1);
+    return dayLabelForDate(date);
+  }
+
+  const isoDate = raw.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+  if (isoDate) {
+    const date = buildLocalDate(Number(isoDate[1]), Number(isoDate[2]), Number(isoDate[3]), { hour: 12, minute: 0 });
+    return date ? dayLabelForDate(date) : null;
+  }
+
+  return null;
+}
+
+function filterSlotsForRequest(slots: string[], opts: { date?: string; range?: string; service?: string }): string[] {
+  const dayLabel = requestedDayLabel(opts);
+  if (!dayLabel) return slots;
+  return slots.filter((slot) => slot.startsWith(`${dayLabel} `));
+}
+
+function localDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function localTimeKey(date: Date): string {
+  const hour = date.getHours().toString().padStart(2, '0');
+  const minute = date.getMinutes().toString().padStart(2, '0');
+  return `${hour}:${minute}`;
+}
+
+async function isChipySlotAvailable(orgId: string, slotTime: Date): Promise<boolean> {
+  const { schedule, blocks, timeBlocks } = await getChipySchedule(orgId);
+  const dateStr = localDateKey(slotTime);
+  if (blocks.includes(dateStr)) return false;
+
+  const dayConfig = schedule[slotTime.getDay().toString()] ?? DEFAULT_CHIPPY_SCHEDULE[slotTime.getDay().toString()];
+  if (!dayConfig?.enabled) return false;
+
+  const timeStr = localTimeKey(slotTime);
+  if (timeStr < dayConfig.start.slice(0, 5) || timeStr >= dayConfig.end.slice(0, 5)) return false;
+
+  const dayBlocks = timeBlocks.filter((b) => b.date === dateStr);
+  return !dayBlocks.some((b) =>
+    b.start_time && b.end_time && timeStr >= b.start_time.slice(0, 5) && timeStr < b.end_time.slice(0, 5)
+  );
+}
+
+async function insertChipyBooking(
+  orgId: string,
+  opts: { customerName: string; customerPhone: string; service: string; notes?: string },
+  slotTime: Date,
+): Promise<string | undefined> {
+  if (!pool) return undefined;
+  const res = await pool.query(
+    `INSERT INTO chipy_bookings (org_id, customer_name, customer_phone, service, notes, slot_time)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    [orgId, opts.customerName, opts.customerPhone, opts.service || null, opts.notes || null, slotTime.toISOString()],
+  );
+  return res.rows[0]?.id as string | undefined;
+}
+
+async function deleteChipyBooking(orgId: string, bookingId: string | undefined): Promise<void> {
+  if (!pool || !bookingId) return;
+  await pool.query(`DELETE FROM chipy_bookings WHERE id = $1 AND org_id = $2`, [bookingId, orgId]).catch(() => {});
 }
 
 // ── Cal.com helpers ───────────────────────────────────────────────────────────
@@ -991,12 +1092,12 @@ export async function findFreeSlots(
 
 async function findFreeSlotsByContract(
   orgId: string,
-  _opts: { date?: string; range?: string; service?: string },
+  opts: { date?: string; range?: string; service?: string },
 ): Promise<{ slots: string[]; source: string }> {
   const connections = await getCheckableConnections(orgId);
   const sources = ['chipy'];
   const { schedule, blocks, timeBlocks } = await getChipySchedule(orgId);
-  let slots = generateChipySlots(schedule, blocks, timeBlocks);
+  let slots = filterSlotsForRequest(generateChipySlots(schedule, blocks, timeBlocks), opts);
 
   if (connections.length === 0) {
     return { slots: [...new Set(slots)].sort(), source: 'chipy' };
@@ -1130,19 +1231,20 @@ export async function bookSlot(
 ): Promise<{ ok: boolean; eventId?: string; bookingId?: number; error?: string }> {
   const connections = await getCheckableConnections(orgId);
   const slotTime = parseSlotTime(opts.time);
+  if (!slotTime) return { ok: false, error: `Cannot parse time: ${opts.time}` };
+  if (!(await isChipySlotAvailable(orgId, slotTime))) {
+    return { ok: false, error: `Chipy slot unavailable: ${opts.time}` };
+  }
+
+  let chipyBookingId: string | undefined;
+  try {
+    chipyBookingId = await insertChipyBooking(orgId, opts, slotTime);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? `Chipy booking failed: ${e.message}` : 'Chipy booking failed' };
+  }
 
   // No external calendars — book directly into Chipy
   if (connections.length === 0) {
-    if (!slotTime) return { ok: false, error: `Cannot parse time: ${opts.time}` };
-    let chipyBookingId: string | undefined;
-    if (pool) {
-      const res = await pool.query(
-        `INSERT INTO chipy_bookings (org_id, customer_name, customer_phone, service, notes, slot_time)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-        [orgId, opts.customerName, opts.customerPhone, opts.service || null, opts.notes || null, slotTime.toISOString()],
-      );
-      chipyBookingId = res.rows[0]?.id as string | undefined;
-    }
     return { ok: true, eventId: chipyBookingId };
   }
 
@@ -1162,24 +1264,11 @@ export async function bookSlot(
   const allExternalSucceeded = results.length > 0 && results.every(r => r.ok);
   const firstSuccess = results.find(r => r.ok);
 
-  let chipyBookingId: string | undefined;
-  if (allExternalSucceeded && slotTime && pool) {
-    try {
-      const res = await pool.query(
-        `INSERT INTO chipy_bookings (org_id, customer_name, customer_phone, service, notes, slot_time)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-        [orgId, opts.customerName, opts.customerPhone, opts.service || null, opts.notes || null, slotTime.toISOString()],
-      );
-      chipyBookingId = res.rows[0]?.id as string | undefined;
-    } catch {
-      // Chipy record is best-effort; external booking already succeeded
-    }
-  }
-
   if (allExternalSucceeded) {
     return { ok: true, eventId: firstSuccess?.eventId ?? chipyBookingId };
   }
 
+  await deleteChipyBooking(orgId, chipyBookingId);
   return { ok: false, error: results.map(r => `${r.provider}: ${r.error}`).join('; ') };
 }
 

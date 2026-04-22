@@ -225,6 +225,16 @@ function isCallbackSafePhone(phone: string): boolean {
   return allowed.some((prefix) => phone.startsWith(prefix));
 }
 
+function compactRetellSlots(slots: string[]): { slots: string[]; allSlotsCount: number; moreCount: number; instruction: string } {
+  const visible = slots.slice(0, 6);
+  return {
+    slots: visible,
+    allSlotsCount: slots.length,
+    moreCount: Math.max(0, slots.length - visible.length),
+    instruction: 'Nenne maximal drei passende Optionen in einem kurzen Satz, nicht jede Uhrzeit einzeln. Wenn mehr Slots vorhanden sind, sage dass es weitere Zeiten gibt.',
+  };
+}
+
 function toolAuthSecret(): string {
   return process.env.RETELL_TOOL_AUTH_SECRET || process.env.JWT_SECRET || 'dev-retell-tool-auth';
 }
@@ -410,7 +420,17 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
-    let result: { ok: boolean; source: string; slots: string[]; service?: unknown; range?: unknown; preferredTime?: unknown };
+    let result: {
+      ok: boolean;
+      source: string;
+      slots: string[];
+      service?: unknown;
+      range?: unknown;
+      preferredTime?: unknown;
+      allSlotsCount?: number;
+      moreCount?: number;
+      instruction?: string;
+    };
 
     if (orgIdForSlots) {
       const { slots, source } = await findFreeSlots(orgIdForSlots, {
@@ -418,7 +438,14 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         range: args.range as string | undefined,
         service: args.service as string | undefined,
       });
-      result = { ok: true, source, slots, service: args.service ?? null, range: args.range ?? null, preferredTime: args.preferredTime ?? null };
+      result = {
+        ok: true,
+        source,
+        ...compactRetellSlots(slots),
+        service: args.service ?? null,
+        range: args.range ?? null,
+        preferredTime: args.preferredTime ?? null,
+      };
     } else {
       // Fallback: no calendar connected — return demo slots
       result = {

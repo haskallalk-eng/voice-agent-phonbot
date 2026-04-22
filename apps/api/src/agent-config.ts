@@ -154,7 +154,7 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
     tools.push({
       type: 'custom',
       name: 'calendar_find_slots',
-      description: 'Find available appointment slots for the requested service or time range.',
+      description: 'Find available appointment slots. Present at most three options to the caller, grouped by day.',
       url: `${webhookBaseUrl}/retell/tools/calendar.findSlots?${signedQuery}`,
       execution_message_description: 'Searching for available slots…',
       parameters: {
