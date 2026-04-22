@@ -476,8 +476,8 @@ p{color:rgba(255,255,255,.7)}
 .msg.user{flex-direction:row-reverse}
 .msg .avatar{flex-shrink:0;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);color:rgba(255,255,255,.65);position:relative}
 .msg .avatar svg{display:block;width:14px;height:14px}
-.msg.bot .avatar{background:transparent;border:none;overflow:visible;width:36px;height:36px;filter:drop-shadow(0 0 8px rgba(249,115,22,.30));animation:chipy-breathe 3.5s ease-in-out infinite}
-.msg.bot .avatar svg{display:block;width:36px;height:36px}
+.msg.bot .avatar{background:transparent;border:none;overflow:visible;width:40px;height:40px;filter:drop-shadow(0 0 10px rgba(249,115,22,.30));animation:chipy-breathe 3.5s ease-in-out infinite}
+.msg.bot .avatar svg{display:block;width:40px;height:40px}
 @keyframes chipy-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
 .msg .bubble{max-width:78%;padding:.75rem 1rem;border-radius:1rem;font-size:.9375rem;line-height:1.55;position:relative}
 .msg.user .bubble{background:rgba(255,255,255,.06);color:rgba(255,255,255,.82);border-bottom-right-radius:.375rem}
@@ -596,9 +596,13 @@ function buildPage(d) {
       const m = cleaned.match(/^([^:]+):\s*(.*)$/);
       const name = m ? m[1].trim() : (line.speaker === 'user' ? 'Anrufer' : 'Phonbot');
       const body = m ? m[2].trim() : cleaned;
+      // Bot avatar uses the SAME Chipy artwork as the nav logo — same
+      // viewBox (0 8 100 92), same radialGradient refs (#ch / #cc / #ce),
+      // which are defined once in _nav.mjs's FOX_LOGO_SVG at the top of
+      // every page. Multiple bot turns share those defs, no duplication.
       const avatar = line.speaker === 'user'
         ? `<div class="avatar" aria-hidden="true">${icon('phone', 14)}</div>`
-        : `<div class="avatar" aria-hidden="true"><svg viewBox="0 0 24 24" width="36" height="36"><circle cx="7" cy="6.5" r="2.6" fill="#D49B12"/><circle cx="7" cy="6.5" r="1.4" fill="#E8B32D"/><circle cx="17" cy="6.5" r="2.6" fill="#D49B12"/><circle cx="17" cy="6.5" r="1.4" fill="#E8B32D"/><circle cx="12" cy="13" r="8" fill="#F5C842"/><ellipse cx="4" cy="15" rx="2.6" ry="2.2" fill="#F7D04A"/><ellipse cx="20" cy="15" rx="2.6" ry="2.2" fill="#F7D04A"/><circle cx="9" cy="12" r="2.1" fill="white"/><circle cx="15" cy="12" r="2.1" fill="white"/><circle cx="9" cy="12.2" r="1.3" fill="#1C1917"/><circle cx="15" cy="12.2" r="1.3" fill="#1C1917"/><circle cx="9.6" cy="11.6" r=".5" fill="white"/><circle cx="15.6" cy="11.6" r=".5" fill="white"/><ellipse cx="12" cy="15.2" rx=".9" ry=".65" fill="#B45309"/><path d="M10.7 16.3 Q12 17.3 13.3 16.3" fill="none" stroke="#8B4513" stroke-width=".5" stroke-linecap="round"/></svg></div>`;
+        : `<div class="avatar" aria-hidden="true"><svg viewBox="0 8 100 92" width="40" height="40"><circle cx="28" cy="22" r="9" fill="#D49B12"/><circle cx="28" cy="22" r="5.5" fill="#E8B32D"/><circle cx="72" cy="22" r="9" fill="#D49B12"/><circle cx="72" cy="22" r="5.5" fill="#E8B32D"/><circle cx="50" cy="55" r="38" fill="url(#ch)"/><ellipse cx="14" cy="62" rx="12" ry="11" fill="url(#cc)"/><ellipse cx="86" cy="62" rx="12" ry="11" fill="url(#cc)"/><circle cx="36" cy="50" r="13" fill="white"/><circle cx="36" cy="50" r="10" fill="url(#ce)"/><ellipse cx="36" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="40" cy="46" r="3" fill="white"/><circle cx="64" cy="50" r="13" fill="white"/><circle cx="64" cy="50" r="10" fill="url(#ce)"/><ellipse cx="64" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="68" cy="46" r="3" fill="white"/><ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309"/><path d="M44 68 Q50 73 56 68" stroke="#8B4513" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg></div>`;
       return `<div class="msg ${line.speaker}">${avatar}<div class="bubble"><span class="name">${name}</span>${body}</div></div>`;
     })
     .join('\n      ');

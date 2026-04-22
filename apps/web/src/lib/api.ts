@@ -534,27 +534,26 @@ export type BillingStatus = {
 export type AgentStats = {
   callsCount: number;
   sampleSize: number;
-  /** E2E latency of the LAST turn of the last ended call, preferring
-   *  the raw value from Retell's values[] array, falling back to p50.
-   *  Single source of truth, no aggregation, no estimation. */
+  /** Primary latency shown in the UI. Matches Retell's agent-builder
+   *  UI number exactly (model-based baseline). Falls back to measured
+   *  llm.p50 when the model isn't in our map. */
   latencyMs: number | null;
-  /** Where did latencyMs come from — 'values' = raw last-turn,
-   *  'p50' = Retell's median for that call, 'none' = no data. */
   latencySource: 'values' | 'p50' | 'none';
-  /** Per-component breakdown (values.at(-1) with p50 fallback). */
+  /** Per-component breakdown from the latest call's measured latency. */
   breakdownMs: {
     llm: number | null;
     tts: number | null;
     asr: number | null;
     e2e: number | null;
   };
-  /** Number of turns Retell recorded in the latest call. */
   turnsInCall: number;
-  /** Unix ms of the last ended call. */
   lastCallAt: number | null;
-  /** Set to 'not_deployed' when the agent has no retellAgentId, or
-   *  'retell_unreachable' when the listCalls fetch threw. null when
-   *  everything succeeded (even if no calls exist yet). */
+  /** The LLM model currently configured on the agent (e.g. 'gpt-4o-mini'). */
+  modelName?: string | null;
+  /** Retell's baseline latency for that model (matches their UI). */
+  modelBaselineMs?: number | null;
+  /** Real llm.p50 from the last ended call — shown in tooltip. */
+  measuredLlmMs?: number | null;
   error: 'not_deployed' | 'retell_unreachable' | null;
 };
 export function getAgentStats(tenantId?: string) {
