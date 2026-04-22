@@ -215,8 +215,13 @@ export type RetellLatencyBreakdown = {
   p50?: number;
   p90?: number;
   p95?: number;
+  p99?: number;
+  min?: number;
   max?: number;
   num?: number;
+  sum?: number;
+  /** Per-turn raw measurements in chronological order. */
+  values?: number[];
 };
 export type RetellLatency = {
   e2e?: RetellLatencyBreakdown;
