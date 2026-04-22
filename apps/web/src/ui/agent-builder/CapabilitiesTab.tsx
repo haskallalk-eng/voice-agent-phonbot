@@ -11,7 +11,7 @@ import {
 import {
   SectionCard, Toggle,
   IconPhoneOut, IconPhoneOff, IconMicUpload, IconTicket, IconCalendar,
-  IconBookOpen, IconCheckCircle, IconWebhook, IconPlug, IconGlobe,
+  IconBookOpen, IconCheckCircle, IconWebhook, IconPlug, IconGlobe, IconInfo,
   type SectionIconComp,
 } from './shared.js';
 
@@ -37,9 +37,12 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
     <>
       {/* Call Routing Rules */}
       <SectionCard title="Rufweiterleitung & Gesprächslogik" icon={IconPhoneOut}>
-        <p className="text-sm text-white/50 mb-4">
-          Definiere Regeln in natürlicher Sprache — der Agent erkennt die Situation und handelt automatisch.
-        </p>
+        <div className="flex items-start gap-2 mb-4 flex-wrap">
+          <p className="text-sm text-white/50 flex-1 min-w-[16rem]">
+            Definiere Regeln in natürlicher Sprache — der Agent erkennt die Situation und handelt automatisch.
+          </p>
+          <ForwardingHint />
+        </div>
         <CallRoutingEditor
           phoneInfo={phoneInfo}
           items={config.callRoutingRules ?? []}
@@ -214,10 +217,16 @@ function CallRoutingEditor({ items, onChange, phoneInfo = [] }: { items: CallRou
                       {warn.type === 'loop' && (
                         <div className="flex gap-2 items-start rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2.5">
                           <span className="text-red-400 text-sm shrink-0 mt-0.5">&#9888;</span>
-                          <div className="text-xs text-red-300/90 leading-relaxed">
-                            <strong>Endlosschleife!</strong> {warn.forwardingType === 'always'
-                              ? 'Diese Nummer hat eine „Immer weiterleiten"-Rufumleitung zu Phonbot. Ein Transfer hierhin erzeugt eine Endlosschleife.'
-                              : 'Diese Nummer ist deine Phonbot-Nummer. Ein Transfer hierhin erzeugt eine Endlosschleife.'}
+                          <div className="text-xs text-red-300/90 leading-relaxed flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <strong>Endlosschleife!</strong>
+                              <ForwardingHint />
+                            </div>
+                            <div className="mt-1">
+                              {warn.forwardingType === 'always'
+                                ? 'Diese Nummer hat eine „Immer weiterleiten"-Rufumleitung zu Phonbot. Ein Transfer hierhin erzeugt eine Endlosschleife.'
+                                : 'Diese Nummer ist deine Phonbot-Nummer. Ein Transfer hierhin erzeugt eine Endlosschleife.'}
+                            </div>
                             <span className="block mt-1.5 text-white/50">
                               <strong>Lösung:</strong> Trage deine <strong>Mobilnummer</strong> oder eine Nummer <strong>ohne Rufumleitung</strong> ein. Oder stelle auf &quot;Bei Nichtannahme&quot; um.
                             </span>
@@ -227,8 +236,14 @@ function CallRoutingEditor({ items, onChange, phoneInfo = [] }: { items: CallRou
                       {warn.type === 'maybe_loop' && (
                         <div className="flex gap-2 items-start rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2.5">
                           <span className="text-amber-400 text-sm shrink-0 mt-0.5">&#9888;</span>
-                          <div className="text-xs text-amber-300/90 leading-relaxed">
-                            <strong>Mögliche Schleife:</strong> Diese Nummer hat eine Rufumleitung zu Phonbot (Typ: {warn.forwardingType}). Prüfe im Telefon-Tab ob die Weiterleitung auf &quot;Bei Nichtannahme&quot; steht — sonst entsteht eine Endlosschleife.
+                          <div className="text-xs text-amber-300/90 leading-relaxed flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <strong>Mögliche Schleife:</strong>
+                              <ForwardingHint />
+                            </div>
+                            <div className="mt-1">
+                              Diese Nummer hat eine Rufumleitung zu Phonbot (Typ: {warn.forwardingType}). Prüfe im Telefon-Tab ob die Weiterleitung auf &quot;Bei Nichtannahme&quot; steht — sonst entsteht eine Endlosschleife.
+                            </div>
                           </div>
                         </div>
                       )}
@@ -602,5 +617,44 @@ function LiveWebAccessEditor({ config, onChange }: { config: LiveWebAccess; onCh
         </>
       )}
     </div>
+  );
+}
+
+/* ── Forwarding hint pill + hover bubble (chipy-design §18 tooltip pattern) ──
+ *
+ * One reusable component that drops in next to any forwarding-related UI
+ * (section header + the two loop-warning variants). Orange brand pill at
+ * rest; on hover/focus the speech bubble fades in with the full explanation
+ * covering both the 'it just works' path and the 'watch for loops' path.
+ */
+function ForwardingHint() {
+  return (
+    <span className="relative inline-flex group align-middle shrink-0">
+      <span
+        tabIndex={0}
+        role="button"
+        aria-label="Hinweis: So funktioniert die Weiterleitung wenn deine Nummer schon zu Phonbot umgeleitet ist"
+        className="inline-flex items-center gap-1 text-[11px] font-medium text-orange-300 rounded-full px-2 py-0.5 bg-orange-500/10 border border-orange-500/25 hover:bg-orange-500/15 hover:text-orange-200 transition-colors cursor-help focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60"
+      >
+        <IconInfo size={10} />
+        Hinweis
+      </span>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute left-1/2 top-full mt-3 -translate-x-1/2 w-80 max-w-[calc(100vw-2rem)] rounded-xl p-3.5 text-xs leading-relaxed text-white/80 bg-[#0A0A0F]/95 border border-white/15 backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.6),0_0_20px_rgba(249,115,22,0.15)] opacity-0 translate-y-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:translate-y-0 z-50"
+      >
+        <span
+          aria-hidden="true"
+          className="absolute -top-[5px] left-1/2 -translate-x-1/2 w-2 h-2 rotate-45 bg-[#0A0A0F] border-t border-l border-white/15"
+        />
+        <p className="text-white font-medium mb-1.5">Wenn deine Nummer zu Phonbot umgeleitet ist:</p>
+        <p>
+          Die Weiterleitung vom Anrufer zur Zielnummer <span className="text-orange-300">funktioniert trotzdem</span>. Chipy nimmt den Anruf an und baut einen zweiten Anruf zur Zielnummer auf — beide Leitungen werden zusammengeschaltet.
+        </p>
+        <p className="mt-2">
+          <span className="text-orange-300 font-medium">Einzige Falle:</span> die Zielnummer hat selbst eine „Immer weiterleiten"-Rufumleitung zu Phonbot — das wäre eine Endlosschleife. Am besten eine Mobilnummer ohne Rufumleitung eintragen.
+        </p>
+      </span>
+    </span>
   );
 }
