@@ -259,9 +259,8 @@ async function getAllConnections(orgId: string): Promise<CalendarConnection[]> {
 }
 
 async function canCheckConnection(conn: CalendarConnection, orgId: string): Promise<boolean> {
-  if (conn.provider === 'calcom') return !!conn.api_key;
-  if (conn.provider === 'microsoft') return !!(await getValidMsToken(orgId));
-  return !!(await getValidToken(orgId));
+  const slots = await findSlotsForConnection(conn, orgId);
+  return slots !== null;
 }
 
 async function getCheckableConnections(orgId: string): Promise<CalendarConnection[]> {
@@ -926,8 +925,9 @@ export async function findFreeSlots(
   for (const conn of connections) {
     try {
       const connSlots = await findSlotsForConnection(conn, orgId);
-      if (connSlots.length > 0) {
-        allSlots.push(...connSlots);
+      const validSlots = connSlots ?? [];
+      if (validSlots.length > 0) {
+        allSlots.push(...validSlots);
         sources.push(conn.provider);
       }
     } catch {
@@ -996,14 +996,15 @@ async function findFreeSlotsByContract(
   }
 
   for (const conn of connections) {
-    sources.push(conn.provider);
-    let connSlots: string[] = [];
+    let connSlots: string[] | null = [];
     try {
       connSlots = await findSlotsForConnection(conn, orgId);
     } catch {
-      connSlots = [];
+      connSlots = null;
     }
+    if (connSlots === null) continue;
 
+    sources.push(conn.provider);
     const connSet = new Set(connSlots);
     slots = slots.filter((slot) => connSet.has(slot));
     if (slots.length === 0) break;
@@ -1048,11 +1049,11 @@ function resolveSlotDate(slot: string, now: Date): { dateStr: string; timeStr: s
 async function findSlotsForConnection(
   conn: CalendarConnection,
   orgId: string,
-): Promise<string[]> {
+): Promise<string[] | null> {
   // ── Cal.com path ───────────────────────────────────────────────────────────
   if (conn.provider === 'calcom') {
     const apiKey = conn.api_key;
-    if (!apiKey) return [];
+    if (!apiKey) return null;
 
     const now = new Date();
     const dateFrom = now.toISOString().slice(0, 10);
@@ -1067,14 +1068,14 @@ async function findSlotsForConnection(
   // ── Microsoft path ─────────────────────────────────────────────────────────
   if (conn.provider === 'microsoft') {
     const token = await getValidMsToken(orgId);
-    if (!token) return [];
+    if (!token) return null;
     const email = conn.email ?? '';
     return msFindSlots(token, email);
   }
 
   // ── Google path ────────────────────────────────────────────────────────────
   const token = await getValidToken(orgId);
-  if (!token) return [];
+  if (!token) return null;
 
   const timeMin = new Date().toISOString();
   const timeMax = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -1093,7 +1094,7 @@ async function findSlotsForConnection(
       }),
     });
 
-    if (!resp.ok) return [];
+    if (!resp.ok) return null;
 
     const data = (await resp.json()) as {
       calendars: Record<string, { busy: { start: string; end: string }[] }>;
@@ -1102,7 +1103,7 @@ async function findSlotsForConnection(
     const busyPeriods = data.calendars[conn.calendar_id]?.busy ?? [];
     return generateFreeSlots(busyPeriods);
   } catch {
-    return [];
+    return null;
   }
 }
 
