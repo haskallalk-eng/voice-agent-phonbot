@@ -39,14 +39,14 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 // this means XSS cannot lift the access token from localStorage the way it
 // used to. Fixes F-01.
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   // 10s timeout — prevents hung logins/me-calls from freezing the UI indefinitely
   // if the API is unreachable (e.g. during deploy). AbortSignal.timeout is widely
   // supported in all modern browsers; we use `any` fallback to combine with a
   // caller-supplied signal if one was passed.
   // credentials: 'include' so the httpOnly refresh-token cookie is sent on
   // /api/auth/refresh and /api/auth/logout (backend cookie path=/api/auth).
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(url, {
     ...init,
     credentials: 'include',
     headers: { 'content-type': 'application/json', ...init?.headers },
@@ -59,17 +59,27 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  return fetchJson<T>(`/api${path}`, init);
+}
+
 // Try to swap the refresh cookie for a fresh access token. Returns the new
 // token on success, null on failure (refresh expired/revoked → user must log in).
 // Publishes the token into the api.ts module store so request() can pick it up.
 async function tryRefresh(): Promise<string | null> {
-  try {
-    const data = await apiFetch<{ token: string }>('/auth/refresh', { method: 'POST' });
-    if (data?.token) {
-      setAccessToken(data.token);
-      return data.token;
+  const refreshUrls = ['/api/auth/refresh', '/auth/refresh'];
+  for (const url of refreshUrls) {
+    try {
+      const data = await fetchJson<{ token: string }>(url, { method: 'POST' });
+      if (data?.token) {
+        setAccessToken(data.token);
+        return data.token;
+      }
+    } catch {
+      // Try the legacy visible path once. Older cookies were accidentally scoped
+      // to /auth, so the browser will not send them to /api/auth/refresh.
     }
-  } catch { /* refresh failed → caller logs out */ }
+  }
   return null;
 }
 
