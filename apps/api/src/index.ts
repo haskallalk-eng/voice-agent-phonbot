@@ -9,7 +9,7 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import formbody from '@fastify/formbody';
-import { migrate, pool, cleanupOldTranscripts, cleanupOldLeads, cleanupOldWebhookDedupKeys } from './db.js';
+import { migrate, pool, cleanupOldTranscripts, cleanupOldLeads, cleanupOldWebhookDedupKeys, sweepAbandonedRegistrations } from './db.js';
 import { connectRedis, redis } from './redis.js';
 import { registerAuth } from './auth.js';
 import { registerTickets } from './tickets.js';
@@ -279,6 +279,19 @@ if (pool) {
   };
   setInterval(runLeadsCleanup, 24 * 60 * 60 * 1000); // every 24h
   setTimeout(runLeadsCleanup, 65_000); // first run 65s after startup (staggered from transcripts)
+
+  // Abandoned Stripe-first signups: sweep every 10 min. Rows older than 30 min
+  // without a matching user are turned into crm_leads + a resume email goes out.
+  const runAbandonedSweep = async () => {
+    try {
+      const handled = await sweepAbandonedRegistrations();
+      if (handled > 0) app.log.info({ handled }, 'swept abandoned registrations → crm_leads + email');
+    } catch (e) {
+      app.log.warn({ err: (e as Error).message }, 'abandoned registration sweep failed');
+    }
+  };
+  setInterval(runAbandonedSweep, 10 * 60 * 1000); // every 10 min
+  setTimeout(runAbandonedSweep, 120_000); // first run 2 min after startup
 
   // Twilio phone-pool sync: without this, orphan numbers (from deleted orgs or
   // failed provisioning) keep incurring €1/month at Twilio until the next

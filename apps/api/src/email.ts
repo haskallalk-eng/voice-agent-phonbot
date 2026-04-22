@@ -79,15 +79,62 @@ async function sendWithTimeout(p: Promise<unknown>, label: string, ms = 10_000):
   }
 }
 
-async function send(to: string, subject: string, text: string, html: string) {
+async function send(to: string, subject: string, text: string, html: string, replyTo?: string) {
   if (!resend) return;
   try {
     await sendWithTimeout(
-      resend.emails.send({ from: FROM_EMAIL, to, subject, text, html }),
+      resend.emails.send({ from: FROM_EMAIL, to, subject, text, html, ...(replyTo ? { replyTo } : {}) }),
       subject,
     );
   } catch (e: unknown) {
     process.stderr.write(`[email] Send failed (${subject}): ${e instanceof Error ? e.message : String(e)}\n`);
+  }
+}
+
+/**
+ * Contact-form forwarding email — sent to the Phonbot team when someone
+ * fills out the public contact form. Styled with the same dark-mode
+ * brand template as the transactional mails so the inbox reads as one
+ * family.
+ */
+export async function sendContactFormEmail(opts: {
+  toEmail: string;
+  fromName: string;
+  fromEmail: string;
+  message: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!resend) return { ok: false, error: 'Resend not configured' };
+  const safeName = opts.fromName ? escapeHtml(opts.fromName) : '—';
+  const safeEmail = escapeHtml(opts.fromEmail);
+  // Preserve line breaks but escape the rest so HTML can't be injected.
+  const safeMessage = escapeHtml(opts.message).replace(/\n/g, '<br />');
+  const html = brandedEmail({
+    title: 'Neue Kontaktanfrage',
+    body: `
+      <table style="width:100%;border-collapse:collapse;margin:0 0 16px 0;text-align:left;">
+        <tr><td style="padding:8px 0;color:rgba(255,255,255,0.4);width:90px;font-size:13px;">Name</td><td style="padding:8px 0;color:#fff;font-weight:600;font-size:14px;">${safeName}</td></tr>
+        <tr><td style="padding:8px 0;color:rgba(255,255,255,0.4);font-size:13px;">E-Mail</td><td style="padding:8px 0;font-size:14px;"><a href="mailto:${safeEmail}" style="color:#F97316;text-decoration:none;">${safeEmail}</a></td></tr>
+      </table>
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;text-align:left;color:rgba(255,255,255,0.75);font-size:14px;line-height:1.6;">
+        ${safeMessage}
+      </div>
+    `,
+    footer: 'Antwort direkt auf diese E-Mail geht an den Absender.',
+  });
+  try {
+    await sendWithTimeout(
+      resend.emails.send({
+        from: FROM_EMAIL,
+        to: opts.toEmail,
+        replyTo: opts.fromEmail,
+        subject: `Kontaktanfrage von ${opts.fromName || opts.fromEmail}`,
+        html,
+      }),
+      'contact-form',
+    );
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
 
@@ -159,6 +206,34 @@ export async function sendWelcomeEmail(opts: { toEmail: string; orgName: string 
     cta: { label: 'Loslegen', url: APP_URL },
   });
   await send(opts.toEmail, 'Willkommen bei Phonbot!', `Willkommen bei Phonbot, ${opts.orgName}! Dein Agent wartet auf dich.`, html);
+}
+
+export async function sendSignupAbandonedEmail(opts: {
+  toEmail: string;
+  orgName: string;
+  planName: string;
+  planId: string;
+  interval: 'month' | 'year';
+}) {
+  const safeOrg = escapeHtml(opts.orgName);
+  const safePlan = escapeHtml(opts.planName);
+  const resumeUrl = `${APP_URL}/?page=register&plan=${encodeURIComponent(opts.planId)}&interval=${encodeURIComponent(opts.interval)}`;
+  const html = brandedEmail({
+    title: 'Deine Anmeldung wartet auf dich',
+    body: `
+      <p style="margin:0 0 12px 0;">Hey <strong style="color:#fff;">${safeOrg}</strong>,</p>
+      <p style="margin:0 0 16px 0;">du hast gerade versucht, dich bei Phonbot anzumelden — aber die Zahlung ist nicht abgeschlossen worden. Alles gut: wir haben noch nichts gespeichert.</p>
+      <div style="background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.15);border-radius:12px;padding:16px;margin:0 0 16px 0;">
+        <p style="margin:0;color:rgba(255,255,255,0.5);font-size:13px;">Dein gewählter Plan</p>
+        <p style="margin:4px 0 0 0;font-size:18px;font-weight:700;color:#fff;">${safePlan}</p>
+      </div>
+      <p style="margin:0;">Falls du Phonbot trotzdem ausprobieren willst, kannst du die Anmeldung mit einem Klick fortsetzen — dein Plan ist vorausgewählt.</p>
+    `,
+    cta: { label: 'Anmeldung fortsetzen', url: resumeUrl },
+    footer: 'Falls du es dir anders überlegt hast, ignoriere diese E-Mail einfach.',
+  });
+  const text = `Deine Anmeldung bei Phonbot wurde nicht abgeschlossen.\n\nFalls du es nochmal versuchen möchtest:\n${resumeUrl}`;
+  await send(opts.toEmail, 'Deine Phonbot-Anmeldung wartet auf dich', text, html);
 }
 
 export async function sendSignupLinkEmail(opts: { toEmail: string; name?: string | null }) {

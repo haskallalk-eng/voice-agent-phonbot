@@ -697,3 +697,71 @@ export async function cleanupOldLeads(): Promise<number> {
   );
   return (res as { rowCount?: number }).rowCount ?? 0;
 }
+
+/**
+ * Sweep pending_registrations rows that are older than STALE_MIN minutes
+ * (= user started Stripe checkout and never came back, whether they
+ * cancelled or just closed the tab). Turn each into a CRM lead + send
+ * a "pick-up-where-you-left-off" email, then drop the pending row.
+ *
+ * Safe to call repeatedly: LIMIT + DELETE RETURNING means we process each
+ * row exactly once. Called on startup and every 10 min via setInterval.
+ *
+ * STALE_MIN=30 gives the webhook + finalize path plenty of time to win
+ * before we assume the user abandoned. Too short = we email someone who's
+ * still typing their card number; too long = re-engagement email lands
+ * when they've already forgotten us.
+ */
+export async function sweepAbandonedRegistrations(): Promise<number> {
+  if (!pool) return 0;
+  const STALE_MIN = 30;
+
+  // DELETE ... RETURNING pops the rows atomically so a parallel call can't
+  // see them. We only act on rows that still have NO corresponding user —
+  // this covers the race where a webhook materialised the user after we
+  // read the pending but before we DELETEd it.
+  const res = await pool.query(
+    `DELETE FROM pending_registrations p
+       WHERE p.created_at < NOW() - (INTERVAL '1 minute' * $1)
+         AND NOT EXISTS (SELECT 1 FROM users u WHERE u.email = p.email)
+       RETURNING p.email, p.org_name, p.plan_id, p.billing_interval`,
+    [STALE_MIN],
+  );
+  const rows = (res.rows ?? []) as Array<{
+    email: string; org_name: string; plan_id: string; billing_interval: 'month' | 'year';
+  }>;
+  if (rows.length === 0) return 0;
+
+  // Lazy-import email module so the worker bootstrap can run without
+  // Resend configured (e.g. dev). Lazy import also breaks the auth → email
+  // circular possibility.
+  const { sendSignupAbandonedEmail } = await import('./email.js');
+
+  const PLAN_DISPLAY: Record<string, string> = {
+    nummer: 'Nummer', starter: 'Starter', pro: 'Professional', agency: 'Agency', free: 'Free',
+  };
+
+  for (const r of rows) {
+    try {
+      await pool.query(
+        `INSERT INTO crm_leads (email, name, source, status, notes)
+         VALUES ($1, $2, 'signup-abandoned', 'new', $3)`,
+        [r.email, r.org_name, `Plan: ${r.plan_id} (${r.billing_interval})`],
+      );
+    } catch (err) {
+      // Likely duplicate (same email sent two abandoned signups in 30min).
+      // Not fatal — log via stderr and keep going.
+      process.stderr.write(`[sweep] crm_leads insert failed for ${r.email}: ${(err as Error).message}\n`);
+    }
+
+    sendSignupAbandonedEmail({
+      toEmail: r.email,
+      orgName: r.org_name,
+      planName: PLAN_DISPLAY[r.plan_id] ?? r.plan_id,
+      planId: r.plan_id,
+      interval: r.billing_interval,
+    }).catch(() => {/* email module logs internally */});
+  }
+
+  return rows.length;
+}

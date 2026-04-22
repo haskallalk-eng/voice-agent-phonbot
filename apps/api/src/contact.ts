@@ -1,13 +1,9 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { Resend } from 'resend';
-import { escapeHtml } from './utils.js';
+import { sendContactFormEmail } from './email.js';
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY ?? '';
 const CONTACT_TO = process.env.CONTACT_EMAIL ?? 'info@mindrails.de';
-const FROM_EMAIL = process.env.EMAIL_FROM ?? 'Phonbot <noreply@phonbot.de>';
-
-const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
+const RESEND_CONFIGURED = !!process.env.RESEND_API_KEY;
 
 const ContactBody = z.object({
   name: z.string().max(200).optional(),
@@ -30,39 +26,28 @@ export async function registerContact(app: FastifyInstance) {
 
     const { name, email, message } = parsed.data;
 
-    if (!resend) {
-      // Don't log name/email/message plaintext — Pino redact covers name/email
-      // but message is the user-authored body and can't round-trip as plaintext
-      // to stdout/Sentry. Log only a length fingerprint for ops visibility.
+    if (!RESEND_CONFIGURED) {
+      // Don't log message plaintext — it's user-authored and Pino/Sentry can't
+      // round-trip it safely. Log only a length fingerprint for ops visibility.
       req.log.warn({ messageLen: message.length, hasEmail: Boolean(email) }, '[contact] Resend not configured, form submission dropped');
       return { ok: true };
     }
 
-    // Sanitize anything that could end up in an email header (subject, reply-to)
+    // Sanitize anything that could land in an email header (subject, reply-to).
+    // sendContactFormEmail itself HTML-escapes the body copy for the card.
     const safeName = name ? sanitizeHeaderValue(name) : '';
     const safeEmail = sanitizeHeaderValue(email);
 
-    try {
-      await resend.emails.send({
-        from: FROM_EMAIL,
-        to: CONTACT_TO,
-        replyTo: safeEmail,
-        subject: `Kontaktanfrage von ${safeName || safeEmail}`,
-        html: `
-          <div style="font-family: system-ui, sans-serif; max-width: 500px;">
-            <h2 style="color: #F97316;">Neue Kontaktanfrage</h2>
-            <p><strong>Name:</strong> ${escapeHtml(name || '–')}</p>
-            <p><strong>E-Mail:</strong> ${escapeHtml(email)}</p>
-            <hr style="border: none; border-top: 1px solid #eee; margin: 16px 0;" />
-            <p style="white-space: pre-wrap;">${escapeHtml(message)}</p>
-          </div>
-        `,
-      });
-    } catch (e) {
-      req.log.error({ error: e instanceof Error ? e.message : String(e) }, '[contact] email send failed');
+    const result = await sendContactFormEmail({
+      toEmail: CONTACT_TO,
+      fromName: safeName,
+      fromEmail: safeEmail,
+      message,
+    });
+    if (!result.ok) {
+      req.log.error({ error: result.error }, '[contact] email send failed');
       return reply.status(500).send({ error: 'Nachricht konnte nicht gesendet werden.' });
     }
-
     return { ok: true };
   });
 }
