@@ -184,14 +184,43 @@ p{color:rgba(255,255,255,.7)}
   .dialogue-header .dot,.msg.bot .avatar,.dialogue-typing span{animation:none}
 }
 
-/* ── Savings card (glass with checklist + pricing hint) ── */
-.savings{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);border-radius:1.5rem;padding:2rem;max-width:640px;margin:0 auto}
-.savings .intro{color:rgba(255,255,255,.8);margin-bottom:1rem;font-size:.9375rem}
-.savings ul{list-style:none;padding:0;margin:0 0 1.25rem;color:rgba(255,255,255,.75)}
-.savings li{padding:.625rem 0;font-size:.9375rem;border-bottom:1px solid rgba(255,255,255,.06)}
-.savings li:last-child{border-bottom:none}
-.savings strong{color:#fff;font-weight:600}
-.pricing-hint{display:inline-flex;align-items:center;padding:.5rem 1rem;border-radius:.625rem;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);font-size:.8125rem;color:#67E8F9}
+/* ── Value section (the professional "why this pays off" block) ── */
+.value-insight{display:flex;flex-direction:column;align-items:center;text-align:center;max-width:48rem;margin:0 auto 3rem;padding:1.75rem 1.5rem;background:linear-gradient(135deg,rgba(249,115,22,.09),rgba(6,182,212,.05));border:1px solid rgba(249,115,22,.18);border-radius:1.25rem;gap:.5rem}
+@media(min-width:768px){.value-insight{flex-direction:row;gap:1.75rem;text-align:left;padding:1.75rem 2rem}}
+.value-stat{font-size:clamp(2.5rem,6vw,3.75rem);font-weight:800;letter-spacing:-.03em;line-height:1;background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;background-clip:text;color:transparent;flex-shrink:0;white-space:nowrap}
+.value-claim{color:rgba(255,255,255,.78);font-size:1rem;line-height:1.55;max-width:34rem}
+@media(max-width:640px){.value-claim{font-size:.9375rem}}
+
+.value-grid{display:grid;grid-template-columns:1fr;gap:1.5rem;max-width:64rem;margin:0 auto}
+@media(min-width:900px){.value-grid{grid-template-columns:1fr 1fr;gap:1.75rem}}
+
+/* ROI card (left column) */
+.roi-card{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);border-radius:1.25rem;padding:1.75rem;display:flex;flex-direction:column}
+.roi-scenario{font-size:.75rem;color:rgba(255,255,255,.5);margin-bottom:1rem;text-transform:uppercase;letter-spacing:.1em;font-weight:600}
+.roi-row{display:flex;align-items:center;gap:.875rem;padding:.875rem 0;border-bottom:1px dashed rgba(255,255,255,.07)}
+.roi-row:last-of-type{border-bottom:none}
+.roi-row .ic{flex-shrink:0;width:36px;height:36px;border-radius:.75rem;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6)}
+.roi-row .ic svg{display:block;width:18px;height:18px}
+.roi-row .label{flex:1;color:rgba(255,255,255,.78);font-size:.9375rem;font-weight:500;line-height:1.35}
+.roi-row .amount{color:rgba(255,255,255,.9);font-size:1rem;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.roi-row .per{color:rgba(255,255,255,.5);font-size:.8125rem;font-weight:500;margin-left:.15rem}
+
+/* Highlight row = the savings reveal */
+.roi-row.highlight{margin-top:.75rem;padding:1rem 1.125rem;border:1px solid rgba(249,115,22,.3);background:linear-gradient(135deg,rgba(249,115,22,.12),rgba(6,182,212,.06));border-radius:.875rem;box-shadow:0 0 32px rgba(249,115,22,.12)}
+.roi-row.highlight .ic{background:linear-gradient(135deg,rgba(249,115,22,.22),rgba(6,182,212,.14));border-color:rgba(249,115,22,.30);color:#FDBA74}
+.roi-row.highlight .label{color:#fff;font-weight:600}
+.roi-row.highlight .amount{background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:1.375rem;font-weight:800}
+.roi-row.highlight .per{color:rgba(255,255,255,.6)}
+
+/* Extras stack (right column) */
+.value-extras{display:flex;flex-direction:column;gap:.875rem}
+.extra{display:flex;gap:1rem;padding:1.25rem;border-radius:1rem;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);transition:all .3s}
+.extra:hover{border-color:rgba(249,115,22,.25);background:rgba(255,255,255,.05);transform:translateY(-1px)}
+.extra .ic{flex-shrink:0;width:38px;height:38px;border-radius:.75rem;background:linear-gradient(135deg,rgba(249,115,22,.15),rgba(6,182,212,.10));display:flex;align-items:center;justify-content:center;color:#FB923C;border:1px solid rgba(249,115,22,.18)}
+.extra .ic svg{display:block;width:18px;height:18px}
+.extra-body{flex:1;min-width:0}
+.extra-title{color:#fff;font-weight:600;font-size:.9375rem;margin-bottom:.2rem;line-height:1.35}
+.extra-desc{color:rgba(255,255,255,.6);font-size:.875rem;line-height:1.55}
 
 /* ── FAQ (native <details> accordion, chipy-design tint on open) ── */
 .faq-list{max-width:48rem;margin:0 auto;display:flex;flex-direction:column;gap:.75rem}
@@ -327,16 +356,53 @@ p{color:rgba(255,255,255,.7)}
 
 <section>
   <div class="container">
-    <h2>Rechnet sich das?</h2>
-    <p class="section-lead">Die Rechnung ist kurz — der Unterschied pro Monat ist nicht.</p>
-    <div class="savings">
-      <p class="intro">Restaurant mit 400 Anrufen/Monat rechnet sich so:</p>
-      <ul>
-        <li><span class="ic-inline"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><strong>Service-Mitarbeiter nur für Telefon</strong>: ~1.700 €/Monat</li>
-        <li><span class="ic-inline"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg></span><strong>Phonbot Starter</strong>: 49 €/Monat</li>
-        <li><span class="ic-inline"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 10v4"/><path d="M18 10v4"/></svg></span><strong>Ersparnis</strong>: ~1.650 €/Monat</li>
-      </ul>
-      <span class="pricing-hint">Plus: Keine Warteschleife = weniger verlorene Gäste an Konkurrenz.</span>
+    <h2>Service-Spitze — und das Telefon <span class="accent">hört nicht auf.</span></h2>
+    <div class="value-insight">
+      <span class="value-stat">2 Tische</span>
+      <span class="value-claim">pro Abend verliert ein durchschnittliches Restaurant an die Warteschleife — das sind 50 Tische pro Monat, die woanders essen.</span>
+    </div>
+    <div class="value-grid">
+      <div class="roi-card">
+        <div class="roi-scenario">Restaurant mit 400 Anrufen pro Monat:</div>
+        <div class="roi-row">
+          <span class="ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+          <span class="label">Service-Kraft nur fürs Telefon</span>
+          <span class="amount">1.700 €<span class="per">/Monat</span></span>
+        </div>
+        <div class="roi-row">
+          <span class="ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></span>
+          <span class="label">Phonbot Starter</span>
+          <span class="amount">49 €<span class="per">/Monat</span></span>
+        </div>
+        <div class="roi-row highlight">
+          <span class="ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>
+          <span class="label">Deine Ersparnis</span>
+          <span class="amount">1.651 €<span class="per">/Monat</span></span>
+        </div>
+      </div>
+      <div class="value-extras">
+        <div class="extra">
+          <span class="ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="13" y2="18"/></svg></span>
+          <div class="extra-body">
+            <div class="extra-title">Reservierungen parallel annehmen</div>
+            <div class="extra-desc">Mehrere Gäste gleichzeitig — keine Warteschleife, niemand legt vor der Reservierung auf.</div>
+          </div>
+        </div>
+        <div class="extra">
+          <span class="ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/></svg></span>
+          <div class="extra-body">
+            <div class="extra-title">Allergien und Wünsche strukturiert</div>
+            <div class="extra-desc">Kinderhochstuhl, Veganer, Allergien — alles notiert und im Reservierungssystem, bevor der Gast kommt.</div>
+          </div>
+        </div>
+        <div class="extra">
+          <span class="ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
+          <div class="extra-body">
+            <div class="extra-title">Take-Away-Bestellungen direkt zur Küche</div>
+            <div class="extra-desc">Bestellung mit Artikeln und Abholzeit landet als Ticket am Küchenpass — kein Notizblock mehr.</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </section>
