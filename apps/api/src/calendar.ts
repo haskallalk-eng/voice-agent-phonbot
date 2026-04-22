@@ -737,7 +737,12 @@ async function getChipySchedule(orgId: string): Promise<{ schedule: ChipySchedul
   return { schedule, blocks, timeBlocks };
 }
 
-function generateChipySlots(schedule: ChipySchedule, blocks: string[], timeBlocks: ChipyBlock[] = []): string[] {
+function generateChipySlots(
+  schedule: ChipySchedule,
+  blocks: string[],
+  timeBlocks: ChipyBlock[] = [],
+  onlyDate?: string | null,
+): string[] {
   const slots: string[] = [];
   const now = new Date();
   const blockedSet = new Set(blocks);
@@ -752,6 +757,7 @@ function generateChipySlots(schedule: ChipySchedule, blocks: string[], timeBlock
     if (!dayConfig?.enabled) continue;
 
     const dateStr = localDateKey(day);
+    if (onlyDate && dateStr !== onlyDate) continue;
     if (blockedSet.has(dateStr)) continue;
 
     const dayLabel = DAY_LABELS[day.getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6];
@@ -784,41 +790,31 @@ function generateChipySlots(schedule: ChipySchedule, blocks: string[], timeBlock
   return slots;
 }
 
-function dayLabelForDate(date: Date): string {
-  return DAY_LABELS[date.getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6];
-}
-
-function requestedDayLabel(opts: { date?: string; range?: string; service?: string }): string | null {
+function requestedDateKey(opts: { date?: string; range?: string; service?: string }): string | null {
   const raw = `${opts.date ?? ''} ${opts.range ?? ''}`.trim();
   if (!raw) return null;
   const normalized = normalizeSlotText(raw);
   const now = new Date();
 
-  if (/\bheute\b/.test(normalized)) return dayLabelForDate(now);
+  if (/\bheute\b/.test(normalized)) return localDateKey(now);
   if (/\buebermorgen\b/.test(normalized)) {
     const date = new Date(now);
     date.setDate(now.getDate() + 2);
-    return dayLabelForDate(date);
+    return localDateKey(date);
   }
   if (/\bmorgen\b/.test(normalized)) {
     const date = new Date(now);
     date.setDate(now.getDate() + 1);
-    return dayLabelForDate(date);
+    return localDateKey(date);
   }
 
   const isoDate = raw.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
   if (isoDate) {
     const date = buildLocalDate(Number(isoDate[1]), Number(isoDate[2]), Number(isoDate[3]), { hour: 12, minute: 0 });
-    return date ? dayLabelForDate(date) : null;
+    return date ? localDateKey(date) : null;
   }
 
   return null;
-}
-
-function filterSlotsForRequest(slots: string[], opts: { date?: string; range?: string; service?: string }): string[] {
-  const dayLabel = requestedDayLabel(opts);
-  if (!dayLabel) return slots;
-  return slots.filter((slot) => slot.startsWith(`${dayLabel} `));
 }
 
 function localDateKey(date: Date): string {
@@ -1097,7 +1093,7 @@ async function findFreeSlotsByContract(
   const connections = await getCheckableConnections(orgId);
   const sources = ['chipy'];
   const { schedule, blocks, timeBlocks } = await getChipySchedule(orgId);
-  let slots = filterSlotsForRequest(generateChipySlots(schedule, blocks, timeBlocks), opts);
+  let slots = generateChipySlots(schedule, blocks, timeBlocks, requestedDateKey(opts));
 
   if (connections.length === 0) {
     return { slots: [...new Set(slots)].sort(), source: 'chipy' };
