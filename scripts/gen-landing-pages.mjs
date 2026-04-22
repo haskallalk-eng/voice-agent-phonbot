@@ -86,14 +86,23 @@ const BRANCHEN = [
       { speaker: 'bot', text: 'Phonbot: „Danke Julia. Du bekommst gleich eine Bestätigungs-SMS. Bis Donnerstag!"' },
     ],
     dialogueNote: '→ Termin automatisch im Kalender eingetragen · Dauer: 28 Sekunden',
-    savings: {
-      intro: 'Ein durchschnittlicher Salon mit 300 Anrufen/Monat kostet:',
-      items: [
-        '👤 <strong>Teilzeit-Rezeption</strong>: ~1.500 €/Monat',
-        '📞 <strong>Phonbot Starter</strong>: 49 €/Monat (500 Min inkl.)',
-        '💰 <strong>Ersparnis</strong>: ~1.450 €/Monat',
+    value: {
+      headline: 'Was passiert, wenn <span class="accent">keiner abnimmt?</span>',
+      insight: {
+        stat: '65 %',
+        claim: 'der Erstanrufer rufen nicht noch einmal an, wenn der Salon besetzt ist. Sie wählen den Nächsten in der Google-Suche.',
+      },
+      scenario: 'Typischer Salon mit 300 Anrufen pro Monat:',
+      roi: [
+        { icon: 'user', label: 'Teilzeit-Rezeption', amount: '1.500 €', per: '/Monat' },
+        { icon: 'chat', label: 'Phonbot Starter — 500 Min inklusive', amount: '49 €', per: '/Monat' },
+        { icon: 'star', label: 'Deine Ersparnis', amount: '1.451 €', per: '/Monat', highlight: true },
       ],
-      hint: 'Plus: Keine Sprechpause, keine Krankheit, kein Urlaub — rund um die Uhr.',
+      extras: [
+        { icon: 'clock', title: 'Kein Anruf in Stoßzeiten verloren', desc: 'Während Föhnen, Färben oder Schnitt geht Chipy trotzdem dran — die Kundin bleibt.' },
+        { icon: 'phone', title: 'Parallelgespräche, keine Warteschleife', desc: 'Mehrere Kundinnen gleichzeitig — niemand hängt in der Leitung, niemand legt auf.' },
+        { icon: 'calendar', title: 'Nie doppelt gebucht', desc: 'Chipy prüft den Kalender in Echtzeit, bevor ein Termin bestätigt wird — sauberes Buch ohne Überlappungen.' },
+      ],
     },
     faq: [
       { q: 'Kann Phonbot mehrere Stylisten im Salon unterscheiden?', a: 'Ja. Im Agent Builder legst du Mitarbeiter-Profile an, Phonbot bucht jedem den eigenen Kalender-Slot.' },
@@ -131,14 +140,23 @@ const BRANCHEN = [
       { speaker: 'bot', text: 'Phonbot: „Notdienst-Ticket ist erstellt mit Priorität hoch. Du wirst in ~15 Min zurückgerufen."' },
     ],
     dialogueNote: '→ Ticket mit Priorität=high im Dashboard · Push an Handwerker · Dauer: 34 Sek',
-    savings: {
-      intro: 'Ein Handwerker mit 200 Anrufen/Monat rechnet sich so:',
-      items: [
-        '👤 <strong>Angestellte Büro-Kraft</strong>: ~2.000 €/Monat',
-        '📞 <strong>Phonbot Starter</strong>: 49 €/Monat',
-        '💰 <strong>Ersparnis</strong>: ~1.950 €/Monat',
+    value: {
+      headline: 'Auf der Baustelle klingelt das Handy. <span class="accent">Und dann?</span>',
+      insight: {
+        stat: '1 von 3',
+        claim: 'Notfall-Anrufern wechselt zur Konkurrenz, wenn beim ersten Handwerker niemand abhebt — Wasserschaden wartet nicht.',
+      },
+      scenario: 'Handwerksbetrieb mit 200 Anrufen pro Monat:',
+      roi: [
+        { icon: 'user', label: 'Angestellte Büro-Kraft', amount: '2.000 €', per: '/Monat' },
+        { icon: 'chat', label: 'Phonbot Starter', amount: '49 €', per: '/Monat' },
+        { icon: 'star', label: 'Deine Ersparnis', amount: '1.951 €', per: '/Monat', highlight: true },
       ],
-      hint: 'Plus: Auf der Baustelle ohne Unterbrechung weiterarbeiten.',
+      extras: [
+        { icon: 'alert', title: 'Notfälle werden sofort priorisiert', desc: 'Keywords wie „Wasserschaden" oder „Heizung aus" lösen Priorität HOCH aus — du bekommst direkt eine Push-Nachricht.' },
+        { icon: 'clipboard', title: 'Alle Kundendaten strukturiert', desc: 'Name, Adresse, Fehlerbild, Rückrufnummer — automatisch ins Ticket, keine verlorenen Zettel auf der Baustelle.' },
+        { icon: 'clock', title: 'Abends und am Wochenende erreichbar', desc: 'Notdienst-Anrufer bekommen immer eine Antwort — und du entscheidest, wann du zurückrufst.' },
+      ],
     },
     faq: [
       { q: 'Erkennt Phonbot den Unterschied zwischen Notfall und regulärem Termin?', a: 'Ja. Keywords wie "sofort", "Wasserschaden", "brennt" lösen automatisch Priorität-hoch aus. Du kannst im Agent Builder deine eigenen Notfall-Regeln ergänzen.' },
@@ -176,14 +194,23 @@ const BRANCHEN = [
       { speaker: 'bot', text: 'Phonbot: „Notiert. Die MFA ruft dich innerhalb von 24h mit dem fertigen Rezept zurück."' },
     ],
     dialogueNote: '→ Ticket für MFA · Patient muss nicht in Warteschleife · Dauer: 38 Sek',
-    savings: {
-      intro: 'Entlastung für eine mittelgroße Praxis (500 Anrufe/Monat):',
-      items: [
-        '👤 <strong>2. Teilzeit-MFA</strong>: ~1.800 €/Monat',
-        '📞 <strong>Phonbot Pro</strong>: 149 €/Monat (inkl. 2.000 Min)',
-        '💰 <strong>Ersparnis</strong>: ~1.650 €/Monat',
+    value: {
+      headline: 'Deine MFA ist am Limit. <span class="accent">Was hilft wirklich?</span>',
+      insight: {
+        stat: '40 %',
+        claim: 'aller Praxis-Telefonate drehen sich um Rezepte, Sprechzeiten oder Termine — genau die Routine, die deine MFA ersticken.',
+      },
+      scenario: 'Mittelgroße Praxis, 500 Anrufe pro Woche:',
+      roi: [
+        { icon: 'user', label: 'Zweite Teilzeit-MFA', amount: '1.800 €', per: '/Monat' },
+        { icon: 'chat', label: 'Phonbot Pro — 2.000 Min inklusive', amount: '149 €', per: '/Monat' },
+        { icon: 'star', label: 'Deine Ersparnis', amount: '1.651 €', per: '/Monat', highlight: true },
       ],
-      hint: 'Plus: Bestehende MFA macht weniger Überstunden, weniger Burnout-Risiko.',
+      extras: [
+        { icon: 'pill', title: 'Rezept-Anfragen DSGVO-konform erfasst', desc: 'Patient + Medikament + Geburtsdatum landen strukturiert im Dashboard — keine Zettel auf dem Empfang.' },
+        { icon: 'calendar', title: 'Routine-Termine direkt vergeben', desc: 'Chipy kennt deine Sprechzeiten und bucht freie Slots ohne MFA-Eingriff — sie bleibt für Patienten vor Ort frei.' },
+        { icon: 'alert', title: 'Akute Notfälle werden weitergeleitet', desc: 'Symptome wie „Atemnot" oder „Brustschmerz" verweisen sofort an 112 — keine KI-Diagnose, aber saubere Triage.' },
+      ],
     },
     faq: [
       { q: 'Ist Phonbot DSGVO-konform für Patientendaten?', a: 'Ja. Server in Deutschland, AES-256 verschlüsselt, AV-Vertrag verfügbar. PII-Redaction entfernt sensible Daten aus Transkripten.' },
@@ -221,14 +248,23 @@ const BRANCHEN = [
       { speaker: 'bot', text: 'Phonbot: „Perfekt. Ich notiere alles. Unser Team schickt dir bis morgen ein konkretes Angebot."' },
     ],
     dialogueNote: '→ Detailliertes Ticket im Dashboard · Angebot-E-Mail automatisch an Vertrieb · Dauer: 44 Sek',
-    savings: {
-      intro: 'Typische Reinigungsfirma mit 150 Auftragsanfragen/Monat:',
-      items: [
-        '👤 <strong>Verwaltung/Disposition</strong>: ~1.800 €/Monat',
-        '📞 <strong>Phonbot Starter</strong>: 49 €/Monat',
-        '💰 <strong>Ersparnis</strong>: ~1.750 €/Monat',
+    value: {
+      headline: 'Anfragen kommen rein — <span class="accent">und keiner im Büro.</span>',
+      insight: {
+        stat: '78 %',
+        claim: 'der gewerblichen Anfragen landen tagsüber — genau dann, wenn dein Team beim Kunden vor Ort ist.',
+      },
+      scenario: 'Reinigungsfirma, 150 Auftrags-Anfragen pro Monat:',
+      roi: [
+        { icon: 'user', label: 'Disposition / Bürokraft', amount: '1.800 €', per: '/Monat' },
+        { icon: 'chat', label: 'Phonbot Starter', amount: '49 €', per: '/Monat' },
+        { icon: 'star', label: 'Deine Ersparnis', amount: '1.751 €', per: '/Monat', highlight: true },
       ],
-      hint: 'Plus: Keine Anfragen gehen verloren wenn das Team unterwegs ist.',
+      extras: [
+        { icon: 'document', title: 'Angebotsanfragen sauber aufgenommen', desc: 'Objekt-Art, Quadratmeter, Frequenz — alles systematisch im Ticket, keine Excel-Liste am Abend mehr.' },
+        { icon: 'calendar', title: 'Wiederkehrende Aufträge live gebucht', desc: 'Freie Slots für Büroreinigung oder Gastro-Grundreinigung direkt vereinbart — feste Kunden freuen sich.' },
+        { icon: 'euro', title: 'Preisauskunft für Standard-Leistungen', desc: 'Chipy kennt deine Preistabellen und gibt direkt Auskunft — der Interessent weiß sofort, woran er ist.' },
+      ],
     },
     faq: [
       { q: 'Kann Phonbot nach Reinigungs-Art filtern (Unterhaltsreinigung vs. Grundreinigung)?', a: 'Ja. Im Agent Builder definierst du deine Leistungspakete mit Fragen zur Unterscheidung.' },
@@ -266,14 +302,23 @@ const BRANCHEN = [
       { speaker: 'bot', text: 'Phonbot: „Perfekt. Bis heute Abend 19 Uhr!"' },
     ],
     dialogueNote: '→ Reservierung im System · SMS-Bestätigung an Gast · Dauer: 31 Sek',
-    savings: {
-      intro: 'Restaurant mit 400 Anrufen/Monat rechnet sich so:',
-      items: [
-        '👤 <strong>Service-Mitarbeiter nur für Telefon</strong>: ~1.700 €/Monat',
-        '📞 <strong>Phonbot Starter</strong>: 49 €/Monat',
-        '💰 <strong>Ersparnis</strong>: ~1.650 €/Monat',
+    value: {
+      headline: 'Service-Spitze — und das Telefon <span class="accent">hört nicht auf.</span>',
+      insight: {
+        stat: '2 Tische',
+        claim: 'pro Abend verliert ein durchschnittliches Restaurant an die Warteschleife — das sind 50 Tische pro Monat, die woanders essen.',
+      },
+      scenario: 'Restaurant mit 400 Anrufen pro Monat:',
+      roi: [
+        { icon: 'user', label: 'Service-Kraft nur fürs Telefon', amount: '1.700 €', per: '/Monat' },
+        { icon: 'chat', label: 'Phonbot Starter', amount: '49 €', per: '/Monat' },
+        { icon: 'star', label: 'Deine Ersparnis', amount: '1.651 €', per: '/Monat', highlight: true },
       ],
-      hint: 'Plus: Keine Warteschleife = weniger verlorene Gäste an Konkurrenz.',
+      extras: [
+        { icon: 'calendar', title: 'Reservierungen parallel annehmen', desc: 'Mehrere Gäste gleichzeitig — keine Warteschleife, niemand legt vor der Reservierung auf.' },
+        { icon: 'clipboard', title: 'Allergien und Wünsche strukturiert', desc: 'Kinderhochstuhl, Veganer, Allergien — alles notiert und im Reservierungssystem, bevor der Gast kommt.' },
+        { icon: 'document', title: 'Take-Away-Bestellungen direkt zur Küche', desc: 'Bestellung mit Artikeln und Abholzeit landet als Ticket am Küchenpass — kein Notizblock mehr.' },
+      ],
     },
     faq: [
       { q: 'Klappt das mit meinem Reservierungs-System (Resmio, Quandoo, OpenTable)?', a: 'Gängige Kalender (Google, Outlook, Cal.com) funktionieren direkt. Spezifische Reservierungs-Systeme auf Anfrage — meist via Kalender-Sync machbar.' },
@@ -311,14 +356,23 @@ const BRANCHEN = [
       { speaker: 'bot', text: 'Phonbot: „Gebucht. Bring bitte den Fahrzeugschein mit. Dein Name und Telefonnummer?"' },
     ],
     dialogueNote: '→ Termin im Werkstatt-Kalender · Ticket mit Fahrzeug-Details · Dauer: 42 Sek',
-    savings: {
-      intro: 'Werkstatt mit 250 Anrufen/Monat:',
-      items: [
-        '👤 <strong>Werkstatt-Büro-Kraft</strong>: ~1.800 €/Monat',
-        '📞 <strong>Phonbot Starter</strong>: 49 €/Monat',
-        '💰 <strong>Ersparnis</strong>: ~1.750 €/Monat',
+    value: {
+      headline: 'Der Kunde will reparieren — <span class="accent">du liegst unterm Auto.</span>',
+      insight: {
+        stat: '1 von 3',
+        claim: 'Werkstatt-Anrufen geht verloren, weil niemand am Tresen frei ist. Der Kunde ruft die nächste Werkstatt an.',
+      },
+      scenario: 'Werkstatt mit 250 Anrufen pro Monat:',
+      roi: [
+        { icon: 'user', label: 'Teilzeit-Tresen', amount: '1.800 €', per: '/Monat' },
+        { icon: 'chat', label: 'Phonbot Starter', amount: '49 €', per: '/Monat' },
+        { icon: 'star', label: 'Deine Ersparnis', amount: '1.751 €', per: '/Monat', highlight: true },
       ],
-      hint: 'Plus: Unter der Hebebühne keine Unterbrechung mehr.',
+      extras: [
+        { icon: 'car', title: 'Fahrzeug-Daten systematisch erfasst', desc: 'Modell, Baujahr, Kilometerstand, Fehlerbild — strukturiert im Ticket, nie auf dem Zettel verschlampt.' },
+        { icon: 'calendar', title: 'TÜV und Inspektion automatisch gebucht', desc: 'Chipy kennt deine Werkstatt-Auslastung und vergibt passende Slots — ohne dass du anrufen musst.' },
+        { icon: 'document', title: 'Kostenvoranschlag-Tickets sauber', desc: 'Komplexe Anfragen landen als Ticket im Dashboard — du rufst später in Ruhe mit dem Angebot zurück.' },
+      ],
     },
     faq: [
       { q: 'Kann Phonbot verschiedene Werkstatt-Bereiche unterscheiden?', a: 'Ja. Du legst im Agent Builder fest: Reifen-Express (30 Min), Inspektion (2h), Unfall-Reparatur (Termin). Phonbot routet korrekt.' },
@@ -443,14 +497,43 @@ p{color:rgba(255,255,255,.7)}
   .dialogue-header .dot,.msg.bot .avatar,.dialogue-typing span{animation:none}
 }
 
-/* ── Savings card (glass with checklist + pricing hint) ── */
-.savings{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);border-radius:1.5rem;padding:2rem;max-width:640px;margin:0 auto}
-.savings .intro{color:rgba(255,255,255,.8);margin-bottom:1rem;font-size:.9375rem}
-.savings ul{list-style:none;padding:0;margin:0 0 1.25rem;color:rgba(255,255,255,.75)}
-.savings li{padding:.625rem 0;font-size:.9375rem;border-bottom:1px solid rgba(255,255,255,.06)}
-.savings li:last-child{border-bottom:none}
-.savings strong{color:#fff;font-weight:600}
-.pricing-hint{display:inline-flex;align-items:center;padding:.5rem 1rem;border-radius:.625rem;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);font-size:.8125rem;color:#67E8F9}
+/* ── Value section (the professional "why this pays off" block) ── */
+.value-insight{display:flex;flex-direction:column;align-items:center;text-align:center;max-width:48rem;margin:0 auto 3rem;padding:1.75rem 1.5rem;background:linear-gradient(135deg,rgba(249,115,22,.09),rgba(6,182,212,.05));border:1px solid rgba(249,115,22,.18);border-radius:1.25rem;gap:.5rem}
+@media(min-width:768px){.value-insight{flex-direction:row;gap:1.75rem;text-align:left;padding:1.75rem 2rem}}
+.value-stat{font-size:clamp(2.5rem,6vw,3.75rem);font-weight:800;letter-spacing:-.03em;line-height:1;background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;background-clip:text;color:transparent;flex-shrink:0;white-space:nowrap}
+.value-claim{color:rgba(255,255,255,.78);font-size:1rem;line-height:1.55;max-width:34rem}
+@media(max-width:640px){.value-claim{font-size:.9375rem}}
+
+.value-grid{display:grid;grid-template-columns:1fr;gap:1.5rem;max-width:64rem;margin:0 auto}
+@media(min-width:900px){.value-grid{grid-template-columns:1fr 1fr;gap:1.75rem}}
+
+/* ROI card (left column) */
+.roi-card{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);border-radius:1.25rem;padding:1.75rem;display:flex;flex-direction:column}
+.roi-scenario{font-size:.75rem;color:rgba(255,255,255,.5);margin-bottom:1rem;text-transform:uppercase;letter-spacing:.1em;font-weight:600}
+.roi-row{display:flex;align-items:center;gap:.875rem;padding:.875rem 0;border-bottom:1px dashed rgba(255,255,255,.07)}
+.roi-row:last-of-type{border-bottom:none}
+.roi-row .ic{flex-shrink:0;width:36px;height:36px;border-radius:.75rem;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.6)}
+.roi-row .ic svg{display:block;width:18px;height:18px}
+.roi-row .label{flex:1;color:rgba(255,255,255,.78);font-size:.9375rem;font-weight:500;line-height:1.35}
+.roi-row .amount{color:rgba(255,255,255,.9);font-size:1rem;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.roi-row .per{color:rgba(255,255,255,.5);font-size:.8125rem;font-weight:500;margin-left:.15rem}
+
+/* Highlight row = the savings reveal */
+.roi-row.highlight{margin-top:.75rem;padding:1rem 1.125rem;border:1px solid rgba(249,115,22,.3);background:linear-gradient(135deg,rgba(249,115,22,.12),rgba(6,182,212,.06));border-radius:.875rem;box-shadow:0 0 32px rgba(249,115,22,.12)}
+.roi-row.highlight .ic{background:linear-gradient(135deg,rgba(249,115,22,.22),rgba(6,182,212,.14));border-color:rgba(249,115,22,.30);color:#FDBA74}
+.roi-row.highlight .label{color:#fff;font-weight:600}
+.roi-row.highlight .amount{background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:1.375rem;font-weight:800}
+.roi-row.highlight .per{color:rgba(255,255,255,.6)}
+
+/* Extras stack (right column) */
+.value-extras{display:flex;flex-direction:column;gap:.875rem}
+.extra{display:flex;gap:1rem;padding:1.25rem;border-radius:1rem;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);transition:all .3s}
+.extra:hover{border-color:rgba(249,115,22,.25);background:rgba(255,255,255,.05);transform:translateY(-1px)}
+.extra .ic{flex-shrink:0;width:38px;height:38px;border-radius:.75rem;background:linear-gradient(135deg,rgba(249,115,22,.15),rgba(6,182,212,.10));display:flex;align-items:center;justify-content:center;color:#FB923C;border:1px solid rgba(249,115,22,.18)}
+.extra .ic svg{display:block;width:18px;height:18px}
+.extra-body{flex:1;min-width:0}
+.extra-title{color:#fff;font-weight:600;font-size:.9375rem;margin-bottom:.2rem;line-height:1.35}
+.extra-desc{color:rgba(255,255,255,.6);font-size:.875rem;line-height:1.55}
 
 /* ── FAQ (native <details> accordion, chipy-design tint on open) ── */
 .faq-list{max-width:48rem;margin:0 auto;display:flex;flex-direction:column;gap:.75rem}
@@ -527,8 +610,27 @@ function buildPage(d) {
   const faq = d.faq
     .map((q) => `<details class="faq-item"><summary>${q.q}</summary><div class="answer">${q.a}</div></details>`)
     .join('\n      ');
-  const savingsItems = d.savings.items
-    .map((i) => `<li>${stripLeadingEmoji(i, 15)}</li>`)
+  // Value section — ROI rows + extras-grid.
+  const roiRows = d.value.roi
+    .map(
+      (r) => `<div class="roi-row${r.highlight ? ' highlight' : ''}">
+          <span class="ic">${icon(r.icon, 18)}</span>
+          <span class="label">${r.label}</span>
+          <span class="amount">${r.amount}<span class="per">${r.per}</span></span>
+        </div>`,
+    )
+    .join('\n        ');
+
+  const valueExtras = d.value.extras
+    .map(
+      (e) => `<div class="extra">
+          <span class="ic">${icon(e.icon, 18)}</span>
+          <div class="extra-body">
+            <div class="extra-title">${e.title}</div>
+            <div class="extra-desc">${e.desc}</div>
+          </div>
+        </div>`,
+    )
     .join('\n        ');
 
   return `<!doctype html>
@@ -610,14 +712,19 @@ ${NAV_HTML}
 
 <section>
   <div class="container">
-    <h2>Rechnet sich das?</h2>
-    <p class="section-lead">Die Rechnung ist kurz — der Unterschied pro Monat ist nicht.</p>
-    <div class="savings">
-      <p class="intro">${d.savings.intro}</p>
-      <ul>
-        ${savingsItems}
-      </ul>
-      <span class="pricing-hint">${d.savings.hint}</span>
+    <h2>${d.value.headline}</h2>
+    <div class="value-insight">
+      <span class="value-stat">${d.value.insight.stat}</span>
+      <span class="value-claim">${d.value.insight.claim}</span>
+    </div>
+    <div class="value-grid">
+      <div class="roi-card">
+        <div class="roi-scenario">${d.value.scenario}</div>
+        ${roiRows}
+      </div>
+      <div class="value-extras">
+        ${valueExtras}
+      </div>
     </div>
   </div>
 </section>
