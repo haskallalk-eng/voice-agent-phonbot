@@ -129,16 +129,9 @@ export function VoiceDropdown({
         </span>
         <IconChevronDown size={16} className="ml-2 text-white/40 shrink-0" />
       </button>
-      {currentIsPremium && (
-        <div className="mt-2 flex items-center gap-2 rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-1.5">
-          <span className="text-sm leading-none" aria-hidden="true">⚡</span>
-          <p className="text-xs text-orange-100/90 leading-none whitespace-nowrap overflow-hidden text-ellipsis">
-            <strong className="text-orange-200">Premium</strong>
-            <span className="text-orange-100/60 mx-1.5">·</span>
-            <span className="text-orange-200 font-semibold">{formatSurcharge(currentSurcharge)}</span>
-          </p>
-        </div>
-      )}
+      {/* (no duplicate Premium-Surcharge banner below the dropdown — the pill
+          next to the voice name inside the trigger already communicates
+          both the tier and the +5 Ct/Min surcharge.) */}
 
       {/* Confirmation modal when switching from standard → premium voice */}
       {confirmVoice && (
