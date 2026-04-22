@@ -153,6 +153,17 @@ function defaultBackchannel(): boolean {
   return process.env.RETELL_AGENT_BACKCHANNEL !== 'false';
 }
 
+/** Hard timeout — Retell hangs up after N ms of unbroken silence.
+ *  Default 60 s so a caller who wandered off / dropped the line can't
+ *  rack up open minutes forever. */
+function defaultEndCallSilenceMs(): number {
+  const raw = process.env.RETELL_AGENT_END_CALL_SILENCE_MS;
+  if (raw === undefined || raw === '') return 60_000;
+  const v = Number(raw);
+  if (!Number.isFinite(v) || v < 10_000) return 60_000;
+  return v;
+}
+
 export async function createAgent(config: {
   name: string;
   llmId: string;
@@ -171,6 +182,7 @@ export async function createAgent(config: {
       interruption_sensitivity: config.interruptionSensitivity ?? defaultInterruption(),
       enable_backchannel: config.enableBackchannel ?? defaultBackchannel(),
       enable_dynamic_responsiveness: true,
+      end_call_after_silence_ms: defaultEndCallSilenceMs(),
     }),
   });
 }
@@ -192,6 +204,7 @@ export async function updateAgent(
   // configured in the Retell dashboard. Now we only override when asked.
   const body: Record<string, unknown> = {
     enable_dynamic_responsiveness: true,
+    end_call_after_silence_ms: defaultEndCallSilenceMs(),
   };
   if (config.interruptionSensitivity !== undefined) body.interruption_sensitivity = config.interruptionSensitivity;
   if (config.enableBackchannel !== undefined) body.enable_backchannel = config.enableBackchannel;
