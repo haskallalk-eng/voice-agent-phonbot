@@ -305,34 +305,39 @@ export function VoiceDropdown({
             </>
           )}
 
-          {/* Built-in voices grouped by tier, sorted by gender within */}
-          {providerGroupsOrdered.map(([provider, provVoices]) => (
-            <React.Fragment key={provider}>
-              <div className="px-4 py-1.5 bg-white/3 border-b border-t border-white/5">
-                <span className="text-xs font-semibold text-white/40 uppercase tracking-wide">{provider}</span>
-              </div>
-              {provVoices.map((v) => (
-                <button
-                  key={v.voice_id}
-                  type="button"
-                  onClick={() => handleSelect(v)}
-                  className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-white/5 transition-colors text-left ${
-                    currentVoiceId === v.voice_id ? 'text-orange-300 bg-orange-500/10' : 'text-white/80'
-                  }`}
-                >
-                  <span className="flex items-center gap-2 min-w-0">
-                    <span className="truncate">{v.voice_name}</span>
-                    {isPremiumVoice(v) && (
-                      <span className="text-[10px] font-semibold text-orange-300 bg-orange-500/10 border border-orange-500/30 rounded-full px-1.5 py-0.5 shrink-0">
-                        {formatSurcharge(voiceSurcharge(v))}
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-xs text-white/30 shrink-0">{genderLabel(v) || v.accent || ''}</span>
-                </button>
-              ))}
-            </React.Fragment>
-          ))}
+          {/* Built-in voices grouped by tier, sorted by gender within.
+              The tier label itself carries the surcharge badge for
+              High-Quality so the row-level pills don't need to shout. */}
+          {providerGroupsOrdered.map(([provider, provVoices]) => {
+            const isHq = provider === 'High Quality Voice';
+            return (
+              <React.Fragment key={provider}>
+                <div className="flex items-center gap-2 px-4 py-1.5 bg-white/3 border-b border-t border-white/5">
+                  <span className="text-xs font-semibold text-white/40 uppercase tracking-wide">{provider}</span>
+                  {isHq && (
+                    <span className="text-[10px] font-semibold text-orange-300 bg-orange-500/10 border border-orange-500/30 rounded-full px-1.5 py-0.5">
+                      +5 Ct/Min
+                    </span>
+                  )}
+                </div>
+                {provVoices.map((v) => (
+                  <button
+                    key={v.voice_id}
+                    type="button"
+                    onClick={() => handleSelect(v)}
+                    className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-white/5 transition-colors text-left ${
+                      currentVoiceId === v.voice_id ? 'text-orange-300 bg-orange-500/10' : 'text-white/80'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span className="truncate">{v.voice_name}</span>
+                    </span>
+                    <span className="text-xs text-white/30 shrink-0">{genderLabel(v) || v.accent || ''}</span>
+                  </button>
+                ))}
+              </React.Fragment>
+            );
+          })}
 
           {/* No search results */}
           {search && cloned.length === 0 && Object.keys(providerGroups).length === 0 && (
