@@ -639,13 +639,19 @@ function AgentStatsRow({
       : diffSec < 3600 ? `vor ${Math.round(diffSec / 60)} min`
       : `vor ${Math.round(diffSec / 3600)} h`;
   }
-  const sourceLabel = stats?.latencySource === 'values' ? 'roh' : stats?.latencySource === 'p50' ? 'p50-Fallback' : '';
-  // Short, multi-line, only-on-hover tooltip with everything the user
-  // needs to trust the number. Stays short visually, lots of info on hover.
+  // Tooltip explains: this number is Retell's model-baseline (matches
+  // the agent-builder UI), and the actually-measured latency from the
+  // last call is shown as extra info.
+  const modelLine = stats?.modelName ? `Modell: ${stats.modelName}` : '';
+  const measured = stats?.measuredLlmMs;
+  const measuredLine = measured != null
+    ? `Gemessen letzter Call: ${measured} ms (LLM p50)`
+    : 'Gemessen letzter Call: — (noch kein Call)';
   const latencyTip = hasData
-    ? `E2E letzter Turn (${sourceLabel})
-${breakdownStr ? breakdownStr + '\n' : ''}${stats?.turnsInCall ? `${stats.turnsInCall} Turn${stats.turnsInCall === 1 ? '' : 's'} · ` : ''}Call ${callAgo}
-live Retell · ${ageStr}`
+    ? `Retell-Baseline für dieses Modell
+${modelLine}
+${measuredLine}
+Call ${callAgo} · live ${ageStr}`
     : '';
 
   if (hasData) {

@@ -13,6 +13,8 @@ import {
   createWebCall,
   listCalls,
   getCall,
+  getAgent as retellGetAgent,
+  getLLM as retellGetLlm,
   DEFAULT_VOICE_ID,
   type RetellTool,
 } from './retell.js';
@@ -544,18 +546,58 @@ export async function registerAgentConfig(app: FastifyInstance) {
       breakdownMs: emptyBreakdown,
       turnsInCall: 0,
       lastCallAt: null,
+      modelName: null as string | null,
+      modelBaselineMs: null as number | null,
+      measuredLlmMs: null as number | null,
       error: null as string | null,
     };
     if (!retellAgentId) return { ...emptyResponse, error: 'not_deployed' };
 
     try {
-      const calls = await listCalls(retellAgentId, 20);
-      // Single source of truth: latency.llm.p50 of the latest ended
-      // call. Retell's own dashboard labels this field 'Latency' as
-      // its headline metric — so by mirroring it we're guaranteed to
-      // show the exact same number as what the user sees on Retell.
-      // llm covers the LLM inference time only; e2e (end-to-end with
-      // ASR + TTS + network) is exposed in the tooltip breakdown.
+      // Retell's agent-builder UI shows a model-based latency estimate
+      // that changes when the user switches LLM. It doesn't come from
+      // /list-calls or /get-agent — it's a per-model baseline baked
+      // into Retell's UI. We mirror the same lookup so Phonbot's chip
+      // matches the user's Retell-builder view 1:1.
+      const MODEL_LATENCY_MS: Record<string, number> = {
+        'gpt-4o-mini': 500,
+        'gpt-4o': 800,
+        'gpt-4.1-mini': 500,
+        'gpt-4.1': 800,
+        'gpt-4.1-nano': 400,
+        'claude-haiku-3.5': 400,
+        'claude-3-haiku': 400,
+        'claude-sonnet-3.5': 900,
+        'claude-3.5-sonnet': 900,
+        'claude-sonnet-4': 900,
+      };
+
+      // Pull agent + LLM in parallel with the call list so we know the
+      // current model every refresh (the user can change it without a
+      // redeploy through the builder).
+      const [calls, agent] = await Promise.all([
+        listCalls(retellAgentId, 20),
+        (async () => {
+          try {
+            const a = await retellGetAgent(retellAgentId);
+            return a;
+          } catch { return null; }
+        })(),
+      ]);
+
+      let modelName: string | null = null;
+      let modelBaselineMs: number | null = null;
+      const llmId = agent?.response_engine?.llm_id;
+      if (llmId) {
+        try {
+          const llm = await retellGetLlm(llmId);
+          modelName = typeof llm?.model === 'string' ? llm.model : null;
+          if (modelName) {
+            modelBaselineMs = MODEL_LATENCY_MS[modelName] ?? null;
+          }
+        } catch { /* keep null */ }
+      }
+
       const pickNum = (v: unknown): number | null =>
         typeof v === 'number' && v > 0 ? Math.round(v) : null;
 
@@ -568,14 +610,27 @@ export async function registerAgentConfig(app: FastifyInstance) {
       const asr = pickNum(l?.asr?.p50);
       const e2e = pickNum(l?.e2e?.p50);
       const turnsInCall = l?.e2e?.values?.length ?? 0;
+
+      // Primary = model baseline (matches Retell's agent-builder UI).
+      // Fall back to measured llm.p50 only when Retell's model map
+      // doesn't know the LLM — at least the user sees *something* real.
+      const primary = modelBaselineMs ?? llm;
+      const source: 'model-baseline' | 'measured' | 'none' =
+        modelBaselineMs != null ? 'model-baseline'
+        : llm != null ? 'measured'
+        : 'none';
+
       return {
         callsCount: endedCalls.length,
-        sampleSize: llm != null ? 1 : 0,
-        latencyMs: llm,
-        latencySource: llm != null ? ('p50' as const) : ('none' as const),
+        sampleSize: primary != null ? 1 : 0,
+        latencyMs: primary,
+        latencySource: source === 'model-baseline' ? 'p50' : source === 'measured' ? 'values' : 'none',
         breakdownMs: { llm, tts, asr, e2e },
         turnsInCall,
         lastCallAt: latest?.end_timestamp ?? null,
+        modelName,
+        modelBaselineMs,
+        measuredLlmMs: llm,
         error: null,
       };
     } catch (err) {
