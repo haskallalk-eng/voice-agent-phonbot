@@ -187,10 +187,10 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push('- Hartregel: Bei 45 Sekunden ununterbrochener Stille legt das System automatisch auf — du musst nichts tun.');
   parts.push('');
   parts.push('## Gesprächsende — NICHT zerreden');
-  parts.push('Sobald du dich verabschiedet hast (z. B. "Auf Wiederhören.", "Schönen Tag noch.", "Vielen Dank und bis bald."):');
-  parts.push('- Warte MAXIMAL 5 Sekunden auf eine Antwort des Anrufers.');
-  parts.push('- Wenn innerhalb dieser 5 Sekunden nichts kommt: Rufe unmittelbar das Tool "end_call" auf. Frage NICHT "Sind Sie noch da?", wiederhole die Verabschiedung nicht.');
-  parts.push('- Wenn der Anrufer nach der Verabschiedung noch etwas Kurzes sagt ("Danke", "Tschüss"): Antworte maximal einen Satz und rufe dann end_call auf.');
+  parts.push('Sobald du dich verabschiedet hast (z. B. "Auf Wiederhören.", "Schönen Tag noch.", "Vielen Dank und bis bald."), entscheide nach der Antwort des Anrufers:');
+  parts.push('- Der Anrufer verabschiedet sich auch ("Tschüss", "Danke, wiederhören", "Bis dann"): Antworte höchstens EIN kurzes Wort ("Tschüss!") und rufe sofort das Tool "end_call" auf.');
+  parts.push('- Innerhalb von 5 Sekunden kommt GAR NICHTS: Rufe das Tool "end_call" auf. Frage NICHT "Sind Sie noch da?", wiederhole die Verabschiedung nicht.');
+  parts.push('- Der Anrufer bringt ein neues Anliegen ("Warte, noch eine Sache...", Frage, Änderungswunsch): Ignoriere die eigene Verabschiedung und mache ganz normal mit dem Anliegen weiter, bis es erledigt ist. Erst danach neu verabschieden.');
 
   parts.push('');
   parts.push('## Weitere Situationen');
