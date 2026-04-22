@@ -110,7 +110,7 @@ const BRANCHEN = [
       { q: 'Versteht Phonbot Friseur-Fachbegriffe (Pony, Balayage, Keratin)?', a: 'Ja. Die KI ist nativ auf deutschem Sprachgebrauch trainiert, inkl. Dialekte und Friseur-Fachbegriffe.' },
       { q: 'Kann ich meine bisherige Salon-Nummer behalten?', a: 'Ja. Rufweiterleitung bei deinem Telefonanbieter einrichten, fertig. Kein Nummernwechsel nötig.' },
     ],
-    ctaHeading: 'Salon-Agent einrichten — 100 Freiminuten',
+    ctaHeading: 'Salon-Agent einrichten — 30 Freiminuten',
   },
   {
     slug: 'handwerker',
@@ -164,7 +164,7 @@ const BRANCHEN = [
       { q: 'Versteht Phonbot Handwerks-Fachbegriffe (Thermostat, Siphon, etc.)?', a: 'Ja. Das LLM kennt deutsche Handwerks-Terminologie und kann bei Unklarheit gezielt nachfragen.' },
       { q: 'Was wenn mehrere Kunden gleichzeitig anrufen?', a: 'Phonbot nimmt mehrere Anrufe parallel an (eigener Agent pro Gespräch). Niemand hängt in der Warteschleife.' },
     ],
-    ctaHeading: 'Handwerksbetrieb automatisieren — 100 Freiminuten',
+    ctaHeading: 'Handwerksbetrieb automatisieren — 30 Freiminuten',
   },
   {
     slug: 'arztpraxis',
@@ -218,7 +218,7 @@ const BRANCHEN = [
       { q: 'Passt das zu meiner Praxis-Software?', a: 'Phonbot arbeitet mit dem Kalender-System (Google, Outlook, Cal.com). Direkte Integration mit PVS-Systemen auf Anfrage.' },
       { q: 'Werden Gespräche aufgenommen?', a: 'Standardmäßig werden Transkripte erstellt, keine Audio-Aufzeichnung. Patienten werden zu Gesprächsbeginn auf die KI-Nutzung hingewiesen.' },
     ],
-    ctaHeading: 'Praxis-Team entlasten — 100 Freiminuten',
+    ctaHeading: 'Praxis-Team entlasten — 30 Freiminuten',
   },
   {
     slug: 'reinigung',
@@ -272,7 +272,7 @@ const BRANCHEN = [
       { q: 'Kann ich verschiedene Service-Gebiete abdecken?', a: 'Ja. Phonbot fragt die PLZ ab und leitet je nach Gebiet an das richtige Team weiter (Agent Builder Routing-Regeln).' },
       { q: 'Lässt sich Phonbot für Hausreinigung UND Gewerbe gleichzeitig nutzen?', a: 'Ja. Im Pro-Plan hast du 3 Agents — z.B. einer für Privatkunden, einer für Gewerbe.' },
     ],
-    ctaHeading: 'Reinigungs-Telefon automatisieren — 100 Freiminuten',
+    ctaHeading: 'Reinigungs-Telefon automatisieren — 30 Freiminuten',
   },
   {
     slug: 'restaurant',
@@ -326,7 +326,7 @@ const BRANCHEN = [
       { q: 'Kann Phonbot Bestellungen für Lieferdienst annehmen?', a: 'Ja. Bestellungen werden als Ticket mit Artikeln + Lieferadresse an die Küche weitergeleitet.' },
       { q: 'Versteht Phonbot Dialekte (Bayrisch, Berlinerisch)?', a: 'Ja. Deutsches Sprach-Modell erkennt regionale Varianten und Gerichte-Slang.' },
     ],
-    ctaHeading: 'Restaurant-Telefon automatisieren — 100 Freiminuten',
+    ctaHeading: 'Restaurant-Telefon automatisieren — 30 Freiminuten',
   },
   {
     slug: 'autowerkstatt',
@@ -380,7 +380,7 @@ const BRANCHEN = [
       { q: 'Kann der Kunde ein Kostenvoranschlag-Angebot direkt bestätigen?', a: 'Aktuell erstellt Phonbot ein Ticket, du schickst das Angebot per E-Mail/SMS. Auto-Bestätigung via Link kommt 2026.' },
       { q: 'Versteht Phonbot Kfz-Fachbegriffe (Zahnriemen, Zylinderkopfdichtung)?', a: 'Ja. Deutsches LLM kennt Kfz-Terminologie.' },
     ],
-    ctaHeading: 'Werkstatt-Telefon automatisieren — 100 Freiminuten',
+    ctaHeading: 'Werkstatt-Telefon automatisieren — 30 Freiminuten',
   },
 ];
 
@@ -675,7 +675,7 @@ ${NAV_HTML}
     <h1>${d.h1Text}</h1>
     <p class="subtitle">${d.subtitle}</p>
     <div class="cta-row">
-      <a href="/" class="btn btn-primary">Kostenlos testen</a>
+      <a href="/?page=register" class="btn btn-primary">Kostenlos testen</a>
       <a href="/?demo=${d.templateId}#demo" class="btn btn-ghost">▶ Chipy live hören</a>
     </div>
     <div class="trust-line">✓ Kostenlos starten · ✓ Sofort einsatzbereit · ✓ DSGVO-konform</div>
@@ -744,7 +744,7 @@ ${NAV_HTML}
     <h2>${d.ctaHeading}</h2>
     <p class="section-lead">Registrierung in unter 2 Minuten · Keine Kreditkarte · Monatlich kündbar.</p>
     <div class="cta-row">
-      <a href="/" class="btn btn-primary">Jetzt einrichten</a>
+      <a href="/?page=register" class="btn btn-primary">Jetzt einrichten</a>
       <a href="/?demo=${d.templateId}#demo" class="btn btn-ghost">Erst Chipy testen</a>
     </div>
   </div>
