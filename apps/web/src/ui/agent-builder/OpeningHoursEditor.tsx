@@ -230,22 +230,24 @@ export function OpeningHoursEditor({ value, onChange }: { value: string; onChang
         </button>
       </div>
 
-      {/* Day grid */}
+      {/* Day grid — flex-wrap lets narrow viewports stack the time block
+          under the toggle instead of overflowing the rounded border. */}
       <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] divide-y divide-white/[0.05] overflow-hidden">
-        {DAY_ORDER.map((d, idx) => {
+        {DAY_ORDER.map((d) => {
           const ds = week[d]!;
           const isMonday = d === 'Mo';
-          const anyOtherWeekday = idx > 0 && idx < 5;
           return (
-            <div key={d} className="flex items-center gap-3 px-3 py-2.5 hover:bg-white/[0.02] transition-colors">
-              <span className="w-24 shrink-0 text-xs font-medium text-white/70">{DAY_LABEL[d]}</span>
-              <label className="flex items-center gap-2 cursor-pointer select-none">
+            <div key={d} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 hover:bg-white/[0.02] transition-colors">
+              <span className="w-16 sm:w-24 shrink-0 text-xs font-medium text-white/70">{DAY_LABEL[d]}</span>
+              {/* Toggle group — plain div, not label, to avoid nested <label> */}
+              <div className="flex items-center gap-2 select-none shrink-0">
                 <button
                   type="button"
                   role="switch"
                   aria-checked={ds.open}
+                  aria-label={`${DAY_LABEL[d]}: ${ds.open ? 'geöffnet' : 'geschlossen'}`}
                   onClick={() => setDay(d, { open: !ds.open })}
-                  className="relative w-9 h-5 rounded-full transition-colors"
+                  className="relative w-9 h-5 rounded-full transition-colors cursor-pointer shrink-0"
                   style={{ background: ds.open ? 'linear-gradient(135deg, #F97316, #06B6D4)' : 'rgba(255,255,255,0.12)' }}
                 >
                   <span
@@ -254,21 +256,21 @@ export function OpeningHoursEditor({ value, onChange }: { value: string; onChang
                   />
                 </button>
                 <span className="text-[11px] text-white/50 w-20">{ds.open ? 'Geöffnet' : 'Geschlossen'}</span>
-              </label>
+              </div>
               {ds.open && (
-                <div className="flex items-center gap-1.5 flex-1">
+                <div className="flex items-center gap-1.5 min-w-0">
                   <input
                     type="time"
                     value={ds.from}
                     onChange={(e) => setDay(d, { from: e.target.value })}
-                    className="bg-white/[0.04] border border-white/10 rounded-lg px-2 py-1 text-xs text-white/80 focus:border-orange-500/40 focus:ring-1 focus:ring-orange-500/30 outline-none [color-scheme:dark]"
+                    className="bg-white/[0.04] border border-white/10 rounded-lg px-2 py-1 text-xs text-white/80 focus:border-orange-500/40 focus:ring-1 focus:ring-orange-500/30 outline-none [color-scheme:dark] w-[6.5rem]"
                   />
                   <span className="text-white/30 text-xs">bis</span>
                   <input
                     type="time"
                     value={ds.to}
                     onChange={(e) => setDay(d, { to: e.target.value })}
-                    className="bg-white/[0.04] border border-white/10 rounded-lg px-2 py-1 text-xs text-white/80 focus:border-orange-500/40 focus:ring-1 focus:ring-orange-500/30 outline-none [color-scheme:dark]"
+                    className="bg-white/[0.04] border border-white/10 rounded-lg px-2 py-1 text-xs text-white/80 focus:border-orange-500/40 focus:ring-1 focus:ring-orange-500/30 outline-none [color-scheme:dark] w-[6.5rem]"
                   />
                 </div>
               )}
@@ -276,13 +278,12 @@ export function OpeningHoursEditor({ value, onChange }: { value: string; onChang
                 <button
                   type="button"
                   onClick={copyMondayToWeekdays}
-                  title="Di-Fr auf die gleichen Zeiten setzen"
-                  className="ml-auto text-[10px] text-cyan-300/75 hover:text-cyan-200 transition-colors whitespace-nowrap"
+                  title="Dienstag bis Freitag mit denselben Zeiten füllen"
+                  className="ml-auto text-[10px] text-cyan-300/75 hover:text-cyan-200 transition-colors whitespace-nowrap cursor-pointer"
                 >
-                  → auf Di-Fr kopieren
+                  → auf Di–Fr kopieren
                 </button>
               )}
-              {!isMonday && !anyOtherWeekday && null}
             </div>
           );
         })}
