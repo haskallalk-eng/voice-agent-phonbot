@@ -1,26 +1,31 @@
 /**
- * Curated voice catalog — per-language native names.
+ * Voice catalog — only native voices per language.
  *
- * Every language gets its own line-up of voices with culturally
- * appropriate names. Under the hood we reuse a handful of multilingual
- * Retell voice_ids (ElevenLabs Multilingual v2, Cartesia Sonic, OpenAI,
- * Minimax) — the same voice engine handles every language, the display
- * name is what's localised so the picker reads natively.
+ * Rules (2026-04-23 rewrite):
+ *  - A voice appears in a language's catalog ONLY if it genuinely
+ *    sounds native in that language. Multilingual-transfer voices
+ *    (English 11labs actors speaking non-English, OpenAI/Minimax
+ *    outside English, etc.) are not mixed in, so the picker can't
+ *    steer a customer into an accented voice by accident.
+ *  - When no native voices exist for a locale, we still ship a small
+ *    multilingual fallback so the feature works — but flag the
+ *    language `nativeStatus: 'none'` so the UI surfaces the
+ *    "upload your own clone for best quality" banner.
+ *  - Languages with a narrow native catalog (≤ 6 voices) get
+ *    `nativeStatus: 'few'` so the UI still nudges the user toward
+ *    a clone for more variety.
  *
- * Structure (2026-04-23):
- *  - DE: 5 High Quality (incl. Chipy HQ) + 15 Standard (incl. Chipy Basic) = 20
- *  - EN / FR / ES / IT / TR / PL / NL: 4 HQ + 15 Std = 19 (no Chipy —
- *    Chipy is a German-only clone)
- *  - No duplicate names within a language
- *  - `name` carries NO provider literal
- *  - `tier` is the split the UI groups on ('High Quality Voice' / 'Standard')
- *  - `gender` stays English in API for stability — frontend translates
- *    to 'Männlich' / 'Weiblich' / 'Neutral' at render time
- *
- * Note on voice_ids: every multilingual voice_id below is either already
- * shipped on phonbot.de or a well-known Retell supplier-prefixed voice.
- * If an ID turns out to be wrong at deploy time, Retell will 4xx on the
- * agent-deploy call — easy to spot + swap in one line.
+ * Native classification:
+ *  - Custom clones (CHIPY_*): native only for the language they were
+ *    recorded in (DE).
+ *  - Cartesia Sonic: native for the 15 Sonic-supported locales
+ *    (en/de/fr/es/it/pt/nl/pl/tr/ja/ko/zh/ru/hi/sv).
+ *  - ElevenLabs 11labs-* voice IDs: native only for English (actors
+ *    are English-speakers; other languages are Multilingual-v2 transfer).
+ *  - OpenAI (alloy/nova/echo): native only for English (the seed
+ *    recordings are English).
+ *  - Minimax: excluded from native lineups everywhere (unclear
+ *    recording language).
  */
 
 import { DEFAULT_VOICE_ID } from './retell.js';
@@ -37,11 +42,11 @@ export interface CuratedVoice {
   surchargePerMinute?: number;
 }
 
+export type NativeStatus = 'many' | 'few' | 'none';
+
 export const PREMIUM_VOICE_SURCHARGE_PER_MINUTE = 0.05;
 
-// ── Voice-ID catalogue (IDs used across every language block) ────────
-// Grouped by tier + gender so per-language blocks can cherry-pick and
-// just rename for the locale.
+// ── Voice-ID catalogue (shared across language blocks) ─────────────────
 const HQ_IDS = {
   f1: '11labs-Marissa',
   f2: '11labs-Rachel',
@@ -50,8 +55,6 @@ const HQ_IDS = {
 } as const;
 
 const STD_IDS = {
-  // 8 female + 6 male + 1 neutral — matches the non-Chipy Standard slots
-  // we need per language. DE slots Chipy Basic in addition (see DE block).
   f1: 'cartesia-Eva',
   f2: 'cartesia-Lina',
   f3: 'cartesia-Cleo',
@@ -59,266 +62,148 @@ const STD_IDS = {
   f5: 'cartesia-Isabel',
   f6: 'cartesia-Elena',
   f7: 'openai-Nova',
-  f8: 'openai-Carola',
   m1: 'cartesia-Adam',
   m2: 'cartesia-Pierre',
   m3: 'cartesia-Manuel',
-  m4: 'minimax-Max',
-  m5: 'minimax-Louis',
   m6: 'openai-echo',
   n1: 'openai-alloy',
 } as const;
 
-const CHIPY_HQ_ID = DEFAULT_VOICE_ID;                        // ElevenLabs Hassieb-Kalla
-const CHIPY_STD_ID = 'custom_voice_28bd4920fa6523c6ac8c4e527b'; // Cartesia Chipy
+const CHIPY_HQ_ID = DEFAULT_VOICE_ID;                          // ElevenLabs Hassieb-Kalla clone (DE)
+const CHIPY_STD_ID = 'custom_voice_28bd4920fa6523c6ac8c4e527b'; // Cartesia Chipy clone (DE)
 
-// ── DE (20) ───────────────────────────────────────────────────────────
+// ── Builders ───────────────────────────────────────────────────────────
+
+type NineNames = {
+  f1: string; f2: string; f3: string; f4: string; f5: string; f6: string;
+  m1: string; m2: string; m3: string;
+};
+
+/**
+ * 9-voice Cartesia Standard lineup (6 female + 3 male) for any of the 15
+ * Sonic-native locales. Caller decides whether to prepend HQ voices.
+ */
+function buildCartesiaStd(names: NineNames): CuratedVoice[] {
+  return [
+    { id: STD_IDS.f1, name: names.f1, tier: 'standard', gender: 'female', provider: 'cartesia' },
+    { id: STD_IDS.f2, name: names.f2, tier: 'standard', gender: 'female', provider: 'cartesia' },
+    { id: STD_IDS.f3, name: names.f3, tier: 'standard', gender: 'female', provider: 'cartesia' },
+    { id: STD_IDS.f4, name: names.f4, tier: 'standard', gender: 'female', provider: 'cartesia' },
+    { id: STD_IDS.f5, name: names.f5, tier: 'standard', gender: 'female', provider: 'cartesia' },
+    { id: STD_IDS.f6, name: names.f6, tier: 'standard', gender: 'female', provider: 'cartesia' },
+    { id: STD_IDS.m1, name: names.m1, tier: 'standard', gender: 'male',   provider: 'cartesia' },
+    { id: STD_IDS.m2, name: names.m2, tier: 'standard', gender: 'male',   provider: 'cartesia' },
+    { id: STD_IDS.m3, name: names.m3, tier: 'standard', gender: 'male',   provider: 'cartesia' },
+  ];
+}
+
+/**
+ * 2-voice Cartesia Standard lineup (1F + 1M) for locales where we don't
+ * have enough name material for nine. Caller marks first voice as default.
+ */
+function buildCartesiaMini(names: { f: string; m: string }): CuratedVoice[] {
+  return [
+    { id: STD_IDS.f1, name: names.f, tier: 'standard', gender: 'female', provider: 'cartesia', isDefault: true },
+    { id: STD_IDS.m1, name: names.m, tier: 'standard', gender: 'male',   provider: 'cartesia' },
+  ];
+}
+
+/**
+ * 3-voice multilingual fallback for locales with NO native recordings.
+ * These voices will speak the target language with a noticeable accent;
+ * the UI surfaces the "upload your own clone" banner so users know.
+ */
+function buildFallbackLineup(names: { hqF1: string; hqM1: string; stdF1: string }): CuratedVoice[] {
+  return [
+    { id: HQ_IDS.f1,  name: names.hqF1,  tier: 'hq',       gender: 'female', provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+    { id: HQ_IDS.m1,  name: names.hqM1,  tier: 'hq',       gender: 'male',   provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+    { id: STD_IDS.f7, name: names.stdF1, tier: 'standard', gender: 'female', provider: 'openai' },
+  ];
+}
+
+/** Mark the first entry of a list as `isDefault`. */
+function withDefault(voices: CuratedVoice[]): CuratedVoice[] {
+  return voices.map((v, i) => (i === 0 ? { ...v, isDefault: true } : v));
+}
+
+// ── DE — 11 native voices ──────────────────────────────────────────────
+// Chipy (HQ + Standard) are German-specific custom clones. Cartesia's
+// 9-voice Std lineup is Sonic-native for DE. 11labs actors are English
+// and would speak German with an accent — excluded.
 const DE_VOICES: CuratedVoice[] = [
-  // High Quality
-  { id: CHIPY_HQ_ID,      name: 'Chipy',   tier: 'hq',       gender: 'male',    provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.f1,        name: 'Lena',    tier: 'hq',       gender: 'female',  provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.f2,        name: 'Sophie',  tier: 'hq',       gender: 'female',  provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.m1,        name: 'Lukas',   tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.m2,        name: 'Tobias',  tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  // Standard — Weiblich
-  { id: CHIPY_STD_ID,     name: 'Chipy Basic', tier: 'standard', gender: 'male',   provider: 'cartesia' },
-  { id: STD_IDS.f1,       name: 'Eva',     tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f2,       name: 'Lina',    tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f3,       name: 'Nora',    tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f4,       name: 'Emma',    tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f5,       name: 'Clara',   tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f6,       name: 'Greta',   tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f7,       name: 'Mia',     tier: 'standard', gender: 'female',  provider: 'openai' },
-  { id: STD_IDS.f8,       name: 'Hannah',  tier: 'standard', gender: 'female',  provider: 'openai' },
-  // Standard — Männlich
-  { id: STD_IDS.m1,       name: 'Jonas',   tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m2,       name: 'Stefan',  tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m3,       name: 'Daniel',  tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m4,       name: 'Max',     tier: 'standard', gender: 'male',    provider: 'minimax' },
-  { id: STD_IDS.m5,       name: 'Ben',     tier: 'standard', gender: 'male',    provider: 'minimax' },
-  { id: STD_IDS.m6,       name: 'Tim',     tier: 'standard', gender: 'male',    provider: 'openai' },
+  { id: CHIPY_HQ_ID,  name: 'Chipy',       tier: 'hq',       gender: 'male',   provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: CHIPY_STD_ID, name: 'Chipy Basic', tier: 'standard', gender: 'male',   provider: 'cartesia' },
+  ...buildCartesiaStd({
+    f1: 'Eva',   f2: 'Lina',   f3: 'Nora',    f4: 'Emma',  f5: 'Clara',  f6: 'Greta',
+    m1: 'Jonas', m2: 'Stefan', m3: 'Daniel',
+  }),
 ];
 
-// ── EN (19) ───────────────────────────────────────────────────────────
+// ── EN — 16 native voices ──────────────────────────────────────────────
+// 11labs actors are native English. OpenAI seed voices are English.
+// Cartesia Sonic is native English. Full stack is genuine EN.
 const EN_VOICES: CuratedVoice[] = [
-  { id: HQ_IDS.f1,  name: 'Marissa',   tier: 'hq',       gender: 'female',  provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.f2,  name: 'Rachel',    tier: 'hq',       gender: 'female',  provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.m1,  name: 'Anthony',   tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.m2,  name: 'James',     tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: STD_IDS.f1, name: 'Ava',       tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f2, name: 'Charlotte', tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f3, name: 'Sophia',    tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f4, name: 'Emma',      tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f5, name: 'Isabelle',  tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f6, name: 'Olivia',    tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f7, name: 'Nova',      tier: 'standard', gender: 'female',  provider: 'openai' },
-  { id: STD_IDS.f8, name: 'Chloe',     tier: 'standard', gender: 'female',  provider: 'openai' },
-  { id: STD_IDS.m1, name: 'Noah',      tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m2, name: 'Oliver',    tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m3, name: 'Liam',      tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m4, name: 'Max',       tier: 'standard', gender: 'male',    provider: 'minimax' },
-  { id: STD_IDS.m5, name: 'William',   tier: 'standard', gender: 'male',    provider: 'minimax' },
-  { id: STD_IDS.m6, name: 'Ethan',     tier: 'standard', gender: 'male',    provider: 'openai' },
-  { id: STD_IDS.n1, name: 'Alloy',     tier: 'standard', gender: 'neutral', provider: 'openai' },
+  { id: HQ_IDS.f1,  name: 'Marissa', tier: 'hq', gender: 'female', provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: HQ_IDS.f2,  name: 'Rachel',  tier: 'hq', gender: 'female', provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: HQ_IDS.m1,  name: 'Anthony', tier: 'hq', gender: 'male',   provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: HQ_IDS.m2,  name: 'James',   tier: 'hq', gender: 'male',   provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  ...buildCartesiaStd({
+    f1: 'Ava',  f2: 'Charlotte', f3: 'Sophia', f4: 'Emma', f5: 'Isabelle', f6: 'Olivia',
+    m1: 'Noah', m2: 'Oliver',    m3: 'Liam',
+  }),
+  { id: STD_IDS.f7, name: 'Nova',  tier: 'standard', gender: 'female',  provider: 'openai' },
+  { id: STD_IDS.m6, name: 'Ethan', tier: 'standard', gender: 'male',    provider: 'openai' },
+  { id: STD_IDS.n1, name: 'Alloy', tier: 'standard', gender: 'neutral', provider: 'openai' },
 ];
 
-// ── FR (19) ───────────────────────────────────────────────────────────
-const FR_VOICES: CuratedVoice[] = [
-  { id: HQ_IDS.f1,  name: 'Céline',    tier: 'hq',       gender: 'female',  provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.f2,  name: 'Juliette',  tier: 'hq',       gender: 'female',  provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.m1,  name: 'Antoine',   tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.m2,  name: 'Étienne',   tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: STD_IDS.f1, name: 'Chloé',     tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f2, name: 'Sarah',     tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f3, name: 'Élodie',    tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f4, name: 'Emma',      tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f5, name: 'Marion',    tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f6, name: 'Anaïs',     tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f7, name: 'Manon',     tier: 'standard', gender: 'female',  provider: 'openai' },
-  { id: STD_IDS.f8, name: 'Camille',   tier: 'standard', gender: 'female',  provider: 'openai' },
-  { id: STD_IDS.m1, name: 'Hugo',      tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m2, name: 'Pierre',    tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m3, name: 'Thomas',    tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m4, name: 'Maxime',    tier: 'standard', gender: 'male',    provider: 'minimax' },
-  { id: STD_IDS.m5, name: 'Louis',     tier: 'standard', gender: 'male',    provider: 'minimax' },
-  { id: STD_IDS.m6, name: 'Julien',    tier: 'standard', gender: 'male',    provider: 'openai' },
-  { id: STD_IDS.n1, name: 'Alloy',     tier: 'standard', gender: 'neutral', provider: 'openai' },
-];
+// ── FR / ES / IT / TR / PL / NL — 9 native voices each ─────────────────
+// Cartesia-native only. No HQ tier: 11labs actors are English natives
+// and would read these locales with a strong English accent.
+const FR_VOICES: CuratedVoice[] = withDefault(buildCartesiaStd({
+  f1: 'Chloé',  f2: 'Sarah',  f3: 'Élodie',  f4: 'Emma',  f5: 'Marion', f6: 'Anaïs',
+  m1: 'Hugo',   m2: 'Pierre', m3: 'Thomas',
+}));
 
-// ── ES (19) ───────────────────────────────────────────────────────────
-const ES_VOICES: CuratedVoice[] = [
-  { id: HQ_IDS.m2,  name: 'Santiago',  tier: 'hq',       gender: 'male',    provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.f1,  name: 'Lucía',     tier: 'hq',       gender: 'female',  provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.f2,  name: 'Carmen',    tier: 'hq',       gender: 'female',  provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.m1,  name: 'Álvaro',    tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: STD_IDS.f5, name: 'Isabel',    tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f6, name: 'Elena',     tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f1, name: 'Sofía',     tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f2, name: 'Paula',     tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f3, name: 'Laura',     tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f4, name: 'Daniela',   tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f7, name: 'Valentina', tier: 'standard', gender: 'female',  provider: 'openai' },
-  { id: STD_IDS.f8, name: 'Rocío',     tier: 'standard', gender: 'female',  provider: 'openai' },
-  { id: STD_IDS.m3, name: 'Manuel',    tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m1, name: 'Diego',     tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m2, name: 'Javier',    tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m4, name: 'Mateo',     tier: 'standard', gender: 'male',    provider: 'minimax' },
-  { id: STD_IDS.m5, name: 'Sebastián', tier: 'standard', gender: 'male',    provider: 'minimax' },
-  { id: STD_IDS.m6, name: 'Carlos',    tier: 'standard', gender: 'male',    provider: 'openai' },
-  { id: STD_IDS.n1, name: 'Alloy',     tier: 'standard', gender: 'neutral', provider: 'openai' },
-];
+const ES_VOICES: CuratedVoice[] = withDefault(buildCartesiaStd({
+  f1: 'Sofía',  f2: 'Paula',  f3: 'Laura',   f4: 'Daniela', f5: 'Isabel', f6: 'Elena',
+  m1: 'Diego',  m2: 'Javier', m3: 'Manuel',
+}));
 
-// ── IT (19) ───────────────────────────────────────────────────────────
-const IT_VOICES: CuratedVoice[] = [
-  { id: HQ_IDS.f1,  name: 'Giulia',    tier: 'hq',       gender: 'female',  provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.f2,  name: 'Sofia',     tier: 'hq',       gender: 'female',  provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.m1,  name: 'Alessandro',tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.m2,  name: 'Matteo',    tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: STD_IDS.f1, name: 'Eva',       tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f2, name: 'Chiara',    tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f3, name: 'Martina',   tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f4, name: 'Francesca', tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f5, name: 'Alessia',   tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f6, name: 'Elena',     tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f7, name: 'Lucia',     tier: 'standard', gender: 'female',  provider: 'openai' },
-  { id: STD_IDS.f8, name: 'Valentina', tier: 'standard', gender: 'female',  provider: 'openai' },
-  { id: STD_IDS.m1, name: 'Luca',      tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m2, name: 'Marco',     tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m3, name: 'Giovanni',  tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m4, name: 'Stefano',   tier: 'standard', gender: 'male',    provider: 'minimax' },
-  { id: STD_IDS.m5, name: 'Andrea',    tier: 'standard', gender: 'male',    provider: 'minimax' },
-  { id: STD_IDS.m6, name: 'Davide',    tier: 'standard', gender: 'male',    provider: 'openai' },
-  { id: STD_IDS.n1, name: 'Alloy',     tier: 'standard', gender: 'neutral', provider: 'openai' },
-];
+const IT_VOICES: CuratedVoice[] = withDefault(buildCartesiaStd({
+  f1: 'Giulia',  f2: 'Chiara',  f3: 'Martina', f4: 'Francesca', f5: 'Alessia', f6: 'Elena',
+  m1: 'Luca',    m2: 'Marco',   m3: 'Giovanni',
+}));
 
-// ── TR (19) ───────────────────────────────────────────────────────────
-const TR_VOICES: CuratedVoice[] = [
-  { id: HQ_IDS.f1,  name: 'Zeynep',    tier: 'hq',       gender: 'female',  provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.f2,  name: 'Ayşe',      tier: 'hq',       gender: 'female',  provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.m1,  name: 'Mehmet',    tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.m2,  name: 'Emre',      tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: STD_IDS.f1, name: 'Elif',      tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f2, name: 'Merve',     tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f3, name: 'Selin',     tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f4, name: 'Deniz',     tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f5, name: 'Esra',      tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f6, name: 'Büşra',     tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f7, name: 'Gamze',     tier: 'standard', gender: 'female',  provider: 'openai' },
-  { id: STD_IDS.f8, name: 'Ceren',     tier: 'standard', gender: 'female',  provider: 'openai' },
-  { id: STD_IDS.m1, name: 'Can',       tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m2, name: 'Burak',     tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m3, name: 'Ahmet',     tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m4, name: 'Kaan',      tier: 'standard', gender: 'male',    provider: 'minimax' },
-  { id: STD_IDS.m5, name: 'Ali',       tier: 'standard', gender: 'male',    provider: 'minimax' },
-  { id: STD_IDS.m6, name: 'Okan',      tier: 'standard', gender: 'male',    provider: 'openai' },
-  { id: STD_IDS.n1, name: 'Alloy',     tier: 'standard', gender: 'neutral', provider: 'openai' },
-];
+const TR_VOICES: CuratedVoice[] = withDefault(buildCartesiaStd({
+  f1: 'Elif',    f2: 'Merve',  f3: 'Selin',   f4: 'Deniz', f5: 'Esra',    f6: 'Büşra',
+  m1: 'Can',     m2: 'Burak',  m3: 'Ahmet',
+}));
 
-// ── PL (19) ───────────────────────────────────────────────────────────
-const PL_VOICES: CuratedVoice[] = [
-  { id: HQ_IDS.f1,  name: 'Zofia',     tier: 'hq',       gender: 'female',  provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.f2,  name: 'Anna',      tier: 'hq',       gender: 'female',  provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.m1,  name: 'Piotr',     tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.m2,  name: 'Tomasz',    tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: STD_IDS.f1, name: 'Katarzyna', tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f2, name: 'Magdalena', tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f3, name: 'Julia',     tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f4, name: 'Ewa',       tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f5, name: 'Natalia',   tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f6, name: 'Karolina',  tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f7, name: 'Olga',      tier: 'standard', gender: 'female',  provider: 'openai' },
-  { id: STD_IDS.f8, name: 'Agnieszka', tier: 'standard', gender: 'female',  provider: 'openai' },
-  { id: STD_IDS.m1, name: 'Jakub',     tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m2, name: 'Michał',    tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m3, name: 'Marcin',    tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m4, name: 'Paweł',     tier: 'standard', gender: 'male',    provider: 'minimax' },
-  { id: STD_IDS.m5, name: 'Adam',      tier: 'standard', gender: 'male',    provider: 'minimax' },
-  { id: STD_IDS.m6, name: 'Krzysztof', tier: 'standard', gender: 'male',    provider: 'openai' },
-  { id: STD_IDS.n1, name: 'Alloy',     tier: 'standard', gender: 'neutral', provider: 'openai' },
-];
+const PL_VOICES: CuratedVoice[] = withDefault(buildCartesiaStd({
+  f1: 'Katarzyna', f2: 'Magdalena', f3: 'Julia', f4: 'Ewa', f5: 'Natalia', f6: 'Karolina',
+  m1: 'Jakub',     m2: 'Michał',    m3: 'Marcin',
+}));
 
-// ── NL (19) ───────────────────────────────────────────────────────────
-const NL_VOICES: CuratedVoice[] = [
-  { id: HQ_IDS.f1,  name: 'Sanne',     tier: 'hq',       gender: 'female',  provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.f2,  name: 'Lotte',     tier: 'hq',       gender: 'female',  provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.m1,  name: 'Thomas',    tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: HQ_IDS.m2,  name: 'Lars',      tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: STD_IDS.f1, name: 'Emma',      tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f2, name: 'Sophie',    tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f3, name: 'Julia',     tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f4, name: 'Lisa',      tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f5, name: 'Eva',       tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f6, name: 'Anna',      tier: 'standard', gender: 'female',  provider: 'cartesia' },
-  { id: STD_IDS.f7, name: 'Fleur',     tier: 'standard', gender: 'female',  provider: 'openai' },
-  { id: STD_IDS.f8, name: 'Noor',      tier: 'standard', gender: 'female',  provider: 'openai' },
-  { id: STD_IDS.m1, name: 'Daan',      tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m2, name: 'Sem',       tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m3, name: 'Lucas',     tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  { id: STD_IDS.m4, name: 'Finn',      tier: 'standard', gender: 'male',    provider: 'minimax' },
-  { id: STD_IDS.m5, name: 'Jan',       tier: 'standard', gender: 'male',    provider: 'minimax' },
-  { id: STD_IDS.m6, name: 'Bram',      tier: 'standard', gender: 'male',    provider: 'openai' },
-  { id: STD_IDS.n1, name: 'Alloy',     tier: 'standard', gender: 'neutral', provider: 'openai' },
-];
+const NL_VOICES: CuratedVoice[] = withDefault(buildCartesiaStd({
+  f1: 'Sanne',  f2: 'Lotte',  f3: 'Julia',   f4: 'Lisa',  f5: 'Eva',     f6: 'Anna',
+  m1: 'Daan',   m2: 'Sem',    m3: 'Lucas',
+}));
 
-// ── Lineup builders for extra languages ────────────────────────────────
-// Two tiers beyond the 8 hand-curated blocks above:
-//
-//  1. NATIVE_LINEUP (6 voices) — 4 HQ + 2 Standard. Used when the
-//     Standard-tier supplier has real native recordings for the locale,
-//     so the voices actually SOUND like native speakers.
-//
-//  2. FALLBACK_LINEUP (3 voices) — 2 HQ + 1 Standard. Used when no
-//     supplier has a native actor for the locale; we still ship
-//     multilingual voices that will technically speak the language, but
-//     the UI flags them as non-native so the user knows to upload their
-//     own clone for a natural sound.
-//
-// The split is driven by which languages our Standard supplier (Cartesia
-// Sonic) has native recordings for — that's the tight bottleneck today.
-const NATIVE_STD_LANGUAGES = new Set([
-  'en', 'de', 'fr', 'es', 'it', 'pt', 'nl', 'pl', 'tr', 'ja', 'ko', 'zh', 'ru', 'hi', 'sv',
-]);
+// ── PT / RU / JA / KO / ZH / HI / SV — 2 native voices each ────────────
+// Cartesia Sonic covers these natively but we have less name material,
+// so lineup is compact (1F + 1M). UI will show the "few voices — clone
+// for more variety" banner.
+const PT_VOICES = buildCartesiaMini({ f: 'Beatriz',  m: 'Miguel' });
+const RU_VOICES = buildCartesiaMini({ f: 'Anna',     m: 'Aleksandr' });
+const JA_VOICES = buildCartesiaMini({ f: 'Sakura',   m: 'Haruto' });
+const KO_VOICES = buildCartesiaMini({ f: 'Ji-woo',   m: 'Min-jun' });
+const ZH_VOICES = buildCartesiaMini({ f: 'Mei',      m: 'Jun' });
+const HI_VOICES = buildCartesiaMini({ f: 'Priya',    m: 'Arjun' });
+const SV_VOICES = buildCartesiaMini({ f: 'Ingrid',   m: 'Oskar' });
 
-export function hasNativeVoicesForLanguage(language: string): boolean {
-  return NATIVE_STD_LANGUAGES.has(language);
-}
-
-function buildNativeLineup(
-  names: {
-    hqF1: string; hqF2: string; hqM1: string; hqM2: string; stdF1: string; stdM1: string;
-  },
-): CuratedVoice[] {
-  return [
-    { id: HQ_IDS.f1,  name: names.hqF1,  tier: 'hq',       gender: 'female',  provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-    { id: HQ_IDS.f2,  name: names.hqF2,  tier: 'hq',       gender: 'female',  provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-    { id: HQ_IDS.m1,  name: names.hqM1,  tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-    { id: HQ_IDS.m2,  name: names.hqM2,  tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-    { id: STD_IDS.f1, name: names.stdF1, tier: 'standard', gender: 'female',  provider: 'cartesia' },
-    { id: STD_IDS.m1, name: names.stdM1, tier: 'standard', gender: 'male',    provider: 'cartesia' },
-  ];
-}
-
-function buildFallbackLineup(
-  names: { hqF1: string; hqM1: string; stdF1: string },
-): CuratedVoice[] {
-  return [
-    { id: HQ_IDS.f1,  name: names.hqF1,  tier: 'hq',       gender: 'female',  provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-    { id: HQ_IDS.m1,  name: names.hqM1,  tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-    { id: STD_IDS.f7, name: names.stdF1, tier: 'standard', gender: 'female',  provider: 'openai' },
-  ];
-}
-
-// Native-supplier languages — 6 voices each.
-const PT_VOICES = buildNativeLineup({ hqF1: 'Beatriz', hqF2: 'Inês',   hqM1: 'Miguel',    hqM2: 'João',     stdF1: 'Sofia',  stdM1: 'Pedro' });
-const RU_VOICES = buildNativeLineup({ hqF1: 'Anna',    hqF2: 'Maria',  hqM1: 'Aleksandr', hqM2: 'Dmitri',   stdF1: 'Elena',  stdM1: 'Ivan' });
-const JA_VOICES = buildNativeLineup({ hqF1: 'Sakura',  hqF2: 'Yui',    hqM1: 'Haruto',    hqM2: 'Kenji',    stdF1: 'Hana',   stdM1: 'Takumi' });
-const KO_VOICES = buildNativeLineup({ hqF1: 'Ji-woo',  hqF2: 'Ha-eun', hqM1: 'Min-jun',   hqM2: 'Seo-joon', stdF1: 'Soo-ah', stdM1: 'Tae-yang' });
-const ZH_VOICES = buildNativeLineup({ hqF1: 'Mei',     hqF2: 'Ling',   hqM1: 'Jun',       hqM2: 'Wei',      stdF1: 'Xiu',    stdM1: 'Hao' });
-const HI_VOICES = buildNativeLineup({ hqF1: 'Priya',   hqF2: 'Ananya', hqM1: 'Arjun',     hqM2: 'Rohan',    stdF1: 'Maya',   stdM1: 'Aarav' });
-const SV_VOICES = buildNativeLineup({ hqF1: 'Ingrid',  hqF2: 'Astrid', hqM1: 'Oskar',     hqM2: 'Lars',     stdF1: 'Elsa',   stdM1: 'Erik' });
-
-// Fallback-only languages — 3 voices each, UI shows the "no native
-// voice — upload your own clone" banner.
+// ── AR / DA / FI / NO / CS / SK / HU / RO / EL / BG / HR / UK / ID / MS / VI ──
+// NO native recordings at any supplier. 3-voice multilingual fallback;
+// UI shows "no native voice — upload your own clone" banner.
 const AR_VOICES = buildFallbackLineup({ hqF1: 'Layla',    hqM1: 'Omar',       stdF1: 'Noor' });
 const DA_VOICES = buildFallbackLineup({ hqF1: 'Frida',    hqM1: 'Anders',     stdF1: 'Mathilde' });
 const FI_VOICES = buildFallbackLineup({ hqF1: 'Aino',     hqM1: 'Eetu',       stdF1: 'Saara' });
@@ -349,9 +234,9 @@ export const VOICE_CATALOG: Record<string, CuratedVoice[]> = {
   ja: JA_VOICES,
   ko: KO_VOICES,
   zh: ZH_VOICES,
-  ar: AR_VOICES,
   hi: HI_VOICES,
   sv: SV_VOICES,
+  ar: AR_VOICES,
   da: DA_VOICES,
   fi: FI_VOICES,
   no: NO_VOICES,
@@ -367,6 +252,27 @@ export const VOICE_CATALOG: Record<string, CuratedVoice[]> = {
   ms: MS_VOICES,
   vi: VI_VOICES,
 };
+
+/**
+ * How native the voice lineup is for a given language:
+ *  - 'many' → ≥ 8 genuinely native voices. No banner.
+ *  - 'few'  → 1–7 native voices. Banner: "limited selection".
+ *  - 'none' → 0 native voices, showing multilingual fallbacks. Banner:
+ *             "no native voice — upload a clone for best quality".
+ */
+export const NATIVE_STATUS: Record<string, NativeStatus> = {
+  // Rich native catalogs
+  de: 'many', en: 'many', fr: 'many', es: 'many', it: 'many', tr: 'many', pl: 'many', nl: 'many',
+  // Cartesia-native but compact (2 voices each)
+  pt: 'few', ru: 'few', ja: 'few', ko: 'few', zh: 'few', hi: 'few', sv: 'few',
+  // No native recordings — fallback-only
+  ar: 'none', da: 'none', fi: 'none', no: 'none', cs: 'none', sk: 'none', hu: 'none',
+  ro: 'none', el: 'none', bg: 'none', hr: 'none', uk: 'none', id: 'none', ms: 'none', vi: 'none',
+};
+
+export function getNativeStatus(language: string): NativeStatus {
+  return NATIVE_STATUS[language] ?? 'none';
+}
 
 /** Default voice ID per language. Falls back to DE Chipy. */
 export function getDefaultVoiceForLanguage(language: string): string {

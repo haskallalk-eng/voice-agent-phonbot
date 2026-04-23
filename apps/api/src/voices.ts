@@ -9,7 +9,7 @@ import type { FastifyInstance } from 'fastify';
 import multipart from '@fastify/multipart';
 import { z } from 'zod';
 import { listVoices, createVoice, type RetellVoice } from './retell.js';
-import { VOICE_CATALOG, getDefaultVoiceForLanguage, getVoicesForLanguage, getVoiceSurcharge, isPremiumProvider, PREMIUM_VOICE_SURCHARGE_PER_MINUTE } from './voice-catalog.js';
+import { VOICE_CATALOG, getDefaultVoiceForLanguage, getVoicesForLanguage, getVoiceSurcharge, isPremiumProvider, PREMIUM_VOICE_SURCHARGE_PER_MINUTE, getNativeStatus } from './voice-catalog.js';
 
 /**
  * Annotate a Retell voice with the per-minute Phonbot surcharge. Cloned
@@ -63,6 +63,7 @@ export async function registerVoices(app: FastifyInstance) {
       return reply.send({
         language,
         defaultVoiceId,
+        nativeStatus: getNativeStatus(language),
         premiumSurchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE,
         voices,
         allLanguages: Object.keys(VOICE_CATALOG),
