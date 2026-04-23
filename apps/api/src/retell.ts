@@ -164,6 +164,18 @@ function defaultEndCallSilenceMs(): number {
   return v;
 }
 
+/** Post-call analysis field definition (Retell API shape).
+ *  Retell only supports string / enum / system-presets — numeric or date
+ *  values must come back as strings and be parsed on our side. */
+export type PostCallAnalysisField = {
+  type: 'string' | 'enum' | 'system-presets';
+  name: string;
+  description: string;
+  required?: boolean;
+  choices?: string[];
+  conditional_prompt?: string;
+};
+
 export async function createAgent(config: {
   name: string;
   llmId: string;
@@ -172,6 +184,7 @@ export async function createAgent(config: {
   interruptionSensitivity?: number;
   enableBackchannel?: boolean;
   webhookUrl?: string;
+  postCallAnalysisData?: PostCallAnalysisField[];
 }): Promise<RetellAgent> {
   const body: Record<string, unknown> = {
     agent_name: config.name,
@@ -188,6 +201,9 @@ export async function createAgent(config: {
   // consent-declined calls). Agent-level is correct because web calls
   // inherit it; phone-number-level webhooks only apply to PSTN.
   if (config.webhookUrl) body.webhook_url = config.webhookUrl;
+  if (config.postCallAnalysisData !== undefined) {
+    body.post_call_analysis_data = config.postCallAnalysisData;
+  }
   return retellRequest('/create-agent', { method: 'POST', body: JSON.stringify(body) });
 }
 
@@ -201,6 +217,7 @@ export async function updateAgent(
     interruptionSensitivity?: number;
     enableBackchannel?: boolean;
     webhookUrl?: string;
+    postCallAnalysisData?: PostCallAnalysisField[];
   },
 ): Promise<RetellAgent> {
   // RET-08: only set tuning params when the caller explicitly provides them.
@@ -218,6 +235,7 @@ export async function updateAgent(
   if (config.language !== undefined) body.language = config.language;
   if (config.llmId !== undefined) body.response_engine = { type: 'retell-llm', llm_id: config.llmId };
   if (config.webhookUrl !== undefined) body.webhook_url = config.webhookUrl;
+  if (config.postCallAnalysisData !== undefined) body.post_call_analysis_data = config.postCallAnalysisData;
 
   return retellRequest(`/update-agent/${encodeURIComponent(agentId)}`, {
     method: 'PATCH',

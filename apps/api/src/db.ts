@@ -431,6 +431,11 @@ async function runMigrationBody() {
   await pool.query(`alter table tickets add column if not exists source text;`);
   await pool.query(`alter table tickets add column if not exists session_id text;`);
   await pool.query(`alter table tickets add column if not exists reason text;`);
+  // Phase 2: custom fields extracted from the call transcript via Retell
+  // post_call_analysis_data. Written by retell-webhooks on call_ended /
+  // call_analyzed (jsonb concat so late-arriving analyses don't clobber
+  // an already-populated metadata).
+  await pool.query(`alter table tickets add column if not exists metadata jsonb not null default '{}'::jsonb;`);
 
   await pool.query(`
     create index if not exists tickets_tenant_created_idx

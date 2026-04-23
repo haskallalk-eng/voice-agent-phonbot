@@ -132,7 +132,8 @@ Nimm Bestellungen strukturiert auf: Artikel, Menge, Sonderwünsche, Lieferadress
     name: 'Notdienst / After-Hours',
     capability: 'Notfälle erkennen, priorisieren und weiterleiten',
     block: `## Notdienst
-Erkenne Notfall-Anliegen am Ton und an Schlüsselwörtern (Wasserschaden, Gasgeruch, medizinische Dringlichkeit, Einbruch, Ausfall kritischer Systeme). Sammle unverzüglich Name, Rückrufnummer und eine präzise Beschreibung der Situation. Leite aktiv weiter oder erstelle ein hoch-priorisiertes Notfall-Ticket. Bleibe dabei ruhig und sachlich; blase die Lage nicht unnötig auf.`,
+Erkenne Notfall-Anliegen am Ton und an Schlüsselwörtern (Wasserschaden, Gasgeruch, medizinische Dringlichkeit, Einbruch, Ausfall kritischer Systeme). Sammle unverzüglich Name, Rückrufnummer und eine präzise Beschreibung der Situation. Leite aktiv weiter oder erstelle ein hoch-priorisiertes Notfall-Ticket. Bleibe dabei ruhig und sachlich; blase die Lage nicht unnötig auf.
+Versuche NIEMALS, den Notfall selbst zu lösen oder den Anrufer zur Selbsthilfe anzuleiten — keine Erste-Hilfe-Anweisungen, keine technischen Schritte, keine „probier mal X"-Tipps. Deine einzige Aufgabe ist Lage erfassen und an Fachpersonal weiterleiten. Bei akuter Lebensgefahr verweise auf 112 bzw. den zuständigen Notruf.`,
   },
   {
     id: 'info',

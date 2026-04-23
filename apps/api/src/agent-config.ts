@@ -18,6 +18,7 @@ import {
   getLLM as retellGetLlm,
   DEFAULT_VOICE_ID,
   type RetellTool,
+  type PostCallAnalysisField,
 } from './retell.js';
 import { triggerBridgeCall } from './twilio-openai-bridge.js';
 import { toE164 } from '@vas/shared';
@@ -353,10 +354,57 @@ function getWebhookBaseUrl(): string {
  * Deploy config to Retell AI (create or update LLM + Agent).
  * Returns the updated config with Retell IDs.
  */
+/**
+ * Build Retell's `post_call_analysis_data` schema from the customer's
+ * extractedVariables config. Retell natively supports only string / enum /
+ * system-presets — we map every non-string type to string and encode the
+ * expected shape in the description, so the LLM returns `"2026-04-23"` as
+ * a string and downstream code can parse or pass through as-is.
+ *
+ * A catch-all `sonstige_relevante_infos` string field is appended so the
+ * LLM has a place to put context the customer didn't think of up front
+ * (Modell C / Hybrid). If the customer defined zero variables we still
+ * send the catch-all so Retell always runs the analysis pass — keeps the
+ * `call.ended` webhook payload consistent.
+ */
+function buildPostCallAnalysisData(config: AgentConfig): PostCallAnalysisField[] {
+  const vars = (config as Record<string, unknown>).extractedVariables as
+    | Array<{ name?: string; description?: string; type?: string; required?: boolean }>
+    | undefined;
+
+  const fields: PostCallAnalysisField[] = [];
+  for (const v of vars ?? []) {
+    const name = (v.name ?? '').trim();
+    if (!name) continue;
+    const hint =
+      v.type === 'number' ? ' (als Zahl, z.B. "42" oder "12.5")'
+        : v.type === 'boolean' ? ' (als "true" oder "false")'
+        : v.type === 'date' ? ' (als ISO-Datum, z.B. "2026-04-23")'
+        : '';
+    fields.push({
+      type: 'string',
+      name,
+      description: `${v.description ?? ''}${hint}`.trim() || name,
+      required: v.required ?? false,
+    });
+  }
+
+  fields.push({
+    type: 'string',
+    name: 'sonstige_relevante_infos',
+    description:
+      'Alles andere was der Anrufer erwähnte und relevant sein könnte — z.B. Stimmung, Dringlichkeit, Besonderheiten. Nur ausfüllen wenn wirklich erwähnenswert.',
+    required: false,
+  });
+
+  return fields;
+}
+
 export async function deployToRetell(config: AgentConfig): Promise<AgentConfig> {
   const webhookBase = getWebhookBaseUrl();
   const instructions = buildAgentInstructions(config);
   const retellTools = buildRetellTools(config, webhookBase);
+  const postCallAnalysisData = buildPostCallAnalysisData(config);
   const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';
   const LANG_MAP: Record<string, string> = {
     de: 'de-DE', en: 'en-US', fr: 'fr-FR', es: 'es-ES',
@@ -374,18 +422,18 @@ export async function deployToRetell(config: AgentConfig): Promise<AgentConfig> 
     // agent already references this llmId.
     await Promise.all([
       updateLLM(llmId, { generalPrompt: instructions, tools: retellTools, model }),
-      retellUpdateAgent(agentId, { name: config.name, voiceId: config.voice, language, llmId, webhookUrl }),
+      retellUpdateAgent(agentId, { name: config.name, voiceId: config.voice, language, llmId, webhookUrl, postCallAnalysisData }),
     ]);
   } else if (llmId && !agentId) {
     // LLM exists but no agent → update LLM, then create agent (agent needs llmId).
     await updateLLM(llmId, { generalPrompt: instructions, tools: retellTools, model });
-    const agent = await retellCreateAgent({ name: config.name, llmId, voiceId: config.voice, language, webhookUrl });
+    const agent = await retellCreateAgent({ name: config.name, llmId, voiceId: config.voice, language, webhookUrl, postCallAnalysisData });
     agentId = agent.agent_id;
   } else {
     // Fresh deploy: create LLM first (agent needs llmId), then create agent.
     const llm = await createLLM({ generalPrompt: instructions, tools: retellTools, model });
     llmId = llm.llm_id;
-    const agent = await retellCreateAgent({ name: config.name, llmId, voiceId: config.voice, language, webhookUrl });
+    const agent = await retellCreateAgent({ name: config.name, llmId, voiceId: config.voice, language, webhookUrl, postCallAnalysisData });
     agentId = agent.agent_id;
   }
 

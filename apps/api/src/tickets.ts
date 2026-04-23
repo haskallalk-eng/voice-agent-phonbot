@@ -20,6 +20,9 @@ type TicketRow = {
   preferred_time: string | null;
   service: string | null;
   notes: string | null;
+  // Phase 2: custom fields extracted via Retell post-call-analysis.
+  // Populated asynchronously by retell-webhooks on call_ended / call_analyzed.
+  metadata: Record<string, unknown>;
 };
 
 let memId = 1;
@@ -121,6 +124,7 @@ export async function createTicket(
       preferred_time: body.preferredTime ?? null,
       service: body.service ?? null,
       notes: body.notes ?? null,
+      metadata: {},
     };
     mem.unshift(row);
     return row;
@@ -140,7 +144,8 @@ export async function createTicket(
      values ($1, $10, 'open', $2, $3, $4, $5, $6, $7, $8, $9)
      returning id, created_at, updated_at, tenant_id, status,
                source, session_id, reason,
-               customer_name, customer_phone, preferred_time, service, notes`,
+               customer_name, customer_phone, preferred_time, service, notes,
+               metadata`,
     [
       body.tenantId,
       body.source ?? null,
@@ -212,7 +217,8 @@ export async function registerTickets(app: FastifyInstance) {
     const { rows } = await pool.query(
       `select id, created_at, updated_at, tenant_id, status,
               source, session_id, reason,
-              customer_name, customer_phone, preferred_time, service, notes
+              customer_name, customer_phone, preferred_time, service, notes,
+              metadata
        from tickets
        where org_id = $1
        order by created_at desc
@@ -325,11 +331,50 @@ export async function registerTickets(app: FastifyInstance) {
        where id = $1 and org_id = $2
        returning id, created_at, updated_at, tenant_id, status,
                  source, session_id, reason,
-                 customer_name, customer_phone, preferred_time, service, notes`,
+                 customer_name, customer_phone, preferred_time, service, notes,
+                 metadata`,
       [params.id, orgId, body.status ?? null, body.notes ?? null]
     );
 
     if (!rows[0]) return { ok: false, error: 'NOT_FOUND' };
     return rows[0];
   });
+}
+
+/**
+ * Merge extracted variables into the ticket's metadata JSONB.
+ *
+ * Called by retell-webhooks on `call_ended` / `call_analyzed` once Retell's
+ * post-call analysis returns `custom_analysis_data`. JSONB concat (`||`) is
+ * left-dominant: already-present keys from an earlier analysis are preserved,
+ * so a late-arriving `call_analyzed` cannot clobber what `call_ended` already
+ * wrote. If both events carry the same key, the first-writer wins — which
+ * is what we want for idempotency.
+ *
+ * Match is by `session_id` (Retell call_id) — there is exactly one ticket
+ * per call in our current flow because ticket.create is tied 1:1 to the
+ * agent's decision during that call.
+ *
+ * Returns the updated metadata (or null if no ticket matched).
+ */
+export async function mergeTicketMetadata(
+  sessionId: string,
+  extracted: Record<string, unknown>,
+): Promise<Record<string, unknown> | null> {
+  if (!pool) {
+    const t = mem.find((x) => x.session_id === sessionId);
+    if (!t) return null;
+    t.metadata = { ...extracted, ...t.metadata };
+    return t.metadata;
+  }
+
+  const { rows } = await pool.query(
+    `update tickets
+        set metadata = $2::jsonb || metadata,
+            updated_at = now()
+      where session_id = $1
+    returning metadata`,
+    [sessionId, JSON.stringify(extracted)],
+  );
+  return (rows[0]?.metadata as Record<string, unknown> | undefined) ?? null;
 }

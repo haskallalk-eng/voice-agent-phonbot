@@ -11,7 +11,7 @@
 import crypto from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { logBg } from './logger.js';
-import { createTicket } from './tickets.js';
+import { createTicket, mergeTicketMetadata } from './tickets.js';
 import { appendTraceEvent } from './traces.js';
 import { reconcileMinutes, DEFAULT_CALL_RESERVE_MINUTES } from './usage.js';
 import { pool } from './db.js';
@@ -418,6 +418,20 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           }
         }
 
+        // Extract Retell's post-call-analysis custom fields (Phase 2).
+        // For short calls the analysis is usually already done when call_ended
+        // fires, so custom_analysis_data is present. For long calls Retell
+        // sends a separate call_analyzed event later — see that branch below.
+        const analysis = (call as RetellCallData & { call_analysis?: Record<string, unknown> }).call_analysis;
+        const extracted = (analysis?.custom_analysis_data as Record<string, unknown> | undefined) ?? null;
+
+        // Attach extracted variables to the ticket this call created, if any.
+        if (extracted && callId) {
+          mergeTicketMetadata(callId, extracted).catch((err: Error) =>
+            req.log.warn({ err: err.message, orgId, callId }, 'mergeTicketMetadata failed'),
+          );
+        }
+
         // Inbound-webhook fan-out: deliver `call.ended` to customer URLs.
         // Fire-and-forget — customer outages must never delay our webhook ACK.
         if (orgId && callId) {
@@ -432,8 +446,37 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
             disconnectionReason: disconnectionReason ?? null,
             startTimestamp: startTs,
             endTimestamp: endTs,
+            variables: extracted ?? {},
           }).catch(() => {});
         }
+      }
+    }
+
+    // Late-arriving post-call analysis for longer calls. Retell re-POSTs with
+    // event='call_analyzed' once the transcript analysis finishes; we merge
+    // the fresh custom_analysis_data into the ticket (JSONB concat preserves
+    // any keys call_ended already wrote — first-writer-wins) and fan out the
+    // `variable.extracted` event separately so customers can subscribe to
+    // just the extraction without re-processing full call.ended payloads.
+    if (event === 'call_analyzed') {
+      const agentId = (call as RetellCallData).agent_id;
+      const callId = (call as RetellCallData).call_id;
+      const analysis = (call as RetellCallData & { call_analysis?: Record<string, unknown> }).call_analysis;
+      const extracted = (analysis?.custom_analysis_data as Record<string, unknown> | undefined) ?? null;
+
+      if (extracted && callId) {
+        await mergeTicketMetadata(callId, extracted).catch((err: Error) =>
+          req.log.warn({ err: err.message, callId }, 'call_analyzed: mergeTicketMetadata failed'),
+        );
+      }
+
+      const orgId = agentId ? await getOrgIdByAgentId(agentId) : null;
+      if (orgId && callId && extracted) {
+        fireInboundWebhooks(orgId, 'variable.extracted', {
+          callId,
+          agentId,
+          variables: extracted,
+        }).catch(() => {});
       }
     }
 
