@@ -230,7 +230,7 @@ export const TABS: { id: Tab; label: string; Icon: SectionIconComp }[] = [
   { id: 'capabilities', label: 'Fähigkeiten',  Icon: IconCapabilities },
   { id: 'technical',    label: 'Technik',      Icon: IconSliders },
   { id: 'privacy',      label: 'Datenschutz',  Icon: IconPrivacy },
-  { id: 'webhooks',     label: 'Webhooks & APIs', Icon: IconWebhook },
+  { id: 'webhooks',     label: 'Schnittstellen', Icon: IconWebhook },
   { id: 'preview',      label: 'Vorschau',     Icon: IconPlay },
 ];
 
