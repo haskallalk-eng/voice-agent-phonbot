@@ -461,6 +461,20 @@ async function deleteMissing(
   keepIds: string[],
 ): Promise<number> {
   if (!pool) return 0;
+
+  // Guard against a provider outage that returns 0 events — without this,
+  // every row in the cache would be wiped on a single bad response. We
+  // require at least ONE event in the fetch response to infer "deletions
+  // mean something". Accept one-sync stale cancelled entries over a full
+  // wipe; the next successful sync will clean them up.
+  if (keepIds.length === 0) {
+    log.info(
+      { orgId, provider, calendarId },
+      'calendar-sync: fetch returned 0 events — skipping delete-missing to avoid mass-wipe on a transient empty response',
+    );
+    return 0;
+  }
+
   // Only delete rows within the sync window. Past-window rows might still
   // be relevant for UI history; we leave them alone — natural pruning
   // happens via the org's cascade-delete on account removal.
