@@ -326,10 +326,14 @@ export function DashboardHome({ onNavigate }: Props) {
           </div>
       </div>
 
-      {/* Quick Actions */}
+      {/* Quick Actions
+          Mobile-sweep (2026-04-23): flex-col on phones stretches every
+          button to the card's full width so they line up as a clean,
+          uniform stack — same visual length, no hanging last row. Desktop
+          keeps flex-row + flex-wrap (natural button widths, left-aligned). */}
       <div className="glass rounded-2xl p-6">
         <h3 className="text-white font-semibold mb-4">Schnellaktionen</h3>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
           {/* Primary — outline-only with orange accent */}
           <button
             onClick={() => onNavigate('test')}
