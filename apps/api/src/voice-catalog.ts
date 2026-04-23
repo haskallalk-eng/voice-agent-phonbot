@@ -260,14 +260,34 @@ const NL_VOICES: CuratedVoice[] = [
   { id: STD_IDS.n1, name: 'Alloy',     tier: 'standard', gender: 'neutral', provider: 'openai' },
 ];
 
-// ── Compact lineup builder for extra languages ─────────────────────────
-// The eight hand-curated blocks above (DE/EN/FR/ES/IT/TR/PL/NL) have
-// 19–20 voices each; for less-common languages we ship a smaller
-// 6-voice starter set (4 HQ + 2 Standard). Same multilingual voice_ids,
-// just culturally-appropriate display names.
-function buildLineup(names: {
-  hqF1: string; hqF2: string; hqM1: string; hqM2: string; stdF1: string; stdM1: string;
-}): CuratedVoice[] {
+// ── Lineup builders for extra languages ────────────────────────────────
+// Two tiers beyond the 8 hand-curated blocks above:
+//
+//  1. NATIVE_LINEUP (6 voices) — 4 HQ + 2 Standard. Used when the
+//     Standard-tier supplier has real native recordings for the locale,
+//     so the voices actually SOUND like native speakers.
+//
+//  2. FALLBACK_LINEUP (3 voices) — 2 HQ + 1 Standard. Used when no
+//     supplier has a native actor for the locale; we still ship
+//     multilingual voices that will technically speak the language, but
+//     the UI flags them as non-native so the user knows to upload their
+//     own clone for a natural sound.
+//
+// The split is driven by which languages our Standard supplier (Cartesia
+// Sonic) has native recordings for — that's the tight bottleneck today.
+const NATIVE_STD_LANGUAGES = new Set([
+  'en', 'de', 'fr', 'es', 'it', 'pt', 'nl', 'pl', 'tr', 'ja', 'ko', 'zh', 'ru', 'hi', 'sv',
+]);
+
+export function hasNativeVoicesForLanguage(language: string): boolean {
+  return NATIVE_STD_LANGUAGES.has(language);
+}
+
+function buildNativeLineup(
+  names: {
+    hqF1: string; hqF2: string; hqM1: string; hqM2: string; stdF1: string; stdM1: string;
+  },
+): CuratedVoice[] {
   return [
     { id: HQ_IDS.f1,  name: names.hqF1,  tier: 'hq',       gender: 'female',  provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
     { id: HQ_IDS.f2,  name: names.hqF2,  tier: 'hq',       gender: 'female',  provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
@@ -278,29 +298,42 @@ function buildLineup(names: {
   ];
 }
 
-// Native-name line-ups, ElevenLabs Multilingual v2 coverage set.
-const PT_VOICES = buildLineup({ hqF1: 'Beatriz', hqF2: 'Inês',     hqM1: 'Miguel',    hqM2: 'João',      stdF1: 'Sofia',   stdM1: 'Pedro' });
-const RU_VOICES = buildLineup({ hqF1: 'Anna',    hqF2: 'Maria',    hqM1: 'Aleksandr', hqM2: 'Dmitri',    stdF1: 'Elena',   stdM1: 'Ivan' });
-const JA_VOICES = buildLineup({ hqF1: 'Sakura',  hqF2: 'Yui',      hqM1: 'Haruto',    hqM2: 'Kenji',     stdF1: 'Hana',    stdM1: 'Takumi' });
-const KO_VOICES = buildLineup({ hqF1: 'Ji-woo',  hqF2: 'Ha-eun',   hqM1: 'Min-jun',   hqM2: 'Seo-joon',  stdF1: 'Soo-ah',  stdM1: 'Tae-yang' });
-const ZH_VOICES = buildLineup({ hqF1: 'Mei',     hqF2: 'Ling',     hqM1: 'Jun',       hqM2: 'Wei',       stdF1: 'Xiu',     stdM1: 'Hao' });
-const AR_VOICES = buildLineup({ hqF1: 'Layla',   hqF2: 'Fatima',   hqM1: 'Omar',      hqM2: 'Youssef',   stdF1: 'Noor',    stdM1: 'Khaled' });
-const HI_VOICES = buildLineup({ hqF1: 'Priya',   hqF2: 'Ananya',   hqM1: 'Arjun',     hqM2: 'Rohan',     stdF1: 'Maya',    stdM1: 'Aarav' });
-const SV_VOICES = buildLineup({ hqF1: 'Ingrid',  hqF2: 'Astrid',   hqM1: 'Oskar',     hqM2: 'Lars',      stdF1: 'Elsa',    stdM1: 'Erik' });
-const DA_VOICES = buildLineup({ hqF1: 'Frida',   hqF2: 'Clara',    hqM1: 'Anders',    hqM2: 'Mikkel',    stdF1: 'Mathilde',stdM1: 'Jonas' });
-const FI_VOICES = buildLineup({ hqF1: 'Aino',    hqF2: 'Helmi',    hqM1: 'Eetu',      hqM2: 'Onni',      stdF1: 'Saara',   stdM1: 'Väinö' });
-const NO_VOICES = buildLineup({ hqF1: 'Nora',    hqF2: 'Emma',     hqM1: 'Henrik',    hqM2: 'Magnus',    stdF1: 'Ida',     stdM1: 'Sindre' });
-const CS_VOICES = buildLineup({ hqF1: 'Eliška',  hqF2: 'Adéla',    hqM1: 'Jakub',     hqM2: 'Matěj',     stdF1: 'Tereza',  stdM1: 'Tomáš' });
-const SK_VOICES = buildLineup({ hqF1: 'Natália', hqF2: 'Viktória', hqM1: 'Samuel',    hqM2: 'Adam',      stdF1: 'Ema',     stdM1: 'Tomáš' });
-const HU_VOICES = buildLineup({ hqF1: 'Zsófia',  hqF2: 'Emma',     hqM1: 'Bence',     hqM2: 'Levente',   stdF1: 'Anna',    stdM1: 'Márk' });
-const RO_VOICES = buildLineup({ hqF1: 'Ioana',   hqF2: 'Maria',    hqM1: 'Andrei',    hqM2: 'Mihai',     stdF1: 'Elena',   stdM1: 'Cristi' });
-const EL_VOICES = buildLineup({ hqF1: 'Eleni',   hqF2: 'Maria',    hqM1: 'Nikos',     hqM2: 'Yannis',    stdF1: 'Sofia',   stdM1: 'Dimitris' });
-const BG_VOICES = buildLineup({ hqF1: 'Maria',   hqF2: 'Elena',    hqM1: 'Ivan',      hqM2: 'Georgi',    stdF1: 'Viktoria',stdM1: 'Aleksandar' });
-const HR_VOICES = buildLineup({ hqF1: 'Ana',     hqF2: 'Petra',    hqM1: 'Luka',      hqM2: 'Marko',     stdF1: 'Mia',     stdM1: 'Ivan' });
-const UK_VOICES = buildLineup({ hqF1: 'Olena',   hqF2: 'Kateryna', hqM1: 'Andriy',    hqM2: 'Dmytro',    stdF1: 'Sofia',   stdM1: 'Oleksandr' });
-const ID_VOICES = buildLineup({ hqF1: 'Siti',    hqF2: 'Dewi',     hqM1: 'Budi',      hqM2: 'Rizky',     stdF1: 'Ayu',     stdM1: 'Andi' });
-const MS_VOICES = buildLineup({ hqF1: 'Nurul',   hqF2: 'Aisyah',   hqM1: 'Aiman',     hqM2: 'Faizal',    stdF1: 'Hana',    stdM1: 'Amir' });
-const VI_VOICES = buildLineup({ hqF1: 'Linh',    hqF2: 'Mai',      hqM1: 'Minh',      hqM2: 'Tuan',      stdF1: 'Thu',     stdM1: 'Duy' });
+function buildFallbackLineup(
+  names: { hqF1: string; hqM1: string; stdF1: string },
+): CuratedVoice[] {
+  return [
+    { id: HQ_IDS.f1,  name: names.hqF1,  tier: 'hq',       gender: 'female',  provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+    { id: HQ_IDS.m1,  name: names.hqM1,  tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+    { id: STD_IDS.f7, name: names.stdF1, tier: 'standard', gender: 'female',  provider: 'openai' },
+  ];
+}
+
+// Native-supplier languages — 6 voices each.
+const PT_VOICES = buildNativeLineup({ hqF1: 'Beatriz', hqF2: 'Inês',   hqM1: 'Miguel',    hqM2: 'João',     stdF1: 'Sofia',  stdM1: 'Pedro' });
+const RU_VOICES = buildNativeLineup({ hqF1: 'Anna',    hqF2: 'Maria',  hqM1: 'Aleksandr', hqM2: 'Dmitri',   stdF1: 'Elena',  stdM1: 'Ivan' });
+const JA_VOICES = buildNativeLineup({ hqF1: 'Sakura',  hqF2: 'Yui',    hqM1: 'Haruto',    hqM2: 'Kenji',    stdF1: 'Hana',   stdM1: 'Takumi' });
+const KO_VOICES = buildNativeLineup({ hqF1: 'Ji-woo',  hqF2: 'Ha-eun', hqM1: 'Min-jun',   hqM2: 'Seo-joon', stdF1: 'Soo-ah', stdM1: 'Tae-yang' });
+const ZH_VOICES = buildNativeLineup({ hqF1: 'Mei',     hqF2: 'Ling',   hqM1: 'Jun',       hqM2: 'Wei',      stdF1: 'Xiu',    stdM1: 'Hao' });
+const HI_VOICES = buildNativeLineup({ hqF1: 'Priya',   hqF2: 'Ananya', hqM1: 'Arjun',     hqM2: 'Rohan',    stdF1: 'Maya',   stdM1: 'Aarav' });
+const SV_VOICES = buildNativeLineup({ hqF1: 'Ingrid',  hqF2: 'Astrid', hqM1: 'Oskar',     hqM2: 'Lars',     stdF1: 'Elsa',   stdM1: 'Erik' });
+
+// Fallback-only languages — 3 voices each, UI shows the "no native
+// voice — upload your own clone" banner.
+const AR_VOICES = buildFallbackLineup({ hqF1: 'Layla',    hqM1: 'Omar',       stdF1: 'Noor' });
+const DA_VOICES = buildFallbackLineup({ hqF1: 'Frida',    hqM1: 'Anders',     stdF1: 'Mathilde' });
+const FI_VOICES = buildFallbackLineup({ hqF1: 'Aino',     hqM1: 'Eetu',       stdF1: 'Saara' });
+const NO_VOICES = buildFallbackLineup({ hqF1: 'Nora',     hqM1: 'Henrik',     stdF1: 'Ida' });
+const CS_VOICES = buildFallbackLineup({ hqF1: 'Eliška',   hqM1: 'Jakub',      stdF1: 'Tereza' });
+const SK_VOICES = buildFallbackLineup({ hqF1: 'Natália',  hqM1: 'Samuel',     stdF1: 'Ema' });
+const HU_VOICES = buildFallbackLineup({ hqF1: 'Zsófia',   hqM1: 'Bence',      stdF1: 'Anna' });
+const RO_VOICES = buildFallbackLineup({ hqF1: 'Ioana',    hqM1: 'Andrei',     stdF1: 'Elena' });
+const EL_VOICES = buildFallbackLineup({ hqF1: 'Eleni',    hqM1: 'Nikos',      stdF1: 'Sofia' });
+const BG_VOICES = buildFallbackLineup({ hqF1: 'Maria',    hqM1: 'Ivan',       stdF1: 'Viktoria' });
+const HR_VOICES = buildFallbackLineup({ hqF1: 'Ana',      hqM1: 'Luka',       stdF1: 'Mia' });
+const UK_VOICES = buildFallbackLineup({ hqF1: 'Olena',    hqM1: 'Andriy',     stdF1: 'Sofia' });
+const ID_VOICES = buildFallbackLineup({ hqF1: 'Siti',     hqM1: 'Budi',       stdF1: 'Ayu' });
+const MS_VOICES = buildFallbackLineup({ hqF1: 'Nurul',    hqM1: 'Aiman',      stdF1: 'Hana' });
+const VI_VOICES = buildFallbackLineup({ hqF1: 'Linh',     hqM1: 'Minh',       stdF1: 'Thu' });
 
 export const VOICE_CATALOG: Record<string, CuratedVoice[]> = {
   de: DE_VOICES,
