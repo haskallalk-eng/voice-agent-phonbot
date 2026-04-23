@@ -5,6 +5,7 @@ import { pool } from './db.js';
 import type { JwtPayload } from './auth.js';
 import { encrypt as encryptToken, decrypt as decryptToken } from './crypto.js';
 import { redis } from './redis.js';
+import { log } from './logger.js';
 import crypto from 'node:crypto';
 
 // CAL-04: every outbound HTTP to Google/Microsoft/Cal.com goes through this
@@ -383,9 +384,14 @@ async function getCheckableConnections(orgId: string): Promise<CalendarConnectio
   for (const conn of connections) {
     try {
       if (await canCheckConnection(conn, orgId)) usable.push(conn);
-    } catch {
+    } catch (err) {
       // A broken/stale integration must not make the agent unusable. Treat it
-      // as disconnected and fall back to Chipy for this call.
+      // as disconnected and fall back to Chipy for this call — BUT log it so
+      // an ops engineer can see WHY a connected calendar is being ignored.
+      log.warn(
+        { orgId, provider: conn.provider, err: (err as Error).message?.slice(0, 200) },
+        'calendar: canCheckConnection threw, connection excluded from agent',
+      );
     }
   }
   return usable;
@@ -1462,7 +1468,21 @@ async function findSlotsForConnection(
       }),
     });
 
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      // Visibility fix 2026-04-23: prior code silently returned null on any
+      // upstream non-2xx, which hid months of 403 errors from the
+      // "Google Calendar API has not been enabled in project X" problem.
+      // The silent fallback meant the agent quietly ignored Google
+      // availability and booked over existing external events. Logging the
+      // status + a truncated body surfaces the issue to ops without risking
+      // PII leakage (Google error bodies don't carry calendar content).
+      const body = (await resp.text().catch(() => '')).slice(0, 200);
+      log.warn(
+        { orgId, provider: 'google', status: resp.status, body },
+        'calendar: freeBusy returned non-2xx, falling back to chipy-only',
+      );
+      return null;
+    }
 
     const data = (await resp.json()) as {
       calendars: Record<string, { busy: { start: string; end: string }[] }>;
@@ -1470,7 +1490,11 @@ async function findSlotsForConnection(
 
     const busyPeriods = data.calendars[conn.calendar_id]?.busy ?? [];
     return generateFreeSlots(busyPeriods);
-  } catch {
+  } catch (err) {
+    log.warn(
+      { orgId, provider: 'google', err: (err as Error).message?.slice(0, 200) },
+      'calendar: freeBusy threw, falling back to chipy-only',
+    );
     return null;
   }
 }
