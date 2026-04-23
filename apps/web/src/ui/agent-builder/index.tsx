@@ -323,7 +323,11 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
       setActivePromptSections(newActive);
       const businessName = config.businessName || 'deinem Unternehmen';
       const agentName = config.name || 'dem Assistenten';
-      const sectionText = section.text
+      // Prefer the customer's edited override if one exists — toggling a
+      // section off and back on must restore their version, not wipe it.
+      const overrides = (config as { sectionTextOverrides?: Record<string, string> }).sectionTextOverrides ?? {};
+      const source = typeof overrides[sectionId] === 'string' ? overrides[sectionId]! : section.text;
+      const sectionText = source
         .replace(/\{businessName\}/g, businessName)
         .replace(/\{agentName\}/g, agentName);
       const current = (config.systemPrompt ?? '').trim();

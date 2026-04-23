@@ -49,6 +49,9 @@ const AgentConfigSchema = z.object({
   // override text wins in the assembled systemPrompt. Survives de-/re-select
   // so toggling a role back on restores the customer's version.
   roleBlockOverrides: z.record(z.string(), z.string()).optional().default({}),
+  // Editable section blocks (PROMPT_SECTIONS) — saved per section id so a
+  // toggle-off + toggle-on preserves the customer's edited text.
+  sectionTextOverrides: z.record(z.string(), z.string()).optional().default({}),
   tools: z.array(z.string().min(1)).default(['calendar.findSlots', 'calendar.book', 'ticket.create']),
   fallback: z.object({
     enabled: z.boolean().default(true),
