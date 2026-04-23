@@ -674,7 +674,7 @@ function PromptView({
             </span>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-white/85">Deine Ergänzungen</p>
-              <p className="text-[10px] text-white/40 leading-tight">Insider-Wissen, temporäre Aktionen, Tabus, VIP-Regeln — alles was keine Rolle und kein Abschnitt abdeckt</p>
+              <p className="text-[10px] text-white/40 leading-tight">Insider-Wissen, temporäre Aktionen, Tabus, VIP-Regeln …</p>
             </div>
           </div>
           <AdaptiveTextarea
