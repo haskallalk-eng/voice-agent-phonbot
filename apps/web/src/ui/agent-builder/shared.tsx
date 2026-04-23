@@ -66,50 +66,84 @@ export const LANGUAGE_VOICE_RECOMMENDATIONS: Record<string, { voiceId: string; n
 
 export const KNOWN_TOOLS = ['calendar.findSlots', 'calendar.book', 'ticket.create'] as const;
 
-export const PROMPT_TEMPLATES: { id: string; Icon: IconComp; accent: string; name: string; prompt: string }[] = [
+/**
+ * Role templates — each role is a composable identity the user can
+ * combine. Assembly (see assembleRolePrompt) produces one single
+ * "Du bist ..." intro, a bullet list of selected capabilities, then one
+ * `## Section` block per role. Designed so two or three roles stacked
+ * never contradict each other ("Du bist Empfang" AND "Du bist Notdienst"
+ * collapses into "Du bist ein Telefonassistent mit zwei Rollen").
+ *
+ * Terminbuchung + Bestellannahme wurden absichtlich aus der Role-Liste
+ * entfernt — Terminbuchung ist bereits über die Fähigkeiten-Tools
+ * (calendar.findSlots / calendar.book) abgedeckt, Bestellannahme ist
+ * eine Spezial-Capability, die separat als Fähigkeit zuschaltbar ist.
+ */
+export const PROMPT_TEMPLATES: {
+  id: string;
+  Icon: IconComp;
+  accent: string;
+  name: string;
+  capability: string;
+  block: string;
+}[] = [
   {
     id: 'reception',
     Icon: IconBuilding,
     accent: 'text-orange-400',
     name: 'Empfang / Zentrale',
-    prompt: `Du bist die freundliche Telefonzentrale von {businessName}. Begrüße Anrufer herzlich, finde heraus worum es geht und leite sie an die richtige Stelle weiter. Bei Unklarheiten erstelle ein Ticket.`,
-  },
-  {
-    id: 'appointment',
-    Icon: IconCalendar,
-    accent: 'text-cyan-400',
-    name: 'Terminbuchung',
-    prompt: `Du bist der Terminassistent von {businessName}. Hilf dem Anrufer einen passenden Termin zu finden und zu buchen. Frage nach gewünschtem Datum, Uhrzeit und Service. Bestätige den Termin am Ende.`,
+    capability: 'Anrufer empfangen und an die richtige Stelle leiten',
+    block: `## Empfang
+Begrüße jeden Anrufer freundlich, finde heraus worum es geht und leite ihn zielgerichtet weiter. Wenn das Anliegen unklar bleibt oder niemand sofort übernehmen kann, erstelle ein Rückruf-Ticket mit Name, Telefonnummer und Kurzbeschreibung.`,
   },
   {
     id: 'support',
     Icon: IconSliders,
     accent: 'text-violet-400',
     name: 'Kundensupport',
-    prompt: `Du bist der Support-Assistent von {businessName}. Höre dem Kunden aufmerksam zu, versuche das Problem zu lösen und erstelle bei Bedarf ein Ticket mit allen Details für das Team.`,
-  },
-  {
-    id: 'orders',
-    Icon: IconTicket,
-    accent: 'text-amber-400',
-    name: 'Bestellannahme',
-    prompt: `Du bist der Bestellassistent von {businessName}. Nimm Bestellungen entgegen, frage nach Details (Menge, Sonderwünsche) und bestätige die Bestellung mit geschätzter Lieferzeit.`,
+    capability: 'Probleme aufnehmen und Support-Tickets erstellen',
+    block: `## Kundensupport
+Höre dem Kunden aufmerksam zu und lasse ihn das Problem vollständig schildern. Stelle präzise Rückfragen zu Produkt, Fehlerbild und Dringlichkeit. Löse einfache Fragen direkt; bei komplexeren oder technischen Problemen erstelle ein Ticket mit allen relevanten Details und bestätige dem Kunden die Bearbeitungszeit.`,
   },
   {
     id: 'emergency',
     Icon: IconAlertTriangle,
     accent: 'text-red-400',
     name: 'Notdienst / After-Hours',
-    prompt: `Du bist der Notdienst-Assistent von {businessName}. Außerhalb der Öffnungszeiten nimmst du dringende Anfragen entgegen, sammelst Kontaktdaten und erstellst ein priorisiertes Ticket.`,
+    capability: 'Notfälle erkennen, priorisieren und weiterleiten',
+    block: `## Notdienst
+Erkenne Notfall-Anliegen am Ton und an Schlüsselwörtern (Wasserschaden, Gasgeruch, medizinische Dringlichkeit, Einbruch, Ausfall kritischer Systeme). Sammle unverzüglich Name, Rückrufnummer und eine präzise Beschreibung der Situation. Leite aktiv weiter oder erstelle ein hoch-priorisiertes Notfall-Ticket. Bleibe dabei ruhig und sachlich; blase die Lage nicht unnötig auf.`,
   },
   {
     id: 'info',
     Icon: IconInfo,
     accent: 'text-sky-400',
     name: 'Auskunft & FAQ',
-    prompt: `Du bist der Informationsassistent von {businessName}. Beantworte häufige Fragen zu Öffnungszeiten, Preisen, Services und Standort. Nutze das hinterlegte Wissen für genaue Antworten.`,
+    capability: 'Häufige Fragen zu Öffnungszeiten, Preisen und Services beantworten',
+    block: `## Auskunft & FAQ
+Beantworte Standardfragen zu Öffnungszeiten, Services, Preisen und Standort anhand der hinterlegten Business-Informationen. Wenn eine Information fehlt, erfinde nichts — sage offen, dass du das gerade nicht sicher weißt, und biete einen Rückruf oder eine Nachricht an.`,
   },
 ];
+
+/**
+ * Assemble a system prompt from 0..n selected role ids. Always produces
+ * exactly one "Du bist …"-Intro, one flat task list, then the per-role
+ * `## Section` blocks. Empty selection falls back to a generic assistant
+ * intro so the agent is never primer-less.
+ */
+export function assembleRolePrompt(roleIds: string[], businessName: string): string {
+  const business = businessName || 'deinem Unternehmen';
+  const roles = PROMPT_TEMPLATES.filter((t) => roleIds.includes(t.id));
+  if (roles.length === 0) {
+    return `Du bist ein freundlicher allgemeiner Telefonassistent für ${business}. Höre dem Anrufer zu, finde heraus worum es geht und hilf so gut du kannst. Wenn du etwas nicht beantworten kannst, erstelle ein Rückruf-Ticket.`;
+  }
+  const intro = roles.length === 1
+    ? `Du bist der freundliche Telefonassistent von ${business}.`
+    : `Du bist der freundliche Telefonassistent von ${business}. Du übernimmst gleichzeitig mehrere Rollen für dieses Unternehmen.`;
+  const tasks = `Deine Aufgaben:\n${roles.map((r) => `- ${r.capability}`).join('\n')}`;
+  const blocks = roles.map((r) => r.block).join('\n\n');
+  return `${intro}\n\n${tasks}\n\n${blocks}`;
+}
 
 export type PromptSection = { id: string; label: string; Icon: SectionIconComp; accent: string; description: string; text: string };
 

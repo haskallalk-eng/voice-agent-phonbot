@@ -160,6 +160,8 @@ export type AgentConfig = {
   openingHours: string;
   servicesText: string;
   systemPrompt: string;
+  selectedRoles?: string[];          // multi-select — ids match PROMPT_TEMPLATES
+  customPromptAddition?: string;     // freeform house-rules below the assembled roles
   tools: string[];
   fallback: { enabled: boolean; reason: string };
   retellAgentId?: string;
