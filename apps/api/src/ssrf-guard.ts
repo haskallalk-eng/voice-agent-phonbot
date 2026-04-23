@@ -121,7 +121,12 @@ export function isPrivateHost(hostname: string): boolean {
     if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(expanded)) return true;
     if (expanded.startsWith('169.254.')) return true;   // link-local (incl. cloud metadata)
     if (expanded.startsWith('0.')) return true;         // this-network
-    if (expanded.startsWith('100.64.')) return true;    // CGNAT — reachable from inside some networks
+    // CGNAT / Shared Address Space (RFC 6598): 100.64.0.0/10
+    //   = 100.64.0.0 through 100.127.255.255.
+    // An earlier version only matched `100.64.` — ran a range test in prod
+    // and `100.127.0.1` slipped through. This now covers the full second-
+    // octet span 64..127.
+    if (/^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\./.test(expanded)) return true;
     // Also block private via literal dotted form to catch parsers that
     // don't normalize (e.g. a hostname like "192.168.001.001").
     return false;
