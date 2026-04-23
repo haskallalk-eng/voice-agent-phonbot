@@ -117,6 +117,12 @@ function clearOnboardingState() {
 
 export function OnboardingWizard({ onComplete }: Props) {
   const saved = loadOnboardingState();
+  const businessTemplates = TEMPLATES.filter((t) => t.id !== 'custom');
+  const customTemplate = TEMPLATES.find((t) => t.id === 'custom') ?? null;
+  const templateRows = [
+    businessTemplates.slice(0, 3),
+    businessTemplates.slice(3),
+  ] as const;
   const [step, setStepRaw] = useState<Step>(saved?.step ?? 'template');
   const [template, setTemplate] = useState<Template | null>(
     saved?.templateId ? TEMPLATES.find(t => t.id === saved.templateId) ?? null : null,
@@ -309,6 +315,36 @@ export function OnboardingWizard({ onComplete }: Props) {
   const stepLabels = ['Template', 'Details', 'Telefon', 'Kalender', 'Testen', 'Fertig'];
   const totalSteps = 6;
 
+  function renderTemplateButton(t: Template) {
+    const cfg = TEMPLATE_CONFIG[t.id];
+    const Icon = cfg?.Icon ?? IconSettings;
+    return (
+      <button
+        key={t.id}
+        onClick={() => selectTemplate(t)}
+        className="flex w-full items-center gap-4 p-5 rounded-2xl border transition-all duration-200 text-left cursor-pointer group"
+        style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.07)' }}
+        onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(249,115,22,0.3)'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
+      >
+        <div className={`shrink-0 w-11 h-11 rounded-xl ${cfg?.iconBg ?? 'bg-white/10'}
+          flex items-center justify-center ${cfg?.accent ?? 'text-white/60'}
+          transition-all duration-200 group-hover:scale-110`}>
+          <Icon size={20} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-white text-[13px] mb-0.5">{t.name}</h3>
+          <p className="text-[11px] text-white/35 leading-relaxed">{t.description}</p>
+        </div>
+        <svg className="shrink-0 text-white/15 group-hover:text-white/40 transition-colors"
+          width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      </button>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#0A0A0F] text-white flex flex-col items-center px-4 py-12 relative overflow-hidden">
       {/* Background glow */}
@@ -360,42 +396,15 @@ export function OnboardingWizard({ onComplete }: Props) {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {TEMPLATES.map((t, i) => {
-              const cfg = TEMPLATE_CONFIG[t.id];
-              const Icon = cfg?.Icon ?? IconSettings;
-              const isLast = i === TEMPLATES.length - 1;
-              const isOddTotal = TEMPLATES.length % 3 !== 0;
-              // Stretch last item to fill remaining columns if total is not divisible by 3
-              const spanClass = isLast && isOddTotal
-                ? TEMPLATES.length % 3 === 1 ? 'sm:col-span-2 lg:col-span-3' : 'lg:col-span-1'
-                : '';
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => selectTemplate(t)}
-                  className={`flex items-center gap-4 p-5 rounded-2xl border transition-all duration-200 text-left cursor-pointer group ${spanClass}`}
-                  style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.07)' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(249,115,22,0.3)'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
-                >
-                  <div className={`shrink-0 w-11 h-11 rounded-xl ${cfg?.iconBg ?? 'bg-white/10'}
-                    flex items-center justify-center ${cfg?.accent ?? 'text-white/60'}
-                    transition-all duration-200 group-hover:scale-110`}>
-                    <Icon size={20} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-white text-[13px] mb-0.5">{t.name}</h3>
-                    <p className="text-[11px] text-white/35 leading-relaxed">{t.description}</p>
-                  </div>
-                  <svg className="shrink-0 text-white/15 group-hover:text-white/40 transition-colors"
-                    width="14" height="14" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="9 18 15 12 9 6" />
-                  </svg>
-                </button>
-              );
-            })}
+          <div className="flex flex-col items-center gap-3">
+            <div className="grid w-full grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {templateRows[0].map(renderTemplateButton)}
+            </div>
+            <div className="grid w-full max-w-3xl grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {templateRows[1][0] && renderTemplateButton(templateRows[1][0])}
+              {customTemplate && renderTemplateButton(customTemplate)}
+              {templateRows[1][1] && renderTemplateButton(templateRows[1][1])}
+            </div>
           </div>
         </div>
       )}
