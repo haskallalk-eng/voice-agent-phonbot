@@ -7,11 +7,12 @@ import {
   type PromptSuggestion,
 } from '../../lib/api.js';
 import {
-  SectionCard, TextArea, Input, Toggle,
+  SectionCard, Input, Toggle,
   PROMPT_TEMPLATES, PROMPT_SECTIONS, KNOWN_TOOLS,
-  assembleRolePrompt,
+  assembleRolePrompt, generalAssistantBlock, roleIntro, roleTaskList,
   IconTemplate, IconMessageSquare,
 } from './shared.js';
+import { AdaptiveTextarea } from '../../components/AdaptiveTextarea.js';
 
 export interface BehaviorTabProps {
   config: AgentConfig;
@@ -279,6 +280,8 @@ export function BehaviorTab({
       />
       <RoleCard config={config} onUpdate={onUpdate} />
 
+      <PromptView config={config} onUpdate={onUpdate} />
+
       {/* Section Blocks */}
       <SectionCard title="Verhaltens-Abschnitte" icon={IconMessageSquare}>
         <p className="text-xs text-white/40 mb-3">Aktiviere Abschnitte — jeder fügt einen Textblock zum Prompt hinzu. Nochmal klicken entfernt ihn.</p>
@@ -309,27 +312,6 @@ export function BehaviorTab({
               </button>
             );
           })}
-        </div>
-
-        {/* Customer's own additions — preserved across role toggles */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Deine Ergänzungen</span>
-            {activePromptSections.size > 0 && (
-              <span className="text-[10px] text-orange-400/70 bg-orange-500/10 border border-orange-500/15 px-2 py-0.5 rounded-full">
-                {activePromptSections.size} Abschnitt{activePromptSections.size !== 1 ? 'e' : ''} aktiv
-              </span>
-            )}
-          </div>
-          <p className="text-[11px] text-white/40 -mt-1">
-            Hausregeln, Sonderfälle, Tonalität — alles was über die gewählten Rollen hinausgeht. Wird unter den automatisch erzeugten Rollen-Prompt gehängt.
-          </p>
-          <TextArea
-            rows={8}
-            value={readCustomAddition(config)}
-            onChange={(e) => updateCustomAddition(config, e.target.value, onUpdate)}
-            placeholder="Z.B. Preise, besondere Öffnungs-Regeln, interne Übergabeprozesse…"
-          />
         </div>
 
         <div className="mt-4">
@@ -408,6 +390,169 @@ function updateCustomAddition(
   onUpdate: (patch: Partial<AgentConfig>) => void,
 ) {
   writeAssembledPrompt(cfg, readSelectedRoles(cfg), text, onUpdate);
+}
+
+function readOverrides(cfg: AgentConfig): Record<string, string> {
+  return (cfg.roleBlockOverrides && typeof cfg.roleBlockOverrides === 'object')
+    ? cfg.roleBlockOverrides
+    : {};
+}
+
+// Atomic save of a single role's block override + systemPrompt reassembly.
+function writeOverride(
+  cfg: AgentConfig,
+  roleId: string,
+  nextText: string,
+  onUpdate: (patch: Partial<AgentConfig>) => void,
+) {
+  const curOverrides = readOverrides(cfg);
+  const roles = readSelectedRoles(cfg);
+  const defaultBlock = PROMPT_TEMPLATES.find((t) => t.id === roleId)?.block ?? '';
+  const trimmed = nextText;
+  // Treat exact-match with default as "no override" — keeps the row clean
+  // and lets a future default change propagate if we ever edit a block.
+  const nextOverrides: Record<string, string> = { ...curOverrides };
+  if (trimmed === defaultBlock) delete nextOverrides[roleId];
+  else nextOverrides[roleId] = trimmed;
+
+  const assembled = assembleRolePrompt(roles, cfg.businessName, nextOverrides);
+  const custom = readCustomAddition(cfg);
+  const full = custom.trim().length > 0 ? `${assembled}\n\n${custom.trim()}` : assembled;
+  onUpdate({ roleBlockOverrides: nextOverrides, systemPrompt: full });
+}
+
+// ── System-Prompt split view ────────────────────────────────────────────────
+
+function PromptView({
+  config,
+  onUpdate,
+}: {
+  config: AgentConfig;
+  onUpdate: (patch: Partial<AgentConfig>) => void;
+}) {
+  const roleIds = readSelectedRoles(config);
+  const overrides = readOverrides(config);
+  const customAddition = readCustomAddition(config);
+  const selectedRoles = useMemo(
+    () => PROMPT_TEMPLATES.filter((t) => roleIds.includes(t.id)),
+    [roleIds],
+  );
+  const intro = useMemo(
+    () => (selectedRoles.length === 0 ? '' : roleIntro(config.businessName, selectedRoles.length)),
+    [selectedRoles.length, config.businessName],
+  );
+  const tasks = useMemo(() => roleTaskList(selectedRoles), [selectedRoles]);
+
+  return (
+    <SectionCard title="System-Prompt" icon={IconTemplate}>
+      <p className="text-xs text-white/40 mb-3">
+        So liest der Agent das Gespräch. Jeder farbige Abschnitt ist direkt editierbar — das Textfeld wächst automatisch mit.
+      </p>
+
+      <div className="space-y-3">
+        {/* Intro + Aufgaben-Liste — auto-generated from selected roles */}
+        {selectedRoles.length > 0 && (
+          <div
+            className="rounded-xl border px-4 py-3"
+            style={{ borderColor: 'rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}
+          >
+            <p className="text-[10px] uppercase tracking-wider text-white/35 mb-1.5">
+              Automatischer Start · aus deiner Rollen-Auswahl
+            </p>
+            <pre className="text-xs text-white/75 font-mono leading-relaxed whitespace-pre-wrap break-words">
+{intro}{'\n\n'}{tasks}
+            </pre>
+          </div>
+        )}
+        {selectedRoles.length === 0 && (
+          <div
+            className="rounded-xl border px-4 py-3"
+            style={{ borderColor: 'rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}
+          >
+            <p className="text-[10px] uppercase tracking-wider text-white/35 mb-1.5">
+              Keine Rolle gewählt · allgemeiner Assistent als Fallback
+            </p>
+            <pre className="text-xs text-white/75 font-mono leading-relaxed whitespace-pre-wrap break-words">
+{generalAssistantBlock(config.businessName)}
+            </pre>
+          </div>
+        )}
+
+        {/* One editable card per selected role, colored by its brand hex */}
+        {selectedRoles.map((tpl) => {
+          const ov = overrides[tpl.id];
+          const value = typeof ov === 'string' ? ov : tpl.block;
+          const edited = typeof ov === 'string' && ov.trim() !== tpl.block.trim();
+          return (
+            <div
+              key={tpl.id}
+              className="rounded-xl border overflow-hidden"
+              style={{
+                borderColor: `${tpl.hex}40`,
+                background: `linear-gradient(135deg, ${tpl.hex}0a 0%, rgba(255,255,255,0.02) 100%)`,
+              }}
+            >
+              <div className="flex items-center gap-2.5 px-4 py-2.5" style={{ borderBottom: `1px solid ${tpl.hex}1f` }}>
+                <span
+                  className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center"
+                  style={{ background: `${tpl.hex}1a`, border: `1px solid ${tpl.hex}33` }}
+                >
+                  <tpl.Icon size={14} className={tpl.accent} />
+                </span>
+                <span className="text-xs font-semibold text-white/85 flex-1">{tpl.name}</span>
+                {edited && (
+                  <button
+                    type="button"
+                    onClick={() => writeOverride(config, tpl.id, tpl.block, onUpdate)}
+                    className="text-[10px] text-white/45 hover:text-white/80 transition-colors cursor-pointer"
+                    title="Original-Block wiederherstellen"
+                  >
+                    Zurücksetzen
+                  </button>
+                )}
+              </div>
+              <AdaptiveTextarea
+                value={value}
+                onChange={(e) => writeOverride(config, tpl.id, e.target.value, onUpdate)}
+                spellCheck={false}
+                className="w-full bg-transparent text-xs text-white/80 font-mono leading-relaxed px-4 py-3 outline-none focus:ring-0 border-0"
+              />
+            </div>
+          );
+        })}
+
+        {/* Custom freeform addition — orange accent, always visible */}
+        <div
+          className="rounded-xl border overflow-hidden"
+          style={{
+            borderColor: '#F9731640',
+            background: 'linear-gradient(135deg, rgba(249,115,22,0.05) 0%, rgba(6,182,212,0.03) 100%)',
+          }}
+        >
+          <div className="flex items-center gap-2.5 px-4 py-2.5" style={{ borderBottom: '1px solid rgba(249,115,22,0.2)' }}>
+            <span
+              className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center"
+              style={{ background: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.25)' }}
+            >
+              <IconMessageSquare size={14} className="text-orange-300" />
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-white/85">Deine Ergänzungen</p>
+              <p className="text-[10px] text-white/40 leading-tight">Hausregeln, Sonderfälle, Tonalität</p>
+            </div>
+          </div>
+          <AdaptiveTextarea
+            value={customAddition}
+            onChange={(e) => updateCustomAddition(config, e.target.value, onUpdate)}
+            spellCheck={false}
+            placeholder="Z.B. Preise, besondere Öffnungs-Regeln, interne Übergabeprozesse…"
+            minRows={3}
+            className="w-full bg-transparent text-xs text-white/80 font-mono leading-relaxed px-4 py-3 outline-none focus:ring-0 border-0 placeholder:text-white/25"
+          />
+        </div>
+      </div>
+    </SectionCard>
+  );
 }
 
 function RoleCard({

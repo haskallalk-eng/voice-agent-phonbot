@@ -44,6 +44,11 @@ const AgentConfigSchema = z.object({
   // Freeform additions the customer types below the assembled role prompt.
   // Preserved across role toggles so manual house-rules never get wiped.
   customPromptAddition: z.string().optional().default(''),
+  // Optional per-role block overrides. Keyed by role id (see PROMPT_TEMPLATES
+  // on web). If a role is selected and the customer edited its block, the
+  // override text wins in the assembled systemPrompt. Survives de-/re-select
+  // so toggling a role back on restores the customer's version.
+  roleBlockOverrides: z.record(z.string(), z.string()).optional().default({}),
   tools: z.array(z.string().min(1)).default(['calendar.findSlots', 'calendar.book', 'ticket.create']),
   fallback: z.object({
     enabled: z.boolean().default(true),
