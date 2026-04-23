@@ -26,8 +26,10 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
               </span>
             </div>
 
-            {/* Headline */}
-            <h1 className="text-5xl sm:text-6xl lg:text-7xl font-extrabold leading-[1.1] tracking-tight mb-6">
+            {/* Headline — mobile-first scale: 4xl on iPhone SE (36px) avoids
+                the 48px text-5xl overflowing into the gradient's second line
+                on a 375px viewport while keeping the desktop sizes unchanged. */}
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold leading-[1.1] tracking-tight mb-6">
               Nie wieder einen
               <br />
               <span

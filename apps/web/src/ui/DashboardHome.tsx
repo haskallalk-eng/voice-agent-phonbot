@@ -45,13 +45,15 @@ function StatCard({
   sub?: string;
 }) {
   return (
-    <div className="glass rounded-2xl p-5 flex flex-col gap-2">
-      <div className="flex items-center gap-2 text-white/50 text-sm">
+    <div className="glass rounded-2xl p-4 sm:p-5 flex flex-col gap-2">
+      <div className="flex items-center gap-2 text-white/50 text-xs sm:text-sm">
         <Icon size={16} className="shrink-0" />
-        <span>{label}</span>
+        <span className="truncate">{label}</span>
       </div>
-      <p className="text-3xl font-bold text-white">{value}</p>
-      {sub && <p className="text-xs text-white/40">{sub}</p>}
+      {/* Mobile-first scale-down — 2xl on phones (24px) keeps the 4-card grid
+          legible at 375px where text-3xl (30px) overflows the card width. */}
+      <p className="text-2xl sm:text-3xl font-bold text-white">{value}</p>
+      {sub && <p className="text-xs text-white/40 truncate">{sub}</p>}
     </div>
   );
 }
@@ -188,7 +190,7 @@ export function DashboardHome({ onNavigate }: Props) {
       <div className="flex items-center gap-4">
         <FoxLogo size="lg" animate />
         <div>
-          <h2 className="text-3xl font-bold text-white">Dashboard</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold text-white">Dashboard</h2>
           <p className="text-white/50 mt-1 text-sm">Hier ist dein Überblick.</p>
         </div>
       </div>
