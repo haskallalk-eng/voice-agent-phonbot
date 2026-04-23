@@ -444,7 +444,7 @@ function RoleCard({
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
         {PROMPT_TEMPLATES.map((tpl) => {
           const active = selected.has(tpl.id);
           return (
