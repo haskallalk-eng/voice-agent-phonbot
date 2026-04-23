@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { ServiceItem } from '../../lib/api.js';
 import { AdaptiveTextarea } from '../../components/AdaptiveTextarea.js';
 
@@ -43,16 +43,29 @@ export function ServicesEditor({
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  // Ref tracks the latest array so two patch() calls inside the same React
+  // batch (e.g. the user clicks "ab X" + "BELIEBT" in quick succession on a
+  // keyboard nav) don't overwrite each other. Without this, both calls close
+  // over the same `value` prop, and the second apply wins.
+  const latestRef = useRef(value);
+  useEffect(() => { latestRef.current = value; }, [value]);
+
   function patch(id: string, p: Partial<ServiceItem>) {
-    onChange(value.map((s) => (s.id === id ? { ...s, ...p } : s)));
+    const next = latestRef.current.map((s) => (s.id === id ? { ...s, ...p } : s));
+    latestRef.current = next;
+    onChange(next);
   }
   function remove(id: string) {
-    onChange(value.filter((s) => s.id !== id));
+    const next = latestRef.current.filter((s) => s.id !== id);
+    latestRef.current = next;
+    onChange(next);
     if (expandedId === id) setExpandedId(null);
   }
   function add() {
-    const next: ServiceItem = { id: newId(), name: '' };
-    onChange([...value, next]);
+    const newItem: ServiceItem = { id: newId(), name: '' };
+    const next = [...latestRef.current, newItem];
+    latestRef.current = next;
+    onChange(next);
     setExpandedId(null); // keep the new row collapsed — clean & focused on the name field
   }
   function migrateLegacy() {
@@ -65,7 +78,9 @@ export function ServicesEditor({
       .slice(0, 30)
       .map<ServiceItem>((name) => ({ id: newId(), name }));
     if (items.length === 0) return;
-    onChange([...value, ...items]);
+    const next = [...latestRef.current, ...items];
+    latestRef.current = next;
+    onChange(next);
     onConsumeLegacy();
   }
 
