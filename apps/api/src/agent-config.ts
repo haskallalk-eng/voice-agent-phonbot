@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import multipart from '@fastify/multipart';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 import type { JwtPayload } from './auth.js';
@@ -23,7 +24,7 @@ import {
 import { triggerBridgeCall } from './twilio-openai-bridge.js';
 import { toE164 } from '@vas/shared';
 import { log } from './logger.js';
-import { normalizeKnowledgeSources, syncRetellKnowledgeBase } from './knowledge.js';
+import { normalizeKnowledgeSources, storeKnowledgePdf, syncRetellKnowledgeBase } from './knowledge.js';
 import {
   buildIntegrationTools,
   mergeAndEncryptIntegrations,
@@ -95,6 +96,7 @@ const AgentConfigSchema = z.object({
 type AgentConfig = z.infer<typeof AgentConfigSchema>;
 
 const CORE_AGENT_TOOLS = ['calendar.findSlots', 'calendar.book', 'ticket.create'] as const;
+const KNOWLEDGE_PDF_MAX_BYTES = 50 * 1024 * 1024;
 
 function withCoreAgentTools(tools: string[] | undefined): string[] {
   return [...new Set([...CORE_AGENT_TOOLS, ...(tools ?? [])])];
@@ -494,8 +496,8 @@ function buildPostCallAnalysisData(config: AgentConfig): PostCallAnalysisField[]
   return fields;
 }
 
-export async function deployToRetell(config: AgentConfig): Promise<AgentConfig> {
-  const preparedConfig = await syncRetellKnowledgeBase(config as unknown as Record<string, unknown>) as AgentConfig;
+export async function deployToRetell(config: AgentConfig, orgId?: string): Promise<AgentConfig> {
+  const preparedConfig = await syncRetellKnowledgeBase(config as unknown as Record<string, unknown>, orgId) as AgentConfig;
   const webhookBase = getWebhookBaseUrl();
   const instructions = buildAgentInstructions(preparedConfig);
   const retellTools = buildRetellTools(preparedConfig, webhookBase);
@@ -700,6 +702,10 @@ REGELN:
 }
 
 export async function registerAgentConfig(app: FastifyInstance) {
+  if (!app.hasPlugin('@fastify/multipart')) {
+    await app.register(multipart, { limits: { fileSize: KNOWLEDGE_PDF_MAX_BYTES } });
+  }
+
   const auth = { onRequest: [app.authenticate] };
 
   // List all agent configs for org
@@ -769,6 +775,67 @@ export async function registerAgentConfig(app: FastifyInstance) {
     const tenantId = query.tenantId ?? orgId;
     return toClientConfig(await readConfig(tenantId, orgId));
   });
+
+  app.post(
+    '/agent-config/knowledge/pdf',
+    {
+      ...auth,
+      config: { rateLimit: { max: 20, timeWindow: '1 hour' } },
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      if (!pool) return reply.status(503).send({ error: 'Database not configured' });
+
+      const { orgId } = req.user as JwtPayload;
+      let data: Awaited<ReturnType<typeof req.file>>;
+      try {
+        data = await req.file();
+      } catch (err) {
+        const code = (err as { code?: string }).code;
+        if (code === 'FST_REQ_FILE_TOO_LARGE') {
+          return reply.status(413).send({ error: 'PDF_TOO_LARGE' });
+        }
+        throw err;
+      }
+      if (!data) return reply.status(400).send({ error: 'No file uploaded' });
+
+      const fields = data.fields as Record<string, { value?: unknown } | undefined>;
+      const rawTenantId = fields.tenantId?.value ?? fields.agentTenantId?.value;
+      const tenantId = typeof rawTenantId === 'string' && rawTenantId.trim() ? rawTenantId.trim() : orgId;
+      if (!(await tenantIdAvailableOrOwned(tenantId, orgId))) {
+        return reply.status(403).send({ error: 'Not your agent' });
+      }
+
+      const filename = data.filename || 'wissen.pdf';
+      const isPdf = data.mimetype === 'application/pdf' || filename.toLowerCase().endsWith('.pdf');
+      if (!isPdf) return reply.status(400).send({ error: 'PDF_ONLY' });
+
+      const chunks: Buffer[] = [];
+      let total = 0;
+      for await (const chunk of data.file) {
+        const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        total += buf.length;
+        if (total > KNOWLEDGE_PDF_MAX_BYTES) {
+          return reply.status(413).send({ error: 'PDF_TOO_LARGE' });
+        }
+        chunks.push(buf);
+      }
+
+      try {
+        const source = await storeKnowledgePdf({
+          orgId,
+          tenantId,
+          filename,
+          mimeType: data.mimetype,
+          data: Buffer.concat(chunks),
+        });
+        return reply.status(201).send(source);
+      } catch (err) {
+        const statusCode = (err as { statusCode?: number }).statusCode ?? 400;
+        const message = err instanceof Error ? err.message : 'PDF_UPLOAD_FAILED';
+        return reply.status(statusCode).send({ error: message });
+      }
+    },
+  );
 
   // Preview generated instructions
   app.get('/agent-config/preview', { ...auth }, async (req: FastifyRequest) => {
@@ -946,7 +1013,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
       retellKnowledgeBaseId: (serverIds as Record<string, unknown>).retellKnowledgeBaseId,
       knowledgeBaseSignature: (serverIds as Record<string, unknown>).knowledgeBaseSignature,
     });
-    const deployed = await deployToRetell(body);
+    const deployed = await deployToRetell(body, orgId);
     const saved = await writeConfig(deployed, orgId);
     // Flush stale agentId→orgId mapping so retell-webhooks.ts picks up the
     // new agent on the next webhook call instead of serving from cache.

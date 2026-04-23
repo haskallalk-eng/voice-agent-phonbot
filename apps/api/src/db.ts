@@ -427,6 +427,25 @@ async function runMigrationBody() {
   await pool.query(`alter table agent_configs add column if not exists org_id uuid references orgs(id) on delete cascade;`);
   await pool.query(`alter table tickets add column if not exists org_id uuid references orgs(id) on delete cascade;`);
 
+  await pool.query(`
+    create table if not exists knowledge_files (
+      id uuid primary key default gen_random_uuid(),
+      created_at timestamptz not null default now(),
+      org_id uuid not null references orgs(id) on delete cascade,
+      tenant_id text not null,
+      filename text not null,
+      mime_type text not null,
+      size_bytes int not null,
+      sha256 text not null,
+      data bytea not null
+    );
+  `);
+  await pool.query(`create index if not exists knowledge_files_org_tenant_idx on knowledge_files(org_id, tenant_id);`);
+  await pool.query(`
+    create unique index if not exists knowledge_files_org_tenant_sha_idx
+    on knowledge_files(org_id, tenant_id, sha256);
+  `);
+
   // In case table existed before these fields were introduced.
   await pool.query(`alter table tickets add column if not exists source text;`);
   await pool.query(`alter table tickets add column if not exists session_id text;`);

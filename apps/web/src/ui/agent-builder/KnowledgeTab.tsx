@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import type { AgentConfig, KnowledgeSource } from '../../lib/api.js';
+import React, { useRef, useState } from 'react';
+import { uploadKnowledgePdf, type AgentConfig, type KnowledgeSource } from '../../lib/api.js';
 import { SectionCard, Input, TextArea, Badge, IconKnowledge, IconGlobe, IconFileText, IconMessageSquare } from './shared.js';
 
 export interface KnowledgeTabProps {
@@ -43,19 +43,52 @@ export function KnowledgeTab({ config, onUpdate }: KnowledgeTabProps) {
         </div>
       )}
 
-      <KnowledgeAdder onAdd={(src) => {
+      <KnowledgeAdder tenantId={config.tenantId} onAdd={(src) => {
         onUpdate({ knowledgeSources: [...sources, src] });
       }} />
     </SectionCard>
   );
 }
 
-function KnowledgeAdder({ onAdd }: { onAdd: (src: KnowledgeSource) => void }) {
+function KnowledgeAdder({ tenantId, onAdd }: { tenantId: string; onAdd: (src: KnowledgeSource) => void }) {
   const [mode, setMode] = useState<'url' | 'text' | null>(null);
   const [url, setUrl] = useState('');
   const [urlError, setUrlError] = useState('');
   const [text, setText] = useState('');
   const [textName, setTextName] = useState('');
+  const [pdfUploading, setPdfUploading] = useState(false);
+  const [pdfError, setPdfError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  function pdfErrorMessage(err: unknown): string {
+    const raw = err instanceof Error ? err.message : String(err);
+    if (raw.includes('PDF_TOO_LARGE')) return 'PDF ist zu gross. Maximal 50 MB.';
+    if (raw.includes('PDF_INVALID')) return 'Diese Datei sieht nicht wie eine PDF aus.';
+    if (raw.includes('PDF_ONLY')) return 'Bitte eine PDF-Datei hochladen.';
+    if (raw.includes('Database not configured')) return 'PDF-Upload ist gerade nicht verfuegbar.';
+    return 'PDF konnte nicht hochgeladen werden.';
+  }
+
+  async function addPdf(file: File | null | undefined) {
+    if (!file) return;
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!isPdf) {
+      setPdfError('Bitte eine PDF-Datei hochladen.');
+      return;
+    }
+
+    setPdfUploading(true);
+    setPdfError('');
+    try {
+      const source = await uploadKnowledgePdf(tenantId, file);
+      onAdd(source);
+    } catch (err) {
+      setPdfError(pdfErrorMessage(err));
+    } finally {
+      setPdfUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
 
   function addUrl() {
     const raw = url.trim();
@@ -99,19 +132,32 @@ function KnowledgeAdder({ onAdd }: { onAdd: (src: KnowledgeSource) => void }) {
 
   if (!mode) {
     return (
-      <div className="flex flex-wrap gap-2">
-        <button onClick={() => setMode('url')}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-white/[0.07] bg-white/[0.03] text-xs text-white/60 hover:border-orange-500/30 hover:text-white transition-all cursor-pointer">
-          <IconGlobe size={13} className="text-white/40" /> Website-URL
-        </button>
-        <button onClick={() => setMode('text')}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-white/[0.07] bg-white/[0.03] text-xs text-white/60 hover:border-orange-500/30 hover:text-white transition-all cursor-pointer">
-          <IconMessageSquare size={13} className="text-white/40" /> Eigener Text
-        </button>
-        <button disabled title="PDF-Verarbeitung folgt"
-          className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-white/[0.07] bg-white/[0.02] text-xs text-white/30 cursor-not-allowed">
-          <IconFileText size={13} className="text-white/25" /> PDF folgt
-        </button>
+      <div className="space-y-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf,.pdf"
+          className="hidden"
+          onChange={(e) => void addPdf(e.target.files?.[0])}
+        />
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setMode('url')}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-white/[0.07] bg-white/[0.03] text-xs text-white/60 hover:border-orange-500/30 hover:text-white transition-all cursor-pointer">
+            <IconGlobe size={13} className="text-white/40" /> Website-URL
+          </button>
+          <button onClick={() => setMode('text')}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-white/[0.07] bg-white/[0.03] text-xs text-white/60 hover:border-orange-500/30 hover:text-white transition-all cursor-pointer">
+            <IconMessageSquare size={13} className="text-white/40" /> Eigener Text
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={pdfUploading}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-white/[0.07] bg-white/[0.03] text-xs text-white/60 hover:border-orange-500/30 hover:text-white transition-all cursor-pointer disabled:cursor-wait disabled:text-white/35 disabled:bg-white/[0.02]"
+          >
+            <IconFileText size={13} className="text-white/40" /> {pdfUploading ? 'PDF laedt...' : 'PDF hochladen'}
+          </button>
+        </div>
+        {pdfError && <p className="text-xs text-red-300/80">{pdfError}</p>}
       </div>
     );
   }
