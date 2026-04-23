@@ -4,7 +4,7 @@ import { useVisible, useCountUp } from './shared.js';
 export function StatsSection() {
   const ref = React.useRef<HTMLElement>(null);
   const visible = useVisible(ref);
-  const languages = useCountUp(8, 1400, visible);
+  const languages = useCountUp(30, 1400, visible);
 
   return (
     <section ref={ref} className="relative z-10 border-t border-b border-white/5 py-16 px-6 ambient-glow-alt ambient-glow">

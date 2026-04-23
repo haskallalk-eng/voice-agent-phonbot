@@ -73,7 +73,7 @@ export const FAQ_ITEMS = [
   },
   {
     q: 'Kann ich den Agenten auf mehrere Sprachen einstellen?',
-    a: 'Phonbot unterstützt Deutsch, Englisch, Französisch, Spanisch, Italienisch, Türkisch, Polnisch und Niederländisch. Du stellst die Hauptsprache im Agent Builder ein.',
+    a: 'Phonbot unterstützt über 30 Sprachen. Für 15 davon (u. a. Deutsch, Englisch, Französisch, Spanisch, Italienisch, Türkisch, Polnisch, Niederländisch, Portugiesisch, Russisch, Japanisch, Koreanisch, Chinesisch, Hindi, Schwedisch) gibt es native, muttersprachlich aufgenommene Stimmen. Die übrigen Sprachen nutzen multilinguale Fallback-Stimmen; für beste Qualität kannst du dort eine eigene Stimme klonen. Du stellst die Hauptsprache im Agent Builder ein.',
   },
   {
     q: 'Gibt es eine Mindestlaufzeit?',
