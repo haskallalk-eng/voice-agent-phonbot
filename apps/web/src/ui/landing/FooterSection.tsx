@@ -11,9 +11,9 @@ export function FooterSection({ onShowLegal, onGoToContact }: FooterSectionProps
     <footer className="relative z-10 border-t border-white/5 px-6 py-12">
       <div className="max-w-6xl mx-auto">
         {/* Top row: brand + link columns */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-8 mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-8 mb-10">
           {/* Brand */}
-          <div className="sm:col-span-1">
+          <div className="sm:col-span-2 lg:col-span-1">
             <PhonbotBrand size="sm" />
             <p className="text-xs text-white/35 mt-2 leading-relaxed">Chipy — dein KI-Telefonassistent.<br />Immer erreichbar.</p>
           </div>
@@ -25,6 +25,18 @@ export function FooterSection({ onShowLegal, onGoToContact }: FooterSectionProps
               <li><a href="/#features" className="text-sm text-white/40 hover:text-white/70 transition-colors">Features</a></li>
               <li><a href="/#demo" className="text-sm text-white/40 hover:text-white/70 transition-colors">Demo</a></li>
               <li><a href="/#preise" className="text-sm text-white/40 hover:text-white/70 transition-colors">Preise</a></li>
+            </ul>
+          </div>
+
+          {/* Branchen */}
+          <div>
+            <h4 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">Branchen</h4>
+            <ul className="space-y-2">
+              <li><a href="/friseur/" className="text-sm text-white/40 hover:text-white/70 transition-colors">Friseur</a></li>
+              <li><a href="/handwerker/" className="text-sm text-white/40 hover:text-white/70 transition-colors">Handwerker</a></li>
+              <li><a href="/reinigung/" className="text-sm text-white/40 hover:text-white/70 transition-colors">Reinigung</a></li>
+              <li><a href="/restaurant/" className="text-sm text-white/40 hover:text-white/70 transition-colors">Restaurant</a></li>
+              <li><a href="/autowerkstatt/" className="text-sm text-white/40 hover:text-white/70 transition-colors">Autowerkstatt</a></li>
             </ul>
           </div>
 
