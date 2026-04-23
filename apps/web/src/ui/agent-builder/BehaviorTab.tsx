@@ -674,14 +674,14 @@ function PromptView({
             </span>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-white/85">Deine Ergänzungen</p>
-              <p className="text-[10px] text-white/40 leading-tight">Hausregeln, Sonderfälle, Tonalität</p>
+              <p className="text-[10px] text-white/40 leading-tight">Insider-Wissen, temporäre Aktionen, Tabus, VIP-Regeln — alles was keine Rolle und kein Abschnitt abdeckt</p>
             </div>
           </div>
           <AdaptiveTextarea
             value={customAddition}
             onChange={(e) => updateCustomAddition(config, e.target.value, onUpdate)}
             spellCheck={false}
-            placeholder="Z.B. Preise, besondere Öffnungs-Regeln, interne Übergabeprozesse…"
+            placeholder="Z. B. „Aktion 20 % auf Färben bis Ende Mai" · „Dienstags ist Chef nicht im Haus — dann Ticket anlegen" · „Nicht über Konkurrenten sprechen" · „Stammkunden mit Namen begrüßen"…"
             minRows={3}
             className="w-full bg-transparent text-xs text-white/80 font-mono leading-relaxed px-4 py-3 outline-none focus:ring-0 border-0 placeholder:text-white/25"
           />
