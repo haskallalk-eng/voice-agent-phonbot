@@ -329,6 +329,13 @@ if (pool) {
   };
   setInterval(runWebhookDedupCleanup, 24 * 60 * 60 * 1000); // every 24h
   setTimeout(runWebhookDedupCleanup, 90_000); // first run 90s after startup (staggered)
+
+  // External calendar poll-sync. Pulls Google/Microsoft/cal.com events into
+  // our `external_calendar_events` cache every 5 minutes so the Kalender-
+  // Seite can show them alongside Chipy-bookings WITH titles. See
+  // calendar-sync.ts for the full design + failure-mode notes.
+  const { startCalendarSyncCron } = await import('./calendar-sync.js');
+  startCalendarSyncCron();
 }
 
 app.get('/health', async () => {

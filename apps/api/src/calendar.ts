@@ -18,6 +18,13 @@ async function calFetch(url: string, init: RequestInit = {}): Promise<Response> 
   return fetch(url, { ...init, signal });
 }
 
+// Exposed for the poll-sync module. Same timeout semantics as the internal
+// one — everything that talks to Google/Microsoft/cal.com should go through
+// a bounded fetch so a hung upstream can't pin a worker.
+export async function calFetchForSync(url: string, init: RequestInit = {}): Promise<Response> {
+  return calFetch(url, init);
+}
+
 // OAuth state uses a SEPARATE HMAC key (defense-in-depth: a JWT_SECRET leak must
 // not also grant OAuth-state forgery, which would let an attacker bind their
 // calendar to someone else's org). In production we require OAUTH_STATE_SECRET
@@ -82,7 +89,7 @@ async function verifyOAuthState(state: string, expectedProvider: 'google' | 'mic
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface CalendarConnection {
+export interface CalendarConnection {
   id: string;
   org_id: string;
   provider: string;
@@ -93,6 +100,9 @@ interface CalendarConnection {
   email: string | null;
   api_key: string | null;
   username: string | null;
+  sync_token?: string | null;
+  last_synced_at?: Date | null;
+  last_sync_error?: string | null;
 }
 
 interface ExternalBookingResult {
@@ -148,6 +158,65 @@ export async function migrateCalendar(): Promise<void> {
   `);
   await pool.query(`
     ALTER TABLE calendar_connections ADD COLUMN IF NOT EXISTS username TEXT;
+  `);
+
+  // Poll-sync columns. We keep `sync_token` so Google's delta API only
+  // returns changed events instead of re-fetching the full window every
+  // time (saves quota + DB churn). `last_synced_at` tells the cron when
+  // this connection last completed successfully — a stale value means
+  // either the connection expired or the cron itself is broken, which
+  // lets ops see drift at a glance.
+  await pool.query(`
+    ALTER TABLE calendar_connections ADD COLUMN IF NOT EXISTS sync_token TEXT;
+  `);
+  await pool.query(`
+    ALTER TABLE calendar_connections ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMPTZ;
+  `);
+  await pool.query(`
+    ALTER TABLE calendar_connections ADD COLUMN IF NOT EXISTS last_sync_error TEXT;
+  `);
+
+  // ── External calendar events cache ─────────────────────────────────────────
+  // Why a cache table and not pure live-fetching:
+  //  - The Agent path (findFreeSlots/bookSlot) still uses live `freeBusy` —
+  //    that is authoritative for conflict-checking.
+  //  - This table is for the UI grid so we can render external events
+  //    offline-consistent with their TITLES (freeBusy only returns times).
+  //  - Storing avoids one Google API call per Kalender-Seiten-Öffnung.
+  //
+  // Schema notes:
+  //  - (org_id, provider, external_id) is the natural key — Google/Microsoft
+  //    event ids are unique only within a calendar, so we pin to our own
+  //    org_id+provider tuple.
+  //  - `status` carries cancelled/confirmed/tentative so we can grey out
+  //    or hide cancelled events instead of deleting (audit trail).
+  //  - `slot_start`/`slot_end` are timestamptz — all provider responses are
+  //    converted to UTC before insert.
+  //  - `raw` keeps the original provider payload for debugging ONE level of
+  //    detail — we strip the description field (can contain PII) before store.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS external_calendar_events (
+      id              BIGSERIAL PRIMARY KEY,
+      org_id          UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      provider        TEXT NOT NULL,
+      external_id     TEXT NOT NULL,
+      calendar_id     TEXT,
+      summary         TEXT,
+      slot_start      TIMESTAMPTZ NOT NULL,
+      slot_end        TIMESTAMPTZ NOT NULL,
+      all_day         BOOLEAN NOT NULL DEFAULT false,
+      status          TEXT NOT NULL DEFAULT 'confirmed',
+      last_synced_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS ext_cal_events_uniq
+      ON external_calendar_events(org_id, provider, external_id);
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS ext_cal_events_range_idx
+      ON external_calendar_events(org_id, slot_start, slot_end);
   `);
 
   // ── Chipy Kalender ─────────────────────────────────────────────────────────
@@ -286,6 +355,23 @@ async function getAllConnections(orgId: string): Promise<CalendarConnection[]> {
   return res.rows.map((r) => decryptConn(r)!).filter((r): r is CalendarConnection => r !== null);
 }
 
+// Exposed for `calendar-sync.ts` — it needs the decrypted connection rows
+// (tokens in plaintext) to fetch events. `getValidToken` + `getValidMsToken`
+// handle OAuth refresh; this helper just lists everything for cron iteration.
+export async function getAllConnectionsForSync(orgId: string): Promise<CalendarConnection[]> {
+  return getAllConnections(orgId);
+}
+
+// List every connection across every org, for the background sync cron.
+// Returns decrypted tokens — caller must never log or expose them.
+export async function getAllActiveConnections(): Promise<CalendarConnection[]> {
+  if (!pool) return [];
+  const res = await pool.query<CalendarConnection>(
+    `SELECT * FROM calendar_connections ORDER BY org_id`,
+  );
+  return res.rows.map((r) => decryptConn(r)!).filter((r): r is CalendarConnection => r !== null);
+}
+
 async function canCheckConnection(conn: CalendarConnection, orgId: string): Promise<boolean> {
   const slots = await findSlotsForConnection(conn, orgId);
   return slots !== null;
@@ -307,7 +393,7 @@ async function getCheckableConnections(orgId: string): Promise<CalendarConnectio
 
 // ── Token Management (Microsoft) ─────────────────────────────────────────────
 
-async function getValidMsToken(orgId: string): Promise<string | null> {
+export async function getValidMsToken(orgId: string): Promise<string | null> {
   if (!pool) return null;
   const res = await pool.query<CalendarConnection>(
     `SELECT * FROM calendar_connections WHERE org_id = $1 AND provider = 'microsoft' LIMIT 1`,
@@ -467,7 +553,7 @@ async function msBookSlot(
 
 // ── Token Management (Google) ─────────────────────────────────────────────────
 
-async function getValidToken(orgId: string): Promise<string | null> {
+export async function getValidToken(orgId: string): Promise<string | null> {
   if (!pool) return null;
   const res = await pool.query<CalendarConnection>(
     `SELECT * FROM calendar_connections WHERE org_id = $1 AND provider = 'google' LIMIT 1`,
@@ -2145,6 +2231,28 @@ setTimeout(function(){window.location.href='${appUrl}?calendarConnected=true'},3
     if (!pool) return reply.send({ ok: true });
     await pool.query(`DELETE FROM chipy_blocks WHERE id = $1 AND org_id = $2`, [id, orgId]);
     return { ok: true };
+  });
+
+  /** GET /calendar/external-events?from=YYYY-MM-DD&to=YYYY-MM-DD — list
+   *  cached external calendar events (Google/Microsoft/cal.com) for the
+   *  org in the given range. Served from the external_calendar_events
+   *  cache; the background cron (calendar-sync.ts) keeps it fresh every
+   *  5 min. See calendar-sync.ts for the fill path. */
+  app.get('/calendar/external-events', { ...auth }, async (req: FastifyRequest) => {
+    const { orgId } = req.user as JwtPayload;
+    const q = req.query as { from?: string; to?: string };
+    const from = q.from ?? new Date().toISOString().slice(0, 10);
+    const to = q.to ?? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const { getExternalEventsForOrg } = await import('./calendar-sync.js');
+    const rows = await getExternalEventsForOrg(
+      orgId,
+      `${from}T00:00:00.000Z`,
+      `${to}T23:59:59.999Z`,
+    );
+    // Strip org_id from the client-facing payload — it's the caller's own,
+    // but there's no reason to echo it back. `external_id` + provider is
+    // enough for the UI to key on.
+    return { events: rows.map(({ org_id: _oid, ...rest }) => rest) };
   });
 
   /** GET /calendar/chipy/bookings?from=YYYY-MM-DD&to=YYYY-MM-DD — list bookings in a range */

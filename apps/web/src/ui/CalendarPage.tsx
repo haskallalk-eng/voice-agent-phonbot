@@ -4,8 +4,9 @@ import {
   getGoogleCalendarAuthUrl, getMicrosoftCalendarAuthUrl,
   getChipyCalendar, saveChipySchedule, addChipyBlock, removeChipyBlock,
   getChipyBookings, createChipyBooking, deleteChipyBooking,
+  getExternalCalendarEvents,
 } from '../lib/api.js';
-import type { ChipySchedule, ChipyBlock, ChipyBooking } from '../lib/api.js';
+import type { ChipySchedule, ChipyBlock, ChipyBooking, ExternalCalendarEvent } from '../lib/api.js';
 import { FoxLogo } from './FoxLogo.js';
 
 type CalendarStatus = { connected: boolean; provider: string | null; email: string | null; expired?: boolean; expiredProvider?: string; chipy?: { configured: boolean } };
@@ -139,11 +140,12 @@ function BookingModal({
 // ── Day Detail Drawer ─────────────────────────────────────────────────────────
 
 function DayDrawer({
-  date, bookings, blocks, onClose, onAddBooking, onDeleteBooking, onAddBlock, onRemoveBlock,
+  date, bookings, blocks, externalEvents, onClose, onAddBooking, onDeleteBooking, onAddBlock, onRemoveBlock,
 }: {
   date: Date;
   bookings: ChipyBooking[];
   blocks: ChipyBlock[];
+  externalEvents: ExternalCalendarEvent[];
   onClose: () => void;
   onAddBooking: () => void;
   onDeleteBooking: (id: string) => void;
@@ -155,6 +157,16 @@ function DayDrawer({
   const fullDayBlock = dayBlocks.find(b => !b.start_time);
   const isFullBlocked = !!fullDayBlock;
   const dayBookings = bookings.filter(b => b.slot_time.startsWith(dateStr));
+  // Filter external events to this day — provider returns UTC timestamps,
+  // we compare against local date string. Events that span midnight show
+  // up on both days (intentional — the user sees the "busy" bleed).
+  const dayExternal = externalEvents.filter(ev => {
+    const s = new Date(ev.slot_start);
+    const e = new Date(ev.slot_end);
+    const dayStart = new Date(`${dateStr}T00:00:00`);
+    const dayEnd = new Date(`${dateStr}T23:59:59.999`);
+    return e > dayStart && s < dayEnd;
+  });
 
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -242,7 +254,33 @@ function DayDrawer({
             </div>
           )}
 
-          {dayBookings.length === 0 && dayBlocks.length === 0 && (
+          {/* External events — read-only, synced every 5 min by the
+              calendar-sync cron. Muted grey styling so they're clearly
+              distinguishable from Chipy-own bookings (which use orange). */}
+          {dayExternal.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest">Extern</p>
+              {dayExternal.map(ev => (
+                <div key={`${ev.provider}:${ev.external_id}`}
+                  className="flex items-start gap-3 rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2.5">
+                  <div className="shrink-0 text-white/40 font-mono text-xs mt-0.5 w-10">
+                    {ev.all_day
+                      ? '—'
+                      : new Date(ev.slot_start).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-white/70 truncate">{ev.summary || 'Ohne Titel'}</p>
+                    <p className="text-[10px] text-white/30 tracking-wide">
+                      {ev.all_day ? 'Ganztägig · ' : ''}
+                      {ev.provider === 'google' ? 'Google Calendar' : ev.provider === 'microsoft' ? 'Microsoft Outlook' : 'Cal.com'}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {dayBookings.length === 0 && dayBlocks.length === 0 && dayExternal.length === 0 && (
             <p className="text-sm text-white/25 text-center py-2">Keine Termine oder Sperren</p>
           )}
 
@@ -974,6 +1012,10 @@ export function CalendarPage({ focusBookingId }: { focusBookingId?: string | nul
   const [schedule, setSchedule] = useState<ChipySchedule>(DEFAULT_SCHEDULE);
   const [blocks, setBlocks] = useState<ChipyBlock[]>([]);
   const [bookings, setBookings] = useState<ChipyBooking[]>([]);
+  // External events (Google / Microsoft / cal.com) — populated by the
+  // background cron on the API, fetched here for display only. Empty array
+  // when no kalender is connected, which is the common case for new orgs.
+  const [externalEvents, setExternalEvents] = useState<ExternalCalendarEvent[]>([]);
   const [calendarError, setCalendarError] = useState<string | null>(null);
 
   // Modal state
@@ -999,19 +1041,24 @@ export function CalendarPage({ focusBookingId }: { focusBookingId?: string | nul
     return () => window.clearTimeout(t);
   }, [focusBookingId, bookings]);
 
-  // Load chipy data + bookings for a 3-month window
+  // Load chipy data + bookings + external events for a 3-month window.
+  // External-events call is non-blocking: if the endpoint errors (e.g. on
+  // fresh boots before the cron has run once, or when the user isn't
+  // connected to any external calendar), we silently show an empty list
+  // rather than breaking the page.
   const loadChipy = useCallback(async () => {
+    const from = isoDate(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1));
+    const to = isoDate(new Date(new Date().getFullYear(), new Date().getMonth() + 3, 0));
     try {
-      const [chipy, bkgs] = await Promise.all([
+      const [chipy, bkgs, ext] = await Promise.all([
         getChipyCalendar(),
-        getChipyBookings(
-          isoDate(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1)),
-          isoDate(new Date(new Date().getFullYear(), new Date().getMonth() + 3, 0)),
-        ),
+        getChipyBookings(from, to),
+        getExternalCalendarEvents(from, to).catch(() => ({ events: [] as ExternalCalendarEvent[] })),
       ]);
       setSchedule({ ...DEFAULT_SCHEDULE, ...chipy.schedule });
       setBlocks(chipy.blocks);
       setBookings(bkgs.bookings);
+      setExternalEvents(ext.events);
     } catch (e: unknown) {
       setCalendarError((e instanceof Error ? e.message : null) ?? 'Kalenderdaten konnten nicht geladen werden');
     }
@@ -1200,6 +1247,7 @@ export function CalendarPage({ focusBookingId }: { focusBookingId?: string | nul
           date={selectedDay}
           bookings={bookings}
           blocks={blocks}
+          externalEvents={externalEvents}
           onClose={() => setSelectedDay(null)}
           onAddBooking={() => setShowAddBooking(true)}
           onDeleteBooking={handleDeleteBooking}

@@ -550,6 +550,24 @@ export function deleteChipyBooking(id: string) {
   return request<{ ok: boolean }>(`/calendar/chipy/bookings/${id}`, { method: 'DELETE' });
 }
 
+// External calendar events (Google / Microsoft / cal.com) — synced every
+// 5 min by the API's calendar-sync cron into a cache table, so the UI can
+// show them side-by-side with Chipy bookings. Read-only on the frontend;
+// edits happen in the original calendar app.
+export type ExternalCalendarEvent = {
+  provider: 'google' | 'microsoft' | 'calcom';
+  external_id: string;
+  calendar_id: string | null;
+  summary: string | null;
+  slot_start: string;
+  slot_end: string;
+  all_day: boolean;
+  status: 'confirmed' | 'tentative' | 'cancelled';
+};
+export function getExternalCalendarEvents(from: string, to: string) {
+  return request<{ events: ExternalCalendarEvent[] }>(`/calendar/external-events?from=${from}&to=${to}`);
+}
+
 // --- Billing ---
 
 export type Plan = {
