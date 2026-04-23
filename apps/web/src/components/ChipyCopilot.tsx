@@ -89,6 +89,16 @@ function MessageBubble({ message }: { message: Message }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
+// ── Draggable-FAB types + constants ───────────────────────────────────────
+type FabPos = { x: number; y: number } | null;  // null = default (bottom-right with safe-area)
+type Dock = 'left' | 'right' | null;
+
+const FAB_SIZE = 60;
+const LONG_PRESS_MS = 400;            // user feedback: long-press threshold
+const DRAG_CANCEL_THRESHOLD = 8;      // px movement before long-press fires → scroll intent
+const EDGE_DOCK_THRESHOLD = 40;       // px from screen edge = snap to dock
+const LS_KEY = 'phonbot_chipy_fab';   // localStorage key for persisted position
+
 export function ChipyCopilot() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
@@ -104,6 +114,103 @@ export function ChipyCopilot() {
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // ── Drag + dock state (2026-04-23 mobile sweep) ─────────────────────────
+  // Long-press → drag mode → release near edge snaps to dock. Docked state
+  // renders a small peek-arrow instead of the FAB. Short tap still opens chat.
+  const [fabPos, setFabPos] = useState<FabPos>(null);
+  const [docked, setDocked] = useState<Dock>(null);
+  const [dragging, setDragging] = useState(false);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Restore position from localStorage on mount. Wrapped in try/catch because
+  // localStorage can throw in private-mode Safari and we never want Chipy to
+  // fail-render — fall back to default bottom-right position.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (!raw) return;
+      const v = JSON.parse(raw) as { pos?: FabPos; dock?: Dock };
+      if (v.pos && typeof v.pos.x === 'number' && typeof v.pos.y === 'number') setFabPos(v.pos);
+      if (v.dock === 'left' || v.dock === 'right') setDocked(v.dock);
+    } catch { /* localStorage unavailable → default position */ }
+  }, []);
+
+  // Persist whenever position or dock changes.
+  useEffect(() => {
+    try { localStorage.setItem(LS_KEY, JSON.stringify({ pos: fabPos, dock: docked })); }
+    catch { /* private mode — silently accept non-persistence */ }
+  }, [fabPos, docked]);
+
+  // Clamp to viewport so chipy never drifts off-screen on resize / rotate.
+  const clampPos = useCallback((x: number, y: number): { x: number; y: number } => ({
+    x: Math.max(8, Math.min(window.innerWidth - FAB_SIZE - 8, x)),
+    y: Math.max(8, Math.min(window.innerHeight - FAB_SIZE - 8, y)),
+  }), []);
+
+  const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (open) return;  // drag disabled while chat is open
+    e.currentTarget.setPointerCapture(e.pointerId);
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
+    longPressTimerRef.current = setTimeout(() => {
+      setDragging(true);
+      if ('vibrate' in navigator) { try { navigator.vibrate(20); } catch { /* ignore */ } }
+    }, LONG_PRESS_MS);
+  };
+
+  const onPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const start = dragStartRef.current;
+    if (!start) return;
+    // If the user moved meaningfully BEFORE the long-press fired, they
+    // meant to scroll, not drag. Cancel the pending drag trigger.
+    if (!dragging) {
+      const dx = e.clientX - start.x;
+      const dy = e.clientY - start.y;
+      if (Math.abs(dx) + Math.abs(dy) > DRAG_CANCEL_THRESHOLD) {
+        if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+        dragStartRef.current = null;
+      }
+      return;
+    }
+    // Active drag: re-position FAB under pointer, exit dock if we were docked.
+    setFabPos(clampPos(e.clientX - FAB_SIZE / 2, e.clientY - FAB_SIZE / 2));
+    if (docked) setDocked(null);
+  };
+
+  const onPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
+    const wasDragStart = dragStartRef.current;
+    dragStartRef.current = null;
+    if (dragging) {
+      // Release-edge-dock check: if finger released within 40px of the left
+      // or right viewport edge, snap chipy to that edge as a peek-arrow.
+      const cx = e.clientX;
+      if (cx < EDGE_DOCK_THRESHOLD) setDocked('left');
+      else if (window.innerWidth - cx < EDGE_DOCK_THRESHOLD) setDocked('right');
+      setDragging(false);
+    } else if (wasDragStart) {
+      // Short tap (no long-press fired) = open chat.
+      setOpen(true);
+    }
+  };
+
+  const onPointerCancel = () => {
+    if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; }
+    dragStartRef.current = null;
+    setDragging(false);
+  };
+
+  // Undock handler: tap on the peek-arrow brings Chipy back to the center
+  // of the viewport (or its last non-docked position if still in state).
+  const undock = () => {
+    if (!fabPos) {
+      // Center of screen as fallback
+      setFabPos(clampPos(window.innerWidth / 2 - FAB_SIZE / 2, window.innerHeight / 2 - FAB_SIZE / 2));
+    }
+    setDocked(null);
+  };
 
   useEffect(() => {
     if (open) bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -185,30 +292,94 @@ export function ChipyCopilot() {
         }
       `}</style>
 
-      {/* ── FAB Button ──
-          Phase 2 mobile-sweep (2026-04-23): bottom position uses
-          env(safe-area-inset-bottom) so the FAB clears iPhone home-indicator
-          bar. Falls back to the original 20px (bottom-5) on non-notched
-          devices. `right` gets the same treatment for rare landscape
-          notches. */}
-      {!open && (
+      {/* ── Docked peek-arrow ──
+          When Chipy has been dragged to the left/right edge, we replace the
+          FAB with a small tab-shape sticking out ~16px from the edge. Tap
+          to bring Chipy back. Chipy-design: canonical orange→cyan gradient
+          border, half-circle glass body, chevron pointing INWARD because
+          the affordance is "pull me back". */}
+      {!open && docked && (
         <button
-          onClick={() => setOpen(true)}
-          aria-label="Chipy Copilot öffnen"
-          className="fixed z-50 flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
+          onClick={undock}
+          aria-label="Chipy wieder einblenden"
+          className="fixed z-50 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
           style={{
-            bottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.25rem)',
-            right: 'calc(env(safe-area-inset-right, 0px) + 1.25rem)',
-            width: 60, height: 60,
-            borderRadius: '50%',
-            background: 'linear-gradient(145deg, #1a1a2e 0%, #0f0f1a 100%)',
-            border: '2px solid rgba(249,115,22,0.35)',
-            animation: 'chipy-fab-glow 3s ease-in-out infinite',
+            [docked]: 0,                // left: 0 or right: 0
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: 20, height: 56,
+            borderRadius: docked === 'left' ? '0 14px 14px 0' : '14px 0 0 14px',
+            background: 'rgba(10,10,15,0.9)',
+            border: '1px solid rgba(249,115,22,0.35)',
+            borderLeftWidth: docked === 'left' ? 0 : 1,
+            borderRightWidth: docked === 'right' ? 0 : 1,
+            backdropFilter: 'blur(12px)',
+            boxShadow: docked === 'left'
+              ? '4px 0 14px rgba(249,115,22,0.18)'
+              : '-4px 0 14px rgba(249,115,22,0.18)',
           }}
         >
-          <FoxLogo size={40} animate />
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="url(#chipy-peek-g)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <defs>
+              <linearGradient id="chipy-peek-g" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#F97316" />
+                <stop offset="100%" stopColor="#06B6D4" />
+              </linearGradient>
+            </defs>
+            {docked === 'left'
+              ? <polyline points="9 18 15 12 9 6" />   /* chevron-right — pulls rightward */
+              : <polyline points="15 18 9 12 15 6" /> /* chevron-left — pulls leftward */
+            }
+          </svg>
         </button>
       )}
+
+      {/* ── FAB Button ──
+          Phase 2 (safe-area) + Phase 2.6 drag + dock (2026-04-23).
+          Long-press 400ms → drag mode (pointer capture, scale-up feedback).
+          Release near edge → setDocked (renders peek-arrow above instead).
+          Short tap → setOpen (unchanged from pre-drag behavior).
+          touch-action: none prevents the browser from treating the
+          press-and-drag as a page-scroll gesture. */}
+      {!open && !docked && (() => {
+        // Resolve actual CSS position. If user has dragged Chipy to a custom
+        // spot, use explicit left/top. Otherwise fall back to safe-area-
+        // inset bottom-right (Phase 2 default).
+        const style: React.CSSProperties = fabPos
+          ? { left: fabPos.x, top: fabPos.y }
+          : {
+              bottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.25rem)',
+              right: 'calc(env(safe-area-inset-right, 0px) + 1.25rem)',
+            };
+        return (
+          <button
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerCancel}
+            aria-label="Chipy Copilot öffnen (halten und ziehen zum Verschieben)"
+            className="fixed z-50 flex items-center justify-center hover:scale-110 active:scale-95"
+            style={{
+              ...style,
+              width: FAB_SIZE, height: FAB_SIZE,
+              borderRadius: '50%',
+              background: 'linear-gradient(145deg, #1a1a2e 0%, #0f0f1a 100%)',
+              border: '2px solid rgba(249,115,22,0.35)',
+              animation: dragging ? 'none' : 'chipy-fab-glow 3s ease-in-out infinite',
+              touchAction: 'none',
+              cursor: dragging ? 'grabbing' : 'pointer',
+              transition: dragging ? 'none' : 'transform 0.2s, box-shadow 0.2s',
+              transform: dragging ? 'scale(1.12)' : undefined,
+              boxShadow: dragging
+                ? '0 0 0 8px rgba(249,115,22,0.15), 0 12px 40px rgba(249,115,22,0.35)'
+                : undefined,
+              userSelect: 'none',
+            }}
+          >
+            <FoxLogo size={40} animate />
+          </button>
+        );
+      })()}
 
       {/* ── Chat Window ──
           Same safe-area treatment as the FAB. The height clamp at
