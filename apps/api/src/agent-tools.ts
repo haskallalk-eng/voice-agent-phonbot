@@ -67,7 +67,7 @@ export function getOpenAITools(cfg: AgentConfig) {
     tools.push({
       type: 'function',
       name: sanitizeToolName('calendar.book'),
-      description: 'Create a booking after the user confirmed a slot and service.',
+      description: 'Create a booking after the user confirmed a slot and service. Mention SMS confirmation only when the result returns smsSent=true.',
       parameters: {
         type: 'object',
         properties: {
@@ -87,7 +87,7 @@ export function getOpenAITools(cfg: AgentConfig) {
     tools.push({
       type: 'function',
       name: sanitizeToolName('ticket.create'),
-      description: 'Create a callback or handoff ticket when the user wants human follow-up or booking cannot be completed live.',
+      description: 'Create a callback or handoff ticket when the user wants human follow-up or booking cannot be completed live. Mention SMS only when the result returns smsSent=true.',
       parameters: {
         type: 'object',
         properties: {

@@ -145,15 +145,36 @@ export type CalendarIntegration = {
   label?: string;
 };
 
+export type ApiEndpointParam = {
+  name: string;
+  type: 'string' | 'number' | 'boolean';
+  description: string;
+  required?: boolean;
+};
+
+export type ApiEndpoint = {
+  id: string;
+  name: string;               // LLM-facing identifier, e.g. "kunde_suchen"
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH';
+  path: string;               // e.g. "/customers/{id}"
+  description: string;
+  params?: ApiEndpointParam[];
+};
+
 export type ApiIntegration = {
   id: string;
   name: string;
   type: 'rest' | 'webhook' | 'zapier';
   baseUrl: string;
   authType: 'none' | 'apikey' | 'bearer' | 'basic';
+  // On GET/PUT the server returns a masked placeholder ("__phonbot_auth_masked__:••••xyz9")
+  // so the real key is never sent to the browser. Re-saving the same string
+  // preserves the stored encrypted value; passing a new plaintext triggers
+  // encryption + overwrite.
   authValue?: string;
   description: string;        // What can the agent use this for?
   enabled: boolean;
+  endpoints?: ApiEndpoint[];  // only used when type === 'rest'
 };
 
 export type LiveWebAccess = {

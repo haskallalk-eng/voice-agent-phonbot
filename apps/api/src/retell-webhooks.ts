@@ -16,7 +16,8 @@ import { appendTraceEvent } from './traces.js';
 import { reconcileMinutes, DEFAULT_CALL_RESERVE_MINUTES } from './usage.js';
 import { pool } from './db.js';
 import { findFreeSlots, bookSlot } from './calendar.js';
-import { triggerCallback } from './agent-config.js';
+import { triggerCallback, readConfig } from './agent-config.js';
+import { executeIntegrationCall, type ApiIntegration } from './api-integrations.js';
 import { analyzeCall } from './insights.js';
 import { getOrgIdByAgentId } from './org-id-cache.js';
 import { getCall, deleteCall } from './retell.js';
@@ -244,7 +245,14 @@ function compactRetellSlots(slots: string[]): { slots: string[]; allSlotsCount: 
 }
 
 function toolAuthSecret(): string {
-  return process.env.RETELL_TOOL_AUTH_SECRET || process.env.JWT_SECRET || 'dev-retell-tool-auth';
+  const secret = process.env.RETELL_TOOL_AUTH_SECRET || process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('RETELL_TOOL_AUTH_SECRET (or JWT_SECRET) required in production — refusing to verify tool URLs with a well-known fallback');
+    }
+    return 'dev-retell-tool-auth';
+  }
+  return secret;
 }
 
 function signToolTenant(tenantId: string): string {
@@ -935,5 +943,86 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     } as Parameters<typeof appendTraceEvent>[0]);
 
     return { ok: true };
+  });
+
+  // ── external.call — proxy for customer API integrations ────────────────
+  // Every tool URL registered by api-integrations.ts points here with
+  // integration_id (+ optional endpoint_id) in the query string. The
+  // integration's authValue is decrypted server-side ONLY here; Retell
+  // never sees it. See api-integrations.ts for the full security model
+  // (SSRF guard, method whitelist, response-size cap, per-call rate limit).
+  app.post('/retell/tools/external.call', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!verifyRetellToolRequest(req as RawBodyRequest)) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const query = req.query as Record<string, string | undefined>;
+    const integrationId = query.integration_id;
+    const endpointId = query.endpoint_id;
+    const signedTenantId = getSignedToolTenantId(req);
+    if (!integrationId) return reply.status(400).send({ ok: false, error: 'NO_INTEGRATION_ID' });
+
+    const body = req.body as RetellEventBody;
+    const args = retellArgs(body);
+    const callId = getRetellCallId(body, args);
+    const agentId = getRetellAgentId(body, args);
+
+    // Tenant resolution: prefer signed tenant param (comes from our own
+    // tool registration), fall back to agent_id → org lookup for a
+    // defence-in-depth cross-check.
+    const orgIdFromAgent = agentId ? await getOrgIdByAgentId(agentId) : null;
+    const tenantId = signedTenantId ?? orgIdFromAgent;
+    if (!tenantId) {
+      req.log.warn({ agentId, integrationId }, 'external.call: could not resolve tenant');
+      return reply.status(403).send({ ok: false, error: 'UNKNOWN_TENANT' });
+    }
+
+    // Load config — use the READ path that returns the encrypted authValue
+    // (readConfig, NOT the HTTP-masked view).
+    const config = await readConfig(tenantId).catch(() => null);
+    if (!config) return reply.status(404).send({ ok: false, error: 'CONFIG_NOT_FOUND' });
+
+    const integrations = (config as Record<string, unknown>).apiIntegrations as
+      | ApiIntegration[] | undefined;
+    const integration = integrations?.find((i) => i.id === integrationId);
+    if (!integration || !integration.enabled) {
+      return reply.status(404).send({ ok: false, error: 'INTEGRATION_NOT_FOUND' });
+    }
+
+    const endpoint = endpointId ? integration.endpoints?.find((e) => e.id === endpointId) : undefined;
+    if (endpointId && !endpoint) {
+      return reply.status(404).send({ ok: false, error: 'ENDPOINT_NOT_FOUND' });
+    }
+
+    // Trace param *names* only — never values. LLM-extracted args can contain
+    // caller PII (names, phone numbers, customer IDs) that we must not persist
+    // under DSGVO Art. 5(1)(c) Datenminimierung. The integration+endpoint name
+    // is enough for debugging the routing.
+    await appendTraceEvent({
+      type: 'tool_call',
+      sessionId: callId ?? 'retell',
+      tenantId,
+      tool: `external:${integration.name}${endpoint ? `:${endpoint.name}` : ''}`,
+      input: { argKeys: Object.keys(args) },
+      at: now(),
+    } as Parameters<typeof appendTraceEvent>[0]);
+
+    const result = await executeIntegrationCall({
+      integration,
+      endpoint,
+      args,
+      callId: callId ?? undefined,
+    });
+
+    await appendTraceEvent({
+      type: 'tool_result',
+      sessionId: callId ?? 'retell',
+      tenantId,
+      tool: `external:${integration.name}${endpoint ? `:${endpoint.name}` : ''}`,
+      output: result.ok ? { status: result.status } : { error: result.error, status: result.status },
+      at: now(),
+    } as Parameters<typeof appendTraceEvent>[0]);
+
+    return result;
   });
 }

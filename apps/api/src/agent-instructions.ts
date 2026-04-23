@@ -109,6 +109,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push('Wenn eine Terminbuchung technisch fehlschlägt, behaupte NIEMALS der Termin sei gebucht. Sage kurz, dass du den Terminwunsch als Rückruf-Ticket aufgenommen hast und jemand den Termin bestätigt.');
   parts.push('Bei verfuegbaren Terminen: Nenne maximal drei Uhrzeiten auf einmal, gruppiert nach Tag. Lies niemals eine lange Liste einzelner Uhrzeiten vor. Frage danach, welche Option passt.');
   parts.push('Bestaetige einen Termin nur, wenn calendar.book mit ok=true/status=confirmed geantwortet hat.');
+  parts.push('Erwaehne eine SMS-Bestaetigung nur, wenn das Tool-Ergebnis smsSent=true enthaelt. Wenn smsSent=false oder fehlt, sage nicht dass eine SMS verschickt wurde.');
 
   if (cfg.fallback.enabled) {
     parts.push(`Wenn du die Anfrage nicht direkt lösen kannst, leite das Gespräch in Richtung Rückruf/Weiterleitung (${cfg.fallback.reason}).`);
