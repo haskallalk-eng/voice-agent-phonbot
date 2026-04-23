@@ -185,7 +185,9 @@ export type LiveWebAccess = {
 export type AgentConfig = {
   tenantId: string;
   name: string;
-  language: 'de' | 'en' | 'fr' | 'es' | 'it' | 'tr' | 'pl' | 'nl';
+  // Language code — see LANGUAGES in shared.tsx for the current list.
+  // String (not literal union) so adding a new locale doesn't force a type bump.
+  language: string;
   voice: string;
   businessName: string;
   businessDescription: string;
