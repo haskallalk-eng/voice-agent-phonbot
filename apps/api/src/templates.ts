@@ -58,26 +58,6 @@ TONFALL: Sachlich, beruhigend, effizient.`,
     tools: ['calendar.findSlots', 'calendar.book', 'ticket.create'],
   },
   {
-    id: 'medical',
-    icon: '🏥',
-    name: 'Arztpraxis',
-    description: 'Terminvereinbarung, Sprechzeiten, Rezeptbestellung',
-    language: 'de',
-    voice: DEFAULT_VOICE_ID,
-    businessDescription: 'Arztpraxis für Allgemeinmedizin.',
-    servicesText: 'Vorsorge, Impfungen, Blutabnahme, Rezepte, Überweisungen, Akutsprechstunde',
-    openingHours: 'Mo-Fr 08:00-12:00, Mo Di Do 14:00-17:00',
-    prompt: `Du bist die Telefonassistenz der Praxis Demo-Praxis. Du bist professionell, ruhig und einfühlsam.
-
-BEGRÜSSUNG: "Praxis Demo-Praxis, guten Tag. Was kann ich für Sie tun?"
-
-Frage nach: 1. Worum geht es? 2. Bereits Patient? 3. Bei akut: seit wann? 4. Wunschtermin 5. Name und Geburtsdatum 6. Gesetzlich oder privat versichert?
-Gib KEINE medizinischen Ratschläge. Bei Notfällen: 112. Bei dringendem nicht lebensbedrohlich: 116117.
-Sprechzeiten: Mo-Fr 08:00-12:00, Mo Di Do 14:00-17:00.
-TONFALL: Professionell, empathisch, immer siezen.`,
-    tools: ['calendar.findSlots', 'calendar.book', 'ticket.create'],
-  },
-  {
     id: 'cleaning',
     icon: '🧹',
     name: 'Reinigung',

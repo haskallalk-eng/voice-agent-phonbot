@@ -14,7 +14,7 @@ import { icon } from './_icons.mjs';
 // polish pass. Any new emoji in BRANCHEN data MUST also get an entry
 // here — otherwise it falls through untouched and breaks visual unity.
 const EMOJI_TO_ICON = {
-  '✂️': 'scissors', '🔧': 'wrench', '🩺': 'medical', '🧹': 'broom',
+  '✂️': 'scissors', '🔧': 'wrench', '🧹': 'broom',
   '🍽️': 'restaurant', '🍴': 'restaurant', '🚗': 'car', '🚘': 'car',
   '📅': 'calendar', '🕒': 'clock', '⏰': 'clock',
   '📞': 'phone', '📱': 'phone',
@@ -165,60 +165,6 @@ const BRANCHEN = [
       { q: 'Was wenn mehrere Kunden gleichzeitig anrufen?', a: 'Phonbot nimmt mehrere Anrufe parallel an (eigener Agent pro Gespräch). Niemand hängt in der Warteschleife.' },
     ],
     ctaHeading: 'Handwerksbetrieb automatisieren — 30 Freiminuten',
-  },
-  {
-    slug: 'arztpraxis',
-    templateId: 'medical',
-    emoji: '🩺',
-    h1Text: 'Deine <span class="accent">MFA</span> ist am Limit? Phonbot nimmt den Druck raus.',
-    title: 'KI-Telefonassistent für Arztpraxen · Terminvergabe 24/7 | Phonbot',
-    description: 'Phonbot ist der KI-Telefonassistent speziell für Arztpraxen. Nimmt Terminanfragen, Rezeptwünsche und Notfälle entgegen, entlastet deine MFA — DSGVO-konform. Ab 8,99 €/Monat.',
-    eyebrow: 'KI-Telefonassistent für Arztpraxen',
-    subtitle: 'Phonbot unterstützt dein Praxis-Team bei Spitzenzeiten: nimmt Terminanfragen entgegen, notiert Rezeptverlängerungen, triagiert Notfälle und entlastet deine MFA spürbar. DSGVO-konform, Server in Deutschland.',
-    ogTitle: 'KI-Telefonassistent für Arztpraxen · Phonbot',
-    ogDesc: 'Entlaste dein Praxis-Team. Phonbot nimmt Termine, Rezepte und Anfragen entgegen — DSGVO-konform, 24/7.',
-    serviceName: 'KI-Telefonassistent für Arztpraxen',
-    audienceType: 'Arztpraxen, Therapeuten, medizinische Versorgungszentren',
-    features: [
-      { icon: '📅', title: 'Terminvergabe', desc: 'Patienten buchen Termine direkt im Praxis-Kalender. Wunschzeiten werden auf Verfügbarkeit geprüft.' },
-      { icon: '💊', title: 'Rezept-Anfragen', desc: 'Anträge auf Rezeptverlängerung werden strukturiert erfasst, MFA ruft mit fertigem Rezept zurück.' },
-      { icon: '🚨', title: 'Notfall-Triage', desc: 'Bei akuten Notfällen weist Phonbot an 112 zu rufen, sonst wird Prioritäts-Ticket erstellt.' },
-      { icon: '🔒', title: 'DSGVO-konform', desc: 'Server in Deutschland, verschlüsselte Speicherung, PII-Redaction in Transkripten. AV-Vertrag verfügbar.' },
-    ],
-    dialogue: [
-      { speaker: 'user', text: '📞 Patient: „Guten Tag, ich bräuchte ein Folgerezept für mein Blutdruck-Medikament."' },
-      { speaker: 'bot', text: 'Phonbot: „Gerne, das notiere ich für die MFA. Dein Name und Geburtsdatum, bitte?"' },
-      { speaker: 'user', text: '📞 Patient: „Anna Becker, 14. März 1958."' },
-      { speaker: 'bot', text: 'Phonbot: „Danke. Um welches Medikament und welche Packungsgröße geht es?"' },
-      { speaker: 'user', text: '📞 Patient: „Ramipril 5 mg, Packung mit 100 Stück."' },
-      { speaker: 'bot', text: 'Phonbot: „Aufgenommen. Die Praxis meldet sich heute zurück — das Rezept liegt dann zur Abholung bereit. Einen schönen Tag noch!"' },
-    ],
-    dialogueNote: '→ Ticket für MFA · Patient muss nicht in Warteschleife · Dauer: 38 Sek',
-    value: {
-      headline: 'Deine MFA ist am Limit. <span class="accent">Was hilft wirklich?</span>',
-      insight: {
-        stat: '40 %',
-        claim: 'aller Praxis-Telefonate drehen sich um Rezepte, Sprechzeiten oder Termine — genau die Routine, die deine MFA ersticken.',
-      },
-      scenario: 'Mittelgroße Praxis, 500 Anrufe pro Monat:',
-      roi: [
-        { icon: 'user', label: 'Zweite Teilzeit-MFA', amount: '1.800 €', per: '/Monat' },
-        { icon: 'chat', label: 'Phonbot Pro — 1.000 Min inklusive', amount: '179 €', per: '/Monat' },
-        { icon: 'star', label: 'Deine Ersparnis', amount: '1.621 €', per: '/Monat', highlight: true },
-      ],
-      extras: [
-        { icon: 'pill', title: 'Rezept-Anfragen DSGVO-konform erfasst', desc: 'Patient + Medikament + Geburtsdatum landen strukturiert im Dashboard — keine Zettel auf dem Empfang.' },
-        { icon: 'calendar', title: 'Routine-Termine direkt vergeben', desc: 'Chipy kennt deine Sprechzeiten und bucht freie Slots ohne MFA-Eingriff — sie bleibt für Patienten vor Ort frei.' },
-        { icon: 'alert', title: 'Akute Notfälle werden weitergeleitet', desc: 'Symptome wie „Atemnot" oder „Brustschmerz" verweisen sofort an 112 — keine KI-Diagnose, aber saubere Triage.' },
-      ],
-    },
-    faq: [
-      { q: 'Ist Phonbot DSGVO-konform für Patientendaten?', a: 'Ja. Server in Deutschland, AES-256 verschlüsselt, AV-Vertrag verfügbar. PII-Redaction entfernt sensible Daten aus Transkripten.' },
-      { q: 'Kann Phonbot zwischen Akut- und Routine-Fällen unterscheiden?', a: 'Ja. Keywords wie "Schmerzen", "akut", "Notfall" triggern Priorisierung. Bei echten Notfällen weist Phonbot an 112 zu rufen.' },
-      { q: 'Passt das zu meiner Praxis-Software?', a: 'Phonbot arbeitet mit dem Kalender-System (Google, Outlook, Cal.com). Direkte Integration mit PVS-Systemen auf Anfrage.' },
-      { q: 'Werden Gespräche aufgenommen?', a: 'Standardmäßig werden Transkripte erstellt, keine Audio-Aufzeichnung. Patienten werden zu Gesprächsbeginn auf die KI-Nutzung hingewiesen.' },
-    ],
-    ctaHeading: 'Praxis-Team entlasten — 30 Freiminuten',
   },
   {
     slug: 'reinigung',

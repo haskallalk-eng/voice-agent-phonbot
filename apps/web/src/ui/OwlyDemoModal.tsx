@@ -4,7 +4,7 @@ import { RetellWebClient } from 'retell-client-js-sdk';
 import { createDemoCall } from '../lib/api.js';
 import { useWebCallCleanup } from '../lib/use-web-call-cleanup.js';
 import { FoxLogo } from './FoxLogo.js';
-import { IconScissors, IconWrench, IconMedical, IconBroom, IconRestaurant, IconPhone, IconHeadphones, IconCar } from './PhonbotIcons.js';
+import { IconScissors, IconWrench, IconBroom, IconRestaurant, IconPhone, IconHeadphones, IconCar } from './PhonbotIcons.js';
 
 type ModalTab = 'webcall' | 'callback';
 type CallState = 'idle' | 'connecting' | 'active' | 'ended' | 'error';
@@ -19,7 +19,6 @@ type DemoTemplate = {
 const DEMO_TEMPLATES: DemoTemplate[] = [
   { id: 'hairdresser', Icon: IconScissors, name: 'Friseur', hint: 'Terminbuchung & Beratung' },
   { id: 'tradesperson', Icon: IconWrench, name: 'Handwerker', hint: 'Auftragsannahme & Notdienst' },
-  { id: 'medical', Icon: IconMedical, name: 'Arztpraxis', hint: 'Terminvergabe & Sprechzeiten' },
   { id: 'cleaning', Icon: IconBroom, name: 'Reinigung', hint: 'Angebote & Planung' },
   { id: 'restaurant', Icon: IconRestaurant, name: 'Restaurant', hint: 'Reservierungen & Karte' },
   { id: 'auto', Icon: IconCar, name: 'Autowerkstatt', hint: 'Termine & Kostenvoranschläge' },
