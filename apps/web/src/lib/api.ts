@@ -126,6 +126,18 @@ export type CallRoutingRule = {
   enabled: boolean;
 };
 
+export type ServiceItem = {
+  id: string;
+  name: string;
+  price?: string;          // "28" — pure number string so an "ab"-toggle can
+                           // wrap it without re-parsing
+  priceFrom?: boolean;     // true → render as "ab 28 €"
+  priceUpTo?: string;      // "60" → renders as "28 €–60 €"
+  duration?: string;       // "30 min" / "2 h" etc., free-text
+  description?: string;    // short note shown after the price
+  tag?: 'BELIEBT' | 'NEU' | 'AKTION' | null;
+};
+
 export type CalendarIntegration = {
   provider: 'google' | 'outlook' | 'calcom' | 'caldav';
   connected: boolean;
@@ -159,6 +171,7 @@ export type AgentConfig = {
   address: string;
   openingHours: string;
   servicesText: string;
+  services?: ServiceItem[];    // structured catalog — preferred over servicesText
   systemPrompt: string;
   selectedRoles?: string[];          // multi-select — ids match PROMPT_TEMPLATES
   customPromptAddition?: string;     // freeform house-rules below the assembled roles

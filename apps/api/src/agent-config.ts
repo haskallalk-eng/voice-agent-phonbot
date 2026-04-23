@@ -34,6 +34,19 @@ const AgentConfigSchema = z.object({
   address: z.string().optional().default(''),
   openingHours: z.string().optional().default(''),
   servicesText: z.string().optional().default(''),
+  // Structured services catalog — each row surfaces in the LLM prompt with
+  // price + duration so the agent can quote cleanly. Legacy `servicesText`
+  // stays as a fallback for configs that haven't migrated yet.
+  services: z.array(z.object({
+    id: z.string().min(1),
+    name: z.string().min(1).max(120),
+    price: z.string().max(20).optional(),
+    priceFrom: z.boolean().optional(),
+    priceUpTo: z.string().max(20).optional(),
+    duration: z.string().max(30).optional(),
+    description: z.string().max(400).optional(),
+    tag: z.enum(['BELIEBT', 'NEU', 'AKTION']).nullable().optional(),
+  })).optional().default([]),
   systemPrompt: z.string().min(1).default(
     'You are a helpful German/English voice agent for a small local business. Goal: book appointments, answer FAQs, and request missing details. Keep answers short, spoken, and polite. If information is missing, ask a single concrete question.',
   ),

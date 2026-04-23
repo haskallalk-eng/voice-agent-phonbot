@@ -4,6 +4,7 @@ import { SectionCard, Field, Input, Select, Badge, LANGUAGES, LANGUAGE_VOICE_REC
 import { VoiceDropdown } from './VoiceDropdown.js';
 import { VoiceClonePanel } from './VoiceClonePanel.js';
 import { OpeningHoursEditor } from './OpeningHoursEditor.js';
+import { ServicesEditor } from './ServicesEditor.js';
 import { AdaptiveTextarea } from '../../components/AdaptiveTextarea.js';
 
 export interface IdentityTabProps {
@@ -111,15 +112,16 @@ export function IdentityTab({
               />
             </div>
           </div>
-          <Field label="Services / Angebote">
-            <AdaptiveTextarea
-              value={config.servicesText}
-              onChange={(e) => onUpdate({ servicesText: e.target.value })}
-              placeholder="Haarschnitt, Färben, Beratung…"
-              minRows={2}
-              className="w-full rounded-xl bg-white/5 border border-white/10 focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/30 outline-none text-sm text-white/85 px-3 py-2"
+          <div className="block">
+            <span className="text-sm font-medium text-white/70">Services / Angebote</span>
+            <p className="text-[11px] text-white/40 mt-0.5 mb-2">Name, Preis und Dauer direkt erfassen — Chipy kann so sauber Preise nennen und Termine vorschlagen. Klick den Pfeil für Beschreibung, Preisspanne oder Tag.</p>
+            <ServicesEditor
+              value={config.services ?? []}
+              legacyText={config.servicesText ?? ''}
+              onChange={(next) => onUpdate({ services: next })}
+              onConsumeLegacy={() => onUpdate({ servicesText: '' })}
             />
-          </Field>
+          </div>
         </div>
       </SectionCard>
     </>
