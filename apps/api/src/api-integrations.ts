@@ -138,14 +138,21 @@ export function mergeAndEncryptIntegrations(
   const byId = new Map((existing ?? []).map((i) => [i.id, i] as const));
   return (incoming ?? []).map((next) => {
     const prev = byId.get(next.id);
-    let authValue: string | null | undefined = next.authValue;
+    let authValue: string | null | undefined = typeof next.authValue === 'string'
+      ? next.authValue.trim()  // tolerate trailing newline from paste
+      : next.authValue;
     if (typeof authValue === 'string' && authValue.startsWith(AUTHVALUE_MASKED_SENTINEL)) {
       // Sentinel round-tripped — keep the existing stored value.
       authValue = prev?.authValue ?? null;
     } else if (authValue) {
       authValue = encryptAuthValue(authValue);
     } else {
-      authValue = null;
+      // Empty string / null / undefined: treat as "no change specified"
+      // and preserve the existing encrypted value. Customer who really
+      // wants to clear the key switches authType to 'none' — otherwise
+      // accidental tippen-und-löschen in the UI would silently wipe
+      // their stored key.
+      authValue = prev?.authValue ?? null;
     }
     return { ...next, authValue: authValue ?? undefined };
   });
@@ -354,7 +361,10 @@ export async function executeIntegrationCall(params: {
   // Also: use the URL object (not string concatenation) so trailing-slash
   // edge cases in baseUrl — query strings, embedded credentials, fragments —
   // parse cleanly.
-  const base = integration.baseUrl.trim();
+  // Defensive: baseUrl is typed as string but a corrupted config row or a
+  // passthrough-schema miss could deliver undefined/null. A crash here
+  // would leak a 500 to Retell instead of a structured tool error.
+  const base = (integration.baseUrl ?? '').toString().trim();
   if (!base) return { ok: false, error: 'NO_BASE_URL' };
   let url: URL;
   let baseHost: string;
