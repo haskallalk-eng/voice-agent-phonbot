@@ -351,18 +351,22 @@ export async function registerTickets(app: FastifyInstance) {
  * wrote. If both events carry the same key, the first-writer wins — which
  * is what we want for idempotency.
  *
- * Match is by `session_id` (Retell call_id) — there is exactly one ticket
- * per call in our current flow because ticket.create is tied 1:1 to the
- * agent's decision during that call.
+ * Match is by `session_id` (Retell call_id) AND `org_id`. Org-scoping is
+ * mandatory: Retell's HMAC signature binds the event body to our platform-
+ * wide key, NOT to a specific agent/org. Without the org_id guard, any
+ * authenticated-as-Retell body could write to any org's ticket if the
+ * session_id happened to match. The caller passes orgId resolved from
+ * agent_id via getOrgIdByAgentId (already org-scoped lookup).
  *
  * Returns the updated metadata (or null if no ticket matched).
  */
 export async function mergeTicketMetadata(
   sessionId: string,
+  orgId: string,
   extracted: Record<string, unknown>,
 ): Promise<Record<string, unknown> | null> {
   if (!pool) {
-    const t = mem.find((x) => x.session_id === sessionId);
+    const t = mem.find((x) => x.session_id === sessionId && x.tenant_id === orgId);
     if (!t) return null;
     t.metadata = { ...extracted, ...t.metadata };
     return t.metadata;
@@ -370,11 +374,12 @@ export async function mergeTicketMetadata(
 
   const { rows } = await pool.query(
     `update tickets
-        set metadata = $2::jsonb || metadata,
+        set metadata = $3::jsonb || metadata,
             updated_at = now()
       where session_id = $1
+        and org_id = $2
     returning metadata`,
-    [sessionId, JSON.stringify(extracted)],
+    [sessionId, orgId, JSON.stringify(extracted)],
   );
   return (rows[0]?.metadata as Record<string, unknown> | undefined) ?? null;
 }

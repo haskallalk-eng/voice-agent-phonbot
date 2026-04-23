@@ -260,6 +260,8 @@ function TicketCard({
             </p>
           )}
 
+          <TicketMetadata metadata={t.metadata} />
+
           <div className="text-xs text-white/30 mt-3 tabular-nums">
             {new Date(t.created_at).toLocaleString('de-DE')}
             {t.source && <> · Quelle: {t.source}</>}
@@ -343,5 +345,33 @@ function StatusButton({
       {icon}
       {label}
     </button>
+  );
+}
+
+/**
+ * Renders the extracted-variables block below the standard ticket fields.
+ * Shows nothing when metadata is empty or only contains an empty
+ * `sonstige_relevante_infos`. Keys are displayed in the original form the
+ * customer chose in Agent-Builder → Variablen extrahieren, so "kundenbranche"
+ * appears as "kundenbranche" — matching what their downstream systems see.
+ */
+function TicketMetadata({ metadata }: { metadata?: Record<string, unknown> }) {
+  if (!metadata) return null;
+  const entries = Object.entries(metadata).filter(([, v]) => {
+    if (v === null || v === undefined) return false;
+    if (typeof v === 'string' && !v.trim()) return false;
+    return true;
+  });
+  if (entries.length === 0) return null;
+
+  return (
+    <dl className="mt-3 bg-white/5 border border-white/10 rounded-xl px-3.5 py-3 text-sm space-y-1.5">
+      {entries.map(([k, v]) => (
+        <div key={k} className="grid grid-cols-[minmax(0,9rem)_1fr] gap-3">
+          <dt className="text-xs text-white/40 font-mono truncate" title={k}>{k}</dt>
+          <dd className="text-white/80 break-words">{String(v)}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }

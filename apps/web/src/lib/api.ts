@@ -400,6 +400,10 @@ export type Ticket = {
   preferred_time: string | null;
   service: string | null;
   notes: string | null;
+  // Custom fields extracted from the call transcript via Retell post-call-analysis.
+  // Always includes `sonstige_relevante_infos` (string) plus any variables the
+  // customer defined in Agent-Builder → Schnittstellen → Variablen extrahieren.
+  metadata?: Record<string, unknown>;
 };
 
 export function getTickets(limit = 50) {
