@@ -100,7 +100,9 @@ export type KnowledgeSource = {
   type: 'url' | 'pdf' | 'text';
   name: string;
   content: string; // URL, filename, or raw text
+  url?: string;
   status?: 'pending' | 'indexed' | 'error';
+  error?: string;
 };
 
 export type ExtractedVariable = {
@@ -204,6 +206,8 @@ export type AgentConfig = {
   fallback: { enabled: boolean; reason: string };
   retellAgentId?: string;
   retellLlmId?: string;
+  retellKnowledgeBaseId?: string;
+  knowledgeBaseSignature?: string;
 
   // Knowledge sources
   knowledgeSources?: KnowledgeSource[];
