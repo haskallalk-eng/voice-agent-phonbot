@@ -260,6 +260,48 @@ const NL_VOICES: CuratedVoice[] = [
   { id: STD_IDS.n1, name: 'Alloy',     tier: 'standard', gender: 'neutral', provider: 'openai' },
 ];
 
+// ── Compact lineup builder for extra languages ─────────────────────────
+// The eight hand-curated blocks above (DE/EN/FR/ES/IT/TR/PL/NL) have
+// 19–20 voices each; for less-common languages we ship a smaller
+// 6-voice starter set (4 HQ + 2 Standard). Same multilingual voice_ids,
+// just culturally-appropriate display names.
+function buildLineup(names: {
+  hqF1: string; hqF2: string; hqM1: string; hqM2: string; stdF1: string; stdM1: string;
+}): CuratedVoice[] {
+  return [
+    { id: HQ_IDS.f1,  name: names.hqF1,  tier: 'hq',       gender: 'female',  provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+    { id: HQ_IDS.f2,  name: names.hqF2,  tier: 'hq',       gender: 'female',  provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+    { id: HQ_IDS.m1,  name: names.hqM1,  tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+    { id: HQ_IDS.m2,  name: names.hqM2,  tier: 'hq',       gender: 'male',    provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+    { id: STD_IDS.f1, name: names.stdF1, tier: 'standard', gender: 'female',  provider: 'cartesia' },
+    { id: STD_IDS.m1, name: names.stdM1, tier: 'standard', gender: 'male',    provider: 'cartesia' },
+  ];
+}
+
+// Native-name line-ups, ElevenLabs Multilingual v2 coverage set.
+const PT_VOICES = buildLineup({ hqF1: 'Beatriz', hqF2: 'Inês',     hqM1: 'Miguel',    hqM2: 'João',      stdF1: 'Sofia',   stdM1: 'Pedro' });
+const RU_VOICES = buildLineup({ hqF1: 'Anna',    hqF2: 'Maria',    hqM1: 'Aleksandr', hqM2: 'Dmitri',    stdF1: 'Elena',   stdM1: 'Ivan' });
+const JA_VOICES = buildLineup({ hqF1: 'Sakura',  hqF2: 'Yui',      hqM1: 'Haruto',    hqM2: 'Kenji',     stdF1: 'Hana',    stdM1: 'Takumi' });
+const KO_VOICES = buildLineup({ hqF1: 'Ji-woo',  hqF2: 'Ha-eun',   hqM1: 'Min-jun',   hqM2: 'Seo-joon',  stdF1: 'Soo-ah',  stdM1: 'Tae-yang' });
+const ZH_VOICES = buildLineup({ hqF1: 'Mei',     hqF2: 'Ling',     hqM1: 'Jun',       hqM2: 'Wei',       stdF1: 'Xiu',     stdM1: 'Hao' });
+const AR_VOICES = buildLineup({ hqF1: 'Layla',   hqF2: 'Fatima',   hqM1: 'Omar',      hqM2: 'Youssef',   stdF1: 'Noor',    stdM1: 'Khaled' });
+const HI_VOICES = buildLineup({ hqF1: 'Priya',   hqF2: 'Ananya',   hqM1: 'Arjun',     hqM2: 'Rohan',     stdF1: 'Maya',    stdM1: 'Aarav' });
+const SV_VOICES = buildLineup({ hqF1: 'Ingrid',  hqF2: 'Astrid',   hqM1: 'Oskar',     hqM2: 'Lars',      stdF1: 'Elsa',    stdM1: 'Erik' });
+const DA_VOICES = buildLineup({ hqF1: 'Frida',   hqF2: 'Clara',    hqM1: 'Anders',    hqM2: 'Mikkel',    stdF1: 'Mathilde',stdM1: 'Jonas' });
+const FI_VOICES = buildLineup({ hqF1: 'Aino',    hqF2: 'Helmi',    hqM1: 'Eetu',      hqM2: 'Onni',      stdF1: 'Saara',   stdM1: 'Väinö' });
+const NO_VOICES = buildLineup({ hqF1: 'Nora',    hqF2: 'Emma',     hqM1: 'Henrik',    hqM2: 'Magnus',    stdF1: 'Ida',     stdM1: 'Sindre' });
+const CS_VOICES = buildLineup({ hqF1: 'Eliška',  hqF2: 'Adéla',    hqM1: 'Jakub',     hqM2: 'Matěj',     stdF1: 'Tereza',  stdM1: 'Tomáš' });
+const SK_VOICES = buildLineup({ hqF1: 'Natália', hqF2: 'Viktória', hqM1: 'Samuel',    hqM2: 'Adam',      stdF1: 'Ema',     stdM1: 'Tomáš' });
+const HU_VOICES = buildLineup({ hqF1: 'Zsófia',  hqF2: 'Emma',     hqM1: 'Bence',     hqM2: 'Levente',   stdF1: 'Anna',    stdM1: 'Márk' });
+const RO_VOICES = buildLineup({ hqF1: 'Ioana',   hqF2: 'Maria',    hqM1: 'Andrei',    hqM2: 'Mihai',     stdF1: 'Elena',   stdM1: 'Cristi' });
+const EL_VOICES = buildLineup({ hqF1: 'Eleni',   hqF2: 'Maria',    hqM1: 'Nikos',     hqM2: 'Yannis',    stdF1: 'Sofia',   stdM1: 'Dimitris' });
+const BG_VOICES = buildLineup({ hqF1: 'Maria',   hqF2: 'Elena',    hqM1: 'Ivan',      hqM2: 'Georgi',    stdF1: 'Viktoria',stdM1: 'Aleksandar' });
+const HR_VOICES = buildLineup({ hqF1: 'Ana',     hqF2: 'Petra',    hqM1: 'Luka',      hqM2: 'Marko',     stdF1: 'Mia',     stdM1: 'Ivan' });
+const UK_VOICES = buildLineup({ hqF1: 'Olena',   hqF2: 'Kateryna', hqM1: 'Andriy',    hqM2: 'Dmytro',    stdF1: 'Sofia',   stdM1: 'Oleksandr' });
+const ID_VOICES = buildLineup({ hqF1: 'Siti',    hqF2: 'Dewi',     hqM1: 'Budi',      hqM2: 'Rizky',     stdF1: 'Ayu',     stdM1: 'Andi' });
+const MS_VOICES = buildLineup({ hqF1: 'Nurul',   hqF2: 'Aisyah',   hqM1: 'Aiman',     hqM2: 'Faizal',    stdF1: 'Hana',    stdM1: 'Amir' });
+const VI_VOICES = buildLineup({ hqF1: 'Linh',    hqF2: 'Mai',      hqM1: 'Minh',      hqM2: 'Tuan',      stdF1: 'Thu',     stdM1: 'Duy' });
+
 export const VOICE_CATALOG: Record<string, CuratedVoice[]> = {
   de: DE_VOICES,
   en: EN_VOICES,
@@ -269,6 +311,28 @@ export const VOICE_CATALOG: Record<string, CuratedVoice[]> = {
   tr: TR_VOICES,
   pl: PL_VOICES,
   nl: NL_VOICES,
+  pt: PT_VOICES,
+  ru: RU_VOICES,
+  ja: JA_VOICES,
+  ko: KO_VOICES,
+  zh: ZH_VOICES,
+  ar: AR_VOICES,
+  hi: HI_VOICES,
+  sv: SV_VOICES,
+  da: DA_VOICES,
+  fi: FI_VOICES,
+  no: NO_VOICES,
+  cs: CS_VOICES,
+  sk: SK_VOICES,
+  hu: HU_VOICES,
+  ro: RO_VOICES,
+  el: EL_VOICES,
+  bg: BG_VOICES,
+  hr: HR_VOICES,
+  uk: UK_VOICES,
+  id: ID_VOICES,
+  ms: MS_VOICES,
+  vi: VI_VOICES,
 };
 
 /** Default voice ID per language. Falls back to DE Chipy. */

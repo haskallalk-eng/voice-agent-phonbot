@@ -41,6 +41,7 @@ export type Tab = 'identity' | 'knowledge' | 'behavior' | 'capabilities' | 'tech
 /* ── Constants ── */
 
 export const LANGUAGES = [
+  // Tier 1 — full curated voice line-ups (19–20 voices each, including Chipy for DE)
   { id: 'de', label: '🇩🇪 Deutsch' },
   { id: 'en', label: '🇬🇧 English' },
   { id: 'fr', label: '🇫🇷 Français' },
@@ -49,19 +50,68 @@ export const LANGUAGES = [
   { id: 'tr', label: '🇹🇷 Türkçe' },
   { id: 'pl', label: '🇵🇱 Polski' },
   { id: 'nl', label: '🇳🇱 Nederlands' },
+  // Tier 2 — ElevenLabs Multilingual v2 coverage, 6-voice starter sets
+  { id: 'pt', label: '🇵🇹 Português' },
+  { id: 'ru', label: '🇷🇺 Русский' },
+  { id: 'ja', label: '🇯🇵 日本語' },
+  { id: 'ko', label: '🇰🇷 한국어' },
+  { id: 'zh', label: '🇨🇳 中文' },
+  { id: 'ar', label: '🇸🇦 العربية' },
+  { id: 'hi', label: '🇮🇳 हिन्दी' },
+  { id: 'sv', label: '🇸🇪 Svenska' },
+  { id: 'da', label: '🇩🇰 Dansk' },
+  { id: 'fi', label: '🇫🇮 Suomi' },
+  { id: 'no', label: '🇳🇴 Norsk' },
+  { id: 'cs', label: '🇨🇿 Čeština' },
+  { id: 'sk', label: '🇸🇰 Slovenčina' },
+  { id: 'hu', label: '🇭🇺 Magyar' },
+  { id: 'ro', label: '🇷🇴 Română' },
+  { id: 'el', label: '🇬🇷 Ελληνικά' },
+  { id: 'bg', label: '🇧🇬 Български' },
+  { id: 'hr', label: '🇭🇷 Hrvatski' },
+  { id: 'uk', label: '🇺🇦 Українська' },
+  { id: 'id', label: '🇮🇩 Indonesia' },
+  { id: 'ms', label: '🇲🇾 Bahasa Melayu' },
+  { id: 'vi', label: '🇻🇳 Tiếng Việt' },
 ] as const;
 
 export const CHIPY_VOICE_ID = 'custom_voice_28bd4920fa6523c6ac8c4e527b';
 
 export const LANGUAGE_VOICE_RECOMMENDATIONS: Record<string, { voiceId: string; native: boolean }> = {
-  de: { voiceId: CHIPY_VOICE_ID,   native: true  },
-  en: { voiceId: 'cartesia-Cleo',  native: true  },
-  fr: { voiceId: 'cartesia-Emma',  native: true  },
-  es: { voiceId: 'cartesia-Isabel', native: true },
-  it: { voiceId: CHIPY_VOICE_ID,   native: false },
-  tr: { voiceId: CHIPY_VOICE_ID,   native: false },
-  pl: { voiceId: CHIPY_VOICE_ID,   native: false },
-  nl: { voiceId: CHIPY_VOICE_ID,   native: false },
+  // Tier 1 — native defaults we picked by hand
+  de: { voiceId: CHIPY_VOICE_ID,     native: true  },
+  en: { voiceId: 'cartesia-Cleo',    native: true  },
+  fr: { voiceId: 'cartesia-Emma',    native: true  },
+  es: { voiceId: 'cartesia-Isabel',  native: true  },
+  it: { voiceId: CHIPY_VOICE_ID,     native: false },
+  tr: { voiceId: CHIPY_VOICE_ID,     native: false },
+  pl: { voiceId: CHIPY_VOICE_ID,     native: false },
+  nl: { voiceId: CHIPY_VOICE_ID,     native: false },
+  // Tier 2 — all use the ElevenLabs Multilingual v2 pool. The `native:true`
+  // flag drops the "upload your own clone" nudge, since these share the HQ
+  // pool which is already language-optimised by ElevenLabs.
+  pt: { voiceId: '11labs-Marissa', native: true },
+  ru: { voiceId: '11labs-Marissa', native: true },
+  ja: { voiceId: '11labs-Marissa', native: true },
+  ko: { voiceId: '11labs-Marissa', native: true },
+  zh: { voiceId: '11labs-Marissa', native: true },
+  ar: { voiceId: '11labs-Marissa', native: true },
+  hi: { voiceId: '11labs-Marissa', native: true },
+  sv: { voiceId: '11labs-Marissa', native: true },
+  da: { voiceId: '11labs-Marissa', native: true },
+  fi: { voiceId: '11labs-Marissa', native: true },
+  no: { voiceId: '11labs-Marissa', native: true },
+  cs: { voiceId: '11labs-Marissa', native: true },
+  sk: { voiceId: '11labs-Marissa', native: true },
+  hu: { voiceId: '11labs-Marissa', native: true },
+  ro: { voiceId: '11labs-Marissa', native: true },
+  el: { voiceId: '11labs-Marissa', native: true },
+  bg: { voiceId: '11labs-Marissa', native: true },
+  hr: { voiceId: '11labs-Marissa', native: true },
+  uk: { voiceId: '11labs-Marissa', native: true },
+  id: { voiceId: '11labs-Marissa', native: true },
+  ms: { voiceId: '11labs-Marissa', native: true },
+  vi: { voiceId: '11labs-Marissa', native: true },
 };
 
 export const KNOWN_TOOLS = ['calendar.findSlots', 'calendar.book', 'ticket.create'] as const;

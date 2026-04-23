@@ -33,7 +33,11 @@ import {
 const AgentConfigSchema = z.object({
   tenantId: z.string().min(1).default('demo'),
   name: z.string().min(1).default('Demo Agent'),
-  language: z.enum(['de', 'en', 'fr', 'es', 'it', 'tr', 'pl', 'nl']).default('de'),
+  // Language code — validated shape only. Full list (ElevenLabs Multilingual
+  // v2 coverage, ~30 locales) lives in apps/web/src/ui/agent-builder/shared +
+  // apps/api/src/voice-catalog. Kept as `z.string` so adding a new language
+  // doesn't require a schema bump.
+  language: z.string().min(2).max(5).default('de'),
   voice: z.string().min(1).default(DEFAULT_VOICE_ID),
   businessName: z.string().min(1).default('Demo Business'),
   businessDescription: z.string().min(1).default('Local service business for appointments, FAQs, and callbacks.'),
@@ -497,6 +501,11 @@ export async function deployToRetell(config: AgentConfig): Promise<AgentConfig> 
   const LANG_MAP: Record<string, string> = {
     de: 'de-DE', en: 'en-US', fr: 'fr-FR', es: 'es-ES',
     it: 'it-IT', tr: 'tr-TR', pl: 'pl-PL', nl: 'nl-NL',
+    pt: 'pt-PT', ru: 'ru-RU', ja: 'ja-JP', ko: 'ko-KR', zh: 'zh-CN',
+    ar: 'ar-SA', hi: 'hi-IN', sv: 'sv-SE', da: 'da-DK', fi: 'fi-FI',
+    no: 'nb-NO', cs: 'cs-CZ', sk: 'sk-SK', hu: 'hu-HU', ro: 'ro-RO',
+    el: 'el-GR', bg: 'bg-BG', hr: 'hr-HR', uk: 'uk-UA', id: 'id-ID',
+    ms: 'ms-MY', vi: 'vi-VN',
   };
   const language = LANG_MAP[config.language] ?? 'de-DE';
 
@@ -558,6 +567,11 @@ async function ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise
   const LANG_MAP: Record<string, string> = {
     de: 'de-DE', en: 'en-US', fr: 'fr-FR', es: 'es-ES',
     it: 'it-IT', tr: 'tr-TR', pl: 'pl-PL', nl: 'nl-NL',
+    pt: 'pt-PT', ru: 'ru-RU', ja: 'ja-JP', ko: 'ko-KR', zh: 'zh-CN',
+    ar: 'ar-SA', hi: 'hi-IN', sv: 'sv-SE', da: 'da-DK', fi: 'fi-FI',
+    no: 'nb-NO', cs: 'cs-CZ', sk: 'sk-SK', hu: 'hu-HU', ro: 'ro-RO',
+    el: 'el-GR', bg: 'bg-BG', hr: 'hr-HR', uk: 'uk-UA', id: 'id-ID',
+    ms: 'ms-MY', vi: 'vi-VN',
   };
   const language = LANG_MAP[config.language] ?? 'de-DE';
   let callbackLlmId = config.retellCallbackLlmId;
