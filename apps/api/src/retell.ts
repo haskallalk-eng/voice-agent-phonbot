@@ -219,7 +219,7 @@ export async function deleteKnowledgeBase(knowledgeBaseId: string): Promise<void
 
 // Retell agent-tuning defaults — overridable per-call and via env (RETELL_AGENT_*)
 // so we can A/B voice behaviour without a code deploy. Also lets individual agents
-// differ (a sleepy arztpraxis shouldn't interrupt as eagerly as a hairdresser).
+// differ by tone and pacing across industries.
 function defaultInterruption(): number {
   const raw = process.env.RETELL_AGENT_INTERRUPTION_SENSITIVITY;
   if (raw === undefined || raw === '') return 1.0;

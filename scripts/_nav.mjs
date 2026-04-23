@@ -1,6 +1,6 @@
 // Shared nav partial — matches apps/web/src/ui/landing/NavHeader.tsx 1:1.
 // Emits the sticky unified nav that every static HTML page uses
-// (6 branch pages + impressum + datenschutz + agb).
+// (5 branch pages + impressum + datenschutz + agb).
 //
 // HTML interaction (hamburger toggle, Branchen-dropdown open/close,
 // click-outside) lives in /apps/web/public/nav.js — already loaded by
@@ -30,7 +30,6 @@ const FOX_LOGO_SVG = [
 const INDUSTRIES = [
   { slug: 'friseur',       name: 'Friseur',       iconInner: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/>' },
   { slug: 'handwerker',    name: 'Handwerker',    iconInner: '<path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>' },
-  { slug: 'arztpraxis',    name: 'Arztpraxis',    iconInner: '<rect x="9" y="2" width="6" height="20" rx="2"/><rect x="2" y="9" width="20" height="6" rx="2"/>' },
   { slug: 'reinigung',     name: 'Reinigung',     iconInner: '<path d="M3 21l7-7"/><path d="M13.5 5.5l5.19-1.04 1.04 5.2-9.23 9.23a2 2 0 01-2.83 0l-2.83-2.83a2 2 0 010-2.83z"/><path d="M7.4 13.4l4.24-4.24"/>' },
   { slug: 'restaurant',    name: 'Restaurant',    iconInner: '<line x1="18" y1="2" x2="18" y2="22"/><path d="M22 8H14V2"/><line x1="6" y1="2" x2="6" y2="8"/><path d="M2 8a4 4 0 008 0"/><line x1="6" y1="12" x2="6" y2="22"/>' },
   { slug: 'autowerkstatt', name: 'Autowerkstatt', iconInner: '<path d="M5 17H3a2 2 0 01-2-2v-4l2.69-6.73A2 2 0 015.54 3h12.92a2 2 0 011.85 1.27L23 11v4a2 2 0 01-2 2h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="17.5" r="2.5"/>' },

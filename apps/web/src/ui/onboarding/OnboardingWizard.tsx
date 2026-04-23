@@ -6,7 +6,7 @@ import { useWebCallCleanup } from '../../lib/use-web-call-cleanup.js';
 import { FoxLogo } from '../FoxLogo.js';
 import {
   IconStar, IconCalendar, IconPhone, IconCapabilities,
-  IconScissors, IconWrench, IconMedical, IconBroom, IconSettings,
+  IconScissors, IconWrench, IconBroom, IconSettings,
   IconTickets, IconAgent, IconDeploy, IconPhoneForward,
   IconRestaurant,
 } from '../PhonbotIcons.js';
@@ -39,15 +39,6 @@ const TEMPLATE_CONFIG: Record<string, {
     hoverGlow: 'hover:shadow-[0_0_22px_rgba(249,115,22,0.18)]',
     selectedBorder: 'border-orange-500/60',
     selectedGlow: 'shadow-[0_0_22px_rgba(249,115,22,0.25)]',
-  },
-  medical: {
-    Icon: IconMedical,
-    accent: 'text-cyan-300',
-    iconBg: 'bg-cyan-500/15',
-    hoverBorder: 'hover:border-cyan-500/40',
-    hoverGlow: 'hover:shadow-[0_0_22px_rgba(6,182,212,0.18)]',
-    selectedBorder: 'border-cyan-500/60',
-    selectedGlow: 'shadow-[0_0_22px_rgba(6,182,212,0.25)]',
   },
   restaurant: {
     Icon: IconRestaurant,

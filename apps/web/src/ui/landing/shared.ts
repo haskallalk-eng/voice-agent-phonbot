@@ -1,5 +1,5 @@
 import React from 'react';
-import { IconScissors, IconWrench, IconMedical, IconBroom, IconRestaurant, IconCar, IconPhone, IconBolt, IconStar, IconCalendar, IconTickets, IconCalls, IconSettings, IconInsights } from '../PhonbotIcons.js';
+import { IconScissors, IconWrench, IconBroom, IconRestaurant, IconCar, IconPhone, IconBolt, IconStar, IconCalendar, IconTickets, IconCalls, IconSettings, IconInsights } from '../PhonbotIcons.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,7 +16,6 @@ export type FeatureItem = {
 export const TEMPLATES = [
   { id: 'hairdresser',  slug: 'friseur',       Icon: IconScissors,   name: 'Friseur',       description: 'Terminbuchungen & Öffnungszeiten' },
   { id: 'tradesperson', slug: 'handwerker',    Icon: IconWrench,     name: 'Handwerker',    description: 'Auftragsannahme & Notdienst' },
-  { id: 'medical',      slug: 'arztpraxis',    Icon: IconMedical,    name: 'Arztpraxis',    description: 'Terminvergabe & Sprechzeiten' },
   { id: 'cleaning',     slug: 'reinigung',     Icon: IconBroom,      name: 'Reinigung',     description: 'Angebote & Terminplanung' },
   { id: 'restaurant',   slug: 'restaurant',    Icon: IconRestaurant, name: 'Restaurant',    description: 'Reservierungen & Bestellungen' },
   { id: 'auto',         slug: 'autowerkstatt', Icon: IconCar,        name: 'Autowerkstatt', description: 'Terminvereinbarung & Kostenvoranschläge' },
@@ -25,7 +24,6 @@ export const TEMPLATES = [
 export const TEMPLATE_PREVIEWS: Record<string, string> = {
   hairdresser: '"Hallo! Salon Müller, wie kann ich helfen? Termin buchen?"',
   tradesperson: '"Handwerk Müller! Notfall oder regulärer Termin?"',
-  medical: '"Praxis Dr. Müller. Termin oder dringende Frage?"',
   cleaning: '"Reinigung Müller! Für welche Räume suchen Sie Hilfe?"',
   restaurant: '"Willkommen! Tisch reservieren oder Fragen zur Karte?"',
   auto: '"Guten Tag, Werkstatt Schmidt! Für welches Fahrzeug benötigen Sie einen Termin?"',
@@ -41,7 +39,7 @@ export const FEATURES: FeatureItem[] = [
 ];
 
 export const STEPS = [
-  { num: '1', title: 'Template wählen', desc: 'Friseur, Handwerker, Arztpraxis — wähle ein passendes Template.' },
+  { num: '1', title: 'Template wählen', desc: 'Friseur, Handwerker, Reinigung oder Restaurant — wähle ein passendes Template.' },
   { num: '2', title: 'Business-Daten eingeben', desc: 'Name, Öffnungszeiten, Services. Dauert unter 2 Minuten.' },
   { num: '3', title: 'Agent ist live', desc: 'Dein Agent beantwortet Anrufe sofort. Rund um die Uhr.' },
 ];
@@ -69,7 +67,7 @@ export const FAQ_ITEMS = [
   },
   {
     q: 'Für welche Branchen ist Phonbot geeignet?',
-    a: 'Phonbot ist optimiert für Friseure, Handwerker, Arztpraxen, Kanzleien, Gastronomie, Kosmetikstudios und alle kleinen Unternehmen die Anrufe und Terminbuchungen bearbeiten müssen. Der Agent passt sich deiner Branche über den Agent Builder an.',
+    a: 'Phonbot ist optimiert für Friseure, Handwerker, Reinigung, Gastronomie, Autowerkstätten, Kanzleien, Kosmetikstudios und andere kleine Unternehmen mit vielen Anrufen und Terminwünschen. Der Agent passt sich deiner Branche über den Agent Builder an.',
   },
   {
     q: 'Kann ich den Agenten auf mehrere Sprachen einstellen?',

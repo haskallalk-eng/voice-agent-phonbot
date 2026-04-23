@@ -70,7 +70,7 @@
     # (e.g. https://phonbot.de/friseur/). Ensure bare /friseur → /friseur/
     # so search engines see one canonical, not two competing URLs.
     @industry_no_slash {
-        path /friseur /handwerker /arztpraxis /reinigung /restaurant /autowerkstatt
+        path /friseur /handwerker /reinigung /restaurant /autowerkstatt
     }
     redir @industry_no_slash {path}/ 301
 
