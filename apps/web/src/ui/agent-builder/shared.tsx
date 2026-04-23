@@ -73,11 +73,6 @@ export const KNOWN_TOOLS = ['calendar.findSlots', 'calendar.book', 'ticket.creat
  * `## Section` block per role. Designed so two or three roles stacked
  * never contradict each other ("Du bist Empfang" AND "Du bist Notdienst"
  * collapses into "Du bist ein Telefonassistent mit zwei Rollen").
- *
- * Terminbuchung + Bestellannahme wurden absichtlich aus der Role-Liste
- * entfernt — Terminbuchung ist bereits über die Fähigkeiten-Tools
- * (calendar.findSlots / calendar.book) abgedeckt, Bestellannahme ist
- * eine Spezial-Capability, die separat als Fähigkeit zuschaltbar ist.
  */
 export const PROMPT_TEMPLATES: {
   id: string;
@@ -97,6 +92,15 @@ export const PROMPT_TEMPLATES: {
 Begrüße jeden Anrufer freundlich, finde heraus worum es geht und leite ihn zielgerichtet weiter. Wenn das Anliegen unklar bleibt oder niemand sofort übernehmen kann, erstelle ein Rückruf-Ticket mit Name, Telefonnummer und Kurzbeschreibung.`,
   },
   {
+    id: 'appointment',
+    Icon: IconCalendar,
+    accent: 'text-cyan-400',
+    name: 'Terminbuchung',
+    capability: 'Termine vereinbaren und verbindlich bestätigen',
+    block: `## Terminbuchung
+Wenn der Anrufer einen Termin möchte: Frage nach Datum, Uhrzeit und Art des Termins, prüfe die Verfügbarkeit über das Kalender-Tool und biete maximal drei Optionen gruppiert nach Tag an. Bestätige den Termin erst nach erfolgreicher Buchung; bei Fehlschlag entschuldige dich kurz und leg ein Rückruf-Ticket an, damit nichts verloren geht.`,
+  },
+  {
     id: 'support',
     Icon: IconSliders,
     accent: 'text-violet-400',
@@ -104,6 +108,15 @@ Begrüße jeden Anrufer freundlich, finde heraus worum es geht und leite ihn zie
     capability: 'Probleme aufnehmen und Support-Tickets erstellen',
     block: `## Kundensupport
 Höre dem Kunden aufmerksam zu und lasse ihn das Problem vollständig schildern. Stelle präzise Rückfragen zu Produkt, Fehlerbild und Dringlichkeit. Löse einfache Fragen direkt; bei komplexeren oder technischen Problemen erstelle ein Ticket mit allen relevanten Details und bestätige dem Kunden die Bearbeitungszeit.`,
+  },
+  {
+    id: 'orders',
+    Icon: IconTicket,
+    accent: 'text-amber-400',
+    name: 'Bestellannahme',
+    capability: 'Bestellungen entgegennehmen und bestätigen',
+    block: `## Bestellannahme
+Nimm Bestellungen strukturiert auf: Artikel, Menge, Sonderwünsche, Lieferadresse und Wunschzeit. Lies die Bestellung vor dem Bestätigen einmal komplett vor ("Ich habe notiert: …, korrekt?"). Nenne eine realistische Lieferzeit-Spanne statt einer harten Zusage. Bei Unsicherheit leg ein Ticket an und kündige einen Rückruf zur Bestätigung an.`,
   },
   {
     id: 'emergency',
