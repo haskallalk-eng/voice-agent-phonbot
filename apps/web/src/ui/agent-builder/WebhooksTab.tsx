@@ -1,6 +1,20 @@
 import React, { useState } from 'react';
-import type { AgentConfig, ExtractedVariable, InboundWebhook, ApiIntegration } from '../../lib/api.js';
+import type { AgentConfig, ExtractedVariable, InboundWebhook, ApiIntegration, ApiEndpoint } from '../../lib/api.js';
 import { SectionCard, Input, Toggle, IconFileText, IconWebhook, IconPlug } from './shared.js';
+
+/** Server returns authValue as "__phonbot_auth_masked__:••••xyz9" so we never
+ *  show the real secret in the browser. The UI displays the hint part; when
+ *  the user re-saves without touching the field, the full sentinel round-trips
+ *  and the server keeps the existing encrypted value. */
+const AUTH_MASK_PREFIX = '__phonbot_auth_masked__';
+function isMaskedAuth(v: string | undefined | null): boolean {
+  return typeof v === 'string' && v.startsWith(AUTH_MASK_PREFIX);
+}
+function maskedHint(v: string | undefined | null): string {
+  if (!isMaskedAuth(v)) return '';
+  const hint = (v as string).slice(AUTH_MASK_PREFIX.length + 1);
+  return hint || '••••';
+}
 
 export interface WebhooksTabProps {
   config: AgentConfig;
@@ -53,11 +67,12 @@ function ApiIntegrationEditor({ items, onChange }: { items: ApiIntegration[]; on
     onChange([...items, {
       id: crypto.randomUUID(),
       name: '',
-      type: 'rest',
+      type: 'webhook',
       baseUrl: '',
       authType: 'none',
       description: '',
       enabled: true,
+      endpoints: [],
     }]);
   }
 
@@ -84,7 +99,7 @@ function ApiIntegrationEditor({ items, onChange }: { items: ApiIntegration[]; on
           </div>
 
           <input value={api.baseUrl} onChange={(e) => patch(i, { baseUrl: e.target.value })}
-            placeholder="https://api.mein-system.de/v1"
+            placeholder={api.type === 'zapier' ? 'https://hooks.zapier.com/hooks/catch/…' : 'https://api.mein-system.de/v1'}
             className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-orange-500/50 outline-none" />
 
           <div className="grid grid-cols-2 gap-3">
@@ -92,9 +107,9 @@ function ApiIntegrationEditor({ items, onChange }: { items: ApiIntegration[]; on
               <span className="text-xs text-white/50">Typ</span>
               <select value={api.type} onChange={(e) => patch(i, { type: e.target.value as ApiIntegration['type'] })}
                 className="w-full mt-1 rounded-lg border border-white/10 bg-[#0F0F18] px-3 py-2 text-sm text-white outline-none">
-                <option value="rest">REST API</option>
-                <option value="webhook">Webhook</option>
+                <option value="webhook">Webhook (einfach)</option>
                 <option value="zapier">Zapier / Make</option>
+                <option value="rest">REST API (mit Endpunkten)</option>
               </select>
             </div>
             <div>
@@ -110,29 +125,190 @@ function ApiIntegrationEditor({ items, onChange }: { items: ApiIntegration[]; on
           </div>
 
           {api.authType !== 'none' && (
-            <input value={api.authValue ?? ''} onChange={(e) => patch(i, { authValue: e.target.value })}
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder={api.authType === 'apikey' ? 'API Key' : api.authType === 'bearer' ? 'Bearer Token' : 'user:password'}
-              className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-orange-500/50 outline-none" />
+            <div>
+              <input
+                value={isMaskedAuth(api.authValue) ? '' : (api.authValue ?? '')}
+                onChange={(e) => patch(i, { authValue: e.target.value })}
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={
+                  isMaskedAuth(api.authValue)
+                    ? `Gespeichert: ${maskedHint(api.authValue)} — leer lassen zum Behalten`
+                    : (api.authType === 'apikey' ? 'API Key' : api.authType === 'bearer' ? 'Bearer Token' : 'user:password')
+                }
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-orange-500/50 outline-none"
+                onFocus={(e) => {
+                  // When the user focuses and the field is showing a mask sentinel,
+                  // we keep the sentinel so an empty submit preserves the stored key;
+                  // only overwrite when the user actually types.
+                  if (isMaskedAuth(api.authValue)) e.currentTarget.value = '';
+                }}
+                onBlur={(e) => {
+                  // If the user didn't type anything, restore the sentinel so it
+                  // round-trips to the server.
+                  if (e.currentTarget.value === '' && isMaskedAuth(api.authValue)) {
+                    // no-op: state already has sentinel
+                  }
+                }}
+              />
+              <p className="text-[11px] text-white/35 mt-1">
+                Schlüssel werden AES-256-verschlüsselt gespeichert und nur server-seitig entschlüsselt — Retell sieht sie nie.
+              </p>
+            </div>
           )}
 
           <textarea value={api.description} onChange={(e) => patch(i, { description: e.target.value })}
-            placeholder="Wofür soll der Agent diese API nutzen? z.B. 'Kundendaten abrufen und Bestellstatus prüfen'"
+            placeholder={
+              api.type === 'rest'
+                ? "Was soll der Agent mit diesem System machen? z.B. 'Kundendaten und Bestellstatus abrufen'"
+                : "Wann soll der Agent diese Integration nutzen? z.B. 'Am Ende jedes Anrufs alle Gesprächsdaten senden'"
+            }
             rows={2}
             className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-orange-500/50 outline-none resize-y" />
+
+          {api.type === 'rest' && (
+            <EndpointsEditor
+              endpoints={api.endpoints ?? []}
+              onChange={(endpoints) => patch(i, { endpoints })}
+            />
+          )}
         </div>
       ))}
 
       <button onClick={add}
         className="w-full border-2 border-dashed border-white/10 hover:border-orange-500/30 rounded-xl py-3 text-sm text-white/40 hover:text-orange-400 transition-all">
-        + API-Integration hinzufügen
+        + Integration hinzufügen
       </button>
 
-      <div className="bg-white/5 rounded-lg px-4 py-3 text-xs text-white/50">
-        Dein Agent kann während des Gesprächs Daten abrufen und senden — z.B. Kundenstatus prüfen, Bestellungen anlegen oder CRM-Einträge erstellen.
+      <div className="bg-white/5 rounded-lg px-4 py-3 text-xs text-white/50 space-y-1.5">
+        <p><strong className="text-white/70">Webhook / Zapier</strong> — einfachster Fall: der Agent ruft die URL mit einem JSON-Payload auf, wenn das Gespräch es erfordert. Perfekt für „schick die Daten an mein CRM/Zapier/n8n".</p>
+        <p><strong className="text-white/70">REST API</strong> — für Fachkunden: du deklarierst genau die Endpunkte die der Agent aufrufen darf (z.B. <code className="bg-white/10 px-1 rounded">GET /customers/&#123;id&#125;</code>). Der Agent kann <em>nur</em> diese Endpunkte live nutzen — kein Raten, kein Halluzinieren.</p>
       </div>
+    </div>
+  );
+}
+
+/* ── REST Endpoints sub-editor ── */
+
+function EndpointsEditor({ endpoints, onChange }: { endpoints: ApiEndpoint[]; onChange: (v: ApiEndpoint[]) => void }) {
+  function add() {
+    onChange([...endpoints, {
+      id: crypto.randomUUID(),
+      name: '',
+      method: 'GET',
+      path: '',
+      description: '',
+      params: [],
+    }]);
+  }
+
+  function patch(i: number, p: Partial<ApiEndpoint>) {
+    const next = [...endpoints];
+    next[i] = { ...next[i], ...p } as ApiEndpoint;
+    onChange(next);
+  }
+
+  function remove(i: number) {
+    onChange(endpoints.filter((_, j) => j !== i));
+  }
+
+  return (
+    <div className="border-l-2 border-orange-500/20 pl-3 space-y-2">
+      <p className="text-xs font-semibold text-white/60">Endpunkte</p>
+      {endpoints.map((ep, i) => (
+        <div key={ep.id} className="bg-white/[0.03] rounded-lg px-3 py-2.5 space-y-2">
+          <div className="grid grid-cols-[6rem_1fr_auto] gap-2 items-center">
+            <select value={ep.method} onChange={(e) => patch(i, { method: e.target.value as ApiEndpoint['method'] })}
+              className="rounded-md border border-white/10 bg-[#0F0F18] px-2 py-1.5 text-xs text-white font-mono outline-none">
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
+              <option value="PATCH">PATCH</option>
+            </select>
+            <input value={ep.path} onChange={(e) => patch(i, { path: e.target.value })}
+              placeholder="/customers/{id}"
+              className="rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white font-mono placeholder:text-white/25 focus:border-orange-500/50 outline-none" />
+            <button onClick={() => remove(i)} className="text-white/25 hover:text-red-400 transition-colors cursor-pointer"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+          <input value={ep.name} onChange={(e) => patch(i, { name: e.target.value.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase() })}
+            placeholder="Tool-Name (nur a–z, 0–9, _) — z.B. kunde_suchen"
+            className="w-full rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white font-mono placeholder:text-white/25 focus:border-orange-500/50 outline-none" />
+          <input value={ep.description} onChange={(e) => patch(i, { description: e.target.value })}
+            placeholder="Wann nutzt der Agent diesen Endpunkt? z.B. 'Kundendaten abrufen wenn Anrufer Kundennummer nennt'"
+            className="w-full rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white placeholder:text-white/25 focus:border-orange-500/50 outline-none" />
+
+          <ParamsEditor
+            params={ep.params ?? []}
+            onChange={(params) => patch(i, { params })}
+            pathPlaceholders={Array.from(ep.path.matchAll(/\{([a-zA-Z0-9_]+)\}/g)).map((m) => m[1] ?? '')}
+          />
+        </div>
+      ))}
+      <button onClick={add}
+        className="w-full border border-dashed border-white/10 hover:border-orange-500/30 rounded-md py-1.5 text-xs text-white/35 hover:text-orange-400 transition-all">
+        + Endpunkt hinzufügen
+      </button>
+    </div>
+  );
+}
+
+function ParamsEditor({ params, onChange, pathPlaceholders }: {
+  params: NonNullable<ApiEndpoint['params']>;
+  onChange: (v: NonNullable<ApiEndpoint['params']>) => void;
+  pathPlaceholders: string[];
+}) {
+  function add() {
+    // Pre-fill with path placeholder if there's an unreferenced one
+    const existingNames = new Set(params.map((p) => p.name));
+    const suggestion = pathPlaceholders.find((p) => p && !existingNames.has(p)) ?? '';
+    onChange([...params, { name: suggestion, type: 'string', description: '', required: !!suggestion }]);
+  }
+  function patch(i: number, p: Partial<NonNullable<ApiEndpoint['params']>[number]>) {
+    const next = [...params];
+    next[i] = { ...next[i], ...p } as NonNullable<ApiEndpoint['params']>[number];
+    onChange(next);
+  }
+  function remove(i: number) {
+    onChange(params.filter((_, j) => j !== i));
+  }
+  if (params.length === 0) {
+    return (
+      <button onClick={add}
+        className="text-[11px] text-white/40 hover:text-orange-400 transition-colors underline decoration-dotted">
+        + Parameter für diesen Endpunkt
+      </button>
+    );
+  }
+  return (
+    <div className="space-y-1">
+      <p className="text-[11px] text-white/40">Parameter</p>
+      {params.map((p, i) => (
+        <div key={i} className="grid grid-cols-[1fr_1fr_6rem_auto_auto] gap-1.5 items-center">
+          <input value={p.name} onChange={(e) => patch(i, { name: e.target.value.replace(/[^a-zA-Z0-9_]/g, '_') })}
+            placeholder="name"
+            className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white font-mono placeholder:text-white/25 focus:border-orange-500/50 outline-none" />
+          <input value={p.description} onChange={(e) => patch(i, { description: e.target.value })}
+            placeholder="Beschreibung für den Agent"
+            className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white placeholder:text-white/25 focus:border-orange-500/50 outline-none" />
+          <select value={p.type} onChange={(e) => patch(i, { type: e.target.value as 'string' | 'number' | 'boolean' })}
+            className="rounded border border-white/10 bg-[#0F0F18] px-1.5 py-1 text-[11px] text-white outline-none">
+            <option value="string">Text</option>
+            <option value="number">Zahl</option>
+            <option value="boolean">Ja/Nein</option>
+          </select>
+          <label className="flex items-center gap-1 text-[11px] text-white/50 cursor-pointer">
+            <input type="checkbox" checked={!!p.required} onChange={(e) => patch(i, { required: e.target.checked })}
+              className="rounded border-white/20 bg-white/5 h-3 w-3" />
+            Pflicht
+          </label>
+          <button onClick={() => remove(i)} className="text-white/25 hover:text-red-400 transition-colors cursor-pointer"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+      ))}
+      <button onClick={add}
+        className="text-[11px] text-white/40 hover:text-orange-400 transition-colors underline decoration-dotted mt-1">
+        + Parameter hinzufügen
+      </button>
     </div>
   );
 }

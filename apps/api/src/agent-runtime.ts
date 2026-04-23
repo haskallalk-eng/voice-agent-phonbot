@@ -62,6 +62,7 @@ function toolGuidance() {
     '- Use calendar.book only after the user confirms a slot + service.',
     '- If user wants a callback or handoff, use ticket.create and confirm the phone number.',
     '- Do not claim a booking unless calendar.book succeeded.',
+    '- Mention SMS confirmation only when the tool result contains smsSent=true.',
   ].join('\n');
 }
 

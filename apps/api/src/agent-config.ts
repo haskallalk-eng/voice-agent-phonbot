@@ -23,6 +23,12 @@ import {
 import { triggerBridgeCall } from './twilio-openai-bridge.js';
 import { toE164 } from '@vas/shared';
 import { log } from './logger.js';
+import {
+  buildIntegrationTools,
+  mergeAndEncryptIntegrations,
+  maskApiIntegrationsForClient,
+  type ApiIntegration,
+} from './api-integrations.js';
 
 const AgentConfigSchema = z.object({
   tenantId: z.string().min(1).default('demo'),
@@ -144,8 +150,51 @@ async function tenantIdAvailableOrOwned(tenantId: string, orgId: string): Promis
   return res.rows[0].org_id === orgId;           // already mine
 }
 
+/**
+ * Replace the masked-sentinel authValue round-trips from the client with
+ * the existing encrypted values in the DB, and encrypt any freshly-provided
+ * plaintext. Plaintext never reaches agent_configs.data — the config stored
+ * in the DB only ever has `enc:v1:…` prefixed values or null.
+ */
+async function applyIntegrationEncryption(
+  normalized: AgentConfig,
+  orgId?: string,
+): Promise<AgentConfig> {
+  const incoming = (normalized as Record<string, unknown>).apiIntegrations as
+    | ApiIntegration[] | undefined;
+  if (!incoming?.length) return normalized;
+
+  let existing: ApiIntegration[] | undefined;
+  if (pool) {
+    const row = await pool.query(
+      'SELECT data FROM agent_configs WHERE tenant_id = $1' +
+      (orgId ? ' AND (org_id = $2 OR org_id IS NULL)' : ''),
+      orgId ? [normalized.tenantId, orgId] : [normalized.tenantId],
+    ).catch(() => null);
+    existing = (row?.rows[0]?.data?.apiIntegrations as ApiIntegration[] | undefined) ?? undefined;
+  }
+
+  const merged = mergeAndEncryptIntegrations(incoming, existing);
+  return { ...normalized, apiIntegrations: merged } as AgentConfig;
+}
+
+/**
+ * Transform the stored config into the client-facing view: encrypted
+ * authValues are replaced with a masked sentinel + last-4-chars hint so
+ * the UI can show `••••xyz9` without ever leaking the key to the browser.
+ * Every HTTP response that returns AgentConfig must funnel through this.
+ */
+function toClientConfig(config: AgentConfig): AgentConfig {
+  const integrations = (config as Record<string, unknown>).apiIntegrations as
+    | ApiIntegration[] | undefined;
+  if (!integrations?.length) return config;
+  const masked = maskApiIntegrationsForClient(integrations);
+  return { ...config, apiIntegrations: masked } as AgentConfig;
+}
+
 async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentConfig> {
-  const normalized = parseAgentConfig(config);
+  const parsed = parseAgentConfig(config);
+  const normalized = await applyIntegrationEncryption(parsed, orgId);
   if (!pool) {
     memory.set(normalized.tenantId, normalized);
     return normalized;
@@ -245,7 +294,7 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
     tools.push({
       type: 'custom',
       name: 'calendar_book',
-      description: 'Create a booking after the user confirmed a slot and service.',
+      description: 'Create a booking after the user confirmed a slot and service. Mention SMS confirmation only when the result returns smsSent=true.',
       url: `${webhookBaseUrl}/retell/tools/calendar.book?${signedQuery}`,
       execution_message_description: 'Booking your appointment…',
       parameters: {
@@ -266,7 +315,7 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
     tools.push({
       type: 'custom',
       name: 'ticket_create',
-      description: 'Create a callback or handoff ticket when the user wants human follow-up.',
+      description: 'Create a callback or handoff ticket when the user wants human follow-up. Mention SMS only when the result returns smsSent=true.',
       url: `${webhookBaseUrl}/retell/tools/ticket.create?${signedQuery}`,
       execution_message_description: 'Creating your callback request…',
       parameters: {
@@ -335,11 +384,34 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
     }
   }
 
+  // Phase 3: customer-configured API integrations (webhook/zapier/rest).
+  // Each enabled integration produces one or more custom tools routed
+  // through our /retell/tools/external.call proxy. The proxy loads the
+  // integration by id, decrypts the authValue, and fires the outbound
+  // request with SSRF + rate + timeout guards. See api-integrations.ts
+  // for the full security model.
+  const apiIntegrations = (config as Record<string, unknown>).apiIntegrations as
+    | ApiIntegration[] | undefined;
+  const integrationTools = buildIntegrationTools(
+    apiIntegrations,
+    webhookBaseUrl,
+    signedQuery,
+    config.tenantId,
+  );
+  for (const t of integrationTools) tools.push(t);
+
   return tools;
 }
 
 function toolAuthSecret(): string {
-  return process.env.RETELL_TOOL_AUTH_SECRET || process.env.JWT_SECRET || 'dev-retell-tool-auth';
+  const secret = process.env.RETELL_TOOL_AUTH_SECRET || process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('RETELL_TOOL_AUTH_SECRET (or JWT_SECRET) required in production — refusing to sign tool URLs with a well-known fallback');
+    }
+    return 'dev-retell-tool-auth';
+  }
+  return secret;
 }
 
 function signToolTenant(tenantId: string): string {
@@ -613,16 +685,16 @@ export async function registerAgentConfig(app: FastifyInstance) {
     const { orgId } = req.user as JwtPayload;
     if (!pool) {
       const cfg = memory.get(orgId);
-      return { items: cfg ? [cfg] : [] };
+      return { items: cfg ? [toClientConfig(cfg)] : [] };
     }
     const res = await pool.query(
       `SELECT tenant_id, data FROM agent_configs WHERE org_id = $1 OR tenant_id = $1::text ORDER BY updated_at DESC`,
       [orgId],
     );
-    const items = res.rows.map((r) => parseAgentConfig(r.data));
+    const items = res.rows.map((r) => toClientConfig(parseAgentConfig(r.data)));
     // Always include at least the default config
     if (items.length === 0) {
-      return { items: [parseAgentConfig({ tenantId: orgId })] };
+      return { items: [toClientConfig(parseAgentConfig({ tenantId: orgId }))] };
     }
     return { items };
   });
@@ -662,7 +734,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
       [newTenantId, orgId, cfg],
     );
 
-    return cfg;
+    return toClientConfig(cfg);
   });
 
   // Read config (default = first for org, or specific by ?tenantId=).
@@ -673,7 +745,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
     const { orgId } = req.user as JwtPayload;
     const query = req.query as Record<string, string>;
     const tenantId = query.tenantId ?? orgId;
-    return readConfig(tenantId, orgId);
+    return toClientConfig(await readConfig(tenantId, orgId));
   });
 
   // Preview generated instructions
@@ -824,7 +896,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
       retellCallbackLlmId: serverIds.retellCallbackLlmId,
       retellCallbackAgentId: serverIds.retellCallbackAgentId,
     });
-    return writeConfig(body, orgId);
+    return toClientConfig(await writeConfig(body, orgId));
   });
 
   // Deploy config to Retell AI (save + sync).
@@ -854,7 +926,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
     // new agent on the next webhook call instead of serving from cache.
     if (saved.retellAgentId) invalidateOrgIdCache(saved.retellAgentId);
     if (saved.retellCallbackAgentId) invalidateOrgIdCache(saved.retellCallbackAgentId);
-    return { ok: true, config: saved, retellAgentId: saved.retellAgentId, retellLlmId: saved.retellLlmId };
+    return { ok: true, config: toClientConfig(saved), retellAgentId: saved.retellAgentId, retellLlmId: saved.retellLlmId };
   });
 
   // Delete an agent config
