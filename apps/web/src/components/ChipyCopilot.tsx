@@ -185,13 +185,20 @@ export function ChipyCopilot() {
         }
       `}</style>
 
-      {/* ── FAB Button ── */}
+      {/* ── FAB Button ──
+          Phase 2 mobile-sweep (2026-04-23): bottom position uses
+          env(safe-area-inset-bottom) so the FAB clears iPhone home-indicator
+          bar. Falls back to the original 20px (bottom-5) on non-notched
+          devices. `right` gets the same treatment for rare landscape
+          notches. */}
       {!open && (
         <button
           onClick={() => setOpen(true)}
           aria-label="Chipy Copilot öffnen"
-          className="fixed bottom-5 right-5 z-50 flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
+          className="fixed z-50 flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
           style={{
+            bottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.25rem)',
+            right: 'calc(env(safe-area-inset-right, 0px) + 1.25rem)',
             width: 60, height: 60,
             borderRadius: '50%',
             background: 'linear-gradient(145deg, #1a1a2e 0%, #0f0f1a 100%)',
@@ -203,13 +210,19 @@ export function ChipyCopilot() {
         </button>
       )}
 
-      {/* ── Chat Window ── */}
+      {/* ── Chat Window ──
+          Same safe-area treatment as the FAB. The height clamp at
+          calc(100vh - 100px) reserves space for the top nav + the safe-area
+          inset, so on a notched phone the window doesn't start behind the
+          iOS status bar or end clipped by the home indicator. */}
       {open && (
         <div
-          className="fixed bottom-5 right-5 z-50 flex flex-col overflow-hidden"
+          className="fixed z-50 flex flex-col overflow-hidden"
           style={{
+            bottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.25rem)',
+            right: 'calc(env(safe-area-inset-right, 0px) + 1.25rem)',
             width: 'min(400px, calc(100vw - 24px))',
-            height: 'min(540px, calc(100vh - 100px))',
+            height: 'min(540px, calc(100vh - 120px - env(safe-area-inset-bottom, 0px) - env(safe-area-inset-top, 0px)))',
             borderRadius: 20,
             background: 'linear-gradient(180deg, rgba(15,15,26,0.97) 0%, rgba(10,10,18,0.98) 100%)',
             border: '1px solid rgba(249,115,22,0.15)',
