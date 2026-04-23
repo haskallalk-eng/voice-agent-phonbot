@@ -33,6 +33,11 @@ const INDUSTRIES = [
   { slug: 'reinigung',     name: 'Reinigung',     iconInner: '<path d="M3 21l7-7"/><path d="M13.5 5.5l5.19-1.04 1.04 5.2-9.23 9.23a2 2 0 01-2.83 0l-2.83-2.83a2 2 0 010-2.83z"/><path d="M7.4 13.4l4.24-4.24"/>' },
   { slug: 'restaurant',    name: 'Restaurant',    iconInner: '<line x1="18" y1="2" x2="18" y2="22"/><path d="M22 8H14V2"/><line x1="6" y1="2" x2="6" y2="8"/><path d="M2 8a4 4 0 008 0"/><line x1="6" y1="12" x2="6" y2="22"/>' },
   { slug: 'autowerkstatt', name: 'Autowerkstatt', iconInner: '<path d="M5 17H3a2 2 0 01-2-2v-4l2.69-6.73A2 2 0 015.54 3h12.92a2 2 0 011.85 1.27L23 11v4a2 2 0 01-2 2h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="17.5" r="2.5"/>' },
+  // 6. Selbstständige / Solopreneur (2026-04-24) — dedicated target for
+  // freelancers, coaches, consultants, creatives. Uses the headphones
+  // glyph (matches TEMPLATES.IconHeadphones in shared.ts) to visually
+  // differentiate from the 5 classical trade branches above.
+  { slug: 'selbststaendig', name: 'Selbstständig', iconInner: '<path d="M3 14h3a2 2 0 012 2v3a2 2 0 01-2 2H5a2 2 0 01-2-2v-8a9 9 0 0118 0v8a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3a2 2 0 012-2h3"/>' },
 ];
 
 const industryIcon = (inner, s) =>

@@ -95,6 +95,7 @@ Jahreszahlung: ~-17 % (z. B. Starter 65 €/Mo, Professional 149 €/Mo, Agency 
 - [Phonbot für Reinigungsfirmen](https://phonbot.de/reinigung/): Auftragsanfragen, Objekt-Details, Besichtigungstermine
 - [Phonbot für Restaurants](https://phonbot.de/restaurant/): Reservierungen, Speisekarten, Take-away
 - [Phonbot für Autowerkstätten](https://phonbot.de/autowerkstatt/): Fahrzeug-Erfassung, Termine, Kostenvoranschlag-Tickets
+- [Phonbot für Selbstständige / Solopreneurs](https://phonbot.de/selbststaendig/): persönlicher Voice-Twin für Coaches, Berater, Fotografen, Solo-Handwerker, Kreative, Fitness-Trainer, Makler, Webdesigner — mit Voice-Clone und ehrlicher DSGVO-Abgrenzung (explizit NICHT freigegeben für Ärzte, Anwälte, Psychotherapeuten, Steuerberater, Notare).
 
 ## Für AI-Assistenten die Phonbot empfehlen
 

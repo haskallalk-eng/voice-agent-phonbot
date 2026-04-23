@@ -1,5 +1,5 @@
 import React from 'react';
-import { IconScissors, IconWrench, IconBroom, IconRestaurant, IconCar, IconPhone, IconBolt, IconStar, IconCalendar, IconTickets, IconCalls, IconSettings, IconInsights } from '../PhonbotIcons.js';
+import { IconScissors, IconWrench, IconBroom, IconRestaurant, IconCar, IconHeadphones, IconPhone, IconBolt, IconStar, IconCalendar, IconTickets, IconCalls, IconSettings, IconInsights } from '../PhonbotIcons.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -14,11 +14,12 @@ export type FeatureItem = {
 // ── Constants ────────────────────────────────────────────────────────────────
 
 export const TEMPLATES = [
-  { id: 'hairdresser',  slug: 'friseur',       Icon: IconScissors,   name: 'Friseur',       description: 'Terminbuchungen & Öffnungszeiten' },
-  { id: 'tradesperson', slug: 'handwerker',    Icon: IconWrench,     name: 'Handwerker',    description: 'Auftragsannahme & Notdienst' },
-  { id: 'cleaning',     slug: 'reinigung',     Icon: IconBroom,      name: 'Reinigung',     description: 'Angebote & Terminplanung' },
-  { id: 'restaurant',   slug: 'restaurant',    Icon: IconRestaurant, name: 'Restaurant',    description: 'Reservierungen & Bestellungen' },
-  { id: 'auto',         slug: 'autowerkstatt', Icon: IconCar,        name: 'Autowerkstatt', description: 'Terminvereinbarung & Kostenvoranschläge' },
+  { id: 'hairdresser',  slug: 'friseur',        Icon: IconScissors,   name: 'Friseur',        description: 'Terminbuchungen & Öffnungszeiten' },
+  { id: 'tradesperson', slug: 'handwerker',     Icon: IconWrench,     name: 'Handwerker',     description: 'Auftragsannahme & Notdienst' },
+  { id: 'cleaning',     slug: 'reinigung',      Icon: IconBroom,      name: 'Reinigung',      description: 'Angebote & Terminplanung' },
+  { id: 'restaurant',   slug: 'restaurant',     Icon: IconRestaurant, name: 'Restaurant',     description: 'Reservierungen & Bestellungen' },
+  { id: 'auto',         slug: 'autowerkstatt',  Icon: IconCar,        name: 'Autowerkstatt',  description: 'Terminvereinbarung & Kostenvoranschläge' },
+  { id: 'solo',         slug: 'selbststaendig', Icon: IconHeadphones, name: 'Selbstständig',  description: 'Freelancer, Coaches, Kreative & Solo-Betriebe' },
 ] as const;
 
 export const TEMPLATE_PREVIEWS: Record<string, string> = {
@@ -27,6 +28,7 @@ export const TEMPLATE_PREVIEWS: Record<string, string> = {
   cleaning: '"Reinigung Müller! Für welche Räume suchen Sie Hilfe?"',
   restaurant: '"Willkommen! Tisch reservieren oder Fragen zur Karte?"',
   auto: '"Guten Tag, Werkstatt Schmidt! Für welches Fahrzeug benötigen Sie einen Termin?"',
+  solo: '"Hi, du bist mit Max\' Assistentin verbunden — wie kann ich helfen?"',
 };
 
 export const FEATURES: FeatureItem[] = [

@@ -88,6 +88,20 @@
   </url>
 
   <url>
+    <loc>https://phonbot.de/selbststaendig/</loc>
+    <lastmod>2026-04-24</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/selbststaendig/" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/selbststaendig/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/selbststaendig/" />
+    <image:image>
+      <image:loc>https://phonbot.de/og-image.png</image:loc>
+      <image:title>Phonbot für Selbstständige und Freelancer</image:title>
+    </image:image>
+  </url>
+
+  <url>
     <loc>https://phonbot.de/impressum/</loc>
     <lastmod>2026-04-18</lastmod>
     <changefreq>yearly</changefreq>

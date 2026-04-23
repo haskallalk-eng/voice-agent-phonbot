@@ -330,6 +330,84 @@ const BRANCHEN = [
     ],
     ctaHeading: 'Werkstatt-Telefon automatisieren — 30 Freiminuten',
   },
+  {
+    // 6. Selbstständige / Solopreneur (2026-04-24)
+    // Zielgruppe: Coaches, Berater, Fotografen, Handwerker-Solo, Kreative,
+    // Fitness-/Yoga-Trainer, Makler, Webdesigner. Positioniert als
+    // „Persönlicher Voice-Twin" — bewusst abgegrenzt gegen Ärzte, Anwälte,
+    // Therapeuten (DSGVO Art. 9 / § 203 StGB) via `negativeList`-Block.
+    slug: 'selbststaendig',
+    templateId: 'solo',
+    emoji: '💼',
+    offerPrice: '8.99',
+    h1Text: 'Dein Handy klingelt, während du arbeitest? <span class="accent">Chipy geht ran.</span>',
+    title: 'KI-Telefonassistent für Selbstständige · Keine Anrufe verpassen | Phonbot',
+    description: 'Chipy hebt ab, wenn du arbeitest. Für Coaches, Berater, Fotografen, Handwerker-Solo & Freelancer. Termine buchen, Rückrufe verwalten, DSGVO-konform. Ab 8,99 €/Monat.',
+    eyebrow: 'KI-Telefonassistent für Selbstständige',
+    subtitle: 'Der einzige KI-Telefonassistent, der nach dir klingt. Chipy nimmt deine Anrufe an — mit deiner Stimme, deinen Regeln — während du im Kundentermin, im Workshop oder im Deep Work bist. Ab 8,99 €/Monat.',
+    ogTitle: 'KI-Telefonassistent für Selbstständige · Phonbot',
+    ogDesc: 'Chipy hebt ab, wenn du nicht kannst. Mit deiner Stimme, deinen Regeln — kein Corporate-Tool, ein persönlicher Voice-Twin für Solopreneurs.',
+    serviceName: 'KI-Telefonassistent für Selbstständige',
+    audienceType: 'Freelancer, Coaches, Berater, Solopreneurs',
+    features: [
+      { icon: '📅', title: 'Termine direkt gebucht', desc: '„Haben Sie Donnerstag 14 Uhr frei?" — Chipy prüft Google Calendar / Cal.com live und bucht, während du im Workshop bist.' },
+      { icon: '📝', title: 'Strukturierte Rückruf-Tickets', desc: 'Name, Nummer, Anliegen, Wunschzeit — alles landet strukturiert im Dashboard. Keine Post-its mehr, keine verlorenen Zettel.' },
+      { icon: '🌍', title: '30+ Sprachen nativ', desc: 'Englisch-sprechende Kunden? Italienische Interessenten? Chipy wechselt sprachlich, bleibt persönlich. Wichtig im Online-Business.' },
+      { icon: '🎙️', title: 'Voice-Clone nach dir', desc: 'Im Premium-Setup klingt Chipy wie DU — nicht wie eine austauschbare KI-Stimme. Deine Marke, deine Bindung zum Kunden.' },
+    ],
+    dialogue: [
+      { speaker: 'user', text: '📞 Interessent: „Hallo, ich hab Ihre Website gesehen — bieten Sie Business-Coaching für Solo-Gründer an?"' },
+      { speaker: 'bot', text: 'Phonbot: „Ja, genau das ist Sandras Schwerpunkt. Darf ich fragen, worum es dir konkret geht?"' },
+      { speaker: 'user', text: '📞 Interessent: „Ich bin gerade ins dritte Jahr, stagniere beim Umsatz und brauch jemand, der mit mir Strategie schärft."' },
+      { speaker: 'bot', text: 'Phonbot: „Klingt genau passend. Sandra bietet kostenlose Erstgespräche — hast du nächste Woche einen 30-Min-Slot? Ich hab Mittwoch 10 Uhr oder Freitag 15 Uhr frei."' },
+      { speaker: 'user', text: '📞 Interessent: „Freitag 15 Uhr wäre super."' },
+      { speaker: 'bot', text: 'Phonbot: „Perfekt. Auf welchen Namen, und wie erreicht Sandra dich am besten?"' },
+    ],
+    dialogueNote: '→ Erstgespräch im Kalender · Kontext im Ticket · Dauer: 36 Sek',
+    personasHeadline: 'Gebaut für dich, wenn du einer davon bist',
+    personasLead: 'Chipy passt sich deiner Arbeit an — nicht umgekehrt. Ein paar typische Stimmen aus der Zielgruppe.',
+    personas: [
+      { icon: 'chat', title: 'Business-Coach', quote: 'Können Sie mir sagen, ob Herr Müller noch einen Platz im nächsten Modul hat?' },
+      { icon: 'user', title: 'Unternehmensberater', quote: 'Ich rufe wegen des Erstgesprächs an, das wir nächste Woche geplant hatten.' },
+      { icon: 'calendar', title: 'Fotograf:in', quote: 'Haben Sie Samstag noch einen Termin für ein Familien-Shooting frei?' },
+      { icon: 'star', title: 'Webdesigner:in', quote: 'Haben Sie eine Preisliste für einen kompletten Website-Relaunch?' },
+      { icon: 'phone', title: 'Solo-Handwerker', quote: 'Können Sie bei mir vorbeikommen und ein Angebot machen?' },
+      { icon: 'clock', title: 'Fitness- / Yoga-Trainer:in', quote: 'Wie viel kostet eine 10er-Karte bei Ihnen?' },
+      { icon: 'clipboard', title: 'Makler:in', quote: 'Ich bin interessiert an der Wohnung in der Beispielstraße 5.' },
+      { icon: 'alert', title: 'Kreative (Illustration, Musik)', quote: 'Wir planen eine Hochzeit und brauchen jemanden für die Zeremonie.' },
+    ],
+    value: {
+      headline: 'Wie viele Kunden verlierst du, <span class="accent">während du arbeitest?</span>',
+      insight: {
+        stat: '85 %',
+        claim: 'der Anrufer, die keinen live erreichen, rufen nicht noch einmal an — 62 % wählen direkt den nächsten Anbieter. Jeder verpasste Erstanruf ist meistens ein verlorener Lead.',
+      },
+      scenario: 'Coaching-Solo-Business · ø 40 Erstanfragen/Monat · 500 € Lifetime-Value pro Mandat:',
+      roi: [
+        { icon: 'user', label: 'Menschlicher Büro-Service', amount: '350 €', per: '/Monat' },
+        { icon: 'chat', label: 'Phonbot Selbstständig — 360 Min inkl.', amount: '8,99 €', per: '/Monat' },
+        { icon: 'star', label: 'Deine Ersparnis + Zeit zurück', amount: '341 €', per: '/Monat', highlight: true },
+      ],
+      extras: [
+        { icon: 'clock', title: 'Deep-Work-Schutz', desc: 'Dein Handy vibriert nicht mehr während du im Kundentermin bist. Chipy regelt die Erst-Qualifizierung, du siehst später im Dashboard was passiert ist.' },
+        { icon: 'phone', title: 'Kein Anruf versickert', desc: 'Auch abends, sonntags, im Urlaub — Chipy hebt immer ab, nimmt Kontext auf, vereinbart Rückruf oder bucht direkt.' },
+        { icon: 'star', title: 'Du bleibst der Kontakt', desc: 'Chipy ist die ersten 30 Sekunden. Wer mit dir selbst sprechen will, kommt auch mit dir selbst zusammen — nur nicht gerade jetzt.' },
+      ],
+    },
+    faq: [
+      { q: 'Wie klingt Chipy am Telefon — erkennt der Anrufer die KI?', a: 'Im Standard-Setup verwendet Chipy eine von 30+ nativen Stimmen (DE/EN/FR/ES/IT/TR/PL/NL). Die meisten Anrufer merken es nicht. Im Premium-Setup kannst du deine eigene Stimme klonen — dann hört der Anrufer dich.' },
+      { q: 'Kann ich bestimmen, welche Anrufe durchgestellt werden?', a: 'Ja. Du legst Regeln fest: Notfall-Keywords („dringend", „heute noch") lösen sofort einen Push oder eine Weiterleitung an dein Handy aus, alles andere landet im Dashboard als Ticket zum ruhigen Nachbearbeiten.' },
+      { q: 'Ich bin oft im Ausland / Zeitzone wechselt — geht das?', a: 'Ja. Chipy kennt deine Zeitzone und die des Anrufers und wählt passende Slots. Mehrsprachigkeit auf dem gleichen Agent: ein Anruf kommt auf Deutsch rein, der nächste auf Englisch — Chipy wechselt automatisch.' },
+      { q: 'Wie schnell ist das Ding einsatzbereit?', a: 'Schnell-Setup: 5 Minuten (Name, Geschäftsart, Kalender verbunden — fertig). Premium-Setup inkl. Voice-Clone + Custom-Prompt + Workflows: 30 Minuten. Du kannst mit Schnell-Setup starten und später tiefer konfigurieren.' },
+      { q: 'Kann ich später zwischen den Plänen wechseln?', a: 'Jederzeit, monatlich. Einstieg mit Phonbot Nummer-Plan (8,99 €/Mo, 360 Min), Upgrade auf Starter (79 €/Mo, mehr Inklusivminuten + Premium-Features) wenn du Voice-Clone oder mehr Traffic brauchst.' },
+    ],
+    negativeList: {
+      heading: 'Nicht geeignet für Heil-, Rechts- und Steuerberufe',
+      body: 'Phonbot ist aktuell <strong>nicht freigegeben</strong> für: Ärzte, Zahnärzte, Psychotherapeuten, Heilpraktiker, Physiotherapeuten mit Heilbehandlungs-Schwerpunkt, Anwälte, Steuerberater, Notare, Mediatoren. Diese Berufsgruppen verarbeiten besondere personenbezogene Daten (DSGVO Art. 9) oder unterliegen Berufsgeheimnissen (§ 203 StGB) — wir bauen dafür zuerst die erforderlichen vertraglichen und technischen Schutzmaßnahmen (Auftragsverarbeitung nach Art. 28, Pseudonymisierung, sektorspezifische Einwilligungs-Flows). Auch Lebens-/Mindset-Coaches mit quasi-therapeutischer Arbeit fallen in diese Gruppe.',
+      waitlistHint: 'Warteliste für dein Segment? Schreib eine E-Mail an info@phonbot.de — wir melden uns, sobald die Freigabe steht.',
+    },
+    ctaHeading: 'Dein persönlicher Telefonassistent — in 5 Minuten aktiv',
+  },
 ];
 
 const STYLE = `*{margin:0;padding:0;box-sizing:border-box}
@@ -500,10 +578,33 @@ p{color:rgba(255,255,255,.7)}
 /* ── Demo hint chip ── */
 .demo-hint{display:inline-flex;align-items:center;padding:.5rem 1rem;border-radius:.625rem;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);font-size:.8125rem;color:#67E8F9;margin-top:1.25rem}
 
+/* ── Persona-Katalog (optional — opt-in per BRANCHEN.personas) ──
+   Glass cards in a responsive 4/2/1-col grid. Each card keeps wording tight
+   so the reader scans the heading + one-line quote in <2s per persona. */
+.personas-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;max-width:60rem;margin:0 auto}
+.persona-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:1rem;padding:1.25rem;backdrop-filter:blur(16px);transition:all .25s}
+.persona-card:hover{border-color:rgba(249,115,22,.25);background:rgba(255,255,255,.06)}
+.persona-icon{width:2.25rem;height:2.25rem;border-radius:.625rem;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(249,115,22,.14),rgba(6,182,212,.08));color:#FDBA74;margin-bottom:.75rem}
+.persona-title{font-size:.9375rem;font-weight:600;color:#fff;margin-bottom:.375rem}
+.persona-quote{font-size:.8125rem;color:rgba(255,255,255,.55);line-height:1.5;font-style:italic}
+
+/* ── DSGVO-Disclaimer (optional — opt-in per BRANCHEN.negativeList) ──
+   Amber-tinted glass card so it reads as a serious caveat without looking
+   like an error banner. Kept visually below FAQ, above final-CTA. */
+.disclaimer-card{max-width:48rem;margin:0 auto;background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.25);border-radius:1rem;padding:1.5rem}
+.disclaimer-head{display:flex;align-items:center;gap:.625rem;color:#FBBF24;font-size:.875rem;margin-bottom:.75rem}
+.disclaimer-ic{display:inline-flex;align-items:center;justify-content:center;width:1.75rem;height:1.75rem;border-radius:.5rem;background:rgba(251,191,36,.12)}
+.disclaimer-body{color:rgba(255,255,255,.7);font-size:.9375rem;line-height:1.6}
+.disclaimer-waitlist{color:rgba(255,255,255,.45);font-size:.8125rem;line-height:1.55;margin-top:.75rem}
+
 /* ── Footer (shared partial) ── */
 ${FOOTER_STYLE}`;
 
 function buildPage(d) {
+  // Default offer price 49 for legacy branches; new branches (e.g.
+  // selbststaendig) can override via `d.offerPrice` to reflect actual
+  // entry-tier pricing (Nummern-Plan 8.99).
+  const offerPrice = d.offerPrice ?? '49';
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'Service',
@@ -524,9 +625,9 @@ function buildPage(d) {
     audience: { '@type': 'BusinessAudience', audienceType: d.audienceType },
     offers: {
       '@type': 'Offer',
-      price: '49',
+      price: offerPrice,
       priceCurrency: 'EUR',
-      priceSpecification: { '@type': 'UnitPriceSpecification', price: '49', priceCurrency: 'EUR', unitText: 'MONTH' },
+      priceSpecification: { '@type': 'UnitPriceSpecification', price: offerPrice, priceCurrency: 'EUR', unitText: 'MONTH' },
     },
   };
 
@@ -587,6 +688,47 @@ function buildPage(d) {
         </div>`,
     )
     .join('\n        ');
+
+  // Optional persona-catalogue (only selbststaendig uses it today).
+  // Renders as a responsive grid of small glass cards — each one is a
+  // "das bin ich"-wiedererkennungs-trigger for a target segment. Skipped
+  // entirely on legacy branches.
+  const personasBlock = d.personas
+    ? `
+<section>
+  <div class="container">
+    <h2>${d.personasHeadline ?? 'Für wen ist Phonbot gemacht?'}</h2>
+    <p class="section-lead">${d.personasLead ?? 'Findest du dich hier wieder? Dann passt Phonbot.'}</p>
+    <div class="personas-grid">
+      ${d.personas.map((p) => `<div class="persona-card">
+        <div class="persona-icon">${icon(p.icon, 22)}</div>
+        <div class="persona-title">${p.title}</div>
+        <div class="persona-quote">„${p.quote}"</div>
+      </div>`).join('\n      ')}
+    </div>
+  </div>
+</section>`
+    : '';
+
+  // Optional DSGVO-disclaimer — positive + negative audience list. For
+  // branches where customers handle Art. 9 DSGVO data (medical / legal /
+  // therapy) we must NOT claim Phonbot is ready. The negative list keeps
+  // the audience expectation honest and serves as a legal guard.
+  const disclaimerBlock = d.negativeList
+    ? `
+<section>
+  <div class="container">
+    <div class="disclaimer-card">
+      <div class="disclaimer-head">
+        <span class="disclaimer-ic">${icon('alert', 18)}</span>
+        <strong>${d.negativeList.heading ?? 'Wichtiger DSGVO-Hinweis'}</strong>
+      </div>
+      <p class="disclaimer-body">${d.negativeList.body}</p>
+      ${d.negativeList.waitlistHint ? `<p class="disclaimer-waitlist">${d.negativeList.waitlistHint}</p>` : ''}
+    </div>
+  </div>
+</section>`
+    : '';
 
   return `<!doctype html>
 <html lang="de">
@@ -664,7 +806,7 @@ ${NAV_HTML}
     </div>
   </div>
 </section>
-
+${personasBlock}
 <section>
   <div class="container">
     <h2>${d.value.headline}</h2>
@@ -693,7 +835,7 @@ ${NAV_HTML}
     </div>
   </div>
 </section>
-
+${disclaimerBlock}
 <section style="text-align:center">
   <div class="container">
     <h2>${d.ctaHeading}</h2>
