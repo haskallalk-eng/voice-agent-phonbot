@@ -711,6 +711,9 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
   const [googleLoading, setGoogleLoading] = useState(false);
   const [microsoftLoading, setMicrosoftLoading] = useState(false);
   const [disconnectLoading, setDisconnectLoading] = useState(false);
+  // Inline confirm instead of browser confirm() — chipy-design prefers
+  // in-card affordances over system dialogs for quiet moments.
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
   async function loadStatus() {
     setLoading(true); setError(null);
@@ -767,7 +770,44 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
     </div>
   );
 
-  const meta = PROVIDER_META[status?.provider ?? ''];
+  // Shared helper: runs disconnect + reloads status. Wrapped so the inline
+  // confirm strip and any other trigger uses exactly one code path.
+  async function runDisconnect() {
+    setDisconnectLoading(true);
+    try {
+      await disconnectCalendar();
+      await loadStatus();
+    } catch (e: unknown) {
+      setError((e instanceof Error ? e.message : null) ?? 'Trennen fehlgeschlagen');
+    } finally {
+      setDisconnectLoading(false);
+      setConfirmDisconnect(false);
+    }
+  }
+
+  // Small inline-confirm strip rendered under a connected provider row
+  // instead of a modal. Same design in both CalendarPage and CapabilitiesTab
+  // so the disconnect-flow feels identical everywhere.
+  function InlineConfirmStrip({ providerLabel }: { providerLabel: string }) {
+    if (!confirmDisconnect) return null;
+    return (
+      <div className="px-5 pb-4 -mt-1 border-t border-red-500/15 pt-3">
+        <p className="text-xs text-white/70 mb-2.5 leading-relaxed">
+          <span className="text-red-300">Sicher trennen?</span> Dein Agent kann nach dem Trennen keine Termine mehr in <span className="text-white">{providerLabel}</span> eintragen oder prüfen — bis du's wieder verbindest.
+        </p>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setConfirmDisconnect(false)}
+            className="rounded-lg px-3 py-1.5 text-xs text-white/60 hover:text-white bg-white/5 hover:bg-white/10 transition-colors cursor-pointer">
+            Abbrechen
+          </button>
+          <button onClick={runDisconnect} disabled={disconnectLoading}
+            className="rounded-lg px-3 py-1.5 text-xs font-semibold text-red-200 bg-red-500/15 hover:bg-red-500/25 border border-red-500/25 transition-colors disabled:opacity-50 cursor-pointer">
+            {disconnectLoading ? 'Trenne…' : 'Ja, trennen'}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -778,31 +818,10 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
         </div>
       )}
 
-      {/* Connected provider (if any external one) */}
-      {status?.connected && meta && status.provider !== 'chipy' && (
-        <div className="rounded-2xl p-5 border border-white/10" style={{ background: meta.bg }}>
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0 bg-white/5">{meta.icon}</div>
-              <div>
-                <p className="text-sm font-semibold text-white">{meta.label}</p>
-                {status.email && <p className="text-xs text-white/50">{status.email}</p>}
-                <div className="flex items-center gap-1 mt-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                  <span className="text-[10px] text-green-400 font-medium">Verbunden</span>
-                </div>
-              </div>
-            </div>
-            <button onClick={async () => { setDisconnectLoading(true); try { await disconnectCalendar(); await loadStatus(); } catch (e: unknown) { setError((e instanceof Error ? e.message : null) ?? 'Trennen fehlgeschlagen'); } finally { setDisconnectLoading(false); } }}
-              disabled={disconnectLoading}
-              className="shrink-0 px-3 py-1.5 rounded-xl text-xs text-red-300 border border-red-500/20 hover:bg-red-500/10 transition-all disabled:opacity-50">
-              {disconnectLoading ? 'Trenne…' : 'Trennen'}
-            </button>
-          </div>
-        </div>
-      )}
+      {/* The old top "Connected provider" card was removed 2026-04-23 —
+          each provider now appears exactly once in the grid below with its
+          status + disconnect action inline. */}
 
-      {/* Always show provider options (not hidden behind connected check) */}
       <div className="space-y-3">
         <p className="text-xs text-white/40 mb-3">
           Verbinde einen Kalender, damit dein Agent Termine prüfen und buchen kann.
@@ -818,24 +837,33 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
           {(() => {
             const isConnected = status?.connected && status.provider === 'google';
             return (
-              <div className="flex items-center gap-4 rounded-2xl px-5 py-4 hover:bg-white/[0.04] transition-all" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(66,133,244,0.08)' }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" className="fancy-star"><defs><linearGradient id="gglCal" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#4285F4"/><stop offset="33%" stopColor="#34A853"/><stop offset="66%" stopColor="#FBBC05"/><stop offset="100%" stopColor="#EA4335"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill="url(#gglCal)"/></svg>
+              <div className="rounded-2xl hover:bg-white/[0.04] transition-all" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="flex items-center gap-4 px-5 py-4">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(66,133,244,0.08)' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" className="fancy-star"><defs><linearGradient id="gglCal" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#4285F4"/><stop offset="33%" stopColor="#34A853"/><stop offset="66%" stopColor="#FBBC05"/><stop offset="100%" stopColor="#EA4335"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill="url(#gglCal)"/></svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-white">Google Calendar</p>
+                    <p className="text-[11px] text-white/30 truncate">{isConnected ? status.email ?? 'Verbunden' : 'OAuth 2.0'}</p>
+                  </div>
+                  {isConnected ? (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="flex items-center gap-1.5 text-[11px] text-green-400/80 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-green-400" />Verbunden</span>
+                      <button onClick={() => setConfirmDisconnect(true)} disabled={disconnectLoading || confirmDisconnect}
+                        className="text-[11px] text-white/35 hover:text-red-400 transition-colors disabled:opacity-40 cursor-pointer">
+                        Trennen
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={async () => { setGoogleLoading(true); try { const { url } = await getGoogleCalendarAuthUrl(); window.location.href = url; } catch { setGoogleLoading(false); } }}
+                      disabled={googleLoading}
+                      className="shrink-0 rounded-lg px-4 py-2 font-semibold text-xs text-white disabled:opacity-50 transition-all hover:brightness-110 cursor-pointer"
+                      style={{ background: 'linear-gradient(135deg, #4285F4, #34A853, #FBBC05, #EA4335)', backgroundSize: '300% 300%', animation: 'fancy-bg 4s ease infinite' }}>
+                      {googleLoading ? 'Verbinde…' : 'Verbinden'}
+                    </button>
+                  )}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-semibold text-white">Google Calendar</p>
-                  <p className="text-[11px] text-white/30">{isConnected ? status.email ?? 'Verbunden' : 'OAuth 2.0'}</p>
-                </div>
-                {isConnected ? (
-                  <span className="flex items-center gap-1.5 text-[11px] text-green-400/70 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-green-400" />Verbunden</span>
-                ) : (
-                  <button onClick={async () => { setGoogleLoading(true); try { const { url } = await getGoogleCalendarAuthUrl(); window.location.href = url; } catch { setGoogleLoading(false); } }}
-                    disabled={googleLoading}
-                    className="shrink-0 rounded-lg px-4 py-2 font-semibold text-xs text-white disabled:opacity-50 transition-all hover:brightness-110 cursor-pointer"
-                    style={{ background: 'linear-gradient(135deg, #4285F4, #34A853, #FBBC05, #EA4335)', backgroundSize: '300% 300%', animation: 'fancy-bg 4s ease infinite' }}>
-                    {googleLoading ? 'Verbinde…' : 'Verbinden'}
-                  </button>
-                )}
+                {isConnected && <InlineConfirmStrip providerLabel="Google Calendar" />}
               </div>
             );
           })()}
@@ -844,22 +872,31 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
           {(() => {
             const isConnected = status?.connected && status.provider === 'microsoft';
             return (
-              <div className="flex items-center gap-4 rounded-2xl px-5 py-4 hover:bg-white/[0.04] transition-all" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-lg" style={{ background: 'rgba(0,120,212,0.08)' }}>🪟</div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-semibold text-white">Microsoft Outlook</p>
-                  <p className="text-[11px] text-white/30">{isConnected ? status.email ?? 'Verbunden' : 'Office 365 / Outlook.com'}</p>
+              <div className="rounded-2xl hover:bg-white/[0.04] transition-all" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="flex items-center gap-4 px-5 py-4">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-lg" style={{ background: 'rgba(0,120,212,0.08)' }}>🪟</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-white">Microsoft Outlook</p>
+                    <p className="text-[11px] text-white/30 truncate">{isConnected ? status.email ?? 'Verbunden' : 'Office 365 / Outlook.com'}</p>
+                  </div>
+                  {isConnected ? (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="flex items-center gap-1.5 text-[11px] text-green-400/80 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-green-400" />Verbunden</span>
+                      <button onClick={() => setConfirmDisconnect(true)} disabled={disconnectLoading || confirmDisconnect}
+                        className="text-[11px] text-white/35 hover:text-red-400 transition-colors disabled:opacity-40 cursor-pointer">
+                        Trennen
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={async () => { setMicrosoftLoading(true); try { const { url } = await getMicrosoftCalendarAuthUrl(); window.location.href = url; } catch { setMicrosoftLoading(false); } }}
+                      disabled={microsoftLoading}
+                      className="shrink-0 rounded-lg px-4 py-2 font-semibold text-xs text-white disabled:opacity-50 transition-all hover:brightness-110 cursor-pointer"
+                      style={{ background: 'linear-gradient(135deg, #0078D4, #00BCF2)' }}>
+                      {microsoftLoading ? 'Verbinde…' : 'Verbinden'}
+                    </button>
+                  )}
                 </div>
-                {isConnected ? (
-                  <span className="flex items-center gap-1.5 text-[11px] text-green-400/70 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-green-400" />Verbunden</span>
-                ) : (
-                  <button onClick={async () => { setMicrosoftLoading(true); try { const { url } = await getMicrosoftCalendarAuthUrl(); window.location.href = url; } catch { setMicrosoftLoading(false); } }}
-                    disabled={microsoftLoading}
-                    className="shrink-0 rounded-lg px-4 py-2 font-semibold text-xs text-white disabled:opacity-50 transition-all hover:brightness-110 cursor-pointer"
-                    style={{ background: 'linear-gradient(135deg, #0078D4, #00BCF2)' }}>
-                    {microsoftLoading ? 'Verbinde…' : 'Verbinden'}
-                  </button>
-                )}
+                {isConnected && <InlineConfirmStrip providerLabel="Microsoft Outlook" />}
               </div>
             );
           })()}
@@ -878,7 +915,13 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
                     <p className="text-[11px] text-white/30">{isConnected ? 'Verbunden' : 'API Key'}</p>
                   </div>
                   {isConnected && (
-                    <span className="flex items-center gap-1.5 text-[11px] text-green-400/70 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-green-400" />Verbunden</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="flex items-center gap-1.5 text-[11px] text-green-400/80 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-green-400" />Verbunden</span>
+                      <button onClick={() => setConfirmDisconnect(true)} disabled={disconnectLoading || confirmDisconnect}
+                        className="text-[11px] text-white/35 hover:text-red-400 transition-colors disabled:opacity-40 cursor-pointer">
+                        Trennen
+                      </button>
+                    </div>
                   )}
                 </div>
                 {!isConnected && (
@@ -897,6 +940,7 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
                     {calcomError && <p className="text-xs text-red-300 mt-2">{calcomError}</p>}
                   </div>
                 )}
+                {isConnected && <InlineConfirmStrip providerLabel="Cal.com" />}
               </div>
             );
           })()}

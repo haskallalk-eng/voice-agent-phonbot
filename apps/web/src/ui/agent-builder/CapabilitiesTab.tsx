@@ -378,28 +378,13 @@ function CalendarConnector({ integrations, onChange }: {
   }
 
   const connected = (integrations ?? []).filter(c => c.connected);
+  // Inline disconnect confirmation — expands underneath the row instead of
+  // popping a modal, matches the chipy-design "quiet motion" rule.
+  const [confirmDisconnect, setConfirmDisconnect] = useState<string | null>(null);
 
   return (
     <div className="space-y-4">
-      {/* Connected calendars */}
-      {connected.length > 0 && (
-        <div className="space-y-2 mb-2">
-          {connected.map((cal) => (
-            <div key={cal.provider} className="flex items-center gap-3 bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3">
-              {(() => { const P = CALENDAR_PROVIDERS.find((p) => p.id === cal.provider); return P ? <P.Icon size={16} className="text-green-400 shrink-0" /> : null; })()}
-              <div className="flex-1">
-                <p className="text-sm text-white font-medium">{cal.label ?? cal.provider}</p>
-                {cal.email && <p className="text-xs text-white/40">{cal.email}</p>}
-              </div>
-              <span className="flex items-center gap-1 text-xs text-green-400 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />Verbunden</span>
-              <button onClick={() => handleDisconnect(cal.provider)} disabled={loading}
-                className="text-white/30 hover:text-red-400 text-sm disabled:opacity-50 cursor-pointer">Trennen</button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Cal.com API Key input */}
+      {/* Cal.com API Key input (modal-ish banner when user picks cal.com) */}
       {showCalcomInput && (
         <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-4 space-y-3">
           <p className="text-sm text-white/70">Cal.com API Key eingeben:</p>
@@ -408,10 +393,6 @@ function CalendarConnector({ integrations, onChange }: {
             onChange={(e) => setCalcomKey(e.target.value)}
             placeholder="cal_live_..."
             type="password"
-            // F5: API keys are NOT user passwords — autocomplete='off' so Chrome
-            // doesn't store them in the password manager and surface them in
-            // unrelated forms. spellCheck off + autoCorrect off avoid mobile
-            // mangling of the key.
             autoComplete="off"
             spellCheck={false}
             autoCorrect="off"
@@ -432,27 +413,89 @@ function CalendarConnector({ integrations, onChange }: {
         </div>
       )}
 
-      {/* Provider grid */}
+      {/* Unified provider grid — each provider appears exactly once. When
+          connected the row shows the email + green status + inline Trennen
+          action with a confirmation expand underneath. No separate
+          "Connected calendars" section above anymore (was a duplicate). */}
       <div className="grid grid-cols-2 gap-3">
         {CALENDAR_PROVIDERS.map((prov) => {
-          const isConnected = connected.find(c => c.provider === prov.id || (prov.id === 'outlook' && c.provider === ('microsoft' as string)));
+          const isConnected = connected.find(
+            c => c.provider === prov.id || (prov.id === 'outlook' && c.provider === ('microsoft' as string)),
+          );
           const isCalDAV = prov.id === 'caldav';
+          const isConfirming = confirmDisconnect === (isConnected?.provider ?? '');
+
           return (
-            <button key={prov.id} onClick={() => !isConnected && !isCalDAV && connectProvider(prov.id)}
-              disabled={!!isConnected || loading || isCalDAV}
-              className={`flex items-center gap-3 p-4 rounded-xl border transition-all text-left ${
-                isConnected
-                  ? 'border-green-500/20 bg-green-500/5 opacity-60 cursor-default'
-                  : isCalDAV
-                    ? 'border-white/10 bg-white/5 opacity-40 cursor-default'
-                    : 'border-white/10 bg-white/5 hover:border-orange-500/40 hover:bg-white/10 cursor-pointer'
-              }`}>
-              <prov.Icon size={18} className="text-white/50 shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-white">{prov.name}</p>
-                <p className="text-xs text-white/40">{isConnected ? 'Bereits verbunden' : isCalDAV ? 'Bald verfügbar' : prov.desc}</p>
+            <div key={prov.id} className={`rounded-xl border transition-all ${
+              isConnected
+                ? 'border-green-500/25 bg-green-500/[0.06]'
+                : isCalDAV
+                  ? 'border-white/10 bg-white/5 opacity-40'
+                  : 'border-white/10 bg-white/5 hover:border-orange-500/40 hover:bg-white/10'
+            }`}>
+              {/* Row body */}
+              <div className="flex items-center gap-3 p-4">
+                <prov.Icon size={18} className={isConnected ? 'text-green-400 shrink-0' : 'text-white/50 shrink-0'} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-white">{prov.name}</p>
+                  <p className="text-xs text-white/40 truncate">
+                    {isConnected ? (isConnected.email ?? 'Verbunden') : isCalDAV ? 'Bald verfügbar' : prov.desc}
+                  </p>
+                </div>
+                {isConnected ? (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="flex items-center gap-1 text-[11px] text-green-400/80 font-medium">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />Verbunden
+                    </span>
+                    <button
+                      onClick={() => setConfirmDisconnect(isConnected.provider)}
+                      disabled={loading || isConfirming}
+                      className="text-xs text-white/35 hover:text-red-400 transition-colors disabled:opacity-40 cursor-pointer"
+                    >
+                      Trennen
+                    </button>
+                  </div>
+                ) : !isCalDAV ? (
+                  <button
+                    onClick={() => connectProvider(prov.id)}
+                    disabled={loading}
+                    className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 cursor-pointer transition-all hover:brightness-110"
+                    style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                  >
+                    Verbinden
+                  </button>
+                ) : null}
               </div>
-            </button>
+
+              {/* Inline disconnect confirm — expands under the row.
+                  Chipy-design: red-tinted glass strip, destructive action on
+                  the right, abbrechen as ghost on the left. */}
+              {isConfirming && isConnected && (
+                <div className="px-4 pb-4 -mt-1 border-t border-red-500/15 pt-3">
+                  <p className="text-xs text-white/70 mb-2.5 leading-relaxed">
+                    <span className="text-red-300">Sicher trennen?</span> Dein Agent kann nach dem Trennen keine Termine mehr in <span className="text-white">{prov.name}</span> eintragen oder prüfen — bis du's wieder verbindest.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setConfirmDisconnect(null)}
+                      className="rounded-lg px-3 py-1.5 text-xs text-white/60 hover:text-white bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
+                    >
+                      Abbrechen
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await handleDisconnect(isConnected.provider);
+                        setConfirmDisconnect(null);
+                      }}
+                      disabled={loading}
+                      className="rounded-lg px-3 py-1.5 text-xs font-semibold text-red-200 bg-red-500/15 hover:bg-red-500/25 border border-red-500/25 transition-colors disabled:opacity-50 cursor-pointer"
+                    >
+                      {loading ? 'Trenne…' : 'Ja, trennen'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
