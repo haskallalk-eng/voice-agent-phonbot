@@ -159,6 +159,19 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   100% { filter: hue-rotate(360deg); }
 }
 
+/* Deep-link highlight: dashboard row click navigates to the target page,
+   target component adds `.focus-pulse` for ~2.2s to draw attention. Orange
+   gradient glow ring + gentle scale so the effect is noticeable but quiet. */
+.focus-pulse {
+  animation: focus-pulse 2.2s ease-out;
+}
+@keyframes focus-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(249,115,22,0.55); }
+  30%  { box-shadow: 0 0 0 10px rgba(249,115,22,0.18); }
+  60%  { box-shadow: 0 0 0 6px rgba(249,115,22,0.08); }
+  100% { box-shadow: 0 0 0 0 rgba(249,115,22,0); }
+}
+
 @keyframes fancy-bg {
   0%   { background-position: 0% 50%; }
   50%  { background-position: 100% 50%; }

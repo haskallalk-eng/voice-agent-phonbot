@@ -229,7 +229,7 @@ function DayDrawer({
             <div className="space-y-1.5">
               <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest">Termine</p>
               {dayBookings.map(b => (
-                <div key={b.id} className="flex items-start gap-3 rounded-xl bg-white/5 px-3 py-2.5">
+                <div key={b.id} data-booking-id={b.id} className="flex items-start gap-3 rounded-xl bg-white/5 px-3 py-2.5">
                   <div className="shrink-0 text-orange-400 font-mono text-xs mt-0.5 w-10">{formatTime(b.slot_time)}</div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-white truncate">{b.customer_name}</p>
@@ -966,7 +966,7 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
 
 type Tab = 'calendar' | 'schedule' | 'connections';
 
-export function CalendarPage() {
+export function CalendarPage({ focusBookingId }: { focusBookingId?: string | null } = {}) {
   const [tab, setTab] = useState<Tab>('calendar');
   const [calendarStatus, setCalendarStatus] = useState<CalendarStatus | null>(null);
 
@@ -979,6 +979,25 @@ export function CalendarPage() {
   // Modal state
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [showAddBooking, setShowAddBooking] = useState(false);
+
+  // Deep-link from dashboard click: arrive with ?focusBookingId → switch to
+  // the calendar tab, open the day panel for that booking's date, and pulse
+  // the row briefly so the user sees which one they clicked.
+  useEffect(() => {
+    if (!focusBookingId || bookings.length === 0) return;
+    const b = bookings.find((x) => x.id === focusBookingId);
+    if (!b) return;
+    setTab('calendar');
+    setSelectedDay(new Date(b.slot_time));
+    const t = window.setTimeout(() => {
+      const el = document.querySelector<HTMLElement>(`[data-booking-id="${CSS.escape(b.id)}"]`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('focus-pulse');
+      window.setTimeout(() => el.classList.remove('focus-pulse'), 2200);
+    }, 200);
+    return () => window.clearTimeout(t);
+  }, [focusBookingId, bookings]);
 
   // Load chipy data + bookings for a 3-month window
   const loadChipy = useCallback(async () => {

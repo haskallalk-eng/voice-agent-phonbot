@@ -82,34 +82,49 @@ export type Page = 'home' | 'agent' | 'test' | 'tickets' | 'logs' | 'billing' | 
 function Dashboard() {
   const { user, org, logout } = useAuth();
   const VALID_PAGES: Page[] = ['home', 'agent', 'test', 'tickets', 'logs', 'billing', 'phone', 'calendar', 'insights'];
+  // Hash format: `#page` OR `#page/itemId` — the second form lets the dashboard
+  // deep-link into a specific ticket/call/booking so clicking a row there
+  // opens that exact row on the target page.
+  const parseHash = (): { page: Page; focusId: string | null } => {
+    const h = window.location.hash.replace('#', '');
+    if (!h) return { page: 'home', focusId: null };
+    const [p, id] = h.split('/');
+    const candidate = p as Page;
+    return {
+      page: VALID_PAGES.includes(candidate) ? candidate : 'home',
+      focusId: id ?? null,
+    };
+  };
   const initialPage = (): Page => {
     const params = new URLSearchParams(window.location.search);
     if (params.has('calendarConnected') || params.has('calendarError')) return 'calendar';
-    // Restore last page from URL hash (e.g. #billing → billing)
-    const hash = window.location.hash.replace('#', '') as Page;
-    if (hash && VALID_PAGES.includes(hash)) return hash;
-    return 'home';
+    return parseHash().page;
   };
   const [page, setPage] = useState<Page>(initialPage);
+  const [focusId, setFocusId] = useState<string | null>(() => parseHash().focusId);
 
-  // Persist current page in URL hash so reload stays on the same page
+  // Combined navigator — target pages read focusId prop to scroll-to /
+  // highlight the item. Second call with only `p` clears focusId.
+  const navigate = (p: Page, id?: string | null) => {
+    setPage(p);
+    setFocusId(id ?? null);
+  };
+
+  // Persist current page+focusId in URL hash so reload / copy-paste works.
   useEffect(() => {
-    const newHash = page === 'home' ? '' : `#${page}`;
+    const base = page === 'home' ? '' : `#${page}`;
+    const newHash = base && focusId ? `${base}/${focusId}` : base;
     if (window.location.hash !== newHash) {
-      // Use pushState (not replaceState) so back/forward buttons create history entries
       window.history.pushState(null, '', newHash || window.location.pathname + window.location.search);
     }
-  }, [page]);
+  }, [page, focusId]);
 
   // L7: Sync page state with browser back/forward navigation
   useEffect(() => {
     const onPopState = () => {
-      const hash = window.location.hash.replace('#', '') as Page;
-      if (hash && VALID_PAGES.includes(hash)) {
-        setPage(hash);
-      } else {
-        setPage('home');
-      }
+      const parsed = parseHash();
+      setPage(parsed.page);
+      setFocusId(parsed.focusId);
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -200,7 +215,7 @@ function Dashboard() {
           <div className="relative z-10 w-64">
             <Sidebar
               current={page}
-              onNavigate={(p) => { setPage(p); setSidebarOpen(false); }}
+              onNavigate={(p) => { navigate(p); setSidebarOpen(false); }}
               org={org}
               user={user}
               onLogout={logout}
@@ -211,7 +226,7 @@ function Dashboard() {
 
       {/* Desktop sidebar */}
       <div className="hidden md:block">
-        <Sidebar current={page} onNavigate={setPage} org={org} user={user} onLogout={logout} />
+        <Sidebar current={page} onNavigate={(p) => navigate(p)} org={org} user={user} onLogout={logout} />
       </div>
 
       <main className="flex-1 overflow-y-auto md:ml-0 mt-12 md:mt-0 relative">
@@ -276,14 +291,14 @@ function Dashboard() {
         {/* Page content — key forces React to remount on navigation,
             triggering the fade-up CSS animation for a smooth transition. */}
         <div key={page} className="fade-up">
-          {page === 'home' && <DashboardHome onNavigate={setPage} />}
+          {page === 'home' && <DashboardHome onNavigate={navigate} />}
           {page === 'agent' && <AgentBuilder onNavigate={setPage} />}
           {page === 'test' && <TestConsole onNavigate={setPage} />}
-          {page === 'tickets' && <TicketInbox />}
-          {page === 'logs' && <CallLog />}
+          {page === 'tickets' && <TicketInbox focusId={focusId} />}
+          {page === 'logs' && <CallLog focusId={focusId} />}
           {page === 'billing' && <BillingPage />}
           {page === 'phone' && <PhoneManager onNavigate={setPage as (page: string) => void} />}
-          {page === 'calendar' && <CalendarPage />}
+          {page === 'calendar' && <CalendarPage focusBookingId={focusId} />}
           {page === 'insights' && <InsightsPage />}
         </div>
       </main>

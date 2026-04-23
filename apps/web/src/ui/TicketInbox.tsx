@@ -41,12 +41,29 @@ function phoneUsable(phone: string | null | undefined): boolean {
   return trimmed.toLowerCase() !== 'unknown' && trimmed.toLowerCase() !== 'unbekannt';
 }
 
-export function TicketInbox() {
+export function TicketInbox({ focusId }: { focusId?: string | null } = {}) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<DisplayStatus | 'all'>('all');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
+
+  // Deep-link highlight: when arrived via dashboard click (#tickets/42),
+  // switch filter to "all", reset pagination so the target ticket is visible,
+  // scroll it into view and pulse-glow it briefly.
+  useEffect(() => {
+    if (!focusId || loading) return;
+    setFilter('all');
+    setPage(1);
+    const t = window.setTimeout(() => {
+      const el = document.querySelector<HTMLElement>(`[data-ticket-id="${CSS.escape(focusId)}"]`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('focus-pulse');
+      window.setTimeout(() => el.classList.remove('focus-pulse'), 2200);
+    }, 100);
+    return () => window.clearTimeout(t);
+  }, [focusId, loading]);
 
   async function load() {
     setLoading(true);
@@ -206,6 +223,7 @@ function TicketCard({
 
   return (
     <div
+      data-ticket-id={t.id}
       className={`glass rounded-2xl p-5 transition-all duration-200 ${
         isIncomplete
           ? 'opacity-60 hover:opacity-80 grayscale-[40%]'
