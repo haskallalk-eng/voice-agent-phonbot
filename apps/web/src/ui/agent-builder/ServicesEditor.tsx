@@ -186,6 +186,7 @@ export function ServicesEditor({
                 value={s.name}
                 onChange={(e) => patch(s.id, { name: e.target.value })}
                 placeholder="Name des Services"
+                maxLength={120}
                 className={`flex-1 min-w-0 ${inputBase}`}
               />
               <div className="flex items-center gap-1 shrink-0">
