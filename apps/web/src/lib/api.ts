@@ -700,6 +700,7 @@ export function getRecommendedVoices(language: string) {
     defaultVoiceId: string;
     premiumSurchargePerMinute: number;
     language: string;
+    nativeStatus: 'many' | 'few' | 'none';
     allLanguages: string[];
   }>(`/voices/recommended?language=${encodeURIComponent(language)}`);
 }

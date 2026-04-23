@@ -77,48 +77,55 @@ export const LANGUAGES = [
 
 export const CHIPY_VOICE_ID = 'custom_voice_28bd4920fa6523c6ac8c4e527b';
 
-export const LANGUAGE_VOICE_RECOMMENDATIONS: Record<string, { voiceId: string; native: boolean }> = {
-  // Tier 1a — DE/EN/FR/ES defaults point to real native Standard voices
-  // (Chipy clone for DE; Cartesia native speakers for EN/FR/ES).
-  de: { voiceId: CHIPY_VOICE_ID,     native: true  },
-  en: { voiceId: 'cartesia-Cleo',    native: true  },
-  fr: { voiceId: 'cartesia-Emma',    native: true  },
-  es: { voiceId: 'cartesia-Isabel',  native: true  },
-  // Tier 1b — IT/TR/PL/NL also have full native lineups (Cartesia
-  // Sonic covers the locale), so default to the first HQ voice of the
-  // catalog — NOT the German Chipy clone which would speak the locale
-  // with a strong German accent.
-  it: { voiceId: '11labs-Marissa', native: true },
-  tr: { voiceId: '11labs-Marissa', native: true },
-  pl: { voiceId: '11labs-Marissa', native: true },
-  nl: { voiceId: '11labs-Marissa', native: true },
-  // Tier 2a — native Standard-tier recordings exist (Cartesia Sonic
-  // covers the locale). 6-voice native lineup, no fallback banner.
-  pt: { voiceId: '11labs-Marissa', native: true },
-  ru: { voiceId: '11labs-Marissa', native: true },
-  ja: { voiceId: '11labs-Marissa', native: true },
-  ko: { voiceId: '11labs-Marissa', native: true },
-  zh: { voiceId: '11labs-Marissa', native: true },
-  hi: { voiceId: '11labs-Marissa', native: true },
-  sv: { voiceId: '11labs-Marissa', native: true },
-  // Tier 2b — no native recordings at any tier. We ship a compact
-  // 3-voice multilingual fallback so the feature works; `native:false`
-  // surfaces the "upload your own clone" banner in the picker.
-  ar: { voiceId: '11labs-Marissa', native: false },
-  da: { voiceId: '11labs-Marissa', native: false },
-  fi: { voiceId: '11labs-Marissa', native: false },
-  no: { voiceId: '11labs-Marissa', native: false },
-  cs: { voiceId: '11labs-Marissa', native: false },
-  sk: { voiceId: '11labs-Marissa', native: false },
-  hu: { voiceId: '11labs-Marissa', native: false },
-  ro: { voiceId: '11labs-Marissa', native: false },
-  el: { voiceId: '11labs-Marissa', native: false },
-  bg: { voiceId: '11labs-Marissa', native: false },
-  hr: { voiceId: '11labs-Marissa', native: false },
-  uk: { voiceId: '11labs-Marissa', native: false },
-  id: { voiceId: '11labs-Marissa', native: false },
-  ms: { voiceId: '11labs-Marissa', native: false },
-  vi: { voiceId: '11labs-Marissa', native: false },
+export type NativeStatus = 'many' | 'few' | 'none';
+
+/**
+ * Per-language voice recommendations:
+ *  - `voiceId`: sensible default voice id for that language.
+ *  - `nativeStatus`:
+ *      'many' → ≥ 8 genuinely native voices, no banner.
+ *      'few'  → 1–7 native voices, banner nudges toward a clone.
+ *      'none' → no native voices at all; catalog shows a multilingual
+ *               fallback and banner warns about the accent.
+ *
+ * Mirrors the server's VOICE_CATALOG classification — see
+ * apps/api/src/voice-catalog.ts.
+ */
+export const LANGUAGE_VOICE_RECOMMENDATIONS: Record<string, { voiceId: string; nativeStatus: NativeStatus }> = {
+  // Rich native catalogs — no banner.
+  de: { voiceId: CHIPY_VOICE_ID,    nativeStatus: 'many' },
+  en: { voiceId: '11labs-Marissa',  nativeStatus: 'many' },
+  fr: { voiceId: 'cartesia-Eva',    nativeStatus: 'many' },
+  es: { voiceId: 'cartesia-Eva',    nativeStatus: 'many' },
+  it: { voiceId: 'cartesia-Eva',    nativeStatus: 'many' },
+  tr: { voiceId: 'cartesia-Eva',    nativeStatus: 'many' },
+  pl: { voiceId: 'cartesia-Eva',    nativeStatus: 'many' },
+  nl: { voiceId: 'cartesia-Eva',    nativeStatus: 'many' },
+  // Narrow native catalogs (2 voices each) — banner suggests a clone
+  // for more variety.
+  pt: { voiceId: 'cartesia-Eva',    nativeStatus: 'few' },
+  ru: { voiceId: 'cartesia-Eva',    nativeStatus: 'few' },
+  ja: { voiceId: 'cartesia-Eva',    nativeStatus: 'few' },
+  ko: { voiceId: 'cartesia-Eva',    nativeStatus: 'few' },
+  zh: { voiceId: 'cartesia-Eva',    nativeStatus: 'few' },
+  hi: { voiceId: 'cartesia-Eva',    nativeStatus: 'few' },
+  sv: { voiceId: 'cartesia-Eva',    nativeStatus: 'few' },
+  // No native recordings — banner warns about accent.
+  ar: { voiceId: '11labs-Marissa',  nativeStatus: 'none' },
+  da: { voiceId: '11labs-Marissa',  nativeStatus: 'none' },
+  fi: { voiceId: '11labs-Marissa',  nativeStatus: 'none' },
+  no: { voiceId: '11labs-Marissa',  nativeStatus: 'none' },
+  cs: { voiceId: '11labs-Marissa',  nativeStatus: 'none' },
+  sk: { voiceId: '11labs-Marissa',  nativeStatus: 'none' },
+  hu: { voiceId: '11labs-Marissa',  nativeStatus: 'none' },
+  ro: { voiceId: '11labs-Marissa',  nativeStatus: 'none' },
+  el: { voiceId: '11labs-Marissa',  nativeStatus: 'none' },
+  bg: { voiceId: '11labs-Marissa',  nativeStatus: 'none' },
+  hr: { voiceId: '11labs-Marissa',  nativeStatus: 'none' },
+  uk: { voiceId: '11labs-Marissa',  nativeStatus: 'none' },
+  id: { voiceId: '11labs-Marissa',  nativeStatus: 'none' },
+  ms: { voiceId: '11labs-Marissa',  nativeStatus: 'none' },
+  vi: { voiceId: '11labs-Marissa',  nativeStatus: 'none' },
 };
 
 export const KNOWN_TOOLS = ['calendar.findSlots', 'calendar.book', 'ticket.create'] as const;

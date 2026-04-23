@@ -58,16 +58,32 @@ export function IdentityTab({
             />
           </Field>
         </div>
-        {LANGUAGE_VOICE_RECOMMENDATIONS[config.language]?.native === false && (
-          <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200/90">
-            <span className="text-base leading-none">💡</span>
-            <span>
-              Für diese Sprache gibt es keine speziell optimierte native Stimme.
-              Für beste Qualität empfehlen wir, unten im Bereich <strong>Eigene Stimme klonen</strong> eine
-              muttersprachliche Aufnahme hochzuladen (ca. 30 Sekunden reichen).
-            </span>
-          </div>
-        )}
+        {(() => {
+          const status = LANGUAGE_VOICE_RECOMMENDATIONS[config.language]?.nativeStatus ?? 'many';
+          if (status === 'many') return null;
+          const message = status === 'none' ? (
+            <>
+              Für diese Sprache gibt es <strong>keine muttersprachlich aufgenommene Stimme</strong>.
+              Die angezeigten Stimmen sprechen die Sprache multilingual — mit
+              leicht hörbarem Akzent. Für natürlichen Klang empfehlen wir,
+              unten unter <strong>Eigene Stimme klonen</strong> eine muttersprachliche
+              Aufnahme hochzuladen (ca. 30 Sekunden reichen).
+            </>
+          ) : (
+            <>
+              Für diese Sprache haben wir nur <strong>wenige native Stimmen</strong>.
+              Falls du einen bestimmten Charakter oder mehr Auswahl willst,
+              lade unten unter <strong>Eigene Stimme klonen</strong> eine eigene
+              Aufnahme hoch (ca. 30 Sekunden reichen).
+            </>
+          );
+          return (
+            <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200/90">
+              <span className="text-base leading-none">💡</span>
+              <span>{message}</span>
+            </div>
+          );
+        })()}
         {config.retellAgentId && (
           <div className="mt-3 flex items-center gap-3 text-xs text-white/50">
             <Badge color="green">Deployed</Badge>
