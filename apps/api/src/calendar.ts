@@ -1469,9 +1469,10 @@ export async function bookSlot(
       await saveChipyExternalRefs(orgId, chipyBooking.id, refs);
     }
 
-    // Success means Chipy plus every connected calendar has a booking. If one
-    // external calendar fails, keep Chipy so a retry from the same call can
-    // complete missing calendars instead of losing the customer's slot.
+    // Chipy is the source of truth for the customer-facing booking. External
+    // calendars are best-effort mirrors: failures stay recorded so a retry from
+    // the same call can complete missing calendars, but they do not turn a
+    // successful Chipy booking into a failed appointment.
     const allExternalSucceeded = results.length > 0 && results.every((r) => r.ok);
     const firstSuccess = results.find((r) => r.ok);
 
@@ -1487,11 +1488,12 @@ export async function bookSlot(
 
     const failed = results.filter((r) => !r.ok);
     return {
-      ok: false,
-      partial: results.some((r) => r.ok),
+      ok: true,
+      eventId: chipyBooking.id,
+      bookingId: chipyBooking.id,
+      partial: failed.length > 0,
       chipyBookingId: chipyBooking.id,
       externalResults: results,
-      error: failed.map((r) => `${r.provider}: ${r.error ?? 'unknown error'}`).join('; '),
     };
   });
 }
