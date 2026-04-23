@@ -22,9 +22,9 @@
  */
 
 import crypto from 'node:crypto';
-import dns from 'node:dns/promises';
 import { log } from './logger.js';
 import { readConfig } from './agent-config.js';
+import { isPrivateHost, isPrivateResolved, isBlockedPort } from './ssrf-guard.js';
 
 /** Supported event names (must match the UI's EVENT_OPTIONS in WebhooksTab.tsx). */
 export type InboundWebhookEvent =
@@ -46,63 +46,11 @@ const MAX_URL_LEN = 2000;
 /** Hard cap per org per event to bound outbound socket usage per call. */
 const MAX_WEBHOOKS_PER_FIRE = 10;
 
-/** Block private / link-local / loopback IP ranges — and IPv6-mapped IPv4.
- *  Input must be a hostname or a bare IP (no port). */
-function isPrivateHost(hostname: string): boolean {
-  const h = hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (h === 'localhost' || h.endsWith('.localhost')) return true;
-  if (h === '127.0.0.1' || h.startsWith('127.')) return true;
-  if (h === '0.0.0.0') return true;
-  if (h === '::1') return true;
-
-  // IPv4 private ranges
-  if (/^10\./.test(h)) return true;
-  if (/^192\.168\./.test(h)) return true;
-  if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(h)) return true;
-
-  // Link-local
-  if (/^169\.254\./.test(h)) return true;
-
-  // IPv6 unique local / link-local
-  if (/^f[cd][0-9a-f]{2}:/.test(h)) return true;
-  if (/^fe80:/.test(h)) return true;
-
-  // IPv6-mapped IPv4 (e.g. ::ffff:10.0.0.1 or ::ffff:a00:1). Extract the
-  // trailing IPv4 or the final 32-bit hextets and re-check.
-  if (/^::ffff:/.test(h)) {
-    const tail = h.replace(/^::ffff:/, '');
-    if (isPrivateHost(tail)) return true;
-    // hex form (::ffff:a00:1 → 10.0.0.1)
-    const parts = tail.split(':');
-    if (parts.length === 2) {
-      const hi = parseInt(parts[0] ?? '', 16);
-      const lo = parseInt(parts[1] ?? '', 16);
-      if (Number.isFinite(hi) && Number.isFinite(lo)) {
-        const ipv4 = `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
-        if (isPrivateHost(ipv4)) return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-/** Resolve hostname and block if it maps to a private address.
- *  Closes the DNS-rebinding window on the parse-time `isPrivateHost` check
- *  (customer registers a public host, flips DNS to 169.254.169.254 between
- *  registration and fire). Not a full fix — undici still re-resolves at
- *  connect time, but the window shrinks from ∞ to a single pre-flight. */
-async function isPrivateResolved(hostname: string): Promise<boolean> {
-  if (isPrivateHost(hostname)) return true;
-  try {
-    const addrs = await dns.lookup(hostname, { all: true, verbatim: true });
-    return addrs.some((a) => isPrivateHost(a.address));
-  } catch {
-    // Unresolvable host → refuse delivery (prevents accidental SSRF via
-    // unreachable-but-spoofable internal DNS shadows).
-    return true;
-  }
-}
+// isPrivateHost + isPrivateResolved moved to ssrf-guard.ts — single source
+// of truth shared with api-integrations.ts. Prior to this, each module
+// had its own copy and they drifted (api-integrations lost the ::ffff:-hex
+// form check). The shared module also adds cloud-metadata blocks,
+// numeric-IPv4 edge cases (0, decimal, hex, octal), and the blocked-port list.
 
 function isAcceptableUrl(raw: string): { ok: true; url: URL } | { ok: false; reason: string } {
   if (!raw || raw.length > MAX_URL_LEN) return { ok: false, reason: 'empty_or_too_long' };
@@ -120,6 +68,7 @@ function isAcceptableUrl(raw: string): { ok: true; url: URL } | { ok: false; rea
     return { ok: false, reason: 'http_in_prod' };
   }
   if (isPrivateHost(url.hostname)) return { ok: false, reason: 'private_host' };
+  if (isBlockedPort(url.port)) return { ok: false, reason: 'blocked_port' };
   return { ok: true, url };
 }
 

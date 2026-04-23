@@ -32,9 +32,9 @@
  */
 
 import crypto from 'node:crypto';
-import dns from 'node:dns/promises';
 import { log } from './logger.js';
 import { encrypt, decrypt } from './crypto.js';
+import { isPrivateResolved, isBlockedPort } from './ssrf-guard.js';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -306,34 +306,6 @@ export function bumpPerCallCounter(callId: string): number {
   return n;
 }
 
-/** SSRF guard — same logic as inbound-webhooks, private ranges + ::ffff: */
-function isPrivateHost(hostname: string): boolean {
-  const h = hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (h === 'localhost' || h.endsWith('.localhost')) return true;
-  if (h.startsWith('127.') || h === '0.0.0.0' || h === '::1') return true;
-  if (/^10\./.test(h)) return true;
-  if (/^192\.168\./.test(h)) return true;
-  if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(h)) return true;
-  if (/^169\.254\./.test(h)) return true;
-  if (/^f[cd][0-9a-f]{2}:/.test(h)) return true;
-  if (/^fe80:/.test(h)) return true;
-  if (/^::ffff:/.test(h)) {
-    const tail = h.replace(/^::ffff:/, '');
-    if (isPrivateHost(tail)) return true;
-  }
-  return false;
-}
-
-async function isPrivateResolved(hostname: string): Promise<boolean> {
-  if (isPrivateHost(hostname)) return true;
-  try {
-    const addrs = await dns.lookup(hostname, { all: true, verbatim: true });
-    return addrs.some((a) => isPrivateHost(a.address));
-  } catch {
-    return true;
-  }
-}
-
 /** Apply {placeholder} substitutions from args into the path. Left-over
  *  placeholders are preserved (the remote service may accept them; at
  *  minimum the customer sees the raw request when debugging). */
@@ -395,6 +367,12 @@ export async function executeIntegrationCall(params: {
 
   if (url.protocol !== 'https:' && url.protocol !== 'http:') return { ok: false, error: 'BAD_PROTOCOL' };
   if (url.protocol === 'http:' && process.env.NODE_ENV === 'production') return { ok: false, error: 'HTTP_IN_PROD' };
+  if (isBlockedPort(url.port)) {
+    // Non-HTTP ports (SSH/SMTP/DB) are forbidden outbound — prevents
+    // cross-protocol request smuggling even when the hostname is public.
+    log.warn({ integrationId: integration.id, port: url.port }, 'api-integrations: port on blocklist, refusing');
+    return { ok: false, error: 'BLOCKED_PORT' };
+  }
   if (await isPrivateResolved(url.hostname)) {
     log.warn({ integrationId: integration.id, host: url.hostname }, 'api-integrations: hostname resolves to private range, blocked');
     return { ok: false, error: 'PRIVATE_HOST' };
