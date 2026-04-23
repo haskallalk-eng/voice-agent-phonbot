@@ -21,11 +21,18 @@ import { analyzeCall } from './insights.js';
 import { getOrgIdByAgentId } from './org-id-cache.js';
 import { getCall, deleteCall } from './retell.js';
 import { fireInboundWebhooks } from './inbound-webhooks.js';
+import { sendBookingConfirmationSms, sendTicketAckSms } from './sms.js';
 
 const RETELL_API_KEY = process.env.RETELL_API_KEY ?? '';
 
 function now() {
   return Date.now();
+}
+
+async function getOrgName(orgId: string | null | undefined): Promise<string | null> {
+  if (!pool || !orgId) return null;
+  const res = await pool.query(`SELECT name FROM orgs WHERE id = $1 LIMIT 1`, [orgId]).catch(() => null);
+  return (res?.rows[0]?.name as string | undefined) ?? null;
 }
 
 /** Internal shape of the extended request with rawBody attached by the content-type parser. */
@@ -612,6 +619,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       const preferredTime = (args.preferredTime as string | undefined) ?? (args.time as string | undefined) ?? '';
       const service = (args.service as string | undefined) ?? '';
       const notes = args.notes as string | undefined;
+      const businessName = await getOrgName(orgIdForBook);
       const booking = await bookSlot(orgIdForBook, {
         customerName,
         customerPhone,
@@ -634,6 +642,13 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
             service,
             notes,
           }, { allowUnverifiedPhone: true });
+          const sms = await sendTicketAckSms({
+            to: ticket.customer_phone,
+            businessName,
+            reason: 'calendar-unavailable',
+            service,
+            logger: req.log,
+          });
 
           result = {
             ok: true,
@@ -645,6 +660,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
             chipyBookingId: booking.chipyBookingId ?? null,
             externalResults: booking.externalResults ?? [],
             partial: booking.partial ?? false,
+            smsSent: sms.ok,
+            smsError: sms.ok ? null : sms.error,
             message: 'Kalenderbuchung fehlgeschlagen, Rueckruf-Ticket wurde erstellt.',
             customerName,
             customerPhone: ticket.customer_phone,
@@ -678,6 +695,14 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           };
         }
       } else {
+        const sms = await sendBookingConfirmationSms({
+          to: customerPhone,
+          businessName,
+          customerName,
+          service,
+          preferredTime,
+          logger: req.log,
+        });
         result = {
           ok: booking.ok,
           status: booking.ok ? 'confirmed' : 'failed',
@@ -687,6 +712,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           externalResults: booking.externalResults ?? [],
           partial: booking.partial ?? false,
           error: booking.error ?? null,
+          smsSent: sms.ok,
+          smsError: sms.ok ? null : sms.error,
           customerName,
           customerPhone,
           preferredTime,
@@ -804,12 +831,22 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         callId,
       }).catch(() => {});
 
+      const sms = await sendTicketAckSms({
+        to: row.customer_phone,
+        businessName: await getOrgName(orgId),
+        reason: row.reason,
+        service: row.service,
+        logger: req.log,
+      });
+
       const result = {
         ok: true,
         ticketId: row.id,
         status: row.status,
         customerPhone: row.customer_phone,
         callbackScheduled: isImmediate && !!orgId,
+        smsSent: sms.ok,
+        smsError: sms.ok ? null : sms.error,
       };
 
       await appendTraceEvent({

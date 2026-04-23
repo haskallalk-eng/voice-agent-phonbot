@@ -3,6 +3,7 @@ import { createTicket } from './tickets.js';
 import type { readConfig } from './agent-config.js';
 import { appendTraceEvent } from './traces.js';
 import { findFreeSlots, bookSlot } from './calendar.js';
+import { sendBookingConfirmationSms, sendTicketAckSms } from './sms.js';
 
 export const KnownToolNameSchema = z.enum(['calendar.findSlots', 'calendar.book', 'ticket.create']);
 
@@ -169,21 +170,38 @@ export async function executeKnownTool(input: {
           service: args.service,
           notes: args.notes,
         });
+        const sms = await sendTicketAckSms({
+          to: ticket.customer_phone,
+          businessName: input.cfg.businessName,
+          reason: 'calendar-unavailable',
+          service: args.service,
+        });
         return {
           ok: true,
           fallback: true,
           ticketId: ticket.id,
           chipyBookingId: result.chipyBookingId,
           partial: result.partial ?? false,
+          smsSent: sms.ok,
+          smsError: sms.ok ? null : sms.error,
           message: 'Terminwunsch als Ticket gespeichert.',
         };
       }
+      const sms = await sendBookingConfirmationSms({
+        to: args.customerPhone ?? '',
+        businessName: input.cfg.businessName,
+        customerName: args.customerName,
+        service: args.service,
+        preferredTime: args.preferredTime,
+      });
       return {
         ok: true,
         eventId: result.eventId,
         bookingId: result.bookingId,
         chipyBookingId: result.chipyBookingId,
         status: 'confirmed',
+        smsSent: sms.ok,
+        smsError: sms.ok ? null : sms.error,
         ...args,
       };
     }
@@ -201,11 +219,19 @@ export async function executeKnownTool(input: {
         service: args.service,
         notes: args.notes,
       });
+      const sms = await sendTicketAckSms({
+        to: row.customer_phone,
+        businessName: input.cfg.businessName,
+        reason: row.reason,
+        service: row.service,
+      });
       return {
         ok: true,
         ticketId: row.id,
         status: row.status,
         customerPhone: row.customer_phone,
+        smsSent: sms.ok,
+        smsError: sms.ok ? null : sms.error,
       };
     }
 

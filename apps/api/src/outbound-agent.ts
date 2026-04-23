@@ -19,6 +19,7 @@ import type { JwtPayload } from './auth.js';
 import { triggerBridgeCall } from './twilio-openai-bridge.js';
 import { verifyTurnstile } from './captcha.js';
 import { sendSignupLinkEmail } from './email.js';
+import { sendSignupLinkSms, signupLinkUrl } from './sms.js';
 
 // ── DB Migration ─────────────────────────────────────────────────────────────
 
@@ -581,7 +582,8 @@ export async function registerOutbound(app: FastifyInstance) {
         app.log.info({ phone, ip: req.ip }, 'website-callback dedup hit — skipping outbound call');
         sendSignupLinkEmail({ toEmail: parsed.data.email, name: parsed.data.name ?? null })
           .catch((err: Error) => app.log.warn({ err: err.message }, 'website-callback signup-link email failed'));
-        return { ok: true };
+        const sms = await sendSignupLinkSms({ to: phone, name: parsed.data.name ?? null, logger: app.log });
+        return { ok: true, smsSent: sms.ok };
       }
     }
 
@@ -624,6 +626,7 @@ export async function registerOutbound(app: FastifyInstance) {
 
       sendSignupLinkEmail({ toEmail: parsed.data.email, name: parsed.data.name ?? null })
         .catch((err: Error) => app.log.warn({ err: err.message }, 'website-callback signup-link email failed'));
+      const signupSms = await sendSignupLinkSms({ to: phone, name: parsed.data.name ?? null, logger: app.log });
 
       // Use the same Retell-based sales agent as demo/callback.
       // Retell metadata is forwarded into their systems; keep it minimal and
@@ -638,7 +641,8 @@ export async function registerOutbound(app: FastifyInstance) {
         fromNumber,
         metadata: { source: 'website-callback', outboundRecordId: websiteCallId ?? '' },
         dynamicVariables: {
-          signup_link: `${process.env.APP_URL ?? 'https://phonbot.de'}/login`,
+          signup_link: signupLinkUrl(),
+          signup_sms_sent: signupSms.ok ? 'true' : 'false',
         },
       });
 
@@ -648,7 +652,7 @@ export async function registerOutbound(app: FastifyInstance) {
       }
 
       app.log.info({ callId: call.call_id, phone }, 'Website callback call initiated via Retell');
-      return { ok: true };
+      return { ok: true, smsSent: signupSms.ok };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Call failed';
       app.log.warn({ err: msg, phone }, 'website-callback call failed');

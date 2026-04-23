@@ -11,6 +11,7 @@ import { pool } from './db.js';
 import { redis } from './redis.js';
 import { verifyTurnstile } from './captcha.js';
 import { sendSignupLinkEmail } from './email.js';
+import { sendSignupLinkSms, signupLinkUrl } from './sms.js';
 
 // Demo agent cache — Redis-backed so horizontal scaling (multiple API containers)
 // doesn't create duplicate Retell agents. Falls back to in-memory Map when Redis down.
@@ -111,13 +112,13 @@ REGELN:
 - Sei ehrlich: wenn Phonbot für jemanden keinen Sinn macht, sag das
 - Kein Druck, keine Tricks — einfach zeigen was möglich ist
 - Halte das Gespräch unter 2 Minuten
-- Wenn der Interessent den Link möchte: Sage, dass der Testlink bereits an die angegebene E-Mail geschickt wurde. Nenne bei Bedarf diesen Link: {{signup_link}}
+- Wenn der Interessent den Link möchte: Sage, dass der Testlink an die angegebene E-Mail geschickt wurde. Wenn {{signup_sms_sent}} = true ist, sage zusätzlich dass er auch per SMS verschickt wurde. Nenne bei Bedarf diesen Link: {{signup_link}}
 `;
 
 // Sales agent ID — Redis-backed (shared across containers, survives restarts)
 // In-memory fallback for when Redis is down.
 let salesAgentIdMem: string | null = null;
-const SALES_AGENT_KEY = 'sales_agent:phonbot:v2';
+const SALES_AGENT_KEY = 'sales_agent:phonbot:v3';
 
 export async function getOrCreateSalesAgent(): Promise<string> {
   if (redis?.isOpen) {
@@ -297,7 +298,8 @@ export async function registerDemo(app: FastifyInstance) {
         app.log.info({ phone, ip: req.ip }, 'demo/callback dedup hit — skipping outbound call');
         sendSignupLinkEmail({ toEmail: email, name })
           .catch((err: Error) => app.log.warn({ err: err.message }, 'demo/callback signup-link email failed'));
-        return { ok: true };
+        const sms = await sendSignupLinkSms({ to: phone, name, logger: app.log });
+        return { ok: true, smsSent: sms.ok };
       }
     }
 
@@ -315,6 +317,7 @@ export async function registerDemo(app: FastifyInstance) {
 
     sendSignupLinkEmail({ toEmail: email, name })
       .catch((err: Error) => app.log.warn({ err: err.message }, 'demo/callback signup-link email failed'));
+    const signupSms = await sendSignupLinkSms({ to: phone, name, logger: app.log });
 
     // Try outbound call via Retell
     const fromNumber = process.env.RETELL_OUTBOUND_NUMBER; // e.g. "+4930123456"
@@ -327,7 +330,8 @@ export async function registerDemo(app: FastifyInstance) {
           fromNumber,
           metadata: { leadId, leadName: name },
           dynamicVariables: {
-            signup_link: `${process.env.APP_URL ?? 'https://phonbot.de'}/login`,
+            signup_link: signupLinkUrl(),
+            signup_sms_sent: signupSms.ok ? 'true' : 'false',
           },
         });
         app.log.info({ callId: call.call_id, phone }, 'Outbound sales call initiated');
@@ -346,7 +350,7 @@ export async function registerDemo(app: FastifyInstance) {
       app.log.warn('RETELL_OUTBOUND_NUMBER not configured — skipping outbound call');
     }
 
-    return { ok: true, message: 'Chipy ruft dich bald an! Wir haben deine Nummer gespeichert.' };
+    return { ok: true, message: 'Chipy ruft dich bald an! Wir haben deine Nummer gespeichert.', smsSent: signupSms.ok };
   });
 
   // Note: /demo/leads was removed — use /admin/leads instead (platform-admin only, reads from crm_leads DB).
