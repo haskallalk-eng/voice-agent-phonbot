@@ -30,9 +30,26 @@ export function IdentityTab({
   onVoiceSelect,
   onVoiceCloned,
 }: IdentityTabProps) {
+  // If the persisted voice-id no longer exists in the current language's
+  // curated catalog (e.g. a legacy "11labs-Carola" after we tightened the
+  // native-only lineup), fall back to the catalog's default voice so the
+  // picker trigger doesn't display a raw supplier-prefixed ID.
+  React.useEffect(() => {
+    if (voicesLoading || voices.length === 0 || !config.voice) return;
+    const exists = voices.some((v) => v.voice_id === config.voice);
+    if (!exists && voices[0]) {
+      onUpdate({ voice: voices[0].voice_id });
+    }
+  }, [voices, voicesLoading, config.voice, onUpdate]);
+
   return (
     <>
-      <SectionCard title="Identität" icon={IconAgent} className={voiceDropdownOpen ? 'relative z-10 overflow-visible' : ''}>
+      <SectionCard
+        title="Identität"
+        icon={IconAgent}
+        className={voiceDropdownOpen ? 'relative z-10 overflow-visible' : ''}
+        rightSlot={config.retellAgentId ? <Badge color="green">Deployed</Badge> : undefined}
+      >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="Agent-Name">
             <Input value={config.name} onChange={(e) => onUpdate({ name: e.target.value })} placeholder="z.B. Lisa" />
@@ -84,12 +101,6 @@ export function IdentityTab({
             </div>
           );
         })()}
-        {config.retellAgentId && (
-          <div className="mt-3 flex items-center gap-3 text-xs text-white/50">
-            <Badge color="green">Deployed</Badge>
-            <span>Agent: <code className="font-mono">{config.retellAgentId}</code></span>
-          </div>
-        )}
       </SectionCard>
 
       {/* Voice cloning panel */}
