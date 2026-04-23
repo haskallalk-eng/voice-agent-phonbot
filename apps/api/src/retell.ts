@@ -48,12 +48,37 @@ async function retellRequest<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function retellFormRequest<T>(path: string, form: FormData, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${RETELL_API}${path}`, {
+    ...init,
+    method: init?.method ?? 'POST',
+    headers: {
+      Authorization: `Bearer ${getApiKey()}`,
+      ...init?.headers,
+    },
+    body: form,
+    signal: AbortSignal.timeout(RETELL_TIMEOUT_MS),
+  }).catch((e: Error) => {
+    if (e.name === 'AbortError' || e.name === 'TimeoutError') {
+      throw new Error(`Retell API timeout after ${RETELL_TIMEOUT_MS}ms at ${path}`);
+    }
+    throw e;
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Retell API ${res.status}: ${text}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 // --- Types ---
 
 export type RetellLLMConfig = {
   llm_id: string;
   general_prompt: string | null;
   general_tools: RetellTool[] | null;
+  knowledge_base_ids?: string[] | null;
+  kb_config?: { top_k?: number; filter_score?: number } | null;
   states: RetellState[] | null;
   starting_state: string | null;
   model: string;
@@ -91,12 +116,22 @@ export type RetellPhoneNumber = {
   agent_id: string | null;
 };
 
+export type RetellKnowledgeBase = {
+  knowledge_base_id: string;
+  knowledge_base_name: string;
+  status: 'in_progress' | 'complete' | 'error' | 'refreshing_in_progress';
+  knowledge_base_sources?: Array<Record<string, unknown>>;
+  enable_auto_refresh?: boolean;
+};
+
 // --- LLM ---
 
 export async function createLLM(config: {
   generalPrompt: string;
   tools: RetellTool[];
   model?: string;
+  knowledgeBaseIds?: string[];
+  kbConfig?: { top_k?: number; filter_score?: number };
 }): Promise<RetellLLMConfig> {
   return retellRequest('/create-retell-llm', {
     method: 'POST',
@@ -104,6 +139,8 @@ export async function createLLM(config: {
       general_prompt: config.generalPrompt,
       general_tools: config.tools.length ? config.tools : undefined,
       model: config.model ?? 'gpt-4o-mini',
+      knowledge_base_ids: config.knowledgeBaseIds?.length ? config.knowledgeBaseIds : undefined,
+      kb_config: config.knowledgeBaseIds?.length ? (config.kbConfig ?? { top_k: 3, filter_score: 0.6 }) : undefined,
     }),
   });
 }
@@ -114,12 +151,18 @@ export async function updateLLM(
     generalPrompt?: string;
     tools?: RetellTool[];
     model?: string;
+    knowledgeBaseIds?: string[];
+    kbConfig?: { top_k?: number; filter_score?: number };
   },
 ): Promise<RetellLLMConfig> {
   const body: Record<string, unknown> = {};
   if (config.generalPrompt !== undefined) body.general_prompt = config.generalPrompt;
   if (config.tools !== undefined) body.general_tools = config.tools.length ? config.tools : [];
   if (config.model !== undefined) body.model = config.model;
+  if (config.knowledgeBaseIds !== undefined) {
+    body.knowledge_base_ids = config.knowledgeBaseIds.length ? config.knowledgeBaseIds : [];
+    if (config.knowledgeBaseIds.length) body.kb_config = config.kbConfig ?? { top_k: 3, filter_score: 0.6 };
+  }
 
   return retellRequest(`/update-retell-llm/${encodeURIComponent(llmId)}`, {
     method: 'PATCH',
@@ -129,6 +172,39 @@ export async function updateLLM(
 
 export async function getLLM(llmId: string): Promise<RetellLLMConfig> {
   return retellRequest(`/get-retell-llm/${encodeURIComponent(llmId)}`);
+}
+
+// --- Knowledge Base ---
+
+function appendKnowledgeArray(form: FormData, name: string, values: unknown[]): void {
+  if (!values.length) return;
+  form.append(name, JSON.stringify(values));
+}
+
+export async function createKnowledgeBase(config: {
+  name: string;
+  texts?: Array<{ title: string; text: string }>;
+  urls?: string[];
+  enableAutoRefresh?: boolean;
+}): Promise<RetellKnowledgeBase> {
+  const form = new FormData();
+  form.append('knowledge_base_name', config.name);
+  appendKnowledgeArray(form, 'knowledge_base_texts', config.texts ?? []);
+  appendKnowledgeArray(form, 'knowledge_base_urls', config.urls ?? []);
+  if (config.urls?.length) form.append('enable_auto_refresh', String(config.enableAutoRefresh ?? true));
+
+  return retellFormRequest('/create-knowledge-base', form);
+}
+
+export async function deleteKnowledgeBase(knowledgeBaseId: string): Promise<void> {
+  const res = await fetch(`${RETELL_API}/delete-knowledge-base/${encodeURIComponent(knowledgeBaseId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${getApiKey()}` },
+    signal: AbortSignal.timeout(RETELL_TIMEOUT_MS),
+  });
+  if (!res.ok && res.status !== 204 && res.status !== 404) {
+    throw new Error(`Retell API ${res.status}: ${await res.text()}`);
+  }
 }
 
 // --- Agent ---

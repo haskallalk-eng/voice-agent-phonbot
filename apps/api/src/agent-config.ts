@@ -23,6 +23,7 @@ import {
 import { triggerBridgeCall } from './twilio-openai-bridge.js';
 import { toE164 } from '@vas/shared';
 import { log } from './logger.js';
+import { normalizeKnowledgeSources, syncRetellKnowledgeBase } from './knowledge.js';
 import {
   buildIntegrationTools,
   mergeAndEncryptIntegrations,
@@ -198,7 +199,8 @@ function toClientConfig(config: AgentConfig): AgentConfig {
 
 async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentConfig> {
   const parsed = parseAgentConfig(config);
-  const normalized = await applyIntegrationEncryption(parsed, orgId);
+  const withIntegrations = await applyIntegrationEncryption(parsed, orgId);
+  const normalized = await normalizeKnowledgeSources(withIntegrations as unknown as Record<string, unknown>) as AgentConfig;
   if (!pool) {
     memory.set(normalized.tenantId, normalized);
     return normalized;
@@ -493,10 +495,13 @@ function buildPostCallAnalysisData(config: AgentConfig): PostCallAnalysisField[]
 }
 
 export async function deployToRetell(config: AgentConfig): Promise<AgentConfig> {
+  const preparedConfig = await syncRetellKnowledgeBase(config as unknown as Record<string, unknown>) as AgentConfig;
   const webhookBase = getWebhookBaseUrl();
-  const instructions = buildAgentInstructions(config);
-  const retellTools = buildRetellTools(config, webhookBase);
-  const postCallAnalysisData = buildPostCallAnalysisData(config);
+  const instructions = buildAgentInstructions(preparedConfig);
+  const retellTools = buildRetellTools(preparedConfig, webhookBase);
+  const postCallAnalysisData = buildPostCallAnalysisData(preparedConfig);
+  const knowledgeBaseId = (preparedConfig as Record<string, unknown>).retellKnowledgeBaseId as string | undefined;
+  const knowledgeBaseIds = knowledgeBaseId ? [knowledgeBaseId] : [];
   const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';
   const LANG_MAP: Record<string, string> = {
     de: 'de-DE', en: 'en-US', fr: 'fr-FR', es: 'es-ES',
@@ -507,10 +512,10 @@ export async function deployToRetell(config: AgentConfig): Promise<AgentConfig> 
     el: 'el-GR', bg: 'bg-BG', hr: 'hr-HR', uk: 'uk-UA', id: 'id-ID',
     ms: 'ms-MY', vi: 'vi-VN',
   };
-  const language = LANG_MAP[config.language] ?? 'de-DE';
+  const language = LANG_MAP[preparedConfig.language] ?? 'de-DE';
 
-  let llmId = config.retellLlmId;
-  let agentId = config.retellAgentId;
+  let llmId = preparedConfig.retellLlmId;
+  let agentId = preparedConfig.retellAgentId;
 
   const webhookUrl = `${webhookBase}/retell/webhook`;
   if (llmId && agentId) {
@@ -518,23 +523,23 @@ export async function deployToRetell(config: AgentConfig): Promise<AgentConfig> 
     // LLM update doesn't depend on agent-update and vice versa — the
     // agent already references this llmId.
     await Promise.all([
-      updateLLM(llmId, { generalPrompt: instructions, tools: retellTools, model }),
-      retellUpdateAgent(agentId, { name: config.name, voiceId: config.voice, language, llmId, webhookUrl, postCallAnalysisData }),
+      updateLLM(llmId, { generalPrompt: instructions, tools: retellTools, model, knowledgeBaseIds }),
+      retellUpdateAgent(agentId, { name: preparedConfig.name, voiceId: preparedConfig.voice, language, llmId, webhookUrl, postCallAnalysisData }),
     ]);
   } else if (llmId && !agentId) {
     // LLM exists but no agent → update LLM, then create agent (agent needs llmId).
-    await updateLLM(llmId, { generalPrompt: instructions, tools: retellTools, model });
-    const agent = await retellCreateAgent({ name: config.name, llmId, voiceId: config.voice, language, webhookUrl, postCallAnalysisData });
+    await updateLLM(llmId, { generalPrompt: instructions, tools: retellTools, model, knowledgeBaseIds });
+    const agent = await retellCreateAgent({ name: preparedConfig.name, llmId, voiceId: preparedConfig.voice, language, webhookUrl, postCallAnalysisData });
     agentId = agent.agent_id;
   } else {
     // Fresh deploy: create LLM first (agent needs llmId), then create agent.
-    const llm = await createLLM({ generalPrompt: instructions, tools: retellTools, model });
+    const llm = await createLLM({ generalPrompt: instructions, tools: retellTools, model, knowledgeBaseIds });
     llmId = llm.llm_id;
-    const agent = await retellCreateAgent({ name: config.name, llmId, voiceId: config.voice, language, webhookUrl, postCallAnalysisData });
+    const agent = await retellCreateAgent({ name: preparedConfig.name, llmId, voiceId: preparedConfig.voice, language, webhookUrl, postCallAnalysisData });
     agentId = agent.agent_id;
   }
 
-  return { ...config, retellLlmId: llmId, retellAgentId: agentId };
+  return { ...preparedConfig, retellLlmId: llmId, retellAgentId: agentId };
 }
 
 /**
@@ -912,6 +917,8 @@ export async function registerAgentConfig(app: FastifyInstance) {
       retellAgentId: serverIds.retellAgentId,
       retellCallbackLlmId: serverIds.retellCallbackLlmId,
       retellCallbackAgentId: serverIds.retellCallbackAgentId,
+      retellKnowledgeBaseId: (serverIds as Record<string, unknown>).retellKnowledgeBaseId,
+      knowledgeBaseSignature: (serverIds as Record<string, unknown>).knowledgeBaseSignature,
     });
     return toClientConfig(await writeConfig(body, orgId));
   });
@@ -936,6 +943,8 @@ export async function registerAgentConfig(app: FastifyInstance) {
       retellAgentId: serverIds.retellAgentId,
       retellCallbackLlmId: serverIds.retellCallbackLlmId,
       retellCallbackAgentId: serverIds.retellCallbackAgentId,
+      retellKnowledgeBaseId: (serverIds as Record<string, unknown>).retellKnowledgeBaseId,
+      knowledgeBaseSignature: (serverIds as Record<string, unknown>).knowledgeBaseSignature,
     });
     const deployed = await deployToRetell(body);
     const saved = await writeConfig(deployed, orgId);
