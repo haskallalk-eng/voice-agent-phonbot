@@ -11,8 +11,11 @@ export function WebhooksTab({ config, onUpdate }: WebhooksTabProps) {
   return (
     <>
       <SectionCard title="Variablen extrahieren" icon={IconFileText}>
-        <p className="text-sm text-white/50 mb-4">
+        <p className="text-sm text-white/50 mb-2">
           Definiere welche Informationen der Agent automatisch aus Gesprächen extrahieren soll.
+        </p>
+        <p className="text-xs text-white/40 mb-4">
+          Nach jedem Anruf analysiert Chipy das Transkript und füllt diese Felder automatisch aus. Die extrahierten Werte landen als Metadaten am jeweiligen Ticket und werden im Webhook-Payload von <code className="bg-white/10 px-1.5 py-0.5 rounded">call.ended</code> und <code className="bg-white/10 px-1.5 py-0.5 rounded">ticket.created</code> mitgeliefert. Zusätzlich füllt Chipy immer ein Feld <code className="bg-white/10 px-1.5 py-0.5 rounded">sonstige_relevante_infos</code> mit allem, was erwähnenswert war — auch wenn du es nicht als eigene Variable definiert hast.
         </p>
         <VariableEditor
           items={config.extractedVariables ?? []}

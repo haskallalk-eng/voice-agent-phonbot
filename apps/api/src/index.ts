@@ -69,6 +69,15 @@ const app = Fastify({
         // Pino doesn't set a root "name" by default (we don't use logger.name),
         // so redacting root "name" only hits PII call-sites (demo/contact leads).
         'name',
+        // Retell webhook bodies are PII-dense (full transcripts + analysed
+        // data incl. customer-defined extracted variables which may hold
+        // IBANs, diagnoses, policy numbers). Censor the entire call object
+        // on /retell/webhook rather than chasing individual nested paths.
+        'req.body.call',
+        'req.body.transcript',
+        // Extracted-variable payload in our own webhook fan-out + handlers.
+        'variables', '*.variables',
+        'extracted', '*.extracted',
       ],
       censor: '[REDACTED]',
     },

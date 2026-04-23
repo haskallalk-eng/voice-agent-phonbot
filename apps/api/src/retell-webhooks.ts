@@ -426,8 +426,11 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         const extracted = (analysis?.custom_analysis_data as Record<string, unknown> | undefined) ?? null;
 
         // Attach extracted variables to the ticket this call created, if any.
-        if (extracted && callId) {
-          mergeTicketMetadata(callId, extracted).catch((err: Error) =>
+        // mergeTicketMetadata is org-scoped — Retell's HMAC only authenticates
+        // the platform-wide event, not the target org, so we must match on
+        // org_id to prevent cross-tenant metadata writes.
+        if (extracted && callId && orgId) {
+          mergeTicketMetadata(callId, orgId, extracted).catch((err: Error) =>
             req.log.warn({ err: err.message, orgId, callId }, 'mergeTicketMetadata failed'),
           );
         }
@@ -463,14 +466,14 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       const callId = (call as RetellCallData).call_id;
       const analysis = (call as RetellCallData & { call_analysis?: Record<string, unknown> }).call_analysis;
       const extracted = (analysis?.custom_analysis_data as Record<string, unknown> | undefined) ?? null;
+      const orgId = agentId ? await getOrgIdByAgentId(agentId) : null;
 
-      if (extracted && callId) {
-        await mergeTicketMetadata(callId, extracted).catch((err: Error) =>
-          req.log.warn({ err: err.message, callId }, 'call_analyzed: mergeTicketMetadata failed'),
+      if (extracted && callId && orgId) {
+        await mergeTicketMetadata(callId, orgId, extracted).catch((err: Error) =>
+          req.log.warn({ err: err.message, orgId, callId }, 'call_analyzed: mergeTicketMetadata failed'),
         );
       }
 
-      const orgId = agentId ? await getOrgIdByAgentId(agentId) : null;
       if (orgId && callId && extracted) {
         fireInboundWebhooks(orgId, 'variable.extracted', {
           callId,
