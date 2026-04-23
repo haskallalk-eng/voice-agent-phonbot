@@ -151,7 +151,7 @@ const PRESETS: Array<{ name: string; apply: () => WeekState }> = [
   {
     name: '24/7',
     apply: () => DAY_ORDER.reduce<WeekState>((acc, d) => {
-      acc[d] = { open: true, from: '00:00', to: '24:00' };
+      acc[d] = { open: true, from: '00:00', to: '23:59' };
       return acc;
     }, {} as WeekState),
   },
