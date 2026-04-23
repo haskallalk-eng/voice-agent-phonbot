@@ -101,6 +101,10 @@ export type KnowledgeSource = {
   name: string;
   content: string; // URL, filename, or raw text
   url?: string;
+  fileId?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  sha256?: string;
   status?: 'pending' | 'indexed' | 'error';
   error?: string;
 };
@@ -312,6 +316,32 @@ export function createWebCall(agentTenantId?: string) {
     method: 'POST',
     body: JSON.stringify({ agentTenantId }),
   });
+}
+
+export async function uploadKnowledgePdf(tenantId: string, file: File): Promise<KnowledgeSource> {
+  const send = async (retried = false): Promise<KnowledgeSource> => {
+    const form = new FormData();
+    form.append('tenantId', tenantId);
+    form.append('pdf', file);
+
+    const res = await fetch(`${BASE}/agent-config/knowledge/pdf`, {
+      method: 'POST',
+      headers: authHeader(),
+      body: form,
+      credentials: 'include',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT),
+    });
+    if (res.status === 401 && !retried) {
+      const token = await refreshAccessToken();
+      if (token) return send(true);
+    }
+    if (!res.ok) {
+      const body = await res.text();
+      throw new ApiError(res.status, res.statusText, body);
+    }
+    return res.json() as Promise<KnowledgeSource>;
+  };
+  return send();
 }
 
 // --- Demo (no auth) ---

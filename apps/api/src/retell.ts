@@ -185,12 +185,20 @@ export async function createKnowledgeBase(config: {
   name: string;
   texts?: Array<{ title: string; text: string }>;
   urls?: string[];
+  files?: Array<{ filename: string; mimeType: string; data: Buffer | Uint8Array }>;
   enableAutoRefresh?: boolean;
 }): Promise<RetellKnowledgeBase> {
   const form = new FormData();
   form.append('knowledge_base_name', config.name);
   appendKnowledgeArray(form, 'knowledge_base_texts', config.texts ?? []);
   appendKnowledgeArray(form, 'knowledge_base_urls', config.urls ?? []);
+  for (const file of config.files ?? []) {
+    form.append(
+      'knowledge_base_files',
+      new Blob([new Uint8Array(file.data)], { type: file.mimeType || 'application/pdf' }),
+      file.filename,
+    );
+  }
   if (config.urls?.length) form.append('enable_auto_refresh', String(config.enableAutoRefresh ?? true));
 
   return retellFormRequest('/create-knowledge-base', form);
