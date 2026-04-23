@@ -67,6 +67,7 @@ export const FOOTER_HTML = `<!--footer-html-begin-->
           <li><a href="/reinigung/">Reinigung</a></li>
           <li><a href="/restaurant/">Restaurant</a></li>
           <li><a href="/autowerkstatt/">Autowerkstatt</a></li>
+          <li><a href="/selbststaendig/">Selbstständig</a></li>
         </ul>
       </div>
       <div>
