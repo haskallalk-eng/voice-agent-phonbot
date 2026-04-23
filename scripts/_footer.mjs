@@ -1,8 +1,9 @@
 // Shared site-footer partial — matches apps/web/src/ui/landing/FooterSection.tsx 1:1.
-// Emits the 4-column footer (brand + Produkt + Rechtliches + Kontakt) with the
-// copyright/DSGVO bottom row. Used on every static HTML page (6 branch pages +
-// impressum + datenschutz + agb). Render order: markers first, then content,
-// so `scripts/sync-legal-nav.mjs` can find-and-replace the block idempotently.
+// Emits the 5-column footer (brand + Produkt + Branchen + Rechtliches + Kontakt)
+// with the copyright/DSGVO bottom row. Used on every static HTML page (5 branch
+// pages + impressum + datenschutz + agb). Render order: markers first, then
+// content, so `scripts/sync-legal-nav.mjs` can find-and-replace the block
+// idempotently.
 
 const FOX_LOGO_SVG_SM = [
   '<svg viewBox="0 8 100 92" fill="none" xmlns="http://www.w3.org/2000/svg" width="28" height="28">',
@@ -22,8 +23,9 @@ const FOX_LOGO_SVG_SM = [
 export const FOOTER_STYLE = `/*--footer-css-begin--*/
 .site-footer{position:relative;z-index:10;border-top:1px solid rgba(255,255,255,.05);padding:3rem 1.5rem 2rem;margin-top:4rem;background:rgba(10,10,15,.6)}
 .site-footer .footer-container{max-width:1152px;margin:0 auto;padding:0;text-align:left}
-.footer-grid{display:grid;grid-template-columns:1fr repeat(3,1fr);gap:2rem;margin-bottom:2.5rem}
-@media(max-width:640px){.footer-grid{grid-template-columns:1fr 1fr;gap:2rem 1.5rem}.footer-grid .col-brand{grid-column:1/-1}}
+.footer-grid{display:grid;grid-template-columns:1fr repeat(4,1fr);gap:2rem;margin-bottom:2.5rem}
+@media(max-width:1024px){.footer-grid{grid-template-columns:1fr 1fr;gap:2rem 1.5rem}.footer-grid .col-brand{grid-column:1/-1}}
+@media(max-width:480px){.footer-grid{grid-template-columns:1fr}}
 .col-brand{display:flex;flex-direction:column;gap:.5rem;align-items:flex-start}
 .col-brand .brand-row{display:flex;align-items:center;gap:6px;text-decoration:none}
 .col-brand .brand-row .brand{font-size:18px;font-weight:800;letter-spacing:-.5px}
@@ -55,6 +57,16 @@ export const FOOTER_HTML = `<!--footer-html-begin-->
           <li><a href="/#features">Features</a></li>
           <li><a href="/#demo">Demo</a></li>
           <li><a href="/#preise">Preise</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Branchen</h4>
+        <ul class="links">
+          <li><a href="/friseur/">Friseur</a></li>
+          <li><a href="/handwerker/">Handwerker</a></li>
+          <li><a href="/reinigung/">Reinigung</a></li>
+          <li><a href="/restaurant/">Restaurant</a></li>
+          <li><a href="/autowerkstatt/">Autowerkstatt</a></li>
         </ul>
       </div>
       <div>
