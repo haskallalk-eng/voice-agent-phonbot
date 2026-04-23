@@ -32,7 +32,7 @@ function TemplateCard({ template, onDemoStart }: TemplateCardProps) {
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="gradient-border group relative flex flex-col items-center gap-4 p-8 rounded-2xl glass
+      className="gradient-border group relative flex h-full w-full max-w-sm flex-col items-center gap-4 p-8 rounded-2xl glass
         hover:bg-white/10 hover:shadow-[0_0_40px_rgba(249,115,22,0.3)]
         hover:scale-[1.03] transition-all duration-300 text-center"
       style={{ zIndex: hovered ? 30 : 1 }}
@@ -112,6 +112,8 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
   const [agentTalking, setAgentTalking] = useState(false);
   const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const topTemplates = TEMPLATES.slice(0, 2);
+  const bottomTemplates = TEMPLATES.slice(2);
   // Cloudflare Turnstile token (cleared on expiry/reset). Empty string = no
   // token yet → demo button stays disabled in prod. Dev without site-key
   // configured: widget renders nothing, token stays '' but backend skips.
@@ -275,10 +277,17 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
                 </div>
               ))}
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 gap-x-4 gap-y-16 pb-10" style={{ overflow: 'visible' }}>
-              {TEMPLATES.map((t) => (
-                <TemplateCard key={t.id} template={t} onDemoStart={() => handleTemplateClick(t.id)} />
-              ))}
+            <div className="flex flex-col items-center gap-4 sm:gap-5 lg:gap-6 pb-10" style={{ overflow: 'visible' }}>
+              <div className="grid w-full max-w-3xl grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-16 justify-items-center" style={{ overflow: 'visible' }}>
+                {topTemplates.map((t) => (
+                  <TemplateCard key={t.id} template={t} onDemoStart={() => handleTemplateClick(t.id)} />
+                ))}
+              </div>
+              <div className="grid w-full max-w-5xl grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-16 justify-items-center" style={{ overflow: 'visible' }}>
+                {bottomTemplates.map((t) => (
+                  <TemplateCard key={t.id} template={t} onDemoStart={() => handleTemplateClick(t.id)} />
+                ))}
+              </div>
             </div>
             {/* Reassurance */}
             <p className="text-center text-xs text-white/35 mt-2">
