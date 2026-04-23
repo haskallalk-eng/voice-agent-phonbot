@@ -25,7 +25,7 @@ function formatTime(ts?: number): string {
   });
 }
 
-export function CallLog() {
+export function CallLog({ focusId }: { focusId?: string | null } = {}) {
   const [calls, setCalls] = useState<RetellCall[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCall, setSelectedCall] = useState<RetellCall | null>(null);
@@ -49,6 +49,17 @@ export function CallLog() {
   useEffect(() => {
     void load();
   }, []);
+
+  // Deep-link: arrived from dashboard → open the call detail directly and
+  // flip to the right page so it's visible when the user dismisses the modal.
+  useEffect(() => {
+    if (!focusId || loading) return;
+    const idx = calls.findIndex((c) => c.call_id === focusId);
+    if (idx >= 0) {
+      setPage(Math.floor(idx / PAGE_SIZE) + 1);
+      void openDetail(focusId);
+    }
+  }, [focusId, loading, calls]);
 
   async function openDetail(callId: string) {
     setDetailLoading(true);

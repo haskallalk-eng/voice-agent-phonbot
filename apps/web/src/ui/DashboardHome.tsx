@@ -28,7 +28,9 @@ import {
 } from './PhonbotIcons.js';
 
 type Props = {
-  onNavigate: (page: Page) => void;
+  // Second arg is an optional focusId — the target page scrolls to and
+  // briefly highlights the item with that id (ticket id, call id, booking id).
+  onNavigate: (page: Page, focusId?: string) => void;
 };
 
 function StatCard({
@@ -390,9 +392,11 @@ export function DashboardHome({ onNavigate }: Props) {
           ) : (
             <div className="space-y-2">
               {recentCalls.map((call) => (
-                <div
+                <button
                   key={call.call_id}
-                  className="flex items-center justify-between px-4 py-3 bg-white/5 rounded-xl"
+                  type="button"
+                  onClick={() => onNavigate('logs', call.call_id)}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-white/5 hover:bg-white/10 border border-transparent hover:border-orange-500/30 rounded-xl transition-all text-left cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
                     <span
@@ -405,7 +409,7 @@ export function DashboardHome({ onNavigate }: Props) {
                     <span className="text-sm text-white/60">{formatDuration(call.duration_ms)}</span>
                   </div>
                   <span className="text-xs text-white/40">{formatTime(call.start_timestamp)}</span>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -430,9 +434,11 @@ export function DashboardHome({ onNavigate }: Props) {
           ) : (
             <div className="space-y-2">
               {recentOpenTickets.map((t) => (
-                <div
+                <button
                   key={t.id}
-                  className="flex items-center justify-between px-4 py-3 bg-white/5 rounded-xl"
+                  type="button"
+                  onClick={() => onNavigate('tickets', String(t.id))}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-white/5 hover:bg-white/10 border border-transparent hover:border-orange-500/30 rounded-xl transition-all text-left cursor-pointer"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <span
@@ -449,7 +455,7 @@ export function DashboardHome({ onNavigate }: Props) {
                   <span className="text-xs text-white/40 shrink-0 ml-2">
                     {new Date(t.created_at).toLocaleDateString('de-DE')}
                   </span>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -472,7 +478,12 @@ export function DashboardHome({ onNavigate }: Props) {
           ) : (
             <div className="space-y-2">
               {upcomingBookings.map(b => (
-                <div key={b.id} className="flex items-center justify-between px-4 py-3 bg-white/5 rounded-xl">
+                <button
+                  key={b.id}
+                  type="button"
+                  onClick={() => onNavigate('calendar', b.id)}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-white/5 hover:bg-white/10 border border-transparent hover:border-orange-500/30 rounded-xl transition-all text-left cursor-pointer"
+                >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-10 h-10 rounded-lg bg-orange-500/15 flex items-center justify-center shrink-0">
                       <span className="text-xs font-bold text-orange-400">
@@ -487,7 +498,7 @@ export function DashboardHome({ onNavigate }: Props) {
                   <span className="text-xs text-white/50 shrink-0 ml-2">
                     {new Date(b.slot_time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr
                   </span>
-                </div>
+                </button>
               ))}
             </div>
           )}
