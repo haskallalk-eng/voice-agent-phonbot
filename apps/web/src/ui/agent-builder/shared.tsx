@@ -194,66 +194,66 @@ export function assembleRolePrompt(
   return `${intro}\n\n${tasks}\n\n${blocks}`;
 }
 
-export type PromptSection = { id: string; label: string; Icon: SectionIconComp; accent: string; description: string; text: string };
+export type PromptSection = { id: string; label: string; Icon: SectionIconComp; accent: string; hex: string; description: string; text: string };
 
 export const PROMPT_SECTIONS: PromptSection[] = [
   {
-    id: 'greeting', label: 'Begrüßung', Icon: IconAgent, accent: 'text-orange-400',
+    id: 'greeting', label: 'Begrüßung', Icon: IconAgent, accent: 'text-orange-400', hex: '#F97316',
     description: 'Wie der Agent Anrufer begrüßt',
     text: `Begrüße jeden Anrufer herzlich: "Guten Tag, willkommen bei {businessName}, mein Name ist {agentName} — wie kann ich Ihnen helfen?" Passe die Tageszeit an.`,
   },
   {
-    id: 'tone', label: 'Tonalität', Icon: IconVolume, accent: 'text-cyan-400',
+    id: 'tone', label: 'Tonalität', Icon: IconVolume, accent: 'text-cyan-400', hex: '#06B6D4',
     description: 'Sprachstil & Persönlichkeit',
     text: `Spreche ruhig, klar und professionell. Verwende eine freundliche, empathische Sprache. Vermeide Fachjargon. Höre aktiv zu und bestätige das Gehörte mit kurzen Phrasen wie "Ich verstehe" oder "Gerne helfe ich Ihnen".`,
   },
   {
-    id: 'appointment', label: 'Terminbuchung', Icon: IconCalendar, accent: 'text-violet-400',
+    id: 'appointment', label: 'Terminbuchung', Icon: IconCalendar, accent: 'text-violet-400', hex: '#A78BFA',
     description: 'Termin finden und buchen',
     text: `Wenn ein Anrufer einen Termin möchte: Frage nach gewünschtem Datum, Uhrzeit und Art des Termins. Prüfe die Verfügbarkeit. Biete 2–3 Optionen an. Bestätige den Termin mit Datum, Uhrzeit und Ort. Frage bei Unklarheiten präzise nach.`,
   },
   {
-    id: 'ticket', label: 'Ticket erstellen', Icon: IconTicket, accent: 'text-amber-400',
+    id: 'ticket', label: 'Ticket erstellen', Icon: IconTicket, accent: 'text-amber-400', hex: '#FBBF24',
     description: 'Anliegen als Ticket erfassen',
     text: `Erstelle ein Ticket wenn das Anliegen komplex ist, eine Bearbeitung durch das Team erfordert oder du das Problem nicht sofort lösen kannst. Erfasse: Name, Telefonnummer, Art des Anliegens und alle Details. Bestätige die Erstellung mit Ticketnummer.`,
   },
   {
-    id: 'routing', label: 'Weiterleitung', Icon: IconPhoneOut, accent: 'text-sky-400',
+    id: 'routing', label: 'Weiterleitung', Icon: IconPhoneOut, accent: 'text-sky-400', hex: '#38BDF8',
     description: 'Anruf weiterleiten',
     text: `Leite Anrufe weiter wenn das Anliegen außerhalb deines Bereichs liegt, der Anrufer nach einer bestimmten Person fragt oder eine persönliche Bearbeitung nötig ist. Kündige die Weiterleitung freundlich an und nenne die Wartezeit.`,
   },
   {
-    id: 'afterhours', label: 'After-Hours', Icon: IconAlertTriangle, accent: 'text-red-400',
+    id: 'afterhours', label: 'After-Hours', Icon: IconAlertTriangle, accent: 'text-red-400', hex: '#F87171',
     description: 'Außerhalb der Öffnungszeiten',
     text: `Außerhalb der Öffnungszeiten teile mit, dass {businessName} aktuell geschlossen ist, und nenne die Öffnungszeiten. Bei dringendem Anliegen: Notfall-Kontakt nennen oder Ticket mit Priorität "Dringend" erstellen. Sonst Rückruf anbieten.`,
   },
   {
-    id: 'faq', label: 'FAQ & Auskunft', Icon: IconBookOpen, accent: 'text-indigo-400',
+    id: 'faq', label: 'FAQ & Auskunft', Icon: IconBookOpen, accent: 'text-indigo-400', hex: '#818CF8',
     description: 'Häufige Fragen beantworten',
     text: `Beantworte häufige Fragen anhand des hinterlegten Wissens: Öffnungszeiten, Preise, Services, Standort und Anfahrt. Wenn du eine Antwort nicht sicher kennst, sage das ehrlich und biete Alternativen an.`,
   },
   {
-    id: 'escalation', label: 'Eskalation', Icon: IconSliders, accent: 'text-rose-400',
+    id: 'escalation', label: 'Eskalation', Icon: IconSliders, accent: 'text-rose-400', hex: '#FB7185',
     description: 'An menschlichen Mitarbeiter übergeben',
     text: `Übergib an einen Mitarbeiter wenn: der Anrufer es ausdrücklich verlangt, du eine Frage nicht beantworten kannst, der Anrufer sehr aufgebracht ist oder das Anliegen rechtlicher Natur ist. Kündige die Übergabe freundlich an.`,
   },
   {
-    id: 'privacy', label: 'Datenschutz', Icon: IconPrivacy, accent: 'text-emerald-400',
+    id: 'privacy', label: 'Datenschutz', Icon: IconPrivacy, accent: 'text-emerald-400', hex: '#34D399',
     description: 'DSGVO-konform handeln',
     text: `Behandle persönliche Daten vertraulich. Frage nicht nach mehr Informationen als nötig. Gib keine Kundendaten an unbekannte Dritte weiter. Bestätige keine personenbezogenen Daten gegenüber unbekannten Anrufern.`,
   },
   {
-    id: 'closing', label: 'Gesprächsabschluss', Icon: IconPhoneOff, accent: 'text-teal-400',
+    id: 'closing', label: 'Gesprächsabschluss', Icon: IconPhoneOff, accent: 'text-teal-400', hex: '#2DD4BF',
     description: 'Gespräch professionell beenden',
     text: `Beende jedes Gespräch freundlich. Fasse die besprochenen Punkte kurz zusammen. Frage ob du noch anderweitig helfen kannst. Verabschiedsformel: "Ich wünsche Ihnen noch einen angenehmen Tag, auf Wiederhören!"`,
   },
   {
-    id: 'upsell', label: 'Zusatzangebote', Icon: IconStar, accent: 'text-yellow-400',
+    id: 'upsell', label: 'Zusatzangebote', Icon: IconStar, accent: 'text-yellow-400', hex: '#FACC15',
     description: 'Passende Angebote erwähnen',
     text: `Weise bei passender Gelegenheit auf relevante Angebote hin — ohne aufdringlich zu sein. Erwähne nur Angebote, die zum Anliegen des Anrufers passen. Formuliere als Vorschlag, nicht als Verkaufsgespräch. Respektiere ein "Nein" sofort.`,
   },
   {
-    id: 'multilingual', label: 'Mehrsprachig', Icon: IconGlobe, accent: 'text-lime-400',
+    id: 'multilingual', label: 'Mehrsprachig', Icon: IconGlobe, accent: 'text-lime-400', hex: '#A3E635',
     description: 'Mehrere Sprachen unterstützen',
     text: `Erkenne die Sprache des Anrufers und antworte in derselben Sprache, sofern du diese beherrschst. Wechsle nahtlos die Sprache wenn der Anrufer wechselt. Bei unbekannten Sprachen bitte höflich auf Deutsch oder Englisch weiterzusprechen.`,
   },

@@ -293,11 +293,12 @@ export function BehaviorTab({
                 key={sec.id}
                 type="button"
                 onClick={() => onTogglePromptSection(sec.id)}
-                className={`group flex items-start gap-2.5 p-3 rounded-xl border transition-all text-left cursor-pointer ${
+                className="group flex items-start gap-2.5 p-3 rounded-xl border transition-all text-left cursor-pointer"
+                style={
                   isActive
-                    ? 'border-orange-500/35 bg-orange-500/[0.07]'
-                    : 'border-white/[0.07] bg-white/[0.03] hover:border-white/[0.14] hover:bg-white/[0.06]'
-                }`}
+                    ? { borderColor: `${sec.hex}55`, background: `${sec.hex}0f` }
+                    : { borderColor: 'rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.03)' }
+                }
               >
                 <sec.Icon
                   size={13}
@@ -313,6 +314,13 @@ export function BehaviorTab({
             );
           })}
         </div>
+
+        {/* Editable coloured cards — one per active section */}
+        <SectionOverrides
+          config={config}
+          onUpdate={onUpdate}
+          activeIds={activePromptSections}
+        />
 
         <div className="mt-4">
           <span className="text-xs font-medium text-white/40 uppercase tracking-wider block mb-2">Aktive Tools</span>
@@ -390,6 +398,134 @@ function updateCustomAddition(
   onUpdate: (patch: Partial<AgentConfig>) => void,
 ) {
   writeAssembledPrompt(cfg, readSelectedRoles(cfg), text, onUpdate);
+}
+
+function readSectionOverrides(cfg: AgentConfig): Record<string, string> {
+  return (cfg.sectionTextOverrides && typeof cfg.sectionTextOverrides === 'object')
+    ? cfg.sectionTextOverrides
+    : {};
+}
+
+// Replace the `### Label\n...` block in systemPrompt with a new body text.
+// Works on the existing in-prompt convention (togglePromptSection appends
+// these headings). If the heading isn't found the caller will fall back to
+// appending; we keep this helper pure-and-local.
+function replaceBlockInPrompt(prompt: string, label: string, nextBody: string): string | null {
+  const lines = prompt.split('\n');
+  const startIdx = lines.findIndex((l) => l.trim() === `### ${label}`);
+  if (startIdx < 0) return null;
+  const endIdx = lines.findIndex((l, i) => i > startIdx && l.startsWith('### '));
+  const tailStart = endIdx < 0 ? lines.length : endIdx;
+  const before = lines.slice(0, startIdx + 1);
+  const after = lines.slice(tailStart);
+  const newLines = [...before, ...nextBody.split('\n')];
+  if (after.length > 0) newLines.push('');
+  return [...newLines, ...after].join('\n').trim();
+}
+
+function renderSectionText(tpl: { text: string }, cfg: AgentConfig, override?: string): string {
+  const src = typeof override === 'string' ? override : tpl.text;
+  return src
+    .replace(/\{businessName\}/g, cfg.businessName || 'deinem Unternehmen')
+    .replace(/\{agentName\}/g, cfg.name || 'dem Assistenten');
+}
+
+function writeSectionOverride(
+  cfg: AgentConfig,
+  sectionId: string,
+  nextText: string,
+  onUpdate: (patch: Partial<AgentConfig>) => void,
+) {
+  const sec = PROMPT_SECTIONS.find((s) => s.id === sectionId);
+  if (!sec) return;
+  const cur = readSectionOverrides(cfg);
+  const defaultRendered = renderSectionText(sec, cfg);
+  const nextOverrides: Record<string, string> = { ...cur };
+  // If edited text matches the rendered default, strip the override so a
+  // future default copy-change propagates. Otherwise persist the raw edited
+  // value (no placeholder re-rewriting — the user now owns the literal text).
+  if (nextText.trim() === defaultRendered.trim()) {
+    delete nextOverrides[sectionId];
+  } else {
+    nextOverrides[sectionId] = nextText;
+  }
+  const patched = replaceBlockInPrompt(cfg.systemPrompt ?? '', sec.label, nextText);
+  onUpdate({
+    sectionTextOverrides: nextOverrides,
+    // If the `### Label` heading isn't in systemPrompt (stale state), skip
+    // the prompt patch — togglePromptSection will pick up the override the
+    // next time the section is re-activated.
+    ...(patched ? { systemPrompt: patched } : {}),
+  });
+}
+
+function SectionOverrides({
+  config,
+  onUpdate,
+  activeIds,
+}: {
+  config: AgentConfig;
+  onUpdate: (patch: Partial<AgentConfig>) => void;
+  activeIds: Set<string>;
+}) {
+  const overrides = readSectionOverrides(config);
+  const active = useMemo(
+    () => PROMPT_SECTIONS.filter((s) => activeIds.has(s.id)),
+    [activeIds],
+  );
+  if (active.length === 0) return null;
+
+  return (
+    <div className="space-y-3 mb-5">
+      {active.map((sec) => {
+        const rendered = renderSectionText(sec, config, overrides[sec.id]);
+        const defaultRendered = renderSectionText(sec, config);
+        const edited = rendered.trim() !== defaultRendered.trim();
+        return (
+          <div
+            key={sec.id}
+            className="rounded-xl border overflow-hidden"
+            style={{
+              borderColor: `${sec.hex}40`,
+              background: `linear-gradient(135deg, ${sec.hex}0a 0%, rgba(255,255,255,0.02) 100%)`,
+            }}
+          >
+            <div
+              className="flex items-center gap-2.5 px-4 py-2.5"
+              style={{ borderBottom: `1px solid ${sec.hex}1f` }}
+            >
+              <span
+                className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center"
+                style={{ background: `${sec.hex}1a`, border: `1px solid ${sec.hex}33` }}
+              >
+                <sec.Icon size={14} className={sec.accent} />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-white/85">{sec.label}</p>
+                <p className="text-[10px] text-white/40 leading-tight">{sec.description}</p>
+              </div>
+              {edited && (
+                <button
+                  type="button"
+                  onClick={() => writeSectionOverride(config, sec.id, defaultRendered, onUpdate)}
+                  className="text-[10px] text-white/45 hover:text-white/80 transition-colors cursor-pointer"
+                  title="Original-Block wiederherstellen"
+                >
+                  Zurücksetzen
+                </button>
+              )}
+            </div>
+            <AdaptiveTextarea
+              value={rendered}
+              onChange={(e) => writeSectionOverride(config, sec.id, e.target.value, onUpdate)}
+              spellCheck={false}
+              className="w-full bg-transparent text-xs text-white/80 font-mono leading-relaxed px-4 py-3 outline-none focus:ring-0 border-0"
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function readOverrides(cfg: AgentConfig): Record<string, string> {

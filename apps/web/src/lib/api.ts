@@ -163,6 +163,7 @@ export type AgentConfig = {
   selectedRoles?: string[];          // multi-select — ids match PROMPT_TEMPLATES
   customPromptAddition?: string;     // freeform house-rules below the assembled roles
   roleBlockOverrides?: Record<string, string>;  // per-role edited block text
+  sectionTextOverrides?: Record<string, string>; // per-section edited block text
   tools: string[];
   fallback: { enabled: boolean; reason: string };
   retellAgentId?: string;
