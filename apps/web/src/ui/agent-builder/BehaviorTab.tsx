@@ -374,20 +374,29 @@ function readSelectedRoles(cfg: AgentConfig): string[] {
   return Array.isArray(cfg.selectedRoles) ? cfg.selectedRoles : [];
 }
 
-/** Rebuild the stored `systemPrompt` from the current role selection + the
- *  customer's freeform addition. Always fires the update atomically so the
- *  three fields stay in sync. */
+function readCustomBlock(cfg: AgentConfig): string {
+  return typeof cfg.customPromptBlock === 'string' ? cfg.customPromptBlock : '';
+}
+
+/** Rebuild the stored `systemPrompt` from the current role selection + both
+ *  freeform slots (customPromptAddition + customPromptBlock). Always fires
+ *  the update atomically so all four fields stay in sync. */
 function writeAssembledPrompt(
   cfg: AgentConfig,
   nextRoles: string[],
   nextCustom: string,
+  nextBlock: string,
   onUpdate: (patch: Partial<AgentConfig>) => void,
 ) {
   const assembled = assembleRolePrompt(nextRoles, cfg.businessName);
-  const full = nextCustom.trim().length > 0 ? `${assembled}\n\n${nextCustom.trim()}` : assembled;
+  const parts = [assembled];
+  if (nextCustom.trim().length > 0) parts.push(nextCustom.trim());
+  if (nextBlock.trim().length > 0) parts.push(nextBlock.trim());
+  const full = parts.join('\n\n');
   onUpdate({
     selectedRoles: nextRoles,
     customPromptAddition: nextCustom,
+    customPromptBlock: nextBlock,
     systemPrompt: full,
   });
 }
@@ -397,7 +406,15 @@ function updateCustomAddition(
   text: string,
   onUpdate: (patch: Partial<AgentConfig>) => void,
 ) {
-  writeAssembledPrompt(cfg, readSelectedRoles(cfg), text, onUpdate);
+  writeAssembledPrompt(cfg, readSelectedRoles(cfg), text, readCustomBlock(cfg), onUpdate);
+}
+
+function updateCustomBlock(
+  cfg: AgentConfig,
+  text: string,
+  onUpdate: (patch: Partial<AgentConfig>) => void,
+) {
+  writeAssembledPrompt(cfg, readSelectedRoles(cfg), readCustomAddition(cfg), text, onUpdate);
 }
 
 function readSectionOverrides(cfg: AgentConfig): Record<string, string> {
@@ -569,6 +586,7 @@ function PromptView({
   const roleIds = readSelectedRoles(config);
   const overrides = readOverrides(config);
   const customAddition = readCustomAddition(config);
+  const customBlock = readCustomBlock(config);
   const selectedRoles = useMemo(
     () => PROMPT_TEMPLATES.filter((t) => roleIds.includes(t.id)),
     [roleIds],
@@ -686,6 +704,32 @@ function PromptView({
             className="w-full bg-transparent text-xs text-white/80 font-mono leading-relaxed px-4 py-3 outline-none focus:ring-0 border-0 placeholder:text-white/25"
           />
         </div>
+
+        {/* Extra blank slot — deliberately quiet: no gradient, no icon, no
+            title row. Just a neutral bordered card that fades in as the
+            user types. For tone tweaks, meta-rules, scratch notes — any
+            freeform line that doesn't fit „Deine Ergänzungen". */}
+        <div
+          className="rounded-xl border overflow-hidden transition-colors"
+          style={{
+            borderColor: 'rgba(255,255,255,0.07)',
+            background: 'rgba(255,255,255,0.015)',
+          }}
+        >
+          <div className="px-4 pt-3 pb-1">
+            <p className="text-[10px] uppercase tracking-wider text-white/30">
+              Freier Block · ganz leer, wie du magst
+            </p>
+          </div>
+          <AdaptiveTextarea
+            value={customBlock}
+            onChange={(e) => updateCustomBlock(config, e.target.value, onUpdate)}
+            spellCheck={false}
+            placeholder={'…'}
+            minRows={2}
+            className="w-full bg-transparent text-xs text-white/75 font-mono leading-relaxed px-4 pt-1 pb-3 outline-none focus:ring-0 border-0 placeholder:text-white/20"
+          />
+        </div>
       </div>
     </SectionCard>
   );
@@ -708,7 +752,7 @@ function RoleCard({
   function toggleRole(id: string) {
     const next = new Set(selected);
     if (next.has(id)) next.delete(id); else next.add(id);
-    writeAssembledPrompt(config, Array.from(next), readCustomAddition(config), onUpdate);
+    writeAssembledPrompt(config, Array.from(next), readCustomAddition(config), readCustomBlock(config), onUpdate);
   }
 
   const empty = selected.size === 0;
