@@ -540,6 +540,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         time: preferredTime,
         service,
         notes,
+        sourceCallId: callId,
       });
 
       if (!booking.ok) {
@@ -563,6 +564,9 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
             ticketId: ticket.id,
             ticketStatus: ticket.status,
             error: booking.error ?? null,
+            chipyBookingId: booking.chipyBookingId ?? null,
+            externalResults: booking.externalResults ?? [],
+            partial: booking.partial ?? false,
             message: 'Kalenderbuchung fehlgeschlagen, Rueckruf-Ticket wurde erstellt.',
             customerName,
             customerPhone: ticket.customer_phone,
@@ -586,6 +590,9 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
             fallback: false,
             error: booking.error ?? 'CALENDAR_BOOK_FAILED',
             fallbackError: code ?? 'TICKET_CREATE_FAILED',
+            chipyBookingId: booking.chipyBookingId ?? null,
+            externalResults: booking.externalResults ?? [],
+            partial: booking.partial ?? false,
             customerName,
             customerPhone,
             preferredTime,
@@ -598,6 +605,9 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           status: booking.ok ? 'confirmed' : 'failed',
           eventId: booking.eventId ?? null,
           bookingId: booking.bookingId ?? null,
+          chipyBookingId: booking.chipyBookingId ?? null,
+          externalResults: booking.externalResults ?? [],
+          partial: booking.partial ?? false,
           error: booking.error ?? null,
           customerName,
           customerPhone,
