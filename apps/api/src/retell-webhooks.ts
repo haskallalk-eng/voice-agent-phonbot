@@ -20,6 +20,7 @@ import { triggerCallback } from './agent-config.js';
 import { analyzeCall } from './insights.js';
 import { getOrgIdByAgentId } from './org-id-cache.js';
 import { getCall, deleteCall } from './retell.js';
+import { fireInboundWebhooks } from './inbound-webhooks.js';
 
 const RETELL_API_KEY = process.env.RETELL_API_KEY ?? '';
 
@@ -284,6 +285,20 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const event = body?.event ?? body?.call?.call_status;
     const call = body?.call ?? body;
 
+    if (event === 'call_started') {
+      const agentId = (call as RetellCallData).agent_id;
+      const orgId = agentId ? await getOrgIdByAgentId(agentId) : null;
+      if (orgId) {
+        fireInboundWebhooks(orgId, 'call.started', {
+          callId: (call as RetellCallData).call_id,
+          agentId,
+          fromNumber: (call as RetellCallData).from_number,
+          toNumber: (call as RetellCallData).to_number,
+          startTimestamp: (call as RetellCallData).start_timestamp,
+        }).catch(() => {}); // logged inside
+      }
+    }
+
     if (event === 'call_ended') {
       const startTs = (call as RetellCallData).start_timestamp;
       const endTs = (call as RetellCallData).end_timestamp;
@@ -401,6 +416,23 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
               silence_duration_ms: silenceDurationMs ?? undefined,
             }).catch((err: Error) => req.log.error({ err: err.message, orgId, callId }, 'analyzeCall failed'));
           }
+        }
+
+        // Inbound-webhook fan-out: deliver `call.ended` to customer URLs.
+        // Fire-and-forget — customer outages must never delay our webhook ACK.
+        if (orgId && callId) {
+          fireInboundWebhooks(orgId, 'call.ended', {
+            callId,
+            agentId,
+            direction: (call as RetellCallData & { metadata?: Record<string, unknown> }).metadata?.outboundRecordId ? 'outbound' : 'inbound',
+            fromNumber: fromNumber ?? null,
+            toNumber: toNumber ?? null,
+            durationSec: durationMs ? Math.round(durationMs / 1000) : null,
+            minutesBilled: minutes,
+            disconnectionReason: disconnectionReason ?? null,
+            startTimestamp: startTs,
+            endTimestamp: endTs,
+          }).catch(() => {});
         }
       }
     }
@@ -713,6 +745,18 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           service: row.service,
         }).catch(logBg('triggerCallback', { orgId }));
       }
+
+      // Inbound-webhook fan-out: deliver `ticket.created` to customer URLs.
+      fireInboundWebhooks(orgId, 'ticket.created', {
+        ticketId: row.id,
+        status: row.status,
+        reason: row.reason,
+        customerName: row.customer_name,
+        customerPhone: row.customer_phone,
+        preferredTime: row.preferred_time,
+        service: row.service,
+        callId,
+      }).catch(() => {});
 
       const result = {
         ok: true,
