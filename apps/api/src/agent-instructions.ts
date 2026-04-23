@@ -75,7 +75,32 @@ export function buildAgentInstructions(cfg: AgentConfig) {
     parts.push(buildOpeningHoursBlock(cfg.openingHours));
   }
 
-  if (cfg.servicesText?.trim()) {
+  // Structured services take precedence over the legacy free-text field.
+  // Each row renders as a single bullet the LLM can quote cleanly: name +
+  // formatted price (with "ab" / range support) + duration + notes + tag.
+  const svc = (cfg as Record<string, unknown>).services as
+    | Array<{
+        name: string; price?: string; priceFrom?: boolean; priceUpTo?: string;
+        duration?: string; description?: string; tag?: string | null;
+      }>
+    | undefined;
+  if (Array.isArray(svc) && svc.length > 0) {
+    const lines = svc.map((s) => {
+      const bits: string[] = [s.name];
+      if (s.price) {
+        let priceStr: string;
+        if (s.priceFrom) priceStr = `ab ${s.price} €`;
+        else if (s.priceUpTo) priceStr = `${s.price}–${s.priceUpTo} €`;
+        else priceStr = `${s.price} €`;
+        bits[0] = `${s.name}: ${priceStr}`;
+      }
+      if (s.duration) bits[0] += ` (${s.duration})`;
+      if (s.description?.trim()) bits.push(`— ${s.description.trim()}`);
+      if (s.tag) bits.push(`· ${s.tag}`);
+      return `- ${bits.join(' ')}`;
+    });
+    parts.push(`Angebotene Services:\n${lines.join('\n')}`);
+  } else if (cfg.servicesText?.trim()) {
     parts.push(`Angebotene Services: ${cfg.servicesText.trim()}`);
   }
 
