@@ -78,40 +78,47 @@ export const LANGUAGES = [
 export const CHIPY_VOICE_ID = 'custom_voice_28bd4920fa6523c6ac8c4e527b';
 
 export const LANGUAGE_VOICE_RECOMMENDATIONS: Record<string, { voiceId: string; native: boolean }> = {
-  // Tier 1 — native defaults we picked by hand
+  // Tier 1a — DE/EN/FR/ES defaults point to real native Standard voices
+  // (Chipy clone for DE; Cartesia native speakers for EN/FR/ES).
   de: { voiceId: CHIPY_VOICE_ID,     native: true  },
   en: { voiceId: 'cartesia-Cleo',    native: true  },
   fr: { voiceId: 'cartesia-Emma',    native: true  },
   es: { voiceId: 'cartesia-Isabel',  native: true  },
-  it: { voiceId: CHIPY_VOICE_ID,     native: false },
-  tr: { voiceId: CHIPY_VOICE_ID,     native: false },
-  pl: { voiceId: CHIPY_VOICE_ID,     native: false },
-  nl: { voiceId: CHIPY_VOICE_ID,     native: false },
-  // Tier 2 — all use the ElevenLabs Multilingual v2 pool. The `native:true`
-  // flag drops the "upload your own clone" nudge, since these share the HQ
-  // pool which is already language-optimised by ElevenLabs.
+  // Tier 1b — IT/TR/PL/NL also have full native lineups (Cartesia
+  // Sonic covers the locale), so default to the first HQ voice of the
+  // catalog — NOT the German Chipy clone which would speak the locale
+  // with a strong German accent.
+  it: { voiceId: '11labs-Marissa', native: true },
+  tr: { voiceId: '11labs-Marissa', native: true },
+  pl: { voiceId: '11labs-Marissa', native: true },
+  nl: { voiceId: '11labs-Marissa', native: true },
+  // Tier 2a — native Standard-tier recordings exist (Cartesia Sonic
+  // covers the locale). 6-voice native lineup, no fallback banner.
   pt: { voiceId: '11labs-Marissa', native: true },
   ru: { voiceId: '11labs-Marissa', native: true },
   ja: { voiceId: '11labs-Marissa', native: true },
   ko: { voiceId: '11labs-Marissa', native: true },
   zh: { voiceId: '11labs-Marissa', native: true },
-  ar: { voiceId: '11labs-Marissa', native: true },
   hi: { voiceId: '11labs-Marissa', native: true },
   sv: { voiceId: '11labs-Marissa', native: true },
-  da: { voiceId: '11labs-Marissa', native: true },
-  fi: { voiceId: '11labs-Marissa', native: true },
-  no: { voiceId: '11labs-Marissa', native: true },
-  cs: { voiceId: '11labs-Marissa', native: true },
-  sk: { voiceId: '11labs-Marissa', native: true },
-  hu: { voiceId: '11labs-Marissa', native: true },
-  ro: { voiceId: '11labs-Marissa', native: true },
-  el: { voiceId: '11labs-Marissa', native: true },
-  bg: { voiceId: '11labs-Marissa', native: true },
-  hr: { voiceId: '11labs-Marissa', native: true },
-  uk: { voiceId: '11labs-Marissa', native: true },
-  id: { voiceId: '11labs-Marissa', native: true },
-  ms: { voiceId: '11labs-Marissa', native: true },
-  vi: { voiceId: '11labs-Marissa', native: true },
+  // Tier 2b — no native recordings at any tier. We ship a compact
+  // 3-voice multilingual fallback so the feature works; `native:false`
+  // surfaces the "upload your own clone" banner in the picker.
+  ar: { voiceId: '11labs-Marissa', native: false },
+  da: { voiceId: '11labs-Marissa', native: false },
+  fi: { voiceId: '11labs-Marissa', native: false },
+  no: { voiceId: '11labs-Marissa', native: false },
+  cs: { voiceId: '11labs-Marissa', native: false },
+  sk: { voiceId: '11labs-Marissa', native: false },
+  hu: { voiceId: '11labs-Marissa', native: false },
+  ro: { voiceId: '11labs-Marissa', native: false },
+  el: { voiceId: '11labs-Marissa', native: false },
+  bg: { voiceId: '11labs-Marissa', native: false },
+  hr: { voiceId: '11labs-Marissa', native: false },
+  uk: { voiceId: '11labs-Marissa', native: false },
+  id: { voiceId: '11labs-Marissa', native: false },
+  ms: { voiceId: '11labs-Marissa', native: false },
+  vi: { voiceId: '11labs-Marissa', native: false },
 };
 
 export const KNOWN_TOOLS = ['calendar.findSlots', 'calendar.book', 'ticket.create'] as const;
