@@ -95,6 +95,25 @@ interface CalendarConnection {
   username: string | null;
 }
 
+interface ExternalBookingResult {
+  provider: string;
+  connectionId: string;
+  ok: boolean;
+  eventId?: string;
+  bookingId?: number | string;
+  error?: string;
+  reused?: boolean;
+  bookedAt?: string;
+}
+
+type ExternalBookingRefs = Record<string, ExternalBookingResult>;
+
+interface ChipyBookingState {
+  id: string;
+  source_call_id: string | null;
+  external_refs: unknown;
+}
+
 // ── DB Migration ──────────────────────────────────────────────────────────────
 
 export async function migrateCalendar(): Promise<void> {
@@ -182,9 +201,13 @@ export async function migrateCalendar(): Promise<void> {
       service         TEXT,
       notes           TEXT,
       slot_time       TIMESTAMPTZ NOT NULL,
+      source_call_id  TEXT,
+      external_refs   JSONB NOT NULL DEFAULT '{}'::jsonb,
       created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  await pool.query(`ALTER TABLE chipy_bookings ADD COLUMN IF NOT EXISTS source_call_id TEXT`);
+  await pool.query(`ALTER TABLE chipy_bookings ADD COLUMN IF NOT EXISTS external_refs JSONB NOT NULL DEFAULT '{}'::jsonb`);
 
   // Prevent double bookings for the same org + slot time.
   // PLAN #2: on existing servers, duplicate rows may already exist (before this
@@ -203,6 +226,11 @@ export async function migrateCalendar(): Promise<void> {
   `).catch(() => {/* table may not exist yet on first boot */});
   await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS chipy_bookings_org_slot_uniq ON chipy_bookings(org_id, slot_time);
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS chipy_bookings_source_call_idx
+      ON chipy_bookings(org_id, source_call_id)
+      WHERE source_call_id IS NOT NULL;
   `);
 }
 
@@ -874,18 +902,137 @@ async function isChipySlotAvailable(orgId: string, slotTime: Date): Promise<bool
   );
 }
 
-async function insertChipyBooking(
+function normalizeSourceCallId(sourceCallId: string | undefined): string | null {
+  const trimmed = sourceCallId?.trim();
+  if (!trimmed || trimmed === 'retell') return null;
+  return trimmed.slice(0, 160);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseExternalBookingRefs(raw: unknown): ExternalBookingRefs {
+  if (!isRecord(raw)) return {};
+  const refs: ExternalBookingRefs = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!isRecord(value)) continue;
+    const provider = typeof value.provider === 'string' ? value.provider : null;
+    const connectionId = typeof value.connectionId === 'string' ? value.connectionId : null;
+    const ok = typeof value.ok === 'boolean' ? value.ok : null;
+    if (!provider || !connectionId || ok === null) continue;
+    refs[key] = {
+      provider,
+      connectionId,
+      ok,
+      eventId: typeof value.eventId === 'string' ? value.eventId : undefined,
+      bookingId: typeof value.bookingId === 'string' || typeof value.bookingId === 'number' ? value.bookingId : undefined,
+      error: typeof value.error === 'string' ? value.error : undefined,
+      reused: typeof value.reused === 'boolean' ? value.reused : undefined,
+      bookedAt: typeof value.bookedAt === 'string' ? value.bookedAt : undefined,
+    };
+  }
+  return refs;
+}
+
+function externalBookingKey(conn: CalendarConnection): string {
+  return `${conn.provider}:${conn.id}`;
+}
+
+async function claimChipyBooking(
   orgId: string,
-  opts: { customerName: string; customerPhone: string; service: string; notes?: string },
+  opts: { customerName: string; customerPhone: string; service: string; notes?: string; sourceCallId?: string },
   slotTime: Date,
-): Promise<string | undefined> {
-  if (!pool) return undefined;
-  const res = await pool.query(
-    `INSERT INTO chipy_bookings (org_id, customer_name, customer_phone, service, notes, slot_time)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-    [orgId, opts.customerName, opts.customerPhone, opts.service || null, opts.notes || null, slotTime.toISOString()],
+): Promise<{ ok: true; id?: string; externalRefs: ExternalBookingRefs; reused: boolean } | { ok: false; error: string }> {
+  if (!pool) return { ok: true, externalRefs: {}, reused: false };
+
+  const sourceCallId = normalizeSourceCallId(opts.sourceCallId);
+  const inserted = await pool.query<ChipyBookingState>(
+    `INSERT INTO chipy_bookings
+       (org_id, customer_name, customer_phone, service, notes, slot_time, source_call_id, external_refs)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, '{}'::jsonb)
+     ON CONFLICT (org_id, slot_time) DO NOTHING
+     RETURNING id, source_call_id, external_refs`,
+    [
+      orgId,
+      opts.customerName,
+      opts.customerPhone,
+      opts.service || null,
+      opts.notes || null,
+      slotTime.toISOString(),
+      sourceCallId,
+    ],
   );
-  return res.rows[0]?.id as string | undefined;
+  const newRow = inserted.rows[0];
+  if (newRow) {
+    return { ok: true, id: newRow.id, externalRefs: parseExternalBookingRefs(newRow.external_refs), reused: false };
+  }
+
+  const existing = await pool.query<ChipyBookingState>(
+    `SELECT id, source_call_id, external_refs
+     FROM chipy_bookings
+     WHERE org_id = $1 AND slot_time = $2
+     LIMIT 1`,
+    [orgId, slotTime.toISOString()],
+  );
+  const existingRow = existing.rows[0];
+  if (existingRow && sourceCallId && existingRow.source_call_id === sourceCallId) {
+    return { ok: true, id: existingRow.id, externalRefs: parseExternalBookingRefs(existingRow.external_refs), reused: true };
+  }
+
+  return { ok: false, error: `Chipy slot already booked: ${slotTime.toISOString()}` };
+}
+
+async function loadChipyExternalRefs(
+  orgId: string,
+  bookingId: string | undefined,
+  fallback: ExternalBookingRefs,
+): Promise<ExternalBookingRefs> {
+  if (!pool || !bookingId) return fallback;
+  const res = await pool.query<Pick<ChipyBookingState, 'external_refs'>>(
+    `SELECT external_refs FROM chipy_bookings WHERE org_id = $1 AND id = $2`,
+    [orgId, bookingId],
+  );
+  return parseExternalBookingRefs(res.rows[0]?.external_refs ?? fallback);
+}
+
+async function saveChipyExternalRefs(
+  orgId: string,
+  bookingId: string | undefined,
+  refs: ExternalBookingRefs,
+): Promise<void> {
+  if (!pool || !bookingId) return;
+  await pool.query(
+    `UPDATE chipy_bookings SET external_refs = $3::jsonb WHERE org_id = $1 AND id = $2`,
+    [orgId, bookingId, JSON.stringify(refs)],
+  );
+}
+
+async function withChipyBookingLock<T>(
+  orgId: string,
+  bookingId: string | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (!bookingId || !redis?.isOpen) return fn();
+
+  const lockKey = `calendar_booking:${orgId}:${bookingId}`;
+  const lockToken = crypto.randomUUID();
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    const acquired = await redis.set(lockKey, lockToken, { NX: true, EX: 45 }).catch(() => null);
+    if (acquired) {
+      try {
+        return await fn();
+      } finally {
+        const current = await redis.get(lockKey).catch(() => null);
+        if (current === lockToken) {
+          await redis.del(lockKey).catch(() => undefined);
+        }
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  return fn();
 }
 
 async function deleteChipyBooking(orgId: string, bookingId: string | undefined): Promise<void> {
@@ -1250,8 +1397,17 @@ export async function bookSlot(
     time: string;
     service: string;
     notes?: string;
+    sourceCallId?: string;
   },
-): Promise<{ ok: boolean; eventId?: string; bookingId?: number; error?: string }> {
+): Promise<{
+  ok: boolean;
+  eventId?: string;
+  bookingId?: number | string;
+  chipyBookingId?: string;
+  externalResults?: ExternalBookingResult[];
+  partial?: boolean;
+  error?: string;
+}> {
   const connections = await getCheckableConnections(orgId);
   const slotTime = parseSlotTime(opts.time);
   if (!slotTime) return { ok: false, error: `Cannot parse time: ${opts.time}` };
@@ -1259,47 +1415,92 @@ export async function bookSlot(
     return { ok: false, error: `Chipy slot unavailable: ${opts.time}` };
   }
 
-  let chipyBookingId: string | undefined;
+  let chipyBooking: { id?: string; externalRefs: ExternalBookingRefs; reused: boolean };
   try {
-    chipyBookingId = await insertChipyBooking(orgId, opts, slotTime);
+    const claimed = await claimChipyBooking(orgId, opts, slotTime);
+    if (!claimed.ok) return { ok: false, error: claimed.error };
+    chipyBooking = claimed;
   } catch (e) {
     return { ok: false, error: e instanceof Error ? `Chipy booking failed: ${e.message}` : 'Chipy booking failed' };
   }
 
   // No external calendars — book directly into Chipy
   if (connections.length === 0) {
-    return { ok: true, eventId: chipyBookingId };
+    return { ok: true, eventId: chipyBooking.id, bookingId: chipyBooking.id, chipyBookingId: chipyBooking.id };
   }
 
-  // Book into ALL connected external calendars (fire-and-collect)
-  const results: { provider: string; ok: boolean; eventId?: string; error?: string }[] = [];
-  for (const conn of connections) {
-    try {
-      const result = await bookSlotForConnection(conn, orgId, opts);
-      results.push({ provider: conn.provider, ...result });
-    } catch (e) {
-      results.push({ provider: conn.provider, ok: false, error: (e instanceof Error ? e.message : 'Unknown error') });
+  return withChipyBookingLock(orgId, chipyBooking.id, async () => {
+    const refs = await loadChipyExternalRefs(orgId, chipyBooking.id, chipyBooking.externalRefs);
+    const results: ExternalBookingResult[] = [];
+
+    for (const conn of connections) {
+      const key = externalBookingKey(conn);
+      const existingRef = refs[key];
+      if (existingRef?.ok) {
+        results.push({ ...existingRef, reused: true });
+        continue;
+      }
+
+      const bookedAt = new Date().toISOString();
+      let nextRef: ExternalBookingResult;
+      try {
+        const result = await bookSlotForConnection(conn, orgId, opts);
+        nextRef = {
+          provider: conn.provider,
+          connectionId: conn.id,
+          ok: result.ok,
+          eventId: result.eventId,
+          bookingId: result.bookingId,
+          error: result.error,
+          bookedAt,
+        };
+      } catch (e) {
+        nextRef = {
+          provider: conn.provider,
+          connectionId: conn.id,
+          ok: false,
+          error: e instanceof Error ? e.message : 'Unknown error',
+          bookedAt,
+        };
+      }
+
+      refs[key] = nextRef;
+      results.push(nextRef);
+      await saveChipyExternalRefs(orgId, chipyBooking.id, refs);
     }
-  }
 
-  // Connected calendars are authoritative together: booking is successful only
-  // when every external calendar accepted it. Chipy is written after that.
-  const allExternalSucceeded = results.length > 0 && results.every(r => r.ok);
-  const firstSuccess = results.find(r => r.ok);
+    // Success means Chipy plus every connected calendar has a booking. If one
+    // external calendar fails, keep Chipy so a retry from the same call can
+    // complete missing calendars instead of losing the customer's slot.
+    const allExternalSucceeded = results.length > 0 && results.every((r) => r.ok);
+    const firstSuccess = results.find((r) => r.ok);
 
-  if (allExternalSucceeded) {
-    return { ok: true, eventId: firstSuccess?.eventId ?? chipyBookingId };
-  }
+    if (allExternalSucceeded) {
+      return {
+        ok: true,
+        eventId: firstSuccess?.eventId ?? chipyBooking.id,
+        bookingId: firstSuccess?.bookingId ?? chipyBooking.id,
+        chipyBookingId: chipyBooking.id,
+        externalResults: results,
+      };
+    }
 
-  await deleteChipyBooking(orgId, chipyBookingId);
-  return { ok: false, error: results.map(r => `${r.provider}: ${r.error}`).join('; ') };
+    const failed = results.filter((r) => !r.ok);
+    return {
+      ok: false,
+      partial: results.some((r) => r.ok),
+      chipyBookingId: chipyBooking.id,
+      externalResults: results,
+      error: failed.map((r) => `${r.provider}: ${r.error ?? 'unknown error'}`).join('; '),
+    };
+  });
 }
 
 async function bookSlotForConnection(
   conn: CalendarConnection,
   orgId: string,
   opts: { customerName: string; customerPhone: string; time: string; service: string; notes?: string },
-): Promise<{ ok: boolean; eventId?: string; error?: string }> {
+): Promise<{ ok: boolean; eventId?: string; bookingId?: number | string; error?: string }> {
 
   // ── Microsoft path ─────────────────────────────────────────────────────────
   if (conn.provider === 'microsoft') {

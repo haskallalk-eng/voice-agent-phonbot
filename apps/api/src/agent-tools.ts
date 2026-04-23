@@ -154,6 +154,7 @@ export async function executeKnownTool(input: {
         time: args.preferredTime,
         service: args.service,
         notes: args.notes,
+        sourceCallId: input.sessionId,
       });
       if (!result.ok) {
         // Fallback: create ticket when calendar unavailable
@@ -172,10 +173,19 @@ export async function executeKnownTool(input: {
           ok: true,
           fallback: true,
           ticketId: ticket.id,
+          chipyBookingId: result.chipyBookingId,
+          partial: result.partial ?? false,
           message: 'Terminwunsch als Ticket gespeichert.',
         };
       }
-      return { ok: true, eventId: result.eventId, status: 'confirmed', ...args };
+      return {
+        ok: true,
+        eventId: result.eventId,
+        bookingId: result.bookingId,
+        chipyBookingId: result.chipyBookingId,
+        status: 'confirmed',
+        ...args,
+      };
     }
 
     case 'ticket.create': {
