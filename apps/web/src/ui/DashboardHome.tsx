@@ -326,10 +326,15 @@ export function DashboardHome({ onNavigate }: Props) {
           </div>
       </div>
 
-      {/* Quick Actions */}
+      {/* Quick Actions
+          Mobile-sweep (2026-04-23): `justify-center sm:justify-start`
+          centers the wrapped button group on phones where the 5 buttons
+          don't fill a full row; on tablets+ the original left-aligned
+          flow-layout is kept so the hierarchy with the glass card header
+          stays intact. */}
       <div className="glass rounded-2xl p-6">
         <h3 className="text-white font-semibold mb-4">Schnellaktionen</h3>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap justify-center sm:justify-start gap-3">
           {/* Primary — outline-only with orange accent */}
           <button
             onClick={() => onNavigate('test')}
