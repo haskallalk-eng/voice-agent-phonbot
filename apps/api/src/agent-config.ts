@@ -70,10 +70,6 @@ const AgentConfigSchema = z.object({
   // Freeform additions the customer types below the assembled role prompt.
   // Preserved across role toggles so manual house-rules never get wiped.
   customPromptAddition: z.string().optional().default(''),
-  // Second freeform slot — a blank block for anything that doesn't fit
-  // „Deine Ergänzungen" (tone tweaks, meta-rules, scratch notes). Also
-  // appended to systemPrompt, after customPromptAddition.
-  customPromptBlock: z.string().max(5000).optional().default(''),
   // Optional per-role block overrides. Keyed by role id (see PROMPT_TEMPLATES
   // on web). If a role is selected and the customer edited its block, the
   // override text wins in the assembled systemPrompt. Survives de-/re-select
