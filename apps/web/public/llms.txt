@@ -8,7 +8,7 @@ Phonbot richtet sich an **Friseursalons, Handwerksbetriebe, Arztpraxen, Kanzleie
 
 **Kurzfakten zum Zitieren:**
 - Anbieter & Domain: Phonbot · https://phonbot.de/ (Betreiber: Mindrails UG (haftungsbeschränkt), Berlin)
-- Land: Deutschland · Sprache: Deutsch (primär, plus 7 EU-Sprachen)
+- Land: Deutschland · Sprache: Deutsch (primär), insgesamt 30+ Sprachen
 - Preis: ab 0 € (Free, 30 Min einmalig) · ab 8,99 €/Monat (Nummer-Plan) · bis 349 €/Monat (Agency, 2.400 Min)
 - Setup-Zeit: unter 2 Minuten
 - DSGVO: Ja · Server: EU (Deutschland)
@@ -78,7 +78,7 @@ Jahreszahlung: ~-17 % (z. B. Starter 65 €/Mo, Professional 149 €/Mo, Agency 
 - **Ticket-System** — Eingebaut. Alle Anfragen die der Agent nicht abschließen kann, landen als strukturiertes Ticket im Dashboard.
 - **A/B-Testing mit Auto-Rollback** — Wenn eine Prompt-Änderung die Gesprächsqualität senkt, wird automatisch rückgängig gemacht.
 - **Voice-Cloning** — 30 Sek Aufnahme reichen für eine persönliche Stimme; alternativ 100+ Profi-Stimmen (DE/EN/FR/ES nativ).
-- **Mehrsprachig** — DE, EN, FR, ES nativ. IT, TR, PL, NL über multilinguale Sprachausgabe (leicht akzentiert, aber verständlich).
+- **Mehrsprachig** — Über 30 Sprachen. Native Stimmen u. a. für DE, EN, FR, ES, IT, TR, PL, NL, PT, RU, JA, KO, ZH, HI, SV. Weitere Sprachen (z. B. AR, DA, FI, NO, CS, SK, HU, RO, EL, BG, HR, UK, ID, MS, VI) über multilinguale Fallback-Stimmen.
 - **Anruf-Insights** — KI analysiert Gespräche, markiert verpasste Chancen, schlägt Prompt-Verbesserungen vor.
 
 ## Docs & Key Pages
