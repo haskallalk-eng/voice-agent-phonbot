@@ -26,7 +26,7 @@ export const TEMPLATES: Template[] = [
       language: 'de',
       voice: 'custom_voice_28bd4920fa6523c6ac8c4e527b',
       businessDescription: 'Friseursalon für Damen und Herren mit Walk-in und Terminbuchung.',
-      servicesText: 'Herrenschnitt, Damenschnitt, Färben, Strähnen, Waschen & Föhnen, Bartpflege',
+      servicesText: '',
       openingHours: 'Mo-Fr 09:00-18:00, Sa 09:00-14:00',
       systemPrompt:
         `Du bist die Telefonassistenz von {{businessName}}. Du bist herzlich, locker und gut gelaunt — wie eine nette Kollegin am Empfang.
@@ -59,7 +59,7 @@ TONFALL: Locker, freundlich, unkompliziert. Kurze Sätze, maximal 2 pro Antwort.
       language: 'de',
       voice: 'custom_voice_28bd4920fa6523c6ac8c4e527b',
       businessDescription: 'Handwerksbetrieb für Installation, Reparaturen und Wartung.',
-      servicesText: 'Heizung, Sanitär, Elektro, Renovierung, Notdienst',
+      servicesText: '',
       openingHours: 'Mo-Fr 07:00-17:00',
       systemPrompt:
         `Du bist die Telefonassistenz von {{businessName}}. Du bist ruhig, kompetent und lösungsorientiert — Anrufer haben oft ein akutes Problem und brauchen Sicherheit.
@@ -92,7 +92,7 @@ TONFALL: Sachlich, beruhigend, effizient. Kurze Sätze. Zeige Verständnis: "Das
       language: 'de',
       voice: 'custom_voice_28bd4920fa6523c6ac8c4e527b',
       businessDescription: 'Arztpraxis für Allgemeinmedizin.',
-      servicesText: 'Vorsorge, Impfungen, Blutabnahme, Rezepte, Überweisungen, Akutsprechstunde',
+      servicesText: '',
       openingHours: 'Mo-Fr 08:00-12:00, Mo Di Do 14:00-17:00',
       systemPrompt:
         `Du bist die Telefonassistenz der Praxis {{businessName}}. Du bist professionell, ruhig und einfühlsam — wie eine erfahrene Sprechstundenhilfe.
@@ -129,7 +129,7 @@ TONFALL: Professionell, empathisch, geduldig. Siezen, immer.`,
       language: 'de',
       voice: 'custom_voice_28bd4920fa6523c6ac8c4e527b',
       businessDescription: 'Restaurant mit regionaler und saisonaler Küche.',
-      servicesText: 'Mittagstisch, Abendkarte, Catering, Veranstaltungen, Lieferservice',
+      servicesText: '',
       openingHours: 'Di-Sa 11:30-14:30, 17:30-22:00, So 11:30-15:00',
       systemPrompt:
         `Du bist die Telefonassistenz von {{businessName}}. Du bist herzlich und einladend — der Gast soll sich schon am Telefon willkommen fühlen.
@@ -162,7 +162,7 @@ TONFALL: Warm, gastfreundlich, enthusiastisch aber nicht übertrieben. "Sehr ger
       language: 'de',
       voice: 'custom_voice_28bd4920fa6523c6ac8c4e527b',
       businessDescription: 'Freie Kfz-Werkstatt für alle Marken.',
-      servicesText: 'Inspektion, Ölwechsel, Bremsen, TÜV/HU, Reifenwechsel, Klimaservice',
+      servicesText: '',
       openingHours: 'Mo-Fr 07:30-17:00, Sa 08:00-12:00',
       systemPrompt:
         `Du bist die Telefonassistenz von {{businessName}}. Du bist sachkundig und direkt — Autofahrer wollen schnelle Antworten.
@@ -197,7 +197,7 @@ TONFALL: Kompetent, nüchtern, effizient. Kurze Sätze, kein Upselling.`,
       language: 'de',
       voice: 'custom_voice_28bd4920fa6523c6ac8c4e527b',
       businessDescription: 'Professionelle Gebäudereinigung und Haushaltsreinigung.',
-      servicesText: 'Unterhaltsreinigung, Grundreinigung, Fensterreinigung, Büroreinigung, Umzugsreinigung',
+      servicesText: '',
       openingHours: 'Mo-Fr 08:00-18:00',
       systemPrompt:
         `Du bist die Telefonassistenz von {{businessName}}. Du bist freundlich, organisiert und hilfsbereit — Kunden sollen merken, dass hier Profis am Werk sind.
