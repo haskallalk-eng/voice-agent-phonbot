@@ -78,6 +78,8 @@ export const PROMPT_TEMPLATES: {
   id: string;
   Icon: IconComp;
   accent: string;
+  /** Primary brand hex used for section-card borders + subtle bg tint. */
+  hex: string;
   name: string;
   capability: string;
   block: string;
@@ -86,6 +88,7 @@ export const PROMPT_TEMPLATES: {
     id: 'reception',
     Icon: IconBuilding,
     accent: 'text-orange-400',
+    hex: '#F97316',
     name: 'Empfang / Zentrale',
     capability: 'Anrufer empfangen und an die richtige Stelle leiten',
     block: `## Empfang
@@ -95,6 +98,7 @@ Begrüße jeden Anrufer freundlich, finde heraus worum es geht und leite ihn zie
     id: 'appointment',
     Icon: IconCalendar,
     accent: 'text-cyan-400',
+    hex: '#06B6D4',
     name: 'Terminbuchung',
     capability: 'Termine vereinbaren und verbindlich bestätigen',
     block: `## Terminbuchung
@@ -104,6 +108,7 @@ Wenn der Anrufer einen Termin möchte: Frage nach Datum, Uhrzeit und Art des Ter
     id: 'support',
     Icon: IconSliders,
     accent: 'text-violet-400',
+    hex: '#A78BFA',
     name: 'Kundensupport',
     capability: 'Probleme aufnehmen und Support-Tickets erstellen',
     block: `## Kundensupport
@@ -113,6 +118,7 @@ Höre dem Kunden aufmerksam zu und lasse ihn das Problem vollständig schildern.
     id: 'orders',
     Icon: IconTicket,
     accent: 'text-amber-400',
+    hex: '#FBBF24',
     name: 'Bestellannahme',
     capability: 'Bestellungen entgegennehmen und bestätigen',
     block: `## Bestellannahme
@@ -122,6 +128,7 @@ Nimm Bestellungen strukturiert auf: Artikel, Menge, Sonderwünsche, Lieferadress
     id: 'emergency',
     Icon: IconAlertTriangle,
     accent: 'text-red-400',
+    hex: '#F87171',
     name: 'Notdienst / After-Hours',
     capability: 'Notfälle erkennen, priorisieren und weiterleiten',
     block: `## Notdienst
@@ -131,6 +138,7 @@ Erkenne Notfall-Anliegen am Ton und an Schlüsselwörtern (Wasserschaden, Gasger
     id: 'info',
     Icon: IconInfo,
     accent: 'text-sky-400',
+    hex: '#38BDF8',
     name: 'Auskunft & FAQ',
     capability: 'Häufige Fragen zu Öffnungszeiten, Preisen und Services beantworten',
     block: `## Auskunft & FAQ
@@ -139,22 +147,50 @@ Beantworte Standardfragen zu Öffnungszeiten, Services, Preisen und Standort anh
 ];
 
 /**
- * Assemble a system prompt from 0..n selected role ids. Always produces
- * exactly one "Du bist …"-Intro, one flat task list, then the per-role
- * `## Section` blocks. Empty selection falls back to a generic assistant
- * intro so the agent is never primer-less.
+ * Generic-assistant fallback used when no roles are selected. Exported so
+ * the UI preview shows the same text the agent will actually see.
  */
-export function assembleRolePrompt(roleIds: string[], businessName: string): string {
+export function generalAssistantBlock(businessName: string): string {
   const business = businessName || 'deinem Unternehmen';
+  return `Du bist ein freundlicher allgemeiner Telefonassistent für ${business}. Höre dem Anrufer zu, finde heraus worum es geht und hilf so gut du kannst. Wenn du etwas nicht beantworten kannst, erstelle ein Rückruf-Ticket.`;
+}
+
+/** Intro line (1 or 2 sentences depending on role count). */
+export function roleIntro(businessName: string, roleCount: number): string {
+  const business = businessName || 'deinem Unternehmen';
+  if (roleCount === 0) return '';
+  if (roleCount === 1) return `Du bist der freundliche Telefonassistent von ${business}.`;
+  return `Du bist der freundliche Telefonassistent von ${business}. Du übernimmst gleichzeitig mehrere Rollen für dieses Unternehmen.`;
+}
+
+/** Task list bullet block (depends on active roles). */
+export function roleTaskList(roles: typeof PROMPT_TEMPLATES): string {
+  if (roles.length === 0) return '';
+  return `Deine Aufgaben:\n${roles.map((r) => `- ${r.capability}`).join('\n')}`;
+}
+
+/**
+ * Assemble a system prompt from 0..n selected role ids, with optional
+ * per-role block overrides from the customer's own edits. Always produces
+ * exactly one "Du bist …"-Intro, one flat task list, then one block per
+ * role (override if present, default otherwise). Empty selection falls
+ * back to the generic assistant block.
+ */
+export function assembleRolePrompt(
+  roleIds: string[],
+  businessName: string,
+  overrides: Record<string, string> = {},
+): string {
   const roles = PROMPT_TEMPLATES.filter((t) => roleIds.includes(t.id));
-  if (roles.length === 0) {
-    return `Du bist ein freundlicher allgemeiner Telefonassistent für ${business}. Höre dem Anrufer zu, finde heraus worum es geht und hilf so gut du kannst. Wenn du etwas nicht beantworten kannst, erstelle ein Rückruf-Ticket.`;
-  }
-  const intro = roles.length === 1
-    ? `Du bist der freundliche Telefonassistent von ${business}.`
-    : `Du bist der freundliche Telefonassistent von ${business}. Du übernimmst gleichzeitig mehrere Rollen für dieses Unternehmen.`;
-  const tasks = `Deine Aufgaben:\n${roles.map((r) => `- ${r.capability}`).join('\n')}`;
-  const blocks = roles.map((r) => r.block).join('\n\n');
+  if (roles.length === 0) return generalAssistantBlock(businessName);
+  const intro = roleIntro(businessName, roles.length);
+  const tasks = roleTaskList(roles);
+  const blocks = roles
+    .map((r) => {
+      const ov = overrides[r.id];
+      return typeof ov === 'string' && ov.trim().length > 0 ? ov : r.block;
+    })
+    .join('\n\n');
   return `${intro}\n\n${tasks}\n\n${blocks}`;
 }
 

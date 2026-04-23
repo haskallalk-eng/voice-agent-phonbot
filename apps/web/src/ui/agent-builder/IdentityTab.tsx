@@ -1,9 +1,10 @@
 import React from 'react';
 import type { AgentConfig, Voice } from '../../lib/api.js';
-import { SectionCard, Field, Input, TextArea, Select, Badge, LANGUAGES, LANGUAGE_VOICE_RECOMMENDATIONS, IconAgent, IconBuilding } from './shared.js';
+import { SectionCard, Field, Input, Select, Badge, LANGUAGES, LANGUAGE_VOICE_RECOMMENDATIONS, IconAgent, IconBuilding } from './shared.js';
 import { VoiceDropdown } from './VoiceDropdown.js';
 import { VoiceClonePanel } from './VoiceClonePanel.js';
 import { OpeningHoursEditor } from './OpeningHoursEditor.js';
+import { AdaptiveTextarea } from '../../components/AdaptiveTextarea.js';
 
 export interface IdentityTabProps {
   config: AgentConfig;
@@ -88,7 +89,13 @@ export function IdentityTab({
         </div>
         <div className="mt-4 space-y-4">
           <Field label="Beschreibung">
-            <TextArea rows={2} value={config.businessDescription} onChange={(e) => onUpdate({ businessDescription: e.target.value })} placeholder="Was macht euer Unternehmen?" />
+            <AdaptiveTextarea
+              value={config.businessDescription}
+              onChange={(e) => onUpdate({ businessDescription: e.target.value })}
+              placeholder="Was macht euer Unternehmen?"
+              minRows={2}
+              className="w-full rounded-xl bg-white/5 border border-white/10 focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/30 outline-none text-sm text-white/85 px-3 py-2"
+            />
           </Field>
           {/* Plain div wrapper instead of <Field>: OpeningHoursEditor contains
               buttons + nested focusables, and <Field> renders a <label> that
@@ -105,7 +112,13 @@ export function IdentityTab({
             </div>
           </div>
           <Field label="Services / Angebote">
-            <TextArea rows={2} value={config.servicesText} onChange={(e) => onUpdate({ servicesText: e.target.value })} placeholder="Haarschnitt, Färben, Beratung…" />
+            <AdaptiveTextarea
+              value={config.servicesText}
+              onChange={(e) => onUpdate({ servicesText: e.target.value })}
+              placeholder="Haarschnitt, Färben, Beratung…"
+              minRows={2}
+              className="w-full rounded-xl bg-white/5 border border-white/10 focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/30 outline-none text-sm text-white/85 px-3 py-2"
+            />
           </Field>
         </div>
       </SectionCard>
