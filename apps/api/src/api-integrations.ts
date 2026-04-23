@@ -340,16 +340,31 @@ export async function executeIntegrationCall(params: {
     }
   }
 
-  // URL building
+  // URL building.
+  //
+  // Careful: `new URL("/x", "https://host/v2/")` resolves to
+  // `https://host/x` — the leading slash in the relative path makes it
+  // absolute-to-origin and drops the base's `/v2` path entirely. Customers
+  // typically copy Postman-style endpoint paths starting with `/`, so we
+  // MUST strip any leading slashes from the endpoint path before resolving
+  // against the base, otherwise `baseUrl=https://api.example.com/v2` +
+  // path=`/customers/{id}` would hit `https://api.example.com/customers/42`
+  // instead of `.../v2/customers/42`.
+  //
+  // Also: use the URL object (not string concatenation) so trailing-slash
+  // edge cases in baseUrl — query strings, embedded credentials, fragments —
+  // parse cleanly.
   const base = integration.baseUrl.trim();
   if (!base) return { ok: false, error: 'NO_BASE_URL' };
   let url: URL;
   let baseHost: string;
   try {
-    const normalizedBase = base.endsWith('/') ? base : `${base}/`;
-    baseHost = new URL(normalizedBase).hostname;
-    const path = endpoint ? renderPath(endpoint.path, args) : '';
-    url = new URL(path || '', normalizedBase);
+    const baseObj = new URL(base);
+    if (!baseObj.pathname.endsWith('/')) baseObj.pathname += '/';
+    baseHost = baseObj.hostname;
+    const rawPath = endpoint ? renderPath(endpoint.path, args) : '';
+    const relativePath = rawPath.replace(/^\/+/, '');  // strip leading slashes
+    url = new URL(relativePath, baseObj);
   } catch {
     return { ok: false, error: 'INVALID_URL' };
   }
