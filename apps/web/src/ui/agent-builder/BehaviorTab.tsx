@@ -681,7 +681,7 @@ function PromptView({
             value={customAddition}
             onChange={(e) => updateCustomAddition(config, e.target.value, onUpdate)}
             spellCheck={false}
-            placeholder="Z. B. „Aktion 20 % auf Färben bis Ende Mai" · „Dienstags ist Chef nicht im Haus — dann Ticket anlegen" · „Nicht über Konkurrenten sprechen" · „Stammkunden mit Namen begrüßen"…"
+            placeholder={'Z. B. „Aktion 20 % auf Färben bis Ende Mai" · „Dienstags ist Chef nicht im Haus — dann Ticket anlegen" · „Nicht über Konkurrenten sprechen" · „Stammkunden mit Namen begrüßen"…'}
             minRows={3}
             className="w-full bg-transparent text-xs text-white/80 font-mono leading-relaxed px-4 py-3 outline-none focus:ring-0 border-0 placeholder:text-white/25"
           />

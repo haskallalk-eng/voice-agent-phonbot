@@ -34,9 +34,9 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
 
   const sliders = [
     { l: 'Anrufe / Tag', v: anrufe, s: setAnrufe, min: 1, max: 100, step: 1, d: `${anrufe}` },
-    { l: 'Gesprächsdauer / pro Anruf', v: dauer, s: setDauer, min: 1, max: 15, step: 1, d: `${dauer} min` },
+    { l: 'Gesprächsdauer / Anruf', v: dauer, s: setDauer, min: 1, max: 15, step: 1, d: `${dauer} min` },
     { l: 'Stundenlohn', v: lohn, s: setLohn, min: 10, max: 80, step: 1, d: `${lohn} €` },
-    { l: 'Nacharbeit / pro Anruf', v: nacharbeit, s: setNacharbeit, min: 0, max: 30, step: 1, d: `${nacharbeit} min` },
+    { l: 'Nacharbeit / Anruf', v: nacharbeit, s: setNacharbeit, min: 0, max: 30, step: 1, d: `${nacharbeit} min` },
     { l: 'Bot-Quote', v: quote, s: setQuote, min: 10, max: 95, step: 5, d: `${quote} %` },
   ];
 
