@@ -358,13 +358,14 @@ export const DEFAULT_CONFIG_VALUES: Partial<AgentConfig> = {
 
 /* ── Small UI Components ── */
 
-export function SectionCard({ title, icon: Icon, children, collapsible = false, className = '', accent = 'text-orange-400' }: {
+export function SectionCard({ title, icon: Icon, children, collapsible = false, className = '', accent = 'text-orange-400', rightSlot }: {
   title: string;
   icon?: SectionIconComp;
   children: React.ReactNode;
   collapsible?: boolean;
   className?: string;
   accent?: string;
+  rightSlot?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(true);
   return (
@@ -380,6 +381,7 @@ export function SectionCard({ title, icon: Icon, children, collapsible = false, 
           </span>
         )}
         <h3 className="text-sm font-semibold text-white/90 flex-1 tracking-wide">{title}</h3>
+        {rightSlot && <span className="shrink-0" onClick={(e) => e.stopPropagation()}>{rightSlot}</span>}
         {collapsible && (
           <IconChevronDown size={15} className={`text-white/25 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
         )}
