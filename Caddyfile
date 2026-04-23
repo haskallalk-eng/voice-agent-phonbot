@@ -1,3 +1,11 @@
+{
+    # Disable HTTP/3 (QUIC). Some networks drop UDP and cause confusing
+    # first-load SSL failures before the browser falls back to TCP.
+    servers {
+        protocols h1 h2
+    }
+}
+
 {$DOMAIN:phonbot.de} {
     # Global security headers — applied to every response (SPA + API + webhooks).
     # CSP blocks XSS → fetch-exfiltration of JWT tokens from localStorage.
@@ -22,6 +30,12 @@
     }
 
     # Direct backend paths (webhooks, health — no /api prefix needed)
+    @auth {
+        path /auth /auth/*
+    }
+    handle @auth {
+        reverse_proxy api:3001
+    }
     handle /retell* {
         reverse_proxy api:3001
     }
