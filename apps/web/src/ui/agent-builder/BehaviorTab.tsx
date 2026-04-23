@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   getInsights,
   applyInsightSuggestion,
@@ -9,6 +9,7 @@ import {
 import {
   SectionCard, TextArea, Input, Toggle,
   PROMPT_TEMPLATES, PROMPT_SECTIONS, KNOWN_TOOLS,
+  assembleRolePrompt,
   IconTemplate, IconMessageSquare,
 } from './shared.js';
 
@@ -276,23 +277,7 @@ export function BehaviorTab({
         onReject={handleReject}
         onNavigate={onNavigateTab}
       />
-      {/* Base Role */}
-      <SectionCard title="Grundrolle" icon={IconTemplate} collapsible>
-        <p className="text-xs text-white/40 mb-3">Legt fest wofür der Agent hauptsächlich eingesetzt wird — setzt den Prompt zurück.</p>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-          {PROMPT_TEMPLATES.map((tpl) => (
-            <button key={tpl.id} onClick={() => {
-              const prompt = tpl.prompt.replace('{businessName}', config.businessName || 'deinem Unternehmen');
-              onUpdate({ systemPrompt: prompt });
-              onSetActivePromptSections(new Set());
-            }}
-              className="group flex flex-col items-center gap-2 p-3 rounded-xl bg-white/[0.03] border border-white/[0.07] hover:border-orange-500/30 hover:bg-white/[0.06] transition-all text-center cursor-pointer">
-              <tpl.Icon size={18} className={tpl.accent} />
-              <span className="text-xs font-medium text-white/65 group-hover:text-white/90 transition-colors leading-tight">{tpl.name}</span>
-            </button>
-          ))}
-        </div>
-      </SectionCard>
+      <RoleCard config={config} onUpdate={onUpdate} />
 
       {/* Section Blocks */}
       <SectionCard title="Verhaltens-Abschnitte" icon={IconMessageSquare}>
@@ -326,21 +311,24 @@ export function BehaviorTab({
           })}
         </div>
 
-        {/* Assembled Prompt */}
+        {/* Customer's own additions — preserved across role toggles */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Prompt</span>
+            <span className="text-xs font-semibold text-white/50 uppercase tracking-wider">Deine Ergänzungen</span>
             {activePromptSections.size > 0 && (
               <span className="text-[10px] text-orange-400/70 bg-orange-500/10 border border-orange-500/15 px-2 py-0.5 rounded-full">
                 {activePromptSections.size} Abschnitt{activePromptSections.size !== 1 ? 'e' : ''} aktiv
               </span>
             )}
           </div>
+          <p className="text-[11px] text-white/40 -mt-1">
+            Hausregeln, Sonderfälle, Tonalität — alles was über die gewählten Rollen hinausgeht. Wird unter den automatisch erzeugten Rollen-Prompt gehängt.
+          </p>
           <TextArea
-            rows={10}
-            value={config.systemPrompt}
-            onChange={(e) => onUpdate({ systemPrompt: e.target.value })}
-            placeholder="Aktiviere Abschnitte oben oder schreibe deinen Prompt direkt hier…"
+            rows={8}
+            value={readCustomAddition(config)}
+            onChange={(e) => updateCustomAddition(config, e.target.value, onUpdate)}
+            placeholder="Z.B. Preise, besondere Öffnungs-Regeln, interne Übergabeprozesse…"
           />
         </div>
 
@@ -374,5 +362,142 @@ export function BehaviorTab({
         </div>
       </SectionCard>
     </>
+  );
+}
+
+// ── Role multi-select card ──────────────────────────────────────────────────
+
+/**
+ * Legacy prompt migration: old configs only had `systemPrompt`. When a user
+ * first opens this tab, we detect that state (no selectedRoles + no custom
+ * addition) and keep the old prompt as customPromptAddition so the user
+ * doesn't lose their hand-written rules. New role selection then prepends
+ * the assembled block above it.
+ */
+function readCustomAddition(cfg: AgentConfig): string {
+  if (typeof cfg.customPromptAddition === 'string') return cfg.customPromptAddition;
+  // First time on new UI — show existing systemPrompt as the custom addition.
+  return cfg.systemPrompt ?? '';
+}
+
+function readSelectedRoles(cfg: AgentConfig): string[] {
+  return Array.isArray(cfg.selectedRoles) ? cfg.selectedRoles : [];
+}
+
+/** Rebuild the stored `systemPrompt` from the current role selection + the
+ *  customer's freeform addition. Always fires the update atomically so the
+ *  three fields stay in sync. */
+function writeAssembledPrompt(
+  cfg: AgentConfig,
+  nextRoles: string[],
+  nextCustom: string,
+  onUpdate: (patch: Partial<AgentConfig>) => void,
+) {
+  const assembled = assembleRolePrompt(nextRoles, cfg.businessName);
+  const full = nextCustom.trim().length > 0 ? `${assembled}\n\n${nextCustom.trim()}` : assembled;
+  onUpdate({
+    selectedRoles: nextRoles,
+    customPromptAddition: nextCustom,
+    systemPrompt: full,
+  });
+}
+
+function updateCustomAddition(
+  cfg: AgentConfig,
+  text: string,
+  onUpdate: (patch: Partial<AgentConfig>) => void,
+) {
+  writeAssembledPrompt(cfg, readSelectedRoles(cfg), text, onUpdate);
+}
+
+function RoleCard({
+  config,
+  onUpdate,
+}: {
+  config: AgentConfig;
+  onUpdate: (patch: Partial<AgentConfig>) => void;
+}) {
+  const selected = useMemo(() => new Set(readSelectedRoles(config)), [config.selectedRoles]);
+  const [showPreview, setShowPreview] = useState(false);
+  const preview = useMemo(
+    () => assembleRolePrompt(Array.from(selected), config.businessName),
+    [selected, config.businessName],
+  );
+
+  function toggleRole(id: string) {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    writeAssembledPrompt(config, Array.from(next), readCustomAddition(config), onUpdate);
+  }
+
+  const empty = selected.size === 0;
+
+  return (
+    <SectionCard title="Rolle" icon={IconTemplate}>
+      <p className="text-xs text-white/45 mb-3">
+        Wähle eine oder mehrere Rollen — Chipy kann gleichzeitig Empfang, Support, Notdienst und Auskunft sein. Die passenden Prompt-Bausteine werden zusammengesetzt.
+      </p>
+
+      {empty && (
+        <div className="mb-3 rounded-xl border border-orange-500/25 bg-orange-500/[0.06] px-3 py-2 text-[11px] text-orange-200/90">
+          Bitte mindestens eine Rolle auswählen. Sonst läuft der Agent als allgemeiner Telefon-Assistent — das ist selten das gewünschte Verhalten.
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        {PROMPT_TEMPLATES.map((tpl) => {
+          const active = selected.has(tpl.id);
+          return (
+            <button
+              key={tpl.id}
+              type="button"
+              onClick={() => toggleRole(tpl.id)}
+              aria-pressed={active}
+              className={`group relative flex flex-col items-center gap-2 p-3 rounded-xl border transition-all text-center cursor-pointer ${
+                active
+                  ? 'border-orange-500/55 bg-orange-500/[0.09] shadow-[0_0_20px_rgba(249,115,22,0.1)]'
+                  : 'border-white/[0.07] bg-white/[0.03] hover:border-orange-500/25 hover:bg-white/[0.06]'
+              }`}
+            >
+              {active && (
+                <span
+                  aria-hidden
+                  className="absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center"
+                  style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                >
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </span>
+              )}
+              <tpl.Icon size={18} className={active ? tpl.accent : `${tpl.accent} opacity-55 group-hover:opacity-85`} />
+              <span className={`text-xs font-medium leading-tight transition-colors ${active ? 'text-white' : 'text-white/65 group-hover:text-white/90'}`}>
+                {tpl.name}
+              </span>
+              <span className="text-[10px] text-white/40 leading-tight">{tpl.capability}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-3 flex items-center justify-between">
+        <span className="text-[11px] text-white/40">
+          {selected.size === 0 ? 'Keine Rolle gewählt' : `${selected.size} Rolle${selected.size === 1 ? '' : 'n'} aktiv`}
+        </span>
+        <button
+          type="button"
+          onClick={() => setShowPreview((v) => !v)}
+          className="text-[11px] text-cyan-300/75 hover:text-cyan-200 transition-colors cursor-pointer"
+        >
+          {showPreview ? 'Vorschau ausblenden' : 'Zusammengesetzten Rollen-Prompt anzeigen'}
+        </button>
+      </div>
+
+      {showPreview && (
+        <pre className="mt-2 rounded-xl border border-white/[0.06] bg-black/30 px-3 py-2.5 text-[11px] text-white/70 whitespace-pre-wrap break-words leading-relaxed max-h-64 overflow-auto">
+{preview}
+        </pre>
+      )}
+    </SectionCard>
   );
 }

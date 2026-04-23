@@ -36,6 +36,14 @@ const AgentConfigSchema = z.object({
   systemPrompt: z.string().min(1).default(
     'You are a helpful German/English voice agent for a small local business. Goal: book appointments, answer FAQs, and request missing details. Keep answers short, spoken, and polite. If information is missing, ask a single concrete question.',
   ),
+  // Multi-select roles — ids match PROMPT_TEMPLATES on the web side
+  // (reception / support / emergency / info). systemPrompt is re-assembled
+  // client-side whenever this array changes; backward-compatible as an
+  // optional passthrough so old configs without the field keep working.
+  selectedRoles: z.array(z.string().min(1)).optional().default([]),
+  // Freeform additions the customer types below the assembled role prompt.
+  // Preserved across role toggles so manual house-rules never get wiped.
+  customPromptAddition: z.string().optional().default(''),
   tools: z.array(z.string().min(1)).default(['calendar.findSlots', 'calendar.book', 'ticket.create']),
   fallback: z.object({
     enabled: z.boolean().default(true),
