@@ -204,6 +204,7 @@ export type AgentConfig = {
   systemPrompt: string;
   selectedRoles?: string[];          // multi-select — ids match PROMPT_TEMPLATES
   customPromptAddition?: string;     // freeform house-rules below the assembled roles
+  customPromptBlock?: string;        // second blank slot for tone / meta-rules / notes
   roleBlockOverrides?: Record<string, string>;  // per-role edited block text
   sectionTextOverrides?: Record<string, string>; // per-section edited block text
   tools: string[];
