@@ -229,7 +229,11 @@ function Dashboard() {
         <Sidebar current={page} onNavigate={(p) => navigate(p)} org={org} user={user} onLogout={logout} />
       </div>
 
-      <main className="flex-1 overflow-y-auto md:ml-0 mt-12 md:mt-0 relative">
+      {/* Phase 2 mobile sweep: pb-24 (96px) reserves space below the last
+          content row on phones so the ChipyCopilot FAB (60px ∅ + 20px inset)
+          doesn't sit on top of the final StatCard / Liste-Eintrag. Desktop
+          keeps its usual page-internal padding (no extra bottom reservation). */}
+      <main className="flex-1 overflow-y-auto md:ml-0 mt-12 md:mt-0 relative pb-24 md:pb-0">
         {/* Ambient glow orbs */}
         <div className="pointer-events-none fixed inset-0 overflow-hidden" style={{ zIndex: 0 }}>
           {[
