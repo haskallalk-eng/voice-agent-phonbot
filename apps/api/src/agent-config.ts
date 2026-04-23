@@ -397,6 +397,9 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
     webhookBaseUrl,
     signedQuery,
     config.tenantId,
+    // Reserve core + transfer tool names so a customer integration can't
+    // shadow them. buildIntegrationTools will append `_2` etc. on collision.
+    tools.map((t) => t.name).filter((n): n is string => typeof n === 'string'),
   );
   for (const t of integrationTools) tools.push(t);
 

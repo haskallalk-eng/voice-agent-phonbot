@@ -178,10 +178,15 @@ export function buildIntegrationTools(
   proxyBaseUrl: string,
   signQuery: string,
   tenantId: string,
+  reservedNames: Iterable<string> = [],
 ): IntegrationTool[] {
   if (!integrations?.length) return [];
   const tools: IntegrationTool[] = [];
-  const seenNames = new Set<string>();
+  // Pre-seed with core-tool + transfer-tool names so a customer-chosen
+  // integration can't shadow them (e.g. customer names integration
+  // "calendar" with endpoint "find_slots" → would collide with the
+  // built-in calendar_find_slots and break Retell's deploy).
+  const seenNames = new Set<string>(reservedNames);
 
   for (const int of integrations) {
     if (!int.enabled || !int.id || !int.name?.trim()) continue;
@@ -263,9 +268,12 @@ export function buildIntegrationTools(
 }
 
 function uniqueName(candidate: string, seen: Set<string>): string {
-  let name = candidate;
+  // Retell caps tool names ~64 chars. Stay under with room for `_<n>` suffix.
+  const MAX = 56;
+  const trimmed = candidate.slice(0, MAX);
+  let name = trimmed;
   let n = 2;
-  while (seen.has(name)) name = `${candidate}_${n++}`;
+  while (seen.has(name)) name = `${trimmed}_${n++}`;
   seen.add(name);
   return name;
 }
