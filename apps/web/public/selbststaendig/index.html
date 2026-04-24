@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0A0A0F" />
 <title>KI-Telefonassistent für Selbstständige · Keine Anrufe verpassen | Phonbot</title>
-<meta name="description" content="Chipy hebt ab, wenn du arbeitest. Für Coaches, Berater, Fotografen, Handwerker-Solo & Freelancer. Termine buchen, Rückrufe verwalten, DSGVO-konform. Ab 8,99 €/Monat." />
+<meta name="description" content="Chipy hebt ab, wenn du arbeitest. Für Freelancer, Coaches, Berater, Fotografen & Kreative. Termine buchen, Rückrufe verwalten, DSGVO-konform. Ab 79 €/Monat." />
 <link rel="canonical" href="https://phonbot.de/selbststaendig/" />
 <link rel="alternate" hreflang="de" href="https://phonbot.de/selbststaendig/" />
 <meta property="og:type" content="website" />
@@ -21,7 +21,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"Service","name":"KI-Telefonassistent für Selbstständige","serviceType":"AI Voice Agent","provider":{"@type":"Organization","name":"Phonbot","url":"https://phonbot.de/","parentOrganization":{"@type":"Organization","name":"Mindrails UG (haftungsbeschränkt)","url":"https://mindrails.de/"}},"areaServed":{"@type":"Country","name":"Deutschland"},"description":"Chipy hebt ab, wenn du arbeitest. Für Coaches, Berater, Fotografen, Handwerker-Solo & Freelancer. Termine buchen, Rückrufe verwalten, DSGVO-konform. Ab 8,99 €/Monat.","audience":{"@type":"BusinessAudience","audienceType":"Freelancer, Coaches, Berater, Solopreneurs"},"offers":{"@type":"Offer","price":"8.99","priceCurrency":"EUR","priceSpecification":{"@type":"UnitPriceSpecification","price":"8.99","priceCurrency":"EUR","unitText":"MONTH"}}}
+{"@context":"https://schema.org","@type":"Service","name":"KI-Telefonassistent für Selbstständige","serviceType":"AI Voice Agent","provider":{"@type":"Organization","name":"Phonbot","url":"https://phonbot.de/","parentOrganization":{"@type":"Organization","name":"Mindrails UG (haftungsbeschränkt)","url":"https://mindrails.de/"}},"areaServed":{"@type":"Country","name":"Deutschland"},"description":"Chipy hebt ab, wenn du arbeitest. Für Freelancer, Coaches, Berater, Fotografen & Kreative. Termine buchen, Rückrufe verwalten, DSGVO-konform. Ab 79 €/Monat.","audience":{"@type":"BusinessAudience","audienceType":"Freelancer, Coaches, Berater, Solopreneurs"},"offers":{"@type":"Offer","price":"79","priceCurrency":"EUR","priceSpecification":{"@type":"UnitPriceSpecification","price":"79","priceCurrency":"EUR","unitText":"MONTH"}}}
 </script>
 <style>*{margin:0;padding:0;box-sizing:border-box}
 html{overflow-x:clip;max-width:100vw;scroll-behavior:smooth}
@@ -250,13 +250,15 @@ p{color:rgba(255,255,255,.7)}
 .persona-quote{font-size:.8125rem;color:rgba(255,255,255,.55);line-height:1.5;font-style:italic}
 
 /* ── DSGVO-Disclaimer (optional — opt-in per BRANCHEN.negativeList) ──
-   Amber-tinted glass card so it reads as a serious caveat without looking
-   like an error banner. Kept visually below FAQ, above final-CTA. */
-.disclaimer-card{max-width:48rem;margin:0 auto;background:rgba(251,191,36,.06);border:1px solid rgba(251,191,36,.25);border-radius:1rem;padding:1.5rem}
-.disclaimer-head{display:flex;align-items:center;gap:.625rem;color:#FBBF24;font-size:.875rem;margin-bottom:.75rem}
-.disclaimer-ic{display:inline-flex;align-items:center;justify-content:center;width:1.75rem;height:1.75rem;border-radius:.5rem;background:rgba(251,191,36,.12)}
-.disclaimer-body{color:rgba(255,255,255,.7);font-size:.9375rem;line-height:1.6}
-.disclaimer-waitlist{color:rgba(255,255,255,.45);font-size:.8125rem;line-height:1.55;margin-top:.75rem}
+   Kompakte, unauffällige Caveat-Karte. Bewusst schmal (36rem) +
+   kleineres Padding + dezentere Farben, damit sie nicht wie ein
+   Error-Banner wirkt, sondern wie ein professioneller Hinweis am
+   Seitenende. Iteration 2026-04-24 nach User-Feedback „kleiner". */
+.disclaimer-card{max-width:36rem;margin:0 auto;background:rgba(251,191,36,.04);border:1px solid rgba(251,191,36,.18);border-radius:.75rem;padding:1rem 1.125rem}
+.disclaimer-head{display:flex;align-items:center;gap:.5rem;color:rgba(251,191,36,.9);font-size:.75rem;font-weight:600;letter-spacing:.01em;margin-bottom:.5rem;text-transform:uppercase}
+.disclaimer-ic{display:inline-flex;align-items:center;justify-content:center;width:1.25rem;height:1.25rem;color:rgba(251,191,36,.85)}
+.disclaimer-body{color:rgba(255,255,255,.6);font-size:.8125rem;line-height:1.55}
+.disclaimer-waitlist{color:rgba(255,255,255,.4);font-size:.75rem;line-height:1.5;margin-top:.5rem}
 
 /* ── Footer (shared partial) ── */
 /*--footer-css-begin--*/
@@ -330,9 +332,9 @@ p{color:rgba(255,255,255,.7)}
 
 <header class="hero">
   <div class="container">
-    <span class="hero-eyebrow"><span class="ic" aria-hidden="true">💼</span>KI-Telefonassistent für Selbstständige</span>
+    <span class="hero-eyebrow"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg></span>KI-Telefonassistent für Selbstständige</span>
     <h1>Dein Handy klingelt, während du arbeitest? <span class="accent">Chipy geht ran.</span></h1>
-    <p class="subtitle">Der einzige KI-Telefonassistent, der nach dir klingt. Chipy nimmt deine Anrufe an — mit deiner Stimme, deinen Regeln — während du im Kundentermin, im Workshop oder im Deep Work bist. Ab 8,99 €/Monat.</p>
+    <p class="subtitle">Der einzige KI-Telefonassistent, der nach dir klingt. Chipy nimmt deine Anrufe an — mit deiner Stimme, deinen Regeln — während du im Kundentermin, im Workshop oder im Deep Work bist. Starter-Plan 79 €/Monat inkl. 360 Minuten.</p>
     <div class="cta-row">
       <a href="/?page=register" class="btn btn-primary">Kostenlos testen</a>
       <a href="/?demo=solo#demo" class="btn btn-ghost">▶ Chipy live hören</a>
@@ -343,7 +345,7 @@ p{color:rgba(255,255,255,.7)}
 
 <section>
   <div class="container">
-    <h2>So klingt Phonbot am Telefon</h2>
+    <h2>So klingt Phonbot <span class="accent">am Telefon</span></h2>
     <div class="dialogue">
       <div class="dialogue-header">
         <span class="dot" aria-hidden="true"></span>
@@ -366,20 +368,20 @@ p{color:rgba(255,255,255,.7)}
 
 <section>
   <div class="container">
-    <h2>Typische Anrufe — automatisch bearbeitet</h2>
+    <h2>Typische Anrufe — <span class="accent">automatisch bearbeitet</span></h2>
     <p class="section-lead">Was Chipy auf deiner Nummer ab Tag 1 übernimmt.</p>
     <div class="features">
       <div class="feature"><div class="feature-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="13" y2="18"/></svg></div><h3>Termine direkt gebucht</h3><p>„Haben Sie Donnerstag 14 Uhr frei?" — Chipy prüft Google Calendar / Cal.com live und bucht, während du im Workshop bist.</p></div>
-        <div class="feature"><div class="feature-icon">📝</div><h3>Strukturierte Rückruf-Tickets</h3><p>Name, Nummer, Anliegen, Wunschzeit — alles landet strukturiert im Dashboard. Keine Post-its mehr, keine verlorenen Zettel.</p></div>
-        <div class="feature"><div class="feature-icon">🌍</div><h3>30+ Sprachen nativ</h3><p>Englisch-sprechende Kunden? Italienische Interessenten? Chipy wechselt sprachlich, bleibt persönlich. Wichtig im Online-Business.</p></div>
-        <div class="feature"><div class="feature-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div><h3>Voice-Clone nach dir</h3><p>Im Premium-Setup klingt Chipy wie DU — nicht wie eine austauschbare KI-Stimme. Deine Marke, deine Bindung zum Kunden.</p></div>
+        <div class="feature"><div class="feature-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/></svg></div><h3>Strukturierte Rückruf-Tickets</h3><p>Name, Nummer, Anliegen, Wunschzeit — alles landet strukturiert im Dashboard. Keine Post-its mehr, keine verlorenen Zettel.</p></div>
+        <div class="feature"><div class="feature-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg></div><h3>30+ Sprachen nativ</h3><p>Englisch-sprechende Kunden? Italienische Interessenten? Chipy wechselt sprachlich, bleibt persönlich. Wichtig im Online-Business.</p></div>
+        <div class="feature"><div class="feature-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></div><h3>Voice-Clone nach dir</h3><p>Im Premium-Setup klingt Chipy wie DU — nicht wie eine austauschbare KI-Stimme. Deine Marke, deine Bindung zum Kunden.</p></div>
     </div>
   </div>
 </section>
 
 <section>
   <div class="container">
-    <h2>Gebaut für dich, wenn du einer davon bist</h2>
+    <h2>Gebaut für dich, wenn du <span class="accent">einer davon</span> bist</h2>
     <p class="section-lead">Chipy passt sich deiner Arbeit an — nicht umgekehrt. Ein paar typische Stimmen aus der Zielgruppe.</p>
     <div class="personas-grid">
       <div class="persona-card">
@@ -388,7 +390,7 @@ p{color:rgba(255,255,255,.7)}
         <div class="persona-quote">„Können Sie mir sagen, ob Herr Müller noch einen Platz im nächsten Modul hat?"</div>
       </div>
       <div class="persona-card">
-        <div class="persona-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+        <div class="persona-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg></div>
         <div class="persona-title">Unternehmensberater</div>
         <div class="persona-quote">„Ich rufe wegen des Erstgesprächs an, das wir nächste Woche geplant hatten."</div>
       </div>
@@ -403,9 +405,9 @@ p{color:rgba(255,255,255,.7)}
         <div class="persona-quote">„Haben Sie eine Preisliste für einen kompletten Website-Relaunch?"</div>
       </div>
       <div class="persona-card">
-        <div class="persona-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg></div>
-        <div class="persona-title">Solo-Handwerker</div>
-        <div class="persona-quote">„Können Sie bei mir vorbeikommen und ein Angebot machen?"</div>
+        <div class="persona-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
+        <div class="persona-title">Freelancer (Text / Design / Code)</div>
+        <div class="persona-quote">„Können wir kurz telefonieren über das Projekt, das ich gestern per E-Mail angefragt habe?"</div>
       </div>
       <div class="persona-card">
         <div class="persona-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 7 12 12 16 14"/></svg></div>
@@ -413,12 +415,12 @@ p{color:rgba(255,255,255,.7)}
         <div class="persona-quote">„Wie viel kostet eine 10er-Karte bei Ihnen?"</div>
       </div>
       <div class="persona-card">
-        <div class="persona-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/></svg></div>
+        <div class="persona-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1H5a1 1 0 01-1-1v-9.5z"/><path d="M9 21V12h6v9"/></svg></div>
         <div class="persona-title">Makler:in</div>
         <div class="persona-quote">„Ich bin interessiert an der Wohnung in der Beispielstraße 5."</div>
       </div>
       <div class="persona-card">
-        <div class="persona-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17" stroke-width="2.5"/></svg></div>
+        <div class="persona-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
         <div class="persona-title">Kreative (Illustration, Musik)</div>
         <div class="persona-quote">„Wir planen eine Hochzeit und brauchen jemanden für die Zeremonie."</div>
       </div>
@@ -437,18 +439,18 @@ p{color:rgba(255,255,255,.7)}
         <div class="roi-scenario">Coaching-Solo-Business · ø 40 Erstanfragen/Monat · 500 € Lifetime-Value pro Mandat:</div>
         <div class="roi-row">
           <span class="ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
-          <span class="label">Menschlicher Büro-Service</span>
+          <span class="label">Menschlicher Büro-Service (Teilzeit, ~10 h/Monat)</span>
           <span class="amount">350 €<span class="per">/Monat</span></span>
         </div>
         <div class="roi-row">
           <span class="ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></span>
-          <span class="label">Phonbot Selbstständig — 360 Min inkl.</span>
-          <span class="amount">8,99 €<span class="per">/Monat</span></span>
+          <span class="label">Phonbot Starter — 360 Min + Voice-Clone</span>
+          <span class="amount">79 €<span class="per">/Monat</span></span>
         </div>
         <div class="roi-row highlight">
           <span class="ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>
-          <span class="label">Deine Ersparnis + Zeit zurück</span>
-          <span class="amount">341 €<span class="per">/Monat</span></span>
+          <span class="label">Deine Ersparnis + zurückgewonnene Deep-Work-Zeit</span>
+          <span class="amount">271 €<span class="per">/Monat</span></span>
         </div>
       </div>
       <div class="value-extras">
@@ -480,14 +482,14 @@ p{color:rgba(255,255,255,.7)}
 
 <section>
   <div class="container">
-    <h2>Häufige Fragen</h2>
+    <h2>Häufige <span class="accent">Fragen</span></h2>
     <p class="section-lead">Alles, was du wissen musst — kurz und ehrlich.</p>
     <div class="faq-list">
       <details class="faq-item"><summary>Wie klingt Chipy am Telefon — erkennt der Anrufer die KI?</summary><div class="answer">Im Standard-Setup verwendet Chipy eine von 30+ nativen Stimmen (DE/EN/FR/ES/IT/TR/PL/NL). Die meisten Anrufer merken es nicht. Im Premium-Setup kannst du deine eigene Stimme klonen — dann hört der Anrufer dich.</div></details>
       <details class="faq-item"><summary>Kann ich bestimmen, welche Anrufe durchgestellt werden?</summary><div class="answer">Ja. Du legst Regeln fest: Notfall-Keywords („dringend", „heute noch") lösen sofort einen Push oder eine Weiterleitung an dein Handy aus, alles andere landet im Dashboard als Ticket zum ruhigen Nachbearbeiten.</div></details>
       <details class="faq-item"><summary>Ich bin oft im Ausland / Zeitzone wechselt — geht das?</summary><div class="answer">Ja. Chipy kennt deine Zeitzone und die des Anrufers und wählt passende Slots. Mehrsprachigkeit auf dem gleichen Agent: ein Anruf kommt auf Deutsch rein, der nächste auf Englisch — Chipy wechselt automatisch.</div></details>
       <details class="faq-item"><summary>Wie schnell ist das Ding einsatzbereit?</summary><div class="answer">Schnell-Setup: 5 Minuten (Name, Geschäftsart, Kalender verbunden — fertig). Premium-Setup inkl. Voice-Clone + Custom-Prompt + Workflows: 30 Minuten. Du kannst mit Schnell-Setup starten und später tiefer konfigurieren.</div></details>
-      <details class="faq-item"><summary>Kann ich später zwischen den Plänen wechseln?</summary><div class="answer">Jederzeit, monatlich. Einstieg mit Phonbot Nummer-Plan (8,99 €/Mo, 360 Min), Upgrade auf Starter (79 €/Mo, mehr Inklusivminuten + Premium-Features) wenn du Voice-Clone oder mehr Traffic brauchst.</div></details>
+      <details class="faq-item"><summary>Kann ich später zwischen den Plänen wechseln?</summary><div class="answer">Jederzeit, monatlich. Der Starter-Plan beginnt bei 79 €/Monat (inklusive 360 Freiminuten + Voice-Clone + alle Integrationen). Brauchst du nur eine Phonbot-Nummer ohne eigenen Agent-Account, gibt es den Nummer-Plan ab 8,99 €/Monat — der ist aber kein vollständiger Assistent, sondern nur die technische Anbindung.</div></details>
     </div>
   </div>
 </section>
@@ -506,7 +508,7 @@ p{color:rgba(255,255,255,.7)}
 </section>
 <section style="text-align:center">
   <div class="container">
-    <h2>Dein persönlicher Telefonassistent — in 5 Minuten aktiv</h2>
+    <h2>Dein persönlicher Telefonassistent — <span class="accent">in 5 Minuten aktiv</span></h2>
     <p class="section-lead">Registrierung in unter 2 Minuten · Keine Kreditkarte · Monatlich kündbar.</p>
     <div class="cta-row">
       <a href="/?page=register" class="btn btn-primary">Jetzt einrichten</a>

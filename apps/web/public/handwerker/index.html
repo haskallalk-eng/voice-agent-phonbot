@@ -239,6 +239,27 @@ p{color:rgba(255,255,255,.7)}
 /* ── Demo hint chip ── */
 .demo-hint{display:inline-flex;align-items:center;padding:.5rem 1rem;border-radius:.625rem;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);font-size:.8125rem;color:#67E8F9;margin-top:1.25rem}
 
+/* ── Persona-Katalog (optional — opt-in per BRANCHEN.personas) ──
+   Glass cards in a responsive 4/2/1-col grid. Each card keeps wording tight
+   so the reader scans the heading + one-line quote in <2s per persona. */
+.personas-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;max-width:60rem;margin:0 auto}
+.persona-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:1rem;padding:1.25rem;backdrop-filter:blur(16px);transition:all .25s}
+.persona-card:hover{border-color:rgba(249,115,22,.25);background:rgba(255,255,255,.06)}
+.persona-icon{width:2.25rem;height:2.25rem;border-radius:.625rem;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(249,115,22,.14),rgba(6,182,212,.08));color:#FDBA74;margin-bottom:.75rem}
+.persona-title{font-size:.9375rem;font-weight:600;color:#fff;margin-bottom:.375rem}
+.persona-quote{font-size:.8125rem;color:rgba(255,255,255,.55);line-height:1.5;font-style:italic}
+
+/* ── DSGVO-Disclaimer (optional — opt-in per BRANCHEN.negativeList) ──
+   Kompakte, unauffällige Caveat-Karte. Bewusst schmal (36rem) +
+   kleineres Padding + dezentere Farben, damit sie nicht wie ein
+   Error-Banner wirkt, sondern wie ein professioneller Hinweis am
+   Seitenende. Iteration 2026-04-24 nach User-Feedback „kleiner". */
+.disclaimer-card{max-width:36rem;margin:0 auto;background:rgba(251,191,36,.04);border:1px solid rgba(251,191,36,.18);border-radius:.75rem;padding:1rem 1.125rem}
+.disclaimer-head{display:flex;align-items:center;gap:.5rem;color:rgba(251,191,36,.9);font-size:.75rem;font-weight:600;letter-spacing:.01em;margin-bottom:.5rem;text-transform:uppercase}
+.disclaimer-ic{display:inline-flex;align-items:center;justify-content:center;width:1.25rem;height:1.25rem;color:rgba(251,191,36,.85)}
+.disclaimer-body{color:rgba(255,255,255,.6);font-size:.8125rem;line-height:1.55}
+.disclaimer-waitlist{color:rgba(255,255,255,.4);font-size:.75rem;line-height:1.5;margin-top:.5rem}
+
 /* ── Footer (shared partial) ── */
 /*--footer-css-begin--*/
 .site-footer{position:relative;z-index:10;border-top:1px solid rgba(255,255,255,.05);padding:3rem 1.5rem 2rem;margin-top:4rem;background:rgba(10,10,15,.6)}
@@ -281,7 +302,7 @@ p{color:rgba(255,255,255,.7)}
       <a href="/#faq">FAQ</a>
       <div class="ph-dd-wrap" id="ph-dd">
         <button type="button" id="ph-dd-btn" class="ph-dd-btn ph-nav-btn" aria-haspopup="true" aria-expanded="false">Branchen <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M1 3l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-        <div class="ph-dd-menu" role="menu"><a href="/friseur/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg><span>Friseur</span></a><a href="/handwerker/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg><span>Handwerker</span></a><a href="/reinigung/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M3 21l7-7"/><path d="M13.5 5.5l5.19-1.04 1.04 5.2-9.23 9.23a2 2 0 01-2.83 0l-2.83-2.83a2 2 0 010-2.83z"/><path d="M7.4 13.4l4.24-4.24"/></svg><span>Reinigung</span></a><a href="/restaurant/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><line x1="18" y1="2" x2="18" y2="22"/><path d="M22 8H14V2"/><line x1="6" y1="2" x2="6" y2="8"/><path d="M2 8a4 4 0 008 0"/><line x1="6" y1="12" x2="6" y2="22"/></svg><span>Restaurant</span></a><a href="/autowerkstatt/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M5 17H3a2 2 0 01-2-2v-4l2.69-6.73A2 2 0 015.54 3h12.92a2 2 0 011.85 1.27L23 11v4a2 2 0 01-2 2h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="17.5" r="2.5"/></svg><span>Autowerkstatt</span></a></div>
+        <div class="ph-dd-menu" role="menu"><a href="/friseur/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg><span>Friseur</span></a><a href="/handwerker/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg><span>Handwerker</span></a><a href="/reinigung/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M3 21l7-7"/><path d="M13.5 5.5l5.19-1.04 1.04 5.2-9.23 9.23a2 2 0 01-2.83 0l-2.83-2.83a2 2 0 010-2.83z"/><path d="M7.4 13.4l4.24-4.24"/></svg><span>Reinigung</span></a><a href="/restaurant/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><line x1="18" y1="2" x2="18" y2="22"/><path d="M22 8H14V2"/><line x1="6" y1="2" x2="6" y2="8"/><path d="M2 8a4 4 0 008 0"/><line x1="6" y1="12" x2="6" y2="22"/></svg><span>Restaurant</span></a><a href="/autowerkstatt/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M5 17H3a2 2 0 01-2-2v-4l2.69-6.73A2 2 0 015.54 3h12.92a2 2 0 011.85 1.27L23 11v4a2 2 0 01-2 2h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="17.5" r="2.5"/></svg><span>Autowerkstatt</span></a><a href="/selbststaendig/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M3 14h3a2 2 0 012 2v3a2 2 0 01-2 2H5a2 2 0 01-2-2v-8a9 9 0 0118 0v8a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3a2 2 0 012-2h3"/></svg><span>Selbstständig</span></a></div>
       </div>
       <a href="/?page=contact">Kontakt</a>
     </nav>
@@ -298,7 +319,7 @@ p{color:rgba(255,255,255,.7)}
     <a href="/#faq">FAQ</a>
     <details>
       <summary>Branchen <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M1 3l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
-      <div class="ph-mob-sub"><a href="/friseur/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg><span>Friseur</span></a><a href="/handwerker/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg><span>Handwerker</span></a><a href="/reinigung/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M3 21l7-7"/><path d="M13.5 5.5l5.19-1.04 1.04 5.2-9.23 9.23a2 2 0 01-2.83 0l-2.83-2.83a2 2 0 010-2.83z"/><path d="M7.4 13.4l4.24-4.24"/></svg><span>Reinigung</span></a><a href="/restaurant/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><line x1="18" y1="2" x2="18" y2="22"/><path d="M22 8H14V2"/><line x1="6" y1="2" x2="6" y2="8"/><path d="M2 8a4 4 0 008 0"/><line x1="6" y1="12" x2="6" y2="22"/></svg><span>Restaurant</span></a><a href="/autowerkstatt/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M5 17H3a2 2 0 01-2-2v-4l2.69-6.73A2 2 0 015.54 3h12.92a2 2 0 011.85 1.27L23 11v4a2 2 0 01-2 2h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="17.5" r="2.5"/></svg><span>Autowerkstatt</span></a></div>
+      <div class="ph-mob-sub"><a href="/friseur/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg><span>Friseur</span></a><a href="/handwerker/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg><span>Handwerker</span></a><a href="/reinigung/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M3 21l7-7"/><path d="M13.5 5.5l5.19-1.04 1.04 5.2-9.23 9.23a2 2 0 01-2.83 0l-2.83-2.83a2 2 0 010-2.83z"/><path d="M7.4 13.4l4.24-4.24"/></svg><span>Reinigung</span></a><a href="/restaurant/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><line x1="18" y1="2" x2="18" y2="22"/><path d="M22 8H14V2"/><line x1="6" y1="2" x2="6" y2="8"/><path d="M2 8a4 4 0 008 0"/><line x1="6" y1="12" x2="6" y2="22"/></svg><span>Restaurant</span></a><a href="/autowerkstatt/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M5 17H3a2 2 0 01-2-2v-4l2.69-6.73A2 2 0 015.54 3h12.92a2 2 0 011.85 1.27L23 11v4a2 2 0 01-2 2h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="17.5" r="2.5"/></svg><span>Autowerkstatt</span></a><a href="/selbststaendig/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M3 14h3a2 2 0 012 2v3a2 2 0 01-2 2H5a2 2 0 01-2-2v-8a9 9 0 0118 0v8a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3a2 2 0 012-2h3"/></svg><span>Selbstständig</span></a></div>
     </details>
     <a href="/?page=contact">Kontakt</a>
     <div class="ph-mob-cta">
@@ -324,7 +345,7 @@ p{color:rgba(255,255,255,.7)}
 
 <section>
   <div class="container">
-    <h2>So klingt Phonbot am Telefon</h2>
+    <h2>So klingt Phonbot <span class="accent">am Telefon</span></h2>
     <div class="dialogue">
       <div class="dialogue-header">
         <span class="dot" aria-hidden="true"></span>
@@ -347,7 +368,7 @@ p{color:rgba(255,255,255,.7)}
 
 <section>
   <div class="container">
-    <h2>Typische Anrufe — automatisch bearbeitet</h2>
+    <h2>Typische Anrufe — <span class="accent">automatisch bearbeitet</span></h2>
     <p class="section-lead">Was Chipy auf deiner Nummer ab Tag 1 übernimmt.</p>
     <div class="features">
       <div class="feature"><div class="feature-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg></div><h3>Auftragsannahme</h3><p>„Ich hab einen Wasserschaden" — Phonbot nimmt Adresse, Art des Problems und Rückrufnummer auf.</p></div>
@@ -413,7 +434,7 @@ p{color:rgba(255,255,255,.7)}
 
 <section>
   <div class="container">
-    <h2>Häufige Fragen</h2>
+    <h2>Häufige <span class="accent">Fragen</span></h2>
     <p class="section-lead">Alles, was du wissen musst — kurz und ehrlich.</p>
     <div class="faq-list">
       <details class="faq-item"><summary>Erkennt Phonbot den Unterschied zwischen Notfall und regulärem Termin?</summary><div class="answer">Ja. Keywords wie "sofort", "Wasserschaden", "brennt" lösen automatisch Priorität-hoch aus. Du kannst im Agent Builder deine eigenen Notfall-Regeln ergänzen.</div></details>
@@ -459,6 +480,7 @@ p{color:rgba(255,255,255,.7)}
           <li><a href="/reinigung/">Reinigung</a></li>
           <li><a href="/restaurant/">Restaurant</a></li>
           <li><a href="/autowerkstatt/">Autowerkstatt</a></li>
+          <li><a href="/selbststaendig/">Selbstständig</a></li>
         </ul>
       </div>
       <div>
