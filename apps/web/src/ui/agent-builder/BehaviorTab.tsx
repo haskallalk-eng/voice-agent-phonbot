@@ -284,7 +284,7 @@ export function BehaviorTab({
 
       {/* Section Blocks */}
       <SectionCard title="Verhaltens-Abschnitte" icon={IconMessageSquare}>
-        <p className="text-xs text-white/40 mb-3">Aktiviere Abschnitte — jeder fügt einen Textblock zum Prompt hinzu. Nochmal klicken entfernt ihn.</p>
+        <p className="text-xs text-white/40 mb-3">Hier schreibst du deinen System-Prompt — wähle Abschnitte, und Chipy bekommt automatisch den passenden Textblock dazu. Nochmal klicken entfernt ihn.</p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-5">
           {PROMPT_SECTIONS.map((sec) => {
             const isActive = activePromptSections.has(sec.id);
