@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React from 'react';
 import type { AgentConfig } from '../../lib/api.js';
 import {
-  SectionCard, Field, Input, Select, Toggle, Slider,
-  IconMic, IconSliders, IconBookOpen,
+  SectionCard, Field, Select, Toggle, Slider,
+  IconMic, IconSliders,
 } from './shared.js';
 
 export interface TechnicalTabProps {
@@ -55,50 +55,6 @@ export function TechnicalTab({ config, onUpdate }: TechnicalTabProps) {
         </div>
       </SectionCard>
 
-      <SectionCard title="Fachbegriffe" icon={IconBookOpen}>
-        <p className="text-sm text-white/50 mb-3">
-          Begriffe die die KI korrekt aussprechen und verstehen soll (Produktnamen, Fachausdrücke, Fremdwörter).
-        </p>
-        <VocabularyEditor
-          items={config.customVocabulary ?? []}
-          onChange={(items) => onUpdate({ customVocabulary: items })}
-        />
-      </SectionCard>
     </>
-  );
-}
-
-/* ── Vocabulary Editor ── */
-
-function VocabularyEditor({ items, onChange }: { items: string[]; onChange: (v: string[]) => void }) {
-  const [input, setInput] = useState('');
-
-  function add() {
-    const term = input.trim();
-    if (!term || items.includes(term)) return;
-    onChange([...items, term]);
-    setInput('');
-  }
-
-  return (
-    <div>
-      <div className="flex flex-wrap gap-2 mb-3">
-        {items.map((term, i) => (
-          <span key={i} className="flex items-center gap-1.5 bg-white/10 text-white/80 text-sm px-3 py-1.5 rounded-full">
-            {term}
-            <button onClick={() => onChange(items.filter((_, j) => j !== i))} className="text-white/30 hover:text-red-400 cursor-pointer transition-colors"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-          </span>
-        ))}
-        {items.length === 0 && <span className="text-sm text-white/30">Noch keine Begriffe hinzugefügt</span>}
-      </div>
-      <div className="flex gap-2">
-        <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="z.B. Balayage, Keratin, HVAC…"
-          className="flex-1" onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), add())} />
-        <button onClick={add}
-          className="rounded-lg bg-white/10 border border-white/10 px-4 py-2 text-sm text-white/70 hover:bg-white/15 transition-colors">
-          + Hinzufügen
-        </button>
-      </div>
-    </div>
   );
 }

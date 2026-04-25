@@ -132,6 +132,12 @@ export type CallRoutingRule = {
   enabled: boolean;
 };
 
+export type VocabularyTerm = {
+  term: string;            // "Balayage"
+  explanation?: string;    // "französische Färbetechnik mit fließenden Übergängen"
+  context?: string;        // "Wenn ein Kunde nach modernen Strähnchen fragt — meist Frauen 25+"
+};
+
 export type ServiceItem = {
   id: string;
   name: string;
@@ -221,7 +227,11 @@ export type AgentConfig = {
   temperature?: number;          // 0 – 1
   maxCallDuration?: number;      // seconds
   backgroundSound?: 'off' | 'office' | 'cafe' | 'nature';
-  customVocabulary?: string[];   // domain-specific terms
+  // Domain-specific terms the AI should pronounce, recognise, and explain
+  // correctly. Each entry can carry a short explanation + a usage context
+  // ("when to use it / for whom"). Older configs may still hold plain
+  // strings — readers fall back to `{term: x}` for those.
+  customVocabulary?: Array<string | VocabularyTerm>;
   enableDtmf?: boolean;
   interruptionMode?: 'allow' | 'hold' | 'block';
 

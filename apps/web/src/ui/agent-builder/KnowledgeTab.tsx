@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
-import { uploadKnowledgePdf, type AgentConfig, type KnowledgeSource } from '../../lib/api.js';
-import { SectionCard, Input, TextArea, Badge, IconKnowledge, IconGlobe, IconFileText, IconMessageSquare } from './shared.js';
+import { uploadKnowledgePdf, type AgentConfig, type KnowledgeSource, type VocabularyTerm } from '../../lib/api.js';
+import { SectionCard, Input, TextArea, Badge, IconKnowledge, IconGlobe, IconFileText, IconMessageSquare, IconBookOpen } from './shared.js';
+import { AdaptiveTextarea } from '../../components/AdaptiveTextarea.js';
 
 export interface KnowledgeTabProps {
   config: AgentConfig;
@@ -9,8 +10,10 @@ export interface KnowledgeTabProps {
 
 export function KnowledgeTab({ config, onUpdate }: KnowledgeTabProps) {
   const sources = config.knowledgeSources ?? [];
+  const vocab = readVocabulary(config);
 
   return (
+    <>
     <SectionCard title="Wissensquellen" icon={IconKnowledge}>
       <p className="text-sm text-white/50 mb-4">
         Eigene Texte und Website-URLs werden beim Speichern/Deploy als Retell Knowledge Base mit dem Agenten verbunden.
@@ -47,6 +50,125 @@ export function KnowledgeTab({ config, onUpdate }: KnowledgeTabProps) {
         onUpdate({ knowledgeSources: [...sources, src] });
       }} />
     </SectionCard>
+
+    <SectionCard title="Spezielle Begriffe" icon={IconBookOpen}>
+      <p className="text-sm text-white/50 mb-4">
+        Begriffe die Chipy korrekt aussprechen und im Kontext verstehen soll —
+        Produktnamen, Fachausdrücke, Fremdwörter. Optional kannst du erklären,
+        was der Begriff bedeutet und wann/mit wem er typischerweise vorkommt;
+        Chipy nutzt das, um den Begriff im richtigen Moment passend einzusetzen.
+      </p>
+
+      <VocabularyEditor
+        items={vocab}
+        onChange={(items) => onUpdate({ customVocabulary: items })}
+      />
+    </SectionCard>
+    </>
+  );
+}
+
+// ── Vocabulary helpers ─────────────────────────────────────────────────
+// Old configs stored `customVocabulary` as `string[]`. We accept that shape
+// transparently and surface every entry as a `VocabularyTerm` so the editor
+// only ever has to deal with one type.
+function readVocabulary(cfg: AgentConfig): VocabularyTerm[] {
+  const raw = cfg.customVocabulary;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => (typeof item === 'string' ? { term: item } : item))
+    .filter((it): it is VocabularyTerm => !!it && typeof it.term === 'string' && it.term.trim().length > 0);
+}
+
+function VocabularyEditor({
+  items,
+  onChange,
+}: {
+  items: VocabularyTerm[];
+  onChange: (items: VocabularyTerm[]) => void;
+}) {
+  function patch(idx: number, p: Partial<VocabularyTerm>) {
+    const next = items.map((it, i) => (i === idx ? { ...it, ...p } : it));
+    onChange(next);
+  }
+  function remove(idx: number) {
+    onChange(items.filter((_, i) => i !== idx));
+  }
+  function add() {
+    onChange([...items, { term: '' }]);
+  }
+
+  return (
+    <div className="space-y-3">
+      {items.length === 0 && (
+        <p className="text-sm text-white/30 italic">Noch keine Begriffe hinzugefügt.</p>
+      )}
+
+      {items.map((it, i) => (
+        <div
+          key={i}
+          className="rounded-xl border border-white/[0.08] bg-white/[0.025] overflow-hidden"
+        >
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-white/[0.06]">
+            <Input
+              value={it.term}
+              onChange={(e) => patch(i, { term: e.target.value })}
+              placeholder="Begriff (z. B. Balayage, Keratin, Pony, HVAC)"
+              className="flex-1 !bg-transparent !border-white/[0.06]"
+              maxLength={120}
+            />
+            <button
+              type="button"
+              onClick={() => remove(i)}
+              className="shrink-0 text-white/30 hover:text-red-400 transition-colors p-1.5 cursor-pointer"
+              aria-label="Begriff entfernen"
+              title="Begriff entfernen"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="px-3 py-2 space-y-2">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-white/30 mb-1">
+                Was bedeutet das?
+              </p>
+              <AdaptiveTextarea
+                value={it.explanation ?? ''}
+                onChange={(e) => patch(i, { explanation: e.target.value })}
+                placeholder={'Kurz erklärt — z. B. „Französische Färbetechnik mit fließenden Übergängen".'}
+                minRows={1}
+                maxLength={500}
+                className="w-full bg-transparent text-xs text-white/80 leading-relaxed outline-none focus:ring-0 border-0 placeholder:text-white/25"
+              />
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-white/30 mb-1">
+                Wann / mit wem benutzt?
+              </p>
+              <AdaptiveTextarea
+                value={it.context ?? ''}
+                onChange={(e) => patch(i, { context: e.target.value })}
+                placeholder={'Z. B. „Wenn Stammkundinnen 25+ nach modernen Strähnchen fragen — passt nicht zu Erstkundinnen unter 20".'}
+                minRows={1}
+                maxLength={500}
+                className="w-full bg-transparent text-xs text-white/80 leading-relaxed outline-none focus:ring-0 border-0 placeholder:text-white/25"
+              />
+            </div>
+          </div>
+        </div>
+      ))}
+
+      <button
+        type="button"
+        onClick={add}
+        className="text-xs text-white/55 hover:text-white/85 transition-colors cursor-pointer rounded-full border border-white/10 hover:border-white/25 px-4 py-1.5"
+      >
+        + Begriff hinzufügen
+      </button>
+    </div>
   );
 }
 
