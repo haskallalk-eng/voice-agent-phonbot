@@ -2,6 +2,8 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import bcrypt from 'bcrypt';
 import { pool } from './db.js';
+import { TEMPLATES } from './templates.js';
+import { DEMO_END_INSTRUCTIONS, flushDemoAgentCache } from './demo.js';
 
 // Admin login accepts either:
 //  • ADMIN_PASSWORD_HASH (bcrypt, recommended for prod) — plaintext never in
@@ -283,6 +285,332 @@ export async function registerAdmin(app: FastifyInstance) {
     );
 
     return { ok: true, leadId };
+  });
+
+  // ── GET /admin/demo-prompts ───────────────────────────────────────────────
+  // Returns the in-code defaults + every admin-stored override side-by-side
+  // so the editor can render "default vs. live" diffs. The shape is keyed by
+  // template_id; the special key '__global__' is the cross-template epilogue.
+  app.get('/admin/demo-prompts', { ...auth }, async (_req: FastifyRequest, reply: FastifyReply) => {
+    if (!pool) return reply.status(503).send({ error: 'DB not configured' });
+
+    const overridesRes = await pool.query(
+      `SELECT template_id, epilogue, base_prompt, updated_at, updated_by
+         FROM demo_prompt_overrides`,
+    );
+    const overrides = new Map<string, { epilogue: string; basePrompt: string | null; updatedAt: string; updatedBy: string | null }>();
+    for (const row of overridesRes.rows as Array<{ template_id: string; epilogue: string; base_prompt: string | null; updated_at: Date; updated_by: string | null }>) {
+      overrides.set(row.template_id, {
+        epilogue: row.epilogue,
+        basePrompt: row.base_prompt,
+        updatedAt: row.updated_at.toISOString(),
+        updatedBy: row.updated_by,
+      });
+    }
+
+    return {
+      defaults: {
+        globalEpilogue: DEMO_END_INSTRUCTIONS,
+        templates: TEMPLATES.map((t) => ({
+          id: t.id,
+          name: t.name,
+          icon: t.icon,
+          basePrompt: t.prompt,
+        })),
+      },
+      overrides: {
+        globalEpilogue: overrides.get('__global__') ?? null,
+        templates: TEMPLATES.map((t) => ({
+          id: t.id,
+          override: overrides.get(t.id) ?? null,
+        })),
+      },
+    };
+  });
+
+  // ── PUT /admin/demo-prompts/:scope ────────────────────────────────────────
+  // scope = '__global__' (epilogue applies to every template) or a templateId.
+  // Setting epilogue=null deletes the override (= falls back to in-code default).
+  app.put('/admin/demo-prompts/:scope', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!pool) return reply.status(503).send({ error: 'DB not configured' });
+    const { scope } = req.params as { scope: string };
+    if (scope !== '__global__' && !TEMPLATES.some((t) => t.id === scope)) {
+      return reply.status(400).send({ error: 'Unknown scope', scope });
+    }
+    const parsed = z.object({
+      epilogue: z.string().min(0).max(20_000).nullable(),
+      basePrompt: z.string().min(0).max(20_000).nullable().optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Invalid body', details: parsed.error.flatten() });
+
+    const { epilogue, basePrompt } = parsed.data;
+    const adminEmail = (req.user as Record<string, unknown> | undefined)?.email as string | undefined;
+
+    if (epilogue === null && (basePrompt === null || basePrompt === undefined)) {
+      // Both unset = drop the row entirely (revert to defaults).
+      await pool.query(`DELETE FROM demo_prompt_overrides WHERE template_id = $1`, [scope]);
+    } else {
+      await pool.query(
+        `INSERT INTO demo_prompt_overrides (template_id, epilogue, base_prompt, updated_by)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (template_id) DO UPDATE SET
+           epilogue    = COALESCE(EXCLUDED.epilogue, demo_prompt_overrides.epilogue),
+           base_prompt = CASE WHEN $5 THEN EXCLUDED.base_prompt ELSE demo_prompt_overrides.base_prompt END,
+           updated_at  = now(),
+           updated_by  = EXCLUDED.updated_by`,
+        [scope, epilogue ?? '', basePrompt ?? null, adminEmail ?? null, basePrompt !== undefined],
+      );
+    }
+
+    // Force every cached demo agent to re-create with the new prompt next call.
+    const flush = await flushDemoAgentCache();
+    return { ok: true, flushed: flush.flushed };
+  });
+
+  // ── POST /admin/demo-prompts/flush-cache ──────────────────────────────────
+  // Manual flush — useful when changing tools/voice/post-call config in code
+  // without editing the prompt itself.
+  app.post('/admin/demo-prompts/flush-cache', { ...auth }, async () => {
+    return flushDemoAgentCache();
+  });
+
+  // ── GET /admin/learnings ──────────────────────────────────────────────────
+  // Combined queue of "improvement candidates" — org-specific prompt_suggestions
+  // AND systemic template_learnings — joined to learning_decisions to surface
+  // any prior admin action. Every row carries `source_kind` so the frontend
+  // knows which decide-target to send back.
+  app.get('/admin/learnings', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!pool) return reply.status(503).send({ error: 'DB not configured' });
+    const q = z.object({
+      status: z.enum(['pending', 'applied', 'rejected', 'all']).default('pending'),
+      limit: z.coerce.number().int().min(1).max(200).default(100),
+    }).safeParse(req.query);
+    if (!q.success) return reply.status(400).send({ error: 'Invalid query', details: q.error.flatten() });
+
+    const promptSuggRes = await pool.query(
+      `SELECT ps.id, ps.created_at, ps.org_id, o.name AS org_name,
+              ps.category, ps.issue_summary, ps.suggested_addition,
+              ps.status AS source_status,
+              ld.scope, ld.status AS decision_status, ld.decided_at, ld.decided_by, ld.reject_reason
+         FROM prompt_suggestions ps
+         LEFT JOIN orgs o ON o.id = ps.org_id
+         LEFT JOIN learning_decisions ld
+           ON ld.source_kind = 'prompt_suggestion' AND ld.source_id = ps.id
+        ORDER BY ps.created_at DESC
+        LIMIT $1`,
+      [q.data.limit],
+    );
+
+    const tmplLearnRes = await pool.query(
+      `SELECT tl.id, tl.created_at, tl.template_id, tl.learning_type,
+              tl.content, tl.source_count, tl.confidence,
+              tl.status AS source_status,
+              ld.scope, ld.status AS decision_status, ld.decided_at, ld.decided_by, ld.reject_reason
+         FROM template_learnings tl
+         LEFT JOIN learning_decisions ld
+           ON ld.source_kind = 'template_learning' AND ld.source_id = tl.id
+        ORDER BY tl.created_at DESC
+        LIMIT $1`,
+      [q.data.limit],
+    );
+
+    type Row = {
+      kind: 'prompt_suggestion' | 'template_learning';
+      id: string;
+      created_at: string;
+      summary: string;
+      proposed: string;
+      orgId: string | null;
+      orgName: string | null;
+      templateId: string | null;
+      sourceMeta: Record<string, unknown>;
+      sourceStatus: string;
+      decision: { scope: string | null; status: string | null; decidedAt: string | null; decidedBy: string | null; rejectReason: string | null } | null;
+    };
+    const items: Row[] = [];
+    for (const r of promptSuggRes.rows as Array<Record<string, unknown>>) {
+      items.push({
+        kind: 'prompt_suggestion',
+        id: r.id as string,
+        created_at: (r.created_at as Date).toISOString(),
+        summary: (r.issue_summary as string) ?? '',
+        proposed: (r.suggested_addition as string) ?? '',
+        orgId: (r.org_id as string) ?? null,
+        orgName: (r.org_name as string) ?? null,
+        templateId: null,
+        sourceMeta: { category: r.category },
+        sourceStatus: (r.source_status as string) ?? 'pending',
+        decision: r.scope || r.decision_status ? {
+          scope: (r.scope as string) ?? null,
+          status: (r.decision_status as string) ?? null,
+          decidedAt: r.decided_at ? (r.decided_at as Date).toISOString() : null,
+          decidedBy: (r.decided_by as string) ?? null,
+          rejectReason: (r.reject_reason as string) ?? null,
+        } : null,
+      });
+    }
+    for (const r of tmplLearnRes.rows as Array<Record<string, unknown>>) {
+      items.push({
+        kind: 'template_learning',
+        id: r.id as string,
+        created_at: (r.created_at as Date).toISOString(),
+        summary: (r.learning_type as string) ?? '',
+        proposed: (r.content as string) ?? '',
+        orgId: null,
+        orgName: null,
+        templateId: (r.template_id as string) ?? null,
+        sourceMeta: { sourceCount: r.source_count, confidence: r.confidence },
+        sourceStatus: (r.source_status as string) ?? 'pending',
+        decision: r.scope || r.decision_status ? {
+          scope: (r.scope as string) ?? null,
+          status: (r.decision_status as string) ?? null,
+          decidedAt: r.decided_at ? (r.decided_at as Date).toISOString() : null,
+          decidedBy: (r.decided_by as string) ?? null,
+          rejectReason: (r.reject_reason as string) ?? null,
+        } : null,
+      });
+    }
+
+    // Sort newest first across both source kinds.
+    items.sort((a, b) => b.created_at.localeCompare(a.created_at));
+
+    if (q.data.status !== 'all') {
+      const want = q.data.status;
+      return {
+        items: items.filter((i) => {
+          const effective = i.decision?.status ?? 'pending';
+          return effective === want;
+        }),
+      };
+    }
+    return { items };
+  });
+
+  // ── POST /admin/learnings/decide ──────────────────────────────────────────
+  // Admin records a decision per improvement. When status='applied' and the
+  // scope contains 'systemic', we append the proposed_change to the global
+  // demo epilogue so the demo agents pick it up on next cache miss. When
+  // scope contains 'org', we mark the underlying prompt_suggestion as
+  // 'applied' so the org's own learning pipeline will roll it into their
+  // prompt on next deploy.
+  app.post('/admin/learnings/decide', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!pool) return reply.status(503).send({ error: 'DB not configured' });
+    const parsed = z.object({
+      sourceKind: z.enum(['prompt_suggestion', 'template_learning']),
+      sourceId: z.string().uuid(),
+      decision: z.enum(['apply', 'reject']),
+      // For 'apply' only — scope is required. 'reject' ignores scope.
+      scope: z.enum(['systemic', 'org', 'both']).optional(),
+      rejectReason: z.string().max(500).optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Invalid body', details: parsed.error.flatten() });
+    const { sourceKind, sourceId, decision } = parsed.data;
+    if (decision === 'apply' && !parsed.data.scope) {
+      return reply.status(400).send({ error: 'scope is required when decision=apply' });
+    }
+    const adminEmail = (req.user as Record<string, unknown> | undefined)?.email as string | undefined;
+    const status = decision === 'apply' ? 'applied' : 'rejected';
+
+    // Look up source row to copy summary/proposed_change for audit trail.
+    let summary: string | null = null;
+    let proposedChange = '';
+    let orgId: string | null = null;
+    let templateId: string | null = null;
+    if (sourceKind === 'prompt_suggestion') {
+      const r = await pool.query(
+        `SELECT issue_summary, suggested_addition, org_id FROM prompt_suggestions WHERE id = $1`,
+        [sourceId],
+      );
+      if (!r.rowCount) return reply.status(404).send({ error: 'Suggestion not found' });
+      summary = (r.rows[0].issue_summary as string) ?? null;
+      proposedChange = (r.rows[0].suggested_addition as string) ?? '';
+      orgId = (r.rows[0].org_id as string) ?? null;
+    } else {
+      const r = await pool.query(
+        `SELECT learning_type, content, template_id FROM template_learnings WHERE id = $1`,
+        [sourceId],
+      );
+      if (!r.rowCount) return reply.status(404).send({ error: 'Learning not found' });
+      summary = (r.rows[0].learning_type as string) ?? null;
+      proposedChange = (r.rows[0].content as string) ?? '';
+      templateId = (r.rows[0].template_id as string) ?? null;
+    }
+
+    const scope = decision === 'apply' ? (parsed.data.scope ?? null) : null;
+    const rejectReason = decision === 'reject' ? (parsed.data.rejectReason ?? null) : null;
+
+    await pool.query(
+      `INSERT INTO learning_decisions
+        (source_kind, source_id, org_id, template_id, scope, status,
+         summary, proposed_change, decided_at, decided_by, reject_reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), $9, $10)
+       ON CONFLICT (source_kind, source_id) DO UPDATE SET
+         scope = EXCLUDED.scope,
+         status = EXCLUDED.status,
+         decided_at = now(),
+         decided_by = EXCLUDED.decided_by,
+         reject_reason = EXCLUDED.reject_reason`,
+      [sourceKind, sourceId, orgId, templateId, scope, status, summary, proposedChange, adminEmail ?? null, rejectReason],
+    );
+
+    let systemicApplied = false;
+    let orgApplied = false;
+
+    if (decision === 'apply' && scope && (scope === 'systemic' || scope === 'both')) {
+      // Append to the global demo epilogue. Idempotent per (sourceKind, sourceId)
+      // via the marker line; if the same proposed_change is applied twice
+      // somehow, we don't double-append.
+      const marker = `<!-- learning:${sourceKind}:${sourceId} -->`;
+      const block = `\n\n${marker}\n${proposedChange.trim()}`;
+      const existing = await pool.query(
+        `SELECT epilogue FROM demo_prompt_overrides WHERE template_id = '__global__'`,
+      );
+      const current = existing.rowCount ? (existing.rows[0].epilogue as string) : DEMO_END_INSTRUCTIONS;
+      const next = current.includes(marker) ? current : current + block;
+      await pool.query(
+        `INSERT INTO demo_prompt_overrides (template_id, epilogue, updated_by)
+         VALUES ('__global__', $1, $2)
+         ON CONFLICT (template_id) DO UPDATE SET
+           epilogue   = EXCLUDED.epilogue,
+           updated_at = now(),
+           updated_by = EXCLUDED.updated_by`,
+        [next, adminEmail ?? null],
+      );
+      await flushDemoAgentCache();
+      systemicApplied = true;
+
+      // For template_learnings, also flag the source row so the existing
+      // org-side propagation pipeline sees it.
+      if (sourceKind === 'template_learning') {
+        await pool.query(
+          `UPDATE template_learnings SET status = 'applied', applied_at = now() WHERE id = $1`,
+          [sourceId],
+        );
+      }
+    }
+
+    if (decision === 'apply' && scope && (scope === 'org' || scope === 'both')) {
+      if (sourceKind === 'prompt_suggestion') {
+        await pool.query(
+          `UPDATE prompt_suggestions SET status = 'applied', applied_at = now() WHERE id = $1`,
+          [sourceId],
+        );
+        orgApplied = true;
+      }
+      // template_learning + org-scope makes no sense (the row is system-level by definition);
+      // we silently no-op so the admin can still pick "both" for a template_learning that
+      // also has an analogous prompt_suggestion they applied separately.
+    }
+
+    if (decision === 'reject') {
+      if (sourceKind === 'prompt_suggestion') {
+        await pool.query(`UPDATE prompt_suggestions SET status = 'rejected' WHERE id = $1`, [sourceId]);
+      } else {
+        await pool.query(`UPDATE template_learnings SET status = 'rejected' WHERE id = $1`, [sourceId]);
+      }
+    }
+
+    return { ok: true, systemicApplied, orgApplied };
   });
 
   // ── GET /admin/metrics ────────────────────────────────────────────────────

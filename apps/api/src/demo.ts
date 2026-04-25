@@ -23,7 +23,8 @@ const DEMO_END_CALL_TOOL: RetellTool = {
 // template prompts focused on their domain (booking, intake, services) while
 // centralising demo-wide rules: shutdown semantics + promise-discipline +
 // capability-parity-with-prod. Synced with DEMO_END_CALL_TOOL.
-const DEMO_END_INSTRUCTIONS = `
+// Exported so the admin UI can show the in-code default next to the override.
+export const DEMO_END_INSTRUCTIONS = `
 
 # Demo-übergreifende Regeln
 
@@ -136,6 +137,61 @@ export async function readDemoCallTemplate(agentId: string): Promise<string | nu
   return null;
 }
 
+/**
+ * Read admin-edited prompt fragments. Returns either {basePrompt, epilogue}
+ * with whichever rows exist, or both null (= use the hard-coded defaults
+ * from templates.ts + DEMO_END_INSTRUCTIONS). The "global" epilogue is
+ * stored under template_id='__global__'; per-template rows can additionally
+ * override base_prompt.
+ */
+async function readDemoPromptOverrides(templateId: string): Promise<{ basePrompt: string | null; epilogue: string | null }> {
+  if (!pool) return { basePrompt: null, epilogue: null };
+  const res = await pool.query(
+    `SELECT template_id, epilogue, base_prompt
+       FROM demo_prompt_overrides
+      WHERE template_id IN ($1, '__global__')`,
+    [templateId],
+  ).catch(() => null);
+  if (!res || !res.rowCount) return { basePrompt: null, epilogue: null };
+  let basePrompt: string | null = null;
+  let epilogue: string | null = null;
+  for (const row of res.rows as Array<{ template_id: string; epilogue: string; base_prompt: string | null }>) {
+    if (row.template_id === templateId) basePrompt = row.base_prompt ?? null;
+    // Per-template epilogue beats the global one. We pick the most specific
+    // epilogue that's set (template-specific > global). Both null = default.
+    if (row.template_id === templateId && row.epilogue) epilogue = row.epilogue;
+    else if (row.template_id === '__global__' && row.epilogue && epilogue === null) epilogue = row.epilogue;
+  }
+  return { basePrompt, epilogue };
+}
+
+/**
+ * Drop all cached demo agents (Redis + in-memory). Next /demo/call hit re-
+ * creates them via Retell with whatever prompt+tool config is current. Used
+ * by the admin endpoint after editing a prompt override.
+ */
+export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
+  inMemDemoAgents.clear();
+  inMemDemoAgentMeta.clear();
+  let flushed = 0;
+  if (redis?.isOpen) {
+    for (const pattern of ['demo_agent:v3:*', 'demo_agent_meta:v3:*']) {
+      try {
+        for await (const key of redis.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+          const list = Array.isArray(key) ? key : [key];
+          for (const k of list) {
+            await redis.del(k);
+            flushed++;
+          }
+        }
+      } catch {
+        /* non-critical */
+      }
+    }
+  }
+  return { flushed };
+}
+
 // In-process dedup: when N parallel /demo/call arrive for the same template
 // with a cold cache, we want ONE createLLM+createAgent, not N. The pending
 // map holds the in-flight promise; every subsequent caller awaits the same
@@ -159,9 +215,18 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
     const cached2 = await readDemoAgent(templateId);
     if (cached2) return cached2;
 
+    // Admin can override (a) the per-template base prompt and/or (b) the
+    // cross-template epilogue via demo_prompt_overrides. Falls back to the
+    // hard-coded template + DEMO_END_INSTRUCTIONS when no row exists. The
+    // admin "Cache leeren"-Button (Redis DEL demo_agent:v3:*) forces every
+    // open demo to pick up new text on the next call.
+    const overrides = await readDemoPromptOverrides(templateId);
+    const basePrompt = overrides.basePrompt ?? template.prompt;
+    const epilogue = overrides.epilogue ?? DEMO_END_INSTRUCTIONS;
+
     const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';
     const llm = await createLLM({
-      generalPrompt: template.prompt + DEMO_END_INSTRUCTIONS,
+      generalPrompt: basePrompt + epilogue,
       tools: [DEMO_END_CALL_TOOL],
       model,
     });
