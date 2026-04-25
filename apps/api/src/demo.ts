@@ -5,7 +5,7 @@
 import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { createWebCall, createLLM, createAgent as retellCreateAgent, createPhoneCall, updatePhoneNumber, DEFAULT_VOICE_ID, type RetellTool } from './retell.js';
+import { createWebCall, createLLM, createAgent as retellCreateAgent, createPhoneCall, updatePhoneNumber, DEFAULT_VOICE_ID, type RetellTool, type PostCallAnalysisField } from './retell.js';
 import { TEMPLATES } from './templates.js';
 
 // Retell built-in end_call tool. Lets GPT-4o-mini hang up the demo when the
@@ -61,6 +61,17 @@ A=Aachen · B=Berlin · C=Chemnitz · D=Düsseldorf · E=Essen · F=Frankfurt ·
 Beispiel-Bestätigung: "Ich wiederhole zur Sicherheit: M wie München, A wie Aachen, X wie Xanten — at-Zeichen — G wie Goslar, M wie München, X wie Xanten — Punkt D wie Düsseldorf E wie Essen. Stimmt das so?"
 
 Wenn der Anrufer nach DEINEM Spelling abweicht ("nein, das X war ein S"), korrigiere und wiederhole NUR das geänderte Stück, nicht die ganze Adresse.`;
+
+// Retell post-call analysis — fields the model extracts from the transcript
+// after the call ends. Sent to /retell/webhook in the call_analysis event,
+// then persisted on the demo_calls row so admins can scan + promote leads.
+const DEMO_POST_CALL_FIELDS: PostCallAnalysisField[] = [
+  { type: 'string', name: 'caller_name', description: 'Vollständiger Name des Anrufers, falls genannt. Nur Vorname OK. Leer lassen wenn nicht erwähnt.' },
+  { type: 'string', name: 'caller_email', description: 'E-Mail-Adresse des Anrufers in lowercase und voll validiert (max@gmx.de). Leer wenn nicht genannt.' },
+  { type: 'string', name: 'caller_phone', description: 'Telefonnummer des Anrufers in E.164-Format (+49…). Leer wenn nicht genannt.' },
+  { type: 'string', name: 'intent_summary', description: 'Ein-Satz-Zusammenfassung des Anliegens auf Deutsch (max. 140 Zeichen). Was wollte der Anrufer?' },
+];
+
 import { pool } from './db.js';
 import { redis } from './redis.js';
 import { verifyTurnstile } from './captcha.js';
@@ -84,14 +95,45 @@ async function readDemoAgent(templateId: string): Promise<string | null> {
   return null;
 }
 
+// Reverse lookup so the Retell webhook can recognise demo calls. The webhook
+// only knows the agent_id; we map it back to a templateId so we can persist
+// into demo_calls with the right branche-tag.
+const inMemDemoAgentMeta = new Map<string, { templateId: string; createdAt: number }>();
+
 async function writeDemoAgent(templateId: string, agentId: string): Promise<void> {
   // H6: Evict oldest entry when hitting the cap.
   if (inMemDemoAgents.size >= MAX_DEMO_AGENTS && !inMemDemoAgents.has(templateId)) {
     const firstKey = inMemDemoAgents.keys().next().value;
     if (firstKey !== undefined) inMemDemoAgents.delete(firstKey);
   }
+  if (inMemDemoAgentMeta.size >= MAX_DEMO_AGENTS) {
+    const firstKey = inMemDemoAgentMeta.keys().next().value;
+    if (firstKey !== undefined) inMemDemoAgentMeta.delete(firstKey);
+  }
   inMemDemoAgents.set(templateId, { agentId, createdAt: Date.now() });
-  if (redis?.isOpen) await redis.set(`demo_agent:v2:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {});
+  inMemDemoAgentMeta.set(agentId, { templateId, createdAt: Date.now() });
+  if (redis?.isOpen) {
+    await Promise.all([
+      redis.set(`demo_agent:v2:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {}),
+      // Reverse direction: webhook sees agent_id, needs templateId. Same TTL.
+      redis.set(`demo_agent_meta:v2:${agentId}`, templateId, { EX: CACHE_TTL_SEC }).catch(() => {}),
+    ]);
+  }
+}
+
+/**
+ * Look up the templateId for a Retell agent_id. Returns null when the agent
+ * isn't a demo agent we created (e.g. a paid-tenant agent whose call_ended
+ * webhook fired through this same handler).
+ */
+export async function readDemoCallTemplate(agentId: string): Promise<string | null> {
+  if (redis?.isOpen) {
+    const v = await redis.get(`demo_agent_meta:v2:${agentId}`).catch(() => null);
+    if (v) return v;
+  }
+  const cached = inMemDemoAgentMeta.get(agentId);
+  if (cached && Date.now() - cached.createdAt < CACHE_TTL_SEC * 1000) return cached.templateId;
+  return null;
 }
 
 // In-process dedup: when N parallel /demo/call arrive for the same template
@@ -124,11 +166,17 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
       model,
     });
 
+    // Wire webhook so call_ended pings /retell/webhook → demo_calls insert.
+    // Without WEBHOOK_BASE_URL (dev) we skip the URL — calls still work, but
+    // there's nowhere for Retell to POST to, so no persistence in dev.
+    const webhookBase = process.env.WEBHOOK_BASE_URL?.replace(/\/$/, '');
     const agent = await retellCreateAgent({
       name: `Demo: ${template.name}`,
       llmId: llm.llm_id,
       voiceId: template.voice,
       language: template.language === 'de' ? 'de-DE' : 'en-US',
+      webhookUrl: webhookBase ? `${webhookBase}/retell/webhook` : undefined,
+      postCallAnalysisData: DEMO_POST_CALL_FIELDS,
     });
 
     await writeDemoAgent(templateId, agent.agent_id);

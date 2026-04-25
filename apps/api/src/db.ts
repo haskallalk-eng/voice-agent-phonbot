@@ -719,6 +719,10 @@ export async function cleanupOldLeads(): Promise<number> {
   const res = await pool.query(
     `DELETE FROM crm_leads WHERE created_at < NOW() - INTERVAL '90 days'`,
   );
+  // Demo-call retention mirrors crm_leads — same 90-day cap.
+  await pool.query(
+    `DELETE FROM demo_calls WHERE created_at < NOW() - INTERVAL '90 days'`,
+  ).catch(() => { /* table may not exist yet on first boot */ });
   return (res as { rowCount?: number }).rowCount ?? 0;
 }
 

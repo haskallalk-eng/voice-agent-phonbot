@@ -106,6 +106,34 @@ export async function migrateOutbound() {
     );
   `);
   await pool.query(`COMMENT ON TABLE crm_leads IS 'DSGVO Art. 5: 90-day retention policy. Rows older than 90 days are purged daily by cleanupOldLeads().';`);
+
+  // Demo-Web-Call persistence — every Retell call_ended on a /demo/call agent
+  // lands here so platform admins can review what visitors discussed and
+  // promote useful conversations into crm_leads. Standalone table (not
+  // crm_leads) because demo calls have no email constraint and are noisier
+  // (hang-ups, test pings). Same 90-day retention as crm_leads.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS demo_calls (
+      id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+      call_id             TEXT NOT NULL UNIQUE,
+      agent_id            TEXT,
+      template_id         TEXT NOT NULL,
+      duration_sec        INTEGER,
+      transcript          TEXT,
+      caller_name         TEXT,
+      caller_email        TEXT,
+      caller_phone        TEXT,
+      intent_summary      TEXT,
+      disconnection_reason TEXT,
+      promoted_lead_id    UUID REFERENCES crm_leads(id) ON DELETE SET NULL,
+      promoted_at         TIMESTAMPTZ
+    );
+  `);
+  await pool.query(`COMMENT ON TABLE demo_calls IS 'DSGVO Art. 5: 90-day retention policy. Rows purged daily by cleanupOldLeads().';`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS demo_calls_template_created_idx ON demo_calls(template_id, created_at DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS demo_calls_promoted_idx ON demo_calls(promoted_at) WHERE promoted_at IS NULL;`);
+
   // Composite index for the 24h phone-dedup query in /demo/callback +
   // /outbound/website-callback (E2 + T-38). Without this the dedup is
   // O(n) seq scan per request — fine at 100 leads, slow at 10k+.

@@ -23,6 +23,7 @@ import { getOrgIdByAgentId } from './org-id-cache.js';
 import { getCall, deleteCall } from './retell.js';
 import { fireInboundWebhooks } from './inbound-webhooks.js';
 import { sendBookingConfirmationSms, sendTicketAckSms } from './sms.js';
+import { readDemoCallTemplate } from './demo.js';
 
 const RETELL_API_KEY = process.env.RETELL_API_KEY ?? '';
 
@@ -467,6 +468,39 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
             variables: extracted ?? {},
           }).catch(() => {});
         }
+
+        // Demo-call persistence: when the agent isn't bound to a paying org,
+        // it might be one of our /demo/call agents. Look up by agent_id; if
+        // it's a demo, insert into demo_calls so admins can review + promote
+        // to crm_leads. The post_call_analysis_data fields (caller_name,
+        // caller_email, caller_phone, intent_summary) come back in `extracted`
+        // for short calls; for long calls they arrive later in call_analyzed.
+        if (!orgId && callId && agentId) {
+          const templateId = await readDemoCallTemplate(agentId);
+          if (templateId && pool) {
+            const cn = (extracted?.caller_name as string | undefined)?.trim() || null;
+            const ce = (extracted?.caller_email as string | undefined)?.trim().toLowerCase() || null;
+            const cp = (extracted?.caller_phone as string | undefined)?.trim() || null;
+            const intent = (extracted?.intent_summary as string | undefined)?.trim() || null;
+            pool.query(
+              `INSERT INTO demo_calls (call_id, agent_id, template_id, duration_sec, transcript, caller_name, caller_email, caller_phone, intent_summary, disconnection_reason)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+               ON CONFLICT (call_id) DO NOTHING`,
+              [
+                callId,
+                agentId,
+                templateId,
+                durationMs ? Math.round(durationMs / 1000) : null,
+                transcript ?? null,
+                cn,
+                ce,
+                cp,
+                intent,
+                disconnectionReason ?? null,
+              ],
+            ).catch((err: Error) => req.log.error({ err: err.message, callId, templateId }, 'demo_calls insert failed'));
+          }
+        }
       }
     }
 
@@ -495,6 +529,30 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           agentId,
           variables: extracted,
         }).catch(() => {});
+      }
+
+      // Late-arriving extraction for demo calls — UPDATE the existing row
+      // (the call_ended path inserted with whatever was available; the post-
+      // call analysis runs async and arrives here). Only updates fields that
+      // are currently NULL so we never overwrite a value the model already
+      // figured out earlier.
+      if (!orgId && callId && agentId && extracted && pool) {
+        const templateId = await readDemoCallTemplate(agentId);
+        if (templateId) {
+          const cn = (extracted.caller_name as string | undefined)?.trim() || null;
+          const ce = (extracted.caller_email as string | undefined)?.trim().toLowerCase() || null;
+          const cp = (extracted.caller_phone as string | undefined)?.trim() || null;
+          const intent = (extracted.intent_summary as string | undefined)?.trim() || null;
+          pool.query(
+            `UPDATE demo_calls SET
+               caller_name     = COALESCE(caller_name, $2),
+               caller_email    = COALESCE(caller_email, $3),
+               caller_phone    = COALESCE(caller_phone, $4),
+               intent_summary  = COALESCE(intent_summary, $5)
+             WHERE call_id = $1`,
+            [callId, cn, ce, cp, intent],
+          ).catch((err: Error) => req.log.warn({ err: err.message, callId }, 'demo_calls late-update failed'));
+        }
       }
     }
 
