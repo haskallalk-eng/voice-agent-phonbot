@@ -3,6 +3,7 @@ import React, { useState, useRef } from 'react';
 import { RetellWebClient } from 'retell-client-js-sdk';
 import { createDemoCall } from '../lib/api.js';
 import { useWebCallCleanup } from '../lib/use-web-call-cleanup.js';
+import { playForwardingTone, looksLikeForwarding } from '../lib/demo-tones.js';
 import { FoxLogo } from './FoxLogo.js';
 import { IconScissors, IconWrench, IconBroom, IconRestaurant, IconPhone, IconHeadphones, IconCar } from './PhonbotIcons.js';
 
@@ -39,6 +40,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
   const [agentTalking, setAgentTalking] = useState(false);
   const [callError, setCallError] = useState<string | null>(null);
   const clientRef = useRef<RetellWebClient | null>(null);
+  const lastAgentMessageRef = useRef<string>('');
   useWebCallCleanup(clientRef);
 
   // Callback state
@@ -59,9 +61,26 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
       const client = new RetellWebClient();
       clientRef.current = client;
       client.on('call_started', () => setCallState('active'));
-      client.on('call_ended', () => { setCallState('ended'); setAgentTalking(false); });
+      client.on('call_ended', () => {
+        if (looksLikeForwarding(lastAgentMessageRef.current)) {
+          void playForwardingTone();
+        }
+        setCallState('ended');
+        setAgentTalking(false);
+      });
       client.on('agent_start_talking', () => setAgentTalking(true));
       client.on('agent_stop_talking', () => setAgentTalking(false));
+      client.on('update', (update: unknown) => {
+        const transcript = (update as { transcript?: Array<{ role: string; content: string }> })?.transcript;
+        if (!Array.isArray(transcript)) return;
+        for (let i = transcript.length - 1; i >= 0; i--) {
+          const turn = transcript[i];
+          if (turn?.role === 'agent' && typeof turn.content === 'string') {
+            lastAgentMessageRef.current = turn.content;
+            break;
+          }
+        }
+      });
       client.on('error', (err: unknown) => { setCallError(String(err)); setCallState('error'); });
       await client.startCall({ accessToken: res.access_token });
     } catch (e: unknown) {
