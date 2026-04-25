@@ -749,7 +749,19 @@ export async function registerPhone(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // POST /phone/verify-forwarding — call customer's number to test if forwarding works.
+  // POST /phone/verify-forwarding — REACHABILITY-only check.
+  //
+  // ⚠️ This dials the customer's number from a Phonbot Twilio trunk and waits
+  // for the line to answer. That tells us the number is reachable; it does NOT
+  // prove the customer's forwarding actually points at our Phonbot inbound.
+  // The frontend banner has been updated to be honest about that.
+  //
+  // TODO (proper loop test): trigger an outbound to the customer-number from a
+  //   Twilio trunk OUTSIDE the Phonbot inbound number, then watch the Phonbot
+  //   inbound webhook for an incoming call within ~30s — if it arrives with a
+  //   matching CallerId, forwarding is confirmed. Mark `verified=true` only on
+  //   that loop hit.
+  //
   // Rate-limited + prefix-whitelisted: without these, a user can POST arbitrary
   // +1-900-*/+44-9-* premium-rate numbers and trigger Twilio to dial them →
   // toll-fraud / IRSF attack.
@@ -817,13 +829,16 @@ export async function registerPhone(app: FastifyInstance) {
         } catch { /* retry */ }
       }
 
-      // Store forwarding_type in DB
+      // Store the reachability outcome. `verified` stays false until a real
+      // loop test confirms the forwarding actually targets our inbound — the
+      // ringDuration heuristic above only proves the line answered.
       await pool.query(
-        `UPDATE phone_numbers SET forwarding_type = $1, verified = $2 WHERE id = $3 AND org_id = $4`,
-        [forwardingType, answered, parsed.data.phonbotNumberId, orgId],
+        `UPDATE phone_numbers SET forwarding_type = $1, verified = false WHERE id = $2 AND org_id = $3`,
+        [forwardingType, parsed.data.phonbotNumberId, orgId],
       );
 
-      return { ok: true, verified: answered, callSid: call.sid, forwardingType };
+      // `verified: false` is intentional — see endpoint doc comment.
+      return { ok: true, reachable: answered, verified: false, callSid: call.sid, forwardingType };
     } catch (e: unknown) {
       return reply.status(500).send({ error: e instanceof Error ? e.message : 'Anruf fehlgeschlagen', verified: false });
     }
