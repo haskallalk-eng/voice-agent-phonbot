@@ -38,18 +38,23 @@ export function buildAgentInstructions(cfg: AgentConfig) {
     day: '2-digit',
   }).format(new Date());
 
-  // ── Recording notice (§ 201 StGB / Art. 6 DSGVO) ──────────────────────────
-  // Germany's § 201 StGB criminalises recording a call without consent. A notice
-  // at the very start preserves consent-by-continued-call; without it, every
-  // recorded conversation is a potential criminal offense (up to 3 years).
-  // We prepend this so it's the FIRST thing the agent does after the greeting,
-  // regardless of the user-configured systemPrompt. The wording is short,
-  // natural-sounding, and legally compliant (identifies the controller, the
-  // purpose, and the opt-out path).
+  // ── KI-Disclosure (EU AI Act Art. 50) + Recording notice (§ 201 StGB / Art. 6 DSGVO) ──
+  // Two legal requirements rolled into one consecutive opening — natural to
+  // listen to, both legally complete:
+  //   1. EU AI Act Art. 50 (in force since Feb 2025): callers must be told
+  //      they're talking to an AI system unless it's "obvious from context".
+  //      Synthetic voices that sound human are explicitly NOT obvious, so we
+  //      always disclose.
+  //   2. § 201 StGB criminalises recording a call without consent — a notice
+  //      at the start preserves consent-by-continued-call; up to 3 years
+  //      without it.
+  // Both are prepended so they are the FIRST things the agent says after the
+  // greeting, regardless of the user-configured systemPrompt.
   parts.push('');
-  parts.push('## Aufzeichnungshinweis (PFLICHT — rechtliche Vorgabe § 201 StGB)');
-  parts.push(`Unmittelbar nach deiner Begrüßung — BEVOR du inhaltlich etwas besprichst — sage EINMAL in einem Satz:`);
-  parts.push(`"Dieses Gespräch wird zur Qualitätssicherung aufgezeichnet. Wenn Sie nicht einverstanden sind, sagen Sie es bitte jetzt — sonst mache ich weiter."`);
+  parts.push('## KI-Hinweis + Aufzeichnungshinweis (PFLICHT — EU AI Act Art. 50 + § 201 StGB)');
+  parts.push(`Unmittelbar nach deiner Begrüßung — BEVOR du inhaltlich etwas besprichst — sage in einem natürlichen Satz, dass du eine KI bist UND dass das Gespräch aufgezeichnet wird. Beispiel:`);
+  parts.push(`"Hier ist ${cfg.name}, der KI-Assistent von ${cfg.businessName}. Unser Gespräch wird zur Qualitätssicherung aufgezeichnet — wenn Sie nicht einverstanden sind, sagen Sie es bitte jetzt, sonst mache ich gerne weiter."`);
+  parts.push(`Wenn die Begrüßung selbst schon den Firmennamen + dein KI-Asssistent-Sein nennt (z. B. "Hier ist ${cfg.name}, der KI-Assistent von ${cfg.businessName}"), reicht der zweite Halbsatz mit dem Aufzeichnungshinweis.`);
   parts.push('');
   parts.push('Wenn der Anrufer widerspricht ("nein", "nicht aufzeichnen", "keine Aufzeichnung", "ich will nicht"), führe SOFORT diese Schritte aus — bevor du inhaltlich antwortest:');
   parts.push('1. Rufe zuerst das Tool "recording_declined" auf (leere Parameter). Das sorgt dafür, dass Audio + Transkript unmittelbar nach dem Anruf gelöscht werden. Nichts wird gespeichert.');

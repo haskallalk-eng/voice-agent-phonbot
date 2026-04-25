@@ -403,6 +403,14 @@ export async function registerBilling(app: FastifyInstance) {
       success_url: `${appUrl}/billing?success=1`,
       cancel_url: `${appUrl}/billing?canceled=1`,
       allow_promotion_codes: true,
+      // VAT-ID Collection: B2B-EU reverse-charge support.
+      tax_id_collection: { enabled: true },
+      // Stripe Tax — guard so billing keeps working until the Stripe Tax
+      // dashboard side (DE registration + product tax codes) is configured.
+      // Flip STRIPE_AUTOMATIC_TAX=1 once Stripe Tax is live.
+      ...(process.env.STRIPE_AUTOMATIC_TAX === '1'
+        ? { automatic_tax: { enabled: true } }
+        : {}),
     });
 
     return { url: session.url };

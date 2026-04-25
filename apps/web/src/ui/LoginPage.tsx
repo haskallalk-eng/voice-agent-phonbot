@@ -17,6 +17,11 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
   const [mode, setMode] = useState<Mode>(initialMode);
   const [error, setError] = useState<string | null>(null);
   const [dsgvoAccepted, setDsgvoAccepted] = useState(false);
+  // §14 BGB Unternehmer-Bestätigung — Phonbot ist B2B-only. Ohne diese
+  // Bestätigung greift bei natürlichen Personen das 14-Tage-Verbraucher-
+  // Widerrufsrecht (§312g BGB). Die Checkbox ist Pflicht für Account-
+  // Erstellung; sie schließt das Widerrufsrecht rechtssicher aus.
+  const [isBusiness, setIsBusiness] = useState(false);
 
   // Forgot password state
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -296,24 +301,38 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
               </div>
 
               {mode === 'register' && (
-                <label className="flex items-start gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={dsgvoAccepted}
-                    onChange={(e) => setDsgvoAccepted(e.target.checked)}
-                    className="mt-0.5 rounded border-white/20 bg-white/5 text-orange-500 focus:ring-orange-500/50"
-                  />
-                  <span className="text-xs text-white/50 leading-relaxed">
-                    Ich akzeptiere die{' '}
-                    <a href="/?page=legal" className="text-orange-400 hover:text-orange-300 underline transition-colors">
-                      Datenschutzerkl&auml;rung
-                    </a>{' '}
-                    und{' '}
-                    <a href="/?page=legal" className="text-orange-400 hover:text-orange-300 underline transition-colors">
-                      AGB
-                    </a>.
-                  </span>
-                </label>
+                <>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={dsgvoAccepted}
+                      onChange={(e) => setDsgvoAccepted(e.target.checked)}
+                      className="mt-0.5 rounded border-white/20 bg-white/5 text-orange-500 focus:ring-orange-500/50"
+                    />
+                    <span className="text-xs text-white/50 leading-relaxed">
+                      Ich akzeptiere die{' '}
+                      <a href="/?page=legal" className="text-orange-400 hover:text-orange-300 underline transition-colors">
+                        Datenschutzerkl&auml;rung
+                      </a>{' '}
+                      und{' '}
+                      <a href="/?page=legal" className="text-orange-400 hover:text-orange-300 underline transition-colors">
+                        AGB
+                      </a>.
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isBusiness}
+                      onChange={(e) => setIsBusiness(e.target.checked)}
+                      className="mt-0.5 rounded border-white/20 bg-white/5 text-orange-500 focus:ring-orange-500/50"
+                    />
+                    <span className="text-xs text-white/50 leading-relaxed">
+                      Ich schliesse diesen Vertrag in Aus&uuml;bung meiner gewerblichen oder
+                      selbst&auml;ndigen T&auml;tigkeit ab (Unternehmer im Sinne von &sect;14 BGB).
+                    </span>
+                  </label>
+                </>
               )}
 
               {error && (
@@ -324,7 +343,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
 
               <button
                 type="submit"
-                disabled={isSubmitting || (mode === 'register' && !dsgvoAccepted)}
+                disabled={isSubmitting || (mode === 'register' && (!dsgvoAccepted || !isBusiness))}
                 className="w-full rounded-xl px-4 py-3 font-semibold text-white text-sm
                   disabled:opacity-50 transition-all duration-300
                   hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] hover:scale-[1.02]"
