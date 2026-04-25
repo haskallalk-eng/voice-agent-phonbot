@@ -37,7 +37,7 @@ const INDUSTRIES = [
   // freelancers, coaches, consultants, creatives. Uses the headphones
   // glyph (matches TEMPLATES.IconHeadphones in shared.ts) to visually
   // differentiate from the 5 classical trade branches above.
-  { slug: 'selbststaendig', name: 'Mein Agent', iconInner: '<path d="M3 14h3a2 2 0 012 2v3a2 2 0 01-2 2H5a2 2 0 01-2-2v-8a9 9 0 0118 0v8a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3a2 2 0 012-2h3"/>' },
+  { slug: 'selbststaendig', name: 'Selbstständige', iconInner: '<path d="M3 14h3a2 2 0 012 2v3a2 2 0 01-2 2H5a2 2 0 01-2-2v-8a9 9 0 0118 0v8a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3a2 2 0 012-2h3"/>' },
 ];
 
 const industryIcon = (inner, s) =>

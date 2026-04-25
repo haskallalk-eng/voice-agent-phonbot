@@ -37,7 +37,7 @@ export function FooterSection({ onShowLegal, onGoToContact }: FooterSectionProps
               <li><a href="/reinigung/" className="text-sm text-white/40 hover:text-white/70 transition-colors">Reinigung</a></li>
               <li><a href="/restaurant/" className="text-sm text-white/40 hover:text-white/70 transition-colors">Restaurant</a></li>
               <li><a href="/autowerkstatt/" className="text-sm text-white/40 hover:text-white/70 transition-colors">Autowerkstatt</a></li>
-              <li><a href="/selbststaendig/" className="text-sm text-white/40 hover:text-white/70 transition-colors">Mein Agent</a></li>
+              <li><a href="/selbststaendig/" className="text-sm text-white/40 hover:text-white/70 transition-colors">Selbstständige</a></li>
             </ul>
           </div>
 
