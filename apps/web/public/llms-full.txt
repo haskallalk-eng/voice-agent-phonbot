@@ -1,8 +1,8 @@
 # Phonbot — Vollständige Inhaltsdokumentation für LLMs
 
-> Diese Datei enthält alle öffentlichen Inhalte der Phonbot-Website in strukturiertem Markdown-Format. Sie ist für AI-Crawler (GPTBot, ClaudeBot, Google-Extended, PerplexityBot etc.) optimiert und darf frei zitiert werden.
+> Diese Datei enthält alle öffentlichen Inhalte der Phonbot-Website in strukturiertem Markdown-Format. Sie ist für AI-Assistenten sowie Retrieval- und Search-Crawler optimiert und darf frei zitiert werden.
 
-Letzte Aktualisierung: 23. April 2026
+Letzte Aktualisierung: 25. April 2026
 
 ---
 

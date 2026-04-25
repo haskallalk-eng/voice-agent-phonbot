@@ -496,21 +496,23 @@ p{color:rgba(255,255,255,.7)}
 .dialogue-header .duration{margin-left:auto;font-variant-numeric:tabular-nums;color:rgba(255,255,255,.5);letter-spacing:.06em}
 
 /* Messages animate in on page load, staggered — no IntersectionObserver,
-   no JS dependency. Duration 0.7 s and 0.7 s gap between turns so the
-   conversation feels like real speech, not a wall-of-text reveal.
-   If animation never plays (prefers-reduced-motion, disabled CSS,
-   ancient browser), the final state is visible anyway. */
-.msg{display:flex;gap:.65rem;align-items:flex-end;margin-bottom:.875rem;animation:msg-in .7s cubic-bezier(.16,1,.3,1) both}
+   no JS dependency. Duration 0.9 s and 1.2 s gap between turns so the
+   conversation feels like real speech with breathing room, not a
+   wall-of-text reveal. Identical timing on every branche-page (same
+   CSS shipped from gen-landing-pages.mjs). If animation never plays
+   (prefers-reduced-motion, disabled CSS, ancient browser), the final
+   state is visible anyway. */
+.msg{display:flex;gap:.65rem;align-items:flex-end;margin-bottom:.875rem;animation:msg-in .9s cubic-bezier(.16,1,.3,1) both}
 .msg:last-child{margin-bottom:0}
 @keyframes msg-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-.msg:nth-child(2){animation-delay:.4s}
-.msg:nth-child(3){animation-delay:1.1s}
-.msg:nth-child(4){animation-delay:1.8s}
-.msg:nth-child(5){animation-delay:2.5s}
-.msg:nth-child(6){animation-delay:3.2s}
-.msg:nth-child(7){animation-delay:3.9s}
-.msg:nth-child(8){animation-delay:4.6s}
-.msg:nth-child(9){animation-delay:5.3s}
+.msg:nth-child(2){animation-delay:.6s}
+.msg:nth-child(3){animation-delay:1.8s}
+.msg:nth-child(4){animation-delay:3.0s}
+.msg:nth-child(5){animation-delay:4.2s}
+.msg:nth-child(6){animation-delay:5.4s}
+.msg:nth-child(7){animation-delay:6.6s}
+.msg:nth-child(8){animation-delay:7.8s}
+.msg:nth-child(9){animation-delay:9.0s}
 .msg.user{flex-direction:row-reverse}
 .msg .avatar{flex-shrink:0;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);color:rgba(255,255,255,.65);position:relative}
 .msg .avatar svg{display:block;width:14px;height:14px}
@@ -531,7 +533,7 @@ p{color:rgba(255,255,255,.7)}
 .dialogue-typing span:nth-child(3){animation-delay:.3s}
 @keyframes typing-bounce{0%,80%,100%{transform:translateY(0);opacity:.5}40%{transform:translateY(-4px);opacity:1}}
 
-.dialogue-note{text-align:center;margin-top:1.5rem;font-size:.875rem;color:rgba(255,255,255,.45);animation:msg-in .7s 6s ease-out both}
+.dialogue-note{text-align:center;margin-top:1.5rem;font-size:.875rem;color:rgba(255,255,255,.45);animation:msg-in .9s 6.8s ease-out both}
 
 @media(prefers-reduced-motion:reduce){
   .msg,.dialogue-note{animation:none!important;opacity:1!important;transform:none!important;animation-delay:0s!important}
@@ -619,30 +621,70 @@ function buildPage(d) {
   // selbststaendig) can override via `d.offerPrice` to reflect actual
   // entry-tier pricing (Nummern-Plan 8.99).
   const offerPrice = d.offerPrice ?? '49';
+  const pageUrl = `https://phonbot.de/${d.slug}/`;
   const jsonLd = {
     '@context': 'https://schema.org',
-    '@type': 'Service',
-    name: d.serviceName,
-    serviceType: 'AI Voice Agent',
-    provider: {
-      '@type': 'Organization',
-      name: 'Phonbot',
-      url: 'https://phonbot.de/',
-      parentOrganization: {
-        '@type': 'Organization',
-        name: 'Mindrails UG (haftungsbeschränkt)',
-        url: 'https://mindrails.de/',
+    '@graph': [
+      {
+        '@type': 'Service',
+        '@id': `${pageUrl}#service`,
+        url: pageUrl,
+        mainEntityOfPage: pageUrl,
+        name: d.serviceName,
+        serviceType: 'AI Voice Agent',
+        provider: {
+          '@type': 'Organization',
+          name: 'Phonbot',
+          url: 'https://phonbot.de/',
+          parentOrganization: {
+            '@type': 'Organization',
+            name: 'Mindrails UG (haftungsbeschränkt)',
+            url: 'https://mindrails.de/',
+          },
+        },
+        areaServed: { '@type': 'Country', name: 'Deutschland' },
+        inLanguage: 'de-DE',
+        description: d.description,
+        audience: { '@type': 'BusinessAudience', audienceType: d.audienceType },
+        offers: {
+          '@type': 'Offer',
+          url: pageUrl,
+          price: offerPrice,
+          priceCurrency: 'EUR',
+          priceSpecification: { '@type': 'UnitPriceSpecification', price: offerPrice, priceCurrency: 'EUR', unitText: 'MONTH' },
+        },
       },
-    },
-    areaServed: { '@type': 'Country', name: 'Deutschland' },
-    description: d.description,
-    audience: { '@type': 'BusinessAudience', audienceType: d.audienceType },
-    offers: {
-      '@type': 'Offer',
-      price: offerPrice,
-      priceCurrency: 'EUR',
-      priceSpecification: { '@type': 'UnitPriceSpecification', price: offerPrice, priceCurrency: 'EUR', unitText: 'MONTH' },
-    },
+      {
+        '@type': 'FAQPage',
+        '@id': `${pageUrl}#faq`,
+        mainEntity: d.faq.map((item) => ({
+          '@type': 'Question',
+          name: item.q,
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: item.a,
+          },
+        })),
+      },
+      {
+        '@type': 'BreadcrumbList',
+        '@id': `${pageUrl}#breadcrumb`,
+        itemListElement: [
+          {
+            '@type': 'ListItem',
+            position: 1,
+            name: 'Phonbot',
+            item: 'https://phonbot.de/',
+          },
+          {
+            '@type': 'ListItem',
+            position: 2,
+            name: d.serviceName,
+            item: pageUrl,
+          },
+        ],
+      },
+    ],
   };
 
   const features = d.features
@@ -752,15 +794,28 @@ function buildPage(d) {
 <meta name="theme-color" content="#0A0A0F" />
 <title>${d.title}</title>
 <meta name="description" content="${d.description}" />
-<link rel="canonical" href="https://phonbot.de/${d.slug}/" />
-<link rel="alternate" hreflang="de" href="https://phonbot.de/${d.slug}/" />
+<meta name="author" content="Phonbot" />
+<link rel="canonical" href="${pageUrl}" />
+<link rel="alternate" hreflang="de-DE" href="${pageUrl}" />
+<link rel="alternate" hreflang="de" href="${pageUrl}" />
+<link rel="alternate" hreflang="x-default" href="${pageUrl}" />
+<link rel="alternate" type="text/markdown" title="LLM-friendly description (concise)" href="/llms.txt" />
+<link rel="alternate" type="text/markdown" title="LLM-friendly full content" href="/llms-full.txt" />
 <meta property="og:type" content="website" />
 <meta property="og:locale" content="de_DE" />
-<meta property="og:url" content="https://phonbot.de/${d.slug}/" />
+<meta property="og:site_name" content="Phonbot" />
+<meta property="og:url" content="${pageUrl}" />
 <meta property="og:title" content="${d.ogTitle}" />
 <meta property="og:description" content="${d.ogDesc}" />
-<meta property="og:image" content="https://phonbot.de/og-image.svg" />
+<meta property="og:image" content="https://phonbot.de/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="${d.ogTitle}" />
 <meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="${d.ogTitle}" />
+<meta name="twitter:description" content="${d.ogDesc}" />
+<meta name="twitter:image" content="https://phonbot.de/og-image.png" />
+<meta name="twitter:image:alt" content="${d.ogTitle}" />
 <meta name="robots" content="index, follow, max-image-preview:large" />
 <link rel="icon" href="/favicon.ico" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />

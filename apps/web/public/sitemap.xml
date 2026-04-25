@@ -5,7 +5,7 @@
 
   <url>
     <loc>https://phonbot.de/</loc>
-    <lastmod>2026-04-18</lastmod>
+    <lastmod>2026-04-25</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/" />
@@ -19,7 +19,7 @@
 
   <url>
     <loc>https://phonbot.de/friseur/</loc>
-    <lastmod>2026-04-18</lastmod>
+    <lastmod>2026-04-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/friseur/" />
@@ -33,7 +33,7 @@
 
   <url>
     <loc>https://phonbot.de/handwerker/</loc>
-    <lastmod>2026-04-18</lastmod>
+    <lastmod>2026-04-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/handwerker/" />
@@ -47,7 +47,7 @@
 
   <url>
     <loc>https://phonbot.de/reinigung/</loc>
-    <lastmod>2026-04-18</lastmod>
+    <lastmod>2026-04-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/reinigung/" />
@@ -61,7 +61,7 @@
 
   <url>
     <loc>https://phonbot.de/restaurant/</loc>
-    <lastmod>2026-04-18</lastmod>
+    <lastmod>2026-04-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/restaurant/" />
@@ -75,7 +75,7 @@
 
   <url>
     <loc>https://phonbot.de/autowerkstatt/</loc>
-    <lastmod>2026-04-18</lastmod>
+    <lastmod>2026-04-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/autowerkstatt/" />
@@ -89,7 +89,7 @@
 
   <url>
     <loc>https://phonbot.de/selbststaendig/</loc>
-    <lastmod>2026-04-24</lastmod>
+    <lastmod>2026-04-25</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/selbststaendig/" />
@@ -129,13 +129,6 @@
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/agb/" />
     <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/agb/" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/agb/" />
-  </url>
-
-  <url>
-    <loc>https://phonbot.de/?page=contact</loc>
-    <lastmod>2026-04-18</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.4</priority>
   </url>
 
 </urlset>
