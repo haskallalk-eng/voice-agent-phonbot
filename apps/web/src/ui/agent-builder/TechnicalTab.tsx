@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import type { AgentConfig } from '../../lib/api.js';
 import {
   SectionCard, Field, Input, Select, Toggle, Slider,
-  IconMic, IconVolume, IconSliders, IconBookOpen,
-  IconPhoneOff, IconBuilding, IconAgent, IconGlobe,
+  IconMic, IconSliders, IconBookOpen,
 } from './shared.js';
 
 export interface TechnicalTabProps {
@@ -31,27 +30,6 @@ export function TechnicalTab({ config, onUpdate }: TechnicalTabProps) {
           <Slider value={config.maxCallDuration ?? 300} onChange={(v) => onUpdate({ maxCallDuration: v })}
             min={30} max={1800} step={30}
             label="Max. Anrufdauer" displayValue={`${Math.floor((config.maxCallDuration ?? 300) / 60)}:${String((config.maxCallDuration ?? 300) % 60).padStart(2, '0')} Min`} />
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Hintergrundgeräusche" icon={IconVolume}>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          {([
-            { id: 'off',    Icon: IconPhoneOff,  label: 'Keine' },
-            { id: 'office', Icon: IconBuilding,  label: 'Büro' },
-            { id: 'cafe',   Icon: IconAgent,     label: 'Café' },
-            { id: 'nature', Icon: IconGlobe,     label: 'Natur' },
-          ] as const).map((bg) => (
-            <button key={bg.id} onClick={() => onUpdate({ backgroundSound: bg.id })}
-              className={`flex flex-col items-center gap-2 py-4 px-3 rounded-xl border transition-all cursor-pointer ${
-                config.backgroundSound === bg.id
-                  ? 'border-orange-500/40 bg-orange-500/8 text-white'
-                  : 'border-white/[0.07] bg-white/[0.03] text-white/40 hover:border-white/15 hover:text-white/70'
-              }`}>
-              <bg.Icon size={18} className={config.backgroundSound === bg.id ? 'text-orange-400' : ''} />
-              <span className="text-xs font-medium">{bg.label}</span>
-            </button>
-          ))}
         </div>
       </SectionCard>
 
