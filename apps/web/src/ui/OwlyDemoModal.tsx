@@ -22,6 +22,7 @@ const DEMO_TEMPLATES: DemoTemplate[] = [
   { id: 'cleaning', Icon: IconBroom, name: 'Reinigung', hint: 'Angebote & Planung' },
   { id: 'restaurant', Icon: IconRestaurant, name: 'Restaurant', hint: 'Reservierungen & Karte' },
   { id: 'auto', Icon: IconCar, name: 'Autowerkstatt', hint: 'Termine & Kostenvoranschläge' },
+  { id: 'solo', Icon: IconHeadphones, name: 'Selbstständige', hint: 'Erstgespräch & Discovery-Call' },
 ];
 
 type Props = {
