@@ -112,8 +112,11 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
   const [agentTalking, setAgentTalking] = useState(false);
   const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const topTemplates = TEMPLATES.slice(0, 2);
-  const bottomTemplates = TEMPLATES.slice(2);
+  // Symmetric 6-card layout (2026-04-25): mit dem 6. Template (Mein Agent)
+  // gehen 2+3 nicht mehr sauber auf — der zweite slice(2) wäre 4 Karten in
+  // einem 3-Spalten-Grid → 3+1 hängt asymmetrisch. Wir konsolidieren auf
+  // EIN Grid mit allen 6 Templates: 2×3 auf Tablet, 3×2 auf Desktop.
+  const allTemplates = TEMPLATES;
   // Cloudflare Turnstile token (cleared on expiry/reset). Empty string = no
   // token yet → demo button stays disabled in prod. Dev without site-key
   // configured: widget renders nothing, token stays '' but backend skips.
@@ -278,13 +281,8 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
               ))}
             </div>
             <div className="flex flex-col items-center gap-4 sm:gap-5 lg:gap-6 pb-10" style={{ overflow: 'visible' }}>
-              <div className="grid w-full max-w-3xl grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-16 justify-items-center" style={{ overflow: 'visible' }}>
-                {topTemplates.map((t) => (
-                  <TemplateCard key={t.id} template={t} onDemoStart={() => handleTemplateClick(t.id)} />
-                ))}
-              </div>
-              <div className="grid w-full max-w-5xl grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-16 justify-items-center" style={{ overflow: 'visible' }}>
-                {bottomTemplates.map((t) => (
+              <div className="grid w-full max-w-5xl grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-16 justify-items-center" style={{ overflow: 'visible' }}>
+                {allTemplates.map((t) => (
                   <TemplateCard key={t.id} template={t} onDemoStart={() => handleTemplateClick(t.id)} />
                 ))}
               </div>
