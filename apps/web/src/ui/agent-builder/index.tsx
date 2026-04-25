@@ -189,7 +189,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
     }
   }
 
-  async function loadConfig() {
+  async function loadConfig({ resetView = true }: { resetView?: boolean } = {}) {
     try {
       const cfg = await getAgentConfig();
       const merged: AgentConfig = {
@@ -198,9 +198,14 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
       } as AgentConfig;
       setConfig(merged);
       savedConfigRef.current = JSON.stringify(merged);
-      // Default to list view if already deployed
-      if (merged.retellAgentId) setView('list');
-      else setView('edit');
+      // Initial mount: jump to list if the agent is already deployed,
+      // otherwise drop the user straight into edit. Skip on refresh-only
+      // reloads (e.g. after applying a suggestion) — otherwise the user
+      // gets thrown out of the editor mid-flow.
+      if (resetView) {
+        if (merged.retellAgentId) setView('list');
+        else setView('edit');
+      }
       const prev = await getAgentPreview();
       setPreview(prev);
       // Pull live latency from Retell for this agent. Non-blocking —
@@ -530,8 +535,10 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
           onConfigRefresh={async () => {
             // Re-read agent config so the TextArea shows the server-side
             // prompt change a suggestion apply just made. Also refresh the
-            // sidebar badge count.
-            await loadConfig();
+            // sidebar badge count. Keep the user in edit-mode — the default
+            // list-jump in loadConfig() would otherwise yank them out of
+            // the tab they were just working in.
+            await loadConfig({ resetView: false });
             void getInsights()
               .then((d) => setPendingSuggestions(d.suggestions.filter((s) => s.status === 'pending').length))
               .catch(() => {});
