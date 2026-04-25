@@ -63,10 +63,23 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return fetchJson<T>(`/api${path}`, init);
 }
 
+// Cheap presence-check for the non-httpOnly hint cookie set by the API on
+// login/refresh. JS can't see the httpOnly refresh cookie itself, so without
+// this hint every anonymous landing-page visitor would trigger a 401 console
+// error on bootstrap. Hint absent ⇒ definitely not logged in ⇒ skip refresh.
+function hasSessionHint(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.cookie.split(';').some((c) => c.trim().startsWith('vas_has_session='));
+}
+
 // Try to swap the refresh cookie for a fresh access token. Returns the new
 // token on success, null on failure (refresh expired/revoked → user must log in).
 // Publishes the token into the api.ts module store so request() can pick it up.
 async function tryRefresh(): Promise<string | null> {
+  // Skip the network probe entirely when no hint cookie is present — anonymous
+  // visitor on the landing page, no point asking the server.
+  if (!hasSessionHint()) return null;
+
   const refreshUrls = ['/api/auth/refresh', '/auth/refresh'];
   for (const url of refreshUrls) {
     try {
