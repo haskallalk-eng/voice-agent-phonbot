@@ -5,9 +5,9 @@
 # (haftungsbeschränkt), Berlin) regarding AI crawlers, training data usage,
 # and content retrieval for LLM-powered assistants.
 #
-# Phonbot welcomes AI crawlers that respect copyright and attribution norms.
-# We provide /llms.txt (concise) and /llms-full.txt (comprehensive) as structured
-# data sources specifically for LLM retrieval.
+# Phonbot welcomes retrieval/search crawlers that respect copyright and
+# attribution norms. We provide /llms.txt (concise) and /llms-full.txt
+# (comprehensive) as structured data sources specifically for LLM retrieval.
 
 User-Agent: *
 Allow: /
@@ -21,15 +21,24 @@ Allow: /llms-full.txt
 # - Training data (foundation models): CASE_BY_CASE — contact info@phonbot.de
 # - Verbatim reproduction >200 words: NOT ALLOWED without permission
 
-# Known AI crawlers — explicit rules:
+# Search / retrieval bots — explicit allow:
 
-User-Agent: ClaudeBot
+User-Agent: OAI-SearchBot
 Allow: /
 
-User-Agent: Claude-Web
+User-Agent: ChatGPT-User
+Allow: /
+
+User-Agent: Claude-User
+Allow: /
+
+User-Agent: Claude-SearchBot
 Allow: /
 
 User-Agent: PerplexityBot
+Allow: /
+
+User-Agent: Perplexity-User
 Allow: /
 
 User-Agent: Google-Extended
@@ -38,26 +47,20 @@ Allow: /
 User-Agent: Applebot-Extended
 Allow: /
 
-User-Agent: YouBot
-Allow: /
-
-User-Agent: OAI-SearchBot
-Allow: /
-
-# AI training for foundation models — opt-out
+# AI training / foundation-model crawlers — opt-out
 User-Agent: GPTBot
 Disallow: /
 
-User-Agent: CCBot
+User-Agent: ClaudeBot
 Disallow: /
 
 User-Agent: anthropic-ai
 Disallow: /
 
-User-Agent: cohere-ai
+User-Agent: CCBot
 Disallow: /
 
-User-Agent: Omgilibot
+User-Agent: cohere-ai
 Disallow: /
 
 User-Agent: FacebookBot

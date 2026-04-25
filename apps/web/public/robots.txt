@@ -1,28 +1,25 @@
 User-agent: *
 Allow: /
-Disallow: /dashboard
-Disallow: /admin
-Disallow: /onboarding
 Disallow: /api/
+Disallow: /auth/
+Disallow: /billing
+Disallow: /webhook/
+Disallow: /outbound/
+Disallow: /health
 
-# AI crawlers — explicitly allowed. Phonbot publishes llms.txt + llms-full.txt
-# and wants to be quotable in ChatGPT, Claude, Perplexity, Google AI Overview.
-User-agent: GPTBot
-Allow: /
-
+# AI retrieval/search bots — explicitly allowed. Phonbot publishes llms.txt +
+# llms-full.txt and wants to be discoverable in ChatGPT, Claude, Perplexity
+# and other AI search surfaces.
 User-agent: OAI-SearchBot
 Allow: /
 
 User-agent: ChatGPT-User
 Allow: /
 
-User-agent: CCBot
+User-agent: Claude-User
 Allow: /
 
-User-agent: anthropic-ai
-Allow: /
-
-User-agent: ClaudeBot
+User-agent: Claude-SearchBot
 Allow: /
 
 User-agent: PerplexityBot
@@ -36,6 +33,28 @@ Allow: /
 
 User-agent: Applebot-Extended
 Allow: /
+
+# Google AI Overviews / AI Mode use the normal Search requirements; Googlebot
+# is therefore handled by the wildcard rule above.
+
+# Training / foundation-model crawlers — blocked by default.
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: cohere-ai
+Disallow: /
+
+User-agent: FacebookBot
+Disallow: /
 
 Sitemap: https://phonbot.de/sitemap.xml
 

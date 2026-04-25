@@ -23,6 +23,14 @@
         -Server
     }
 
+    # Keep private/auth surfaces out of search results. This is done with
+    # X-Robots-Tag instead of robots.txt alone so crawlers can actually see
+    # the noindex signal.
+    @nonpublic {
+        path /dashboard /dashboard/* /admin /admin/* /onboarding /onboarding/* /reset-password /auth /auth/* /api /api/* /billing* /retell* /webhook* /outbound* /health
+    }
+    header @nonpublic X-Robots-Tag "noindex, nofollow, noarchive"
+
     # All /api/* requests → strip prefix → backend
     handle /api/* {
         uri strip_prefix /api
