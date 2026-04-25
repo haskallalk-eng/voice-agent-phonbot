@@ -14,8 +14,9 @@ import {
   type AdminUser,
   type AdminOrg,
 } from '../lib/api.js';
+import { DemoCallsTab, DemoPromptsTab, LearningsTab } from './AdminTabs.js';
 
-type Tab = 'overview' | 'leads' | 'users';
+type Tab = 'overview' | 'leads' | 'users' | 'demo-calls' | 'demo-prompts' | 'learnings';
 
 // ── Smart Search Input ───────────────────────────────────────────────────────
 
@@ -547,6 +548,9 @@ export function AdminPage() {
             ['overview', 'Overview'],
             ['leads', 'Leads'],
             ['users', 'Users'],
+            ['demo-calls', 'Demo Calls'],
+            ['demo-prompts', 'Demo Prompts'],
+            ['learnings', 'Verbesserungen'],
           ] as const).map(([key, label]) => (
             <button
               key={key}
@@ -568,6 +572,9 @@ export function AdminPage() {
         {tab === 'overview' && <OverviewTab />}
         {tab === 'leads' && <LeadsTab />}
         {tab === 'users' && <UsersTab />}
+        {tab === 'demo-calls' && <DemoCallsTab />}
+        {tab === 'demo-prompts' && <DemoPromptsTab />}
+        {tab === 'learnings' && <LearningsTab />}
       </main>
     </div>
   );

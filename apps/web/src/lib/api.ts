@@ -1122,6 +1122,119 @@ export function adminGetOrgs() {
   return adminRequest<{ items: AdminOrg[] }>('/admin/orgs');
 }
 
+// ── Demo Calls ────────────────────────────────────────────────────────────────
+
+export type AdminDemoCall = {
+  id: string;
+  created_at: string;
+  call_id: string;
+  template_id: string;
+  duration_sec: number | null;
+  caller_name: string | null;
+  caller_email: string | null;
+  caller_phone: string | null;
+  intent_summary: string | null;
+  disconnection_reason: string | null;
+  promoted_lead_id: string | null;
+  promoted_at: string | null;
+  transcript_excerpt: string | null;
+};
+
+export function adminGetDemoCalls(params?: { template?: string; onlyUnpromoted?: boolean; hasContact?: boolean; limit?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.template) qs.set('template', params.template);
+  if (params?.onlyUnpromoted) qs.set('onlyUnpromoted', 'true');
+  if (params?.hasContact) qs.set('hasContact', 'true');
+  if (params?.limit) qs.set('limit', String(params.limit));
+  const q = qs.toString();
+  return adminRequest<{ calls: AdminDemoCall[] }>(`/admin/demo-calls${q ? `?${q}` : ''}`);
+}
+
+export function adminPromoteDemoCall(id: string, body?: { email?: string; phone?: string; name?: string; notes?: string }) {
+  return adminRequest<{ ok: boolean; leadId: string }>(`/admin/demo-calls/${encodeURIComponent(id)}/promote`, {
+    method: 'POST',
+    body: JSON.stringify(body ?? {}),
+  });
+}
+
+// ── Demo Prompt Overrides ────────────────────────────────────────────────────
+
+export type AdminDemoPromptOverride = {
+  epilogue: string;
+  basePrompt: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+} | null;
+
+export type AdminDemoPrompts = {
+  defaults: {
+    globalEpilogue: string;
+    templates: { id: string; name: string; icon: string; basePrompt: string }[];
+  };
+  overrides: {
+    globalEpilogue: AdminDemoPromptOverride;
+    templates: { id: string; override: AdminDemoPromptOverride }[];
+  };
+};
+
+export function adminGetDemoPrompts() {
+  return adminRequest<AdminDemoPrompts>('/admin/demo-prompts');
+}
+
+export function adminPutDemoPrompt(scope: string, body: { epilogue: string | null; basePrompt?: string | null }) {
+  return adminRequest<{ ok: boolean; flushed: number }>(`/admin/demo-prompts/${encodeURIComponent(scope)}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
+export function adminFlushDemoCache() {
+  return adminRequest<{ flushed: number }>('/admin/demo-prompts/flush-cache', { method: 'POST' });
+}
+
+// ── Learning Improvements ────────────────────────────────────────────────────
+
+export type AdminLearningItem = {
+  kind: 'prompt_suggestion' | 'template_learning';
+  id: string;
+  created_at: string;
+  summary: string;
+  proposed: string;
+  orgId: string | null;
+  orgName: string | null;
+  templateId: string | null;
+  sourceMeta: Record<string, unknown>;
+  sourceStatus: string;
+  decision: {
+    scope: 'systemic' | 'org' | 'both' | null;
+    status: 'pending' | 'applied' | 'rejected' | null;
+    decidedAt: string | null;
+    decidedBy: string | null;
+    rejectReason: string | null;
+  } | null;
+};
+
+export function adminGetLearnings(params?: { status?: 'pending' | 'applied' | 'rejected' | 'all'; limit?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  const q = qs.toString();
+  return adminRequest<{ items: AdminLearningItem[] }>(`/admin/learnings${q ? `?${q}` : ''}`);
+}
+
+export function adminDecideLearning(body: {
+  sourceKind: 'prompt_suggestion' | 'template_learning';
+  sourceId: string;
+  decision: 'apply' | 'reject';
+  scope?: 'systemic' | 'org' | 'both';
+  rejectReason?: string;
+}) {
+  return adminRequest<{ ok: boolean; systemicApplied: boolean; orgApplied: boolean }>('/admin/learnings/decide', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 // --- Learning Consent (cross-org pattern sharing opt-in) ---
 
 export type LearningConsent = {

@@ -134,6 +134,45 @@ export async function migrateOutbound() {
   await pool.query(`CREATE INDEX IF NOT EXISTS demo_calls_template_created_idx ON demo_calls(template_id, created_at DESC);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS demo_calls_promoted_idx ON demo_calls(promoted_at) WHERE promoted_at IS NULL;`);
 
+  // Demo system-prompt overrides — admin-editable epilogue per template, plus
+  // a "global" row (template_id=NULL) for the cross-template DEMO_END_INSTRUCTIONS
+  // suffix. Demo agents pick up the override on next cache-miss / admin-trigger.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS demo_prompt_overrides (
+      template_id   TEXT PRIMARY KEY,
+      epilogue      TEXT NOT NULL,
+      base_prompt   TEXT,
+      updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_by    TEXT
+    );
+  `);
+  await pool.query(`COMMENT ON TABLE demo_prompt_overrides IS 'Admin-editable demo prompt fragments. template_id=__global__ stores the cross-template epilogue. base_prompt overrides templates.ts when set.';`);
+
+  // Learning-improvement decisions — extends the existing prompt_suggestions /
+  // template_learnings flow with an admin-controlled `scope` field. Each row
+  // links to the source improvement and records whether the admin decided it
+  // should ship to (a) one org only, (b) the system globally, or (c) both.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS learning_decisions (
+      id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+      decided_at        TIMESTAMPTZ,
+      decided_by        TEXT,
+      source_kind       TEXT NOT NULL CHECK (source_kind IN ('prompt_suggestion', 'template_learning')),
+      source_id         UUID NOT NULL,
+      org_id            UUID,
+      template_id       TEXT,
+      scope             TEXT CHECK (scope IN ('systemic', 'org', 'both')),
+      status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'applied', 'rejected')),
+      summary           TEXT,
+      proposed_change   TEXT NOT NULL,
+      reject_reason     TEXT
+    );
+  `);
+  await pool.query(`COMMENT ON TABLE learning_decisions IS 'Admin queue for learning improvements. Each row = one decision (apply scope=systemic|org|both, or reject).';`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS learning_decisions_source_uniq ON learning_decisions(source_kind, source_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS learning_decisions_status_idx ON learning_decisions(status, created_at DESC);`);
+
   // Composite index for the 24h phone-dedup query in /demo/callback +
   // /outbound/website-callback (E2 + T-38). Without this the dedup is
   // O(n) seq scan per request — fine at 100 leads, slow at 10k+.
