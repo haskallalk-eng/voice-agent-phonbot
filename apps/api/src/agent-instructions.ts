@@ -109,6 +109,37 @@ export function buildAgentInstructions(cfg: AgentConfig) {
     parts.push(`Angebotene Services: ${cfg.servicesText.trim()}`);
   }
 
+  // ── Custom vocabulary (terms + meaning + usage context) ─────────────
+  // Old configs stored this as `string[]` (term-only); new configs hold
+  // `{term, explanation?, context?}`. Accept both transparently.
+  const vocabRaw = (cfg as Record<string, unknown>).customVocabulary;
+  if (Array.isArray(vocabRaw) && vocabRaw.length > 0) {
+    const vocabLines: string[] = [];
+    for (const item of vocabRaw) {
+      if (typeof item === 'string') {
+        const t = item.trim();
+        if (t) vocabLines.push(`- ${t}`);
+        continue;
+      }
+      if (item && typeof item === 'object' && 'term' in item) {
+        const v = item as { term?: unknown; explanation?: unknown; context?: unknown };
+        const term = typeof v.term === 'string' ? v.term.trim() : '';
+        if (!term) continue;
+        const exp = typeof v.explanation === 'string' ? v.explanation.trim() : '';
+        const ctx = typeof v.context === 'string' ? v.context.trim() : '';
+        const bits: string[] = [`- ${term}`];
+        if (exp) bits.push(`= ${exp}`);
+        if (ctx) bits.push(`(Kontext: ${ctx})`);
+        vocabLines.push(bits.join(' '));
+      }
+    }
+    if (vocabLines.length > 0) {
+      parts.push(
+        `Spezielle Begriffe — diese Wörter korrekt aussprechen, ihre Bedeutung kennen und im richtigen Kontext einsetzen:\n${vocabLines.join('\n')}`,
+      );
+    }
+  }
+
   parts.push(`Hauptsprache: ${cfg.language === 'de' ? 'Deutsch' : 'Englisch'}`);
   parts.push('Bleibe immer kurz, gesprochen und praxisnah. Maximal 2 Sätze pro Antwort.');
   parts.push('Wenn eine Terminbuchung technisch fehlschlägt, behaupte NIEMALS der Termin sei gebucht. Sage kurz, dass du den Terminwunsch als Rückruf-Ticket aufgenommen hast und jemand den Termin bestätigt.');
