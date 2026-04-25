@@ -6,6 +6,7 @@ import { FoxLogo } from '../FoxLogo.js';
 import { IconPhone } from '../PhonbotIcons.js';
 import { TurnstileWidget, type TurnstileHandle } from '../TurnstileWidget.js';
 import { TEMPLATES, TEMPLATE_PREVIEWS, type CallState } from './shared.js';
+import { playForwardingTone, looksLikeForwarding } from '../../lib/demo-tones.js';
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 
@@ -125,6 +126,9 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
   // page-readers never see or interact with Cloudflare.
   const turnstileHandleRef = useRef<TurnstileHandle>(null);
   const clientRef = useRef<RetellWebClient | null>(null);
+  // Last agent message — set on every transcript update from Retell, read in
+  // the call_ended handler to decide whether to play a forwarding ringback.
+  const lastAgentMessageRef = useRef<string>('');
   useWebCallCleanup(clientRef);
 
   const isInCall = callState === 'connecting' || callState === 'active' || callState === 'ended' || callState === 'error';
@@ -176,11 +180,28 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
 
       client.on('call_started', () => setCallState('active'));
       client.on('call_ended', () => {
+        // If the agent's last utterance was a forwarding announcement
+        // ("Ich verbinde dich gleich"), play a brief ringback so the demo
+        // feels like a real switch-over before the UI flips to the ended state.
+        if (looksLikeForwarding(lastAgentMessageRef.current)) {
+          void playForwardingTone();
+        }
         setCallState('ended');
         setAgentTalking(false);
       });
       client.on('agent_start_talking', () => setAgentTalking(true));
       client.on('agent_stop_talking', () => setAgentTalking(false));
+      client.on('update', (update: unknown) => {
+        const transcript = (update as { transcript?: Array<{ role: string; content: string }> })?.transcript;
+        if (!Array.isArray(transcript)) return;
+        for (let i = transcript.length - 1; i >= 0; i--) {
+          const turn = transcript[i];
+          if (turn?.role === 'agent' && typeof turn.content === 'string') {
+            lastAgentMessageRef.current = turn.content;
+            break;
+          }
+        }
+      });
       client.on('error', (err: unknown) => {
         setError(String(err));
         setCallState('error');

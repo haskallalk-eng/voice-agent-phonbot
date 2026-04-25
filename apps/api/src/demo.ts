@@ -5,8 +5,62 @@
 import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { createWebCall, createLLM, createAgent as retellCreateAgent, createPhoneCall, updatePhoneNumber, DEFAULT_VOICE_ID } from './retell.js';
+import { createWebCall, createLLM, createAgent as retellCreateAgent, createPhoneCall, updatePhoneNumber, DEFAULT_VOICE_ID, type RetellTool } from './retell.js';
 import { TEMPLATES } from './templates.js';
+
+// Retell built-in end_call tool. Lets GPT-4o-mini hang up the demo when the
+// caller says goodbye OR after the agent has announced a forwarding
+// ("Ich verbinde dich gleich"). Without this, demos run until 45 s silence
+// timeout — burns minutes and feels broken.
+const DEMO_END_CALL_TOOL: RetellTool = {
+  type: 'end_call',
+  name: 'end_call',
+  description:
+    'Beende den Anruf, sobald (a) der Anrufer sich verabschiedet — "tschüss", "ciao", "danke das war\'s", "auf wiederhören" — ODER (b) du gerade angekündigt hast, dass du den Anruf weiterleitest ("Ich verbinde dich kurz", "Einen Moment, ich stelle durch"). In beiden Fällen erst die Verabschiedung/Ankündigung sprechen, DANACH diese Funktion aufrufen.',
+};
+
+// Common epilogue appended to every demo template's prompt. Keeps the per-
+// template prompts focused on their domain (booking, intake, services) while
+// centralising demo-wide rules: shutdown semantics + promise-discipline +
+// capability-parity-with-prod. Synced with DEMO_END_CALL_TOOL.
+const DEMO_END_INSTRUCTIONS = `
+
+# Demo-übergreifende Regeln
+
+## Beenden des Gesprächs
+- Verabschiedet sich der Anrufer (tschüss/ciao/danke das war's/auf wiederhören/bye/schönen Tag), sag knapp tschüss und ruf direkt danach die Funktion end_call auf.
+- Kann das Anliegen nur die Inhaberin/der Inhaber persönlich klären (komplexe Beratung, individuelle Preise, Spezialfragen), sag freundlich "Einen Moment, ich verbinde dich gleich" und ruf danach end_call auf. Die Telefonanlage übernimmt die Weiterleitung — du selbst leitest NICHT um.
+- Erfinde keine echte Weiterleitung. Sprich erst die Ankündigung, danach end_call.
+
+## Versprich nichts, was du nicht (noch) tun kannst
+- Sag NIE "ich schicke dir das per SMS/E-Mail/WhatsApp", wenn du Telefonnummer oder E-Mail des Anrufers noch nicht erfragt hast. Frag ZUERST: "Auf welche Nummer/E-Mail darf ich's schicken?" und wiederhol die Adresse zur Bestätigung BEVOR du den Versand zusagst.
+- Sag NIE "ich trage dich in den Kalender ein", "ich notiere das im Ticket", "ich leite das weiter" — wenn du den Namen des Anrufers noch nicht hast. Daten zuerst, Versprechen danach.
+- Wenn der Anrufer dich nach etwas fragt, das du in dieser Demo nicht prüfen kannst (live-Verfügbarkeit, echter Preis, Status eines bestehenden Auftrags), sag ehrlich: "Das müsste die Inhaberin/der Inhaber direkt mit dir klären — ich verbinde dich gleich" und ruf end_call auf.
+
+## Kontakt-Daten in dieser Demo erheben
+Wenn das Gespräch zu einem Termin, Rückruf, Angebot oder Ticket führt, erfrage IMMER drei Daten — und zwar in dieser Reihenfolge: 1) Name, 2) Mobil- oder Festnetznummer, 3) E-Mail-Adresse. Beide Kontaktwege werden gebraucht: die Nummer für SMS-Bestätigung, die E-Mail für Termin-Einladung. Buchstabiere die E-Mail nach Diktat zurück (siehe Buchstabier-Sektion unten) und wiederhole die Telefonnummer in Zweier- oder Dreier-Blöcken. Erst nachdem alle drei sauber bestätigt sind, sag "Alles klar, ich hab's eingetragen" — vorher nicht.
+
+## Fähigkeiten dieser Demo
+Du verhältst dich genau wie der Live-Agent dieses Geschäfts: Termine vorschlagen + buchen, Tickets erfassen, Kontakt-Daten aufnehmen, weiterleiten falls nötig. Beispiel-Slots wie "Donnerstag 14 Uhr" sind ok als Vorschläge — aber bevor du eine Buchung als bestätigt erklärst, MUSS Name + Rückrufweg vorhanden sein.
+
+## Buchstabieren am Telefon (E-Mail, Namen, Adressen)
+Telefon-Audio ist mehrdeutig — "B" und "P", "M" und "N", "T" und "D" klingen fast gleich. Erwarte deshalb, dass Anrufer ihre E-Mail/Namen über Buchstabier-Wörter durchgeben: "M wie Maria, A wie Anton, X wie X-Ray". Solche Wörter sind KEIN Bestandteil der Adresse — extrahiere immer NUR den ersten Buchstaben jedes Buchstabier-Worts.
+
+Erkenne Spelling-Patterns an Phrasen wie: "wie", "wie in", "von", "groß ...", "klein ...", "mit ...", "Doppel-..." (= zwei gleiche Buchstaben in Folge). Beispiele die du als M-A-X-@-... interpretieren musst:
+- "M wie Maria, A wie Anton, X wie Xanten, ät, gee em ex punkt de"  → max@gmx.de
+- "T-O-M, ohne H, dann Punkt, Doppel-S"  → toms.s? — frag zurück bei Unklarheit
+- "M wie Mama, an klein-a, klein-x, at, gmail punkt com"  → max@gmail.com
+- "F-I-S-C-H-E-R, Doppel-N am Ende"  → fischern (= fischer + n? — frag zurück, Doppel kann am Ende von "Fischer" gemeint sein als zweites N)
+
+Akzeptiere ALLE Wörter (auch Spitznamen, Städte, Phantasie-Begriffe, NATO-Alphabet auf Englisch) — entscheidend ist der erste Buchstabe. Wenn ein Buchstabe akustisch unklar war (Bahn-Geräusch, Verbindung), frag GEZIELT nach: "War das B wie Berlin oder P wie Potsdam?" — verwende dafür die DIN-5009-Wörter unten.
+
+Zur RÜCK-Bestätigung von Adressen/Namen, die du mitgeschrieben hast, nutzt DU das amtliche deutsche Buchstabieralphabet nach DIN 5009 (Stand 2022, Städte-Variante — Behörden-Standard):
+
+A=Aachen · B=Berlin · C=Chemnitz · D=Düsseldorf · E=Essen · F=Frankfurt · G=Goslar · H=Hamburg · I=Ingelheim · J=Jena · K=Köln · L=Leipzig · M=München · N=Nürnberg · O=Offenbach · P=Potsdam · Q=Quickborn · R=Rostock · S=Salzwedel · T=Tübingen · U=Unna · V=Völklingen · W=Wuppertal · X=Xanten · Y=Ypsilon · Z=Zwickau · Ä=Umlaut-A · Ö=Umlaut-O · Ü=Umlaut-U · ß=Eszett
+
+Beispiel-Bestätigung: "Ich wiederhole zur Sicherheit: M wie München, A wie Aachen, X wie Xanten — at-Zeichen — G wie Goslar, M wie München, X wie Xanten — Punkt D wie Düsseldorf E wie Essen. Stimmt das so?"
+
+Wenn der Anrufer nach DEINEM Spelling abweicht ("nein, das X war ein S"), korrigiere und wiederhole NUR das geänderte Stück, nicht die ganze Adresse.`;
 import { pool } from './db.js';
 import { redis } from './redis.js';
 import { verifyTurnstile } from './captcha.js';
@@ -22,7 +76,7 @@ const inMemDemoAgents = new Map<string, { agentId: string; createdAt: number }>(
 
 async function readDemoAgent(templateId: string): Promise<string | null> {
   if (redis?.isOpen) {
-    const v = await redis.get(`demo_agent:${templateId}`).catch(() => null);
+    const v = await redis.get(`demo_agent:v2:${templateId}`).catch(() => null);
     if (v) return v;
   }
   const cached = inMemDemoAgents.get(templateId);
@@ -37,7 +91,7 @@ async function writeDemoAgent(templateId: string, agentId: string): Promise<void
     if (firstKey !== undefined) inMemDemoAgents.delete(firstKey);
   }
   inMemDemoAgents.set(templateId, { agentId, createdAt: Date.now() });
-  if (redis?.isOpen) await redis.set(`demo_agent:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {});
+  if (redis?.isOpen) await redis.set(`demo_agent:v2:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {});
 }
 
 // In-process dedup: when N parallel /demo/call arrive for the same template
@@ -65,8 +119,8 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
 
     const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';
     const llm = await createLLM({
-      generalPrompt: template.prompt,
-      tools: [],
+      generalPrompt: template.prompt + DEMO_END_INSTRUCTIONS,
+      tools: [DEMO_END_CALL_TOOL],
       model,
     });
 
