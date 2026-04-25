@@ -71,12 +71,16 @@ export function KnowledgeTab({ config, onUpdate }: KnowledgeTabProps) {
 // ── Vocabulary helpers ─────────────────────────────────────────────────
 // Old configs stored `customVocabulary` as `string[]`. We accept that shape
 // transparently and surface every entry as a `VocabularyTerm` so the editor
-// only ever has to deal with one type.
+// only ever has to deal with one type. Empty terms stay in the list so the
+// user can click „+ Begriff hinzufügen" and immediately see the new card to
+// type into. The backend (agent-instructions.ts) skips empty terms when
+// emitting the prompt block.
 function readVocabulary(cfg: AgentConfig): VocabularyTerm[] {
   const raw = cfg.customVocabulary;
   if (!Array.isArray(raw)) return [];
-  return raw.map((item) => (typeof item === 'string' ? { term: item } : item))
-    .filter((it): it is VocabularyTerm => !!it && typeof it.term === 'string' && it.term.trim().length > 0);
+  return raw
+    .map((item) => (typeof item === 'string' ? { term: item } : item))
+    .filter((it): it is VocabularyTerm => !!it && typeof it.term === 'string');
 }
 
 function VocabularyEditor({
