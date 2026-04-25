@@ -199,6 +199,92 @@ export async function registerAdmin(app: FastifyInstance) {
     return { ok: true };
   });
 
+  // ── GET /admin/demo-calls ─────────────────────────────────────────────────
+  // Persisted /demo/call sessions (template_id, transcript, extracted contact
+  // fields). Promoted demo calls keep the row but show their crm_leads id.
+  app.get('/admin/demo-calls', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!pool) return reply.status(503).send({ error: 'DB not configured' });
+    const q = z.object({
+      limit: z.coerce.number().int().min(1).max(200).default(100),
+      template: z.string().optional(),
+      onlyUnpromoted: z.coerce.boolean().optional(),
+      hasContact: z.coerce.boolean().optional(),
+    }).safeParse(req.query);
+    if (!q.success) return reply.status(400).send({ error: 'Invalid query', details: q.error.flatten() });
+
+    const where: string[] = [];
+    const args: unknown[] = [];
+    if (q.data.template) { args.push(q.data.template); where.push(`template_id = $${args.length}`); }
+    if (q.data.onlyUnpromoted) where.push(`promoted_at IS NULL`);
+    if (q.data.hasContact) where.push(`(caller_email IS NOT NULL OR caller_phone IS NOT NULL)`);
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+    args.push(q.data.limit);
+    const res = await pool.query(
+      `SELECT id, created_at, call_id, template_id, duration_sec,
+              caller_name, caller_email, caller_phone, intent_summary,
+              disconnection_reason, promoted_lead_id, promoted_at,
+              LEFT(transcript, 4000) AS transcript_excerpt
+         FROM demo_calls ${whereSql}
+        ORDER BY created_at DESC
+        LIMIT $${args.length}`,
+      args,
+    );
+    return { calls: res.rows };
+  });
+
+  // ── POST /admin/demo-calls/:id/promote ────────────────────────────────────
+  // Move a demo_calls row into crm_leads. Caller's email is required (the CRM
+  // table makes it NOT NULL); when the demo only captured a phone, the admin
+  // must supply an email manually via the request body.
+  app.post('/admin/demo-calls/:id/promote', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!pool) return reply.status(503).send({ error: 'DB not configured' });
+    const { id } = req.params as { id: string };
+    const overrides = z.object({
+      email: z.string().email().optional(),
+      phone: z.string().optional(),
+      name: z.string().optional(),
+      notes: z.string().optional(),
+    }).safeParse(req.body ?? {});
+    if (!overrides.success) return reply.status(400).send({ error: 'Invalid body', details: overrides.error.flatten() });
+
+    const dcRes = await pool.query(`SELECT * FROM demo_calls WHERE id = $1`, [id]);
+    if (!dcRes.rowCount) return reply.status(404).send({ error: 'Demo call not found' });
+    const dc = dcRes.rows[0] as {
+      id: string; call_id: string; template_id: string;
+      caller_name: string | null; caller_email: string | null; caller_phone: string | null;
+      intent_summary: string | null; promoted_lead_id: string | null;
+    };
+    if (dc.promoted_lead_id) {
+      return reply.status(409).send({ error: 'Already promoted', leadId: dc.promoted_lead_id });
+    }
+
+    const email = overrides.data.email ?? dc.caller_email;
+    if (!email) return reply.status(400).send({ error: 'Email missing — pass `email` in body to promote' });
+    const phone = overrides.data.phone ?? dc.caller_phone ?? null;
+    const name = overrides.data.name ?? dc.caller_name ?? null;
+    const notes = overrides.data.notes
+      ?? [
+        `Demo-Call (${dc.template_id}) — ${dc.intent_summary ?? 'kein Intent erfasst'}`,
+        `Retell call_id: ${dc.call_id}`,
+      ].join('\n');
+
+    const insertRes = await pool.query(
+      `INSERT INTO crm_leads (name, email, phone, source, status, notes, call_id)
+       VALUES ($1, $2, $3, 'demo-web-call', 'new', $4, $5)
+       RETURNING id`,
+      [name, email, phone, notes, dc.call_id],
+    );
+    const leadId = insertRes.rows[0].id as string;
+
+    await pool.query(
+      `UPDATE demo_calls SET promoted_lead_id = $1, promoted_at = now() WHERE id = $2`,
+      [leadId, id],
+    );
+
+    return { ok: true, leadId };
+  });
+
   // ── GET /admin/metrics ────────────────────────────────────────────────────
   app.get('/admin/metrics', { ...auth }, async (_req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
