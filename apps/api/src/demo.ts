@@ -87,7 +87,7 @@ const inMemDemoAgents = new Map<string, { agentId: string; createdAt: number }>(
 
 async function readDemoAgent(templateId: string): Promise<string | null> {
   if (redis?.isOpen) {
-    const v = await redis.get(`demo_agent:v2:${templateId}`).catch(() => null);
+    const v = await redis.get(`demo_agent:v3:${templateId}`).catch(() => null);
     if (v) return v;
   }
   const cached = inMemDemoAgents.get(templateId);
@@ -114,9 +114,9 @@ async function writeDemoAgent(templateId: string, agentId: string): Promise<void
   inMemDemoAgentMeta.set(agentId, { templateId, createdAt: Date.now() });
   if (redis?.isOpen) {
     await Promise.all([
-      redis.set(`demo_agent:v2:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {}),
+      redis.set(`demo_agent:v3:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {}),
       // Reverse direction: webhook sees agent_id, needs templateId. Same TTL.
-      redis.set(`demo_agent_meta:v2:${agentId}`, templateId, { EX: CACHE_TTL_SEC }).catch(() => {}),
+      redis.set(`demo_agent_meta:v3:${agentId}`, templateId, { EX: CACHE_TTL_SEC }).catch(() => {}),
     ]);
   }
 }
@@ -128,7 +128,7 @@ async function writeDemoAgent(templateId: string, agentId: string): Promise<void
  */
 export async function readDemoCallTemplate(agentId: string): Promise<string | null> {
   if (redis?.isOpen) {
-    const v = await redis.get(`demo_agent_meta:v2:${agentId}`).catch(() => null);
+    const v = await redis.get(`demo_agent_meta:v3:${agentId}`).catch(() => null);
     if (v) return v;
   }
   const cached = inMemDemoAgentMeta.get(agentId);
