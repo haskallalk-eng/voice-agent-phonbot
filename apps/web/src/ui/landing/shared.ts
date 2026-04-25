@@ -19,7 +19,7 @@ export const TEMPLATES = [
   { id: 'cleaning',     slug: 'reinigung',      Icon: IconBroom,      name: 'Reinigung',      description: 'Angebote & Terminplanung' },
   { id: 'restaurant',   slug: 'restaurant',     Icon: IconRestaurant, name: 'Restaurant',     description: 'Reservierungen & Bestellungen' },
   { id: 'auto',         slug: 'autowerkstatt',  Icon: IconCar,        name: 'Autowerkstatt',  description: 'Terminvereinbarung & Kostenvoranschläge' },
-  { id: 'solo',         slug: 'selbststaendig', Icon: IconHeadphones, name: 'Selbstständig',  description: 'Freelancer, Coaches, Kreative & Solo-Betriebe' },
+  { id: 'solo',         slug: 'selbststaendig', Icon: IconHeadphones, name: 'Mein Agent',     description: 'Freelancer, Coaches, Kreative — dein eigener Agent' },
 ] as const;
 
 export const TEMPLATE_PREVIEWS: Record<string, string> = {
