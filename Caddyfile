@@ -14,12 +14,12 @@
         # CSP: fonts are self-hosted (system-stack, no Google CDN).
         # Turnstile (Cloudflare CAPTCHA) needs challenges.cloudflare.com on
         # script-src + frame-src + connect-src.
-        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https://phonbot.de https://*.retellai.com https://challenges.cloudflare.com; connect-src 'self' wss://*.retellai.com https://*.retellai.com wss://*.livekit.cloud https://*.livekit.cloud wss://phonbot.de https://challenges.cloudflare.com; media-src 'self' blob: https://*.cloudfront.net; frame-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self';"
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://challenges.cloudflare.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com https://challenges.cloudflare.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https://phonbot.de https://*.retellai.com https://challenges.cloudflare.com; connect-src 'self' wss://*.retellai.com https://*.retellai.com wss://*.livekit.cloud https://*.livekit.cloud wss://phonbot.de https://challenges.cloudflare.com; media-src 'self' blob: https://*.cloudfront.net; frame-src 'self' https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'self';"
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
         X-Content-Type-Options "nosniff"
         X-Frame-Options "SAMEORIGIN"
         Referrer-Policy "strict-origin-when-cross-origin"
-        Permissions-Policy "microphone=(self), camera=(), geolocation=(), payment=(self)"
+        Permissions-Policy "microphone=(self), camera=(), geolocation=(), payment=(self), xr-spatial-tracking=()"
         -Server
     }
 

@@ -21,6 +21,13 @@ const REFRESH_COOKIE = 'vas_refresh';
 // so this must use /api/auth, not the internal Fastify route /auth.
 const REFRESH_COOKIE_PATH = '/api/auth';
 const LEGACY_REFRESH_COOKIE_PATH = '/auth';
+// Non-httpOnly companion cookie. Pure presence-flag — JS reads it on bootstrap
+// to decide whether to attempt /auth/refresh at all. Without this, anonymous
+// landing-page visitors trigger a 401 console error every page load (the
+// httpOnly refresh cookie is invisible to JS, so the bootstrap can't otherwise
+// know it should skip). Carries no auth value — losing it just means one extra
+// refresh probe.
+const SESSION_HINT_COOKIE = 'vas_has_session';
 
 function refreshCookieOptions() {
   return {
@@ -33,11 +40,22 @@ function refreshCookieOptions() {
   };
 }
 
+function sessionHintCookieOptions() {
+  return {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict' as const,
+    path: '/',
+    maxAge: REFRESH_TOKEN_TTL_MS / 1000,
+  };
+}
+
 function clearRefreshCookie(reply: FastifyReply) {
   reply.clearCookie(REFRESH_COOKIE, { path: REFRESH_COOKIE_PATH });
   // Clean up cookies issued before 2026-04-22 that used the internal route
   // path. They were not sent to /api/auth/refresh, which caused logout on reload.
   reply.clearCookie(REFRESH_COOKIE, { path: LEGACY_REFRESH_COOKIE_PATH });
+  reply.clearCookie(SESSION_HINT_COOKIE, { path: '/' });
 }
 
 function hashToken(raw: string): string {
@@ -72,6 +90,7 @@ async function issueTokenPair(
   );
   const refreshRaw = await issueRefreshToken(user.id, req);
   reply.setCookie(REFRESH_COOKIE, refreshRaw, refreshCookieOptions());
+  reply.setCookie(SESSION_HINT_COOKIE, '1', sessionHintCookieOptions());
   return { token: accessToken };
 }
 
