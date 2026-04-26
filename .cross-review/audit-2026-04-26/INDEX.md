@@ -8,7 +8,7 @@ Großes Audit aller Phonbot-Module — vom Architektur-Big-Picture bis runter zu
 |---|---|---|---|---|
 | 00 | `00-overview.md` — Architektur-Map + Trust-Boundaries | Claude | Codex | ⏳ Author done, awaiting review |
 | 01 | `01-auth-jwt.md` — Auth, JWT, Refresh-Token, Sessions | Claude | Codex | ⏳ Author done, awaiting review |
-| 02 | `02-agent-config-tenancy.md` — Agent-Config + Multi-Tenant-Isolation | — | — | ⬜ Pending |
+| 02 | `02-agent-config-tenancy.md` — Agent-Config + Multi-Tenant-Isolation | Claude | Codex | ⏳ Author done, awaiting review |
 | 03 | `03-retell-webhooks-tools.md` — Retell-Webhooks + Tool-Dispatch | — | — | ⬜ Pending |
 | 04 | `04-billing-stripe.md` — Stripe Subscription + Invoicing | — | — | ⬜ Pending |
 | 05 | `05-calendar-oauth-sync.md` — Calendar OAuth + Poll-Sync | — | — | ⬜ Pending |
