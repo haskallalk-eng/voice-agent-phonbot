@@ -1,11 +1,26 @@
 /**
  * Retell AI webhook endpoints.
  *
- * Retell calls these URLs when the agent invokes a custom function.
- * Each tool endpoint receives the extracted parameters from the conversation
- * and returns a result that Retell feeds back to the LLM.
+ * Retell calls these URLs when the agent invokes a custom function or when
+ * the call lifecycle changes. Two distinct auth bars apply (TOOL_AUTH_NOTE):
  *
- * All endpoints verify the x-retell-signature header using RETELL_API_KEY.
+ *   • POST /retell/webhook   (lifecycle: call_started/_ended/_analyzed)
+ *     STRICT verifyRetellSignature(): HMAC-SHA256 over rawBody using
+ *     RETELL_API_KEY, timing-safe compared against x-retell-signature.
+ *     No body-only fallback — these events MUTATE billing
+ *     (orgs.minutes_used) and persist transcripts/insights, so a forged
+ *     event must be impossible without the API key.
+ *
+ *   • POST /retell/tools/*   (custom-function dispatchers)
+ *     verifyRetellToolRequest() — OR-chain:
+ *       1. valid HMAC (Retell may add per-tool signing in future), OR
+ *       2. signed-tenant-id query param we set when registering the tool, OR
+ *       3. body-carried _retell_agent_id, cross-checked via
+ *          getOrgIdByAgentId() against agent_configs (unknown agent → 403
+ *          / demo-only fallback per handler).
+ *     Acceptable here because Retell does NOT send x-retell-signature on
+ *     Custom-Function calls. The agent_id check binds the call to a known
+ *     org, giving the same tenant-isolation guarantee HMAC would.
  */
 
 import crypto from 'node:crypto';
@@ -284,16 +299,29 @@ async function getOrgIdByTenantId(tenantId: string): Promise<string | null> {
 
 export async function registerRetellWebhooks(app: FastifyInstance) {
   // ── Call lifecycle webhook ─────────────────────────────────────────────────
-  // Retell sends call_started, call_ended, call_analyzed events here.
+  // Retell sends call_started / call_ended / call_analyzed events here.
+  // These events MUTATE billing (orgs.minutes_used) and persist transcripts +
+  // trigger insights — so the auth bar is the strict HMAC check, no body-only
+  // fallback. A spoofed call_ended would otherwise inflate minutes, inject
+  // fake transcripts, fan out to customer webhooks, and (with a guessable
+  // call_id) trigger DELETE on real Retell calls. The OR-fallback chain that
+  // tool endpoints below use is acceptable there because tool calls are
+  // read-mostly and bound by agent_id ownership; lifecycle is not.
   app.post('/retell/webhook', async (req: FastifyRequest, reply: FastifyReply) => {
-    // Tool-endpoint auth: Retell's Custom-Function calls do NOT include the
-    // x-retell-signature header (that's webhook-only). Authentication here
-    // relies on the _retell_agent_id in the body being cross-checked against
-    // the agent_configs table via getOrgIdByAgentId below. Unknown agents
-    // get 403 / demo-only, which is the same tenant-isolation guarantee the
-    // HMAC check would provide. We keep HMAC strict on the call lifecycle
-    // webhook (above) because those directly write minutes_used + transcripts.
-    if (!verifyRetellToolRequest(req as RawBodyRequest)) {
+    if (!verifyRetellSignature(req as RawBodyRequest)) {
+      // Loud-log — if Retell ever sends an unsigned lifecycle event we want
+      // to see it immediately, not silently lose data. Body context (event +
+      // agent_id) helps figure out which org's webhook setup needs attention.
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const call = (body.call ?? {}) as Record<string, unknown>;
+      req.log.error(
+        {
+          event: body.event ?? call.call_status ?? null,
+          agentId: call.agent_id ?? body.agent_id ?? null,
+          hasSignature: !!req.headers['x-retell-signature'],
+        },
+        'retell lifecycle webhook rejected — HMAC signature missing or invalid',
+      );
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 
@@ -311,7 +339,12 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           fromNumber: (call as RetellCallData).from_number,
           toNumber: (call as RetellCallData).to_number,
           startTimestamp: (call as RetellCallData).start_timestamp,
-        }).catch(() => {}); // logged inside
+        }).catch((err: Error) =>
+          req.log.warn(
+            { err: err.message, orgId, event: 'call.started' },
+            'inbound-webhook fan-out failed',
+          ),
+        );
       }
     }
 
@@ -466,7 +499,12 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
             startTimestamp: startTs,
             endTimestamp: endTs,
             variables: extracted ?? {},
-          }).catch(() => {});
+          }).catch((err: Error) =>
+            req.log.warn(
+              { err: err.message, orgId, callId, event: 'call.ended' },
+              'inbound-webhook fan-out failed',
+            ),
+          );
         }
 
         // Demo-call persistence: when the agent isn't bound to a paying org,
@@ -528,7 +566,12 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           callId,
           agentId,
           variables: extracted,
-        }).catch(() => {});
+        }).catch((err: Error) =>
+          req.log.warn(
+            { err: err.message, orgId, callId, event: 'variable.extracted' },
+            'inbound-webhook fan-out failed',
+          ),
+        );
       }
 
       // Late-arriving extraction for demo calls — UPDATE the existing row
@@ -563,13 +606,9 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
   // --- calendar.findSlots ---
   app.post('/retell/tools/calendar.findSlots', async (req: FastifyRequest, reply: FastifyReply) => {
-    // Tool-endpoint auth: Retell's Custom-Function calls do NOT include the
-    // x-retell-signature header (that's webhook-only). Authentication here
-    // relies on the _retell_agent_id in the body being cross-checked against
-    // the agent_configs table via getOrgIdByAgentId below. Unknown agents
-    // get 403 / demo-only, which is the same tenant-isolation guarantee the
-    // HMAC check would provide. We keep HMAC strict on the call lifecycle
-    // webhook (above) because those directly write minutes_used + transcripts.
+    // Tool auth: see TOOL_AUTH_NOTE at top of file. Lifecycle webhook uses
+    // strict HMAC; tool endpoints use the OR-fallback chain because Retell's
+    // Custom-Function calls don't carry x-retell-signature.
     if (!verifyRetellToolRequest(req as RawBodyRequest)) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
@@ -646,13 +685,9 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
   // --- calendar.book ---
   app.post('/retell/tools/calendar.book', async (req: FastifyRequest, reply: FastifyReply) => {
-    // Tool-endpoint auth: Retell's Custom-Function calls do NOT include the
-    // x-retell-signature header (that's webhook-only). Authentication here
-    // relies on the _retell_agent_id in the body being cross-checked against
-    // the agent_configs table via getOrgIdByAgentId below. Unknown agents
-    // get 403 / demo-only, which is the same tenant-isolation guarantee the
-    // HMAC check would provide. We keep HMAC strict on the call lifecycle
-    // webhook (above) because those directly write minutes_used + transcripts.
+    // Tool auth: see TOOL_AUTH_NOTE at top of file. Lifecycle webhook uses
+    // strict HMAC; tool endpoints use the OR-fallback chain because Retell's
+    // Custom-Function calls don't carry x-retell-signature.
     if (!verifyRetellToolRequest(req as RawBodyRequest)) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
@@ -814,13 +849,9 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
   // --- ticket.create ---
   app.post('/retell/tools/ticket.create', async (req: FastifyRequest, reply: FastifyReply) => {
-    // Tool-endpoint auth: Retell's Custom-Function calls do NOT include the
-    // x-retell-signature header (that's webhook-only). Authentication here
-    // relies on the _retell_agent_id in the body being cross-checked against
-    // the agent_configs table via getOrgIdByAgentId below. Unknown agents
-    // get 403 / demo-only, which is the same tenant-isolation guarantee the
-    // HMAC check would provide. We keep HMAC strict on the call lifecycle
-    // webhook (above) because those directly write minutes_used + transcripts.
+    // Tool auth: see TOOL_AUTH_NOTE at top of file. Lifecycle webhook uses
+    // strict HMAC; tool endpoints use the OR-fallback chain because Retell's
+    // Custom-Function calls don't carry x-retell-signature.
     if (!verifyRetellToolRequest(req as RawBodyRequest)) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
@@ -895,7 +926,12 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         preferredTime: row.preferred_time,
         service: row.service,
         callId,
-      }).catch(() => {});
+      }).catch((err: Error) =>
+        req.log.warn(
+          { err: err.message, orgId, ticketId: row.id, event: 'ticket.created' },
+          'inbound-webhook fan-out failed',
+        ),
+      );
 
       const sms = await sendTicketAckSms({
         to: row.customer_phone,
@@ -982,13 +1018,31 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       return { ok: true };
     }
 
+    // CRITICAL DSGVO/§201 StGB path: if this insert silently fails, call_ended
+    // won't see the flag and will persist the transcript despite the caller's
+    // explicit withdrawal of consent. We need a HARD error here so Retell + the
+    // LLM know the decline was not stored — then the agent can ask the caller
+    // to repeat / hang up safely instead of pretending everything is fine.
     if (pool) {
-      await pool.query(
-        `INSERT INTO recording_declined_calls (call_id, org_id, tenant_id)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (call_id) DO NOTHING`,
-        [callId, orgId, signedTenantId ?? null],
-      ).catch((err: Error) => req.log.error({ err: err.message, callId }, 'recording_declined_calls insert failed'));
+      try {
+        await pool.query(
+          `INSERT INTO recording_declined_calls (call_id, org_id, tenant_id)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (call_id) DO NOTHING`,
+          [callId, orgId, signedTenantId ?? null],
+        );
+      } catch (err) {
+        req.log.error(
+          { err: (err as Error).message, callId, orgId },
+          'recording.declined: storage failed — refusing tool with 503 so transcript is NOT silently kept',
+        );
+        return reply.status(503).send({
+          ok: false,
+          error: 'STORAGE_UNAVAILABLE',
+          message:
+            'Konnte den Widerspruch nicht speichern. Bitte wiederhole den Wunsch oder beende den Anruf.',
+        });
+      }
     }
 
     await appendTraceEvent({
