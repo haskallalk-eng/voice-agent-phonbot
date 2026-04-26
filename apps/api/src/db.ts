@@ -500,6 +500,10 @@ async function runMigrationBody() {
   // ── Email verification columns on users ───────────────────────────────────
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false;`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verify_token TEXT;`);
+  // Expiry for the verify token (14d at issue time). Pre-existing tokens
+  // without expiry stay valid (NULL = no expiry, treated as still-active in
+  // the WHERE clause); new ones get a deadline.
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verify_token_expires_at TIMESTAMPTZ;`);
 
   // ── Password resets ────────────────────────────────────────────────────────
   await pool.query(`

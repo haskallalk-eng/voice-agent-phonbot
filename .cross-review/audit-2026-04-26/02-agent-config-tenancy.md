@@ -57,7 +57,9 @@ Plus: `grep` nach Aufrufern und sicherstellen dass alle den orgId-Pfad nehmen.
 
 ---
 
-### 🟠 HIGH-1 · `web-call` Fallback kann anderen Agent als gemeint nehmen
+### 🟠 HIGH-1 · `web-call` Fallback kann anderen Agent als gemeint nehmen · ✅ GEFIXT (Round 5)
+
+**Status**: ✅ GEFIXT — Multi-Agent-Orgs (>1 deployed agent) bekommen 400 `AGENT_TENANT_REQUIRED` wenn `agentTenantId` fehlt. Single-Agent-Orgs behalten den Fallback. SQL-Limit auf 2 macht den Check billig.
 
 **Datei**: [agent-config.ts:1163–1170](../../apps/api/src/agent-config.ts#L1163-L1170)
 
@@ -83,7 +85,9 @@ Plus: `grep` nach Aufrufern und sicherstellen dass alle den orgId-Pfad nehmen.
 
 ---
 
-### 🟠 HIGH-2 · PDF-Upload + PUT umgehen Plan-Limit
+### 🟠 HIGH-2 · PDF-Upload + PUT umgehen Plan-Limit · ✅ GEFIXT (Round 5)
+
+**Status**: ✅ GEFIXT — `enforcePlanAgentLimitOnCreate(orgId, tenantId)` in `agent-config.ts` blockt jeden CREATE-Pfad (PUT mit neuer tenantId, deploy mit neuer tenantId). Limit kommt aus `PLANS[plan].agentsLimit` (single source of truth aus `billing.ts`). PUT + deploy-Handler haben jetzt try/catch der `AGENTS_LIMIT_REACHED` als 403 mit Plan-Info zurückgibt. PDF-Upload-Pfad: Audit-Annahme „PDF macht implicit INSERT in agent_configs" stimmt nicht — `storeKnowledgePdf` schreibt nur in `knowledge_files`, kein agent_configs-INSERT.
 
 **Datei**: [agent-config.ts:797–832](../../apps/api/src/agent-config.ts#L797-L832) vs. [agent-config.ts:1035–1057](../../apps/api/src/agent-config.ts#L1035-L1057) vs. [agent-config.ts:868–870](../../apps/api/src/agent-config.ts#L868-L870)
 
@@ -105,7 +109,9 @@ Plus: `grep` nach Aufrufern und sicherstellen dass alle den orgId-Pfad nehmen.
 
 ---
 
-### 🟡 MEDIUM-1 · `LIMITS`-Map duplikat zur PLANS-Definition
+### 🟡 MEDIUM-1 · `LIMITS`-Map duplikat zur PLANS-Definition · ✅ GEFIXT (Round 1)
+
+**Status**: ✅ GEFIXT — `LIMITS`-Hardcode entfernt; `/agent-config/new` und `enforcePlanAgentLimitOnCreate` lesen jetzt `PLANS[plan].agentsLimit` aus `billing.ts`. Plan-Änderung = ein Edit, keine Drift mehr.
 
 **Datei**: [agent-config.ts:804](../../apps/api/src/agent-config.ts#L804) vs. [billing.ts](../../apps/api/src/billing.ts)
 
@@ -127,7 +133,9 @@ Single source of truth.
 
 ---
 
-### 🟡 MEDIUM-2 · `/agent-config/stats` ohne per-route Rate-Limit
+### 🟡 MEDIUM-2 · `/agent-config/stats` ohne per-route Rate-Limit · ✅ GEFIXT (Round 1)
+
+**Status**: ✅ GEFIXT — Per-route Rate-Limit `60/min per IP` auf `/agent-config/stats`. Backend-side cache + Page-Visibility-API als Optimierung-Optionen für später dokumentiert.
 
 **Datei**: [agent-config.ts:922](../../apps/api/src/agent-config.ts#L922)
 
@@ -144,7 +152,9 @@ Single source of truth.
 
 ---
 
-### 🟡 MEDIUM-3 · `opening-hours-sync` fire-and-forget ohne Log
+### 🟡 MEDIUM-3 · `opening-hours-sync` fire-and-forget ohne Log · ✅ GEFIXT (Round 1)
+
+**Status**: ✅ GEFIXT — `.catch(() => {})` ersetzt durch `log.warn({ err, orgId }, 'opening-hours-sync to chipy_schedules failed')`. Plus: dynamic-import auf top-level static import migriert (LOW-1 mit erledigt; kein Circular-Dep).
 
 **Datei**: [agent-config.ts:240–242](../../apps/api/src/agent-config.ts#L240-L242)
 
@@ -177,7 +187,9 @@ Plus: top-level static import statt dynamic — siehe LOW-1.
 
 ---
 
-### 🔵 LOW-1 · Dynamic-import im Hot-Path
+### 🔵 LOW-1 · Dynamic-import im Hot-Path · ✅ GEFIXT (Round 1)
+
+**Status**: ✅ GEFIXT — top-level `import { syncOpeningHoursToChipy } from './opening-hours-sync.js';` (kein Circular-Dep, opening-hours-sync importiert nur `db.js`).
 
 **Datei**: [agent-config.ts:240](../../apps/api/src/agent-config.ts#L240)
 

@@ -21,7 +21,7 @@
 
 ## Befunde
 
-### 🟠 HIGH-1 · Refresh-Token Cross-Tab-Race
+### 🟠 HIGH-1 · Refresh-Token Cross-Tab-Race · ⏳ pending (BroadcastChannel-Frontend-Refactor offen)
 
 **Datei**: [auth.ts:705–714](../../apps/api/src/auth.ts#L705-L714) + Frontend [api.ts:43–66](../../apps/web/src/lib/api.ts#L43-L66)
 
@@ -41,7 +41,9 @@
 
 ---
 
-### 🟠 HIGH-2 · `DELETE /auth/account` ohne Re-Authentication
+### 🟠 HIGH-2 · `DELETE /auth/account` ohne Re-Authentication · ✅ GEFIXT (Round 2)
+
+**Status**: ✅ GEFIXT — `DELETE /auth/account` verlangt jetzt `password` im Body, bcrypt-verify gegen `users.password_hash`, sonst 401. Frontend-Modal in `Sidebar.tsx` zeigt Passwort-Feld zusätzlich zum „LÖSCHEN"-Confirm.
 
 **Datei**: [auth.ts:756–907](../../apps/api/src/auth.ts#L756-L907)
 
@@ -60,7 +62,9 @@
 
 ---
 
-### 🟡 MEDIUM-1 · Email-Verify-Token hat keine Expiry
+### 🟡 MEDIUM-1 · Email-Verify-Token hat keine Expiry · ✅ GEFIXT (Round 2)
+
+**Status**: ✅ GEFIXT — `users.email_verify_token_expires_at TIMESTAMPTZ` Migration in `db.ts`. Register + resend setzen 14d-TTL. Verify-Query prüft `> now()` (NULL-pre-existing-tokens bleiben aus Backwards-Compat-Gründen gültig).
 
 **Datei**: [auth.ts:619–643](../../apps/api/src/auth.ts#L619-L643) + DB-Schema
 
@@ -76,7 +80,9 @@
 
 ---
 
-### 🟡 MEDIUM-2 · Stripe-Sub-Cancel im Account-Delete fail-silent
+### 🟡 MEDIUM-2 · Stripe-Sub-Cancel im Account-Delete fail-silent · ✅ GEFIXT (Round 2)
+
+**Status**: ✅ GEFIXT — `catch {}` ersetzt durch `req.log.error({ err, subId, orgId }, 'account-delete: stripe subscription cancel failed — manual cancel required')`. Sentry sieht das als strukturiertes Error-Event.
 
 **Datei**: [auth.ts:776–787](../../apps/api/src/auth.ts#L776-L787)
 
@@ -143,7 +149,9 @@ Plus: Failure-Counter exposed über `/admin/ops/failed-cancels` damit Ops leakag
 
 ---
 
-### 🟡 MEDIUM-5 · Brute-Force-Schutz fehlt auf User-Ebene
+### 🟡 MEDIUM-5 · Brute-Force-Schutz fehlt auf User-Ebene · ✅ GEFIXT (Round 2)
+
+**Status**: ✅ GEFIXT — Per-User-Failed-Counter in Redis (mit In-Memory-Fallback) in `auth.ts`. `recordLoginFailure` zählt pro Email; bei 10 Failures in 1h → 30-min-Soft-Lock (429), unabhängig von IP. Erfolgreicher Login resettet den Counter. Lock-Check passiert VOR dem DB-Query, spart auch bcrypt-CPU bei laufenden Attacken.
 
 **Datei**: [auth.ts:443–487](../../apps/api/src/auth.ts#L443-L487)
 
@@ -160,7 +168,9 @@ Plus: Failure-Counter exposed über `/admin/ops/failed-cancels` damit Ops leakag
 
 ---
 
-### 🔵 LOW-1 · Fehlender B2B-Bestätigungs-Backend-Check
+### 🔵 LOW-1 · Fehlender B2B-Bestätigungs-Backend-Check · ✅ GEFIXT (Round 2)
+
+**Status**: ✅ GEFIXT — `RegisterBody` + `CheckoutStartBody` in `auth.ts` erfordern jetzt `isBusiness: z.literal(true)` und `termsAccepted: z.literal(true)`. Frontend (`auth.tsx` register, `LoginPage.tsx`, `api.ts` startCheckoutSignup) schickt die Flags konsistent mit. DevTools-Edit kann den Backend-Check nicht mehr umgehen.
 
 **Datei**: [auth.ts:105–109](../../apps/api/src/auth.ts#L105-L109)
 

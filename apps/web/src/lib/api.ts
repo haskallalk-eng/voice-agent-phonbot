@@ -433,8 +433,17 @@ export function reassignPhoneAgent(phoneId: string, agentTenantId: string) {
   });
 }
 
+export type VerifyForwardingResponse = {
+  ok: boolean;
+  verified: boolean;
+  confidence?: 'high' | 'medium';
+  forwardingType?: 'always' | 'no_answer';
+  callSid?: string | null;
+  hint?: string;
+};
+
 export function verifyForwarding(customerNumber: string, phonbotNumberId: string) {
-  return request<{ ok: boolean; verified?: boolean; forwardingType?: string }>('/phone/verify-forwarding', {
+  return request<VerifyForwardingResponse>('/phone/verify-forwarding', {
     method: 'POST',
     body: JSON.stringify({ customerNumber, phonbotNumberId }),
   });
@@ -695,6 +704,8 @@ export function startCheckoutSignup(input: {
   password: string;
   planId: 'nummer' | 'starter' | 'pro' | 'agency';
   interval: 'month' | 'year';
+  isBusiness: true;
+  termsAccepted: true;
 }) {
   return request<{ url: string }>('/auth/checkout-start', {
     method: 'POST',
@@ -712,8 +723,11 @@ export function finalizeCheckoutSignup(sessionId: string) {
   );
 }
 
-export function deleteAccount() {
-  return request<{ ok: boolean }>('/auth/account', { method: 'DELETE', body: '{}' });
+export function deleteAccount(password: string) {
+  return request<{ ok: boolean }>('/auth/account', {
+    method: 'DELETE',
+    body: JSON.stringify({ password }),
+  });
 }
 
 export function createPortalSession() {

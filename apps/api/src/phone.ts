@@ -2,6 +2,7 @@
  * Phone number management — provision, assign, and verify numbers.
  * Supports: Retell-provisioned numbers + Twilio-owned numbers imported into Retell.
  */
+import crypto from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import twilio from 'twilio';
@@ -73,7 +74,10 @@ export async function migratePhone() {
     END $$;
   `);
 
-  // forwarding_type: 'always' | 'no_answer' | 'busy' | null — detected by verify-forwarding-type endpoint
+  // forwarding_type: 'always' | 'no_answer' | null — set by /phone/verify-forwarding
+  // when the loop-test confirms forwarding to a Phonbot inbound. Pre-2026-04
+  // rows may carry legacy values ('busy', 'unknown', 'not_forwarded'); the
+  // frontend treats those as unverified (maybe_loop) and prompts re-test.
   await pool.query(`ALTER TABLE phone_numbers ADD COLUMN IF NOT EXISTS forwarding_type TEXT;`);
   // customer_number: the business's own number that forwards to this Phonbot number
   await pool.query(`ALTER TABLE phone_numbers ADD COLUMN IF NOT EXISTS customer_number TEXT;`);
@@ -334,6 +338,130 @@ export async function autoProvisionGermanNumber(orgId: string): Promise<void> {
   );
 
   process.stdout.write(`[phone] Auto-provisioned ${purchasedNumber} for org ${orgId}\n`);
+}
+
+// ── Forwarding-Verification (real loop test) ────────────────────────────────
+//
+// The honest way to verify a customer's call-forwarding actually targets our
+// Phonbot inbound: dial the customer's number from a SEPARATE verifier trunk
+// (a Twilio number that is NOT imported into Retell), and watch the inbound
+// webhook on the Phonbot number for a call whose caller-ID matches either the
+// verifier (carrier preserved caller-ID — most German GSM with **21#/**61#)
+// or the customer number itself (some SIP/Fritzbox setups rewrite caller-ID).
+//
+// Two halves:
+//   • setPendingForwardingVerification + setForwardingVerificationResult are
+//     called by /phone/verify-forwarding.
+//   • checkForwardingVerificationMatch is called fire-and-forget from the
+//     retell call_started webhook hook to close the loop.
+
+const VERIFY_PENDING_TTL_S = 90;
+const VERIFY_RESULT_TTL_S = 60;
+
+type PendingForwardingVerification = {
+  token: string;
+  orgId: string;
+  phonbotNumberId: string;
+  phonbotNumber: string;
+  customerNumber: string;
+  verifierNumber: string;
+  startedAt: number;
+};
+
+type ForwardingVerificationResult = {
+  ok: true;
+  confidence: 'high' | 'medium';
+  matchedFrom: string;
+  forwardingType: 'always' | 'no_answer';
+  elapsedMs: number;
+};
+
+function pendingVerifyKey(phonbotNumber: string): string {
+  return `phone-verify:pending:${phonbotNumber}`;
+}
+
+function resultVerifyKey(token: string): string {
+  return `phone-verify:result:${token}`;
+}
+
+function normalizeE164(n: string): string {
+  return n.replace(/[\s\-()]/g, '').trim();
+}
+
+async function setPendingForwardingVerification(p: PendingForwardingVerification): Promise<boolean> {
+  if (!redis?.isOpen) return false;
+  const ok = await redis
+    .set(pendingVerifyKey(p.phonbotNumber), JSON.stringify(p), { EX: VERIFY_PENDING_TTL_S })
+    .catch(() => null);
+  return ok != null;
+}
+
+async function getPendingForwardingVerification(phonbotNumber: string): Promise<PendingForwardingVerification | null> {
+  if (!redis?.isOpen) return null;
+  const raw = await redis.get(pendingVerifyKey(phonbotNumber)).catch(() => null);
+  if (!raw) return null;
+  try { return JSON.parse(raw) as PendingForwardingVerification; } catch { return null; }
+}
+
+async function clearPendingForwardingVerification(phonbotNumber: string): Promise<void> {
+  if (!redis?.isOpen) return;
+  await redis.del(pendingVerifyKey(phonbotNumber)).catch(() => null);
+}
+
+async function setForwardingVerificationResult(token: string, result: ForwardingVerificationResult): Promise<void> {
+  if (!redis?.isOpen) return;
+  await redis
+    .set(resultVerifyKey(token), JSON.stringify(result), { EX: VERIFY_RESULT_TTL_S })
+    .catch(() => null);
+}
+
+async function getForwardingVerificationResult(token: string): Promise<ForwardingVerificationResult | null> {
+  if (!redis?.isOpen) return null;
+  const raw = await redis.get(resultVerifyKey(token)).catch(() => null);
+  if (!raw) return null;
+  try { return JSON.parse(raw) as ForwardingVerificationResult; } catch { return null; }
+}
+
+/**
+ * Called fire-and-forget from the retell call_started webhook handler.
+ * If a forwarding-verification is pending for the inbound's destination
+ * number AND the caller-ID matches the verifier (or the customer number as
+ * fallback), records a successful match in Redis. The /phone/verify-forwarding
+ * endpoint polls that result.
+ *
+ * Must not throw — webhook flow is critical and unrelated to verification.
+ */
+export async function checkForwardingVerificationMatch(
+  toNumber: string | null | undefined,
+  fromNumber: string | null | undefined,
+): Promise<void> {
+  if (!toNumber || !fromNumber) return;
+  const toNorm = normalizeE164(toNumber);
+  const pending = await getPendingForwardingVerification(toNorm);
+  if (!pending) return;
+
+  const fromNorm = normalizeE164(fromNumber);
+  const verifierNorm = normalizeE164(pending.verifierNumber);
+  const customerNorm = normalizeE164(pending.customerNumber);
+
+  let confidence: 'high' | 'medium' | null = null;
+  if (fromNorm === verifierNorm) confidence = 'high';
+  else if (fromNorm === customerNorm) confidence = 'medium';
+  if (!confidence) return;
+
+  const elapsedMs = Date.now() - pending.startedAt;
+  // CFNR ("Bei Nichtannahme") needs ~15-25s before the carrier forwards.
+  // CFU ("Immer") forwards within a few seconds. 10s is the practical cutoff.
+  const forwardingType: 'always' | 'no_answer' = elapsedMs < 10_000 ? 'always' : 'no_answer';
+
+  await setForwardingVerificationResult(pending.token, {
+    ok: true,
+    confidence,
+    matchedFrom: fromNumber,
+    forwardingType,
+    elapsedMs,
+  });
+  await clearPendingForwardingVerification(toNorm);
 }
 
 // ── Routes ──────────────────────────────────────────────────────────────────
@@ -749,22 +877,29 @@ export async function registerPhone(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // POST /phone/verify-forwarding — REACHABILITY-only check.
+  // POST /phone/verify-forwarding — REAL loop test for call forwarding.
   //
-  // ⚠️ This dials the customer's number from a Phonbot Twilio trunk and waits
-  // for the line to answer. That tells us the number is reachable; it does NOT
-  // prove the customer's forwarding actually points at our Phonbot inbound.
-  // The frontend banner has been updated to be honest about that.
+  // Flow:
+  //   1. Generate a verification token, store pending state in Redis keyed
+  //      by the Phonbot inbound number.
+  //   2. Dial the customer-number from VERIFIER_TWILIO_NUMBER (a Twilio number
+  //      that is NOT imported into Retell — otherwise the verifier outbound
+  //      would short-circuit through Retell instead of going through PSTN).
+  //      The TwiML hangs up immediately so no theatre TTS is played to whoever
+  //      picks up.
+  //   3. If the customer's carrier has CFU/CFNR set up to our Phonbot inbound,
+  //      the forwarded call arrives at the inbound and Retell fires
+  //      call_started. The hook in retell-webhooks.ts compares the inbound's
+  //      caller-ID against the pending verifier/customer number and writes
+  //      a result key to Redis (see checkForwardingVerificationMatch above).
+  //   4. We poll the result key for up to 35s (covers CFU ~5s + CFNR ~25s).
+  //   5. On match → mark verified=true and persist customer_number +
+  //      forwarding_type. On timeout → verified stays false and customer is
+  //      told to test manually.
   //
-  // TODO (proper loop test): trigger an outbound to the customer-number from a
-  //   Twilio trunk OUTSIDE the Phonbot inbound number, then watch the Phonbot
-  //   inbound webhook for an incoming call within ~30s — if it arrives with a
-  //   matching CallerId, forwarding is confirmed. Mark `verified=true` only on
-  //   that loop hit.
-  //
-  // Rate-limited + prefix-whitelisted: without these, a user can POST arbitrary
-  // +1-900-*/+44-9-* premium-rate numbers and trigger Twilio to dial them →
-  // toll-fraud / IRSF attack.
+  // Rate-limited + DACH-prefix-whitelisted: without these, an authenticated
+  // user could POST premium-rate numbers and trigger Twilio to dial them
+  // (toll-fraud / IRSF).
   app.post('/phone/verify-forwarding', {
     ...auth,
     config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
@@ -772,14 +907,44 @@ export async function registerPhone(app: FastifyInstance) {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
+    const verifierNumber = process.env.VERIFIER_TWILIO_NUMBER
+      ? normalizeE164(process.env.VERIFIER_TWILIO_NUMBER)
+      : null;
+    if (!verifierNumber) {
+      // Honest 503: no fake verified=true fallback. Frontend should fall back
+      // to the manual test instructions.
+      return reply.status(503).send({
+        error: 'Verifikations-Trunk nicht konfiguriert. Bitte VERIFIER_TWILIO_NUMBER in der Server-Konfiguration setzen oder die Weiterleitung manuell testen (z.B. von einem fremden Telefon aus die eigene Nummer anrufen — wenn Chipy rangeht, läuft die Weiterleitung).',
+        configurationMissing: true,
+      });
+    }
+
     const parsed = z.object({
       customerNumber: z.string().min(1),
       phonbotNumberId: z.string().uuid(),
     }).safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: 'customerNumber and phonbotNumberId required' });
 
-    if (!isPhonePrefixAllowed(parsed.data.customerNumber)) {
+    const customerNumber = normalizeE164(parsed.data.customerNumber);
+    if (!isPhonePrefixAllowed(customerNumber)) {
       return reply.status(400).send({ error: 'Aktuell nur Telefonnummern aus DACH (DE/AT/CH) unterstützt.' });
+    }
+
+    // Defense-in-depth: the verifier MUST be a number that is NOT one of our
+    // provisioned Phonbot inbounds. Otherwise Retell intercepts the verifier
+    // outbound's destination side, and the loop never closes via PSTN.
+    const verifierConflict = await pool.query(
+      `SELECT 1 FROM phone_numbers WHERE number = $1 AND method = 'provisioned' LIMIT 1`,
+      [verifierNumber],
+    );
+    if (verifierConflict.rowCount && verifierConflict.rowCount > 0) {
+      req.log.error(
+        { verifierNumber },
+        '[verify-forwarding] VERIFIER_TWILIO_NUMBER collides with a provisioned Phonbot inbound — loop test would short-circuit',
+      );
+      return reply.status(503).send({
+        error: 'Server-Konfigurationsfehler: Verifikations-Nummer überschneidet sich mit einer Phonbot-Eingangsnummer. Bitte Support kontaktieren.',
+      });
     }
 
     const phonbotNum = await pool.query(
@@ -787,67 +952,110 @@ export async function registerPhone(app: FastifyInstance) {
       [parsed.data.phonbotNumberId, orgId],
     );
     if (!phonbotNum.rowCount) return reply.status(404).send({ error: 'Phonbot-Nummer nicht gefunden' });
-    const fromNumber = phonbotNum.rows[0].number;
+    const phonbotNumber = phonbotNum.rows[0].number;
 
-    // Save customer_number on the phone record for loop-detection later
-    await pool.query(
-      `UPDATE phone_numbers SET customer_number = $1 WHERE id = $2 AND org_id = $3`,
-      [parsed.data.customerNumber, parsed.data.phonbotNumberId, orgId],
-    );
+    if (!redis?.isOpen) {
+      // Loop test depends on Redis to coordinate the inbound webhook hit with
+      // this poller. No silent fake-verify fallback.
+      return reply.status(503).send({
+        error: 'Verifikation aktuell nicht verfügbar (Redis nicht erreichbar). Bitte später erneut testen.',
+      });
+    }
 
+    const token = crypto.randomUUID();
+    const pending: PendingForwardingVerification = {
+      token,
+      orgId,
+      phonbotNumberId: parsed.data.phonbotNumberId,
+      phonbotNumber: normalizeE164(phonbotNumber),
+      customerNumber,
+      verifierNumber,
+      startedAt: Date.now(),
+    };
+    const stored = await setPendingForwardingVerification(pending);
+    if (!stored) {
+      return reply.status(503).send({ error: 'Verifikation konnte nicht initialisiert werden.' });
+    }
+
+    let twilioCallSid: string | null = null;
     try {
       const client = getTwilioClient();
-      const twilioFromNumber = process.env.TWILIO_FROM_NUMBER ?? fromNumber;
-      const startTime = Date.now();
+      // <Hangup/> only — verifier call's purpose is solely to trigger the
+      // customer's carrier to forward. Whoever picks up shouldn't hear a
+      // misleading "Test successful" message.
       const call = await client.calls.create({
-        to: parsed.data.customerNumber,
-        from: twilioFromNumber,
-        twiml: '<Response><Pause length="5"/><Say language="de-DE">Weiterleitungstest erfolgreich. Dein Phonbot Agent ist korrekt verbunden.</Say><Hangup/></Response>',
-        timeout: 25,
+        to: customerNumber,
+        from: verifierNumber,
+        twiml: '<Response><Hangup/></Response>',
+        timeout: 30,
       });
-
-      // Poll call status to determine ring duration → forwarding type.
-      // "always" forwarding answers within ~2-4s, "no_answer" takes 15-25s.
-      let forwardingType: string = 'unknown';
-      let answered = false;
-      for (let attempt = 0; attempt < 12; attempt++) {
-        await new Promise(r => setTimeout(r, 2500));
-        try {
-          const status = await client.calls(call.sid).fetch();
-          if (status.status === 'in-progress' || status.status === 'completed') {
-            const ringDuration = Date.now() - startTime;
-            if (ringDuration < 8000) forwardingType = 'always';
-            else if (ringDuration < 20000) forwardingType = 'no_answer';
-            else forwardingType = 'no_answer';
-            answered = true;
-            break;
-          }
-          if (status.status === 'failed' || status.status === 'busy' || status.status === 'no-answer' || status.status === 'canceled') {
-            forwardingType = status.status === 'busy' ? 'busy' : 'not_forwarded';
-            break;
-          }
-        } catch { /* retry */ }
-      }
-
-      // Store the reachability outcome. `verified` stays false until a real
-      // loop test confirms the forwarding actually targets our inbound — the
-      // ringDuration heuristic above only proves the line answered.
-      await pool.query(
-        `UPDATE phone_numbers SET forwarding_type = $1, verified = false WHERE id = $2 AND org_id = $3`,
-        [forwardingType, parsed.data.phonbotNumberId, orgId],
-      );
-
-      // `verified: false` is intentional — see endpoint doc comment.
-      return { ok: true, reachable: answered, verified: false, callSid: call.sid, forwardingType };
+      twilioCallSid = call.sid;
     } catch (e: unknown) {
-      return reply.status(500).send({ error: e instanceof Error ? e.message : 'Anruf fehlgeschlagen', verified: false });
+      await clearPendingForwardingVerification(pending.phonbotNumber);
+      return reply.status(500).send({
+        error: e instanceof Error ? e.message : 'Twilio-Anruf fehlgeschlagen',
+        verified: false,
+      });
     }
+
+    // Poll for the inbound webhook hit. CFNR carriers may take up to ~25s
+    // before forwarding kicks in — 35s gives margin. Short polling interval
+    // keeps the response snappy when CFU answers within a few seconds.
+    const POLL_INTERVAL_MS = 1500;
+    const MAX_WAIT_MS = 35_000;
+    const deadline = Date.now() + MAX_WAIT_MS;
+    let result: ForwardingVerificationResult | null = null;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+      result = await getForwardingVerificationResult(token);
+      if (result?.ok) break;
+    }
+
+    // Best-effort cleanup of the verifier outbound. Whether it was forwarded
+    // or just kept ringing the customer, we don't want it to keep going.
+    if (twilioCallSid) {
+      try {
+        const client = getTwilioClient();
+        await client.calls(twilioCallSid).update({ status: 'completed' });
+      } catch { /* call may already be ended; ignore */ }
+    }
+
+    if (result?.ok) {
+      await pool.query(
+        `UPDATE phone_numbers
+         SET customer_number = $1, forwarding_type = $2, verified = true
+         WHERE id = $3 AND org_id = $4`,
+        [customerNumber, result.forwardingType, parsed.data.phonbotNumberId, orgId],
+      );
+      return {
+        ok: true,
+        verified: true,
+        confidence: result.confidence,
+        forwardingType: result.forwardingType,
+        callSid: twilioCallSid,
+      };
+    }
+
+    await clearPendingForwardingVerification(pending.phonbotNumber);
+    return {
+      ok: true,
+      verified: false,
+      callSid: twilioCallSid,
+      hint: 'Wir haben innerhalb von 30 Sekunden keinen weitergeleiteten Anruf empfangen. Prüfe die Carrier-Codes auf deinem Handy oder teste manuell von einem anderen Telefon aus.',
+    };
   });
 
-  // POST /phone/verify — make a real test call to verify call forwarding is working.
-  // Rate-limited: triggers a Twilio outbound dial to the forwarding number that
-  // /phone/forward persisted. Prefix-whitelisting happened at forward-time, but
-  // rate-limit here as additional defense against automation.
+  // POST /phone/verify — mark a number as verified.
+  //
+  // Two cases:
+  //   • method = 'provisioned' / 'twilio'  → the number is owned by Phonbot,
+  //     bought via Twilio + imported into Retell during provisioning. There is
+  //     nothing further to verify; we just flip the flag.
+  //   • method = 'forwarding'              → real verification can ONLY happen
+  //     via the loop test in /phone/verify-forwarding. We refuse to mark
+  //     verified=true here because previously this endpoint was setting
+  //     verified=true purely on a Twilio call-create 2xx, which had zero
+  //     correlation with whether the customer's carrier actually forwarded.
   app.post('/phone/verify', {
     ...auth,
     config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
@@ -860,46 +1068,24 @@ export async function registerPhone(app: FastifyInstance) {
     const { phoneId } = verifyParsed.data;
 
     const phoneRow = await pool.query(
-      `SELECT number, method FROM phone_numbers WHERE id = $1 AND org_id = $2`,
+      `SELECT method FROM phone_numbers WHERE id = $1 AND org_id = $2`,
       [phoneId, orgId],
     );
     if (!phoneRow.rowCount) return reply.status(404).send({ error: 'Phone number not found' });
-    const { number, method } = phoneRow.rows[0];
+    const { method } = phoneRow.rows[0];
 
-    // Provisioned/imported numbers are already verified — mark directly
-    if (method !== 'forwarding') {
-      await pool.query(`UPDATE phone_numbers SET verified = true WHERE id = $1`, [phoneId]);
-      return { ok: true, verified: true };
-    }
-
-    // For forwarding numbers: make an actual Twilio call to check the redirect works.
-    // Defense-in-depth: re-validate prefix even though /phone/forward already did.
-    if (!isPhonePrefixAllowed(number)) {
-      return reply.status(400).send({ error: 'Nummer ausserhalb erlaubter Länder (DACH).' });
-    }
-
-    const fromNumber = process.env.TWILIO_FROM_NUMBER;
-    if (!fromNumber) {
-      // No Twilio number configured — just mark as verified optimistically
-      await pool.query(`UPDATE phone_numbers SET verified = true WHERE id = $1`, [phoneId]);
-      return { ok: true, verified: true };
-    }
-
-    try {
-      const client = getTwilioClient();
-      // Short TwiML: says a test message then hangs up — proves the forwarding works
-      await client.calls.create({
-        to: number,
-        from: fromNumber,
-        twiml: '<Response><Say language="de-DE">Weiterleitungstest erfolgreich. Ihr Phonbot ist bereit.</Say><Hangup/></Response>',
+    if (method === 'forwarding') {
+      return reply.status(409).send({
+        error: 'Eine Rufweiterleitung lässt sich nur über den Loop-Test bestätigen. Bitte den "Erreichbarkeits-Test" im Telefon-Manager nutzen.',
+        useEndpoint: '/phone/verify-forwarding',
+        verified: false,
       });
-
-      await pool.query(`UPDATE phone_numbers SET verified = true WHERE id = $1`, [phoneId]);
-      return { ok: true, verified: true };
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Twilio call failed';
-      return reply.status(500).send({ error: msg, verified: false });
     }
+
+    // Provisioned/imported numbers — Phonbot owns them, Twilio + Retell already
+    // confirmed their existence at provisioning time. Just flip the flag.
+    await pool.query(`UPDATE phone_numbers SET verified = true WHERE id = $1`, [phoneId]);
+    return { ok: true, verified: true };
   });
 
   // POST /phone/admin/seed-pool — add existing phone numbers to the pool (platform-admin only)

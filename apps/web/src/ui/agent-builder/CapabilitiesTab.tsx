@@ -22,15 +22,32 @@ export interface CapabilitiesTabProps {
 }
 
 export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
-  // Load org's Phonbot phone numbers + forwarding info for loop-detection warning
-  const [phoneInfo, setPhoneInfo] = useState<Array<{ number: string; customerNumber?: string; forwardingType?: string }>>([]);
+  // Load org's Phonbot phone numbers + forwarding info for loop-detection warning.
+  // We rely on:
+  //   • number          — every Phonbot inbound is a guaranteed loop target
+  //   • customer_number — set only when /phone/verify-forwarding succeeded
+  //   • forwarding_type — 'always' | 'no_answer', set during the same successful loop test
+  //   • verified        — true when the loop test confirmed forwarding to this Phonbot inbound
+  const [phoneInfo, setPhoneInfo] = useState<Array<{
+    number: string;
+    customerNumber?: string;
+    forwardingType?: 'always' | 'no_answer';
+    verified?: boolean;
+  }>>([]);
   useEffect(() => {
     getPhoneNumbers()
-      .then(res => setPhoneInfo((res.items ?? []).map(p => ({
-        number: (p.number ?? '').replace(/\s/g, ''),
-        customerNumber: ((p as Record<string, unknown>).customer_number as string | undefined)?.replace(/\s/g, '') ?? undefined,
-        forwardingType: (p as Record<string, unknown>).forwarding_type as string | undefined,
-      }))))
+      .then(res => setPhoneInfo((res.items ?? []).map(p => {
+        const raw = p as Record<string, unknown>;
+        const ftRaw = raw.forwarding_type as string | undefined;
+        const ft: 'always' | 'no_answer' | undefined =
+          ftRaw === 'always' || ftRaw === 'no_answer' ? ftRaw : undefined;
+        return {
+          number: (p.number ?? '').replace(/\s/g, ''),
+          customerNumber: (raw.customer_number as string | undefined)?.replace(/\s/g, '') ?? undefined,
+          forwardingType: ft,
+          verified: (raw.verified as boolean | undefined) ?? false,
+        };
+      })))
       .catch(() => {});
   }, []);
 
@@ -88,13 +105,31 @@ const ROUTING_EXAMPLES = [
   'Wenn die Anfrage medizinisch dringend ist → Ticket erstellen mit Priorität Hoch',
 ];
 
-type PhoneInfoItem = { number: string; customerNumber?: string; forwardingType?: string };
+type PhoneInfoItem = { number: string; customerNumber?: string; forwardingType?: 'always' | 'no_answer'; verified?: boolean };
 
 function CallRoutingEditor({ items, onChange, phoneInfo = [] }: { items: CallRoutingRule[]; onChange: (v: CallRoutingRule[]) => void; phoneInfo?: PhoneInfoItem[] }) {
   const normalize = (n: string) => n.replace(/[\s\-()]/g, '');
 
-  /** Check if the transfer target would cause a loop */
-  function getLoopWarning(target: string): { type: 'loop' | 'maybe_loop' | null; forwardingType?: string } {
+  /**
+   * Check if the transfer target would cause a loop.
+   *
+   * Inputs:
+   *   - phoneInfo entries with verified=true → forwarding to Phonbot was
+   *     CONFIRMED via /phone/verify-forwarding loop test
+   *   - forwardingType ∈ {'always','no_answer'} is also set on confirmed entries
+   *
+   * Decisions:
+   *   - target equals a Phonbot inbound  → definite loop
+   *   - target equals a verified customer_number with type 'always'
+   *                                      → definite loop
+   *   - target equals a verified customer_number with type 'no_answer'
+   *                                      → safe (Phonbot hangs up before
+   *                                        the carrier triggers forwarding)
+   *   - target equals an UNverified customer_number
+   *                                      → maybe-loop warning, prompt user to
+   *                                        run the test
+   */
+  function getLoopWarning(target: string): { type: 'loop' | 'maybe_loop' | null; forwardingType?: 'always' | 'no_answer' } {
     const t = normalize(target);
     if (t.length < 5) return { type: null };
 
@@ -103,12 +138,16 @@ function CallRoutingEditor({ items, onChange, phoneInfo = [] }: { items: CallRou
       return { type: 'loop' };
     }
 
-    // Target matches a customer_number that has "always" forwarding → definite loop
     const matchedPhone = phoneInfo.find(p => p.customerNumber && normalize(p.customerNumber) === t);
     if (matchedPhone) {
-      if (matchedPhone.forwardingType === 'always') return { type: 'loop', forwardingType: 'always' };
-      if (matchedPhone.forwardingType === 'no_answer') return { type: null, forwardingType: 'no_answer' }; // safe
-      return { type: 'maybe_loop', forwardingType: matchedPhone.forwardingType ?? 'unknown' }; // unknown → warn
+      if (matchedPhone.verified && matchedPhone.forwardingType === 'always') {
+        return { type: 'loop', forwardingType: 'always' };
+      }
+      if (matchedPhone.verified && matchedPhone.forwardingType === 'no_answer') {
+        return { type: null, forwardingType: 'no_answer' }; // safe
+      }
+      // Unverified customer_number record (legacy or old verify-forwarding fail)
+      return { type: 'maybe_loop' };
     }
 
     return { type: null };
@@ -234,7 +273,7 @@ function CallRoutingEditor({ items, onChange, phoneInfo = [] }: { items: CallRou
                               <ForwardingHint />
                             </div>
                             <div className="mt-1">
-                              Diese Nummer hat eine Rufumleitung zu Phonbot (Typ: {warn.forwardingType}). Prüfe im Telefon-Tab ob die Weiterleitung auf &quot;Bei Nichtannahme&quot; steht — sonst entsteht eine Endlosschleife.
+                              Diese Nummer wurde noch nicht als Weiterleitung zu Phonbot bestätigt. Im Telefon-Tab den „Weiterleitung testen"-Button drücken — wenn die Weiterleitung auf „Immer" steht, entsteht eine Endlosschleife.
                             </div>
                           </div>
                         </div>

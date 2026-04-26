@@ -2,9 +2,68 @@ import crypto from 'node:crypto';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import bcrypt from 'bcrypt';
 import { pool } from './db.js';
+import { redis } from './redis.js';
 import { z } from 'zod';
 import { sendPasswordResetEmail, sendVerificationEmail, sendWelcomeEmail } from './email.js';
 import { stripe, PLANS, type PlanId } from './billing.js';
+
+// Per-user brute-force counter. The route-level rate-limit is per-IP (5–10/min);
+// a botnet of 100 IPs against one email easily slips through. We add a Redis-
+// keyed per-email counter on top: 10 failures within an hour locks that account
+// for the next 30 min regardless of the source IP. Resets on first success.
+// In-memory fallback when Redis is offline so dev still works.
+const LOGIN_FAIL_WINDOW_S = 60 * 60;  // 1 hour
+const LOGIN_LOCK_AFTER = 10;
+const LOGIN_LOCK_TTL_S = 30 * 60;     // 30 min lockout
+const memLoginFails = new Map<string, { count: number; expires: number }>();
+const memLoginLocks = new Map<string, number>();
+
+function loginFailKey(email: string) { return `login:fail:${email.toLowerCase()}`; }
+function loginLockKey(email: string) { return `login:lock:${email.toLowerCase()}`; }
+
+async function isLoginLocked(email: string): Promise<boolean> {
+  if (redis) {
+    const v = await redis.get(loginLockKey(email)).catch(() => null);
+    return !!v;
+  }
+  const lock = memLoginLocks.get(email.toLowerCase());
+  if (!lock) return false;
+  if (lock < Date.now()) { memLoginLocks.delete(email.toLowerCase()); return false; }
+  return true;
+}
+
+async function recordLoginFailure(email: string): Promise<number> {
+  const key = loginFailKey(email);
+  if (redis) {
+    const count = await redis.incr(key).catch(() => 0);
+    if (count === 1) await redis.expire(key, LOGIN_FAIL_WINDOW_S).catch(() => {});
+    if (count >= LOGIN_LOCK_AFTER) {
+      await redis.set(loginLockKey(email), '1', { EX: LOGIN_LOCK_TTL_S }).catch(() => {});
+    }
+    return count;
+  }
+  const k = email.toLowerCase();
+  const now = Date.now();
+  const cur = memLoginFails.get(k);
+  const fresh = cur && cur.expires > now ? cur : { count: 0, expires: now + LOGIN_FAIL_WINDOW_S * 1000 };
+  fresh.count += 1;
+  memLoginFails.set(k, fresh);
+  if (fresh.count >= LOGIN_LOCK_AFTER) {
+    memLoginLocks.set(k, now + LOGIN_LOCK_TTL_S * 1000);
+  }
+  return fresh.count;
+}
+
+async function clearLoginFailures(email: string): Promise<void> {
+  if (redis) {
+    await redis.del(loginFailKey(email)).catch(() => {});
+    await redis.del(loginLockKey(email)).catch(() => {});
+  } else {
+    const k = email.toLowerCase();
+    memLoginFails.delete(k);
+    memLoginLocks.delete(k);
+  }
+}
 
 // ── Token lifetime / cookie config ────────────────────────────────────────────
 //
@@ -102,10 +161,17 @@ async function issueTokenPair(
 const PASSWORD_MIN = 8;
 const PASSWORD_MAX = 72;
 
+// isBusiness + termsAccepted: B2B-only contract. Backend enforces literal(true)
+// so a DevTools-edited form can't bypass the frontend checkbox — a consumer
+// signing up would otherwise keep §312g BGB Widerrufsrecht regardless of AGB
+// wording. AGB §1 + KVKG-Disclaimer rest on the user truthfully attesting they
+// signed up as a Gewerbetreibender.
 const RegisterBody = z.object({
   orgName: z.string().min(2).max(100),
   email: z.string().email(),
   password: z.string().min(PASSWORD_MIN).max(PASSWORD_MAX),
+  isBusiness: z.literal(true),
+  termsAccepted: z.literal(true),
 });
 
 const CheckoutStartBody = z.object({
@@ -114,6 +180,8 @@ const CheckoutStartBody = z.object({
   password: z.string().min(PASSWORD_MIN).max(PASSWORD_MAX),
   planId: z.enum(['nummer', 'starter', 'pro', 'agency']),
   interval: z.enum(['month', 'year']).default('month'),
+  isBusiness: z.literal(true),
+  termsAccepted: z.literal(true),
 });
 
 const FinalizeCheckoutBody = z.object({
@@ -247,12 +315,18 @@ export async function registerAuth(app: FastifyInstance) {
       // through. users.email has a UNIQUE constraint (see db.ts); on conflict
       // we RETURNING 0 rows → we detect, roll back, and return 409.
       const emailServiceConfigured = !!process.env.RESEND_API_KEY;
+      // 14-day expiry on the verify token: if the verification email is
+      // intercepted (mailbox compromise, family member access) the token is
+      // dead within two weeks, not forever.
+      const verifyExpiresAt = emailServiceConfigured
+        ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+        : null;
       const userResult = await client.query(
-        `INSERT INTO users (org_id, email, password_hash, role, email_verify_token, email_verified)
-         VALUES ($1, $2, $3, 'owner', $4, $5)
+        `INSERT INTO users (org_id, email, password_hash, role, email_verify_token, email_verify_token_expires_at, email_verified)
+         VALUES ($1, $2, $3, 'owner', $4, $5, $6)
          ON CONFLICT (email) DO NOTHING
          RETURNING id, email, role`,
-        [org.id, email, passwordHash, emailServiceConfigured ? verifyTokenHash : null, !emailServiceConfigured],
+        [org.id, email, passwordHash, emailServiceConfigured ? verifyTokenHash : null, verifyExpiresAt, !emailServiceConfigured],
       );
       if (!userResult.rowCount) {
         await client.query('ROLLBACK');
@@ -451,6 +525,15 @@ export async function registerAuth(app: FastifyInstance) {
 
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
+    // Per-user soft-lock: stops a distributed-IP brute-force where the per-IP
+    // rate-limit at the route level can't see the pattern. We check BEFORE
+    // hitting the DB so a locked account doesn't cause bcrypt CPU burn either.
+    if (await isLoginLocked(email)) {
+      return reply.status(429).send({
+        error: 'Account temporarily locked due to repeated failed logins. Try again in 30 minutes.',
+      });
+    }
+
     const result = await pool.query(
       `SELECT u.id, u.email, u.role, u.password_hash, u.org_id, u.email_verified,
               o.name as org_name, o.slug as org_slug
@@ -461,14 +544,25 @@ export async function registerAuth(app: FastifyInstance) {
     );
 
     if (result.rowCount === 0) {
+      // Still record under the supplied email so a probe of unknown emails
+      // can't bypass the counter by varying user-base.
+      await recordLoginFailure(email);
       return reply.status(401).send({ error: 'Invalid credentials' });
     }
 
     const user = result.rows[0];
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
+      const count = await recordLoginFailure(email);
+      if (count >= LOGIN_LOCK_AFTER) {
+        req.log.warn({ email, count }, 'login: per-user lock triggered');
+      }
       return reply.status(401).send({ error: 'Invalid credentials' });
     }
+
+    // Successful login → reset the failure counter so a long-lived legit
+    // account doesn't accumulate stale fails over months.
+    await clearLoginFailures(email);
 
     // Email verification is informational only — never block login
 
@@ -629,8 +723,9 @@ export async function registerAuth(app: FastifyInstance) {
     const tokenHash = hashToken(token);
 
     const result = await pool.query(
-      `UPDATE users SET email_verified = true, email_verify_token = null
+      `UPDATE users SET email_verified = true, email_verify_token = null, email_verify_token_expires_at = null
        WHERE email_verify_token = $1
+         AND (email_verify_token_expires_at IS NULL OR email_verify_token_expires_at > now())
        RETURNING id`,
       [tokenHash],
     );
@@ -667,7 +762,11 @@ export async function registerAuth(app: FastifyInstance) {
     const verifyToken = crypto.randomBytes(32).toString('hex');
     // H1: Store only the SHA-256 hash in DB; plain token goes in the email URL.
     const verifyTokenHash = hashToken(verifyToken);
-    await pool.query('UPDATE users SET email_verify_token = $1 WHERE id = $2', [verifyTokenHash, userId]);
+    const verifyExpiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    await pool.query(
+      'UPDATE users SET email_verify_token = $1, email_verify_token_expires_at = $2 WHERE id = $3',
+      [verifyTokenHash, verifyExpiresAt, userId],
+    );
 
     const appUrl = process.env.APP_URL ?? 'http://localhost:5173';
     sendVerificationEmail({
@@ -752,7 +851,11 @@ export async function registerAuth(app: FastifyInstance) {
     return reply.send({ ok: true });
   });
 
-  // DELETE /auth/account — GDPR: delete own account + org data
+  // DELETE /auth/account — GDPR: delete own account + org data.
+  // Re-auth: requires the current password in the body. The route is owner-only
+  // and irreversible (cancels Stripe sub, releases Twilio numbers, drops Retell
+  // agents, FK-cascades all customer data). A stolen 1h access token or an
+  // unattended browser must NOT be enough to nuke the org.
   app.delete('/auth/account', {
     onRequest: [app.authenticate],
     config: { rateLimit: { max: 3, timeWindow: '1 minute' } },
@@ -764,6 +867,26 @@ export async function registerAuth(app: FastifyInstance) {
     // Only owner can delete the entire org
     if (role !== 'owner') {
       return reply.status(403).send({ error: 'Only the org owner can delete the account' });
+    }
+
+    // Re-authenticate with password before destructive cascade.
+    const reauthParse = z.object({
+      password: z.string().min(1).max(PASSWORD_MAX),
+    }).safeParse(req.body ?? {});
+    if (!reauthParse.success) {
+      return reply.status(400).send({ error: 'Password required for account deletion' });
+    }
+    const userRow = await pool.query(
+      'SELECT password_hash FROM users WHERE id = $1 AND is_active = true',
+      [userId],
+    );
+    if (!userRow.rowCount) {
+      return reply.status(401).send({ error: 'User not found' });
+    }
+    const reauthOk = await bcrypt.compare(reauthParse.data.password, userRow.rows[0].password_hash);
+    if (!reauthOk) {
+      req.log.warn({ userId, orgId }, 'account-delete: password reauth failed');
+      return reply.status(401).send({ error: 'Invalid password' });
     }
 
     // Cancel Stripe subscription before deleting (avoid dangling subscriptions)
@@ -781,8 +904,14 @@ export async function registerAuth(app: FastifyInstance) {
           const stripe = new Stripe(stripeKey);
           await stripe.subscriptions.cancel(stripeSubId);
         }
-      } catch {
-        // Non-critical — continue with deletion even if Stripe cancel fails
+      } catch (err) {
+        // Continue with deletion — but log loudly. A silent fail here means
+        // the customer's account is gone but Stripe keeps billing them every
+        // month. Ops needs to see this to manually cancel in the dashboard.
+        req.log.error(
+          { err: (err as Error).message, subId: stripeSubId, orgId },
+          'account-delete: stripe subscription cancel failed — manual cancel required',
+        );
       }
     }
 

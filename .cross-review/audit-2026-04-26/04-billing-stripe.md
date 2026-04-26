@@ -100,7 +100,9 @@ try {
 
 ---
 
-### 🟠 HIGH-2 · `past_due`-Status blockt keine weiteren Calls — Money-Burn-Risiko
+### 🟠 HIGH-2 · `past_due`-Status blockt keine weiteren Calls — Money-Burn-Risiko · ✅ GEFIXT (bereits in usage.ts)
+
+**Status**: ✅ GEFIXT — `tryReserveMinutes` (`usage.ts:128-129`) hat im atomic SQL CTE einen `WHEN plan_status IN ('incomplete','incomplete_expired','past_due','unpaid','paused','canceled') THEN 'blocked'` branch. `BLOCKED_PLAN_STATUSES` als exportierte Konstante. Audit war historisch, Fix lag bereits vor — verifiziert beim Round-4-Sweep.
 
 **Datei**: [billing.ts:546–566](../../apps/api/src/billing.ts#L546-L566) (Webhook setzt `past_due`) + [agent-config.ts](../../apps/api/src/agent-config.ts) (`/web-call`, deploy etc.)
 
@@ -151,7 +153,9 @@ if (newMinutesLimit < oldMinutesLimit) {
 
 ---
 
-### 🟡 MEDIUM-2 · Free-Plan-Re-Entry Pfad fehlt
+### 🟡 MEDIUM-2 · Free-Plan-Re-Entry Pfad fehlt · ✅ GEFIXT (Round 4)
+
+**Status**: ✅ GEFIXT — Webhook `customer.subscription.deleted` setzt `minutes_used = LEAST(minutes_used, minutes_limit)`. Cancelled User landet auf Free, behält maximal das Free-Limit als verbraucht. Kein Refill, aber kann zumindest noch testen wenn unter 30.
 
 **Datei**: [billing.ts:202](../../apps/api/src/billing.ts#L202) Comment + Schema
 
@@ -167,7 +171,9 @@ if (newMinutesLimit < oldMinutesLimit) {
 
 ---
 
-### 🟡 MEDIUM-3 · `process.stderr.write` statt structured Pino-Log
+### 🟡 MEDIUM-3 · `process.stderr.write` statt structured Pino-Log · ✅ GEFIXT (Round 4)
+
+**Status**: ✅ GEFIXT — verbleibende `process.stderr.write` in `billing.ts` (orgId-mismatch warn + free-plan-reset) auf `log.warn` / `log.error` migriert. Sentry sieht das jetzt strukturiert.
 
 **Dateien**: [billing.ts:157, 198](../../apps/api/src/billing.ts#L157)
 

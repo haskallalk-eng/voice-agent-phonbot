@@ -23,7 +23,9 @@
 
 ## Befunde
 
-### 🟠 HIGH-1 · Token-Refresh-Failures sind silent (`catch { return null; }`)
+### 🟠 HIGH-1 · Token-Refresh-Failures sind silent (`catch { return null; }`) · ✅ GEFIXT (Round 3)
+
+**Status**: ✅ GEFIXT — Beide `catch {}` (Google + Microsoft) ersetzt durch `log.warn({ err, orgId, provider }, 'calendar: token refresh failed — connection likely needs reconnect')`. Sentry sieht jetzt revoked-refresh / scope-change-Spikes statt 5 Monate Stille.
 
 **Dateien**: [calendar.ts:622–624](../../apps/api/src/calendar.ts#L622-L624) (Google) + [calendar.ts:461–463](../../apps/api/src/calendar.ts#L461-L463) (Microsoft)
 
@@ -53,7 +55,9 @@ Analog für Microsoft. Zusätzlich (Nice-to-Have): bei N consecutive Refresh-Fai
 
 ---
 
-### 🟠 HIGH-2 · OAuth-Callback-HTML interpoliert `appUrl` ohne Escape — XSS-Vektor wenn ENV-Var ändert
+### 🟠 HIGH-2 · OAuth-Callback-HTML interpoliert `appUrl` ohne Escape — XSS-Vektor wenn ENV-Var ändert · ✅ GEFIXT (Round 3)
+
+**Status**: ✅ GEFIXT — Beide OAuth-Callback-HTML-Templates (Google + Microsoft) nutzen jetzt `${JSON.stringify(appUrl)}` statt `'${appUrl}'`. JSON.stringify produziert ein korrekt-escaptes String-Literal — JS-Injection via APP_URL ist nicht mehr möglich.
 
 **Datei**: [calendar.ts:1867–1876](../../apps/api/src/calendar.ts#L1867-L1876)
 
@@ -111,7 +115,9 @@ Selbe Stelle für Microsoft-Callback.
 
 ---
 
-### 🟡 MEDIUM-3 · ENCRYPTION_KEY-Rotation würde ALLE Calendar-Verbindungen stillschweigend killen
+### 🟡 MEDIUM-3 · ENCRYPTION_KEY-Rotation würde ALLE Calendar-Verbindungen stillschweigend killen · ✅ GEFIXT (Round 3)
+
+**Status**: ✅ GEFIXT — `decryptConn` loggt Decryption-Failures jetzt als `log.error({ orgId, provider, field }, 'calendar: token decrypt failed (key rotated?)')` statt `process.stderr.write`. Sentry sieht den Spike sofort, Ops kann reagieren.
 
 **Datei**: `decryptConn` (Helper, mehrfach aufgerufen)
 

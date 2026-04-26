@@ -150,7 +150,9 @@ Bei allen 5 Aufrufstellen.
 
 ---
 
-### 🟡 MEDIUM-1 · Demo-Call-Tabelle ohne anti-spam
+### 🟡 MEDIUM-1 · Demo-Call-Tabelle ohne anti-spam · ✅ COVERED (Round 1, via CRITICAL-1)
+
+**Status**: ✅ COVERED — CRITICAL-1-Fix (lifecycle-webhook strict HMAC) verhindert komplett ungesignerte fake call_ended-Events. Damit kann ein Angreifer demo_calls nicht mehr per Body-Forge fluten. Per-agent-Rate-Limit als zusätzliche Schicht weiterhin sinnvoll für später.
 
 **Datei**: [retell-webhooks.ts:478–503](../../apps/api/src/retell-webhooks.ts#L478-L503)
 
@@ -166,7 +168,9 @@ Bei allen 5 Aufrufstellen.
 
 ---
 
-### 🟡 MEDIUM-2 · `analyzeCall` + `analyzeOutboundCall` dynamic-import in hot path
+### 🟡 MEDIUM-2 · `analyzeCall` + `analyzeOutboundCall` dynamic-import in hot path · ✅ GEFIXT (Round 1)
+
+**Status**: ✅ GEFIXT — `analyzeOutboundCall` jetzt top-level static-imported (kein Circular-Dep). Konsistent mit `analyzeCall`. Spart 50–200ms first-call-Latenz.
 
 **Datei**: [retell-webhooks.ts:420–425, 428–433](../../apps/api/src/retell-webhooks.ts#L420-L425)
 
@@ -184,7 +188,9 @@ import('./outbound-insights.js').then(({ analyzeOutboundCall }) =>
 
 ---
 
-### 🟡 MEDIUM-3 · Tracing nutzt `tenantId` als orgId — semantische Verwirrung
+### 🟡 MEDIUM-3 · Tracing nutzt `tenantId` als orgId — semantische Verwirrung · ✅ GEFIXT (Round 1)
+
+**Status**: ✅ GEFIXT — `TraceEventSchema` um optionales `agentId` erweitert (mit Doc-Comment dass `tenantId` weiterhin Org-Isolation-Key ist, NICHT renamed wegen Backwards-Compat). Alle 9 Trace-Call-Sites in `retell-webhooks.ts` schicken jetzt `agentId`. Multi-Agent-Orgs können Traces pro Agent gruppieren.
 
 **Datei**: [retell-webhooks.ts:638, 674, 806](../../apps/api/src/retell-webhooks.ts#L638)
 
@@ -228,7 +234,9 @@ await appendTraceEvent({
 
 ---
 
-### 🔵 LOW-2 · `getCallerPhone` blacklist mit „unknown"-Strings ist fragile
+### 🔵 LOW-2 · `getCallerPhone` blacklist mit „unknown"-Strings ist fragile · ✅ GEFIXT (Round 1)
+
+**Status**: ✅ GEFIXT — Multilinguale „no number"-Phrases ergänzt: DE/EN/ES/FR/IT/NL/TR/PL + n/a/null/none/undefined. Voice-Catalog-Sprachen abgedeckt.
 
 **Datei**: [retell-webhooks.ts:174](../../apps/api/src/retell-webhooks.ts#L174)
 
