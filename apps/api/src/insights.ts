@@ -554,6 +554,35 @@ async function checkScoreRollback(orgId: string): Promise<void> {
   }
 }
 
+// ── Meta-Lernen: load recent admin corrections ─────────────────────────────────
+// When an admin rewrites a learning suggestion via the "Verbessern" action,
+// the (original, corrected, reason) tuple lands in learning_corrections. We
+// surface the most recent ones to the suggestion-generator so it can avoid
+// repeating the same mistake. The system literally learns from being corrected.
+
+async function loadRecentCorrectionsForFewShot(limit = 5): Promise<string> {
+  if (!pool) return '';
+  try {
+    const res = await pool.query(
+      `SELECT original_text, corrected_text, correction_reason
+         FROM learning_corrections
+        ORDER BY created_at DESC
+        LIMIT $1`,
+      [limit],
+    );
+    if (!res.rowCount) return '';
+    const lines = res.rows.map((r: Record<string, unknown>, i: number) => {
+      const orig = (r.original_text as string).slice(0, 400);
+      const corr = (r.corrected_text as string).slice(0, 400);
+      const reason = (r.correction_reason as string | null)?.slice(0, 200);
+      return `Korrektur ${i + 1}:\n  Ursprünglicher Vorschlag: "${orig}"\n  Admin-Korrektur: "${corr}"${reason ? `\n  Grund: ${reason}` : ''}`;
+    });
+    return `\n\nMETA-LERNEN — Frühere Admin-Korrekturen (lerne aus diesen Mustern, wiederhole sie nicht):\n${lines.join('\n\n')}`;
+  } catch {
+    return '';
+  }
+}
+
 // ── Optimized fix generation ───────────────────────────────────────────────────
 
 async function generateOptimizedFix(
@@ -561,6 +590,7 @@ async function generateOptimizedFix(
   currentPrompt: string,
   ctx: BusinessContext,
 ): Promise<string> {
+  const corrections = await loadRecentCorrectionsForFewShot(5);
   try {
     const resp = await openai.chat.completions.create({
       model: MODEL,
@@ -572,7 +602,7 @@ PLATTFORM-REGELN:
 - Dein Output ist IMMER eine Textergänzung für den System-Prompt des Agenten — keine UI-Anleitung ("klicke auf X", "verbinde Google Calendar") und keine Infrastruktur-Empfehlung.
 - Terminbuchung funktioniert IMMER, auch ohne externen Kalender (interner Chipy-Kalender). Niemals empfehlen, einen externen Kalender zu verbinden.
 - Wenn dem Agenten konkrete Info fehlt (Parkplätze, Preise, besondere Hausregeln), verwende eine eckige-Klammern-Lücke wie "[bitte konkrete Parkinfo eintragen]" statt etwas zu erfinden. Die UI zwingt den Kunden dann, die Lücke zu füllen, bevor der Prompt angewendet wird.
-- 2-4 Sätze. Imperativ formuliert. Keine Kommentare, kein Markdown, nur die reine Anweisung.` },
+- 2-4 Sätze. Imperativ formuliert. Keine Kommentare, kein Markdown, nur die reine Anweisung.${corrections}` },
         {
           role: 'user',
           content: `${businessBlock(ctx) ? businessBlock(ctx) + '\n\n' : ''}Folgendes Problem ist in ${examples.length} Gesprächen aufgetreten:
@@ -721,12 +751,13 @@ async function holisticReview(orgId: string): Promise<void> {
   const topIssues = grouped.sort((a, b) => b.count - a.count).slice(0, 5)
     .map(g => ({ issue: g.representative, count: g.count }));
 
+  const corrections = await loadRecentCorrectionsForFewShot(5);
   try {
     const resp = await openai.chat.completions.create({
       model: MODEL,
       temperature: 0.4,
       messages: [
-        { role: 'system', content: 'Du bist Senior-Coach für KI-Sprachagenten. Antworte ausschließlich mit JSON.' },
+        { role: 'system', content: `Du bist Senior-Coach für KI-Sprachagenten. Antworte ausschließlich mit JSON.${corrections}` },
         {
           role: 'user',
           content: `${businessBlock(ctx) ? businessBlock(ctx) + '\n\n' : ''}Analyse der letzten ${HOLISTIC_REVIEW_INTERVAL} Anrufe:

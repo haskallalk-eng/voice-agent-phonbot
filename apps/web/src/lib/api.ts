@@ -1234,14 +1234,39 @@ export function adminGetLearnings(params?: { status?: 'pending' | 'applied' | 'r
 export function adminDecideLearning(body: {
   sourceKind: 'prompt_suggestion' | 'template_learning';
   sourceId: string;
-  decision: 'apply' | 'reject';
+  decision: 'apply' | 'correct' | 'reject';
   scope?: 'systemic' | 'org' | 'both';
+  correctedText?: string;
+  correctionReason?: string;
   rejectReason?: string;
 }) {
-  return adminRequest<{ ok: boolean; systemicApplied: boolean; orgApplied: boolean }>('/admin/learnings/decide', {
+  return adminRequest<{ ok: boolean; systemicApplied: boolean; orgApplied: boolean; corrected: boolean }>('/admin/learnings/decide', {
     method: 'POST',
     body: JSON.stringify(body),
   });
+}
+
+// ── Meta-Lernen: Korrektur-Feed ──────────────────────────────────────────────
+
+export type AdminLearningCorrection = {
+  id: string;
+  createdAt: string;
+  sourceKind: 'prompt_suggestion' | 'template_learning';
+  sourceId: string;
+  summary: string | null;
+  originalText: string;
+  correctedText: string;
+  correctionReason: string | null;
+  scopeApplied: 'systemic' | 'org' | 'both' | null;
+  appliedBy: string | null;
+  usedForMetaAt: string | null;
+};
+
+export function adminGetCorrections(params?: { limit?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.limit) qs.set('limit', String(params.limit));
+  const q = qs.toString();
+  return adminRequest<{ corrections: AdminLearningCorrection[] }>(`/admin/learnings/corrections${q ? `?${q}` : ''}`);
 }
 
 // --- Learning Consent (cross-org pattern sharing opt-in) ---
