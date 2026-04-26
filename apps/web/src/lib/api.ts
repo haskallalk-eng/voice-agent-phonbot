@@ -227,6 +227,9 @@ export type AgentConfig = {
   temperature?: number;          // 0 – 1
   maxCallDuration?: number;      // seconds
   backgroundSound?: 'off' | 'office' | 'cafe' | 'nature';
+  responsiveness?: number;       // 0 – 1
+  interruptionSensitivity?: number; // 0 – 1
+  enableBackchannel?: boolean;
   // Domain-specific terms the AI should pronounce, recognise, and explain
   // correctly. Each entry can carry a short explanation + a usage context
   // ("when to use it / for whom"). Older configs may still hold plain

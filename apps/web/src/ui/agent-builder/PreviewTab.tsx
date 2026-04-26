@@ -3,6 +3,7 @@ import type { AgentConfig, AgentPreview, Voice } from '../../lib/api.js';
 import { getAgentPreview } from '../../lib/api.js';
 import { WebCallWidget } from '../WebCallWidget.js';
 import { IconAgent, IconDeploy, IconMic, IconMicUpload, IconRefresh } from './shared.js';
+import { deriveTechnicalRuntimeSettings, formatCallDuration } from '../../../../../packages/shared/src/technical.js';
 
 export interface PreviewTabProps {
   config: AgentConfig;
@@ -14,6 +15,8 @@ export interface PreviewTabProps {
 }
 
 export function PreviewTab({ config, preview, voices, deploying, onDeploy, onPreviewUpdate }: PreviewTabProps) {
+  const runtime = deriveTechnicalRuntimeSettings(config);
+
   if (!config.retellAgentId) {
     return (
       <div className="space-y-4">
@@ -91,6 +94,22 @@ export function PreviewTab({ config, preview, voices, deploying, onDeploy, onPre
           </div>
 
           <div className="border-t border-white/[0.05] pt-4">
+            <div className="mb-4 rounded-xl border border-white/[0.07] bg-white/[0.025] p-3">
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/35">
+                Aktive Technik
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <RuntimeItem label="Tempo" value={`${runtime.voiceSpeed.toFixed(1)}x`} />
+                <RuntimeItem label="Kreativitaet" value={runtime.modelTemperature.toFixed(2)} />
+                <RuntimeItem label="Max. Dauer" value={formatCallDuration(runtime.maxCallDurationSeconds)} />
+                <RuntimeItem label="Profil" value={runtime.interruptionModeLabel} />
+                <RuntimeItem label="Reaktion" value={runtime.responsiveness.toFixed(2)} />
+                <RuntimeItem label="Unterbrechung" value={runtime.interruptionSensitivity.toFixed(2)} />
+                <RuntimeItem label="Backchannel" value={runtime.enableBackchannel ? 'An' : 'Aus'} />
+                <RuntimeItem label="DTMF" value={runtime.allowUserDtmf ? 'An' : 'Aus'} />
+              </div>
+            </div>
+
             <button
               onClick={() => getAgentPreview().then(onPreviewUpdate)}
               className="flex items-center gap-1.5 text-[11px] text-white/40 hover:text-orange-400 transition-colors cursor-pointer mb-3"
@@ -112,6 +131,15 @@ export function PreviewTab({ config, preview, voices, deploying, onDeploy, onPre
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function RuntimeItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-white/[0.06] bg-black/20 px-2.5 py-2">
+      <div className="text-[10px] uppercase tracking-[0.12em] text-white/30">{label}</div>
+      <div className="mt-1 truncate text-xs font-medium text-white/80">{value}</div>
     </div>
   );
 }

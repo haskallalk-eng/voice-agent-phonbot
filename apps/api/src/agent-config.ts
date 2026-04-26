@@ -22,7 +22,7 @@ import {
   type PostCallAnalysisField,
 } from './retell.js';
 import { triggerBridgeCall } from './twilio-openai-bridge.js';
-import { toE164 } from '@vas/shared';
+import { deriveTechnicalRuntimeSettings, toE164 } from '@vas/shared';
 import { log } from './logger.js';
 import { normalizeKnowledgeSources, storeKnowledgePdf, syncRetellKnowledgeBase } from './knowledge.js';
 import {
@@ -502,6 +502,7 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
   const instructions = buildAgentInstructions(preparedConfig);
   const retellTools = buildRetellTools(preparedConfig, webhookBase);
   const postCallAnalysisData = buildPostCallAnalysisData(preparedConfig);
+  const technical = deriveTechnicalRuntimeSettings(preparedConfig as Parameters<typeof deriveTechnicalRuntimeSettings>[0]);
   const knowledgeBaseId = (preparedConfig as Record<string, unknown>).retellKnowledgeBaseId as string | undefined;
   const knowledgeBaseIds = knowledgeBaseId ? [knowledgeBaseId] : [];
   const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';
@@ -525,19 +526,76 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
     // LLM update doesn't depend on agent-update and vice versa — the
     // agent already references this llmId.
     await Promise.all([
-      updateLLM(llmId, { generalPrompt: instructions, tools: retellTools, model, knowledgeBaseIds }),
-      retellUpdateAgent(agentId, { name: preparedConfig.name, voiceId: preparedConfig.voice, language, llmId, webhookUrl, postCallAnalysisData }),
+      updateLLM(llmId, {
+        generalPrompt: instructions,
+        tools: retellTools,
+        model,
+        modelTemperature: technical.modelTemperature,
+        knowledgeBaseIds,
+      }),
+      retellUpdateAgent(agentId, {
+        name: preparedConfig.name,
+        voiceId: preparedConfig.voice,
+        language,
+        llmId,
+        voiceSpeed: technical.voiceSpeed,
+        responsiveness: technical.responsiveness,
+        maxCallDurationMs: technical.maxCallDurationMs,
+        interruptionSensitivity: technical.interruptionSensitivity,
+        enableBackchannel: technical.enableBackchannel,
+        allowUserDtmf: technical.allowUserDtmf,
+        webhookUrl,
+        postCallAnalysisData,
+      }),
     ]);
   } else if (llmId && !agentId) {
     // LLM exists but no agent → update LLM, then create agent (agent needs llmId).
-    await updateLLM(llmId, { generalPrompt: instructions, tools: retellTools, model, knowledgeBaseIds });
-    const agent = await retellCreateAgent({ name: preparedConfig.name, llmId, voiceId: preparedConfig.voice, language, webhookUrl, postCallAnalysisData });
+    await updateLLM(llmId, {
+      generalPrompt: instructions,
+      tools: retellTools,
+      model,
+      modelTemperature: technical.modelTemperature,
+      knowledgeBaseIds,
+    });
+    const agent = await retellCreateAgent({
+      name: preparedConfig.name,
+      llmId,
+      voiceId: preparedConfig.voice,
+      language,
+      voiceSpeed: technical.voiceSpeed,
+      responsiveness: technical.responsiveness,
+      maxCallDurationMs: technical.maxCallDurationMs,
+      interruptionSensitivity: technical.interruptionSensitivity,
+      enableBackchannel: technical.enableBackchannel,
+      allowUserDtmf: technical.allowUserDtmf,
+      webhookUrl,
+      postCallAnalysisData,
+    });
     agentId = agent.agent_id;
   } else {
     // Fresh deploy: create LLM first (agent needs llmId), then create agent.
-    const llm = await createLLM({ generalPrompt: instructions, tools: retellTools, model, knowledgeBaseIds });
+    const llm = await createLLM({
+      generalPrompt: instructions,
+      tools: retellTools,
+      model,
+      modelTemperature: technical.modelTemperature,
+      knowledgeBaseIds,
+    });
     llmId = llm.llm_id;
-    const agent = await retellCreateAgent({ name: preparedConfig.name, llmId, voiceId: preparedConfig.voice, language, webhookUrl, postCallAnalysisData });
+    const agent = await retellCreateAgent({
+      name: preparedConfig.name,
+      llmId,
+      voiceId: preparedConfig.voice,
+      language,
+      voiceSpeed: technical.voiceSpeed,
+      responsiveness: technical.responsiveness,
+      maxCallDurationMs: technical.maxCallDurationMs,
+      interruptionSensitivity: technical.interruptionSensitivity,
+      enableBackchannel: technical.enableBackchannel,
+      allowUserDtmf: technical.allowUserDtmf,
+      webhookUrl,
+      postCallAnalysisData,
+    });
     agentId = agent.agent_id;
   }
 
