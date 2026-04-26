@@ -22,6 +22,7 @@ import {
   type PostCallAnalysisField,
 } from './retell.js';
 import { triggerBridgeCall } from './twilio-openai-bridge.js';
+import { loadPlatformBaseline } from './platform-baseline.js';
 import { deriveTechnicalRuntimeSettings, toE164 } from '@vas/shared';
 import { log } from './logger.js';
 import { normalizeKnowledgeSources, storeKnowledgePdf, syncRetellKnowledgeBase } from './knowledge.js';
@@ -499,7 +500,14 @@ function buildPostCallAnalysisData(config: AgentConfig): PostCallAnalysisField[]
 export async function deployToRetell(config: AgentConfig, orgId?: string): Promise<AgentConfig> {
   const preparedConfig = await syncRetellKnowledgeBase(config as unknown as Record<string, unknown>, orgId) as AgentConfig;
   const webhookBase = getWebhookBaseUrl();
-  const instructions = buildAgentInstructions(preparedConfig);
+  // Platform-Baseline-Prefix: admin-edited quality floor (spelling alphabet,
+  // end-call rules, promise-discipline) that applies to every Phonbot agent —
+  // even customers who configured nothing. Falls back to PLATFORM_BASELINE_PROMPT
+  // when no admin override exists. Customer's own systemPrompt + roles + custom
+  // additions then layer on top.
+  const platformBaseline = await loadPlatformBaseline();
+  const customerPrompt = buildAgentInstructions(preparedConfig);
+  const instructions = `${platformBaseline}\n\n${customerPrompt}`;
   const retellTools = buildRetellTools(preparedConfig, webhookBase);
   const postCallAnalysisData = buildPostCallAnalysisData(preparedConfig);
   const technical = deriveTechnicalRuntimeSettings(preparedConfig as Parameters<typeof deriveTechnicalRuntimeSettings>[0]);

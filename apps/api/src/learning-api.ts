@@ -273,9 +273,11 @@ Schreibe direkte Anweisungen, keine Einleitung oder Erklärung.`,
           if (llmId) {
             const { buildAgentInstructions } = await import('./agent-instructions.js');
             const { updateLLM } = await import('./retell.js');
+            const { loadPlatformBaseline } = await import('./platform-baseline.js');
             const updatedData = { ...data, systemPrompt: newPrompt };
             const instructions = buildAgentInstructions(updatedData as Parameters<typeof buildAgentInstructions>[0]);
-            await updateLLM(llmId, { generalPrompt: instructions });
+            const baseline = await loadPlatformBaseline();
+            await updateLLM(llmId, { generalPrompt: `${baseline}\n\n${instructions}` });
           }
           updatedOrgs = 1;
         }

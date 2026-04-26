@@ -4,6 +4,7 @@ import bcrypt from 'bcrypt';
 import { pool } from './db.js';
 import { TEMPLATES } from './templates.js';
 import { DEMO_END_INSTRUCTIONS, flushDemoAgentCache } from './demo.js';
+import { PLATFORM_BASELINE_PROMPT } from './platform-baseline.js';
 
 // Admin login accepts either:
 //  • ADMIN_PASSWORD_HASH (bcrypt, recommended for prod) — plaintext never in
@@ -310,6 +311,7 @@ export async function registerAdmin(app: FastifyInstance) {
 
     return {
       defaults: {
+        platformBaseline: PLATFORM_BASELINE_PROMPT,
         globalEpilogue: DEMO_END_INSTRUCTIONS,
         templates: TEMPLATES.map((t) => ({
           id: t.id,
@@ -319,6 +321,7 @@ export async function registerAdmin(app: FastifyInstance) {
         })),
       },
       overrides: {
+        platformBaseline: overrides.get('__platform__') ?? null,
         globalEpilogue: overrides.get('__global__') ?? null,
         templates: TEMPLATES.map((t) => ({
           id: t.id,
@@ -334,7 +337,7 @@ export async function registerAdmin(app: FastifyInstance) {
   app.put('/admin/demo-prompts/:scope', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
     const { scope } = req.params as { scope: string };
-    if (scope !== '__global__' && !TEMPLATES.some((t) => t.id === scope)) {
+    if (scope !== '__global__' && scope !== '__platform__' && !TEMPLATES.some((t) => t.id === scope)) {
       return reply.status(400).send({ error: 'Unknown scope', scope });
     }
     const parsed = z.object({
