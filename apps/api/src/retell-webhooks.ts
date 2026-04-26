@@ -35,7 +35,10 @@ import { triggerCallback, readConfig } from './agent-config.js';
 import { executeIntegrationCall, type ApiIntegration } from './api-integrations.js';
 import { analyzeCall } from './insights.js';
 import { getOrgIdByAgentId } from './org-id-cache.js';
-import { checkForwardingVerificationMatch } from './phone.js';
+// TODO(codex): re-enable once phone.ts checkForwardingVerificationMatch is pushed.
+// Currently disabled (with the call site below) so prod build doesn't fail on
+// the missing export — Codex's helper exists locally but is uncommitted.
+// import { checkForwardingVerificationMatch } from './phone.js';
 import { getCall, deleteCall } from './retell.js';
 import { fireInboundWebhooks } from './inbound-webhooks.js';
 import { sendBookingConfirmationSms, sendTicketAckSms } from './sms.js';
@@ -336,16 +339,15 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       const fromNumber = (call as RetellCallData).from_number;
       const toNumber = (call as RetellCallData).to_number;
 
-      // Forwarding-verification correlation. If a /phone/verify-forwarding
-      // call is currently waiting on this Phonbot inbound and the caller-ID
-      // matches the verifier (or customer fallback), close the loop. Fire-
-      // and-forget — must never block or break the lifecycle path.
-      checkForwardingVerificationMatch(toNumber, fromNumber).catch((err: Error) =>
-        req.log.warn(
-          { err: err.message, toNumber, fromNumber },
-          'forwarding-verification match check failed',
-        ),
-      );
+      // TODO(codex): re-enable once phone.ts checkForwardingVerificationMatch
+      // is pushed. Disabled to unblock the prod build.
+      // checkForwardingVerificationMatch(toNumber, fromNumber).catch((err: Error) =>
+      //   req.log.warn(
+      //     { err: err.message, toNumber, fromNumber },
+      //     'forwarding-verification match check failed',
+      //   ),
+      // );
+      void toNumber; void fromNumber; // keep variables referenced for now
 
       if (orgId) {
         fireInboundWebhooks(orgId, 'call.started', {
