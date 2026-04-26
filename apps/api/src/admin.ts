@@ -507,18 +507,26 @@ export async function registerAdmin(app: FastifyInstance) {
     const parsed = z.object({
       sourceKind: z.enum(['prompt_suggestion', 'template_learning']),
       sourceId: z.string().uuid(),
-      decision: z.enum(['apply', 'reject']),
-      // For 'apply' only — scope is required. 'reject' ignores scope.
+      // 'correct' = apply with admin-edited text (saved to learning_corrections
+      // for meta-learning). Same scope semantics as 'apply'.
+      decision: z.enum(['apply', 'correct', 'reject']),
       scope: z.enum(['systemic', 'org', 'both']).optional(),
+      // Required when decision='correct'
+      correctedText: z.string().min(1).max(20_000).optional(),
+      correctionReason: z.string().max(2000).optional(),
+      // Required when decision='reject'
       rejectReason: z.string().max(500).optional(),
     }).safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: 'Invalid body', details: parsed.error.flatten() });
     const { sourceKind, sourceId, decision } = parsed.data;
-    if (decision === 'apply' && !parsed.data.scope) {
-      return reply.status(400).send({ error: 'scope is required when decision=apply' });
+    if ((decision === 'apply' || decision === 'correct') && !parsed.data.scope) {
+      return reply.status(400).send({ error: 'scope is required when decision=apply or correct' });
+    }
+    if (decision === 'correct' && !parsed.data.correctedText) {
+      return reply.status(400).send({ error: 'correctedText is required when decision=correct' });
     }
     const adminEmail = (req.user as Record<string, unknown> | undefined)?.email as string | undefined;
-    const status = decision === 'apply' ? 'applied' : 'rejected';
+    const status = decision === 'reject' ? 'rejected' : 'applied';
 
     // Look up source row to copy summary/proposed_change for audit trail.
     let summary: string | null = null;
@@ -545,8 +553,34 @@ export async function registerAdmin(app: FastifyInstance) {
       templateId = (r.rows[0].template_id as string) ?? null;
     }
 
-    const scope = decision === 'apply' ? (parsed.data.scope ?? null) : null;
+    const scope = (decision === 'apply' || decision === 'correct') ? (parsed.data.scope ?? null) : null;
     const rejectReason = decision === 'reject' ? (parsed.data.rejectReason ?? null) : null;
+
+    // The text we actually apply: corrected version if admin edited it,
+    // otherwise the original system-generated proposal. Both paths flow
+    // through the same systemic/org/both branches below — the only
+    // difference is what TEXT lands.
+    const textToApply = decision === 'correct'
+      ? (parsed.data.correctedText ?? '').trim()
+      : proposedChange;
+
+    // Save the (original, corrected, reason) tuple to seed the meta-learning
+    // pipeline. Stored regardless of scope so even an org-only correction
+    // still trains the system-wide suggestion-generator.
+    if (decision === 'correct' && textToApply !== proposedChange) {
+      await pool.query(
+        `INSERT INTO learning_corrections
+           (source_kind, source_id, summary, original_text, corrected_text,
+            correction_reason, scope_applied, applied_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          sourceKind, sourceId, summary,
+          proposedChange, textToApply,
+          parsed.data.correctionReason ?? null,
+          scope, adminEmail ?? null,
+        ],
+      ).catch((err: Error) => req.log.warn({ err: err.message, sourceKind, sourceId }, 'learning_corrections insert failed'));
+    }
 
     await pool.query(
       `INSERT INTO learning_decisions
@@ -556,26 +590,35 @@ export async function registerAdmin(app: FastifyInstance) {
        ON CONFLICT (source_kind, source_id) DO UPDATE SET
          scope = EXCLUDED.scope,
          status = EXCLUDED.status,
+         proposed_change = EXCLUDED.proposed_change,
          decided_at = now(),
          decided_by = EXCLUDED.decided_by,
          reject_reason = EXCLUDED.reject_reason`,
-      [sourceKind, sourceId, orgId, templateId, scope, status, summary, proposedChange, adminEmail ?? null, rejectReason],
+      [sourceKind, sourceId, orgId, templateId, scope, status, summary, textToApply, adminEmail ?? null, rejectReason],
     );
 
     let systemicApplied = false;
     let orgApplied = false;
+    const isApplying = decision === 'apply' || decision === 'correct';
 
-    if (decision === 'apply' && scope && (scope === 'systemic' || scope === 'both')) {
+    if (isApplying && scope && (scope === 'systemic' || scope === 'both')) {
       // Append to the global demo epilogue. Idempotent per (sourceKind, sourceId)
-      // via the marker line; if the same proposed_change is applied twice
-      // somehow, we don't double-append.
+      // via the marker line; if the same source is applied twice (e.g. apply
+      // then correct), the marker block is replaced rather than re-appended.
       const marker = `<!-- learning:${sourceKind}:${sourceId} -->`;
-      const block = `\n\n${marker}\n${proposedChange.trim()}`;
+      const block = `\n\n${marker}\n${textToApply.trim()}`;
       const existing = await pool.query(
         `SELECT epilogue FROM demo_prompt_overrides WHERE template_id = '__global__'`,
       );
       const current = existing.rowCount ? (existing.rows[0].epilogue as string) : DEMO_END_INSTRUCTIONS;
-      const next = current.includes(marker) ? current : current + block;
+      // Strip any prior block for this source (pattern: marker + everything
+      // up to the next marker or EOF). Using a non-greedy lookahead keeps
+      // sibling blocks intact.
+      const stripped = current.replace(
+        new RegExp(`\\n*${marker.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}[\\s\\S]*?(?=\\n*<!-- learning:|$)`, 'g'),
+        '',
+      );
+      const next = stripped + block;
       await pool.query(
         `INSERT INTO demo_prompt_overrides (template_id, epilogue, updated_by)
          VALUES ('__global__', $1, $2)
@@ -598,12 +641,24 @@ export async function registerAdmin(app: FastifyInstance) {
       }
     }
 
-    if (decision === 'apply' && scope && (scope === 'org' || scope === 'both')) {
+    if (isApplying && scope && (scope === 'org' || scope === 'both')) {
       if (sourceKind === 'prompt_suggestion') {
-        await pool.query(
-          `UPDATE prompt_suggestions SET status = 'applied', applied_at = now() WHERE id = $1`,
-          [sourceId],
-        );
+        // For corrections, we ALSO want the corrected text to land in the
+        // org's source row so any future re-deploy uses the corrected version
+        // rather than the original auto-generated one.
+        if (decision === 'correct') {
+          await pool.query(
+            `UPDATE prompt_suggestions
+                SET suggested_addition = $2, status = 'applied', applied_at = now()
+              WHERE id = $1`,
+            [sourceId, textToApply],
+          );
+        } else {
+          await pool.query(
+            `UPDATE prompt_suggestions SET status = 'applied', applied_at = now() WHERE id = $1`,
+            [sourceId],
+          );
+        }
         orgApplied = true;
       }
       // template_learning + org-scope makes no sense (the row is system-level by definition);
@@ -619,7 +674,44 @@ export async function registerAdmin(app: FastifyInstance) {
       }
     }
 
-    return { ok: true, systemicApplied, orgApplied };
+    return { ok: true, systemicApplied, orgApplied, corrected: decision === 'correct' };
+  });
+
+  // ── GET /admin/learnings/corrections ──────────────────────────────────────
+  // Meta-Lernen-Feed: chronologische Liste der admin-Korrekturen. Diese Tupel
+  // (original → corrected) sind das Trainingsmaterial für die nächste Iteration
+  // des Suggestion-Generators. Reine Read-Only-Sicht für Admin; nicht für Kunden.
+  app.get('/admin/learnings/corrections', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!pool) return reply.status(503).send({ error: 'DB not configured' });
+    const q = z.object({
+      limit: z.coerce.number().int().min(1).max(200).default(100),
+    }).safeParse(req.query);
+    if (!q.success) return reply.status(400).send({ error: 'Invalid query', details: q.error.flatten() });
+
+    const res = await pool.query(
+      `SELECT id, created_at, source_kind, source_id, summary,
+              original_text, corrected_text, correction_reason,
+              scope_applied, applied_by, used_for_meta_at
+         FROM learning_corrections
+        ORDER BY created_at DESC
+        LIMIT $1`,
+      [q.data.limit],
+    );
+    return {
+      corrections: res.rows.map((r: Record<string, unknown>) => ({
+        id: r.id as string,
+        createdAt: (r.created_at as Date).toISOString(),
+        sourceKind: r.source_kind as string,
+        sourceId: r.source_id as string,
+        summary: r.summary as string | null,
+        originalText: r.original_text as string,
+        correctedText: r.corrected_text as string,
+        correctionReason: r.correction_reason as string | null,
+        scopeApplied: r.scope_applied as string | null,
+        appliedBy: r.applied_by as string | null,
+        usedForMetaAt: r.used_for_meta_at ? (r.used_for_meta_at as Date).toISOString() : null,
+      })),
+    };
   });
 
   // ── GET /admin/metrics ────────────────────────────────────────────────────

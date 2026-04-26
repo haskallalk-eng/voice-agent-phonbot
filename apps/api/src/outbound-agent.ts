@@ -173,6 +173,30 @@ export async function migrateOutbound() {
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS learning_decisions_source_uniq ON learning_decisions(source_kind, source_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS learning_decisions_status_idx ON learning_decisions(status, created_at DESC);`);
 
+  // Meta-Lernen: when an admin applies a learning suggestion in CORRECTED form
+  // (not as the system proposed it), we keep the (original, corrected, reason)
+  // tuple here. These rows are the training data for the next iteration of the
+  // suggestion-generator — the learning system learns from being corrected.
+  // Admin-only feed; never surfaced to customers.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS learning_corrections (
+      id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+      source_kind         TEXT NOT NULL,
+      source_id           UUID NOT NULL,
+      summary             TEXT,
+      original_text       TEXT NOT NULL,
+      corrected_text      TEXT NOT NULL,
+      correction_reason   TEXT,
+      scope_applied       TEXT,
+      applied_by          TEXT,
+      used_for_meta_at    TIMESTAMPTZ
+    );
+  `);
+  await pool.query(`COMMENT ON TABLE learning_corrections IS 'Meta-Lernen: admin-Korrekturen an Lern-Vorschlägen. Speist die nächste Generation des Suggestion-Generators.';`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS learning_corrections_created_idx ON learning_corrections(created_at DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS learning_corrections_source_idx ON learning_corrections(source_kind, source_id);`);
+
   // Composite index for the 24h phone-dedup query in /demo/callback +
   // /outbound/website-callback (E2 + T-38). Without this the dedup is
   // O(n) seq scan per request — fine at 100 leads, slow at 10k+.

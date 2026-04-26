@@ -7,9 +7,11 @@ import {
   adminFlushDemoCache,
   adminGetLearnings,
   adminDecideLearning,
+  adminGetCorrections,
   type AdminDemoCall,
   type AdminDemoPrompts,
   type AdminLearningItem,
+  type AdminLearningCorrection,
 } from '../lib/api.js';
 
 // ── Shared bits ──────────────────────────────────────────────────────────────
@@ -468,8 +470,13 @@ export function LearningsTab() {
   const [items, setItems] = useState<AdminLearningItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'pending' | 'applied' | 'rejected' | 'all'>('pending');
+  const [view, setView] = useState<'queue' | 'corrections'>('queue');
   const [openId, setOpenId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftText, setDraftText] = useState('');
+  const [draftReason, setDraftReason] = useState('');
+  const [draftScope, setDraftScope] = useState<'systemic' | 'org' | 'both'>('systemic');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -479,7 +486,7 @@ export function LearningsTab() {
       .finally(() => setLoading(false));
   }, [statusFilter]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (view === 'queue') load(); }, [load, view]);
 
   async function decide(item: AdminLearningItem, scope: 'systemic' | 'org' | 'both') {
     setBusy(item.id);
@@ -495,6 +502,48 @@ export function LearningsTab() {
         res.orgApplied ? 'kunden-spezifisch ✓' : '',
       ].filter(Boolean).join(' + ');
       alert(`Angewendet (${scope}). ${note || ''}`);
+      load();
+    } catch (e) {
+      alert(`Fehler: ${(e as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function startEdit(item: AdminLearningItem) {
+    setEditingId(item.id);
+    setDraftText(item.proposed);
+    setDraftReason('');
+    setDraftScope(item.kind === 'template_learning' ? 'systemic' : 'systemic');
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setDraftText('');
+    setDraftReason('');
+  }
+
+  async function saveCorrection(item: AdminLearningItem) {
+    if (!draftText.trim()) {
+      alert('Korrigierter Text darf nicht leer sein.');
+      return;
+    }
+    setBusy(item.id);
+    try {
+      const res = await adminDecideLearning({
+        sourceKind: item.kind,
+        sourceId: item.id,
+        decision: 'correct',
+        scope: draftScope,
+        correctedText: draftText,
+        correctionReason: draftReason.trim() || undefined,
+      });
+      const note = [
+        res.systemicApplied ? 'systemisch ✓' : '',
+        res.orgApplied ? 'kunden-spezifisch ✓' : '',
+      ].filter(Boolean).join(' + ');
+      alert(`Korrigiert + angewendet (${draftScope}). ${note}\n\nDie Korrektur landet im Meta-Lernen-Feed und verbessert künftige Vorschläge.`);
+      cancelEdit();
       load();
     } catch (e) {
       alert(`Fehler: ${(e as Error).message}`);
@@ -523,6 +572,29 @@ export function LearningsTab() {
 
   return (
     <div className="space-y-4">
+      {/* View toggle: Queue (eingehende Vorschläge) vs. Corrections (Meta-Lernen-Feed) */}
+      <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-xl p-1 w-fit">
+        <button
+          onClick={() => setView('queue')}
+          className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            view === 'queue' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white/70'
+          }`}
+        >
+          Vorschläge
+        </button>
+        <button
+          onClick={() => setView('corrections')}
+          className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            view === 'corrections' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white/70'
+          }`}
+        >
+          🧠 Meta-Lernen
+        </button>
+      </div>
+
+      {view === 'corrections' && <CorrectionsFeed />}
+      {view === 'queue' && (<>
+
       <div className="flex items-center gap-3 flex-wrap">
         <span className="text-white/50 text-sm">Status:</span>
         {(['pending', 'applied', 'rejected', 'all'] as const).map((s) => (
@@ -542,8 +614,9 @@ export function LearningsTab() {
       <div className="text-xs text-white/40 italic">
         <strong className="text-white/60">Scope-Erklärung:</strong> Eine Verbesserung kann <Pill tone="orange">systemisch</Pill> sein
         (greift bei allen Demo-Agents weltweit), <Pill tone="orange">kunden-spezifisch</Pill> (nur bei dem Kunden, dessen Calls die
-        Verbesserung ausgelöst haben), oder <Pill tone="orange">beides</Pill>. Lehnt man ab, bleibt die Verbesserung im Archiv aber
-        wird nicht angewendet.
+        Verbesserung ausgelöst haben), oder <Pill tone="orange">beides</Pill>. Mit <Pill tone="orange">Verbessern</Pill> kannst du
+        die vorgeschlagene Änderung umschreiben bevor du sie anwendest — diese Korrekturen landen im Meta-Lernen-Feed und verbessern
+        künftige Vorschläge. Lehnt man ab, bleibt die Verbesserung im Archiv aber wird nicht angewendet.
       </div>
 
       {loading ? <Spinner /> : items.length === 0 ? (
@@ -585,6 +658,61 @@ export function LearningsTab() {
                         Entschieden am {fmtDate(it.decision.decidedAt)} von {it.decision.decidedBy ?? 'unbekannt'}
                         {it.decision.rejectReason && ` — Grund: ${it.decision.rejectReason}`}
                       </div>
+                    ) : editingId === it.id ? (
+                      <div className="space-y-3 pt-2 rounded-lg bg-amber-500/[0.04] border border-amber-500/20 p-3">
+                        <div className="text-xs font-medium text-amber-300">✏️ Verbessern: schreibe die Änderung um wie sie WIRKLICH lauten soll</div>
+                        <div>
+                          <label className="block text-[11px] text-white/50 mb-1">Korrigierter Text</label>
+                          <textarea
+                            value={draftText}
+                            onChange={(e) => setDraftText(e.target.value)}
+                            rows={Math.min(20, Math.max(6, draftText.split('\n').length + 1))}
+                            className="w-full px-3 py-2 rounded-lg bg-black/40 border border-white/10 text-white/90 text-xs font-mono resize-y focus:outline-none focus:border-amber-500/50"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-white/50 mb-1">Warum hast du das geändert? (geht ins Meta-Lernen)</label>
+                          <textarea
+                            value={draftReason}
+                            onChange={(e) => setDraftReason(e.target.value)}
+                            rows={2}
+                            placeholder="z.B. 'Original war zu rigide — Kunde will flexibler reagieren'"
+                            className="w-full px-3 py-2 rounded-lg bg-black/40 border border-white/10 text-white/90 text-xs resize-y focus:outline-none focus:border-amber-500/50"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[11px] text-white/50">Anwenden als:</span>
+                          {(['systemic', 'org', 'both'] as const).map((s) => {
+                            const disabled = it.kind === 'template_learning' && (s === 'org' || s === 'both');
+                            return (
+                              <button
+                                key={s}
+                                onClick={() => setDraftScope(s)}
+                                disabled={disabled}
+                                className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors ${
+                                  draftScope === s ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'
+                                } disabled:opacity-30 disabled:cursor-not-allowed`}
+                              >
+                                {s === 'systemic' ? 'systemisch' : s === 'org' ? 'nur Kunde' : 'beides'}
+                              </button>
+                            );
+                          })}
+                          <button
+                            onClick={() => saveCorrection(it)}
+                            disabled={busy === it.id}
+                            className="ml-auto px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-medium hover:bg-amber-500/30 disabled:opacity-40 transition-colors"
+                          >
+                            {busy === it.id ? '…' : 'Korrektur speichern + anwenden'}
+                          </button>
+                          <button
+                            onClick={cancelEdit}
+                            disabled={busy === it.id}
+                            className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/50 text-xs hover:bg-white/10 disabled:opacity-40 transition-colors"
+                          >
+                            Abbrechen
+                          </button>
+                        </div>
+                      </div>
                     ) : (
                       <div className="flex items-center gap-2 pt-2 flex-wrap">
                         <button
@@ -616,6 +744,14 @@ export function LearningsTab() {
                           </button>
                         )}
                         <button
+                          onClick={() => startEdit(it)}
+                          disabled={busy === it.id}
+                          className="px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-medium hover:bg-amber-500/25 disabled:opacity-40 transition-colors"
+                          title="Vorschlag umschreiben — die Korrektur fließt ins Meta-Lernen ein"
+                        >
+                          ✏️ Verbessern
+                        </button>
+                        <button
                           onClick={() => reject(it)}
                           disabled={busy === it.id}
                           className="ml-auto px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/50 text-xs hover:bg-red-500/15 hover:border-red-500/30 hover:text-red-300 disabled:opacity-40 transition-colors"
@@ -624,6 +760,77 @@ export function LearningsTab() {
                         </button>
                       </div>
                     )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      </>)}
+    </div>
+  );
+}
+
+// ── Corrections-Feed (Meta-Lernen) ───────────────────────────────────────────
+
+function CorrectionsFeed() {
+  const [corrections, setCorrections] = useState<AdminLearningCorrection[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    adminGetCorrections({ limit: 200 })
+      .then((res) => setCorrections(res.corrections))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl bg-white/[0.03] border border-white/10 px-4 py-3 text-xs text-white/70 space-y-1">
+        <p><strong className="text-white/90">🧠 Meta-Lernen (Verbesserungen der Verbesserungen)</strong></p>
+        <p>Jedes Mal wenn du einen Vorschlag mit <Pill tone="orange">Verbessern</Pill> umschreibst statt blind zu übernehmen, landet das Tupel <em>(Original → Korrektur + Grund)</em> hier. Der Suggestion-Generator zieht diesen Feed als Trainingsmaterial heran — das System lernt aus seinen eigenen Fehlern.</p>
+        <p className="text-white/40">Nur im Admin sichtbar. Kunden sehen weder den ursprünglichen Vorschlag noch die Korrektur.</p>
+      </div>
+
+      {loading ? <Spinner /> : corrections.length === 0 ? (
+        <p className="text-white/30 text-sm text-center py-12">Noch keine Korrekturen. Sobald du einen Vorschlag mit <em>Verbessern</em> umschreibst, taucht er hier auf.</p>
+      ) : (
+        <div className="space-y-2">
+          {corrections.map((c) => {
+            const open = openId === c.id;
+            return (
+              <div key={c.id} className="rounded-xl bg-white/5 border border-white/10">
+                <button
+                  onClick={() => setOpenId(open ? null : c.id)}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.04] transition-colors"
+                >
+                  <span className="text-xs text-white/40 w-32 shrink-0">{fmtDate(c.createdAt)}</span>
+                  <Pill tone={c.sourceKind === 'template_learning' ? 'orange' : 'gray'}>{c.sourceKind === 'template_learning' ? 'systemisch' : 'pro-org'}</Pill>
+                  {c.scopeApplied && <Pill tone="green">{c.scopeApplied}</Pill>}
+                  <span className="text-sm text-white/80 truncate flex-1">{c.summary ?? c.correctionReason ?? '— ohne Beschreibung'}</span>
+                  <span className="text-[11px] text-white/40 shrink-0">{c.appliedBy ?? 'unbekannt'}</span>
+                </button>
+                {open && (
+                  <div className="px-4 pb-4 pt-1 space-y-3 border-t border-white/5">
+                    {c.correctionReason && (
+                      <div className="text-xs">
+                        <span className="text-white/40">Begründung:</span>
+                        <p className="text-white/80 mt-1 italic">{c.correctionReason}</p>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-[11px] text-white/40 mb-1">System-Vorschlag (original)</div>
+                        <pre className="p-3 rounded-lg bg-red-500/[0.04] border border-red-500/15 whitespace-pre-wrap text-white/70 text-xs max-h-72 overflow-auto">{c.originalText}</pre>
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-emerald-300/70 mb-1">Admin-Korrektur (angewendet)</div>
+                        <pre className="p-3 rounded-lg bg-emerald-500/[0.04] border border-emerald-500/20 whitespace-pre-wrap text-white/85 text-xs max-h-72 overflow-auto">{c.correctedText}</pre>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
