@@ -91,7 +91,12 @@ export async function fireInboundWebhooks(
 ): Promise<void> {
   let hooks: InboundWebhookConfig[] = [];
   try {
-    const config = await readConfig(tenantId);
+    // tenantId is the only context this fan-out has — pass it as both
+    // parameters. Functionally equivalent to the previous one-arg call
+    // (both filter to the row whose tenant_id matches), but readConfig now
+    // requires orgId at the type level so a future caller can't silently
+    // skip the multi-tenant filter.
+    const config = await readConfig(tenantId, tenantId);
     hooks = (config as unknown as { inboundWebhooks?: InboundWebhookConfig[] }).inboundWebhooks ?? [];
   } catch (err) {
     log.warn({ err: (err as Error).message, tenantId }, 'inbound-webhooks: readConfig failed');
