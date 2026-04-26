@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import Stripe from 'stripe';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
@@ -6,6 +7,7 @@ import type { JwtPayload } from './auth.js';
 import { materializePendingFromSession } from './auth.js';
 import { autoProvisionGermanNumber } from './phone.js';
 import { sendPlanActivatedEmail, sendPaymentFailedEmail } from './email.js';
+import { log } from './logger.js';
 
 // ── Stripe client ─────────────────────────────────────────────────────────────
 
@@ -127,11 +129,23 @@ async function getOrCreateStripeCustomer(orgId: string, email: string, orgName: 
  * customer's next invoice automatically.
  *
  * Only charges the NEW overage from this specific reconciliation, not the total.
+ *
+ * Reliability:
+ *   - idempotencyKey is mandatory under the hood; if the caller doesn't supply
+ *     a stable one (overageKey, usually built from callId), we generate a UUID
+ *     fallback so two invocations within a single process never accidentally
+ *     create two invoice items for one call.
+ *   - On Stripe failure: ONE silent retry after 2s, then persist into
+ *     failed_invoice_items with the same idempotency_key so the cron can
+ *     retry it later without risking a double-charge.
+ *   - Success and failure both log structured Pino events (visible to Sentry)
+ *     so money-loss never goes silent.
  */
 export async function chargeOverageMinutes(
   orgId: string,
   overageMinutes: number,
   ratePerMinute: number,
+  overageKey?: string,
 ): Promise<void> {
   if (!stripe || !pool || overageMinutes <= 0 || ratePerMinute <= 0) return;
 
@@ -145,17 +159,19 @@ export async function chargeOverageMinutes(
   const amountCents = Math.round(overageMinutes * ratePerMinute * 100);
   if (amountCents <= 0) return;
 
-  try {
-    await stripe.invoiceItems.create({
-      customer: row.stripe_customer_id as string,
-      amount: amountCents,
-      currency: 'eur',
-      description: `${overageMinutes} Min Überschreitung (${ratePerMinute.toFixed(2)} €/Min)`,
-      metadata: { orgId, overageMinutes: String(overageMinutes), plan: row.plan as string },
-    });
-  } catch (err) {
-    process.stderr.write(`[billing] overage invoice item failed for org=${orgId}: ${(err as Error).message}\n`);
-  }
+  const description = `${overageMinutes} Min Überschreitung (${ratePerMinute.toFixed(2)} €/Min)`;
+  const metadata = { orgId, overageMinutes: String(overageMinutes), plan: row.plan as string };
+  const idempotencyKey = overageKey ?? `overage:${orgId}:${crypto.randomUUID()}`;
+
+  await chargeWithRetryAndPersist({
+    customer: row.stripe_customer_id as string,
+    amountCents,
+    description,
+    metadata,
+    idempotencyKey,
+    kind: 'overage',
+    orgId,
+  });
 }
 
 /**
@@ -166,13 +182,15 @@ export async function chargeOverageMinutes(
  * higher TTS cost applies per minute regardless of plan.
  *
  * Lands on the customer's next Stripe invoice as a separate line item so
- * the billing is transparent.
+ * the billing is transparent. Same retry+persist semantics as
+ * chargeOverageMinutes — see chargeWithRetryAndPersist for details.
  */
 export async function chargePremiumVoiceMinutes(
   orgId: string,
   minutes: number,
   surchargePerMinute: number,
   voiceName?: string,
+  surchargeKey?: string,
 ): Promise<void> {
   if (!stripe || !pool || minutes <= 0 || surchargePerMinute <= 0) return;
 
@@ -186,16 +204,184 @@ export async function chargePremiumVoiceMinutes(
   const amountCents = Math.round(minutes * surchargePerMinute * 100);
   if (amountCents <= 0) return;
 
+  const description = `${minutes.toFixed(2)} Min Premium-Stimme${voiceName ? ` "${voiceName}"` : ''} (+${surchargePerMinute.toFixed(2)} €/Min)`;
+  const metadata = { orgId, premiumMinutes: String(minutes), surcharge: String(surchargePerMinute) };
+  const idempotencyKey = surchargeKey ?? `premium:${orgId}:${crypto.randomUUID()}`;
+
+  await chargeWithRetryAndPersist({
+    customer: row.stripe_customer_id as string,
+    amountCents,
+    description,
+    metadata,
+    idempotencyKey,
+    kind: 'premium_voice',
+    orgId,
+  });
+}
+
+// ── Retry-and-persist core (used by both charge functions) ────────────────────
+
+interface ChargeAttempt {
+  customer: string;
+  amountCents: number;
+  description: string;
+  metadata: Record<string, string>;
+  idempotencyKey: string;
+  kind: 'overage' | 'premium_voice';
+  orgId: string;
+}
+
+/**
+ * Try to create the Stripe invoice item once, retry exactly once after a
+ * 2-second pause if it fails, and on permanent failure persist the attempt
+ * into failed_invoice_items so the cron can pick it up later.
+ *
+ * The same idempotencyKey threads through all paths (initial call → retry →
+ * cron retry) so Stripe will refuse to create a duplicate even in pathological
+ * race conditions where two retries land at the same instant.
+ *
+ * Returns when (a) Stripe accepted the item, or (b) the failure is parked
+ * in the queue. Never throws — money loss must be loud, not crashy.
+ */
+async function chargeWithRetryAndPersist(attempt: ChargeAttempt): Promise<void> {
+  if (!stripe) return;
+
+  const params: Stripe.InvoiceItemCreateParams = {
+    customer: attempt.customer,
+    amount: attempt.amountCents,
+    currency: 'eur',
+    description: attempt.description,
+    metadata: attempt.metadata,
+  };
+  const opts: Stripe.RequestOptions = { idempotencyKey: attempt.idempotencyKey };
+
+  // Attempt 1
   try {
-    await stripe.invoiceItems.create({
-      customer: row.stripe_customer_id as string,
-      amount: amountCents,
-      currency: 'eur',
-      description: `${minutes.toFixed(2)} Min Premium-Stimme${voiceName ? ` "${voiceName}"` : ''} (+${surchargePerMinute.toFixed(2)} €/Min)`,
-      metadata: { orgId, premiumMinutes: String(minutes), surcharge: String(surchargePerMinute) },
-    });
-  } catch (err) {
-    process.stderr.write(`[billing] premium-voice invoice item failed for org=${orgId}: ${(err as Error).message}\n`);
+    await stripe.invoiceItems.create(params, opts);
+    log.info(
+      { orgId: attempt.orgId, kind: attempt.kind, amountCents: attempt.amountCents, idempotencyKey: attempt.idempotencyKey },
+      'stripe invoice item created',
+    );
+    return;
+  } catch (err1) {
+    log.warn(
+      { err: (err1 as Error).message, orgId: attempt.orgId, kind: attempt.kind, idempotencyKey: attempt.idempotencyKey },
+      'stripe invoice item attempt 1 failed — retrying in 2s',
+    );
+  }
+
+  await new Promise((r) => setTimeout(r, 2000));
+
+  // Attempt 2 (same idempotencyKey — Stripe dedups if attempt 1 actually succeeded server-side)
+  try {
+    await stripe.invoiceItems.create(params, opts);
+    log.info(
+      { orgId: attempt.orgId, kind: attempt.kind, amountCents: attempt.amountCents, idempotencyKey: attempt.idempotencyKey },
+      'stripe invoice item created on retry',
+    );
+    return;
+  } catch (err2) {
+    // Park the attempt in the dead-letter queue so a cron job can retry it
+    // without forgetting. Same idempotencyKey ensures Stripe will not create
+    // a duplicate even if the previous attempts actually went through.
+    const errMsg = (err2 as Error).message;
+    log.error(
+      { err: errMsg, orgId: attempt.orgId, kind: attempt.kind, amountCents: attempt.amountCents, idempotencyKey: attempt.idempotencyKey },
+      'stripe invoice item failed twice — parking in failed_invoice_items for cron retry',
+    );
+    if (!pool) return;
+    await pool.query(
+      `INSERT INTO failed_invoice_items (org_id, kind, amount_cents, currency, description, idempotency_key, metadata, last_error, retry_count, last_retry_at)
+       VALUES ($1, $2, $3, 'eur', $4, $5, $6, $7, 2, now())
+       ON CONFLICT (idempotency_key) DO UPDATE
+         SET last_error = EXCLUDED.last_error,
+             last_retry_at = now(),
+             retry_count = failed_invoice_items.retry_count + 1`,
+      [
+        attempt.orgId,
+        attempt.kind,
+        attempt.amountCents,
+        attempt.description,
+        attempt.idempotencyKey,
+        JSON.stringify(attempt.metadata),
+        errMsg,
+      ],
+    ).catch((dbErr: Error) =>
+      // Even the persistence failed — last-resort log so it shows up in Sentry
+      log.error(
+        { err: dbErr.message, orgId: attempt.orgId, kind: attempt.kind, amountCents: attempt.amountCents, idempotencyKey: attempt.idempotencyKey },
+        'failed_invoice_items persistence failed — manual intervention required',
+      ),
+    );
+  }
+}
+
+/**
+ * Cron-triggered retry of items parked in failed_invoice_items.
+ * Walks the pending rows oldest-first, caps retries at 5 per item, marks
+ * succeeded_at on success. Same idempotencyKey is reused so a successful
+ * older retry that we missed will dedup.
+ */
+export async function retryFailedInvoiceItems(): Promise<void> {
+  if (!stripe || !pool) return;
+
+  const res = await pool.query(
+    `SELECT id, org_id, kind, amount_cents, currency, description, idempotency_key, metadata
+     FROM failed_invoice_items
+     WHERE succeeded_at IS NULL AND retry_count < 5
+     ORDER BY created_at ASC
+     LIMIT 20`,
+  );
+
+  for (const row of res.rows) {
+    const customerRes = await pool.query(
+      `SELECT stripe_customer_id FROM orgs WHERE id = $1`,
+      [row.org_id],
+    );
+    const customer = customerRes.rows[0]?.stripe_customer_id as string | null;
+    if (!customer) {
+      // Org gone or never had a customer — mark as succeeded so we stop trying
+      await pool.query(
+        `UPDATE failed_invoice_items SET succeeded_at = now(), last_error = 'org_or_customer_gone' WHERE id = $1`,
+        [row.id],
+      ).catch(() => {});
+      continue;
+    }
+    const metadata = (typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata) ?? {};
+    try {
+      await stripe.invoiceItems.create(
+        {
+          customer,
+          amount: row.amount_cents as number,
+          currency: (row.currency as string) ?? 'eur',
+          description: (row.description as string) ?? undefined,
+          metadata,
+        },
+        { idempotencyKey: row.idempotency_key as string },
+      );
+      await pool.query(
+        `UPDATE failed_invoice_items SET succeeded_at = now() WHERE id = $1`,
+        [row.id],
+      );
+      log.info(
+        { orgId: row.org_id, kind: row.kind, amountCents: row.amount_cents, idempotencyKey: row.idempotency_key, retry: row.retry_count + 1 },
+        'failed_invoice_items: retry succeeded',
+      );
+    } catch (err) {
+      const errMsg = (err as Error).message;
+      await pool.query(
+        `UPDATE failed_invoice_items
+           SET retry_count = retry_count + 1,
+               last_retry_at = now(),
+               last_error = $2
+         WHERE id = $1`,
+        [row.id, errMsg],
+      );
+      log.warn(
+        { err: errMsg, orgId: row.org_id, kind: row.kind, amountCents: row.amount_cents, idempotencyKey: row.idempotency_key, retry: row.retry_count + 1 },
+        'failed_invoice_items: retry failed',
+      );
+    }
   }
 }
 

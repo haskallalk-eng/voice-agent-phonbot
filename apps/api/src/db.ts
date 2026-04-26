@@ -333,6 +333,32 @@ async function runMigrationBody() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS processed_stripe_events_received_idx ON processed_stripe_events(received_at);`);
 
+  // Failed-invoice-items dead-letter queue. When billing.ts overage / premium-
+  // voice charges hit a transient Stripe failure (network, 5xx, customer-id
+  // drift), the row is parked here so a cron job can retry it instead of
+  // silently losing the charge. idempotency_key prevents Stripe from creating
+  // duplicate invoice items if the original call actually succeeded server-
+  // side and we just didn't see the response. succeeded_at marks completion;
+  // retry_count caps the cron loop.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS failed_invoice_items (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+      org_id          UUID NOT NULL,
+      kind            TEXT NOT NULL,
+      amount_cents    INTEGER NOT NULL,
+      currency        TEXT NOT NULL DEFAULT 'eur',
+      description     TEXT,
+      idempotency_key TEXT NOT NULL UNIQUE,
+      metadata        JSONB,
+      last_error      TEXT,
+      retry_count     INTEGER NOT NULL DEFAULT 0,
+      last_retry_at   TIMESTAMPTZ,
+      succeeded_at    TIMESTAMPTZ
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS failed_invoice_items_pending_idx ON failed_invoice_items(succeeded_at, retry_count) WHERE succeeded_at IS NULL;`);
+
   // Retell webhook idempotency. Retell retries call_ended on non-2xx or timeout.
   // Without dedup, a retried call_ended runs reconcileMinutes twice -> double
   // overage charge (€9 bill becomes €28 on 3x retries) and double analyzeCall

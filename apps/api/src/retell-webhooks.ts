@@ -35,6 +35,7 @@ import { triggerCallback, readConfig } from './agent-config.js';
 import { executeIntegrationCall, type ApiIntegration } from './api-integrations.js';
 import { analyzeCall } from './insights.js';
 import { getOrgIdByAgentId } from './org-id-cache.js';
+import { checkForwardingVerificationMatch } from './phone.js';
 import { getCall, deleteCall } from './retell.js';
 import { fireInboundWebhooks } from './inbound-webhooks.js';
 import { sendBookingConfirmationSms, sendTicketAckSms } from './sms.js';
@@ -332,12 +333,26 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     if (event === 'call_started') {
       const agentId = (call as RetellCallData).agent_id;
       const orgId = agentId ? await getOrgIdByAgentId(agentId) : null;
+      const fromNumber = (call as RetellCallData).from_number;
+      const toNumber = (call as RetellCallData).to_number;
+
+      // Forwarding-verification correlation. If a /phone/verify-forwarding
+      // call is currently waiting on this Phonbot inbound and the caller-ID
+      // matches the verifier (or customer fallback), close the loop. Fire-
+      // and-forget — must never block or break the lifecycle path.
+      checkForwardingVerificationMatch(toNumber, fromNumber).catch((err: Error) =>
+        req.log.warn(
+          { err: err.message, toNumber, fromNumber },
+          'forwarding-verification match check failed',
+        ),
+      );
+
       if (orgId) {
         fireInboundWebhooks(orgId, 'call.started', {
           callId: (call as RetellCallData).call_id,
           agentId,
-          fromNumber: (call as RetellCallData).from_number,
-          toNumber: (call as RetellCallData).to_number,
+          fromNumber,
+          toNumber,
           startTimestamp: (call as RetellCallData).start_timestamp,
         }).catch((err: Error) =>
           req.log.warn(
@@ -398,7 +413,10 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           // delta now: actual ≤ reserved → refund the over-reservation;
           // actual > reserved → top up the difference. agentId is also passed
           // so premium-voice surcharge can be looked up and billed inside.
-          await reconcileMinutes(orgId, DEFAULT_CALL_RESERVE_MINUTES, minutes, agentId);
+          // callId threads through to make the Stripe idempotency key stable
+          // across webhook retries — a retried call_ended can no longer
+          // double-charge the customer.
+          await reconcileMinutes(orgId, DEFAULT_CALL_RESERVE_MINUTES, minutes, agentId, dedupCallId);
         }
 
         // AI analysis — fire and forget, never blocks the webhook response
