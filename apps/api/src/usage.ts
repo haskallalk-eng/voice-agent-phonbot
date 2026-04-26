@@ -177,13 +177,16 @@ export async function reconcileMinutes(
   reservedMinutes: number,
   actualMinutes: number,
   agentId?: string,
+  callId?: string,
 ): Promise<void> {
   if (!pool) return;
 
   // Premium-voice surcharge (applied to ALL minutes of the call, not just
   // overage). Looked up by resolving the agent's configured voice against
   // voice-catalog.ts; voices without a surcharge field no-op. Fire-and-
-  // forget so Stripe-API slowness doesn't block the webhook response.
+  // forget so Stripe-API slowness doesn't block the webhook response —
+  // the charge function persists Stripe failures in failed_invoice_items
+  // and the cron retries them, so we don't need to handle errors here.
   if (agentId && actualMinutes > 0) {
     try {
       const voiceRes = await pool.query(
@@ -196,8 +199,10 @@ export async function reconcileMinutes(
       if (voiceId) {
         const surcharge = getVoiceSurcharge(voiceId);
         if (surcharge > 0) {
-          chargePremiumVoiceMinutes(orgId, actualMinutes, surcharge, voiceId)
-            .catch((err: Error) => process.stderr.write(`[usage] premium-voice charge failed for org=${orgId}: ${err.message}\n`));
+          // Stable idempotency key built from callId so a webhook retry
+          // can't double-charge — Stripe dedups on the same key.
+          const surchargeKey = callId ? `premium:${orgId}:${callId}` : undefined;
+          void chargePremiumVoiceMinutes(orgId, actualMinutes, surcharge, voiceId, surchargeKey);
         }
       }
     } catch (err) {
@@ -236,7 +241,9 @@ export async function reconcileMinutes(
   const newOverage = overageAfter - overageBefore;
   if (newOverage > 0) {
     const rate = getOverchargeRate(plan);
-    chargeOverageMinutes(orgId, newOverage, rate).catch(() => {/* logged inside */});
+    // Stable idempotency key from callId — webhook retries dedup at Stripe.
+    const overageKey = callId ? `overage:${orgId}:${callId}` : undefined;
+    void chargeOverageMinutes(orgId, newOverage, rate, overageKey);
   }
 
   // Usage warning emails at 80% and 100% thresholds.

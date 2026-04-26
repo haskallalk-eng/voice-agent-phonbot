@@ -336,6 +336,19 @@ if (pool) {
   // calendar-sync.ts for the full design + failure-mode notes.
   const { startCalendarSyncCron } = await import('./calendar-sync.js');
   startCalendarSyncCron();
+
+  // Failed-invoice-items retry. When a Stripe charge in chargeOverageMinutes
+  // or chargePremiumVoiceMinutes fails twice in a row, it's parked in
+  // failed_invoice_items with a stable idempotencyKey so this cron can pick
+  // it up later without risking a double-charge. Runs every 5 min, capped
+  // at 5 retries per item before it stays parked for manual review.
+  const { retryFailedInvoiceItems } = await import('./billing.js');
+  const runFailedInvoiceRetry = async () => {
+    try { await retryFailedInvoiceItems(); }
+    catch (e) { app.log.warn({ err: (e as Error).message }, 'failed_invoice_items retry job failed'); }
+  };
+  setInterval(runFailedInvoiceRetry, 5 * 60 * 1000); // every 5 min
+  setTimeout(runFailedInvoiceRetry, 150_000); // first run 2.5 min after startup (staggered)
 }
 
 app.get('/health', async () => {
