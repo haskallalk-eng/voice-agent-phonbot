@@ -7,6 +7,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { createWebCall, createLLM, createAgent as retellCreateAgent, createPhoneCall, updatePhoneNumber, DEFAULT_VOICE_ID, type RetellTool, type PostCallAnalysisField } from './retell.js';
 import { TEMPLATES } from './templates.js';
+import { loadPlatformBaseline } from './platform-baseline.js';
 
 // Retell built-in end_call tool. Lets GPT-4o-mini hang up the demo when the
 // caller says goodbye OR after the agent has announced a forwarding
@@ -19,49 +20,25 @@ const DEMO_END_CALL_TOOL: RetellTool = {
     'Beende den Anruf, sobald (a) der Anrufer sich verabschiedet — "tschüss", "ciao", "danke das war\'s", "auf wiederhören" — ODER (b) du gerade angekündigt hast, dass du den Anruf weiterleitest ("Ich verbinde dich kurz", "Einen Moment, ich stelle durch"). In beiden Fällen erst die Verabschiedung/Ankündigung sprechen, DANACH diese Funktion aufrufen.',
 };
 
-// Common epilogue appended to every demo template's prompt. Keeps the per-
-// template prompts focused on their domain (booking, intake, services) while
-// centralising demo-wide rules: shutdown semantics + promise-discipline +
-// capability-parity-with-prod. Synced with DEMO_END_CALL_TOOL.
+// Demo-spezifische Regeln, die NICHT für zahlende Kunden gelten — Demo-Modus-
+// Disclaimer, harte 3-Daten-Pflicht (beide Kanäle für die CRM-Aufnahme), und
+// Capability-Simulation. Universelle Qualitäts-Regeln (Buchstabieren, end_call,
+// Promise-Disziplin) liegen in apps/api/src/platform-baseline.ts und werden
+// für JEDEN Agent vorne angehängt.
+//
 // Exported so the admin UI can show the in-code default next to the override.
 export const DEMO_END_INSTRUCTIONS = `
 
-# Demo-übergreifende Regeln
+# Demo-spezifische Regeln (gilt nur für Demo-Calls)
 
-## Beenden des Gesprächs
-- Verabschiedet sich der Anrufer (tschüss/ciao/danke das war's/auf wiederhören/bye/schönen Tag), sag knapp tschüss und ruf direkt danach die Funktion end_call auf.
-- Kann das Anliegen nur die Inhaberin/der Inhaber persönlich klären (komplexe Beratung, individuelle Preise, Spezialfragen), sag freundlich "Einen Moment, ich verbinde dich gleich" und ruf danach end_call auf. Die Telefonanlage übernimmt die Weiterleitung — du selbst leitest NICHT um.
-- Erfinde keine echte Weiterleitung. Sprich erst die Ankündigung, danach end_call.
+## Demo-Modus
+Du bist eine LIVE-Demo auf phonbot.de. Der Anrufer ist ein Website-Besucher, der dich gerade testet. Spiel realistisch mit, aber erfinde keine echten Termine, Preise oder Kalenderdaten — wenn du einen Slot vorschlägst, sind Beispiel-Slots wie "Donnerstag 14 Uhr" ok, aber bestätige nichts als "verbindlich gebucht".
 
-## Versprich nichts, was du nicht (noch) tun kannst
-- Sag NIE "ich schicke dir das per SMS/E-Mail/WhatsApp", wenn du Telefonnummer oder E-Mail des Anrufers noch nicht erfragt hast. Frag ZUERST: "Auf welche Nummer/E-Mail darf ich's schicken?" und wiederhol die Adresse zur Bestätigung BEVOR du den Versand zusagst.
-- Sag NIE "ich trage dich in den Kalender ein", "ich notiere das im Ticket", "ich leite das weiter" — wenn du den Namen des Anrufers noch nicht hast. Daten zuerst, Versprechen danach.
-- Wenn der Anrufer dich nach etwas fragt, das du in dieser Demo nicht prüfen kannst (live-Verfügbarkeit, echter Preis, Status eines bestehenden Auftrags), sag ehrlich: "Das müsste die Inhaberin/der Inhaber direkt mit dir klären — ich verbinde dich gleich" und ruf end_call auf.
-
-## Kontakt-Daten in dieser Demo erheben
-Wenn das Gespräch zu einem Termin, Rückruf, Angebot oder Ticket führt, erfrage IMMER drei Daten — und zwar in dieser Reihenfolge: 1) Name, 2) Mobil- oder Festnetznummer, 3) E-Mail-Adresse. Beide Kontaktwege werden gebraucht: die Nummer für SMS-Bestätigung, die E-Mail für Termin-Einladung. Buchstabiere die E-Mail nach Diktat zurück (siehe Buchstabier-Sektion unten) und wiederhole die Telefonnummer in Zweier- oder Dreier-Blöcken. Erst nachdem alle drei sauber bestätigt sind, sag "Alles klar, ich hab's eingetragen" — vorher nicht.
+## Kontakt-Daten in dieser Demo erheben (Pflicht-Trio)
+Wenn das Gespräch zu einem Termin, Rückruf, Angebot oder Ticket führt, erfrage IMMER drei Daten in dieser Reihenfolge: 1) Name, 2) Mobil- oder Festnetznummer, 3) E-Mail-Adresse. Beide Kontaktwege werden gebraucht: die Nummer für SMS-Bestätigung, die E-Mail für Termin-Einladung. Wiederhole die Telefonnummer in Zweier- oder Dreier-Blöcken zur Kontrolle. Erst nachdem alle drei sauber bestätigt sind, sag "Alles klar, ich hab's eingetragen" — vorher nicht.
 
 ## Fähigkeiten dieser Demo
-Du verhältst dich genau wie der Live-Agent dieses Geschäfts: Termine vorschlagen + buchen, Tickets erfassen, Kontakt-Daten aufnehmen, weiterleiten falls nötig. Beispiel-Slots wie "Donnerstag 14 Uhr" sind ok als Vorschläge — aber bevor du eine Buchung als bestätigt erklärst, MUSS Name + Rückrufweg vorhanden sein.
-
-## Buchstabieren am Telefon (E-Mail, Namen, Adressen)
-Telefon-Audio ist mehrdeutig — "B" und "P", "M" und "N", "T" und "D" klingen fast gleich. Erwarte deshalb, dass Anrufer ihre E-Mail/Namen über Buchstabier-Wörter durchgeben: "M wie Maria, A wie Anton, X wie X-Ray". Solche Wörter sind KEIN Bestandteil der Adresse — extrahiere immer NUR den ersten Buchstaben jedes Buchstabier-Worts.
-
-Erkenne Spelling-Patterns an Phrasen wie: "wie", "wie in", "von", "groß ...", "klein ...", "mit ...", "Doppel-..." (= zwei gleiche Buchstaben in Folge). Beispiele die du als M-A-X-@-... interpretieren musst:
-- "M wie Maria, A wie Anton, X wie Xanten, ät, gee em ex punkt de"  → max@gmx.de
-- "T-O-M, ohne H, dann Punkt, Doppel-S"  → toms.s? — frag zurück bei Unklarheit
-- "M wie Mama, an klein-a, klein-x, at, gmail punkt com"  → max@gmail.com
-- "F-I-S-C-H-E-R, Doppel-N am Ende"  → fischern (= fischer + n? — frag zurück, Doppel kann am Ende von "Fischer" gemeint sein als zweites N)
-
-Akzeptiere ALLE Wörter (auch Spitznamen, Städte, Phantasie-Begriffe, NATO-Alphabet auf Englisch) — entscheidend ist der erste Buchstabe. Wenn ein Buchstabe akustisch unklar war (Bahn-Geräusch, Verbindung), frag GEZIELT nach: "War das B wie Berlin oder P wie Potsdam?" — verwende dafür die DIN-5009-Wörter unten.
-
-Zur RÜCK-Bestätigung von Adressen/Namen, die du mitgeschrieben hast, nutzt DU das amtliche deutsche Buchstabieralphabet nach DIN 5009 (Stand 2022, Städte-Variante — Behörden-Standard):
-
-A=Aachen · B=Berlin · C=Chemnitz · D=Düsseldorf · E=Essen · F=Frankfurt · G=Goslar · H=Hamburg · I=Ingelheim · J=Jena · K=Köln · L=Leipzig · M=München · N=Nürnberg · O=Offenbach · P=Potsdam · Q=Quickborn · R=Rostock · S=Salzwedel · T=Tübingen · U=Unna · V=Völklingen · W=Wuppertal · X=Xanten · Y=Ypsilon · Z=Zwickau · Ä=Umlaut-A · Ö=Umlaut-O · Ü=Umlaut-U · ß=Eszett
-
-Beispiel-Bestätigung: "Ich wiederhole zur Sicherheit: M wie München, A wie Aachen, X wie Xanten — at-Zeichen — G wie Goslar, M wie München, X wie Xanten — Punkt D wie Düsseldorf E wie Essen. Stimmt das so?"
-
-Wenn der Anrufer nach DEINEM Spelling abweicht ("nein, das X war ein S"), korrigiere und wiederhole NUR das geänderte Stück, nicht die ganze Adresse.`;
+Du verhältst dich genau wie der Live-Agent dieses Geschäfts: Termine vorschlagen + buchen, Tickets erfassen, weiterleiten falls nötig. Wenn ein Anliegen über das hinausgeht, was du in der Demo simulieren kannst (echte Verfügbarkeit, echter Preis, Status eines bestehenden Auftrags), kündige eine Weiterleitung an und beende den Anruf — siehe Plattform-Baseline.`;
 
 // Retell post-call analysis — fields the model extracts from the transcript
 // after the call ends. Sent to /retell/webhook in the call_analysis event,
@@ -88,7 +65,7 @@ const inMemDemoAgents = new Map<string, { agentId: string; createdAt: number }>(
 
 async function readDemoAgent(templateId: string): Promise<string | null> {
   if (redis?.isOpen) {
-    const v = await redis.get(`demo_agent:v3:${templateId}`).catch(() => null);
+    const v = await redis.get(`demo_agent:v4:${templateId}`).catch(() => null);
     if (v) return v;
   }
   const cached = inMemDemoAgents.get(templateId);
@@ -115,9 +92,9 @@ async function writeDemoAgent(templateId: string, agentId: string): Promise<void
   inMemDemoAgentMeta.set(agentId, { templateId, createdAt: Date.now() });
   if (redis?.isOpen) {
     await Promise.all([
-      redis.set(`demo_agent:v3:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {}),
+      redis.set(`demo_agent:v4:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {}),
       // Reverse direction: webhook sees agent_id, needs templateId. Same TTL.
-      redis.set(`demo_agent_meta:v3:${agentId}`, templateId, { EX: CACHE_TTL_SEC }).catch(() => {}),
+      redis.set(`demo_agent_meta:v4:${agentId}`, templateId, { EX: CACHE_TTL_SEC }).catch(() => {}),
     ]);
   }
 }
@@ -129,7 +106,7 @@ async function writeDemoAgent(templateId: string, agentId: string): Promise<void
  */
 export async function readDemoCallTemplate(agentId: string): Promise<string | null> {
   if (redis?.isOpen) {
-    const v = await redis.get(`demo_agent_meta:v3:${agentId}`).catch(() => null);
+    const v = await redis.get(`demo_agent_meta:v4:${agentId}`).catch(() => null);
     if (v) return v;
   }
   const cached = inMemDemoAgentMeta.get(agentId);
@@ -175,7 +152,10 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
   inMemDemoAgentMeta.clear();
   let flushed = 0;
   if (redis?.isOpen) {
-    for (const pattern of ['demo_agent:v3:*', 'demo_agent_meta:v3:*']) {
+    // Include older versioned keys in the scan so a deploy that bumps the
+    // cache key cleans up its own predecessors. Cheap — Redis SCAN is O(N)
+    // total across all keys, not O(N) per pattern.
+    for (const pattern of ['demo_agent:v4:*', 'demo_agent_meta:v4:*', 'demo_agent:v3:*', 'demo_agent_meta:v3:*']) {
       try {
         for await (const key of redis.scanIterator({ MATCH: pattern, COUNT: 100 })) {
           const list = Array.isArray(key) ? key : [key];
@@ -215,18 +195,24 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
     const cached2 = await readDemoAgent(templateId);
     if (cached2) return cached2;
 
-    // Admin can override (a) the per-template base prompt and/or (b) the
-    // cross-template epilogue via demo_prompt_overrides. Falls back to the
-    // hard-coded template + DEMO_END_INSTRUCTIONS when no row exists. The
-    // admin "Cache leeren"-Button (Redis DEL demo_agent:v3:*) forces every
-    // open demo to pick up new text on the next call.
+    // Three-layer prompt for demo agents:
+    //   1. Platform-Baseline — admin-editable, applies to every Phonbot agent
+    //      (paid customers + demos). Quality floor: spelling, end-call,
+    //      promise-discipline. Lives in platform-baseline.ts + DB override.
+    //   2. Branche-prompt — per-template (Friseur/Handwerker/…), admin can
+    //      override individually via demo_prompt_overrides.
+    //   3. Demo-addendum — admin-editable, applies only to demos. Demo-mode
+    //      disclaimer, contact-trio, simulation note.
+    // Cache key v3 is bumped whenever the assembly logic changes — the admin
+    // "Cache leeren"-Button hard-flushes Redis if needed.
+    const platformBaseline = await loadPlatformBaseline();
     const overrides = await readDemoPromptOverrides(templateId);
     const basePrompt = overrides.basePrompt ?? template.prompt;
-    const epilogue = overrides.epilogue ?? DEMO_END_INSTRUCTIONS;
+    const demoAddendum = overrides.epilogue ?? DEMO_END_INSTRUCTIONS;
 
     const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';
     const llm = await createLLM({
-      generalPrompt: basePrompt + epilogue,
+      generalPrompt: platformBaseline + '\n\n' + basePrompt + demoAddendum,
       tools: [DEMO_END_CALL_TOOL],
       model,
     });

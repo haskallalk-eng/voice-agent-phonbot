@@ -1171,10 +1171,12 @@ export type AdminDemoPromptOverride = {
 
 export type AdminDemoPrompts = {
   defaults: {
+    platformBaseline: string;
     globalEpilogue: string;
     templates: { id: string; name: string; icon: string; basePrompt: string }[];
   };
   overrides: {
+    platformBaseline: AdminDemoPromptOverride;
     globalEpilogue: AdminDemoPromptOverride;
     templates: { id: string; override: AdminDemoPromptOverride }[];
   };

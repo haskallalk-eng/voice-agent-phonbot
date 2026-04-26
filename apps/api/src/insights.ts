@@ -364,10 +364,14 @@ async function syncPromptToRetell(orgId: string): Promise<void> {
 
   const { buildAgentInstructions } = await import('./agent-instructions.js');
   const { updateLLM } = await import('./retell.js');
+  const { loadPlatformBaseline } = await import('./platform-baseline.js');
 
-  // Reconstruct a minimal config object for buildAgentInstructions
+  // Reconstruct a minimal config object for buildAgentInstructions, then
+  // re-prepend the platform baseline so this auto-learning resync doesn't
+  // strip the quality floor that deployToRetell originally added.
   const instructions = buildAgentInstructions(data as Parameters<typeof buildAgentInstructions>[0]);
-  await updateLLM(llmId, { generalPrompt: instructions });
+  const baseline = await loadPlatformBaseline();
+  await updateLLM(llmId, { generalPrompt: `${baseline}\n\n${instructions}` });
 }
 
 async function applyPromptAddition(orgId: string, addition: string): Promise<void> {

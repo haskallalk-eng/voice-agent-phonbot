@@ -206,7 +206,11 @@ export function DemoPromptsTab() {
   // Sync drafts when scope or data changes
   useEffect(() => {
     if (!data) return;
-    if (scope === '__global__') {
+    if (scope === '__platform__') {
+      setDraftEpilogue(data.overrides.platformBaseline?.epilogue ?? data.defaults.platformBaseline);
+      setDraftBase('');
+      setEditBase(false);
+    } else if (scope === '__global__') {
       setDraftEpilogue(data.overrides.globalEpilogue?.epilogue ?? data.defaults.globalEpilogue);
       setDraftBase('');
       setEditBase(false);
@@ -269,23 +273,36 @@ export function DemoPromptsTab() {
 
   if (loading || !data) return <Spinner />;
 
+  const isPlatform = scope === '__platform__';
   const isGlobal = scope === '__global__';
   const tmpl = data.defaults.templates.find((t) => t.id === scope);
+  const ovPlatform = data.overrides.platformBaseline;
   const ovGlobal = data.overrides.globalEpilogue;
   const ovTmpl = data.overrides.templates.find((t) => t.id === scope)?.override ?? null;
-  const activeOverride = isGlobal ? ovGlobal : ovTmpl;
+  const activeOverride = isPlatform ? ovPlatform : isGlobal ? ovGlobal : ovTmpl;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
         <span className="text-white/50 text-sm">Scope:</span>
         <button
+          onClick={() => setScope('__platform__')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+            isPlatform ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' : 'bg-emerald-500/5 border-emerald-500/15 text-emerald-300/70 hover:bg-emerald-500/10'
+          }`}
+          title="Plattform-Baseline — gilt für JEDEN Agent (Demo + zahlende Kunden), Mindest-Qualitätsstandard"
+        >
+          🌐 Plattform-Baseline (alle Agents)
+        </button>
+        <span className="text-white/20 text-sm">·</span>
+        <button
           onClick={() => setScope('__global__')}
           className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
             isGlobal ? 'bg-orange-500/20 border-orange-500/40 text-orange-300' : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'
           }`}
+          title="Demo-Epilog — gilt nur für Demo-Calls auf phonbot.de"
         >
-          Global (alle Branchen)
+          Demo-Epilog (nur Demo)
         </button>
         {data.defaults.templates.map((t) => (
           <button
@@ -308,6 +325,14 @@ export function DemoPromptsTab() {
         </button>
       </div>
 
+      {isPlatform && (
+        <div className="rounded-xl bg-emerald-500/5 border border-emerald-500/20 px-4 py-3 text-xs text-emerald-200/90 space-y-1">
+          <p><strong>Plattform-Baseline</strong> — wird vor JEDEM Agent-Prompt eingefügt (Demo + zahlende Kunden). Stellt Mindest-Qualität sicher: DIN-5009-Buchstabieralphabet, end_call-Trigger, Promise-Disziplin, Datenschutz-Untergrenze.</p>
+          <p>Kunden sehen diesen Block nicht und können ihn nicht editieren. Greift auch wenn der Kunde gar keinen System-Prompt konfiguriert hat.</p>
+          <p className="text-emerald-300/60">Demo-Agents picken die Änderung nach <em>Cache leeren</em> sofort. Zahlende Kunden picken sie beim nächsten Speichern ihres Agent-Configs auf — oder via "Alle Kunden neu deployen" (TODO).</p>
+        </div>
+      )}
+
       {flash && (
         <div className="px-4 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">{flash}</div>
       )}
@@ -315,7 +340,7 @@ export function DemoPromptsTab() {
       <div className="rounded-xl bg-white/5 border border-white/10 p-4 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-white">
-            {isGlobal ? 'Globaler Demo-Epilog' : `${tmpl?.icon} ${tmpl?.name} — Branche-Prompt`}
+            {isPlatform ? '🌐 Plattform-Baseline (alle Agents)' : isGlobal ? 'Demo-Epilog (nur Demo)' : `${tmpl?.icon} ${tmpl?.name} — Branche-Prompt`}
           </h3>
           <div className="text-xs text-white/40">
             {activeOverride ? (
@@ -326,7 +351,7 @@ export function DemoPromptsTab() {
           </div>
         </div>
 
-        {!isGlobal && (
+        {!isPlatform && !isGlobal && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-xs font-medium text-white/60">Branche-Prompt (vor dem Epilog)</label>
@@ -347,7 +372,9 @@ export function DemoPromptsTab() {
 
         <div className="space-y-2">
           <label className="text-xs font-medium text-white/60">
-            {isGlobal ? 'Epilog — wird an JEDE Branche-Prompt angehängt' : 'Branche-spezifischer Epilog (überschreibt den globalen wenn gesetzt)'}
+            {isPlatform ? 'Plattform-Baseline — wird vor JEDEN Agent-Prompt gehängt (Demo + Kunden)'
+              : isGlobal ? 'Demo-Epilog — wird an die Branche-Prompts angehängt (nur Demo)'
+              : 'Branche-spezifischer Epilog (überschreibt den Demo-Epilog für diese Branche)'}
           </label>
           <textarea
             value={draftEpilogue}
