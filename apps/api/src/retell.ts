@@ -130,6 +130,7 @@ export async function createLLM(config: {
   generalPrompt: string;
   tools: RetellTool[];
   model?: string;
+  modelTemperature?: number;
   knowledgeBaseIds?: string[];
   kbConfig?: { top_k?: number; filter_score?: number };
 }): Promise<RetellLLMConfig> {
@@ -139,6 +140,7 @@ export async function createLLM(config: {
       general_prompt: config.generalPrompt,
       general_tools: config.tools.length ? config.tools : undefined,
       model: config.model ?? 'gpt-4o-mini',
+      model_temperature: config.modelTemperature,
       knowledge_base_ids: config.knowledgeBaseIds?.length ? config.knowledgeBaseIds : undefined,
       kb_config: config.knowledgeBaseIds?.length ? (config.kbConfig ?? { top_k: 3, filter_score: 0.6 }) : undefined,
     }),
@@ -151,6 +153,7 @@ export async function updateLLM(
     generalPrompt?: string;
     tools?: RetellTool[];
     model?: string;
+    modelTemperature?: number;
     knowledgeBaseIds?: string[];
     kbConfig?: { top_k?: number; filter_score?: number };
   },
@@ -159,6 +162,7 @@ export async function updateLLM(
   if (config.generalPrompt !== undefined) body.general_prompt = config.generalPrompt;
   if (config.tools !== undefined) body.general_tools = config.tools.length ? config.tools : [];
   if (config.model !== undefined) body.model = config.model;
+  if (config.modelTemperature !== undefined) body.model_temperature = config.modelTemperature;
   if (config.knowledgeBaseIds !== undefined) {
     body.knowledge_base_ids = config.knowledgeBaseIds.length ? config.knowledgeBaseIds : [];
     if (config.knowledgeBaseIds.length) body.kb_config = config.kbConfig ?? { top_k: 3, filter_score: 0.6 };
@@ -265,8 +269,12 @@ export async function createAgent(config: {
   llmId: string;
   voiceId?: string;
   language?: string;
+  voiceSpeed?: number;
+  responsiveness?: number;
+  maxCallDurationMs?: number;
   interruptionSensitivity?: number;
   enableBackchannel?: boolean;
+  allowUserDtmf?: boolean;
   webhookUrl?: string;
   postCallAnalysisData?: PostCallAnalysisField[];
 }): Promise<RetellAgent> {
@@ -275,9 +283,13 @@ export async function createAgent(config: {
     response_engine: { type: 'retell-llm', llm_id: config.llmId },
     voice_id: config.voiceId ?? DEFAULT_VOICE_ID,
     language: config.language ?? 'de-DE',
+    voice_speed: config.voiceSpeed,
+    responsiveness: config.responsiveness,
     interruption_sensitivity: config.interruptionSensitivity ?? defaultInterruption(),
     enable_backchannel: config.enableBackchannel ?? defaultBackchannel(),
+    allow_user_dtmf: config.allowUserDtmf,
     enable_dynamic_responsiveness: true,
+    max_call_duration_ms: config.maxCallDurationMs,
     end_call_after_silence_ms: defaultEndCallSilenceMs(),
   };
   // webhook_url is per-agent — without it, Retell never sends call_ended
@@ -298,8 +310,12 @@ export async function updateAgent(
     voiceId?: string;
     language?: string;
     llmId?: string;
+    voiceSpeed?: number;
+    responsiveness?: number;
+    maxCallDurationMs?: number;
     interruptionSensitivity?: number;
     enableBackchannel?: boolean;
+    allowUserDtmf?: boolean;
     webhookUrl?: string;
     postCallAnalysisData?: PostCallAnalysisField[];
   },
@@ -314,6 +330,10 @@ export async function updateAgent(
   };
   if (config.interruptionSensitivity !== undefined) body.interruption_sensitivity = config.interruptionSensitivity;
   if (config.enableBackchannel !== undefined) body.enable_backchannel = config.enableBackchannel;
+  if (config.voiceSpeed !== undefined) body.voice_speed = config.voiceSpeed;
+  if (config.responsiveness !== undefined) body.responsiveness = config.responsiveness;
+  if (config.maxCallDurationMs !== undefined) body.max_call_duration_ms = config.maxCallDurationMs;
+  if (config.allowUserDtmf !== undefined) body.allow_user_dtmf = config.allowUserDtmf;
   if (config.name !== undefined) body.agent_name = config.name;
   if (config.voiceId !== undefined) body.voice_id = config.voiceId;
   if (config.language !== undefined) body.language = config.language;
