@@ -7,11 +7,11 @@ Großes Audit aller Phonbot-Module — vom Architektur-Big-Picture bis runter zu
 | # | Datei | Author | Reviewer | Status |
 |---|---|---|---|---|
 | 00 | `00-overview.md` — Architektur-Map + Trust-Boundaries | Claude | Codex | ⏳ Author done, awaiting review |
-| 01 | `01-auth-jwt.md` — Auth, JWT, Refresh-Token, Sessions | Claude | Codex | ⏳ Author done, awaiting review |
-| 02 | `02-agent-config-tenancy.md` — Agent-Config + Multi-Tenant-Isolation | Claude | Codex | ⏳ Author done, awaiting review |
-| 03 | `03-retell-webhooks-tools.md` — Retell-Webhooks + Tool-Dispatch | Claude | Codex | ⏳ Author done · ⚠️ **1× CRITICAL** (HMAC fehlt im lifecycle-webhook) |
-| 04 | `04-billing-stripe.md` — Stripe Subscription + Invoicing | Claude | Codex | ⏳ Author done · ⚠️ **1× CRITICAL** (overage-charge schluckt Stripe-Errors → Money-Loss) |
-| 05 | `05-calendar-oauth-sync.md` — Calendar OAuth + Poll-Sync | Claude | Codex | ⏳ Author done · 0🔴 · 2🟠 (silent token-refresh, XSS-Vektor via appUrl) · 4🟡 · 3🔵 |
+| 01 | `01-auth-jwt.md` — Auth, JWT, Refresh-Token, Sessions | Claude | Codex | 🔧 HIGH-2 + MEDIUM-1 + MEDIUM-2 + MEDIUM-5 + LOW-1 ✅ GEFIXT · HIGH-1 (cross-tab-race) noch offen |
+| 02 | `02-agent-config-tenancy.md` — Agent-Config + Multi-Tenant-Isolation | Claude | Codex | 🔧 CRITICAL-1 + HIGH-1 + HIGH-2 + MEDIUM-1/2/3 + LOW-1 ✅ GEFIXT |
+| 03 | `03-retell-webhooks-tools.md` — Retell-Webhooks + Tool-Dispatch | Claude | Codex | 🔧 CRITICAL-1 + HIGH-1 + HIGH-2 + MEDIUM-1/2/3 + LOW-1/2 ✅ GEFIXT |
+| 04 | `04-billing-stripe.md` — Stripe Subscription + Invoicing | Claude | Codex | 🔧 CRITICAL-1 + HIGH-1 + HIGH-2 + MEDIUM-2/3 ✅ GEFIXT · MEDIUM-1/4 noch offen |
+| 05 | `05-calendar-oauth-sync.md` — Calendar OAuth + Poll-Sync | Claude | Codex | 🔧 HIGH-1 + HIGH-2 + MEDIUM-3 ✅ GEFIXT · MEDIUM-1/2/4 noch offen |
 | 06 | `06-phone-twilio.md` — Twilio Numbers + Forwarding | — | — | ⬜ Pending |
 | 07 | `07-tickets-insights-leads.md` — Tickets + Insights + CRM | — | — | ⬜ Pending |
 | 08 | `08-db-schema-migrations.md` — Postgres Schema + Migrations | — | — | ⬜ Pending |

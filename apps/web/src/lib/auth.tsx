@@ -27,7 +27,12 @@ export type AuthState = {
 
 type AuthContextValue = AuthState & {
   login: (email: string, password: string) => Promise<void>;
-  register: (orgName: string, email: string, password: string) => Promise<void>;
+  register: (
+    orgName: string,
+    email: string,
+    password: string,
+    flags: { isBusiness: true; termsAccepted: true },
+  ) => Promise<void>;
   finalizeCheckout: (sessionId: string) => Promise<void>;
   logout: () => void;
 };
@@ -159,10 +164,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState({ token: data.token, user: data.user, org: data.org, bootstrapping: false });
   }, []);
 
-  const register = useCallback(async (orgName: string, email: string, password: string) => {
+  const register = useCallback(async (
+    orgName: string,
+    email: string,
+    password: string,
+    flags: { isBusiness: true; termsAccepted: true },
+  ) => {
     const data = await apiFetch<AuthResponse>('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ orgName, email, password }),
+      body: JSON.stringify({ orgName, email, password, ...flags }),
     });
     setAccessToken(data.token);
     setState({ token: data.token, user: data.user, org: data.org, bootstrapping: false });

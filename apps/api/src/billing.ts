@@ -406,7 +406,7 @@ async function syncSubscription(sub: Stripe.Subscription) {
     const dbOrgId = mapRes.rows[0]?.id as string | undefined;
     if (dbOrgId) {
       if (metaOrgId && metaOrgId !== dbOrgId) {
-        process.stderr.write(`[billing] metadata.orgId=${metaOrgId} mismatch with stripe_customer_id→orgId=${dbOrgId}; trusting DB mapping\n`);
+        log.warn({ metaOrgId, dbOrgId, customerId, subId: sub.id }, 'billing: metadata.orgId mismatch with stripe_customer_id mapping; trusting DB');
       }
       orgId = dbOrgId;
     }
@@ -713,7 +713,26 @@ export async function registerBilling(app: FastifyInstance) {
       }
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {
-        await syncSubscription(event.data.object as Stripe.Subscription);
+        const sub = event.data.object as Stripe.Subscription;
+        await syncSubscription(sub);
+        // On subscription.deleted: re-entry to free plan. syncSubscription
+        // sets plan=free + minutes_limit=30 (or whatever current free is) but
+        // does NOT touch minutes_used. A user who burned 350 min on Starter
+        // would otherwise come back to free with minutes_used > minutes_limit
+        // and be unable to test their own agent. Cap to the new limit so a
+        // returning user can at least keep using whatever's left of their
+        // free allowance — without giving them a fresh refill.
+        if (event.type === 'customer.subscription.deleted' && pool) {
+          const orgId = sub.metadata?.orgId;
+          if (orgId) {
+            await pool.query(
+              `UPDATE orgs SET minutes_used = LEAST(minutes_used, minutes_limit) WHERE id = $1`,
+              [orgId],
+            ).catch((err: Error) =>
+              log.error({ err: err.message, orgId }, 'billing: free-plan minutes_used reset failed'),
+            );
+          }
+        }
         break;
       }
       case 'customer.subscription.paused':

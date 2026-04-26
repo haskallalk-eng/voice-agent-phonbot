@@ -34,11 +34,9 @@ import { findFreeSlots, bookSlot } from './calendar.js';
 import { triggerCallback, readConfig } from './agent-config.js';
 import { executeIntegrationCall, type ApiIntegration } from './api-integrations.js';
 import { analyzeCall } from './insights.js';
+import { analyzeOutboundCall } from './outbound-insights.js';
 import { getOrgIdByAgentId } from './org-id-cache.js';
-// TODO(codex): re-enable once phone.ts checkForwardingVerificationMatch is pushed.
-// Currently disabled (with the call site below) so prod build doesn't fail on
-// the missing export — Codex's helper exists locally but is uncommitted.
-// import { checkForwardingVerificationMatch } from './phone.js';
+import { checkForwardingVerificationMatch } from './phone.js';
 import { getCall, deleteCall } from './retell.js';
 import { fireInboundWebhooks } from './inbound-webhooks.js';
 import { sendBookingConfirmationSms, sendTicketAckSms } from './sms.js';
@@ -190,7 +188,12 @@ function firstStringValue(...values: unknown[]): string {
     const trimmed = value.trim();
     if (!trimmed) continue;
     if (/^\{\{[^}]+\}\}$/.test(trimmed)) continue;
-    if (/^(unknown|anonymous|unbekannt|nicht angegeben)$/i.test(trimmed)) continue;
+    // LLM "no number" placeholders across our supported languages — keep extending
+    // as we add more locales (voice-catalog covers ~30; common 5-language minimum
+    // listed here covers DACH + EU/global routing). If the LLM picks anything
+    // outside this set we'd rather keep the (probably broken) value than silently
+    // route to demo — at least it surfaces in the logs.
+    if (/^(unknown|anonymous|unbekannt|nicht angegeben|nicht bekannt|keine angabe|keine telefonnummer|kein eintrag|kein wert|desconocido|anónimo|no proporcionado|no facilitado|inconnu|anonyme|non communiqué|sconosciuto|anonimo|non fornito|onbekend|anoniem|niet opgegeven|bilinmiyor|anonim|verilmedi|nieznany|anonimowy|nie podano|n\/?a|none|null|undefined)$/i.test(trimmed)) continue;
     return trimmed;
   }
   return '';
@@ -339,15 +342,16 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       const fromNumber = (call as RetellCallData).from_number;
       const toNumber = (call as RetellCallData).to_number;
 
-      // TODO(codex): re-enable once phone.ts checkForwardingVerificationMatch
-      // is pushed. Disabled to unblock the prod build.
-      // checkForwardingVerificationMatch(toNumber, fromNumber).catch((err: Error) =>
-      //   req.log.warn(
-      //     { err: err.message, toNumber, fromNumber },
-      //     'forwarding-verification match check failed',
-      //   ),
-      // );
-      void toNumber; void fromNumber; // keep variables referenced for now
+      // Close the forwarding-verification loop: if there's a pending verifier
+      // dial against this Phonbot inbound, match the inbound caller-ID and
+      // resolve the pending result. Fire-and-forget; the verify endpoint polls
+      // the Redis result key until TTL expires.
+      checkForwardingVerificationMatch(toNumber, fromNumber).catch((err: Error) =>
+        req.log.warn(
+          { err: err.message, toNumber, fromNumber },
+          'forwarding-verification match check failed',
+        ),
+      );
 
       if (orgId) {
         fireInboundWebhooks(orgId, 'call.started', {
@@ -470,12 +474,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
           if (isOutbound) {
             // Outbound sales call — use outbound learning system
-            import('./outbound-insights.js')
-              .then(({ analyzeOutboundCall }) =>
-                analyzeOutboundCall(orgId!, callId!, transcript, durationMs ? Math.round(durationMs / 1000) : undefined)
-                  .catch((err: Error) => req.log.error({ err: err.message, orgId, callId }, 'analyzeOutboundCall failed')),
-              )
-              .catch((err: Error) => req.log.error({ err: err.message }, 'outbound-insights import failed'));
+            analyzeOutboundCall(orgId, callId, transcript, durationMs ? Math.round(durationMs / 1000) : undefined)
+              .catch((err: Error) => req.log.error({ err: err.message, orgId, callId }, 'analyzeOutboundCall failed'));
           } else {
             // Inbound call — use inbound learning system
             analyzeCall(orgId, callId, transcript, {
@@ -648,6 +648,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       type: 'tool_call',
       sessionId: callId,
       tenantId: orgIdForSlots ?? undefined,
+      agentId: agentIdForSlots ?? undefined,
       tool: 'calendar.findSlots',
       input: args,
       at: now(),
@@ -695,6 +696,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       type: 'tool_result',
       sessionId: callId,
       tenantId: orgIdForSlots ?? undefined,
+      agentId: agentIdForSlots ?? undefined,
       tool: 'calendar.findSlots',
       output: result,
       at: now(),
@@ -727,6 +729,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       type: 'tool_call',
       sessionId: callId,
       tenantId: orgIdForBook ?? undefined,
+      agentId: agentIdForBook ?? undefined,
       tool: 'calendar.book',
       input: args,
       at: now(),
@@ -859,6 +862,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       type: 'tool_result',
       sessionId: callId,
       tenantId: orgIdForBook ?? undefined,
+      agentId: agentIdForBook ?? undefined,
       tool: 'calendar.book',
       output: result,
       at: now(),
@@ -902,6 +906,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       type: 'tool_call',
       sessionId: callId,
       tenantId: orgId ?? undefined,
+      agentId: agentId ?? undefined,
       tool: 'ticket.create',
       input: args,
       at: now(),
@@ -975,6 +980,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         type: 'tool_result',
         sessionId: callId,
         tenantId: orgId ?? undefined,
+        agentId: agentId ?? undefined,
         tool: 'ticket.create',
         output: result,
         at: now(),
@@ -1004,6 +1010,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         type: 'tool_result',
         sessionId: callId,
         tenantId: orgId ?? undefined,
+        agentId: agentId ?? undefined,
         tool: 'ticket.create',
         output: result,
         at: now(),
@@ -1069,6 +1076,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       type: 'tool_call',
       sessionId: callId,
       tenantId: orgId ?? undefined,
+      agentId: agentId ?? undefined,
       tool: 'recording.declined',
       input: args,
       at: now(),
@@ -1136,6 +1144,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       type: 'tool_call',
       sessionId: callId ?? 'retell',
       tenantId,
+      agentId: agentId ?? undefined,
       tool: `external:${integration.name}${endpoint ? `:${endpoint.name}` : ''}`,
       input: { argKeys: Object.keys(args) },
       at: now(),
@@ -1152,6 +1161,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       type: 'tool_result',
       sessionId: callId ?? 'retell',
       tenantId,
+      agentId: agentId ?? undefined,
       tool: `external:${integration.name}${endpoint ? `:${endpoint.name}` : ''}`,
       output: result.ok ? { status: result.status } : { error: result.error, status: result.status },
       at: now(),

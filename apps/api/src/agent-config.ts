@@ -32,6 +32,8 @@ import {
   maskApiIntegrationsForClient,
   type ApiIntegration,
 } from './api-integrations.js';
+import { syncOpeningHoursToChipy } from './opening-hours-sync.js';
+import { PLANS, type PlanId } from './billing.js';
 
 const AgentConfigSchema = z.object({
   tenantId: z.string().min(1).default('demo'),
@@ -202,6 +204,38 @@ function toClientConfig(config: AgentConfig): AgentConfig {
   return { ...config, apiIntegrations: masked } as AgentConfig;
 }
 
+/**
+ * Enforce the plan's agentsLimit when a write would create a new agent_configs
+ * row for this org. Looked up from PLANS in billing.ts (single source of truth).
+ * Throws AGENTS_LIMIT_REACHED (HTTP 403) when the org is at its cap.
+ *
+ * Closes the bypass where PUT /agent-config or POST /agent-config/knowledge/pdf
+ * could create a brand-new tenant_id past the plan limit, evading the explicit
+ * /agent-config/new check.
+ */
+async function enforcePlanAgentLimitOnCreate(orgId: string, tenantId: string): Promise<void> {
+  if (!pool) return;
+  const owned = await pool.query(
+    'SELECT 1 FROM agent_configs WHERE tenant_id = $1 AND org_id = $2',
+    [tenantId, orgId],
+  );
+  if (owned.rowCount) return; // existing row → it's an UPDATE, no limit applies
+  const orgRow = await pool.query('SELECT plan FROM orgs WHERE id = $1', [orgId]);
+  const plan = (orgRow.rows[0]?.plan as string) ?? 'free';
+  const limit = PLANS[plan as PlanId]?.agentsLimit ?? PLANS.free.agentsLimit;
+  const countRes = await pool.query(
+    'SELECT COUNT(*)::int AS c FROM agent_configs WHERE org_id = $1',
+    [orgId],
+  );
+  const count = (countRes.rows[0]?.c as number) ?? 0;
+  if (count >= limit) {
+    const err = new Error('AGENTS_LIMIT_REACHED') as Error & { statusCode?: number; details?: unknown };
+    err.statusCode = 403;
+    err.details = { limit, current: count, plan };
+    throw err;
+  }
+}
+
 async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentConfig> {
   const parsed = parseAgentConfig(config);
   const withIntegrations = await applyIntegrationEncryption(parsed, orgId);
@@ -210,6 +244,10 @@ async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentCo
     memory.set(normalized.tenantId, normalized);
     return normalized;
   }
+
+  // Plan-limit guard: if this write would create a new row for the org,
+  // enforce agentsLimit. Skipped for the orgId-less legacy path (memory only).
+  if (orgId) await enforcePlanAgentLimitOnCreate(orgId, normalized.tenantId);
 
   // Defence-in-depth: even though the HTTP handlers gate by tenantIdAvailableOrOwned,
   // a future caller that forgets the gate must NOT be able to overwrite another org's
@@ -235,13 +273,14 @@ async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentCo
   }
 
   // Keep chipy_schedules in sync with what the customer just edited in the
-  // Agent Builder. Loop-breaker + empty-string handling live in the helper —
-  // this stays a one-liner. Fire-and-forget: the openingHours string is
-  // already persisted on agent_configs, so a chipy-schedules write failure
-  // doesn't need to roll the user's save back.
-  void import('./opening-hours-sync.js').then(({ syncOpeningHoursToChipy }) =>
-    syncOpeningHoursToChipy(orgId, normalized.openingHours),
-  ).catch(() => {/* non-fatal */});
+  // Agent Builder. Loop-breaker + empty-string handling live in the helper.
+  // Fire-and-forget: the openingHours string is already persisted on
+  // agent_configs, so a chipy-schedules write failure doesn't need to roll
+  // the user's save back — but we log loudly so drift is visible (CLAUDE.md §13).
+  syncOpeningHoursToChipy(orgId, normalized.openingHours).catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.warn({ err: msg, orgId }, 'opening-hours-sync to chipy_schedules failed');
+  });
 
   return normalized;
 }
@@ -800,11 +839,10 @@ export async function registerAgentConfig(app: FastifyInstance) {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
-    // Check plan agents limit
+    // Check plan agents limit (single source of truth: PLANS in billing.ts).
     const orgRow = await pool.query(`SELECT plan FROM orgs WHERE id = $1`, [orgId]);
     const plan = (orgRow.rows[0]?.plan as string) ?? 'free';
-    const LIMITS: Record<string, number> = { free: 1, starter: 1, pro: 3, agency: 10 };
-    const limit = LIMITS[plan] ?? 1;
+    const limit = PLANS[plan as PlanId]?.agentsLimit ?? PLANS.free.agentsLimit;
 
     const countRes = await pool.query(
       `SELECT COUNT(*) FROM agent_configs WHERE org_id = $1`,
@@ -921,7 +959,13 @@ export async function registerAgentConfig(app: FastifyInstance) {
   // so the number in the builder header always reflects current reality.
   // Returns callsCount=0 when the agent hasn't been deployed or had no
   // calls yet; frontend shows "—" in that case instead of a fake estimate.
-  app.get('/agent-config/stats', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  // Rate-limit guards Retell-API budget: frontend polls every 15s per open
+  // builder tab; cap at 60/min per IP keeps a single user-with-4-tabs from
+  // burning Retell quota across the org.
+  app.get('/agent-config/stats', {
+    ...auth,
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
     const query = req.query as Record<string, string>;
     const tenantId = query.tenantId ?? orgId;
@@ -1055,7 +1099,20 @@ export async function registerAgentConfig(app: FastifyInstance) {
       retellKnowledgeBaseId: (serverIds as Record<string, unknown>).retellKnowledgeBaseId,
       knowledgeBaseSignature: (serverIds as Record<string, unknown>).knowledgeBaseSignature,
     });
-    return toClientConfig(await writeConfig(body, orgId));
+    try {
+      return toClientConfig(await writeConfig(body, orgId));
+    } catch (err) {
+      const e = err as Error & { statusCode?: number; details?: { limit?: number; current?: number } };
+      if (e.message === 'AGENTS_LIMIT_REACHED') {
+        return reply.status(403).send({
+          error: 'AGENTS_LIMIT_REACHED',
+          message: `Dein Plan erlaubt maximal ${e.details?.limit ?? '?'} Agent(s). Upgrade für mehr.`,
+          ...e.details,
+        });
+      }
+      if (e.statusCode === 409) return reply.status(409).send({ error: e.message });
+      throw err;
+    }
   });
 
   // Deploy config to Retell AI (save + sync).
@@ -1082,7 +1139,21 @@ export async function registerAgentConfig(app: FastifyInstance) {
       knowledgeBaseSignature: (serverIds as Record<string, unknown>).knowledgeBaseSignature,
     });
     const deployed = await deployToRetell(body, orgId);
-    const saved = await writeConfig(deployed, orgId);
+    let saved: AgentConfig;
+    try {
+      saved = await writeConfig(deployed, orgId);
+    } catch (err) {
+      const e = err as Error & { statusCode?: number; details?: { limit?: number } };
+      if (e.message === 'AGENTS_LIMIT_REACHED') {
+        return reply.status(403).send({
+          error: 'AGENTS_LIMIT_REACHED',
+          message: `Dein Plan erlaubt maximal ${e.details?.limit ?? '?'} Agent(s). Upgrade für mehr.`,
+          ...e.details,
+        });
+      }
+      if (e.statusCode === 409) return reply.status(409).send({ error: e.message });
+      throw err;
+    }
     // Flush stale agentId→orgId mapping so retell-webhooks.ts picks up the
     // new agent on the next webhook call instead of serving from cache.
     if (saved.retellAgentId) invalidateOrgIdCache(saved.retellAgentId);
@@ -1163,12 +1234,25 @@ export async function registerAgentConfig(app: FastifyInstance) {
       if (!owned.exists) return { ok: false, error: 'NOT_YOUR_AGENT' };
       config = owned.data;
     } else {
-      // Fallback: find first deployed agent for this org
       if (!pool) return { ok: false, error: 'AGENT_NOT_DEPLOYED', message: 'Deploy the agent first.' };
+      // Multi-agent orgs (Pro/Agency) MUST send agentTenantId — otherwise
+      // "Test" against one agent could hit a sibling agent that someone else
+      // just saved. We refuse the call rather than guess. Single-agent orgs
+      // keep the fallback so existing flows don't break.
       const res = await pool.query(
-        `SELECT data FROM agent_configs WHERE org_id = $1 AND data->>'retellAgentId' IS NOT NULL ORDER BY updated_at DESC LIMIT 1`,
+        `SELECT data FROM agent_configs
+         WHERE org_id = $1 AND data->>'retellAgentId' IS NOT NULL
+         ORDER BY updated_at DESC
+         LIMIT 2`,
         [orgId],
       );
+      if (res.rows.length > 1) {
+        return {
+          ok: false,
+          error: 'AGENT_TENANT_REQUIRED',
+          message: 'Bitte einen konkreten Agent auswählen — diese Org hat mehrere.',
+        };
+      }
       config = res.rows[0]?.data ? parseAgentConfig(res.rows[0].data) : await readConfig(orgId, orgId);
     }
 

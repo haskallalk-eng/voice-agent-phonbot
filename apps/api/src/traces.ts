@@ -6,7 +6,14 @@ export const TraceEventSchema = z.object({
   type: z.string().min(1),
   sessionId: z.string().min(1),
   at: z.number().int().nonnegative(),
+  // SECURITY-LOAD-BEARING: tenantId is the org-isolation key (the org_id UUID,
+  // despite the misleading name — kept for backwards-compat with stored events).
+  // First-writer-wins stamps a session to this value; subsequent reads must
+  // match or get []. Don't rename without a careful migration.
   tenantId: z.string().optional(),
+  // agentId is purely descriptive — lets multi-agent orgs (Pro/Agency plans)
+  // see which of their agents made a given tool call. NOT used for isolation.
+  agentId: z.string().optional(),
 }).passthrough();
 
 export type TraceEvent = z.infer<typeof TraceEventSchema>;

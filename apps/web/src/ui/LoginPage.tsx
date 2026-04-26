@@ -83,6 +83,8 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
           password: data.password,
           planId: plan as 'nummer' | 'starter' | 'pro' | 'agency',
           interval,
+          isBusiness: true,
+          termsAccepted: true,
         });
         window.location.href = url;
         return; // browser navigates away
@@ -91,7 +93,10 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
       if (mode === 'login') {
         await login(data.email, data.password);
       } else {
-        await authRegister(data.orgName, data.email, data.password);
+        await authRegister(data.orgName, data.email, data.password, {
+          isBusiness: true,
+          termsAccepted: true,
+        });
       }
 
       // Existing user logging in with a preselected plan still gets sent

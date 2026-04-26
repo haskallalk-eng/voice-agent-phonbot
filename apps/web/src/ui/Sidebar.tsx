@@ -57,15 +57,16 @@ type Props = {
 
 function DeleteAccountModal({ onClose, onLogout }: { onClose: () => void; onLogout: () => void }) {
   const [confirm, setConfirm] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleDelete() {
-    if (confirm !== 'LÖSCHEN') return;
+    if (confirm !== 'LÖSCHEN' || !password) return;
     setLoading(true);
     setError(null);
     try {
-      await deleteAccount();
+      await deleteAccount(password);
       onLogout();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Fehler beim Löschen');
@@ -81,6 +82,17 @@ function DeleteAccountModal({ onClose, onLogout }: { onClose: () => void; onLogo
           <p className="text-sm text-white/50 mt-1">
             Alle Daten — Agent, Anrufe, Tickets, Kalender — werden sofort und dauerhaft gelöscht. Dein Stripe-Abo wird gekündigt.
           </p>
+        </div>
+        <div>
+          <label className="block text-xs text-white/40 mb-1.5">Passwort zur Bestätigung</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            placeholder={'••••••••'}
+            className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-red-500/40"
+          />
         </div>
         <div>
           <label className="block text-xs text-white/40 mb-1.5">
@@ -103,7 +115,7 @@ function DeleteAccountModal({ onClose, onLogout }: { onClose: () => void; onLogo
           </button>
           <button
             onClick={handleDelete}
-            disabled={confirm !== 'LÖSCHEN' || loading}
+            disabled={confirm !== 'LÖSCHEN' || !password || loading}
             className="flex-1 py-2.5 rounded-xl bg-red-500/20 border border-red-500/30 text-red-300 text-sm font-medium hover:bg-red-500/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
           >
             {loading ? '…' : 'Löschen'}

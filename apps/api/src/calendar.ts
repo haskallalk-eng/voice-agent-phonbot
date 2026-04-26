@@ -314,24 +314,28 @@ export async function migrateCalendar(): Promise<void> {
 // an empty access_token that makes every downstream call 401.
 function decryptConn(row: CalendarConnection | null): CalendarConnection | null {
   if (!row) return null;
+  // Decryption fails when ENCRYPTION_KEY rotates without a re-encrypt sweep
+  // — the connection silently disappears from the UI and the customer wonders
+  // why "Google connected" but no events sync. log.error so the spike shows
+  // up in Sentry / structured logs instead of just stderr.
   if (row.access_token) {
     const dec = decryptToken(row.access_token);
     if (dec === null) {
-      process.stderr.write(`[calendar] decrypt access_token failed for org ${row.org_id}/${row.provider}\n`);
+      log.error({ orgId: row.org_id, provider: row.provider, field: 'access_token' }, 'calendar: token decrypt failed (key rotated?)');
     }
     row.access_token = dec ?? '';
   }
   if (row.refresh_token) {
     const dec = decryptToken(row.refresh_token);
     if (dec === null) {
-      process.stderr.write(`[calendar] decrypt refresh_token failed for org ${row.org_id}/${row.provider}\n`);
+      log.error({ orgId: row.org_id, provider: row.provider, field: 'refresh_token' }, 'calendar: token decrypt failed (key rotated?)');
     }
     row.refresh_token = dec;
   }
   if (row.api_key !== undefined && row.api_key !== null) {
     const dec = decryptToken(row.api_key);
     if (dec === null) {
-      process.stderr.write(`[calendar] decrypt api_key failed for org ${row.org_id}/${row.provider}\n`);
+      log.error({ orgId: row.org_id, provider: row.provider, field: 'api_key' }, 'calendar: token decrypt failed (key rotated?)');
     }
     row.api_key = dec;
   }
@@ -458,7 +462,15 @@ export async function getValidMsToken(orgId: string): Promise<string | null> {
         [encryptToken(data.access_token), encryptToken(data.refresh_token ?? null), expiresAt, orgId],
       );
       return data.access_token;
-    } catch {
+    } catch (err) {
+      // Loud log: silent null-returns here masked 5 months of Google 403s
+      // historically. Caller treats null as "no token" → user sees no Google
+      // mirror without knowing why. Surface the error so Ops can spot
+      // revoked-refresh-token / scope-change patterns.
+      log.warn(
+        { err: (err as Error).message, orgId, provider: 'microsoft' },
+        'calendar: token refresh failed — connection likely needs reconnect',
+      );
       return null;
     } finally {
       if (redis?.isOpen && gotLock === '1') {
@@ -619,7 +631,15 @@ export async function getValidToken(orgId: string): Promise<string | null> {
       );
 
       return data.access_token;
-    } catch {
+    } catch (err) {
+      // Loud log: silent null-returns here masked 5 months of Google 403s
+      // historically. Caller treats null as "no token" → user sees no Google
+      // mirror without knowing why. Surface the error so Ops can spot
+      // revoked-refresh-token / scope-change patterns.
+      log.warn(
+        { err: (err as Error).message, orgId, provider: 'google' },
+        'calendar: token refresh failed — connection likely needs reconnect',
+      );
       return null;
     } finally {
       if (redis?.isOpen && gotLock === '1') {
@@ -1870,9 +1890,9 @@ export async function registerCalendar(app: FastifyInstance): Promise<void> {
   <p style="color:rgba(255,255,255,.5);font-size:.875rem">Dieses Fenster schlie\u00dft sich automatisch\u2026</p>
 </div>
 <script>
-if(window.opener){try{window.opener.postMessage({type:'calendarConnected',provider:'google'},'${appUrl}')}catch(e){}}
+if(window.opener){try{window.opener.postMessage({type:'calendarConnected',provider:'google'}, ${JSON.stringify(appUrl)})}catch(e){}}
 setTimeout(function(){window.close()},1500);
-setTimeout(function(){window.location.href='${appUrl}?calendarConnected=true'},3000);
+setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calendarConnected=true'},3000);
 </script></body></html>`);
   });
 
@@ -2159,9 +2179,9 @@ setTimeout(function(){window.location.href='${appUrl}?calendarConnected=true'},3
   <p style="color:rgba(255,255,255,.5);font-size:.875rem">Dieses Fenster schlie\u00dft sich automatisch\u2026</p>
 </div>
 <script>
-if(window.opener){try{window.opener.postMessage({type:'calendarConnected',provider:'microsoft'},'${appUrl}')}catch(e){}}
+if(window.opener){try{window.opener.postMessage({type:'calendarConnected',provider:'microsoft'}, ${JSON.stringify(appUrl)})}catch(e){}}
 setTimeout(function(){window.close()},1500);
-setTimeout(function(){window.location.href='${appUrl}?calendarConnected=true'},3000);
+setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calendarConnected=true'},3000);
 </script></body></html>`);
   });
 
