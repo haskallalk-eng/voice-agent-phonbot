@@ -110,19 +110,21 @@ function parseAgentConfig(input: unknown): AgentConfig {
 
 const memory = new Map<string, AgentConfig>();
 
-export async function readConfig(tenantId: string, orgId?: string): Promise<AgentConfig> {
+export async function readConfig(tenantId: string, orgId: string): Promise<AgentConfig> {
   if (!pool) {
     return memory.get(tenantId) ?? parseAgentConfig({ tenantId });
   }
 
-  // When an orgId is supplied, enforce ownership — otherwise a caller with knowledge
-  // of another tenant's id could read that tenant's config (prompt, retellAgentId,
-  // business details, knowledge sources).
-  const sql = orgId
-    ? 'select data from agent_configs where tenant_id = $1 and (org_id = $2 or tenant_id = $2::text)'
-    : 'select data from agent_configs where tenant_id = $1';
-  const params = orgId ? [tenantId, orgId] : [tenantId];
-  const res = await pool.query(sql, params);
+  // Multi-tenant filter is mandatory: a caller who only knows the tenantId
+  // (e.g. an attacker who scraped one out of a Sentry payload) must not be
+  // able to read another org's config (prompt, retellAgentId, business
+  // details, knowledge sources). The OR-on-tenant_id branch survives the
+  // legacy single-agent-per-org case where tenant_id was set to the orgId
+  // string before org_id became its own column.
+  const res = await pool.query(
+    'select data from agent_configs where tenant_id = $1 and (org_id = $2 or tenant_id = $2::text)',
+    [tenantId, orgId],
+  );
   if (!res.rows.length) return parseAgentConfig({ tenantId });
   return parseAgentConfig(res.rows[0].data);
 }

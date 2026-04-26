@@ -1036,8 +1036,10 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     }
 
     // Load config — use the READ path that returns the encrypted authValue
-    // (readConfig, NOT the HTTP-masked view).
-    const config = await readConfig(tenantId).catch(() => null);
+    // (readConfig, NOT the HTTP-masked view). Both args are tenantId here:
+    // tenantId was already resolved from a signed param OR an agent_id DB
+    // lookup above, so it is the trusted org context for this call.
+    const config = await readConfig(tenantId, tenantId).catch(() => null);
     if (!config) return reply.status(404).send({ ok: false, error: 'CONFIG_NOT_FOUND' });
 
     const integrations = (config as Record<string, unknown>).apiIntegrations as
