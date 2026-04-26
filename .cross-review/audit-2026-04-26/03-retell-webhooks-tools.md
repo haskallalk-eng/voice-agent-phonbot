@@ -64,6 +64,8 @@ app.post('/retell/webhook', async (req: FastifyRequest, reply: FastifyReply) => 
 
 **Severity**: **🔴 CRITICAL** — direkter finanzieller Schaden + Datenintegrität bei publik-gewordener agent_id.
 
+**Status**: ✅ **GEFIXT** in commit `87a9f60` — Lifecycle-Webhook nutzt jetzt strict `verifyRetellSignature`, kein body-only-Fallback mehr. Bei Reject loud-error-log mit event + agent_id für Sichtbarkeit.
+
 **Vorsichtiger Fix**:
 ```ts
 app.post('/retell/webhook', async (req, reply) => {
@@ -102,6 +104,8 @@ if (pool) {
 
 **Severity**: **🟠 HIGH** — selten triggernd (DB muss failen genau in dem 50ms-Fenster), aber wenn es trifft, ist es ein Compliance-Verstoß.
 
+**Status**: ✅ **GEFIXT** in commit `87a9f60` — `await` + try/catch, Tool returnt 503 mit Message wenn der INSERT failed → LLM kann den Caller nochmal fragen oder den Anruf sauber beenden.
+
 **Vorsichtiger Fix**:
 - Tool muss `503` returnen wenn der Flag-INSERT failed, NICHT `200`. So weiß Retell + LLM dass etwas nicht klappte und kann den User informieren („Ich konnte deinen Widerspruch nicht speichern, bitte nenne ihn nochmal").
 - Alternative: `recording_declined`-Flag zusätzlich in einer **In-Memory + Redis**-Layer halten als safety net (call_ended-Pfad checkt beide).
@@ -133,6 +137,8 @@ fireInboundWebhooks(orgId, 'call.started', { ... }).catch(() => {}); // logged i
 - CLAUDE.md §13 verbietet `.catch(() => {})` ohne Logging. Comment „logged inside" ist nicht selbst-tragend (man muss in `inbound-webhooks.ts` reinschauen um zu prüfen).
 
 **Severity**: **🟠 HIGH** — wenn der Code in `inbound-webhooks.ts` future-edited wird ohne den `try/catch` zu erhalten, sind alle Customer-Webhook-Failures dark.
+
+**Status**: ✅ **GEFIXT** in commit `87a9f60` — alle 5 `.catch(() => {})` ersetzt durch `.catch((err) => req.log.warn({ err.message, orgId, event, ... }, 'inbound-webhook fan-out failed'))`. Failures jetzt im prod-Log strukturiert sichtbar.
 
 **Vorsichtiger Fix**:
 ```ts
@@ -217,6 +223,8 @@ await appendTraceEvent({
 **Fix**: 
 - Nach CRITICAL-1-Fix: Comment-Aktualisieren auf „lifecycle webhook above is strict HMAC; tool endpoints accept body-only auth because Retell doesn't sign Custom-Function calls".
 - Comment aus jedem Tool-Handler in eine **einzige** zentrale Konstante / Module-Doc-Comment ziehen — DRY für Comments auch.
+
+**Status**: ✅ **GEFIXT** in commit `87a9f60` — File-Header-Doc-Block (TOOL_AUTH_NOTE) erklärt jetzt beide Auth-Bars zentral; jedes Tool-Handler-Comment ist 1-Zeile-Pointer dorthin.
 
 ---
 
