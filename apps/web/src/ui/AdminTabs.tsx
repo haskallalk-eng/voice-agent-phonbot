@@ -210,6 +210,14 @@ export function DemoPromptsTab() {
       setDraftEpilogue(data.overrides.platformBaseline?.epilogue ?? data.defaults.platformBaseline);
       setDraftBase('');
       setEditBase(false);
+    } else if (scope === '__outbound__') {
+      setDraftEpilogue(data.overrides.outboundBaseline?.epilogue ?? data.defaults.outboundBaseline);
+      setDraftBase('');
+      setEditBase(false);
+    } else if (scope === '__sales__') {
+      setDraftEpilogue(data.overrides.salesPrompt?.epilogue ?? data.defaults.salesPrompt);
+      setDraftBase('');
+      setEditBase(false);
     } else if (scope === '__global__') {
       setDraftEpilogue(data.overrides.globalEpilogue?.epilogue ?? data.defaults.globalEpilogue);
       setDraftBase('');
@@ -274,12 +282,20 @@ export function DemoPromptsTab() {
   if (loading || !data) return <Spinner />;
 
   const isPlatform = scope === '__platform__';
+  const isOutbound = scope === '__outbound__';
+  const isSales = scope === '__sales__';
   const isGlobal = scope === '__global__';
   const tmpl = data.defaults.templates.find((t) => t.id === scope);
   const ovPlatform = data.overrides.platformBaseline;
+  const ovOutbound = data.overrides.outboundBaseline;
+  const ovSales = data.overrides.salesPrompt;
   const ovGlobal = data.overrides.globalEpilogue;
   const ovTmpl = data.overrides.templates.find((t) => t.id === scope)?.override ?? null;
-  const activeOverride = isPlatform ? ovPlatform : isGlobal ? ovGlobal : ovTmpl;
+  const activeOverride = isPlatform ? ovPlatform
+    : isOutbound ? ovOutbound
+    : isSales ? ovSales
+    : isGlobal ? ovGlobal
+    : ovTmpl;
 
   return (
     <div className="space-y-4">
@@ -290,9 +306,27 @@ export function DemoPromptsTab() {
           className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
             isPlatform ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' : 'bg-emerald-500/5 border-emerald-500/15 text-emerald-300/70 hover:bg-emerald-500/10'
           }`}
-          title="Plattform-Baseline — gilt für JEDEN Agent (Demo + zahlende Kunden), Mindest-Qualitätsstandard"
+          title="Plattform-Baseline — gilt für JEDEN Inbound-Agent (Demo + zahlende Kunden), Mindest-Qualitätsstandard"
         >
-          🌐 Plattform-Baseline (alle Agents)
+          🌐 Plattform-Baseline (Inbound)
+        </button>
+        <button
+          onClick={() => setScope('__outbound__')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+            isOutbound ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300' : 'bg-cyan-500/5 border-cyan-500/15 text-cyan-300/70 hover:bg-cyan-500/10'
+          }`}
+          title="Outbound-Baseline — gilt für JEDEN Outbound-Agent (Sales-Callback + Customer-Outbound). DSGVO Art.21, KI-Identifikation, kein Hard-Close"
+        >
+          📞 Outbound-Baseline (Rückrufe)
+        </button>
+        <button
+          onClick={() => setScope('__sales__')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+            isSales ? 'bg-fuchsia-500/20 border-fuchsia-500/40 text-fuchsia-300' : 'bg-fuchsia-500/5 border-fuchsia-500/15 text-fuchsia-300/70 hover:bg-fuchsia-500/10'
+          }`}
+          title="Phonbot Sales-Callback-Prompt — Chipy ruft Lead nach Website-Formular zurück"
+        >
+          ✨ Sales-Rückruf-Prompt
         </button>
         <span className="text-white/20 text-sm">·</span>
         <button
@@ -327,9 +361,21 @@ export function DemoPromptsTab() {
 
       {isPlatform && (
         <div className="rounded-xl bg-emerald-500/5 border border-emerald-500/20 px-4 py-3 text-xs text-emerald-200/90 space-y-1">
-          <p><strong>Plattform-Baseline</strong> — wird vor JEDEM Agent-Prompt eingefügt (Demo + zahlende Kunden). Stellt Mindest-Qualität sicher: DIN-5009-Buchstabieralphabet, end_call-Trigger, Promise-Disziplin, Datenschutz-Untergrenze.</p>
+          <p><strong>Plattform-Baseline (Inbound)</strong> — wird vor JEDEM Inbound-Agent-Prompt eingefügt (Demo + zahlende Kunden). Stellt Mindest-Qualität sicher: DIN-5009-Buchstabieralphabet, end_call-Trigger, Promise-Disziplin, Datenschutz-Untergrenze.</p>
           <p>Kunden sehen diesen Block nicht und können ihn nicht editieren. Greift auch wenn der Kunde gar keinen System-Prompt konfiguriert hat.</p>
           <p className="text-emerald-300/60">Demo-Agents picken die Änderung nach <em>Cache leeren</em> sofort. Zahlende Kunden picken sie beim nächsten Speichern ihres Agent-Configs auf — oder via "Alle Kunden neu deployen" (TODO).</p>
+        </div>
+      )}
+      {isOutbound && (
+        <div className="rounded-xl bg-cyan-500/5 border border-cyan-500/20 px-4 py-3 text-xs text-cyan-200/90 space-y-1">
+          <p><strong>Outbound-Baseline</strong> — wird vor JEDEM Agent eingefügt, der AKTIV anruft (Phonbot Sales-Rückruf + zukünftige Customer-Outbound-Agenten). Bewusst getrennt von der Inbound-Baseline weil der Anrufer hier nicht uns angerufen hat.</p>
+          <p>Pflicht-Inhalte: DSGVO-Widerspruch (Art. 21) sofort akzeptieren, KI-Identifikation auf Nachfrage (EU AI Act / § 13 UWG), kein Hard-Close, höflicher Auftakt mit Bezug auf den Anlass.</p>
+        </div>
+      )}
+      {isSales && (
+        <div className="rounded-xl bg-fuchsia-500/5 border border-fuchsia-500/20 px-4 py-3 text-xs text-fuchsia-200/90 space-y-1">
+          <p><strong>Sales-Rückruf-Prompt</strong> — der Prompt für Chipy's Outbound-Anrufe nach Website-Formular. Wird mit der Outbound-Baseline (siehe oben) kombiniert.</p>
+          <p>Dynamische Variablen die Retell zur Laufzeit ersetzt: <code>{`{{signup_link}}`}</code>, <code>{`{{signup_sms_sent}}`}</code>. Behalte sie wenn du den Prompt anpasst.</p>
         </div>
       )}
 
@@ -340,7 +386,11 @@ export function DemoPromptsTab() {
       <div className="rounded-xl bg-white/5 border border-white/10 p-4 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-white">
-            {isPlatform ? '🌐 Plattform-Baseline (alle Agents)' : isGlobal ? 'Demo-Epilog (nur Demo)' : `${tmpl?.icon} ${tmpl?.name} — Branche-Prompt`}
+            {isPlatform ? '🌐 Plattform-Baseline (Inbound)'
+              : isOutbound ? '📞 Outbound-Baseline (Rückrufe)'
+              : isSales ? '✨ Sales-Rückruf-Prompt'
+              : isGlobal ? 'Demo-Epilog (nur Demo)'
+              : `${tmpl?.icon} ${tmpl?.name} — Branche-Prompt`}
           </h3>
           <div className="text-xs text-white/40">
             {activeOverride ? (
@@ -351,7 +401,7 @@ export function DemoPromptsTab() {
           </div>
         </div>
 
-        {!isPlatform && !isGlobal && (
+        {!isPlatform && !isOutbound && !isSales && !isGlobal && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-xs font-medium text-white/60">Branche-Prompt (vor dem Epilog)</label>
@@ -372,7 +422,9 @@ export function DemoPromptsTab() {
 
         <div className="space-y-2">
           <label className="text-xs font-medium text-white/60">
-            {isPlatform ? 'Plattform-Baseline — wird vor JEDEN Agent-Prompt gehängt (Demo + Kunden)'
+            {isPlatform ? 'Plattform-Baseline (Inbound) — wird vor JEDEN Inbound-Agent-Prompt gehängt'
+              : isOutbound ? 'Outbound-Baseline — wird vor JEDEN Outbound-Agent-Prompt gehängt'
+              : isSales ? 'Sales-Rückruf-Prompt (kombiniert sich mit der Outbound-Baseline)'
               : isGlobal ? 'Demo-Epilog — wird an die Branche-Prompts angehängt (nur Demo)'
               : 'Branche-spezifischer Epilog (überschreibt den Demo-Epilog für diese Branche)'}
           </label>

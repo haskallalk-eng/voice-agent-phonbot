@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { createWebCall, createLLM, createAgent as retellCreateAgent, createPhoneCall, updatePhoneNumber, DEFAULT_VOICE_ID, type RetellTool, type PostCallAnalysisField } from './retell.js';
 import { TEMPLATES } from './templates.js';
 import { loadPlatformBaseline } from './platform-baseline.js';
+import { loadOutboundBaseline } from './outbound-baseline.js';
 
 // Retell built-in end_call tool. Lets GPT-4o-mini hang up the demo when the
 // caller says goodbye OR after the agent has announced a forwarding
@@ -150,8 +151,18 @@ async function readDemoPromptOverrides(templateId: string): Promise<{ basePrompt
 export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
   inMemDemoAgents.clear();
   inMemDemoAgentMeta.clear();
+  salesAgentIdMem = null;
   let flushed = 0;
   if (redis?.isOpen) {
+    // Sales-Callback agent (single key, no wildcard) — drop directly.
+    try {
+      const removed = await redis.del(SALES_AGENT_KEY);
+      flushed += typeof removed === 'number' ? removed : 0;
+      // Clean up the previous v3 key too on the way past.
+      await redis.del('sales_agent:phonbot:v3').catch(() => {});
+    } catch {
+      /* non-critical */
+    }
     // Include older versioned keys in the scan so a deploy that bumps the
     // cache key cleans up its own predecessors. Cheap — Redis SCAN is O(N)
     // total across all keys, not O(N) per pattern.
@@ -244,7 +255,11 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
 
 /* ── Sales callback agent ── */
 
-const SALES_PROMPT = `Du bist Chipy, der freundliche KI-Assistent von Phonbot. Du rufst gerade jemanden an, der sich für Phonbot interessiert hat und einen Rückruf angefordert hat.
+// Compiled-in default for the Phonbot Sales-Callback (Rückruf) agent.
+// Admin can override at runtime via demo_prompt_overrides row template_id='__sales__'
+// (see loadSalesPrompt below). Exported so the admin UI can show the default
+// next to the override.
+export const DEFAULT_SALES_PROMPT = `Du bist Chipy, der freundliche KI-Assistent von Phonbot. Du rufst gerade jemanden an, der sich für Phonbot interessiert hat und einen Rückruf angefordert hat.
 
 DEIN ZIEL: Finde heraus welches Business der Interessent hat und zeige ihm wie Phonbot konkret helfen kann. Sei ehrlich, sympathisch und beratend — nicht aufdringlich.
 
@@ -268,10 +283,23 @@ REGELN:
 - Wenn der Interessent den Link möchte: Sage, dass der Testlink an die angegebene E-Mail geschickt wurde. Wenn {{signup_sms_sent}} = true ist, sage zusätzlich dass er auch per SMS verschickt wurde. Nenne bei Bedarf diesen Link: {{signup_link}}
 `;
 
+// Read admin-edited Sales prompt if set, otherwise the compiled-in default.
+async function loadSalesPrompt(): Promise<string> {
+  if (!pool) return DEFAULT_SALES_PROMPT;
+  const res = await pool.query(
+    `SELECT epilogue FROM demo_prompt_overrides WHERE template_id = '__sales__'`,
+  ).catch(() => null);
+  if (!res || !res.rowCount) return DEFAULT_SALES_PROMPT;
+  const stored = res.rows[0].epilogue as string;
+  return stored && stored.trim() ? stored : DEFAULT_SALES_PROMPT;
+}
+
 // Sales agent ID — Redis-backed (shared across containers, survives restarts)
-// In-memory fallback for when Redis is down.
+// In-memory fallback for when Redis is down. Cache key bumps to v4 because
+// the prompt now layers Outbound-Baseline + Sales-Prompt — old v3 cached
+// agents lack that.
 let salesAgentIdMem: string | null = null;
-const SALES_AGENT_KEY = 'sales_agent:phonbot:v3';
+const SALES_AGENT_KEY = 'sales_agent:phonbot:v4';
 
 export async function getOrCreateSalesAgent(): Promise<string> {
   if (redis?.isOpen) {
@@ -282,9 +310,13 @@ export async function getOrCreateSalesAgent(): Promise<string> {
   }
 
   const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';
+  // Layer Outbound-Baseline + (admin-overridable) Sales-Prompt. Outbound
+  // baseline carries DSGVO-Widerspruch + KI-Identifikation + DIN-5009 etc.
+  const outboundBaseline = await loadOutboundBaseline();
+  const salesPrompt = await loadSalesPrompt();
   const llm = await createLLM({
-    generalPrompt: SALES_PROMPT,
-    tools: [],
+    generalPrompt: `${outboundBaseline}\n\n${salesPrompt}`,
+    tools: [DEMO_END_CALL_TOOL],
     model,
   });
 
