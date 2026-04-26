@@ -632,12 +632,24 @@ export async function registerAdmin(app: FastifyInstance) {
       systemicApplied = true;
 
       // For template_learnings, also flag the source row so the existing
-      // org-side propagation pipeline sees it.
+      // org-side propagation pipeline sees it. On a correction, ALSO write
+      // the corrected text back into template_learnings.content so any
+      // future re-ingest (apply-to-template flow, learning-export) uses
+      // the corrected version, not the original auto-generated text.
       if (sourceKind === 'template_learning') {
-        await pool.query(
-          `UPDATE template_learnings SET status = 'applied', applied_at = now() WHERE id = $1`,
-          [sourceId],
-        );
+        if (decision === 'correct') {
+          await pool.query(
+            `UPDATE template_learnings
+                SET content = $2, status = 'applied', applied_at = now()
+              WHERE id = $1`,
+            [sourceId, textToApply],
+          );
+        } else {
+          await pool.query(
+            `UPDATE template_learnings SET status = 'applied', applied_at = now() WHERE id = $1`,
+            [sourceId],
+          );
+        }
       }
     }
 
