@@ -66,7 +66,17 @@ export async function registerAdmin(app: FastifyInstance) {
 
     // H2: admin:true + aud:'phonbot:admin' separates admin-tokens from user-tokens
     // (both verified by requireAdmin middleware to prevent user-JWT privilege escalation)
-    const token = app.jwt.sign({ admin: true, aud: 'phonbot:admin' }, { expiresIn: '24h' });
+    // `email` is carried so audit columns (demo_prompt_overrides.updated_by,
+    // learning_decisions.decided_by, learning_corrections.applied_by) can
+    // actually record who acted. Single-shared-password operation means we
+    // can't tell admins apart, but ADMIN_EMAIL env-var lets ops tag their
+    // identity (e.g. set to "max@mindrails.de" on max's container) so the
+    // audit trail isn't all-NULL.
+    const adminEmail = process.env.ADMIN_EMAIL ?? 'platform-admin';
+    const token = app.jwt.sign(
+      { admin: true, aud: 'phonbot:admin', email: adminEmail },
+      { expiresIn: '24h' },
+    );
     return { token };
   });
 
@@ -511,8 +521,19 @@ export async function registerAdmin(app: FastifyInstance) {
       // for meta-learning). Same scope semantics as 'apply'.
       decision: z.enum(['apply', 'correct', 'reject']),
       scope: z.enum(['systemic', 'org', 'both']).optional(),
-      // Required when decision='correct'
-      correctedText: z.string().min(1).max(20_000).optional(),
+      // Required when decision='correct'.
+      // Refuse marker-syntax: we use `<!-- learning:KIND:UUID -->` to delimit
+      // applied learning blocks in the global epilogue and idempotency-strip
+      // them on re-apply. A correctedText carrying its own marker would
+      // (a) survive the strip-regex (lookahead matches the next marker), so
+      // it'd persist as a ghost-block, AND
+      // (b) be a prompt-injection vector if the strip ever runs greedy.
+      // Easier: forbid the literal sequence in user input.
+      correctedText: z.string().min(1).max(20_000)
+        .refine((t) => !/<!--\s*learning:/i.test(t), {
+          message: 'correctedText may not contain "<!-- learning:" marker syntax',
+        })
+        .optional(),
       correctionReason: z.string().max(2000).optional(),
       // Required when decision='reject'
       rejectReason: z.string().max(500).optional(),

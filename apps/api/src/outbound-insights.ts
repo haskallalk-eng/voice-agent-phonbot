@@ -358,8 +358,11 @@ export async function analyzeAndImproveOutboundPrompt(
   const llmId = orgRes.rows[0]?.outbound_llm_id;
   if (llmId) {
     try {
-      const { loadPlatformBaseline } = await import('./platform-baseline.js');
-      const baseline = await loadPlatformBaseline();
+      // Customer-Outbound-Agent → Outbound-Baseline (NOT inbound-platform).
+      // The auto-relearn pipeline must preserve the same baseline that
+      // deployToCallbackRetell/deployToOutboundRetell originally prepended.
+      const { loadOutboundBaseline } = await import('./outbound-baseline.js');
+      const baseline = await loadOutboundBaseline();
       await updateLLM(llmId, { generalPrompt: `${baseline}\n\n${newPrompt}` });
     } catch {
       // Non-critical — Retell update failure doesn't break the system

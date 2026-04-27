@@ -169,7 +169,7 @@ export async function migrateOutbound() {
       reject_reason     TEXT
     );
   `);
-  await pool.query(`COMMENT ON TABLE learning_decisions IS 'Admin queue for learning improvements. Each row = one decision (apply scope=systemic|org|both, or reject).';`);
+  await pool.query(`COMMENT ON TABLE learning_decisions IS 'Admin queue for learning improvements. Each row = one decision (apply scope=systemic|org|both, or reject). DSGVO Art. 5(1)(e): 365-day retention via cleanupOldLeads().';`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS learning_decisions_source_uniq ON learning_decisions(source_kind, source_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS learning_decisions_status_idx ON learning_decisions(status, created_at DESC);`);
 
@@ -193,7 +193,7 @@ export async function migrateOutbound() {
       used_for_meta_at    TIMESTAMPTZ
     );
   `);
-  await pool.query(`COMMENT ON TABLE learning_corrections IS 'Meta-Lernen: admin-Korrekturen an Lern-Vorschlägen. Speist die nächste Generation des Suggestion-Generators.';`);
+  await pool.query(`COMMENT ON TABLE learning_corrections IS 'Meta-Lernen: admin-Korrekturen an Lern-Vorschlägen. Speist die nächste Generation des Suggestion-Generators. DSGVO Art. 5(1)(e): 365-day retention via cleanupOldLeads(). original_text kann Anruf-Zitate enthalten, daher PII-relevant.';`);
   await pool.query(`CREATE INDEX IF NOT EXISTS learning_corrections_created_idx ON learning_corrections(created_at DESC);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS learning_corrections_source_idx ON learning_corrections(source_kind, source_id);`);
 
