@@ -984,6 +984,12 @@ export async function cleanupOldLeads(): Promise<number> {
   await pool.query(
     `DELETE FROM prompt_override_history WHERE created_at < NOW() - INTERVAL '365 days'`,
   ).catch(() => { /* table may not exist yet on first boot */ });
+  // Audit-Round-9 H3: durable agent_id → template_id map for demo webhooks.
+  // Mappings older than 30 days are dead weight (Retell agents have long
+  // since rotated; no incoming webhook would still need them).
+  await pool.query(
+    `DELETE FROM demo_agent_templates WHERE created_at < NOW() - INTERVAL '30 days'`,
+  ).catch(() => { /* table may not exist yet on first boot */ });
   return (res as { rowCount?: number }).rowCount ?? 0;
 }
 

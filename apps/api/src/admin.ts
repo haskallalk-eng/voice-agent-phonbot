@@ -703,163 +703,216 @@ export async function registerAdmin(app: FastifyInstance) {
     }
     const adminEmail = (req.user as Record<string, unknown> | undefined)?.email as string | undefined;
     const status = decision === 'reject' ? 'rejected' : 'applied';
-
-    // Look up source row to copy summary/proposed_change for audit trail.
-    let summary: string | null = null;
-    let proposedChange = '';
-    let orgId: string | null = null;
-    let templateId: string | null = null;
-    if (sourceKind === 'prompt_suggestion') {
-      const r = await pool.query(
-        `SELECT issue_summary, suggested_addition, org_id FROM prompt_suggestions WHERE id = $1`,
-        [sourceId],
-      );
-      if (!r.rowCount) return reply.status(404).send({ error: 'Suggestion not found' });
-      summary = (r.rows[0].issue_summary as string) ?? null;
-      proposedChange = (r.rows[0].suggested_addition as string) ?? '';
-      orgId = (r.rows[0].org_id as string) ?? null;
-    } else {
-      const r = await pool.query(
-        `SELECT learning_type, content, template_id FROM template_learnings WHERE id = $1`,
-        [sourceId],
-      );
-      if (!r.rowCount) return reply.status(404).send({ error: 'Learning not found' });
-      summary = (r.rows[0].learning_type as string) ?? null;
-      proposedChange = (r.rows[0].content as string) ?? '';
-      templateId = (r.rows[0].template_id as string) ?? null;
-    }
-
     const scope = (decision === 'apply' || decision === 'correct') ? (parsed.data.scope ?? null) : null;
     const rejectReason = decision === 'reject' ? (parsed.data.rejectReason ?? null) : null;
-
-    // The text we actually apply: corrected version if admin edited it,
-    // otherwise the original system-generated proposal. Both paths flow
-    // through the same systemic/org/both branches below — the only
-    // difference is what TEXT lands.
-    const textToApply = decision === 'correct'
-      ? (parsed.data.correctedText ?? '').trim()
-      : proposedChange;
-
-    // Save the (original, corrected, reason) tuple to seed the meta-learning
-    // pipeline. Stored regardless of scope so even an org-only correction
-    // still trains the system-wide suggestion-generator.
-    if (decision === 'correct' && textToApply !== proposedChange) {
-      await pool.query(
-        `INSERT INTO learning_corrections
-           (source_kind, source_id, summary, original_text, corrected_text,
-            correction_reason, scope_applied, applied_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [
-          sourceKind, sourceId, summary,
-          proposedChange, textToApply,
-          parsed.data.correctionReason ?? null,
-          scope, adminEmail ?? null,
-        ],
-      ).catch((err: Error) => req.log.warn({ err: err.message, sourceKind, sourceId }, 'learning_corrections insert failed'));
-    }
-
-    await pool.query(
-      `INSERT INTO learning_decisions
-        (source_kind, source_id, org_id, template_id, scope, status,
-         summary, proposed_change, decided_at, decided_by, reject_reason)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), $9, $10)
-       ON CONFLICT (source_kind, source_id) DO UPDATE SET
-         scope = EXCLUDED.scope,
-         status = EXCLUDED.status,
-         proposed_change = EXCLUDED.proposed_change,
-         decided_at = now(),
-         decided_by = EXCLUDED.decided_by,
-         reject_reason = EXCLUDED.reject_reason`,
-      [sourceKind, sourceId, orgId, templateId, scope, status, summary, textToApply, adminEmail ?? null, rejectReason],
-    );
-
-    let systemicApplied = false;
-    let orgApplied = false;
     const isApplying = decision === 'apply' || decision === 'correct';
 
-    if (isApplying && scope && (scope === 'systemic' || scope === 'both')) {
-      // Append to the global demo epilogue. Idempotent per (sourceKind, sourceId)
-      // via the marker line; if the same source is applied twice (e.g. apply
-      // then correct), the marker block is replaced rather than re-appended.
-      const marker = `<!-- learning:${sourceKind}:${sourceId} -->`;
-      const block = `\n\n${marker}\n${textToApply.trim()}`;
-      const existing = await pool.query(
-        `SELECT epilogue FROM demo_prompt_overrides WHERE template_id = '__global__'`,
-      );
-      const current = existing.rowCount ? (existing.rows[0].epilogue as string) : DEMO_END_INSTRUCTIONS;
-      // Strip any prior block for this source (pattern: marker + everything
-      // up to the next marker or EOF). Using a non-greedy lookahead keeps
-      // sibling blocks intact.
-      const stripped = current.replace(
-        new RegExp(`\\n*${marker.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}[\\s\\S]*?(?=\\n*<!-- learning:|$)`, 'g'),
-        '',
-      );
-      const next = stripped + block;
-      await pool.query(
-        `INSERT INTO demo_prompt_overrides (template_id, epilogue, updated_by)
-         VALUES ('__global__', $1, $2)
-         ON CONFLICT (template_id) DO UPDATE SET
-           epilogue   = EXCLUDED.epilogue,
-           updated_at = now(),
-           updated_by = EXCLUDED.updated_by`,
-        [next, adminEmail ?? null],
-      );
-      await flushDemoAgentCache();
-      systemicApplied = true;
+    // Audit-Round-9 H2: wrap the entire multi-statement decide-flow in one
+    // transaction. Without this, a crash mid-way (e.g. between learning_
+    // corrections-INSERT and learning_decisions-UPSERT) left inconsistent
+    // state: orphaned correction rows, applied-but-no-source-update, etc.
+    //
+    // Audit-Round-9 M5: SELECT … FOR UPDATE on the source row at the top of
+    // the transaction serialises parallel decide-clicks on the same source,
+    // so a double-clicking admin produces exactly one correction insert and
+    // one global-epilogue write — no read-modify-write race on the override.
+    //
+    // The cache-flush is INTENTIONALLY outside the transaction (M4): it's
+    // a Redis op that can take seconds; we do it fire-and-forget after
+    // commit so the admin's HTTP response isn't blocked.
+    const client = await pool.connect();
+    let systemicApplied = false;
+    let orgApplied = false;
+    let needsFlush = false;
+    let notFound = false;
+    let proposedChange = '';
+    let summary: string | null = null;
+    let orgId: string | null = null;
+    let templateId: string | null = null;
+    let textToApply = '';
 
-      // For template_learnings, also flag the source row so the existing
-      // org-side propagation pipeline sees it. On a correction, ALSO write
-      // the corrected text back into template_learnings.content so any
-      // future re-ingest (apply-to-template flow, learning-export) uses
-      // the corrected version, not the original auto-generated text.
-      if (sourceKind === 'template_learning') {
-        if (decision === 'correct') {
-          await pool.query(
-            `UPDATE template_learnings
-                SET content = $2, status = 'applied', applied_at = now()
-              WHERE id = $1`,
-            [sourceId, textToApply],
-          );
-        } else {
-          await pool.query(
-            `UPDATE template_learnings SET status = 'applied', applied_at = now() WHERE id = $1`,
-            [sourceId],
-          );
-        }
-      }
-    }
+    try {
+      await client.query('BEGIN');
 
-    if (isApplying && scope && (scope === 'org' || scope === 'both')) {
+      // Lock the source row so concurrent decide-calls on the same source
+      // serialise. `FOR UPDATE` is safe here — both source tables are small
+      // and the lock is held for the rest of this transaction (sub-second).
       if (sourceKind === 'prompt_suggestion') {
-        // For corrections, we ALSO want the corrected text to land in the
-        // org's source row so any future re-deploy uses the corrected version
-        // rather than the original auto-generated one.
-        if (decision === 'correct') {
-          await pool.query(
-            `UPDATE prompt_suggestions
-                SET suggested_addition = $2, status = 'applied', applied_at = now()
-              WHERE id = $1`,
-            [sourceId, textToApply],
-          );
-        } else {
-          await pool.query(
-            `UPDATE prompt_suggestions SET status = 'applied', applied_at = now() WHERE id = $1`,
-            [sourceId],
-          );
+        const r = await client.query(
+          `SELECT issue_summary, suggested_addition, org_id FROM prompt_suggestions WHERE id = $1 FOR UPDATE`,
+          [sourceId],
+        );
+        if (!r.rowCount) { notFound = true; }
+        else {
+          summary = (r.rows[0].issue_summary as string) ?? null;
+          proposedChange = (r.rows[0].suggested_addition as string) ?? '';
+          orgId = (r.rows[0].org_id as string) ?? null;
         }
-        orgApplied = true;
-      }
-      // template_learning + org-scope makes no sense (the row is system-level by definition);
-      // we silently no-op so the admin can still pick "both" for a template_learning that
-      // also has an analogous prompt_suggestion they applied separately.
-    }
-
-    if (decision === 'reject') {
-      if (sourceKind === 'prompt_suggestion') {
-        await pool.query(`UPDATE prompt_suggestions SET status = 'rejected' WHERE id = $1`, [sourceId]);
       } else {
-        await pool.query(`UPDATE template_learnings SET status = 'rejected' WHERE id = $1`, [sourceId]);
+        const r = await client.query(
+          `SELECT learning_type, content, template_id FROM template_learnings WHERE id = $1 FOR UPDATE`,
+          [sourceId],
+        );
+        if (!r.rowCount) { notFound = true; }
+        else {
+          summary = (r.rows[0].learning_type as string) ?? null;
+          proposedChange = (r.rows[0].content as string) ?? '';
+          templateId = (r.rows[0].template_id as string) ?? null;
+        }
       }
+
+      if (notFound) {
+        await client.query('ROLLBACK');
+      } else {
+        // The text we actually apply: corrected version if admin edited it,
+        // otherwise the original system-generated proposal.
+        textToApply = decision === 'correct'
+          ? (parsed.data.correctedText ?? '').trim()
+          : proposedChange;
+
+        // Save the (original, corrected, reason) tuple to seed the meta-
+        // learning pipeline. Inside the transaction so a rollback drops
+        // the correction row too — keeps state consistent if a downstream
+        // step fails.
+        if (decision === 'correct' && textToApply !== proposedChange) {
+          await client.query(
+            `INSERT INTO learning_corrections
+               (source_kind, source_id, summary, original_text, corrected_text,
+                correction_reason, scope_applied, applied_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [
+              sourceKind, sourceId, summary,
+              proposedChange, textToApply,
+              parsed.data.correctionReason ?? null,
+              scope, adminEmail ?? null,
+            ],
+          );
+        }
+
+        await client.query(
+          `INSERT INTO learning_decisions
+            (source_kind, source_id, org_id, template_id, scope, status,
+             summary, proposed_change, decided_at, decided_by, reject_reason)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), $9, $10)
+           ON CONFLICT (source_kind, source_id) DO UPDATE SET
+             scope = EXCLUDED.scope,
+             status = EXCLUDED.status,
+             proposed_change = EXCLUDED.proposed_change,
+             decided_at = now(),
+             decided_by = EXCLUDED.decided_by,
+             reject_reason = EXCLUDED.reject_reason`,
+          [sourceKind, sourceId, orgId, templateId, scope, status, summary, textToApply, adminEmail ?? null, rejectReason],
+        );
+
+        if (isApplying && scope && (scope === 'systemic' || scope === 'both')) {
+          // Append to the global demo epilogue. Idempotent per (sourceKind, sourceId)
+          // via the marker line; if the same source is applied twice (e.g. apply
+          // then correct), the marker block is replaced rather than re-appended.
+          const marker = `<!-- learning:${sourceKind}:${sourceId} -->`;
+          const block = `\n\n${marker}\n${textToApply.trim()}`;
+          const existing = await client.query(
+            `SELECT epilogue FROM demo_prompt_overrides WHERE template_id = '__global__' FOR UPDATE`,
+          );
+          const current = existing.rowCount ? (existing.rows[0].epilogue as string) : DEMO_END_INSTRUCTIONS;
+          // Strip any prior block for this source (pattern: marker + everything
+          // up to the next marker or EOF). Using a non-greedy lookahead keeps
+          // sibling blocks intact.
+          const stripped = current.replace(
+            new RegExp(`\\n*${marker.replace(/[-/\\^$*+?.()|[\\]{}]/g, '\\$&')}[\\s\\S]*?(?=\\n*<!-- learning:|$)`, 'g'),
+            '',
+          );
+          const next = stripped + block;
+          await client.query(
+            `INSERT INTO demo_prompt_overrides (template_id, epilogue, updated_by)
+             VALUES ('__global__', $1, $2)
+             ON CONFLICT (template_id) DO UPDATE SET
+               epilogue   = EXCLUDED.epilogue,
+               updated_at = now(),
+               updated_by = EXCLUDED.updated_by`,
+            [next, adminEmail ?? null],
+          );
+          systemicApplied = true;
+          needsFlush = true;
+
+          // For template_learnings, also flag the source row so the existing
+          // org-side propagation pipeline sees it. On a correction, ALSO write
+          // the corrected text back into template_learnings.content so any
+          // future re-ingest (apply-to-template flow, learning-export) uses
+          // the corrected version, not the original auto-generated text.
+          if (sourceKind === 'template_learning') {
+            if (decision === 'correct') {
+              await client.query(
+                `UPDATE template_learnings
+                    SET content = $2, status = 'applied', applied_at = now()
+                  WHERE id = $1`,
+                [sourceId, textToApply],
+              );
+            } else {
+              await client.query(
+                `UPDATE template_learnings SET status = 'applied', applied_at = now() WHERE id = $1`,
+                [sourceId],
+              );
+            }
+          }
+        }
+
+        if (isApplying && scope && (scope === 'org' || scope === 'both')) {
+          if (sourceKind === 'prompt_suggestion') {
+            // For corrections, we ALSO want the corrected text to land in the
+            // org's source row so any future re-deploy uses the corrected version
+            // rather than the original auto-generated one.
+            if (decision === 'correct') {
+              await client.query(
+                `UPDATE prompt_suggestions
+                    SET suggested_addition = $2, status = 'applied', applied_at = now()
+                  WHERE id = $1`,
+                [sourceId, textToApply],
+              );
+            } else {
+              await client.query(
+                `UPDATE prompt_suggestions SET status = 'applied', applied_at = now() WHERE id = $1`,
+                [sourceId],
+              );
+            }
+            orgApplied = true;
+          }
+          // template_learning + org-scope makes no sense (the row is system-level by
+          // definition); we silently no-op so the admin can still pick "both" for a
+          // template_learning that also has an analogous prompt_suggestion they
+          // applied separately.
+        }
+
+        if (decision === 'reject') {
+          if (sourceKind === 'prompt_suggestion') {
+            await client.query(`UPDATE prompt_suggestions SET status = 'rejected' WHERE id = $1`, [sourceId]);
+          } else {
+            await client.query(`UPDATE template_learnings SET status = 'rejected' WHERE id = $1`, [sourceId]);
+          }
+        }
+
+        await client.query('COMMIT');
+      }
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => { /* already rolled back or connection broken */ });
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    if (notFound) {
+      return reply.status(404).send({
+        error: sourceKind === 'prompt_suggestion' ? 'Suggestion not found' : 'Learning not found',
+      });
+    }
+
+    // M4 fix: cache-flush is fire-and-forget AFTER commit. Admin response
+    // returns immediately; the (potentially slow) Redis SCAN runs in the
+    // background. If it fails we log — the next demo agent creation still
+    // picks up the new prompt because the cache miss naturally re-creates.
+    if (needsFlush) {
+      flushDemoAgentCache().catch((err: Error) =>
+        req.log.warn({ err: err.message }, 'flushDemoAgentCache after decide failed'),
+      );
     }
 
     return { ok: true, systemicApplied, orgApplied, corrected: decision === 'correct' };

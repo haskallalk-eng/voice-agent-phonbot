@@ -134,6 +134,25 @@ export async function migrateOutbound() {
   await pool.query(`CREATE INDEX IF NOT EXISTS demo_calls_template_created_idx ON demo_calls(template_id, created_at DESC);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS demo_calls_promoted_idx ON demo_calls(promoted_at) WHERE promoted_at IS NULL;`);
 
+  // Audit-Round-9 H3: durable agent_id → template_id mapping.
+  // Redis (demo_agent_meta:v4:*) is the fast-path lookup but expires on
+  // flushDemoAgentCache() and 24h TTL. If a Retell webhook (call_ended /
+  // call_analyzed) for an active demo arrives AFTER the Redis key is gone,
+  // readDemoCallTemplate() returns null and the demo_calls row is never
+  // inserted — the lead is lost. This DB table is the second-tier lookup:
+  // written on every getOrCreateDemoAgent, read by retell-webhooks when
+  // Redis misses. Retention: 30 days, longer than typical Retell-call
+  // lifecycle, short enough to not bloat. Indexed by agent_id (PK).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS demo_agent_templates (
+      agent_id    TEXT PRIMARY KEY,
+      template_id TEXT NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`COMMENT ON TABLE demo_agent_templates IS 'Durable agent_id → template_id mapping for demo agents. Backstops Redis cache when keys expire/flushed mid-call. 30-day retention via cleanupOldLeads().';`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS demo_agent_templates_created_idx ON demo_agent_templates(created_at);`);
+
   // Demo system-prompt overrides — admin-editable epilogue per template, plus
   // a "global" row (template_id=NULL) for the cross-template DEMO_END_INSTRUCTIONS
   // suffix. Demo agents pick up the override on next cache-miss / admin-trigger.
