@@ -765,6 +765,12 @@ export async function cleanupOldLeads(): Promise<number> {
   await pool.query(
     `DELETE FROM learning_decisions WHERE created_at < NOW() - INTERVAL '365 days'`,
   ).catch(() => { /* table may not exist yet on first boot */ });
+  // Prompt-edit history mirrors meta-learning retention. Same trade-off:
+  // useful as audit trail, but the stored text can carry quotes from
+  // transcripts, so capping at 365d.
+  await pool.query(
+    `DELETE FROM prompt_override_history WHERE created_at < NOW() - INTERVAL '365 days'`,
+  ).catch(() => { /* table may not exist yet on first boot */ });
   return (res as { rowCount?: number }).rowCount ?? 0;
 }
 

@@ -365,6 +365,27 @@ export async function registerAdmin(app: FastifyInstance) {
     const { epilogue, basePrompt } = parsed.data;
     const adminEmail = (req.user as Record<string, unknown> | undefined)?.email as string | undefined;
 
+    // Capture the PRE-edit state so the audit trail has every version, not
+    // just the latest. Reads the current row (if any) and inserts it as the
+    // pre-image into prompt_override_history. The actual edit follows below.
+    const preState = await pool.query(
+      `SELECT epilogue, base_prompt FROM demo_prompt_overrides WHERE template_id = $1`,
+      [scope],
+    );
+    if (preState.rowCount) {
+      await pool.query(
+        `INSERT INTO prompt_override_history (template_id, epilogue, base_prompt, changed_by, change_kind)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          scope,
+          (preState.rows[0].epilogue as string) ?? null,
+          (preState.rows[0].base_prompt as string) ?? null,
+          adminEmail ?? null,
+          epilogue === null && (basePrompt === null || basePrompt === undefined) ? 'revert' : 'edit',
+        ],
+      ).catch((err: Error) => req.log.warn({ err: err.message, scope }, 'prompt_override_history insert failed'));
+    }
+
     if (epilogue === null && (basePrompt === null || basePrompt === undefined)) {
       // Both unset = drop the row entirely (revert to defaults).
       await pool.query(`DELETE FROM demo_prompt_overrides WHERE template_id = $1`, [scope]);
@@ -386,10 +407,102 @@ export async function registerAdmin(app: FastifyInstance) {
     return { ok: true, flushed: flush.flushed };
   });
 
+  // ── GET /admin/demo-prompts/history ───────────────────────────────────────
+  // Append-only history of every demo_prompt_overrides edit. Useful for
+  // diffing what the prompt USED to look like vs. now, and for rollback.
+  app.get('/admin/demo-prompts/history', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!pool) return reply.status(503).send({ error: 'DB not configured' });
+    const q = z.object({
+      scope: z.string().optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(100),
+    }).safeParse(req.query);
+    if (!q.success) return reply.status(400).send({ error: 'Invalid query', details: q.error.flatten() });
+
+    const args: unknown[] = [];
+    let where = '';
+    if (q.data.scope) {
+      args.push(q.data.scope);
+      where = `WHERE template_id = $${args.length}`;
+    }
+    args.push(q.data.limit);
+    const res = await pool.query(
+      `SELECT id, created_at, template_id, epilogue, base_prompt, changed_by, change_kind
+         FROM prompt_override_history
+         ${where}
+         ORDER BY created_at DESC
+         LIMIT $${args.length}`,
+      args,
+    );
+    return {
+      history: res.rows.map((r: Record<string, unknown>) => ({
+        id: r.id as string,
+        createdAt: (r.created_at as Date).toISOString(),
+        scope: r.template_id as string,
+        epilogue: r.epilogue as string | null,
+        basePrompt: r.base_prompt as string | null,
+        changedBy: r.changed_by as string | null,
+        changeKind: r.change_kind as 'edit' | 'revert',
+      })),
+    };
+  });
+
+  // ── POST /admin/demo-prompts/history/:id/restore ─────────────────────────
+  // Restore a prior snapshot from prompt_override_history into the live
+  // demo_prompt_overrides row. The current state is itself appended to
+  // history first (so the restore is also reversible).
+  app.post('/admin/demo-prompts/history/:id/restore', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!pool) return reply.status(503).send({ error: 'DB not configured' });
+    const { id } = req.params as { id: string };
+    const adminEmail = (req.user as Record<string, unknown> | undefined)?.email as string | undefined;
+
+    const snap = await pool.query(
+      `SELECT template_id, epilogue, base_prompt FROM prompt_override_history WHERE id = $1`,
+      [id],
+    );
+    if (!snap.rowCount) return reply.status(404).send({ error: 'History entry not found' });
+    const row = snap.rows[0] as { template_id: string; epilogue: string | null; base_prompt: string | null };
+
+    const current = await pool.query(
+      `SELECT epilogue, base_prompt FROM demo_prompt_overrides WHERE template_id = $1`,
+      [row.template_id],
+    );
+    if (current.rowCount) {
+      await pool.query(
+        `INSERT INTO prompt_override_history (template_id, epilogue, base_prompt, changed_by, change_kind)
+         VALUES ($1, $2, $3, $4, 'edit')`,
+        [row.template_id, current.rows[0].epilogue ?? null, current.rows[0].base_prompt ?? null, adminEmail ?? null],
+      ).catch((err: Error) => req.log.warn({ err: err.message }, 'prompt_override_history pre-restore insert failed'));
+    }
+
+    if (row.epilogue === null && row.base_prompt === null) {
+      await pool.query(`DELETE FROM demo_prompt_overrides WHERE template_id = $1`, [row.template_id]);
+    } else {
+      await pool.query(
+        `INSERT INTO demo_prompt_overrides (template_id, epilogue, base_prompt, updated_by)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (template_id) DO UPDATE SET
+           epilogue    = EXCLUDED.epilogue,
+           base_prompt = EXCLUDED.base_prompt,
+           updated_at  = now(),
+           updated_by  = EXCLUDED.updated_by`,
+        [row.template_id, row.epilogue ?? '', row.base_prompt, adminEmail ?? null],
+      );
+    }
+
+    const flush = await flushDemoAgentCache();
+    return { ok: true, restoredScope: row.template_id, flushed: flush.flushed };
+  });
+
   // ── POST /admin/demo-prompts/flush-cache ──────────────────────────────────
   // Manual flush — useful when changing tools/voice/post-call config in code
-  // without editing the prompt itself.
-  app.post('/admin/demo-prompts/flush-cache', { ...auth }, async () => {
+  // without editing the prompt itself. Rate-limited because it triggers a
+  // full Redis SCAN over demo_agent:* + demo_agent_meta:* + sales_agent:*;
+  // an attacker with a hijacked admin token (1h TTL) could otherwise loop on
+  // it as a DoS amplifier.
+  app.post('/admin/demo-prompts/flush-cache', {
+    ...auth,
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async () => {
     return flushDemoAgentCache();
   });
 
