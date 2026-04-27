@@ -141,6 +141,12 @@ export async function fireInboundWebhooks(
       // can reconstruct it on our side to expose in the UI later. If
       // WEBHOOK_SIGNING_SECRET is unset, fall back to JWT_SECRET (already
       // required in prod by env.ts) so there is never an unsigned delivery.
+      //
+      // ⚠️ Audit-Round-7 Codex MEDIUM-A: the JWT_SECRET fallback is dangerous
+      // long-term — any JWT rotation breaks every customer's webhook-signature
+      // validation silently. env.ts now warn-logs at boot when
+      // WEBHOOK_SIGNING_SECRET is missing in prod. Move WEBHOOK_SIGNING_SECRET
+      // into hard-required REQUIRED_PROD_SECRETS once it's set on all envs.
       const signingKey = process.env.WEBHOOK_SIGNING_SECRET || process.env.JWT_SECRET || '';
       const perHookSecret = crypto
         .createHmac('sha256', signingKey)
