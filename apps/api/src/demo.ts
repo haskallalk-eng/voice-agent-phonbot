@@ -67,8 +67,15 @@ const inMemDemoAgents = new Map<string, { agentId: string; createdAt: number }>(
 async function readDemoAgent(templateId: string): Promise<string | null> {
   if (redis?.isOpen) {
     const v = await redis.get(`demo_agent:v4:${templateId}`).catch(() => null);
-    if (v) return v;
+    return v ?? null;
+    // Audit-Round-9 H1: when Redis is online but the key is absent (legit
+    // flush, scaled-out container B that never wrote it), DO NOT fall back
+    // to in-mem. In-mem can carry stale values from before a cross-container
+    // flushDemoAgentCache(), causing user-visible old prompts. The cost of
+    // returning null here = one extra Retell agent gets created on the next
+    // /demo/call, which is cheap and self-healing via Redis.
   }
+  // Redis offline → in-mem is the only fallback we have.
   const cached = inMemDemoAgents.get(templateId);
   if (cached && Date.now() - cached.createdAt < CACHE_TTL_SEC * 1000) return cached.agentId;
   return null;
@@ -98,20 +105,55 @@ async function writeDemoAgent(templateId: string, agentId: string): Promise<void
       redis.set(`demo_agent_meta:v4:${agentId}`, templateId, { EX: CACHE_TTL_SEC }).catch(() => {}),
     ]);
   }
+  // Audit-Round-9 H3: durable DB mirror of the reverse-lookup. Redis is the
+  // fast-path; this row backstops it when the Redis key expires (24h TTL) or
+  // is dropped by flushDemoAgentCache() while a demo call is still in flight.
+  // Without this, retell-webhooks call_ended/call_analyzed handlers can't
+  // resolve agent_id → templateId and silently drop the lead. Fire-and-forget
+  // (the demo creation already worked at the Retell side; durability of the
+  // mapping is a secondary concern that shouldn't fail the demo flow).
+  if (pool) {
+    pool.query(
+      `INSERT INTO demo_agent_templates (agent_id, template_id)
+       VALUES ($1, $2)
+       ON CONFLICT (agent_id) DO UPDATE SET template_id = EXCLUDED.template_id`,
+      [agentId, templateId],
+    ).catch(() => { /* non-critical — Redis still serves the fast-path */ });
+  }
 }
 
 /**
  * Look up the templateId for a Retell agent_id. Returns null when the agent
  * isn't a demo agent we created (e.g. a paid-tenant agent whose call_ended
  * webhook fired through this same handler).
+ *
+ * Lookup chain (fastest → most durable):
+ *   1. Redis (24h TTL, written on getOrCreateDemoAgent)
+ *   2. In-memory map (per-container, 24h TTL — only consulted when Redis offline
+ *      to avoid the cross-container stale-read trap from Audit-Round 9 H1)
+ *   3. demo_agent_templates DB row (30-day retention) — Audit-Round 9 H3.
+ *      Catches the case where Redis was flushed mid-call OR the cache TTL
+ *      lapsed before call_ended/call_analyzed fired. Without this, leads
+ *      were silently dropped.
  */
 export async function readDemoCallTemplate(agentId: string): Promise<string | null> {
   if (redis?.isOpen) {
     const v = await redis.get(`demo_agent_meta:v4:${agentId}`).catch(() => null);
     if (v) return v;
+    // Skip in-mem when Redis is online (H1): in-mem could be stale across
+    // containers and we now have a durable DB layer below.
+  } else {
+    const cached = inMemDemoAgentMeta.get(agentId);
+    if (cached && Date.now() - cached.createdAt < CACHE_TTL_SEC * 1000) return cached.templateId;
   }
-  const cached = inMemDemoAgentMeta.get(agentId);
-  if (cached && Date.now() - cached.createdAt < CACHE_TTL_SEC * 1000) return cached.templateId;
+  // H3: durable DB fallback. Cheap single-row PK lookup.
+  if (pool) {
+    const res = await pool.query(
+      `SELECT template_id FROM demo_agent_templates WHERE agent_id = $1`,
+      [agentId],
+    ).catch(() => null);
+    if (res && res.rowCount) return res.rows[0].template_id as string;
+  }
   return null;
 }
 
@@ -304,7 +346,12 @@ const SALES_AGENT_KEY = 'sales_agent:phonbot:v4';
 export async function getOrCreateSalesAgent(): Promise<string> {
   if (redis?.isOpen) {
     const cached = await redis.get(SALES_AGENT_KEY).catch(() => null);
-    if (cached) { salesAgentIdMem = cached; return cached; }
+    if (cached) return cached;
+    // Audit-Round-9 H1/M3: do NOT write back into salesAgentIdMem here.
+    // The in-mem fallback is only for Redis-offline mode; a fresh Redis
+    // read during a concurrent flushDemoAgentCache() could otherwise re-
+    // populate the in-mem with the soon-to-be-deleted value, leaving a
+    // stale value that surfaces if Redis later goes offline.
   } else if (salesAgentIdMem) {
     return salesAgentIdMem;
   }

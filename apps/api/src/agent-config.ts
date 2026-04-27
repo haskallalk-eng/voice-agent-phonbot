@@ -270,6 +270,20 @@ async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentCo
   // enforce agentsLimit. Skipped for the orgId-less legacy path (memory only).
   if (orgId) await enforcePlanAgentLimitOnCreate(orgId, normalized.tenantId);
 
+  // Privacy-Audit-Trail (DSGVO Art. 5 Abs. 2 Rechenschaftspflicht): when the
+  // recordCalls toggle changes, log structured so Sentry/Pino retains a
+  // forensic record of who flipped recording on or off and when. Read the
+  // previous value from the DB row before the upsert so we capture the
+  // delta — `undefined → undefined` and unchanged values stay quiet.
+  let previousRecordCalls: boolean | undefined;
+  try {
+    const prev = await pool.query<{ data: { recordCalls?: boolean } | null }>(
+      `SELECT data FROM agent_configs WHERE tenant_id = $1 LIMIT 1`,
+      [normalized.tenantId],
+    );
+    previousRecordCalls = prev.rows[0]?.data?.recordCalls;
+  } catch { /* non-fatal; audit is best-effort */ }
+
   // Defence-in-depth: even though the HTTP handlers gate by tenantIdAvailableOrOwned,
   // a future caller that forgets the gate must NOT be able to overwrite another org's
   // config. The DO UPDATE WHERE clause makes the conflict path a no-op when the row
@@ -291,6 +305,25 @@ async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentCo
     const err = new Error('TENANT_OWNED_BY_OTHER_ORG') as Error & { statusCode?: number };
     err.statusCode = 409;
     throw err;
+  }
+
+  // Recording-toggle audit-trail. Treat undefined as legacy-on so a flip
+  // undefined → false is logged as on→off, and false → undefined is the
+  // same as off→on. Sentry breadcrumb covers Art. 5 Abs. 2 Rechenschaftspflicht
+  // without a dedicated audit table.
+  const wasOn = previousRecordCalls !== false;
+  const isOn = normalized.recordCalls !== false;
+  if (wasOn !== isOn) {
+    log.info(
+      {
+        orgId: orgId ?? null,
+        tenantId: normalized.tenantId,
+        recordCallsBefore: previousRecordCalls ?? '(legacy-undefined-true)',
+        recordCallsAfter: normalized.recordCalls ?? '(undefined-true)',
+        change: wasOn ? 'recording_disabled' : 'recording_enabled',
+      },
+      'privacy: recordCalls toggle changed',
+    );
   }
 
   // Keep chipy_schedules in sync with what the customer just edited in the
@@ -746,6 +779,20 @@ async function ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise
       model,
     });
     callbackLlmId = llm.llm_id;
+  } else {
+    // Audit-Round-9 H4: refresh existing callback LLM with the current outbound
+    // baseline. Without this branch, admin edits to the outbound baseline
+    // (DSGVO Art. 21 wording, KI-Identifikation phrasing, …) never propagate
+    // to existing customers — the LLM stays frozen at whatever baseline was
+    // active at first deploy. updateLLM is idempotent on Retell's side, so
+    // re-running with identical text is a no-op. Failure is non-fatal: we
+    // log and continue, the customer's previous prompt remains active.
+    const outboundBaseline = await loadOutboundBaseline();
+    await updateLLM(callbackLlmId, {
+      generalPrompt: `${outboundBaseline}\n\n${buildCallbackPrompt()}`,
+    }).catch((err: Error) => {
+      log.warn({ err: err.message, orgId, callbackLlmId }, 'callback LLM baseline-refresh failed (non-fatal)');
+    });
   }
 
   if (!callbackAgentId) {
