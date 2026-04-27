@@ -9,7 +9,7 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import formbody from '@fastify/formbody';
-import { migrate, pool, cleanupOldTranscripts, cleanupOldLeads, cleanupOldWebhookDedupKeys, cleanupOldAuditLogs, cleanupOldWebhookHealth, sweepAbandonedRegistrations } from './db.js';
+import { migrate, pool, cleanupOldTranscripts, cleanupOldLeads, cleanupOldWebhookDedupKeys, cleanupOldAuditLogs, cleanupOldPrivacySettingChanges, cleanupOldWebhookHealth, sweepAbandonedRegistrations } from './db.js';
 import { connectRedis, redis } from './redis.js';
 import { registerAuth } from './auth.js';
 import { registerTickets } from './tickets.js';
@@ -342,6 +342,18 @@ if (pool) {
   };
   setInterval(runAuditLogCleanup, 24 * 60 * 60 * 1000); // every 24h
   setTimeout(runAuditLogCleanup, 100_000); // 100s after startup (staggered)
+
+  // Audit-Round-11: privacy_setting_changes — same 365d retention.
+  const runPrivacyAuditCleanup = async () => {
+    try {
+      const deleted = await cleanupOldPrivacySettingChanges();
+      if (deleted > 0) app.log.info({ deleted }, 'DSGVO retention: purged old privacy_setting_changes');
+    } catch (e) {
+      app.log.warn({ err: (e as Error).message }, 'privacy audit-log cleanup failed');
+    }
+  };
+  setInterval(runPrivacyAuditCleanup, 24 * 60 * 60 * 1000);
+  setTimeout(runPrivacyAuditCleanup, 110_000); // 110s after startup (staggered)
 
   // Audit-Round-9 NICE-2: webhook-health rows are operational state, not
   // history. Drop entries with no attempts in 90d so the disable-tracker

@@ -693,6 +693,28 @@ async function runMigrationBody() {
   await pool.query(`CREATE INDEX IF NOT EXISTS admin_read_audit_log_created_idx ON admin_read_audit_log(created_at DESC);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS admin_read_audit_log_admin_idx ON admin_read_audit_log(admin_email, created_at DESC);`);
 
+  // ── Privacy-setting changes audit ─────────────────────────────────────────
+  // Audit-Round-11 (Codex post-deploy review): DSGVO Art. 5 Abs. 2 / Art. 24
+  // Rechenschaftspflicht braucht persistenten Audit-Trail für privacy-toggles
+  // (recordCalls etc.). log.info → Sentry-breadcrumb reicht nicht — Sentry-
+  // retention ist plan-abhängig, nicht garantiert lange genug für Behörden-
+  // prüfungen. 365-day retention via cleanupOldPrivacySettingChanges().
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS privacy_setting_changes (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      org_id        UUID,
+      tenant_id     TEXT NOT NULL,
+      setting       TEXT NOT NULL,
+      value_before  TEXT,
+      value_after   TEXT,
+      changed_by    TEXT
+    );
+  `);
+  await pool.query(`COMMENT ON TABLE privacy_setting_changes IS 'DSGVO Art. 5 Abs. 2 Rechenschaftspflicht: log every change of a privacy-relevant config toggle (recordCalls, share_patterns, dataRetentionDays, ...). 365-day retention via cleanupOldPrivacySettingChanges().';`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS privacy_setting_changes_tenant_idx ON privacy_setting_changes(tenant_id, created_at DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS privacy_setting_changes_org_idx ON privacy_setting_changes(org_id, created_at DESC) WHERE org_id IS NOT NULL;`);
+
   // Audit-Round-9 (Claude/Codex NICE-2): track per-webhook health so repeated
   // 5xx/timeouts can self-disable for 1h instead of burning hot-path time
   // forever. 90-day retention via cleanupOldWebhookHealth() in index.ts cron.
@@ -949,6 +971,18 @@ export async function cleanupOldAuditLogs(): Promise<number> {
   if (!pool) return 0;
   const res = await pool.query(
     `DELETE FROM admin_read_audit_log WHERE created_at < NOW() - INTERVAL '365 days'`,
+  ).catch(() => null);
+  return (res as { rowCount?: number } | null)?.rowCount ?? 0;
+}
+
+/**
+ * Audit-Round-11: purge privacy_setting_changes rows older than 365 days
+ * — the same retention as admin_read_audit_log. Same daily cron, staggered.
+ */
+export async function cleanupOldPrivacySettingChanges(): Promise<number> {
+  if (!pool) return 0;
+  const res = await pool.query(
+    `DELETE FROM privacy_setting_changes WHERE created_at < NOW() - INTERVAL '365 days'`,
   ).catch(() => null);
   return (res as { rowCount?: number } | null)?.rowCount ?? 0;
 }
