@@ -136,6 +136,138 @@ export const pool = DATABASE_URL ? new Proxy({} as pg.Pool, {
   },
 }) : null;
 
+type WebhookHealthSuccessParams = {
+  outcome: 'success';
+  tenantId: string;
+  webhookId: string;
+  event: string;
+  status: number;
+};
+
+type WebhookHealthFailureParams = {
+  outcome: 'failure';
+  tenantId: string;
+  webhookId: string;
+  event: string;
+  status: number | null;
+  error: string;
+  failThreshold: number;
+  disableDuration: string;
+};
+
+type WebhookHealthUpsertParams = WebhookHealthSuccessParams | WebhookHealthFailureParams;
+
+export async function upsertWebhookHealth(
+  dbPool: pg.Pool | null,
+  params: WebhookHealthUpsertParams,
+): Promise<void> {
+  if (!dbPool) return;
+
+  if (params.outcome === 'success') {
+    // Round-10 Claude-Review (Codex Uncertainty #1): naive `disabled_until = NULL`
+    // in the success path can race with a freshly-set disable. Sequence:
+    //   T0: parallel fetches A + B start
+    //   T1: A completes with 5xx → consecutive_failures bumps to threshold,
+    //       disabled_until = now() + 1h
+    //   T2: B completes with 2xx (slow but successful) → naive UPDATE wipes
+    //       disabled_until back to NULL
+    // Guard: only clear disabled_until if it has already expired. A live
+    // disable-window stays in force regardless of out-of-order success
+    // arrivals; the natural cooldown still kicks in via expiry. consecutive_
+    // failures = 0 is fine to reset — even if a later failure re-counts from 1,
+    // the disabled_until preservation keeps the skip-decision honest until
+    // its TTL.
+    await dbPool.query(
+      `INSERT INTO inbound_webhook_health (
+         tenant_id,
+         webhook_id,
+         last_status,
+         last_event,
+         last_error,
+         consecutive_failures,
+         last_success_at,
+         last_attempt_at,
+         disabled_until
+       )
+       VALUES ($1, $2, $3, $4, NULL, 0, now(), now(), NULL)
+       ON CONFLICT (tenant_id, webhook_id) DO UPDATE
+       SET last_status = EXCLUDED.last_status,
+           last_event = EXCLUDED.last_event,
+           last_error = NULL,
+           consecutive_failures = 0,
+           last_success_at = EXCLUDED.last_success_at,
+           last_attempt_at = EXCLUDED.last_attempt_at,
+           disabled_until = CASE
+             WHEN inbound_webhook_health.disabled_until > now()
+               THEN inbound_webhook_health.disabled_until
+             ELSE NULL
+           END`,
+      [params.tenantId, params.webhookId, params.status, params.event],
+    );
+    return;
+  }
+
+  await dbPool.query(
+    `INSERT INTO inbound_webhook_health (
+       tenant_id,
+       webhook_id,
+       last_status,
+       last_event,
+       last_error,
+       consecutive_failures,
+       last_attempt_at,
+       disabled_until
+     )
+     VALUES (
+       $1,
+       $2,
+       $3,
+       $4,
+       $5,
+       1,
+       now(),
+       CASE WHEN 1 >= $6 THEN now() + $7::interval ELSE NULL END
+     )
+     ON CONFLICT (tenant_id, webhook_id) DO UPDATE
+     SET last_status = EXCLUDED.last_status,
+         last_event = EXCLUDED.last_event,
+         last_error = EXCLUDED.last_error,
+         consecutive_failures = GREATEST(
+           inbound_webhook_health.consecutive_failures + 1,
+           EXCLUDED.consecutive_failures
+         ),
+         last_attempt_at = now(),
+         disabled_until = CASE
+           WHEN GREATEST(
+             inbound_webhook_health.consecutive_failures + 1,
+             EXCLUDED.consecutive_failures
+           ) >= $6
+             THEN GREATEST(
+               COALESCE(inbound_webhook_health.disabled_until, '-infinity'::timestamptz),
+               now() + $7::interval
+             )
+           ELSE NULL
+         END`,
+    [
+      params.tenantId,
+      params.webhookId,
+      params.status,
+      params.event,
+      params.error,
+      params.failThreshold,
+      params.disableDuration,
+    ],
+  );
+}
+
+export async function cleanupOldWebhookHealth(dbPool: pg.Pool | null): Promise<number> {
+  if (!dbPool) return 0;
+  const res = await dbPool.query(
+    `DELETE FROM inbound_webhook_health WHERE last_attempt_at < NOW() - INTERVAL '90 days'`,
+  );
+  return (res as { rowCount?: number }).rowCount ?? 0;
+}
+
 // Fixed advisory-lock key for the migration. pg_advisory_lock is a 64-bit
 // session-scoped mutex that Postgres provides; any integer works as long as
 // every replica uses the same one. Chosen arbitrarily.
@@ -560,6 +692,29 @@ async function runMigrationBody() {
   await pool.query(`COMMENT ON TABLE admin_read_audit_log IS 'DSGVO Art. 5(1)(e): 365-day retention via cleanupOldAuditLogs(). Each row = one cross-org admin GET on a bulk-read endpoint (leads/demo-calls).';`);
   await pool.query(`CREATE INDEX IF NOT EXISTS admin_read_audit_log_created_idx ON admin_read_audit_log(created_at DESC);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS admin_read_audit_log_admin_idx ON admin_read_audit_log(admin_email, created_at DESC);`);
+
+  // Audit-Round-9 (Claude/Codex NICE-2): track per-webhook health so repeated
+  // 5xx/timeouts can self-disable for 1h instead of burning hot-path time
+  // forever. 90-day retention via cleanupOldWebhookHealth() in index.ts cron.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS inbound_webhook_health (
+      tenant_id            TEXT NOT NULL,
+      webhook_id           TEXT NOT NULL,
+      last_status          INTEGER,
+      last_event           TEXT,
+      last_error           TEXT,
+      consecutive_failures INTEGER NOT NULL DEFAULT 0,
+      last_success_at      TIMESTAMPTZ,
+      last_attempt_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+      disabled_until       TIMESTAMPTZ,
+      PRIMARY KEY (tenant_id, webhook_id)
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS inbound_webhook_health_disabled_idx
+      ON inbound_webhook_health (disabled_until)
+      WHERE disabled_until IS NOT NULL;
+  `);
 
   // ── AI Insights ────────────────────────────────────────────────────────────
   await pool.query(`

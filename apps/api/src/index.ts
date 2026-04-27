@@ -9,7 +9,7 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import formbody from '@fastify/formbody';
-import { migrate, pool, cleanupOldTranscripts, cleanupOldLeads, cleanupOldWebhookDedupKeys, cleanupOldAuditLogs, sweepAbandonedRegistrations } from './db.js';
+import { migrate, pool, cleanupOldTranscripts, cleanupOldLeads, cleanupOldWebhookDedupKeys, cleanupOldAuditLogs, cleanupOldWebhookHealth, sweepAbandonedRegistrations } from './db.js';
 import { connectRedis, redis } from './redis.js';
 import { registerAuth } from './auth.js';
 import { registerTickets } from './tickets.js';
@@ -342,6 +342,20 @@ if (pool) {
   };
   setInterval(runAuditLogCleanup, 24 * 60 * 60 * 1000); // every 24h
   setTimeout(runAuditLogCleanup, 100_000); // 100s after startup (staggered)
+
+  // Audit-Round-9 NICE-2: webhook-health rows are operational state, not
+  // history. Drop entries with no attempts in 90d so the disable-tracker
+  // doesn't grow forever for deleted/forgotten endpoints.
+  const runWebhookHealthCleanup = async () => {
+    try {
+      const deleted = await cleanupOldWebhookHealth(pool);
+      if (deleted > 0) app.log.info({ deleted }, 'purged old inbound webhook health rows');
+    } catch (e) {
+      app.log.warn({ err: (e as Error).message }, 'webhook-health cleanup failed');
+    }
+  };
+  setInterval(runWebhookHealthCleanup, 24 * 60 * 60 * 1000); // every 24h
+  setTimeout(runWebhookHealthCleanup, 240_000); // 4 min after startup (staggered from other daily cleanups)
 
   // External calendar poll-sync. Pulls Google/Microsoft/cal.com events into
   // our `external_calendar_events` cache every 5 minutes so the Kalender-

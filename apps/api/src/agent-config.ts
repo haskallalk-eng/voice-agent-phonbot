@@ -904,6 +904,51 @@ export async function registerAgentConfig(app: FastifyInstance) {
     return toClientConfig(await readConfig(tenantId, orgId));
   });
 
+  app.get('/agent-config/webhooks-health', { ...auth }, async (req: FastifyRequest) => {
+    const { orgId } = req.user as JwtPayload;
+    const query = z.object({ tenantId: z.string().optional() }).parse(req.query);
+    const tenantId = query.tenantId ?? orgId;
+    if (!pool) return { items: [] };
+
+    const owned = await loadOwnedConfigRow(tenantId, orgId);
+    if (!owned.exists) return { items: [] };
+
+    const res = await pool.query(
+      `SELECT webhook_id, consecutive_failures, last_success_at, disabled_until
+       FROM inbound_webhook_health
+       WHERE tenant_id = $1
+       ORDER BY webhook_id ASC`,
+      [tenantId],
+    );
+
+    // Round-10 Claude-Review (Codex Uncertainty #3): filter out orphan health
+    // rows whose webhook no longer exists in the current config. Without this,
+    // a customer who deleted a webhook still sees its (stale) failure-count
+    // in the dashboard banner — confusing and suggests fix-action where there
+    // is none. The DB rows themselves are kept (cleanup-cron drops them at 90d)
+    // for audit purposes, but the API surface stays honest about live state.
+    const liveWebhookIds = new Set(
+      ((owned.data as unknown as { inboundWebhooks?: { id: string }[] }).inboundWebhooks ?? [])
+        .map((h) => h.id),
+    );
+
+    return {
+      items: res.rows
+        .filter((row: { webhook_id: string }) => liveWebhookIds.has(row.webhook_id))
+        .map((row: {
+          webhook_id: string;
+          consecutive_failures: number;
+          last_success_at: string | Date | null;
+          disabled_until: string | Date | null;
+        }) => ({
+          webhook_id: row.webhook_id,
+          consecutive_failures: row.consecutive_failures,
+          last_success_at: row.last_success_at instanceof Date ? row.last_success_at.toISOString() : row.last_success_at,
+          disabled_until: row.disabled_until instanceof Date ? row.disabled_until.toISOString() : row.disabled_until,
+        })),
+    };
+  });
+
   app.post(
     '/agent-config/knowledge/pdf',
     {

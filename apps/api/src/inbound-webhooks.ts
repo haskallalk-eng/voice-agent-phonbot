@@ -23,6 +23,7 @@
 
 import crypto from 'node:crypto';
 import { log } from './logger.js';
+import { pool, upsertWebhookHealth } from './db.js';
 import { readConfig } from './agent-config.js';
 import { isPrivateHost, isPrivateResolved, isBlockedPort } from './ssrf-guard.js';
 
@@ -45,6 +46,8 @@ const TIMEOUT_MS = 5_000;
 const MAX_URL_LEN = 2000;
 /** Hard cap per org per event to bound outbound socket usage per call. */
 const MAX_WEBHOOKS_PER_FIRE = 10;
+const WEBHOOK_FAIL_THRESHOLD = 50;
+const WEBHOOK_DISABLE_DURATION = '1 hour';
 
 // Audit-Round-8 (Codex M07-MEDIUM-4): cache the inboundWebhooks-slice per
 // tenantId for 60s. Without this, a busy customer with 5 events/sec eats 5
@@ -81,6 +84,17 @@ export function invalidateInboundWebhooksCache(tenantId: string): void {
   webhookCache.delete(tenantId);
 }
 
+function queueWebhookHealthUpsert(params: Parameters<typeof upsertWebhookHealth>[1]): void {
+  if (!pool) return;
+  void upsertWebhookHealth(pool, params).catch((err: unknown) => {
+    const msg = err instanceof Error ? err.message : String(err);
+    log.warn(
+      { err: msg, tenantId: params.tenantId, webhookId: params.webhookId },
+      'inbound-webhooks: health upsert failed',
+    );
+  });
+}
+
 // isPrivateHost + isPrivateResolved moved to ssrf-guard.ts — single source
 // of truth shared with api-integrations.ts. Prior to this, each module
 // had its own copy and they drifted (api-integrations lost the ::ffff:-hex
@@ -113,7 +127,9 @@ type WebhookEventPayload = Record<string, unknown>;
  * Fire an event to all configured inbound webhooks that subscribe to it.
  *
  * NEVER awaited by callers on the hot path — always use:
- *   fireInboundWebhooks(...).catch(() => {}); // ignore — already logged
+ *   fireInboundWebhooks(...).catch((err) =>
+ *     log.warn({ err: (err as Error).message }, 'inbound-webhooks: unexpected top-level failure')
+ *   );
  *
  * @param tenantId  The agent config tenant (= org id in current design).
  * @param event     Event name (must be one of InboundWebhookEvent).
@@ -181,6 +197,32 @@ export async function fireInboundWebhooks(
         );
         return;
       }
+      if (pool) {
+        try {
+          const disabled = await pool.query(
+            `SELECT 1
+             FROM inbound_webhook_health
+             WHERE tenant_id = $1
+               AND webhook_id = $2
+               AND disabled_until > now()
+             LIMIT 1`,
+            [tenantId, h.id],
+          );
+          if (disabled.rowCount) {
+            log.info(
+              { tenantId, webhookId: h.id },
+              'webhook disabled due to consecutive failures, skipping',
+            );
+            return;
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          log.warn(
+            { err: msg, tenantId, webhookId: h.id },
+            'inbound-webhooks: health pre-check failed',
+          );
+        }
+      }
       // Per-webhook signing secret is derived deterministically from a single
       // server secret + (tenantId, webhookId). No DB column needed; customer
       // can reconstruct it on our side to expose in the UI later. If
@@ -212,7 +254,25 @@ export async function fireInboundWebhooks(
           signal: AbortSignal.timeout(TIMEOUT_MS),
           redirect: 'manual', // don't follow 3xx — could redirect to internal host
         });
-        if (!res.ok) {
+        if (res.ok) {
+          queueWebhookHealthUpsert({
+            outcome: 'success',
+            tenantId,
+            webhookId: h.id,
+            event,
+            status: res.status,
+          });
+        } else {
+          queueWebhookHealthUpsert({
+            outcome: 'failure',
+            tenantId,
+            webhookId: h.id,
+            event,
+            status: res.status,
+            error: `HTTP ${res.status}`,
+            failThreshold: WEBHOOK_FAIL_THRESHOLD,
+            disableDuration: WEBHOOK_DISABLE_DURATION,
+          });
           log.info(
             { tenantId, webhookId: h.id, status: res.status, event },
             'inbound-webhooks: delivery non-2xx',
@@ -220,6 +280,16 @@ export async function fireInboundWebhooks(
         }
       } catch (err) {
         const msg = (err as Error).message;
+        queueWebhookHealthUpsert({
+          outcome: 'failure',
+          tenantId,
+          webhookId: h.id,
+          event,
+          status: null,
+          error: msg,
+          failThreshold: WEBHOOK_FAIL_THRESHOLD,
+          disableDuration: WEBHOOK_DISABLE_DURATION,
+        });
         log.info({ tenantId, webhookId: h.id, event, err: msg }, 'inbound-webhooks: delivery failed');
       }
     }),
