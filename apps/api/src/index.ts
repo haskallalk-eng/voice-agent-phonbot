@@ -9,7 +9,7 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import formbody from '@fastify/formbody';
-import { migrate, pool, cleanupOldTranscripts, cleanupOldLeads, cleanupOldWebhookDedupKeys, sweepAbandonedRegistrations } from './db.js';
+import { migrate, pool, cleanupOldTranscripts, cleanupOldLeads, cleanupOldWebhookDedupKeys, cleanupOldAuditLogs, sweepAbandonedRegistrations } from './db.js';
 import { connectRedis, redis } from './redis.js';
 import { registerAuth } from './auth.js';
 import { registerTickets } from './tickets.js';
@@ -329,6 +329,19 @@ if (pool) {
   };
   setInterval(runWebhookDedupCleanup, 24 * 60 * 60 * 1000); // every 24h
   setTimeout(runWebhookDedupCleanup, 90_000); // first run 90s after startup (staggered)
+
+  // Audit-Round-8 (Codex M07-MEDIUM-C): purge admin_read_audit_log rows older
+  // than 365 days. Long retention so security incidents have a forensic trail.
+  const runAuditLogCleanup = async () => {
+    try {
+      const deleted = await cleanupOldAuditLogs();
+      if (deleted > 0) app.log.info({ deleted }, 'DSGVO retention: purged old admin audit log');
+    } catch (e) {
+      app.log.warn({ err: (e as Error).message }, 'admin audit-log cleanup failed');
+    }
+  };
+  setInterval(runAuditLogCleanup, 24 * 60 * 60 * 1000); // every 24h
+  setTimeout(runAuditLogCleanup, 100_000); // 100s after startup (staggered)
 
   // External calendar poll-sync. Pulls Google/Microsoft/cal.com events into
   // our `external_calendar_events` cache every 5 minutes so the Kalender-

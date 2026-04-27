@@ -23,6 +23,7 @@ import OpenAI from 'openai';
 import { pool } from './db.js';
 import { log, logBg } from './logger.js';
 import { computeSatisfactionScore, extractSignalsFromCall, storeSatisfactionData } from './satisfaction-signals.js';
+import { redactPII } from './pii.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? '' });
 const MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
@@ -95,6 +96,59 @@ function cosine(a: number[], b: number[]): number {
 // faster (~2s p99), chat completions need more headroom for long prompts.
 const OPENAI_EMBED_TIMEOUT = 10_000;
 const OPENAI_CHAT_TIMEOUT = 30_000;
+
+// Audit-Round-8 (Codex-reviewed): defensive filter for LLM-extracted
+// prompt_fix strings. The Caller's transcript can carry instructions that
+// nudge GPT into emitting a malicious "fix" — the system-prompt rules try
+// to block this but aren't robust against well-crafted injection. Suspected
+// rows are NOT dropped (false-positive risk on legit DE/EN guidance) — they
+// are quarantined: stored under category 'prompt_injection_attempt' so the
+// admin sees them in a separate review queue and can decide. URL/email
+// detection deliberately omitted (Codex feedback): too high FP risk on
+// legitimate corrections that reference contact channels.
+//
+// Patterns intentionally narrow after Codex feedback (`act as a` was too
+// broad — would quarantine legit "act as a phone agent" customer prompts).
+// Each pattern targets a phrase that's almost-only-used in injection attacks
+// AND extremely unusual in legitimate customer-prompt corrections.
+const INJECT_PATTERNS = [
+  /\bignore\s+(?:all\s+)?(?:previous|prior)\s+instructions?\b/i,
+  /\bvergiss\s+(?:alle|deine)\s+(?:bisherigen\s+)?anweisungen\b/i,
+  /\b(?:disregard|forget)\s+(?:everything|all|the)\s+above\b/i,
+  /\bneue\s+identit[äa]t\b/i,
+  /\b(?:override|overwrite|bypass)\s+(?:system|the\s+system)\s+prompt\b/i,
+  /<\s*\/?\s*(?:system|sys)\s*>/i,                          // fake XML/markup framing
+  /\b(?:speichere|store|save)\s+(?:diese|alle|all|every)\s+(?:nachrichten|messages|conversations|chats)\b/i,
+  /\bjailbreak(?:ing|ed)?\b/i,
+];
+const PROMPT_FIX_MAX_LEN = 500;
+
+function classifyPromptFix(promptFix: string | null | undefined): {
+  text: string;
+  quarantined: boolean;
+  reason: string | null;
+} {
+  if (!promptFix) return { text: '', quarantined: false, reason: null };
+  const trimmed = promptFix.trim();
+  if (trimmed.length > PROMPT_FIX_MAX_LEN) {
+    return {
+      text: trimmed.slice(0, PROMPT_FIX_MAX_LEN),
+      quarantined: true,
+      reason: `length>${PROMPT_FIX_MAX_LEN}`,
+    };
+  }
+  for (const re of INJECT_PATTERNS) {
+    const m = trimmed.match(re);
+    if (m) {
+      return {
+        text: trimmed,
+        quarantined: true,
+        reason: `pattern:${m[0].slice(0, 40)}`,
+      };
+    }
+  }
+  return { text: trimmed, quarantined: false, reason: null };
+}
 
 async function embed(text: string): Promise<number[]> {
   const resp = await openai.embeddings.create(
@@ -645,10 +699,15 @@ async function loadRecentCorrectionsForFewShot(limit = 5): Promise<string> {
       [limit],
     );
     if (!res.rowCount) return '';
+    // Audit-Round-8 (Codex Q5 / DSGVO): learning_corrections.original_text
+    // can carry call-quote snippets with caller PII. Few-shot context is sent
+    // to OpenAI on EVERY analyzeCall — without redaction we'd be re-shipping
+    // every PII-tainted past correction to OpenAI on every call. Redact at
+    // the boundary so OpenAI never sees raw PII even though it sits in our DB.
     const lines = res.rows.map((r: Record<string, unknown>, i: number) => {
-      const orig = (r.original_text as string).slice(0, 400);
-      const corr = (r.corrected_text as string).slice(0, 400);
-      const reason = (r.correction_reason as string | null)?.slice(0, 200);
+      const orig = redactPII((r.original_text as string).slice(0, 400));
+      const corr = redactPII((r.corrected_text as string).slice(0, 400));
+      const reason = redactPII((r.correction_reason as string | null)?.slice(0, 200) ?? '');
       return `Korrektur ${i + 1}:\n  Ursprünglicher Vorschlag: "${orig}"\n  Admin-Korrektur: "${corr}"${reason ? `\n  Grund: ${reason}` : ''}`;
     });
     return `\n\nMETA-LERNEN — Frühere Admin-Korrekturen (lerne aus diesen Mustern, wiederhole sie nicht):\n${lines.join('\n\n')}`;
@@ -776,11 +835,22 @@ async function checkFixEffectiveness(orgId: string): Promise<void> {
         // Only create a pending suggestion — do NOT auto-apply here.
         // The normal learning loop (processIssue) will pick this up on the next call
         // and apply all guards (cooldown, A/B test, one-at-a-time, dynamic threshold).
+        // Audit-Round-8: classify the GPT-generated retry-fix; quarantine if
+        // it carries inject-pattern. (Applies even though generateOptimizedFix
+        // has its own system-prompt rules — defense-in-depth at storage.)
+        const classified = classifyPromptFix(betterFix);
+        const retryCategory = classified.quarantined ? 'prompt_injection_attempt' : fix.category;
+        const retrySummary = classified.quarantined
+          ? `[QUARANTÄNE: ${classified.reason}] Retry nach ineffektivem Fix: ${fix.issue_summary}`
+          : `Retry nach ineffektivem Fix: ${fix.issue_summary}`;
         await pool.query(
           `INSERT INTO prompt_suggestions (org_id, category, issue_summary, suggested_addition, occurrence_count, status, all_examples)
            VALUES ($1, $2, $3, $4, $5, 'pending', $6)`,
-          [orgId, fix.category, `Retry nach ineffektivem Fix: ${fix.issue_summary}`, betterFix, newCount, JSON.stringify(moments)],
+          [orgId, retryCategory, retrySummary, classified.text, newCount, JSON.stringify(moments)],
         );
+        if (classified.quarantined) {
+          log.warn({ orgId, reason: classified.reason }, 'insights: prompt_fix quarantined (retry)');
+        }
       }
     }
   }
@@ -857,11 +927,22 @@ Identifiziere die EINE wirkungsvollste Verbesserung für dieses spezifische Unte
     const result = JSON.parse(raw) as { issue_summary: string; suggested_addition: string; expected_improvement: string };
 
     if (result.suggested_addition) {
+      // Audit-Round-8: holistic-review suggestions go through the same
+      // quarantine filter — GPT can hallucinate or be tipped over by a
+      // poisoned `bad_moments` summary that bubbled up from earlier calls.
+      const classified = classifyPromptFix(result.suggested_addition);
+      const category = classified.quarantined ? 'prompt_injection_attempt' : 'holistic_review';
+      const summary = classified.quarantined
+        ? `[QUARANTÄNE: ${classified.reason}] [Holistische Analyse] ${result.issue_summary} — ${result.expected_improvement}`
+        : `[Holistische Analyse] ${result.issue_summary} — ${result.expected_improvement}`;
       await pool.query(
         `INSERT INTO prompt_suggestions (org_id, category, issue_summary, suggested_addition, occurrence_count, status)
-         VALUES ($1, 'holistic_review', $2, $3, $4, 'pending')`,
-        [orgId, `[Holistische Analyse] ${result.issue_summary} — ${result.expected_improvement}`, result.suggested_addition, HOLISTIC_REVIEW_INTERVAL],
+         VALUES ($1, $2, $3, $4, $5, 'pending')`,
+        [orgId, category, summary, classified.text, HOLISTIC_REVIEW_INTERVAL],
       );
+      if (classified.quarantined) {
+        log.warn({ orgId, reason: classified.reason }, 'insights: prompt_fix quarantined (holistic)');
+      }
     }
   } catch (err) {
     // Audit-Round-7 LOW-2: was silent — GPT/JSON/insert failures invisible.
@@ -1117,17 +1198,25 @@ async function processIssue(
 
     if (bestMatch.status === 'applied' || bestMatch.status === 'auto_applied') {
       // Issue recurs after a fix was applied — create a recurrence note so the user can see the fix didn't hold
+      const classified = classifyPromptFix(moment.prompt_fix);
+      const recurrenceCategory = classified.quarantined ? 'prompt_injection_attempt' : moment.category;
+      const recurrenceSummary = classified.quarantined
+        ? `[QUARANTÄNE: ${classified.reason}] [Recurrence] ${moment.issue}`
+        : `[Recurrence] ${moment.issue}`;
       const embeddingJson = momentEmbedding.length > 0 ? JSON.stringify(momentEmbedding) : null;
       await pool.query(
         `INSERT INTO prompt_suggestions
            (org_id, category, issue_summary, suggested_addition, occurrence_count, status, all_examples, embedding)
          VALUES ($1,$2,$3,$4,1,'pending',$5,$6)`,
-        [orgId, moment.category,
-         `[Recurrence] ${moment.issue}`,
-         moment.prompt_fix,
+        [orgId, recurrenceCategory,
+         recurrenceSummary,
+         classified.text,
          JSON.stringify([moment]),
          embeddingJson],
       );
+      if (classified.quarantined) {
+        log.warn({ orgId, reason: classified.reason, issue: moment.issue.slice(0, 100) }, 'insights: prompt_fix quarantined (recurrence)');
+      }
       return;
     }
 
@@ -1158,14 +1247,24 @@ async function processIssue(
     void startAbTest; void currentPrompt; void setPrompt; void applyPromptAddition;
     void examples;
   } else {
-    // New distinct issue — store with embedding
+    // New distinct issue — store with embedding. Audit-Round-8: classify the
+    // GPT-extracted prompt_fix; quarantine if it looks like a prompt-injection
+    // attempt rather than an honest improvement suggestion.
+    const classified = classifyPromptFix(moment.prompt_fix);
+    const category = classified.quarantined ? 'prompt_injection_attempt' : moment.category;
+    const summary = classified.quarantined
+      ? `[QUARANTÄNE: ${classified.reason}] ${moment.issue}`
+      : moment.issue;
     const embeddingJson = momentEmbedding.length > 0 ? JSON.stringify(momentEmbedding) : null;
     await pool.query(
       `INSERT INTO prompt_suggestions
          (org_id, category, issue_summary, suggested_addition, occurrence_count, status, all_examples, embedding)
        VALUES ($1,$2,$3,$4,1,'pending',$5,$6)`,
-      [orgId, moment.category, moment.issue, moment.prompt_fix, JSON.stringify([moment]), embeddingJson],
+      [orgId, category, summary, classified.text, JSON.stringify([moment]), embeddingJson],
     );
+    if (classified.quarantined) {
+      log.warn({ orgId, reason: classified.reason, issue: moment.issue.slice(0, 100) }, 'insights: prompt_fix quarantined (new)');
+    }
   }
 }
 
@@ -1268,10 +1367,21 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
       if (t.length > 0 && t.length <= 4000) textToApply = t;
     }
     const res = await pool.query(
-      `SELECT suggested_addition FROM prompt_suggestions WHERE id=$1 AND org_id=$2 AND status='pending'`,
+      `SELECT suggested_addition, category FROM prompt_suggestions WHERE id=$1 AND org_id=$2 AND status='pending'`,
       [id, orgId],
     );
     if (res.rows.length === 0) return reply.status(404).send({ error: 'Not found' });
+    // Audit-Round-8: quarantined suggestions cannot be applied via the normal
+    // customer-facing apply route. They need admin attention (review queue).
+    // The customer can still see them in the suggestions list (with the
+    // [QUARANTÄNE:...] prefix in issue_summary) but the Übernehmen-button
+    // should refuse on the server even if the UI somehow lets it through.
+    if (res.rows[0].category === 'prompt_injection_attempt') {
+      return reply.status(409).send({
+        error: 'QUARANTINED',
+        message: 'Dieser Vorschlag wurde automatisch in Quarantäne genommen, weil er Muster eines Prompt-Injection-Versuchs enthält. Bitte den Support kontaktieren.',
+      });
+    }
     const finalText = textToApply ?? (res.rows[0].suggested_addition as string);
     await applyPromptAddition(orgId, finalText);
     // Persist the text that actually landed in the prompt (not the original
@@ -1306,5 +1416,50 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
     const orgId = (req.user as { orgId: string }).orgId;
     consolidatePrompt(orgId).catch(logBg('consolidatePrompt-manual', { orgId }));
     return { ok: true };
+  });
+
+  // Audit-Round-8 (Codex M07-MEDIUM-1): one-shot backfill for legacy
+  // prompt_suggestions rows that lack `embedding`. Each call processes up to
+  // BATCH_SIZE rows + returns the remaining count, so an admin can hammer it
+  // until done. Idempotent — `WHERE embedding IS NULL` is the source of truth,
+  // running twice is a no-op for already-backfilled rows.
+  //
+  // Platform-admin-gated (payload.admin) — backfilling is OpenAI-budget
+  // expensive, regular customers don't need it.
+  app.post('/insights/admin/embed-backfill', { onRequest: [app.authenticate] }, async (req, reply) => {
+    if (!pool) return reply.status(503).send({ error: 'Database not configured' });
+    if (!process.env.OPENAI_API_KEY) return reply.status(503).send({ error: 'OPENAI_API_KEY not configured' });
+    const payload = req.user as Record<string, unknown>;
+    if (!payload.admin) return reply.status(403).send({ error: 'Platform-admin only' });
+
+    const BATCH_SIZE = 50;
+    const rows = await pool.query<{ id: string; issue_summary: string }>(
+      `SELECT id, issue_summary FROM prompt_suggestions WHERE embedding IS NULL LIMIT $1`,
+      [BATCH_SIZE],
+    );
+    let processed = 0;
+    let failed = 0;
+    for (const row of rows.rows) {
+      try {
+        const vec = await embed(row.issue_summary);
+        if (vec.length > 0) {
+          await pool.query(
+            `UPDATE prompt_suggestions SET embedding = $1 WHERE id = $2`,
+            [JSON.stringify(vec), row.id],
+          );
+          processed++;
+        } else {
+          failed++;
+        }
+      } catch (err) {
+        failed++;
+        log.warn({ err: (err as Error).message, suggestionId: row.id }, 'embed-backfill: row failed');
+      }
+    }
+    const remainingRes = await pool.query<{ cnt: string }>(
+      `SELECT COUNT(*)::text AS cnt FROM prompt_suggestions WHERE embedding IS NULL`,
+    );
+    const remaining = parseInt(remainingRes.rows[0]?.cnt ?? '0', 10);
+    return { ok: true, processed, failed, remaining };
   });
 }

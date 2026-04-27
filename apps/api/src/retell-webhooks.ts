@@ -41,6 +41,7 @@ import { getCall, deleteCall } from './retell.js';
 import { fireInboundWebhooks } from './inbound-webhooks.js';
 import { sendBookingConfirmationSms, sendTicketAckSms } from './sms.js';
 import { readDemoCallTemplate } from './demo.js';
+import { redactPII } from './pii.js';
 
 const RETELL_API_KEY = process.env.RETELL_API_KEY ?? '';
 
@@ -567,7 +568,12 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
                 agentId,
                 templateId,
                 durationMs ? Math.round(durationMs / 1000) : null,
-                transcript ?? null,
+                // Audit-Round-8 (Codex M07-MEDIUM-B): demo_calls keeps
+                // transcripts for 90 days for promotion to leads. Redact PII
+                // at write-time so credit-card / IBAN / phone / email / DOB
+                // never sit raw in the table — admin-bulk-views and any
+                // future leak surface only see the redacted form.
+                transcript ? redactPII(transcript) : null,
                 cn,
                 ce,
                 cp,

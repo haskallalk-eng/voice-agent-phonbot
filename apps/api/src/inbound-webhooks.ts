@@ -46,6 +46,41 @@ const MAX_URL_LEN = 2000;
 /** Hard cap per org per event to bound outbound socket usage per call. */
 const MAX_WEBHOOKS_PER_FIRE = 10;
 
+// Audit-Round-8 (Codex M07-MEDIUM-4): cache the inboundWebhooks-slice per
+// tenantId for 60s. Without this, a busy customer with 5 events/sec eats 5
+// agent_configs SELECTs/sec just for webhook-routing config that rarely
+// changes. Invalidated explicitly from agent-config.ts:writeConfig via
+// invalidateInboundWebhooksCache() — and falls back gracefully via TTL if
+// some bypass-path skips the invalidation (max 60s drift).
+const WEBHOOK_CACHE_TTL_MS = 60_000;
+const WEBHOOK_CACHE_MAX_ENTRIES = 1000;
+const webhookCache = new Map<string, { hooks: InboundWebhookConfig[]; expires: number }>();
+
+function getCachedHooks(tenantId: string): InboundWebhookConfig[] | null {
+  const e = webhookCache.get(tenantId);
+  if (!e) return null;
+  if (e.expires < Date.now()) {
+    webhookCache.delete(tenantId);
+    return null;
+  }
+  return e.hooks;
+}
+
+function setCachedHooks(tenantId: string, hooks: InboundWebhookConfig[]): void {
+  // Bounded — drop oldest entry on overflow. Map iteration order is insertion-
+  // order in V8 so the first key is the oldest.
+  if (webhookCache.size >= WEBHOOK_CACHE_MAX_ENTRIES && !webhookCache.has(tenantId)) {
+    const firstKey = webhookCache.keys().next().value;
+    if (firstKey !== undefined) webhookCache.delete(firstKey);
+  }
+  webhookCache.set(tenantId, { hooks, expires: Date.now() + WEBHOOK_CACHE_TTL_MS });
+}
+
+/** Called by agent-config.ts:writeConfig after a successful save. */
+export function invalidateInboundWebhooksCache(tenantId: string): void {
+  webhookCache.delete(tenantId);
+}
+
 // isPrivateHost + isPrivateResolved moved to ssrf-guard.ts — single source
 // of truth shared with api-integrations.ts. Prior to this, each module
 // had its own copy and they drifted (api-integrations lost the ::ffff:-hex
@@ -90,17 +125,27 @@ export async function fireInboundWebhooks(
   data: WebhookEventPayload,
 ): Promise<void> {
   let hooks: InboundWebhookConfig[] = [];
-  try {
-    // tenantId is the only context this fan-out has — pass it as both
-    // parameters. Functionally equivalent to the previous one-arg call
-    // (both filter to the row whose tenant_id matches), but readConfig now
-    // requires orgId at the type level so a future caller can't silently
-    // skip the multi-tenant filter.
-    const config = await readConfig(tenantId, tenantId);
-    hooks = (config as unknown as { inboundWebhooks?: InboundWebhookConfig[] }).inboundWebhooks ?? [];
-  } catch (err) {
-    log.warn({ err: (err as Error).message, tenantId }, 'inbound-webhooks: readConfig failed');
-    return;
+  // Hot-path cache (Audit-Round-8 M07-MEDIUM-4): readConfig per event is
+  // expensive — call.started + call.ended + ticket.created + variable.extracted
+  // for one busy call already runs 4 SELECTs of a 10-50KB JSONB row. Cached
+  // for 60s, invalidated by invalidateInboundWebhooksCache from writeConfig.
+  const cached = getCachedHooks(tenantId);
+  if (cached !== null) {
+    hooks = cached;
+  } else {
+    try {
+      // tenantId is the only context this fan-out has — pass it as both
+      // parameters. Functionally equivalent to the previous one-arg call
+      // (both filter to the row whose tenant_id matches), but readConfig now
+      // requires orgId at the type level so a future caller can't silently
+      // skip the multi-tenant filter.
+      const config = await readConfig(tenantId, tenantId);
+      hooks = (config as unknown as { inboundWebhooks?: InboundWebhookConfig[] }).inboundWebhooks ?? [];
+      setCachedHooks(tenantId, hooks);
+    } catch (err) {
+      log.warn({ err: (err as Error).message, tenantId }, 'inbound-webhooks: readConfig failed');
+      return;
+    }
   }
 
   const allMatches = hooks.filter((h) => h.enabled && Array.isArray(h.events) && h.events.includes(event));

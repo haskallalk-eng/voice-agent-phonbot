@@ -2,10 +2,37 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import bcrypt from 'bcrypt';
 import { pool } from './db.js';
+import { log } from './logger.js';
 import { TEMPLATES } from './templates.js';
 import { DEMO_END_INSTRUCTIONS, DEFAULT_SALES_PROMPT, flushDemoAgentCache } from './demo.js';
 import { PLATFORM_BASELINE_PROMPT } from './platform-baseline.js';
 import { OUTBOUND_BASELINE_PROMPT } from './outbound-baseline.js';
+
+/**
+ * Audit-Round-8 (Codex M07-MEDIUM-C): admin cross-org reads are intentional
+ * (platform-admin can see every customer's data) but we had no read-audit-
+ * trail and no per-route rate-limit. With a compromised admin token, bulk
+ * exfiltration was invisible and unbounded.
+ *
+ * `recordAdminRead` is fire-and-forget — never block the GET. Failures only
+ * mean the audit row is missing; we surface them via log so Ops sees the
+ * pattern without it taking the response path down.
+ */
+async function recordAdminRead(
+  req: FastifyRequest,
+  route: string,
+  resultCount: number | null,
+  paramsForAudit: Record<string, unknown> = {},
+): Promise<void> {
+  if (!pool) return;
+  const payload = (req.user as Record<string, unknown>) ?? {};
+  const adminEmail = (payload.email as string | undefined) ?? 'unknown';
+  pool.query(
+    `INSERT INTO admin_read_audit_log (admin_email, route, params, result_count, ip)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [adminEmail, route, JSON.stringify(paramsForAudit), resultCount, req.ip ?? null],
+  ).catch((err: Error) => log.warn({ err: err.message, route, adminEmail }, 'admin: audit-log insert failed'));
+}
 
 // Admin login accepts either:
 //  • ADMIN_PASSWORD_HASH (bcrypt, recommended for prod) — plaintext never in
@@ -81,7 +108,12 @@ export async function registerAdmin(app: FastifyInstance) {
   });
 
   // ── GET /admin/leads ──────────────────────────────────────────────────────
-  app.get('/admin/leads', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  // Audit-Round-8: Per-route rate-limit (60/min) caps bulk-exfiltration with
+  // a compromised admin token. + recordAdminRead audit-log on every read.
+  app.get('/admin/leads', {
+    ...auth,
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
 
     const q = z.object({
@@ -128,11 +160,15 @@ export async function registerAdmin(app: FastifyInstance) {
       dataValues,
     );
 
+    void recordAdminRead(req, '/admin/leads', rows.length, q);
     return { items: rows, total };
   });
 
   // ── GET /admin/leads/stats ────────────────────────────────────────────────
-  app.get('/admin/leads/stats', { ...auth }, async (_req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/admin/leads/stats', {
+    ...auth,
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
 
     const statusRes = await pool.query(
@@ -169,6 +205,7 @@ export async function registerAdmin(app: FastifyInstance) {
       count: parseInt(String(r.cnt), 10),
     }));
 
+    void recordAdminRead(req, '/admin/leads/stats', total, {});
     return { total, byStatus, bySource, conversionRate, perDay };
   });
 
@@ -216,7 +253,11 @@ export async function registerAdmin(app: FastifyInstance) {
   // ── GET /admin/demo-calls ─────────────────────────────────────────────────
   // Persisted /demo/call sessions (template_id, transcript, extracted contact
   // fields). Promoted demo calls keep the row but show their crm_leads id.
-  app.get('/admin/demo-calls', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  // Audit-Round-8: rate-limit + recordAdminRead.
+  app.get('/admin/demo-calls', {
+    ...auth,
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
     const q = z.object({
       limit: z.coerce.number().int().min(1).max(200).default(100),
@@ -244,6 +285,7 @@ export async function registerAdmin(app: FastifyInstance) {
         LIMIT $${args.length}`,
       args,
     );
+    void recordAdminRead(req, '/admin/demo-calls', res.rows.length, q.data);
     return { calls: res.rows };
   });
 

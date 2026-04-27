@@ -1136,6 +1136,24 @@ export async function registerPhone(app: FastifyInstance) {
       return reply.status(503).send({ error: 'Verifikation konnte nicht initialisiert werden.' });
     }
 
+    // Audit-Round-8 (M06-MEDIUM-4): global hourly cap on verifier-Twilio-calls.
+    // Per-user RL is 5/hour, but with 100 users × 5 we'd burn ~5€/h Twilio
+    // worst-case if a credentials-leak got distributed across accounts. Hard
+    // cap at 200/hour platform-wide so an outage is louder than the bill.
+    const VERIFY_GLOBAL_CAP_PER_HOUR = Number(process.env.VERIFY_GLOBAL_CAP_PER_HOUR ?? 200);
+    if (redis?.isOpen) {
+      const counterKey = 'phone:verify:global:hourly';
+      const count = await redis.incr(counterKey).catch(() => 0);
+      if (count === 1) await redis.expire(counterKey, 3600).catch(() => {});
+      if (count > VERIFY_GLOBAL_CAP_PER_HOUR) {
+        log.warn({ count, cap: VERIFY_GLOBAL_CAP_PER_HOUR }, '[verify-forwarding] global hourly cap exceeded — refusing further verifier calls this hour');
+        await clearPendingForwardingVerification(pending.phonbotNumber);
+        return reply.status(503).send({
+          error: 'Aktuell zu viele Verifikationsanfragen — bitte in einer Stunde erneut versuchen oder manuell testen.',
+        });
+      }
+    }
+
     let twilioCallSid: string | null = null;
     try {
       const client = getTwilioClient();
