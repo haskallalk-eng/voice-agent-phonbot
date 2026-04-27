@@ -148,6 +148,24 @@ export async function migrateOutbound() {
   `);
   await pool.query(`COMMENT ON TABLE demo_prompt_overrides IS 'Admin-editable demo prompt fragments. template_id=__global__ stores the cross-template epilogue. base_prompt overrides templates.ts when set.';`);
 
+  // Append-only history of every prompt override edit. demo_prompt_overrides
+  // only carries the latest state; without this table the admin has no way to
+  // see previous versions or roll back. Insert happens in the PUT handler
+  // BEFORE the upsert so the prior state is captured on every change.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS prompt_override_history (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      template_id   TEXT NOT NULL,
+      epilogue      TEXT,
+      base_prompt   TEXT,
+      changed_by    TEXT,
+      change_kind   TEXT NOT NULL CHECK (change_kind IN ('edit', 'revert'))
+    );
+  `);
+  await pool.query(`COMMENT ON TABLE prompt_override_history IS 'Append-only history of demo_prompt_overrides edits. DSGVO Art. 5(1)(e): 365-day retention via cleanupOldLeads().';`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS prompt_override_history_template_idx ON prompt_override_history(template_id, created_at DESC);`);
+
   // Learning-improvement decisions — extends the existing prompt_suggestions /
   // template_learnings flow with an admin-controlled `scope` field. Each row
   // links to the source improvement and records whether the admin decided it

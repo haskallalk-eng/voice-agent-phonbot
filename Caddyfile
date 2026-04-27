@@ -19,6 +19,10 @@
         X-Content-Type-Options "nosniff"
         X-Frame-Options "SAMEORIGIN"
         Referrer-Policy "strict-origin-when-cross-origin"
+        # microphone=(self) is required for the in-browser demo (retell-client-js).
+        # xr-spatial-tracking=() silences the WebXR-policy warning Cloudflare's
+        # Turnstile iframe triggers — registered policy-controlled feature per
+        # the W3C Permissions-Policy spec, no-op on Firefox/Safari.
         Permissions-Policy "microphone=(self), camera=(), geolocation=(), payment=(self), xr-spatial-tracking=()"
         -Server
     }

@@ -255,6 +255,30 @@ function DatenschutzContent() {
           zertifiziert ist.
         </p>
 
+        <h3 className="text-sm font-semibold text-white/90 mt-3 mb-1">Demo-Anrufe auf phonbot.de</h3>
+        <p>
+          Wenn Sie auf phonbot.de die Live-Demo eines KI-Telefonassistenten nutzen (Web-Anruf direkt
+          im Browser), wird das Gesprächs-Transkript zusammen mit aus dem Gespräch extrahierten
+          Kontaktdaten (Name, E-Mail, Telefonnummer — sofern Sie diese im Demo-Gespräch nennen) für
+          bis zu 90 Tage in unserer Datenbank gespeichert. Wir verwenden diese Daten ausschließlich zur
+          Qualitätssicherung der Demo, zur Verbesserung des Sprach-Agenten und — sofern Sie im Demo-
+          Gespräch ein Interesse an unserem Produkt äußern — als Lead, den unser Team manuell
+          bearbeitet. Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an Produkt-
+          verbesserung und Lead-Aufnahme nach freiwilliger Anfrage). Sie können der Speicherung
+          jederzeit widersprechen — schreiben Sie uns dazu eine E-Mail an info@phonbot.de mit der
+          Anrufzeit; wir löschen den Datensatz dann manuell.
+        </p>
+
+        <h3 className="text-sm font-semibold text-white/90 mt-3 mb-1">Demo-Rückrufe von Phonbot</h3>
+        <p>
+          Wenn Sie auf phonbot.de das Rückruf-Formular ausfüllen (Name, E-Mail, Telefonnummer), ruft
+          unser KI-Assistent Chipy Sie unter der angegebenen Nummer zurück. Der Anruf wird wie oben
+          beschrieben aufgezeichnet und für bis zu 90 Tage gespeichert. Sie können der weiteren
+          Kontaktaufnahme jederzeit widersprechen (DSGVO Art. 21) — Chipy akzeptiert ein
+          „kein Interesse" / „nicht mehr anrufen" sofort und beendet das Gespräch. Rechtsgrundlage:
+          Art. 6 Abs. 1 lit. a DSGVO (Einwilligung durch Formular-Eintragung).
+        </p>
+
         <h3 className="text-sm font-semibold text-white/90 mt-3 mb-1">Twilio (Telefonie-Infrastruktur)</h3>
         <p>
           Für die eigentliche Telefonverbindung (Durchleitung, Rufnummern, SIP-Trunk, SMS) verwenden
