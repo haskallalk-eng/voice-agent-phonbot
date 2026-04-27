@@ -21,7 +21,7 @@
 import type { FastifyInstance } from 'fastify';
 import OpenAI from 'openai';
 import { pool } from './db.js';
-import { logBg } from './logger.js';
+import { log, logBg } from './logger.js';
 import { computeSatisfactionScore, extractSignalsFromCall, storeSatisfactionData } from './satisfaction-signals.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? '' });
@@ -327,21 +327,91 @@ async function savePromptVersion(orgId: string, prompt: string, reason: string):
   return res.rows[0]?.id as string | null;
 }
 
+// Stable advisory-lock key per org for setPrompt-serialisation.
+// Postgres pg_advisory_xact_lock uses int8 (signed 64-bit). We hash the orgId
+// UUID into a deterministic int8 — collision-rate negligible for the size of
+// the orgs table. Only setPrompt + consolidatePrompt + evaluateAbTest must
+// take this lock; readers don't need it.
+function setPromptLockKey(orgId: string): string {
+  // Use the first 16 hex chars of a sha256 — fits in int8, deterministic per org.
+  // Returned as decimal string so pg-driver passes it as bigint.
+  // (SQL: SELECT pg_advisory_xact_lock(hashtext($1) is also valid; we keep the
+  // explicit conversion for readability.)
+  let h = 0n;
+  for (const ch of orgId) h = (h * 131n + BigInt(ch.charCodeAt(0))) & 0x7fffffffffffffffn;
+  return h.toString();
+}
+
 async function setPrompt(orgId: string, newPrompt: string, reason: string): Promise<string | null> {
   if (!pool) return null;
-  const old = await getSystemPrompt(orgId);
-  let versionId: string | null = null;
-  if (old) versionId = await savePromptVersion(orgId, old, `before:${reason}`);
-  await pool.query(
-    `UPDATE agent_configs
-     SET data = jsonb_set(data, '{systemPrompt}', to_jsonb($2::text)), updated_at = now()
-     WHERE org_id = $1`,
-    [orgId, newPrompt],
-  );
 
-  // Sync to live Retell agent — rebuild full instructions and push to Retell LLM
-  syncPromptToRetell(orgId).catch((e) => {
-    process.stderr.write(`[insights] Retell sync failed for org ${orgId}: ${e instanceof Error ? e.message : String(e)}\n`);
+  // Audit-Round-7 MEDIUM-2: serialize concurrent setPrompt calls per-org.
+  // Without this, parallel apply/restore/consolidate would race the
+  // SELECT-old → INSERT-version → UPDATE-prompt sequence and each others'
+  // before:* version snapshots could carry stale prompts → checkScoreRollback
+  // would roll back to the wrong baseline.
+  const client = await pool.connect();
+  let versionId: string | null = null;
+  try {
+    await client.query('BEGIN');
+    await client.query(`SELECT pg_advisory_xact_lock($1::bigint)`, [setPromptLockKey(orgId)]);
+
+    const oldRes = await client.query(
+      `SELECT data->>'systemPrompt' AS prompt FROM agent_configs
+       WHERE org_id = $1 ORDER BY updated_at DESC LIMIT 1`,
+      [orgId],
+    );
+    const old = (oldRes.rows[0]?.prompt as string | undefined) ?? '';
+
+    if (old) {
+      // Inline savePromptVersion (we already have the client; doing it here
+      // keeps the snapshot inside the same transaction → consistent with the
+      // UPDATE that follows).
+      const scoreRes = await client.query(
+        `SELECT AVG(score) AS avg FROM (
+           SELECT score FROM call_analyses WHERE org_id = $1 ORDER BY created_at DESC LIMIT 5
+         ) t`,
+        [orgId],
+      );
+      const avg = scoreRes.rows[0]?.avg != null ? Number(scoreRes.rows[0].avg) : null;
+      const cntRes = await client.query(`SELECT COUNT(*) AS cnt FROM call_analyses WHERE org_id = $1`, [orgId]);
+      const insRes = await client.query(
+        `INSERT INTO prompt_versions (org_id, prompt, reason, avg_score, call_count)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        [orgId, old, `before:${reason}`, avg, Number(cntRes.rows[0]?.cnt ?? 0)],
+      );
+      versionId = (insRes.rows[0]?.id as string) ?? null;
+    }
+
+    await client.query(
+      `UPDATE agent_configs
+       SET data = jsonb_set(data, '{systemPrompt}', to_jsonb($2::text)), updated_at = now()
+       WHERE org_id = $1`,
+      [orgId, newPrompt],
+    );
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {/* nothing to roll back */});
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  // Sync to live Retell agent — fire-and-forget AFTER commit (no point in
+  // rolling back the DB if Retell is slow). Audit-Round-7 HIGH-3: silent
+  // stderr-fail meant DB had new prompt while Retell still served the old
+  // one. Now log.error + DB column for frontend banner.
+  syncPromptToRetell(orgId).catch((e: unknown) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    log.error({ err: msg, orgId, reason }, 'insights: Retell prompt-sync failed — agent may be running stale prompt');
+    if (pool) {
+      pool.query(
+        `UPDATE agent_configs SET last_retell_sync_error = $1, last_retell_sync_at = now()
+         WHERE org_id = $2`,
+        [msg.slice(0, 500), orgId],
+      ).catch(() => {/* column might not exist yet on stale schema; non-fatal */});
+    }
   });
 
   return versionId;
@@ -439,7 +509,11 @@ ${current}`,
        VALUES ($1, $2, 'consolidation_checkpoint', null, $3)`,
       [orgId, consolidated, callCountBefore],
     );
-  } catch { /* silent */ }
+  } catch (err) {
+    // Audit-Round-7 LOW-1: was silent — OpenAI/parse/DB failures looked like
+    // "nothing happened". Now warn-logged so Sentry sees the pattern.
+    log.warn({ err: (err as Error).message, orgId }, 'insights: consolidatePrompt failed');
+  }
 }
 
 // ── Consolidation quality check ────────────────────────────────────────────────
@@ -789,7 +863,10 @@ Identifiziere die EINE wirkungsvollste Verbesserung für dieses spezifische Unte
         [orgId, `[Holistische Analyse] ${result.issue_summary} — ${result.expected_improvement}`, result.suggested_addition, HOLISTIC_REVIEW_INTERVAL],
       );
     }
-  } catch { /* silent */ }
+  } catch (err) {
+    // Audit-Round-7 LOW-2: was silent — GPT/JSON/insert failures invisible.
+    log.warn({ err: (err as Error).message, orgId }, 'insights: holisticReview failed');
+  }
 }
 
 // ── Core analysis ─────────────────────────────────────────────────────────────
@@ -882,7 +959,10 @@ Falls keine Probleme: bad_moments leer. satisfaction_signals ist immer auszufül
     const raw = (resp.choices[0]?.message?.content ?? '{}')
       .replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
     analysis = JSON.parse(raw) as CallAnalysis;
-  } catch {
+  } catch (err) {
+    // Audit-Round-7 LOW-3: silent return swallowed OpenAI/parse failures —
+    // a systematic OpenAI outage was invisible. log.warn so Sentry can detect.
+    log.warn({ err: (err as Error).message, orgId, callId }, 'insights: analyzeCall OpenAI/parse failed');
     return;
   }
 
@@ -915,7 +995,7 @@ Falls keine Probleme: bad_moments leer. satisfaction_signals ist immer auszufül
     // INS-09: silent swallow here means call_transcripts.score + feedback stay
     // null — all downstream analytics are blind to this call. Log so ops can
     // spot systematic DB issues (constraint violations, connection drops).
-    process.stderr.write(`[insights] call_transcripts update failed (orgId=${orgId}, callId=${callId}): ${err instanceof Error ? err.message : String(err)}\n`);
+    log.warn({ err: err instanceof Error ? err.message : String(err), orgId, callId }, 'insights: call_transcripts enrichment failed');
   });
 
   // Compute and store implicit satisfaction score (fire-and-forget)
@@ -927,7 +1007,7 @@ Falls keine Probleme: bad_moments leer. satisfaction_signals ist immer auszufül
       const satScore = computeSatisfactionScore(signals);
       return storeSatisfactionData(callId, orgId, satScore, signals, callMeta.disconnection_reason ?? null);
     }).catch((err: unknown) => {
-      process.stderr.write(`[insights] satisfaction persist failed (callId=${callId}): ${err instanceof Error ? err.message : String(err)}\n`);
+      log.warn({ err: err instanceof Error ? err.message : String(err), orgId, callId }, 'insights: satisfaction persist failed');
     });
   }
 

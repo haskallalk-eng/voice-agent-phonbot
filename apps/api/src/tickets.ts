@@ -5,6 +5,7 @@ import { isPlausiblePhone, normalizePhoneLight } from '@vas/shared';
 import type { JwtPayload } from './auth.js';
 import { sendTicketNotification } from './email.js';
 import { triggerCallback } from './agent-config.js';
+import { log } from './logger.js';
 
 type TicketRow = {
   id: number;
@@ -186,11 +187,11 @@ export async function createTicket(
           service: ticket.service,
         }).catch((e: unknown) => {
           // Don't swallow silently — log so ops can see mail-send failures.
-          process.stderr.write(`[tickets] sendTicketNotification failed: ${e instanceof Error ? e.message : String(e)}\n`);
+          log.warn({ err: e instanceof Error ? e.message : String(e), orgId, ticketId: ticket.id }, 'tickets: sendTicketNotification failed');
         });
       }
     }).catch((e: unknown) => {
-      process.stderr.write(`[tickets] owner-lookup for notification failed: ${e instanceof Error ? e.message : String(e)}\n`);
+      log.warn({ err: e instanceof Error ? e.message : String(e), orgId, ticketId: ticket.id }, 'tickets: owner-lookup for notification failed');
     });
   }
 
@@ -346,10 +347,14 @@ export async function registerTickets(app: FastifyInstance) {
  *
  * Called by retell-webhooks on `call_ended` / `call_analyzed` once Retell's
  * post-call analysis returns `custom_analysis_data`. JSONB concat (`||`) is
- * left-dominant: already-present keys from an earlier analysis are preserved,
- * so a late-arriving `call_analyzed` cannot clobber what `call_ended` already
- * wrote. If both events carry the same key, the first-writer wins — which
- * is what we want for idempotency.
+ * RIGHT-dominant in Postgres: in `$3::jsonb || metadata`, the existing
+ * `metadata` (right side) wins on key conflicts, so a late-arriving
+ * `call_analyzed` cannot clobber what `call_ended` already wrote. If both
+ * events carry the same key, the first writer (the row already in the table)
+ * wins — which is what we want for idempotency.
+ *
+ * (Audit-2026-04-26 Codex Counter-Review LOW-B: prior comment said
+ * "left-dominant" — code is correct, comment was wrong.)
  *
  * Match is by `session_id` (Retell call_id) AND `org_id`. Org-scoping is
  * mandatory: Retell's HMAC signature binds the event body to our platform-

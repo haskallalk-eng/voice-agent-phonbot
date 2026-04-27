@@ -453,6 +453,30 @@ async function runMigrationBody() {
   await pool.query(`alter table agent_configs add column if not exists org_id uuid references orgs(id) on delete cascade;`);
   await pool.query(`alter table tickets add column if not exists org_id uuid references orgs(id) on delete cascade;`);
 
+  // Audit-Round-7 HIGH-3: surface Retell-LLM-sync failures (insights.setPrompt
+  // fire-and-forget). Frontend banner can read these and prompt re-deploy.
+  await pool.query(`alter table agent_configs add column if not exists last_retell_sync_error text;`);
+  await pool.query(`alter table agent_configs add column if not exists last_retell_sync_at timestamptz;`);
+
+  // Audit-Round-7 MEDIUM-3 (Codex): cancel zombie A/B-tests that started
+  // before the 2026-04-23 auto-apply-disable date. recordAbTestCall would
+  // otherwise keep accumulating variant_scores and eventually trigger an
+  // unintended evaluateAbTest rollback. Idempotent — only fires while there
+  // are stale 'running' rows older than the cutoff.
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'ab_tests') THEN
+        UPDATE ab_tests
+          SET status = 'cancelled',
+              decision_reason = COALESCE(decision_reason, 'auto-apply disabled 2026-04-23'),
+              completed_at = COALESCE(completed_at, now())
+        WHERE status = 'running'
+          AND created_at < '2026-04-23'::timestamptz;
+      END IF;
+    END $$;
+  `);
+
   await pool.query(`
     create table if not exists knowledge_files (
       id uuid primary key default gen_random_uuid(),

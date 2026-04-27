@@ -16,6 +16,7 @@
 
 import OpenAI from 'openai';
 import { pool } from './db.js';
+import { log } from './logger.js';
 import { BASE_OUTBOUND_PROMPT } from './outbound-agent.js';
 import { updateLLM } from './retell.js';
 
@@ -128,18 +129,23 @@ Bewertungskriterien:
     }
 
     // Store outbound transcript enriched with analysis results (fire-and-forget)
+    // Audit-Round-7 Codex LOW-A defense-in-depth: scope the UPDATE by org_id
+    // even though call_transcripts.call_id is UNIQUE today. If a future schema
+    // change relaxes that or two orgs ever observe the same call_id (shouldn't
+    // happen but defensive), this prevents cross-tenant overwrite.
     pool.query(
       `UPDATE call_transcripts SET
          score = $1, conv_score = $2, outcome = $3
-       WHERE call_id = $4`,
+       WHERE call_id = $4 AND org_id = $5`,
       [
         score.toFixed(2),
         score.toFixed(2),
         analysis.outcome_detected ?? null,
         callId,
+        orgId,
       ],
     ).catch((err: unknown) => {
-      process.stderr.write(`[outbound-insights] conv_score update failed (callId=${callId}): ${err instanceof Error ? err.message : String(err)}\n`);
+      log.warn({ err: err instanceof Error ? err.message : String(err), orgId, callId }, 'outbound-insights: conv_score update failed');
     });
 
     // Trigger batch learning after enough calls
@@ -149,11 +155,11 @@ Bewertungskriterien:
     );
     if ((rowCount ?? 0) % MIN_CALLS_FOR_LEARNING === 0) {
       consolidateAndLearn(orgId).catch((e) => {
-        process.stderr.write(`[outbound-insights] consolidate failed for org ${orgId}: ${e instanceof Error ? e.message : String(e)}\n`);
+        log.warn({ err: e instanceof Error ? e.message : String(e), orgId }, 'outbound-insights: consolidate failed');
       });
     }
   } catch (e) {
-    process.stderr.write(`[outbound-insights] analyzeOutboundCall failed: ${e instanceof Error ? e.message : String(e)}\n`);
+    log.warn({ err: e instanceof Error ? e.message : String(e), orgId, callId }, 'outbound-insights: analyzeOutboundCall failed');
   }
 }
 
@@ -270,11 +276,18 @@ Erstelle präzise Verbesserungen. Fokus auf: konkretere Formulierungen, bessere 
     let newPrompt = currentPrompt;
     for (const imp of (result.improvements ?? [])) {
       if (imp.new_formulation && imp.new_formulation.length > 20) {
-        // Update suggestion with GPT-generated lift estimate
+        // Update suggestion with GPT-generated lift estimate.
+        // Audit-Round-7 Codex MEDIUM-6: escape LIKE meta-chars in the GPT-
+        // generated current_issue so a stray `%` or `_` can't broaden the
+        // ILIKE match and overwrite the wrong suggestion's conv_lift_est.
+        const safeNeedle = imp.current_issue
+          .slice(0, 50)
+          .replace(/\\/g, '\\\\')
+          .replace(/[%_]/g, '\\$&');
         await pool.query(
           `UPDATE outbound_suggestions SET conv_lift_est = $1
-           WHERE org_id = $2 AND status = 'pending' AND issue_summary ILIKE $3`,
-          [imp.estimated_lift, orgId, `%${imp.current_issue.slice(0, 50)}%`],
+           WHERE org_id = $2 AND status = 'pending' AND issue_summary ILIKE $3 ESCAPE '\\'`,
+          [imp.estimated_lift, orgId, `%${safeNeedle}%`],
         );
       }
     }
@@ -303,8 +316,9 @@ Erstelle präzise Verbesserungen. Fokus auf: konkretere Formulierungen, bessere 
         );
       }
     }
-  } catch {
-    // Non-critical
+  } catch (err) {
+    // Audit-Round-7: was silent (`Non-critical`) — GPT/JSON/DB failures invisible.
+    log.warn({ err: err instanceof Error ? err.message : String(err), orgId }, 'outbound-insights: consolidateAndLearn failed');
   }
 }
 
@@ -364,8 +378,10 @@ export async function analyzeAndImproveOutboundPrompt(
       const { loadOutboundBaseline } = await import('./outbound-baseline.js');
       const baseline = await loadOutboundBaseline();
       await updateLLM(llmId, { generalPrompt: `${baseline}\n\n${newPrompt}` });
-    } catch {
-      // Non-critical — Retell update failure doesn't break the system
+    } catch (err) {
+      // Audit-Round-7: was silent — Retell stays on the old prompt while DB
+      // claims the new one is live. Surface so Ops can see + manually re-deploy.
+      log.warn({ err: err instanceof Error ? err.message : String(err), orgId, llmId }, 'outbound-insights: Retell prompt-sync failed (DB updated, Retell not)');
     }
   }
 }

@@ -60,4 +60,17 @@ if (process.env.NODE_ENV === 'production') {
     process.stderr.write(`[env] FATAL: missing required production secrets: ${missing.join(', ')}\n`);
     throw new Error(`Missing required production env vars: ${missing.join(', ')}`);
   }
+
+  // Audit-Round-7 Codex MEDIUM-A: WEBHOOK_SIGNING_SECRET should be separate from
+  // JWT_SECRET so a JWT rotation doesn't silently break every customer's
+  // webhook-signature-validation. We don't make it hard-required yet
+  // (would crash any deploy that hasn't set it); we soft-warn so Ops sees
+  // the gap and can set it before the next JWT rotation. Once set on all
+  // envs, promote into REQUIRED_PROD_SECRETS in a follow-up.
+  const SOFT_REQUIRED_PROD_SECRETS = ['WEBHOOK_SIGNING_SECRET'] as const;
+  const softMissing = SOFT_REQUIRED_PROD_SECRETS.filter((k) => !process.env[k] || process.env[k]!.trim() === '');
+  if (softMissing.length > 0) {
+    process.stderr.write(`[env] WARN: missing recommended production secrets (will be required soon): ${softMissing.join(', ')}\n`);
+    process.stderr.write(`[env] WARN: WEBHOOK_SIGNING_SECRET falls back to JWT_SECRET — a JWT rotation will silently break customer webhook signatures. Set this before the next rotation.\n`);
+  }
 }
