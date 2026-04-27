@@ -540,10 +540,28 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
             const ce = (extracted?.caller_email as string | undefined)?.trim().toLowerCase() || null;
             const cp = (extracted?.caller_phone as string | undefined)?.trim() || null;
             const intent = (extracted?.intent_summary as string | undefined)?.trim() || null;
+            // UPSERT — `call_analyzed` may arrive BEFORE `call_ended` for short
+            // calls (Retell does not guarantee ordering). If call_analyzed
+            // already inserted a stub row with only caller_*/intent fields,
+            // the call_ended path here MUST fill in transcript/duration/
+            // disconnection_reason via UPDATE. ON CONFLICT DO NOTHING (the
+            // previous behaviour) would silently drop these fields, leaving
+            // the demo_calls row half-populated. COALESCE keeps any earlier-
+            // written analysis fields; transcript/duration are call_ended-
+            // only so they always come from EXCLUDED.
             pool.query(
               `INSERT INTO demo_calls (call_id, agent_id, template_id, duration_sec, transcript, caller_name, caller_email, caller_phone, intent_summary, disconnection_reason)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-               ON CONFLICT (call_id) DO NOTHING`,
+               ON CONFLICT (call_id) DO UPDATE SET
+                 agent_id             = COALESCE(demo_calls.agent_id, EXCLUDED.agent_id),
+                 template_id          = COALESCE(demo_calls.template_id, EXCLUDED.template_id),
+                 duration_sec         = COALESCE(EXCLUDED.duration_sec, demo_calls.duration_sec),
+                 transcript           = COALESCE(EXCLUDED.transcript, demo_calls.transcript),
+                 caller_name          = COALESCE(demo_calls.caller_name, EXCLUDED.caller_name),
+                 caller_email         = COALESCE(demo_calls.caller_email, EXCLUDED.caller_email),
+                 caller_phone         = COALESCE(demo_calls.caller_phone, EXCLUDED.caller_phone),
+                 intent_summary       = COALESCE(demo_calls.intent_summary, EXCLUDED.intent_summary),
+                 disconnection_reason = COALESCE(EXCLUDED.disconnection_reason, demo_calls.disconnection_reason)`,
               [
                 callId,
                 agentId,
@@ -594,11 +612,13 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         );
       }
 
-      // Late-arriving extraction for demo calls — UPDATE the existing row
-      // (the call_ended path inserted with whatever was available; the post-
-      // call analysis runs async and arrives here). Only updates fields that
-      // are currently NULL so we never overwrite a value the model already
-      // figured out earlier.
+      // Late-arriving extraction for demo calls. UPSERT (not bare UPDATE) so
+      // that if call_analyzed actually arrives BEFORE call_ended (Retell does
+      // not guarantee event ordering), we still create the demo_calls row
+      // with the analysis fields — call_ended will then UPSERT and fill in
+      // transcript/duration/disconnection_reason. COALESCE keeps the earlier
+      // value when both events carry the same field, so a later (less
+      // confident) extraction can't blank out an earlier one.
       if (!orgId && callId && agentId && extracted && pool) {
         const templateId = await readDemoCallTemplate(agentId);
         if (templateId) {
@@ -607,14 +627,15 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           const cp = (extracted.caller_phone as string | undefined)?.trim() || null;
           const intent = (extracted.intent_summary as string | undefined)?.trim() || null;
           pool.query(
-            `UPDATE demo_calls SET
-               caller_name     = COALESCE(caller_name, $2),
-               caller_email    = COALESCE(caller_email, $3),
-               caller_phone    = COALESCE(caller_phone, $4),
-               intent_summary  = COALESCE(intent_summary, $5)
-             WHERE call_id = $1`,
-            [callId, cn, ce, cp, intent],
-          ).catch((err: Error) => req.log.warn({ err: err.message, callId }, 'demo_calls late-update failed'));
+            `INSERT INTO demo_calls (call_id, agent_id, template_id, caller_name, caller_email, caller_phone, intent_summary)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             ON CONFLICT (call_id) DO UPDATE SET
+               caller_name    = COALESCE(demo_calls.caller_name, EXCLUDED.caller_name),
+               caller_email   = COALESCE(demo_calls.caller_email, EXCLUDED.caller_email),
+               caller_phone   = COALESCE(demo_calls.caller_phone, EXCLUDED.caller_phone),
+               intent_summary = COALESCE(demo_calls.intent_summary, EXCLUDED.intent_summary)`,
+            [callId, agentId, templateId, cn, ce, cp, intent],
+          ).catch((err: Error) => req.log.warn({ err: err.message, callId }, 'demo_calls late-upsert failed'));
         }
       }
     }

@@ -23,6 +23,7 @@ import {
 } from './retell.js';
 import { triggerBridgeCall } from './twilio-openai-bridge.js';
 import { loadPlatformBaseline } from './platform-baseline.js';
+import { loadOutboundBaseline } from './outbound-baseline.js';
 import { deriveTechnicalRuntimeSettings, toE164 } from '@vas/shared';
 import { log } from './logger.js';
 import { normalizeKnowledgeSources, storeKnowledgePdf, syncRetellKnowledgeBase } from './knowledge.js';
@@ -692,7 +693,16 @@ async function ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise
   let callbackAgentId = config.retellCallbackAgentId;
 
   if (!callbackLlmId) {
-    const llm = await createLLM({ generalPrompt: buildCallbackPrompt(), tools: [], model });
+    // Outbound flow (we call THE CUSTOMER'S customer back): prepend the
+    // outbound baseline (DSGVO Art. 21 widerspruchsrecht, KI-Identifikation,
+    // kein Hard-Close, höflicher Auftakt). Inbound platform baseline would be
+    // wrong here — outbound has fundamentally different rules.
+    const outboundBaseline = await loadOutboundBaseline();
+    const llm = await createLLM({
+      generalPrompt: `${outboundBaseline}\n\n${buildCallbackPrompt()}`,
+      tools: [],
+      model,
+    });
     callbackLlmId = llm.llm_id;
   }
 

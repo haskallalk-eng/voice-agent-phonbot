@@ -753,6 +753,18 @@ export async function cleanupOldLeads(): Promise<number> {
   await pool.query(
     `DELETE FROM demo_calls WHERE created_at < NOW() - INTERVAL '90 days'`,
   ).catch(() => { /* table may not exist yet on first boot */ });
+  // Meta-learning artifacts (admin corrections + decisions) retain longer —
+  // they're training-data signal, not personal-data per se. But original_text
+  // can carry call-quote fragments, so DSGVO Art. 5(1)(e) Speicherbegrenzung
+  // applies. 365 days balances "useful as few-shot history" against PII
+  // exposure window. Same horizon for learning_decisions so the audit trail
+  // and the corrections-feed stay aligned.
+  await pool.query(
+    `DELETE FROM learning_corrections WHERE created_at < NOW() - INTERVAL '365 days'`,
+  ).catch(() => { /* table may not exist yet on first boot */ });
+  await pool.query(
+    `DELETE FROM learning_decisions WHERE created_at < NOW() - INTERVAL '365 days'`,
+  ).catch(() => { /* table may not exist yet on first boot */ });
   return (res as { rowCount?: number }).rowCount ?? 0;
 }
 

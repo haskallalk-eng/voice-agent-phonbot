@@ -15,15 +15,18 @@ import { pool } from './db.js';
 
 // Gate cross-tenant aggregate reads (template_learnings + conversation_patterns
 // pool data across all orgs, so only platform admins may read them directly).
+// Mirrors the requireAdmin in admin.ts: BOTH the admin flag AND the audience
+// claim must be set, and we MUST `return` so handler code below the auth block
+// never runs after a 401/403 reply.
 async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
   try {
     await req.jwtVerify();
     const payload = req.user as Record<string, unknown>;
-    if (!payload.admin) {
-      reply.status(403).send({ error: 'Admin access required' });
+    if (!payload.admin || payload.aud !== 'phonbot:admin') {
+      return reply.status(403).send({ error: 'Admin access required' });
     }
   } catch {
-    reply.status(401).send({ error: 'Unauthorized' });
+    return reply.status(401).send({ error: 'Unauthorized' });
   }
 }
 
