@@ -46,7 +46,7 @@ export function PrivacyTab({ config, onUpdate }: PrivacyTabProps) {
   return (
     <SectionCard title="Aufzeichnung & Datenschutz" icon={IconPrivacy}>
       <div className="space-y-6">
-        <Toggle checked={config.recordCalls ?? false}
+        <Toggle checked={config.recordCalls ?? true}
           onChange={(v) => onUpdate({ recordCalls: v })}
           label="Anrufe aufzeichnen" />
         {config.recordCalls && (

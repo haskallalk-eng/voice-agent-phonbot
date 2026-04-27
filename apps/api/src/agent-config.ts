@@ -89,6 +89,25 @@ const AgentConfigSchema = z.object({
     reason: z.string().min(1).default('handoff'),
   }).default({ enabled: true, reason: 'handoff' }),
 
+  // Recording-Toggle (PrivacyTab → "Anrufe aufzeichnen"). When true:
+  //   • disclosure prompt-block in agent-instructions.ts mentions recording,
+  //   • Retell agent uses data_storage_setting='everything' (default),
+  //   • recording.declined-tool is registered.
+  // When false:
+  //   • disclosure prompt-block keeps the EU-AI-Act KI-Hinweis but DROPS
+  //     the recording-line (no false promise to the caller),
+  //   • Retell agent uses data_storage_setting='basic_attributes_only' so
+  //     transcripts/audio are not stored on Retell's side either,
+  //   • recording.declined-tool is omitted (would be misleading).
+  //
+  // Codex Round-11 review HIGH: NOT `default(true)` because that would
+  // materialise the field on every parseAgentConfig() round-trip — existing
+  // customer-configs without an explicit toggle would silently flip to
+  // `recordCalls: true` in the DB on the next save, even though the user
+  // never touched the toggle. Optional + treat `undefined` as legacy-on at
+  // every consumer site (`!== false` checks instead of `=== true`).
+  recordCalls: z.boolean().optional(),
+
   // Retell AI references (set after first deploy)
   retellAgentId: z.string().optional(),
   retellLlmId: z.string().optional(),
@@ -320,14 +339,19 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
   // Custom tool: caller refused recording. Webhook flags the call for
   // post-call deletion of the audio + transcript. The LLM must still
   // call end_call immediately after this to actually hang up.
-  tools.push({
-    type: 'custom',
-    name: 'recording_declined',
-    description: 'Call this BEFORE end_call when the caller refuses consent to recording. Deletes the call transcript and audio after the call ends.',
-    url: `${webhookBaseUrl}/retell/tools/recording.declined?${signedQuery}`,
-    execution_message_description: 'Markiere für Löschung.',
-    parameters: { type: 'object', properties: {} },
-  });
+  // Only registered when recording is actually active — otherwise the tool
+  // is irreführend (would-be-no-op since nothing is recorded). PrivacyTab's
+  // `recordCalls` toggle drives this.
+  if (config.recordCalls !== false) {
+    tools.push({
+      type: 'custom',
+      name: 'recording_declined',
+      description: 'Call this BEFORE end_call when the caller refuses consent to recording. Deletes the call transcript and audio after the call ends.',
+      url: `${webhookBaseUrl}/retell/tools/recording.declined?${signedQuery}`,
+      execution_message_description: 'Markiere für Löschung.',
+      parameters: { type: 'object', properties: {} },
+    });
+  }
 
   if (enabled.has('calendar.findSlots')) {
     tools.push({
@@ -573,6 +597,15 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
   };
   const language = LANG_MAP[preparedConfig.language] ?? 'de-DE';
 
+  // PrivacyTab `recordCalls` toggle → Retell data_storage_setting:
+  //   true (or legacy undefined) → 'everything' (transcripts + recordings + logs).
+  //   false                       → 'basic_attributes_only' (no transcripts, no
+  //                                  audio, no logs persisted on Retell's side).
+  // Paired with the conditional disclosure-block in agent-instructions.ts so
+  // the prompt promise (or absence thereof) actually matches what Retell does.
+  const dataStorageSetting: 'everything' | 'basic_attributes_only' =
+    preparedConfig.recordCalls === false ? 'basic_attributes_only' : 'everything';
+
   let llmId = preparedConfig.retellLlmId;
   let agentId = preparedConfig.retellAgentId;
 
@@ -602,6 +635,7 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
         allowUserDtmf: technical.allowUserDtmf,
         webhookUrl,
         postCallAnalysisData,
+        dataStorageSetting,
       }),
     ]);
   } else if (llmId && !agentId) {
@@ -626,6 +660,7 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
       allowUserDtmf: technical.allowUserDtmf,
       webhookUrl,
       postCallAnalysisData,
+      dataStorageSetting,
     });
     agentId = agent.agent_id;
   } else {
@@ -651,6 +686,7 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
       allowUserDtmf: technical.allowUserDtmf,
       webhookUrl,
       postCallAnalysisData,
+      dataStorageSetting,
     });
     agentId = agent.agent_id;
   }
@@ -713,11 +749,17 @@ async function ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise
   }
 
   if (!callbackAgentId) {
+    // Callback agent inherits the org's recordCalls setting — outbound callbacks
+    // are bound by the same § 201 StGB / Art. 6 DSGVO recording-consent rules
+    // as inbound calls. Same toggle, same Retell side-effect.
+    const callbackDataStorage: 'everything' | 'basic_attributes_only' =
+      config.recordCalls === false ? 'basic_attributes_only' : 'everything';
     const agent = await retellCreateAgent({
       name: `${config.name} (Callback)`,
       llmId: callbackLlmId,
       voiceId: config.voice,
       language,
+      dataStorageSetting: callbackDataStorage,
     });
     callbackAgentId = agent.agent_id;
   }

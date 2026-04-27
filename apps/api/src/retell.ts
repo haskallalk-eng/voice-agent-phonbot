@@ -264,6 +264,19 @@ export type PostCallAnalysisField = {
   conditional_prompt?: string;
 };
 
+/**
+ * Retell `data_storage_setting` controls what Retell persists after a call:
+ *  • 'everything'              — transcripts + recordings + logs (default)
+ *  • 'everything_except_pii'   — same minus auto-detected PII fields
+ *  • 'basic_attributes_only'   — call metadata only, no transcripts/recordings/logs
+ *
+ * Replaces the deprecated `opt_out_sensitive_data_storage` flag.
+ */
+export type RetellDataStorageSetting =
+  | 'everything'
+  | 'everything_except_pii'
+  | 'basic_attributes_only';
+
 export async function createAgent(config: {
   name: string;
   llmId: string;
@@ -277,6 +290,7 @@ export async function createAgent(config: {
   allowUserDtmf?: boolean;
   webhookUrl?: string;
   postCallAnalysisData?: PostCallAnalysisField[];
+  dataStorageSetting?: RetellDataStorageSetting;
 }): Promise<RetellAgent> {
   const body: Record<string, unknown> = {
     agent_name: config.name,
@@ -300,6 +314,9 @@ export async function createAgent(config: {
   if (config.postCallAnalysisData !== undefined) {
     body.post_call_analysis_data = config.postCallAnalysisData;
   }
+  if (config.dataStorageSetting !== undefined) {
+    body.data_storage_setting = config.dataStorageSetting;
+  }
   return retellRequest('/create-agent', { method: 'POST', body: JSON.stringify(body) });
 }
 
@@ -318,6 +335,7 @@ export async function updateAgent(
     allowUserDtmf?: boolean;
     webhookUrl?: string;
     postCallAnalysisData?: PostCallAnalysisField[];
+    dataStorageSetting?: RetellDataStorageSetting;
   },
 ): Promise<RetellAgent> {
   // RET-08: only set tuning params when the caller explicitly provides them.
@@ -340,6 +358,7 @@ export async function updateAgent(
   if (config.llmId !== undefined) body.response_engine = { type: 'retell-llm', llm_id: config.llmId };
   if (config.webhookUrl !== undefined) body.webhook_url = config.webhookUrl;
   if (config.postCallAnalysisData !== undefined) body.post_call_analysis_data = config.postCallAnalysisData;
+  if (config.dataStorageSetting !== undefined) body.data_storage_setting = config.dataStorageSetting;
 
   return retellRequest(`/update-agent/${encodeURIComponent(agentId)}`, {
     method: 'PATCH',
