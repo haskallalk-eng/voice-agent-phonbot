@@ -436,3 +436,9 @@ Comment sagt: pre-2026-04 rows mit `'busy'`/`'unknown'`/`'not_forwarded'` werden
 - **Q3** (DACH-Compliance Bundle): Codex bestätigt mit Twilio-Doku-Links — `addressSid`-only ist Compliance-Risiko, nicht akzeptable Abkürzung.
 - **Q4** (SSE vs Twilio-Status-Webhook): Codex bevorzugt Twilio-Status-Webhook (echte Abbruch-Information bei busy/no-answer/failed; SSE allein hilft nicht).
 - **Q5** (Übersehenes): Codex hat 5 Zusatzbefunde gefunden, davon 4 bestätigt + 3 gefixt + 1 verschoben + 1 falsch (HIGH-A migratePhone).
+
+---
+
+## Round-8 Update
+
+- **MEDIUM-4 (Globaler Twilio-Verify-Cost-Cap)**: ✅ GEFIXT in Round 8. `/phone/verify-forwarding` checkt jetzt `phone:verify:global:hourly` Redis-Counter, env-tunable via `VERIFY_GLOBAL_CAP_PER_HOUR` (default 200). Bei Überschreitung: 503 + `log.warn` + clear pending-record + kein Twilio-Call. Per-User-RL bleibt 5/h.

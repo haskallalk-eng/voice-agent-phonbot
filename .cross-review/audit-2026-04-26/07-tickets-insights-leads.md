@@ -456,3 +456,67 @@ Codex's Counter-Review war wieder substantiell. Drei Severity-Korrekturen, fünf
 - **Q3** (Zombie-A/B-Tests): Cleanup-Migration ZUERST (✅ done), Feature-Flag als Belt-and-Suspender später.
 - **Q4** (Race-Pfade): `applyPromptAddition` + `consolidatePrompt` + `evaluateAbTest` + `checkScoreRollback` schreiben alle den gleichen `agent_configs.data.systemPrompt`-State. Mit dem `pg_advisory_xact_lock` per orgId in `setPrompt` (Round 7) sind die Pfade jetzt serialisiert. ✅
 - **Q5** (`learning_corrections.original_text` als OpenAI-Few-shot, DSGVO): Codex bestätigt das ist ein Compliance-Gap ohne dokumentierte AV oder Redaction. ⏳ Round 8 mit Demo-PII-Redaction-Pipeline zusammen lösen.
+
+---
+
+## Round-8 Update
+
+Codex hat zweimal beraten (Plan-Review vor Start + Code-Review vor Deploy). Resultat: **A → C → B** Reihenfolge, **konservative Quarantine** statt Drop, **engere Regex-Patterns** (Codex's `act as a` zu breit), Cache-Invalidation auch im `/agent-config/new`-Pfad.
+
+**Was in Round 8 gefixt wurde**:
+
+### 🟠 HIGH-1 (Prompt-Injection-Filter) — ✅ TEILGEFIXT (Quarantine-Pfad)
+
+Neue `classifyPromptFix(promptFix)`-Helper in `insights.ts` mit:
+- Length-Cap 500 chars
+- 8 narrow inject-Regex-Patterns (DE/EN). Codex's Q1-Feedback eingearbeitet: ursprünglich `act as a`, `you are now a`, `system prompt` — alle zu breit, würden legitime Customer-Prompts wie „act as a phone agent" matchen. Jetzt:
+  - `ignore (all) previous instructions`
+  - `vergiss (alle|deine) bisherigen anweisungen`
+  - `disregard|forget everything|all|the above`
+  - `neue identität`
+  - `override|overwrite|bypass system prompt`
+  - `<system>` / `<sys>` markup-framing
+  - `speichere|store|save (alle|every) (nachrichten|messages|conversations|chats)`
+  - `jailbreak`
+
+Bei match: `category='prompt_injection_attempt'` + `[QUARANTÄNE: <reason>]` Prefix in `issue_summary`. Eingebaut an 4 INSERT-Sites (`processIssue` recurrence + new, `checkFixEffectiveness` retry, `holisticReview`). Plus Apply-Route-Guard: `/insights/suggestions/:id/apply` returnt 409 `QUARANTINED` wenn category match.
+
+**Was noch offen**: Embedding-Distance-Check zur Out-of-Distribution-Detektion (Codex empfahl als zusätzlichen Layer) — aufwendiger, später.
+
+### 🟠 HIGH-2 (Email-PII-Umbau) — ⏳ NOCH NICHT (UX-Entscheidung)
+
+User-Konsens fehlt noch ob Mail = nur Link oder mit gekürztem Reason-Snippet.
+
+### 🟡 MEDIUM-1 (Embedding-Backfill) — ✅ GEFIXT (admin-trigger)
+
+Neuer Endpoint `POST /insights/admin/embed-backfill` (platform-admin via `payload.admin`):
+- Selektiert 50 Rows mit `WHERE embedding IS NULL`
+- Embed pro Row, UPDATE
+- Returnt `{ processed, failed, remaining }` damit Admin pollen kann
+- Codex-Q3-Note: zwei parallele Aufrufe = nur Doppel-Cost, kein fachlicher Konflikt — `SKIP LOCKED` als Optional-Optimierung dokumentiert, nicht implementiert (Endpoint wird selten genutzt).
+
+### 🟡 MEDIUM-4 (LRU-Cache für readConfig) — ✅ GEFIXT
+
+In `inbound-webhooks.ts` neuer in-memory `webhookCache` (TTL 60s, MAX 1000 entries, oldest-eviction). Hot-Path `fireInboundWebhooks` checkt cache zuerst; cache-miss → `readConfig` + `setCachedHooks`. Plus `invalidateInboundWebhooksCache(tenantId)` exported. Aufgerufen von `agent-config.ts:writeConfig` UND nach Codex's Q2-Hinweis auch von `/agent-config/new` (sonst Cache-Invalidation-Lücke beim ersten Save eines neuen Agents).
+
+### 🟡 MEDIUM-B (Demo-Transcript-Redaction) — ✅ GEFIXT
+
+`retell-webhooks.ts:553-577` ruft jetzt `redactPII(transcript)` vor `INSERT INTO demo_calls`. Kreditkartennummer / IBAN / Phone / Email / DOB im Demo-Call landet redacted in der Tabelle, 90 Tage Retention bleibt unverändert. Plus in `insights.ts:loadRecentCorrectionsForFewShot` werden `original_text` / `corrected_text` / `correction_reason` durch `redactPII()` gejagt bevor sie an OpenAI gehen (closes Codex's Q5 DSGVO-Few-shot-Gap).
+
+### 🟡 MEDIUM-C (Admin-Read-Audit-Log + Rate-Limits) — ✅ GEFIXT
+
+Neue Tabelle `admin_read_audit_log (admin_email, route, params JSONB, result_count, ip)` in `db.ts`. Per-route rate-limit (60/min) auf `/admin/leads`, `/admin/leads/stats`, `/admin/demo-calls`. `recordAdminRead()`-Helper in `admin.ts` als fire-and-forget INSERT. Cleanup-Cron mit 365-Tage-Retention in `index.ts`. Codex-Q4-Diskussion: fire-and-forget bleibt, weil hard-fail die Operations bei DB-Hick blockieren würde. Documented as „Best-Effort-Audit; bei systematischen Insert-Failures triggert Sentry über `log.warn`".
+
+### 🔵 LOW-5 (Retry-Suggestion Embedding+Dedup) — ⏳ Nicht in Round 8 (low priority, kommt mit nächster Insight-Pass)
+
+### 💡 NICE-1 + NICE-2 — ⏳ Offen (UX-Polish)
+
+### Codex-Code-Review-Findings (alle adressiert)
+
+| Codex-Finding | Aktion |
+|---|---|
+| Q1: Regex zu breit (act as a, you are now a, system prompt) | ✅ Patterns auf 8 narrow phrases reduziert |
+| Q2: Cache-Invalidation lückenhaft in `/agent-config/new` | ✅ `invalidateInboundWebhooksCache(newTenantId)` ergänzt |
+| Q3: embed-backfill double-work bei parallel admins | ⚠️ Akzeptiert (nur Kosten, dokumentiert) |
+| Q4: recordAdminRead fire-and-forget | ⚠️ Akzeptiert (Best-Effort, Sentry-via-log.warn als Audit-Trail) |
+| Q5: LRU-Eviction race | ✅ Codex bestätigt: kein Problem in Node single-thread |

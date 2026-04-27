@@ -35,6 +35,7 @@ import {
 } from './api-integrations.js';
 import { syncOpeningHoursToChipy } from './opening-hours-sync.js';
 import { PLANS, type PlanId } from './billing.js';
+import { invalidateInboundWebhooksCache } from './inbound-webhooks.js';
 
 const AgentConfigSchema = z.object({
   tenantId: z.string().min(1).default('demo'),
@@ -282,6 +283,11 @@ async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentCo
     const msg = err instanceof Error ? err.message : String(err);
     log.warn({ err: msg, orgId }, 'opening-hours-sync to chipy_schedules failed');
   });
+
+  // Audit-Round-8: invalidate the inbound-webhooks cache so the next
+  // fireInboundWebhooks call re-reads the fresh config (otherwise edits
+  // wouldn't take effect for up to 60s — the TTL fallback).
+  invalidateInboundWebhooksCache(normalized.tenantId);
 
   return normalized;
 }
@@ -877,6 +883,12 @@ export async function registerAgentConfig(app: FastifyInstance) {
       `INSERT INTO agent_configs (tenant_id, org_id, data, updated_at) VALUES ($1, $2, $3, now())`,
       [newTenantId, orgId, cfg],
     );
+
+    // Audit-Round-8 (Codex Q2): /new bypasses writeConfig, so we must
+    // invalidate the inbound-webhooks cache here too. Otherwise a fresh
+    // agent's webhook config could miss a stale TTL window when readConfig
+    // is called via fireInboundWebhooks before TTL expires.
+    invalidateInboundWebhooksCache(newTenantId);
 
     return toClientConfig(cfg);
   });

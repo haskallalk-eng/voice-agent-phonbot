@@ -540,6 +540,27 @@ async function runMigrationBody() {
     );
   `);
 
+  // ── Admin read-audit log ──────────────────────────────────────────────────
+  // Audit-Round-8 (Codex M07-MEDIUM-C): platform-admin endpoints (/admin/leads,
+  // /admin/leads/stats, /admin/demo-calls) read across orgs. Without an audit
+  // trail a compromised admin token can bulk-exfiltrate invisibly. Each
+  // GET to a bulk-read endpoint inserts one row here; DSGVO Art. 5(1)(e)
+  // 365-day retention via cleanupOldAuditLogs() in index.ts cron.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_read_audit_log (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      admin_email   TEXT NOT NULL,
+      route         TEXT NOT NULL,
+      params        JSONB,
+      result_count  INTEGER,
+      ip            TEXT
+    );
+  `);
+  await pool.query(`COMMENT ON TABLE admin_read_audit_log IS 'DSGVO Art. 5(1)(e): 365-day retention via cleanupOldAuditLogs(). Each row = one cross-org admin GET on a bulk-read endpoint (leads/demo-calls).';`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS admin_read_audit_log_created_idx ON admin_read_audit_log(created_at DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS admin_read_audit_log_admin_idx ON admin_read_audit_log(admin_email, created_at DESC);`);
+
   // ── AI Insights ────────────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS call_analyses (
@@ -762,6 +783,19 @@ export async function cleanupOldWebhookDedupKeys(): Promise<{ stripe: number; re
     stripe: (stripeRes as { rowCount?: number }).rowCount ?? 0,
     retell: (retellRes as { rowCount?: number }).rowCount ?? 0,
   };
+}
+
+/**
+ * Audit-Round-8 (Codex M07-MEDIUM-C): purge admin_read_audit_log rows
+ * older than 365 days. Long retention so security incidents have a useful
+ * forensic trail; daily cron in index.ts.
+ */
+export async function cleanupOldAuditLogs(): Promise<number> {
+  if (!pool) return 0;
+  const res = await pool.query(
+    `DELETE FROM admin_read_audit_log WHERE created_at < NOW() - INTERVAL '365 days'`,
+  ).catch(() => null);
+  return (res as { rowCount?: number } | null)?.rowCount ?? 0;
 }
 
 /**
