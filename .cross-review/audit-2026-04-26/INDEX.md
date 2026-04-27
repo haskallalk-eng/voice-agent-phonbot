@@ -13,7 +13,7 @@ Großes Audit aller Phonbot-Module — vom Architektur-Big-Picture bis runter zu
 | 04 | `04-billing-stripe.md` — Stripe Subscription + Invoicing | Claude | Codex | 🔧 CRITICAL-1 + HIGH-1 + HIGH-2 + MEDIUM-2/3 ✅ GEFIXT · MEDIUM-1/4 noch offen |
 | 05 | `05-calendar-oauth-sync.md` — Calendar OAuth + Poll-Sync | Claude | Codex | 🔧 HIGH-1 + HIGH-2 + MEDIUM-3 ✅ GEFIXT · MEDIUM-1/2/4 noch offen |
 | 06 | `06-phone-twilio.md` — Twilio Numbers + Forwarding | Claude | Codex | 🔧 Round-6 + Round-8 + Round-9 · alle HIGH + alle MEDIUM (außer MEDIUM-3 Twilio-Status-Webhook) ✅ GEFIXT · MEDIUM-3 + LOW-1/2/3 + NICE noch offen |
-| 07 | `07-tickets-insights-leads.md` — Tickets + Insights + CRM | Claude | Codex | 🔧 Round-7 + Round-8 + Round-9 · HIGH-1 (Quarantine-Pfad) + HIGH-3/4 + alle MEDIUM + alle LOW ✅ GEFIXT · HIGH-2 (UX-Entscheid) + NICE noch offen |
+| 07 | `07-tickets-insights-leads.md` — Tickets + Insights + CRM | Claude+Codex | Codex+Claude | 🔧 Round-7/8/9/10 · alle HIGH (außer HIGH-2 UX-Entscheid) + alle MEDIUM + alle LOW + NICE-2 (Codex authored, Claude reviewed) ✅ GEFIXT · HIGH-2 + NICE-1 noch offen |
 | 08 | `08-db-schema-migrations.md` — Postgres Schema + Migrations | — | — | ⬜ Pending |
 | 09 | `09-frontend-agent-builder.md` — AgentBuilder + Sub-Tabs | — | — | ⬜ Pending |
 | 10 | `10-frontend-public.md` — Landing, Onboarding, Login | — | — | ⬜ Pending |

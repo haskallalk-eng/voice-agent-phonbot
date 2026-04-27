@@ -538,3 +538,108 @@ Akzeptiert für Round 9 weil checkFixEffectiveness nur fire-and-forget aus
 analyzeCall via `.catch(logBg(...))` läuft — Race-Window ist eng + Worst-Case
 ist 1 Duplicate-Row (kein Daten-Korruption). Partial-Unique-Index als
 Round-10-Optimierung dokumentiert.
+
+---
+
+## Round-10 Update — Bidirectional Cross-Review (Codex authors, Claude reviews)
+
+Erste echte bidirektionale Cross-Review-Session in dieser Audit-Reihe. Bisher
+war Pattern „Claude author → Codex review" über Rounds 6–9. Round 10 dreht es
+um — Codex hat NICE-2 (Webhook-Health-Tracking) implementiert, Claude reviewt.
+
+### 💡 NICE-2 (Webhook-Health-Tracking) · ✅ GEFIXT (Codex authored, Claude reviewed)
+
+**Codex's Implementation** (8 Files, +257 LOC):
+- `db.ts` — `inbound_webhook_health` Tabelle + Partial-Index `(disabled_until)
+  WHERE disabled_until IS NOT NULL` für skip-check + `cleanupOldWebhookHealth`
+  90d-retention
+- `db.ts` — `upsertWebhookHealth(pool, params)` Helper mit
+  TypeScript-discriminated-union (success/failure params)
+- `inbound-webhooks.ts` — disabled-check BEFORE fetch (skip wenn
+  `disabled_until > now()`) + success/failure UPSERT nach fetch
+- `agent-config.ts` — `GET /agent-config/webhooks-health` für Frontend-Banner
+- `index.ts` — daily cleanup cron (240s post-startup, staggered)
+- Konstanten `WEBHOOK_FAIL_THRESHOLD = 50`, `WEBHOOK_DISABLE_DURATION = '1 hour'`
+
+**Codex selbst-flagged 3 Uncertainties + 1 Edge-Case** vor meinem Review.
+**Claude-Review-Verdict** (4 Achsen):
+
+- **Sinnhaftigkeit ✅**: Self-Disable nach 50 fails / 1h cooldown ist der
+  richtige Trade-off — schnell genug für laute Logs, langsam genug für nicht-
+  intermittierende-Probleme.
+- **Funktionalität 🟠**: ein echter Bug gefunden (siehe HIGH-A unten).
+- **Sauberkeit ✅**: discriminated union für Helper-Params + GREATEST-guard auf
+  consecutive_failures + idempotente Migration — sauber.
+- **Sicherheit ✅**: Endpoint geht durch `loadOwnedConfigRow` (Org-scope-Check
+  aus Round-2-Audit), keine Cross-Tenant-Lücken.
+
+### Claude-Review-Findings
+
+| # | Severity | Befund | Status |
+|---|---|---|---|
+| HIGH-A | 🟠 | Codex Uncertainty #1: Concurrent Race auf `disabled_until` | ✅ GEFIXT pre-deploy |
+| LOW-A | 🔵 | Codex Uncertainty #3: Endpoint zeigt orphan health-rows | ✅ GEFIXT pre-deploy |
+| LOW-B | 🔵 | Codex Uncertainty #2: extra DB-roundtrip pro fetch | ⏳ Akzeptiert (in-process cache als spätere Optimierung) |
+| LOW-C | 🔵 | Codex Edge-Case: Webhook-recreation erbt Failure-State | ⏳ Bekannte Limitation (Workaround: neue webhook_id beim re-create) |
+
+#### HIGH-A · ✅ GEFIXT (Claude pre-deploy fix)
+
+Claude-Review-Befund: success-UPSERT setzt `disabled_until = NULL`
+unconditionally. Race-Sequence:
+- T0: Parallel-fetches A + B starten
+- T1: Fetch A endet 5xx → `consecutive_failures` bumps to 50, `disabled_until
+  = now() + 1h`
+- T2: Fetch B endet 2xx (langsam aber successful) → naive UPDATE wipes
+  `disabled_until` zurück auf NULL
+- Resultat: gerade-frisch-disabled webhook ist nicht mehr disabled, fetch-
+  storm geht weiter
+
+**Claude-Fix** (vor Deploy, in `db.ts:166-200`): success-Branch CASE statt
+unconditional NULL:
+```sql
+disabled_until = CASE
+  WHEN inbound_webhook_health.disabled_until > now()
+    THEN inbound_webhook_health.disabled_until
+  ELSE NULL
+END
+```
+Eine live disable-window bleibt in Force; eine abgelaufene wird gecleart.
+Recovery-Test nach 1h-Cooldown bleibt möglich, weil die Skip-Decision selbst
+auf `disabled_until > now()` basiert (also läuft natürlich ab wenn TTL
+abgelaufen).
+
+(Codex's eigener Vorschlag `WHERE consecutive_failures > 0`-Guard hätte den
+Recovery-Path-Fall gelöst, nicht den Race. Claude's pragmatische Variante ist
+robuster gegen Out-of-Order-Arrivals.)
+
+#### LOW-A · ✅ GEFIXT
+
+Endpoint `GET /agent-config/webhooks-health` zeigte alle health-rows der
+tenant_id, auch von gelöschten Webhooks. Customer würde im Banner Failure-
+Count für nicht mehr existente Webhooks sehen. **Claude-Fix**: filter im
+Endpoint mit `liveWebhookIds`-Set aus aktueller config-data. DB-Rows bleiben
+für Audit-Purposes (90d cleanup); API-Surface zeigt nur live state.
+
+#### LOW-B · ⏳ Akzeptiert
+
+Pre-fetch DB-Roundtrip (`SELECT FROM inbound_webhook_health WHERE disabled_
+until > now()`) addiert ~1ms pro fetch. Bei 5 events/sec × 5 webhooks = 25
+SELECTs/sec extra. Akzeptabel; in-process-Cache mit kurzer TTL als Round-11-
+Optimierung dokumentiert.
+
+#### LOW-C · ⏳ Bekannte Limitation
+
+Webhook-recreation mit gleicher `webhook_id` erbt prior failure-state inkl.
+disabled_until. Workaround: UI sollte beim Edit-Webhook-Flow eine neue UUID
+generieren statt die alte zu reusen. Dauerhafte Fix: explicit DELETE der
+health-row beim Webhook-Delete-Pfad in `writeConfig` (verlangt Diff zwischen
+alt + neu, größer-scope-change).
+
+### Cross-Review-Pattern bestätigt
+
+Bidirectional review hat Wert geliefert: Codex hat ein gut-strukturiertes
+Feature implementiert + 4 Uncertainties selbst geflagged; Claude hat den
+echten HIGH bestätigt + LOW-A gefixt + die 2 anderen als akzeptable Trade-
+offs verbucht. Beide Seiten haben Catch-fail-Punkte. Pattern für Round 11+:
+abwechseln Author / Reviewer pro Item, größere Items als Codex-author-task
+(hier hat 257 LOC in ~9 min Implementation gut geklappt).
