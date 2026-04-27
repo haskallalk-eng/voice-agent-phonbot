@@ -442,3 +442,46 @@ Comment sagt: pre-2026-04 rows mit `'busy'`/`'unknown'`/`'not_forwarded'` werden
 ## Round-8 Update
 
 - **MEDIUM-4 (Globaler Twilio-Verify-Cost-Cap)**: ✅ GEFIXT in Round 8. `/phone/verify-forwarding` checkt jetzt `phone:verify:global:hourly` Redis-Counter, env-tunable via `VERIFY_GLOBAL_CAP_PER_HOUR` (default 200). Bei Überschreitung: 503 + `log.warn` + clear pending-record + kein Twilio-Call. Per-User-RL bleibt 5/h.
+
+---
+
+## Round-9 Update
+
+Codex-Plan-Review vor Start: 5 Items klassifiziert (3 OK, 2 RISIKO, 1 SKIP).
+Reihenfolge `3 → 2 → 1 → 4` nach Codex (risiko-aufsteigend), Item 5
+(Webhook-Health) zurückgestellt. Codex-Code-Review nach Implementation fand
+**1 HIGH** + **1 MEDIUM** vor Deploy.
+
+### 🟠 HIGH-2 (autoProvisionGermanNumber Pool-First + Bundle) · ✅ GEFIXT (Round 9)
+
+`autoProvisionGermanNumber` macht jetzt Pool-Claim ZUERST mit der gleichen
+atomic CTE wie `/phone/provision` (`FOR UPDATE SKIP LOCKED`). Bei Pool-Hit:
+Retell PATCH (wenn `provider_id` gesetzt) oder IMPORT (wenn NULL). Stale-PII-
+Reset (`customer_number = NULL`, `forwarding_type = NULL`, `verified = true`)
+direkt im CTE. Bei Retell-Fail: Pool-Rollback. Bei Pool-Miss fällt der Code
+auf Twilio-Buy mit **`bundleSid + addressSid`** (DACH-Compliance, fehlte
+vorher) zurück — Loop über 5 Candidates statt 1.
+
+**Codex Code-Review HIGH-Fund**: vor Round-9-Submission war der `existing`-
+Check + Claim-Pipeline NICHT in einer per-Org-Lock — zwei Stripe-Webhook-
+Retries hätten beide `existing.rowCount === 0` passieren und je eine andere
+Pool-Row claimen können → Customer hätte 2-3 Numbers bekommen. Fix vor Deploy:
+gesamten Body in `pg_advisory_xact_lock` per orgId. Body extrahiert in
+`runAutoProvisionBody` damit Wrapper readable bleibt.
+
+### 🟡 MEDIUM-C (DB-vs-Twilio-Diff-Sync) · ✅ GEFIXT (Round 9)
+
+`syncTwilioNumbersToDb` mit Reverse-Diff-Sweep:
+- `limit:1000` statt `:100` (kein Pagination-State, full inventory).
+- Pool-Numbers (`org_id=NULL`) die NICHT in Twilio sind UND >7 Tage alt → DELETE.
+- Assigned-Numbers (`org_id NOT NULL`) → NIE delete; UPDATE `verified=false` + log.error.
+- **Codex Code-Review MEDIUM-Fund**: ohne Cap würde ein partial-Twilio-Response alle Pool-Rows >7d gleichzeitig löschen. Fix vor Deploy: `MAX_POOL_DELETES_PER_RUN = 5` Cap mit Warn-Log wenn erreicht.
+
+### 🟡 MEDIUM-X (`/phone/forward` Endpoint-Cleanup) · ✅ GEFIXT (Round 9)
+
+`INSERT INTO phone_numbers (method='forwarding', ...)` komplett entfernt.
+Endpoint behalten als read-only Carrier-Code-Helper-API mit DACH-Whitelist
+auf der Customer-Number (Defense-in-Depth obwohl kein Server-Dial mehr
+stattfindet). Comment dokumentiert warum (Round 6 hat `/phone/verify` für
+forwarding-method auf 409 gesetzt → der persistierte Row war seitdem dead
+code, UI baut Carrier-Codes lokal).

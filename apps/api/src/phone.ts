@@ -165,11 +165,18 @@ export async function syncTwilioNumbersToDb() {
 
   try {
     const client = getTwilioClient();
-    const twilioNumbers = await client.incomingPhoneNumbers.list({ limit: 100 });
+    // Audit-Round-9 (M06-MEDIUM-C): bump limit so we can detect missing
+    // numbers reliably. Twilio's list defaults paginate at 50; if we ever
+    // own >100 numbers the diff-step below would falsely flag the unseen
+    // pages. limit:1000 is the API max for incomingPhoneNumbers.list.
+    const twilioNumbers = await client.incomingPhoneNumbers.list({ limit: 1000 });
+    const twilioNumberSet = new Set(twilioNumbers.map(n => n.phoneNumber));
 
     // Step 1: Sync missing numbers into DB (batch check to avoid N+1 queries)
-    const existingRes = await pool.query('SELECT number FROM phone_numbers');
-    const existingNumbers = new Set(existingRes.rows.map((r: { number: string }) => r.number));
+    const existingRes = await pool.query<{ number: string; org_id: string | null; created_at: Date; method: string }>(
+      `SELECT number, org_id, created_at, method FROM phone_numbers WHERE provider = 'twilio'`,
+    );
+    const existingNumbers = new Set(existingRes.rows.map((r) => r.number));
 
     let synced = 0;
     for (const num of twilioNumbers) {
@@ -186,6 +193,70 @@ export async function syncTwilioNumbersToDb() {
     }
     if (synced > 0) {
       log.info({ synced }, '[phone] Synced Twilio numbers to DB pool');
+    }
+
+    // Step 1b — Reverse-Diff (Audit-Round-9 M06-MEDIUM-C):
+    // Numbers that exist in our DB but NOT in Twilio's list. Possible
+    // causes: someone released the number from the Twilio console, the
+    // Bundle expired, the account got suspended. Without this step those
+    // rows linger forever and /phone/provision will claim them, then fail
+    // at Retell-import time.
+    //
+    // Codex's pagination-edge-case concern: a Twilio API hiccup that
+    // returns a partial list would falsely flag healthy numbers. Two
+    // safeguards: (a) limit:1000 above gives us the whole inventory in one
+    // shot, no pagination state-machine to lose; (b) cooldown on
+    // pool-numbers (org_id IS NULL): only DELETE rows older than 7 days, so
+    // a number that's only briefly missing has time to re-appear in the
+    // next sync. Assigned rows (org_id NOT NULL) are NEVER deleted —
+    // they get a flag + log so Ops can investigate; deleting an assigned
+    // row would orphan the customer's phone-number-association.
+    // Audit-Round-9 (Codex Code-Review MEDIUM): cap deletions per run. If
+    // Twilio returns a successful-but-truncated list (rare, but documented
+    // failure mode), the diff would target every Pool-row >7d old at once.
+    // Hard limit 5 per sweep means even worst-case-mistake costs at most 5
+    // pool-rows before Ops sees the alert.
+    const MAX_POOL_DELETES_PER_RUN = 5;
+    let droppedFromPool = 0;
+    let flaggedAssigned = 0;
+    for (const row of existingRes.rows) {
+      if (row.method !== 'provisioned') continue; // only check the pool/assigned set
+      if (twilioNumberSet.has(row.number)) continue; // present, fine
+
+      const ageMs = Date.now() - new Date(row.created_at).getTime();
+      const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+      if (row.org_id === null) {
+        // Pool-Number gone from Twilio. Drop only after a 7-day cooldown
+        // to absorb transient API hiccups, AND respect the per-run cap.
+        if (ageMs > SEVEN_DAYS_MS && droppedFromPool < MAX_POOL_DELETES_PER_RUN) {
+          await pool.query(
+            `DELETE FROM phone_numbers WHERE number = $1 AND org_id IS NULL AND method = 'provisioned'`,
+            [row.number],
+          ).catch((err: Error) => log.warn({ err: err.message, number: row.number }, '[phone] reverse-diff DELETE failed'));
+          droppedFromPool++;
+        } else if (ageMs > SEVEN_DAYS_MS) {
+          // Cap reached this run — leave the rest for the next sweep so we
+          // never delete more than the cap in a single Twilio-API-hiccup.
+          log.warn({ number: row.number, droppedThisRun: droppedFromPool }, '[phone] reverse-diff: skipping further pool-deletes this run (cap reached)');
+        }
+      } else {
+        // Assigned to an org but Twilio doesn't see it. Don't delete —
+        // log + flag verified=false so the dashboard shows the broken
+        // state and the customer can re-provision.
+        await pool.query(
+          `UPDATE phone_numbers SET verified = false WHERE number = $1 AND org_id = $2`,
+          [row.number, row.org_id],
+        ).catch((err: Error) => log.warn({ err: err.message, number: row.number }, '[phone] reverse-diff UPDATE failed'));
+        log.error(
+          { number: row.number, orgId: row.org_id },
+          '[phone] reverse-diff: assigned number is gone from Twilio — ops should investigate',
+        );
+        flaggedAssigned++;
+      }
+    }
+    if (droppedFromPool > 0 || flaggedAssigned > 0) {
+      log.info({ droppedFromPool, flaggedAssigned }, '[phone] reverse-diff sweep done');
     }
 
     // Step 2: Trim pool — release excess unassigned numbers from Twilio
@@ -326,43 +397,193 @@ async function retellPurchasePhoneNumber(areaCode: string, agentId?: string) {
 // ── Auto-provision a German Twilio number for a new customer ────────────────
 // Called automatically after a successful Stripe checkout.
 
+// Stable advisory-lock key per org for autoProvisionGermanNumber serialisation.
+// Same hash technique as setPromptLockKey in insights.ts — fits in pg int8.
+function autoProvisionLockKey(orgId: string): string {
+  let h = 1n;
+  for (const ch of orgId) h = (h * 131n + BigInt(ch.charCodeAt(0))) & 0x7fffffffffffffffn;
+  return h.toString();
+}
+
 export async function autoProvisionGermanNumber(orgId: string): Promise<void> {
   if (!pool) return;
 
-  // Don't provision if org already has a number
-  const existing = await pool.query(
-    `SELECT id FROM phone_numbers WHERE org_id = $1 LIMIT 1`,
-    [orgId],
-  );
-  if (existing.rowCount && existing.rowCount > 0) return;
+  // Audit-Round-9 (Codex Code-Review HIGH): the existing-check + claim-or-buy
+  // pipeline ran outside any per-org lock, so two Stripe-webhook retries could
+  // both pass the `existing.rowCount === 0` guard, then each claim a different
+  // pool row → customer ends up with 2-3 numbers. Wrap the whole thing in a
+  // pg_advisory_xact_lock keyed off orgId so concurrent webhook deliveries
+  // serialise. Lock is auto-released on transaction end (commit/rollback) or
+  // session disconnect — no leak even if we throw mid-way.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SELECT pg_advisory_xact_lock($1::bigint)`, [autoProvisionLockKey(orgId)]);
 
-  // Get org's deployed Retell agent ID
+    // Idempotency: don't provision if org already has a number. Stripe can
+    // retry subscription.created webhooks; without this guard (now inside the
+    // advisory lock) a customer would get 2-3 numbers on retry.
+    const existing = await client.query(
+      `SELECT id FROM phone_numbers WHERE org_id = $1 LIMIT 1`,
+      [orgId],
+    );
+    if (existing.rowCount && existing.rowCount > 0) {
+      await client.query('COMMIT');
+      return;
+    }
+
+    await runAutoProvisionBody(client, orgId);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {/* nothing to roll back */});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Body extracted so the advisory-lock-wrapper above stays readable. Uses the
+// passed client (in the same transaction as the lock) for DB writes; external
+// services (Twilio, Retell) run as async I/O — they don't take the lock with
+// them, but they ARE serialised by virtue of the lock holding.
+async function runAutoProvisionBody(
+  client: import('pg').PoolClient,
+  orgId: string,
+): Promise<void> {
+  if (!pool) return;
+
+  // Get org's deployed Retell agent ID (may be null if customer hasn't
+  // deployed yet — then number is bought + parked, gets bound on next deploy).
   const configRes = await pool.query(
     `SELECT data FROM agent_configs WHERE org_id = $1 LIMIT 1`,
     [orgId],
   );
   const agentId = configRes.rows[0]?.data?.retellAgentId ?? null;
 
-  // Buy a German number via Twilio (requires Address for regulatory compliance)
+  // ── Audit-Round-9 (M06-HIGH-2): try the pool FIRST before buying.
+  // Pre-Round-9 every Stripe-paying customer triggered a fresh Twilio buy,
+  // even though syncTwilioNumbersToDb keeps 3 unassigned numbers in the pool
+  // (≈€3/month idle). Pool-claim with the same atomic CTE as /phone/provision
+  // — FOR UPDATE SKIP LOCKED prevents two concurrent autoProvision calls
+  // (e.g. Stripe webhook retry collision) from both claiming the same row.
+  const claimed = await pool.query<{ id: string; number: string; number_pretty: string | null; provider_id: string | null }>(
+    `WITH free AS (
+       SELECT id FROM phone_numbers
+       WHERE org_id IS NULL AND method = 'provisioned'
+       LIMIT 1
+       FOR UPDATE SKIP LOCKED
+     )
+     UPDATE phone_numbers
+     SET org_id = $1,
+         agent_id = $2,
+         customer_number = NULL,
+         forwarding_type = NULL,
+         verified = true
+     FROM free
+     WHERE phone_numbers.id = free.id
+     RETURNING phone_numbers.id, phone_numbers.number, phone_numbers.number_pretty, phone_numbers.provider_id`,
+    [orgId, agentId],
+  );
+
+  if (claimed.rowCount && claimed.rowCount > 0 && claimed.rows[0]) {
+    const free = claimed.rows[0];
+    let retellOk = false;
+
+    // Pool numbers may be in two states:
+    //  • already-imported in Retell (provider_id set) → PATCH to bind agent
+    //  • Twilio-only / never-imported (provider_id NULL) → IMPORT
+    // Same logic as /phone/provision after Round-6 HIGH-B fix.
+    if (agentId) {
+      const key = process.env.RETELL_API_KEY;
+      if (free.provider_id && key) {
+        try {
+          const patchRes = await fetch(
+            `https://api.retellai.com/update-phone-number/${encodeURIComponent(free.number)}`,
+            {
+              method: 'PATCH',
+              headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ inbound_agent_id: agentId }),
+            },
+          );
+          retellOk = patchRes.ok;
+          if (!patchRes.ok) {
+            log.error(
+              { status: patchRes.status, number: free.number, orgId },
+              '[phone] auto-provision pool-claim: Retell PATCH non-2xx',
+            );
+          }
+        } catch (err) {
+          log.error({ err: err instanceof Error ? err.message : String(err), number: free.number, orgId }, '[phone] auto-provision pool-claim: Retell PATCH threw');
+        }
+      } else if (key) {
+        try {
+          const result = await retellImportPhoneNumber(free.number, agentId);
+          const newId = (result.phone_number_id as string | undefined) ?? null;
+          if (newId) {
+            await pool.query(`UPDATE phone_numbers SET provider_id = $1 WHERE id = $2`, [newId, free.id]);
+            retellOk = true;
+          }
+        } catch (err) {
+          log.error({ err: err instanceof Error ? err.message : String(err), number: free.number, orgId }, '[phone] auto-provision pool-claim: Retell import threw');
+        }
+      }
+    } else {
+      // No agent yet — DB is the source of truth, Retell binding deferred.
+      retellOk = true;
+    }
+
+    if (!retellOk) {
+      // Roll the pool-claim back so the next provision attempt can re-try it.
+      await pool.query(
+        `UPDATE phone_numbers SET org_id = NULL, agent_id = NULL WHERE id = $1`,
+        [free.id],
+      ).catch((err: Error) => log.warn({ err: err.message, poolNumberId: free.id }, '[phone] auto-provision pool rollback failed'));
+      return;
+    }
+    log.info({ number: free.number, orgId, source: 'pool' }, '[phone] Auto-provisioned for org');
+    return;
+  }
+
+  // Pool empty — fall through to Twilio buy. Audit-Round-9: explicit
+  // bundleSid + addressSid for DACH-Compliance (German local numbers are
+  // regulated, Twilio requires Bundle. Pre-Round-9 we passed addressSid
+  // only → Twilio could refuse the buy or revoke the number later).
+  const PHONBOT_BUNDLE_SID = process.env.TWILIO_BUNDLE_SID ?? (
+    process.env.NODE_ENV === 'production'
+      ? (() => { throw new Error('TWILIO_BUNDLE_SID is required in production'); })()
+      : 'BUdf48e4eb15c501c7fe3b36008b728062'
+  );
+  const PHONBOT_ADDRESS_SID = process.env.TWILIO_ADDRESS_SID ?? (
+    process.env.NODE_ENV === 'production'
+      ? (() => { throw new Error('TWILIO_ADDRESS_SID is required in production'); })()
+      : 'AD4c5ce0dc9622cf67e55cbc07996802c8'
+  );
+
   let purchasedNumber: string;
   try {
     const client = getTwilioClient();
-    const addresses = await client.addresses.list({ isoCountry: 'DE', limit: 1 });
-    const addressSid = addresses[0]?.sid;
-    if (!addressSid) {
-      log.error({ orgId }, '[phone] No German address in Twilio for org');
+    const available = await client.availablePhoneNumbers('DE').local.list({ limit: 5 });
+    if (!available.length) {
+      log.error({ orgId }, '[phone] No German Twilio numbers available for auto-provision');
       return;
     }
-    const available = await client.availablePhoneNumbers('DE').local.list({ limit: 1 });
-    const first = available[0];
-    if (!first) {
-      log.error({ orgId }, '[phone] No German Twilio numbers available for org');
+    let purchased: { phoneNumber: string } | null = null;
+    for (const candidate of available) {
+      try {
+        purchased = await client.incomingPhoneNumbers.create({
+          phoneNumber: candidate.phoneNumber,
+          bundleSid: PHONBOT_BUNDLE_SID,
+          addressSid: PHONBOT_ADDRESS_SID,
+        });
+        break;
+      } catch (err) {
+        log.warn({ err: err instanceof Error ? err.message : String(err), candidate: candidate.phoneNumber, orgId }, '[phone] auto-provision: Twilio buy candidate failed, trying next');
+      }
+    }
+    if (!purchased) {
+      log.error({ orgId }, '[phone] Auto-provision: all candidates failed');
       return;
     }
-    const purchased = await client.incomingPhoneNumbers.create({
-      phoneNumber: first.phoneNumber,
-      addressSid,
-    });
     purchasedNumber = purchased.phoneNumber;
   } catch (e: unknown) {
     log.error({ err: e instanceof Error ? e.message : String(e), orgId }, '[phone] Twilio provision failed');
@@ -375,8 +596,10 @@ export async function autoProvisionGermanNumber(orgId: string): Promise<void> {
     const result = await retellImportPhoneNumber(purchasedNumber, agentId);
     retellPhoneNumberId = (result.phone_number_id as string | undefined) ?? null;
   } catch (e: unknown) {
-    log.error({ err: e instanceof Error ? e.message : String(e), number: purchasedNumber }, '[phone] Retell import failed');
-    // Continue — number is bought, save it even without Retell ID
+    log.error({ err: e instanceof Error ? e.message : String(e), number: purchasedNumber, orgId }, '[phone] Retell import failed');
+    // Continue — number is bought, save it even without Retell ID. The
+    // user gets a number in their dashboard; reverse-diff sweep will catch
+    // it later if Retell never picks it up.
   }
 
   // Save to DB
@@ -388,7 +611,7 @@ export async function autoProvisionGermanNumber(orgId: string): Promise<void> {
     [orgId, purchasedNumber, pretty, retellPhoneNumberId, agentId],
   );
 
-  log.info({ number: purchasedNumber, orgId }, '[phone] Auto-provisioned for org');
+  log.info({ number: purchasedNumber, orgId, source: 'twilio-buy' }, '[phone] Auto-provisioned for org');
 }
 
 // ── Forwarding-Verification (real loop test) ────────────────────────────────
@@ -748,9 +971,18 @@ export async function registerPhone(app: FastifyInstance) {
     return { ok: true, number: purchasedNumber, numberPretty };
   });
 
-  // POST /phone/forward — register an existing number with call forwarding
-  // Rate-limited: the persisted forwarding number is later dialled by /phone/verify.
-  // Spamming forward inserts + verify-triggers is a classic toll-fraud fan-out.
+  // POST /phone/forward — return carrier-codes + instructions for setting up
+  // call-forwarding to the org's Phonbot number.
+  //
+  // Audit-Round-9 (Codex M06-MEDIUM-X): the previous version persisted an
+  // unverified `method='forwarding'` row in phone_numbers as a side-effect.
+  // That insert was dead code — UI builds the carrier-codes locally from
+  // `num.number` (PhoneManager.tsx), `/phone/verify-forwarding` keys off the
+  // Phonbot inbound (phonbotNumberId), not the forwarding-row, and the
+  // legacy `/phone/verify`-dial-back path is gone (refused with 409 since
+  // Round 6). The INSERT only created stale rows that confused the dashboard
+  // and silently failed for shared family/business numbers (UNIQUE constraint).
+  // Endpoint kept as a Carrier-Code-Helper API: idempotent, no DB write.
   app.post('/phone/forward', {
     ...auth,
     config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
@@ -765,9 +997,9 @@ export async function registerPhone(app: FastifyInstance) {
     if (!fwdParsed.success) return reply.status(400).send({ error: 'number required' });
     const { number, phoneId } = fwdParsed.data;
 
-    // Anti-toll-fraud: reject non-whitelisted prefixes. /phone/verify dials this
-    // number back to test forwarding; an unvalidated entry turns the verify
-    // endpoint into an arbitrary-dial vector (premium-rate / IRSF).
+    // Prefix-whitelist still applied: the carrier-codes embed the user's
+    // number in instructions text, which we wouldn't want to enable for a
+    // premium-rate prefix — even though there's no longer a server-side dial.
     if (!isPhonePrefixAllowed(number)) {
       return reply.status(400).send({ error: 'Aktuell nur Telefonnummern aus DACH (DE/AT/CH) unterstützt.' });
     }
@@ -783,17 +1015,6 @@ export async function registerPhone(app: FastifyInstance) {
     if (!forwardTo) {
       return reply.status(400).send({ error: 'Du brauchst zuerst eine Phonbot-Nummer. Klicke auf "Nummer aktivieren".' });
     }
-
-    // T-29: prevent duplicate forwarding entries for the same org + number.
-    // Without ON CONFLICT the same user could POST /phone/forward 10× with
-    // the same number and pollute phone_numbers with identical rows — each
-    // later showing up as a separate "forwarding number" in the dashboard.
-    await pool.query(
-      `INSERT INTO phone_numbers (org_id, number, number_pretty, provider, method, verified)
-       VALUES ($1, $2, $2, 'forwarding', 'forwarding', false)
-       ON CONFLICT (number) DO NOTHING`,
-      [orgId, number],
-    );
 
     return {
       ok: true,
