@@ -520,3 +520,21 @@ Neue Tabelle `admin_read_audit_log (admin_email, route, params JSONB, result_cou
 | Q3: embed-backfill double-work bei parallel admins | ⚠️ Akzeptiert (nur Kosten, dokumentiert) |
 | Q4: recordAdminRead fire-and-forget | ⚠️ Akzeptiert (Best-Effort, Sentry-via-log.warn als Audit-Trail) |
 | Q5: LRU-Eviction race | ✅ Codex bestätigt: kein Problem in Node single-thread |
+
+---
+
+## Round-9 Update
+
+### 🔵 LOW-5 (Retry-Suggestion Embedding + Dedup) · ✅ GEFIXT (Round 9)
+
+`checkFixEffectiveness` retry-INSERT bekommt jetzt:
+- Pre-computed embedding via `embed(retrySummary)` mit try/catch fallback NULL
+- SELECT-then-INSERT Dedup auf `(org_id, status='pending', issue_summary)`
+
+**Codex Code-Review LOW-Fund**: SELECT-then-INSERT-Race-Window theoretisch
+möglich — Codex empfahl Partial-Unique-Index `(org_id, issue_summary) WHERE
+status='pending'` für `INSERT ON CONFLICT DO NOTHING` als robuster Approach.
+Akzeptiert für Round 9 weil checkFixEffectiveness nur fire-and-forget aus
+analyzeCall via `.catch(logBg(...))` läuft — Race-Window ist eng + Worst-Case
+ist 1 Duplicate-Row (kein Daten-Korruption). Partial-Unique-Index als
+Round-10-Optimierung dokumentiert.

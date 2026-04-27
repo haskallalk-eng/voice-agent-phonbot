@@ -832,9 +832,6 @@ async function checkFixEffectiveness(orgId: string): Promise<void> {
         const betterFix = await generateOptimizedFix(moments, currentPrompt, ctx);
         const newCount = moments.length;
 
-        // Only create a pending suggestion — do NOT auto-apply here.
-        // The normal learning loop (processIssue) will pick this up on the next call
-        // and apply all guards (cooldown, A/B test, one-at-a-time, dynamic threshold).
         // Audit-Round-8: classify the GPT-generated retry-fix; quarantine if
         // it carries inject-pattern. (Applies even though generateOptimizedFix
         // has its own system-prompt rules — defense-in-depth at storage.)
@@ -843,13 +840,51 @@ async function checkFixEffectiveness(orgId: string): Promise<void> {
         const retrySummary = classified.quarantined
           ? `[QUARANTÄNE: ${classified.reason}] Retry nach ineffektivem Fix: ${fix.issue_summary}`
           : `Retry nach ineffektivem Fix: ${fix.issue_summary}`;
-        await pool.query(
-          `INSERT INTO prompt_suggestions (org_id, category, issue_summary, suggested_addition, occurrence_count, status, all_examples)
-           VALUES ($1, $2, $3, $4, $5, 'pending', $6)`,
-          [orgId, retryCategory, retrySummary, classified.text, newCount, JSON.stringify(moments)],
+
+        // Audit-Round-9 LOW-5 (Codex-reviewed): pre-Round-9 the retry-INSERT
+        // had no embedding (legacy embed-on-read path) and no dedup — running
+        // checkFixEffectiveness twice would create two retry-suggestions for
+        // the same underlying issue. Now: pre-compute embedding (sync but
+        // already inside a fire-and-forget cron) and dedup on issue_summary
+        // for the same org + pending status. Codex's „embed asynchronous"
+        // empfehlung greift hier nicht direkt — checkFixEffectiveness ist
+        // selbst schon fire-and-forget aus analyzeCall via .catch(logBg(...))
+        // (insights.ts:1051). Eine extra embed-Latenz ist also kein Hot-Path-
+        // Risiko. Bei embed-Failure: INSERT mit NULL-embedding (legacy-path).
+        let retryEmbeddingJson: string | null = null;
+        try {
+          const v = await embed(retrySummary);
+          if (v.length > 0) retryEmbeddingJson = JSON.stringify(v);
+        } catch (err) {
+          log.warn({ err: (err as Error).message, orgId }, 'insights: retry-suggestion embed failed, INSERT without embedding');
+        }
+
+        // Dedup via SELECT-then-INSERT (no partial unique index migration
+        // needed). Race-window is the gap between SELECT and INSERT — but
+        // checkFixEffectiveness runs in `applied_at < now() - interval '1 hour'`
+        // batches and fix.id is the loop key, so two parallel cron passes for
+        // the same fix.id are very rare. Worst-case race: one duplicate row,
+        // not data corruption.
+        const dedup = await pool.query(
+          `SELECT 1 FROM prompt_suggestions
+           WHERE org_id = $1 AND status = 'pending' AND issue_summary = $2
+           LIMIT 1`,
+          [orgId, retrySummary],
         );
-        if (classified.quarantined) {
-          log.warn({ orgId, reason: classified.reason }, 'insights: prompt_fix quarantined (retry)');
+        if (dedup.rowCount && dedup.rowCount > 0) {
+          // Already have a retry-suggestion for this exact fix — skip.
+          if (classified.quarantined) {
+            log.warn({ orgId, reason: classified.reason }, 'insights: retry-suggestion (quarantined) deduped');
+          }
+        } else {
+          await pool.query(
+            `INSERT INTO prompt_suggestions (org_id, category, issue_summary, suggested_addition, occurrence_count, status, all_examples, embedding)
+             VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7)`,
+            [orgId, retryCategory, retrySummary, classified.text, newCount, JSON.stringify(moments), retryEmbeddingJson],
+          );
+          if (classified.quarantined) {
+            log.warn({ orgId, reason: classified.reason }, 'insights: prompt_fix quarantined (retry)');
+          }
         }
       }
     }
