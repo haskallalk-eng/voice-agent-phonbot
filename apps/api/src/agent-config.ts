@@ -307,23 +307,40 @@ async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentCo
     throw err;
   }
 
-  // Recording-toggle audit-trail. Treat undefined as legacy-on so a flip
-  // undefined → false is logged as on→off, and false → undefined is the
-  // same as off→on. Sentry breadcrumb covers Art. 5 Abs. 2 Rechenschaftspflicht
-  // without a dedicated audit table.
+  // Audit-Round-11 (Codex review): DSGVO Art. 5 Abs. 2 / Art. 24
+  // Rechenschaftspflicht. Treat undefined as legacy-on so a flip
+  // undefined → false is logged as on→off. Persists to privacy_setting_changes
+  // (365d retention) — Sentry-breadcrumb-only ist nicht ausreichend für
+  // belastbare Nachweisbarkeit bei Behördenprüfungen.
   const wasOn = previousRecordCalls !== false;
   const isOn = normalized.recordCalls !== false;
   if (wasOn !== isOn) {
+    const changeKind = wasOn ? 'recording_disabled' : 'recording_enabled';
     log.info(
       {
         orgId: orgId ?? null,
         tenantId: normalized.tenantId,
         recordCallsBefore: previousRecordCalls ?? '(legacy-undefined-true)',
         recordCallsAfter: normalized.recordCalls ?? '(undefined-true)',
-        change: wasOn ? 'recording_disabled' : 'recording_enabled',
+        change: changeKind,
       },
       'privacy: recordCalls toggle changed',
     );
+    // Persistent audit row (best-effort: never block the save). Insert-fail
+    // gets logged but doesn't reverse the actual config change.
+    pool.query(
+      `INSERT INTO privacy_setting_changes (org_id, tenant_id, setting, value_before, value_after, changed_by)
+       VALUES ($1, $2, 'recordCalls', $3, $4, $5)`,
+      [
+        orgId ?? null,
+        normalized.tenantId,
+        previousRecordCalls === undefined ? null : String(previousRecordCalls),
+        normalized.recordCalls === undefined ? null : String(normalized.recordCalls),
+        // Without a request-context here we can only tag the org. Future:
+        // pass userId/email through the writeConfig call signature.
+        orgId ?? null,
+      ],
+    ).catch((err: Error) => log.warn({ err: err.message, tenantId: normalized.tenantId }, 'privacy: audit-insert failed'));
   }
 
   // Keep chipy_schedules in sync with what the customer just edited in the

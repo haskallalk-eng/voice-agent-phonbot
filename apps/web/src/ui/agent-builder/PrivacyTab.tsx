@@ -49,11 +49,18 @@ export function PrivacyTab({ config, onUpdate }: PrivacyTabProps) {
         <Toggle checked={config.recordCalls ?? true}
           onChange={(v) => onUpdate({ recordCalls: v })}
           label="Anrufe aufzeichnen" />
-        {config.recordCalls && (
+        {(config.recordCalls ?? true) ? (
           <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-4 py-3 text-sm text-yellow-300 ml-14">
-            Stelle sicher, dass Anrufer zu Beginn über die Aufzeichnung informiert werden (DSGVO).
+            Anrufer werden automatisch zu Beginn jedes Calls über die Aufzeichnung informiert (DSGVO/§ 201 StGB).
+          </div>
+        ) : (
+          <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/60 ml-14">
+            Audio + Transkript werden nicht gespeichert. Anrufmetadaten (Dauer, Datum, Rufnummer) verbleiben für die Minutenabrechnung.
           </div>
         )}
+        <div className="ml-14 text-xs text-white/40">
+          Änderung greift nach dem nächsten <strong>Deploy</strong> des Agents — der laufende Retell-Agent behält bis dahin seine alten Einstellungen.
+        </div>
 
         <Field label="Gesprächsdaten aufbewahren">
           <Select value={String(config.dataRetentionDays ?? 30)}
