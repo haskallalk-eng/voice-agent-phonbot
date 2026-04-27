@@ -9,6 +9,57 @@ import twilio from 'twilio';
 import { pool } from './db.js';
 import { redis } from './redis.js';
 import type { JwtPayload } from './auth.js';
+import { PLANS, type PlanId } from './billing.js';
+import { log } from './logger.js';
+
+/**
+ * Plan-Limit-Check für Telefonnummern-Provisioning.
+ * Wird sowohl von /phone/provision als auch /phone/twilio/import benutzt —
+ * vor Audit-2026-04-26 hatte twilio/import keinen Check und war ein klarer
+ * Plan-Bypass-Vektor (CRITICAL-1 → HIGH nach Codex-Counter-Review).
+ *
+ * Returns null when allowed, or a Reply-payload object when denied.
+ */
+async function checkPhoneProvisionPlan(orgId: string): Promise<
+  | null
+  | { status: number; body: { error: string; current?: number; limit?: number; plan?: string } }
+> {
+  if (!pool) return { status: 503, body: { error: 'Database not configured' } };
+  const orgRow = await pool.query(`SELECT plan, plan_status FROM orgs WHERE id = $1`, [orgId]);
+  const org = orgRow.rows[0];
+  if (!org) return { status: 404, body: { error: 'Org not found' } };
+
+  const plan = (org.plan as string) ?? 'free';
+  const planDef = PLANS[plan as PlanId];
+  const limit = planDef?.phoneNumbersLimit ?? 0;
+  if (limit === 0) {
+    return {
+      status: 403,
+      body: { error: 'Telefonnummern sind ab dem Nummer- oder Starter-Plan verfügbar. Bitte upgrade deinen Plan.' },
+    };
+  }
+  if (org.plan_status !== 'active' && org.plan_status !== 'trialing') {
+    return { status: 403, body: { error: 'Aktives Abo erforderlich. Bitte Zahlung prüfen.' } };
+  }
+
+  const countRes = await pool.query(
+    `SELECT count(*)::int as cnt FROM phone_numbers WHERE org_id = $1 AND method = 'provisioned'`,
+    [orgId],
+  );
+  const currentCount = (countRes.rows[0]?.cnt as number) ?? 0;
+  if (currentCount >= limit) {
+    return {
+      status: 403,
+      body: {
+        error: `Dein ${plan}-Plan erlaubt max. ${limit} Nummer${limit > 1 ? 'n' : ''}. Upgrade für mehr.`,
+        current: currentCount,
+        limit,
+        plan,
+      },
+    };
+  }
+  return null;
+}
 
 // ── Twilio client (lazy init) ────────────────────────────────────────────────
 
@@ -107,7 +158,7 @@ export async function syncTwilioNumbersToDb() {
   if (redis?.isOpen) {
     const gotLock = await redis.set('phone:twilio-sync-lock', String(Date.now()), { NX: true, EX: 600 }).catch(() => null);
     if (!gotLock) {
-      process.stdout.write('[phone] syncTwilioNumbersToDb skipped — another instance holds the sync lock\n');
+      log.info({}, '[phone] syncTwilioNumbersToDb skipped — another instance holds the sync lock');
       return;
     }
   }
@@ -134,13 +185,13 @@ export async function syncTwilioNumbersToDb() {
       synced++;
     }
     if (synced > 0) {
-      process.stdout.write(`[phone] Synced ${synced} Twilio numbers to DB pool\n`);
+      log.info({ synced }, '[phone] Synced Twilio numbers to DB pool');
     }
 
     // Step 2: Trim pool — release excess unassigned numbers from Twilio
     await trimPool(client);
   } catch (e) {
-    process.stderr.write(`[phone] Twilio sync skipped: ${e instanceof Error ? e.message : String(e)}\n`);
+    log.warn({ err: e instanceof Error ? e.message : String(e) }, '[phone] Twilio sync skipped');
   }
 }
 
@@ -160,7 +211,7 @@ async function trimPool(client?: ReturnType<typeof getTwilioClient>) {
   if (redis?.isOpen) {
     const gotLock = await redis.set('phone:trim-lock', String(Date.now()), { NX: true, EX: 300 }).catch(() => null);
     if (!gotLock) {
-      process.stdout.write('[phone] trimPool skipped — another instance holds the lock\n');
+      log.info({}, '[phone] trimPool skipped — another instance holds the lock');
       return;
     }
   }
@@ -191,17 +242,17 @@ async function trimPool(client?: ReturnType<typeof getTwilioClient>) {
         // Remove from DB
         await pool.query(`DELETE FROM phone_numbers WHERE id = $1`, [num.id]);
         released++;
-        process.stdout.write(`[phone] Released ${num.number} from pool (cost saving)\n`);
+        log.info({ number: num.number }, '[phone] Released number from pool (cost saving)');
       } catch (e) {
-        process.stderr.write(`[phone] Failed to release ${num.number}: ${e instanceof Error ? e.message : String(e)}\n`);
+        log.error({ err: e instanceof Error ? e.message : String(e), number: num.number }, '[phone] Failed to release number');
       }
     }
 
     if (released > 0) {
-      process.stdout.write(`[phone] Pool trimmed: released ${released} numbers, keeping ${MAX_POOL_SIZE}\n`);
+      log.info({ released, maxPoolSize: MAX_POOL_SIZE }, '[phone] Pool trimmed');
     }
   } catch (e) {
-    process.stderr.write(`[phone] Pool trim failed: ${e instanceof Error ? e.message : String(e)}\n`);
+    log.error({ err: e instanceof Error ? e.message : String(e) }, '[phone] Pool trim failed');
   } finally {
     if (redis?.isOpen) await redis.del('phone:trim-lock').catch(() => {});
   }
@@ -299,13 +350,13 @@ export async function autoProvisionGermanNumber(orgId: string): Promise<void> {
     const addresses = await client.addresses.list({ isoCountry: 'DE', limit: 1 });
     const addressSid = addresses[0]?.sid;
     if (!addressSid) {
-      process.stderr.write(`[phone] No German address in Twilio for org ${orgId}\n`);
+      log.error({ orgId }, '[phone] No German address in Twilio for org');
       return;
     }
     const available = await client.availablePhoneNumbers('DE').local.list({ limit: 1 });
     const first = available[0];
     if (!first) {
-      process.stderr.write(`[phone] No German Twilio numbers available for org ${orgId}\n`);
+      log.error({ orgId }, '[phone] No German Twilio numbers available for org');
       return;
     }
     const purchased = await client.incomingPhoneNumbers.create({
@@ -314,7 +365,7 @@ export async function autoProvisionGermanNumber(orgId: string): Promise<void> {
     });
     purchasedNumber = purchased.phoneNumber;
   } catch (e: unknown) {
-    process.stderr.write(`[phone] Twilio provision failed for org ${orgId}: ${e instanceof Error ? e.message : String(e)}\n`);
+    log.error({ err: e instanceof Error ? e.message : String(e), orgId }, '[phone] Twilio provision failed');
     return;
   }
 
@@ -324,7 +375,7 @@ export async function autoProvisionGermanNumber(orgId: string): Promise<void> {
     const result = await retellImportPhoneNumber(purchasedNumber, agentId);
     retellPhoneNumberId = (result.phone_number_id as string | undefined) ?? null;
   } catch (e: unknown) {
-    process.stderr.write(`[phone] Retell import failed for ${purchasedNumber}: ${e instanceof Error ? e.message : String(e)}\n`);
+    log.error({ err: e instanceof Error ? e.message : String(e), number: purchasedNumber }, '[phone] Retell import failed');
     // Continue — number is bought, save it even without Retell ID
   }
 
@@ -337,7 +388,7 @@ export async function autoProvisionGermanNumber(orgId: string): Promise<void> {
     [orgId, purchasedNumber, pretty, retellPhoneNumberId, agentId],
   );
 
-  process.stdout.write(`[phone] Auto-provisioned ${purchasedNumber} for org ${orgId}\n`);
+  log.info({ number: purchasedNumber, orgId }, '[phone] Auto-provisioned for org');
 }
 
 // ── Forwarding-Verification (real loop test) ────────────────────────────────
@@ -474,8 +525,13 @@ export async function registerPhone(app: FastifyInstance) {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return { items: [] };
 
+    // customer_number + forwarding_type are required by the frontend's
+    // CapabilitiesTab loop-warning — without them the loop guard is blind
+    // (Codex MEDIUM-B). Only set when /phone/verify-forwarding succeeded;
+    // otherwise null/undefined.
     const { rows } = await pool.query(
-      `SELECT id, number, number_pretty, provider, method, verified, agent_id
+      `SELECT id, number, number_pretty, provider, method, verified, agent_id,
+              customer_number, forwarding_type
        FROM phone_numbers WHERE org_id = $1 ORDER BY created_at`,
       [orgId],
     );
@@ -489,27 +545,9 @@ export async function registerPhone(app: FastifyInstance) {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
-    // Check billing: only paid plans can provision numbers
-    const orgRow = await pool.query(
-      `SELECT plan, plan_status FROM orgs WHERE id = $1`,
-      [orgId],
-    );
-    const org = orgRow.rows[0];
-    if (!org || org.plan === 'free' || (org.plan_status !== 'active' && org.plan_status !== 'trialing')) {
-      return reply.status(403).send({ error: 'Telefonnummern sind ab dem Starter-Plan verfügbar. Bitte upgrade deinen Plan.' });
-    }
-
-    // Limit numbers per plan
-    const countRes = await pool.query(
-      `SELECT count(*) as cnt FROM phone_numbers WHERE org_id = $1 AND method = 'provisioned'`,
-      [orgId],
-    );
-    const currentCount = parseInt(String(countRes.rows[0]?.cnt ?? '0'), 10);
-    const limits: Record<string, number> = { starter: 1, pro: 3, agency: 10 };
-    const maxNumbers = limits[org.plan] ?? 1;
-    if (currentCount >= maxNumbers) {
-      return reply.status(403).send({ error: `Dein ${org.plan}-Plan erlaubt max. ${maxNumbers} Nummer${maxNumbers > 1 ? 'n' : ''}. Upgrade für mehr.` });
-    }
+    // Plan-Check via shared helper (limits aus PLANS, single source of truth).
+    const planDeny = await checkPhoneProvisionPlan(orgId);
+    if (planDeny) return reply.status(planDeny.status).send(planDeny.body);
 
     // Optional: specify which agent to connect (defaults to first deployed agent)
     const parsed = z.object({ agentTenantId: z.string().optional() }).safeParse(req.body);
@@ -617,37 +655,86 @@ export async function registerPhone(app: FastifyInstance) {
       }
     }
 
-    // Connect number to agent in Retell
+    // Connect number to agent in Retell.
+    //
+    // Audit-Round-6 Codex-Counter-Review:
+    //  • HIGH-B: Pool-Rows ohne provider_id wurden früher trotzdem in den
+    //    PATCH-Pfad geschickt (Retell hat sie nie gehabt → 404 silent) und
+    //    landeten im Dashboard als „aktiv" obwohl sie in Retell nicht
+    //    existierten. Jetzt: bei !provider_id → IMPORT statt PATCH.
+    //  • MEDIUM-2 → HIGH: PATCH/POST hatten kein res.ok-Check, jeder 4xx/5xx
+    //    wurde wie Erfolg behandelt. Jetzt explizit geprüft + retellOk-Flag.
     const key = process.env.RETELL_API_KEY;
+    let retellOk = false;
     if (key && agentId) {
-      if (poolNumberId) {
-        // Pool number — already in Retell, just update the agent
+      if (poolNumberId && retellPhoneNumberId) {
+        // Pool number that's already imported in Retell — just patch the agent.
         try {
-          await fetch(`https://api.retellai.com/update-phone-number/${encodeURIComponent(purchasedNumber)}`, {
+          const patchRes = await fetch(`https://api.retellai.com/update-phone-number/${encodeURIComponent(purchasedNumber)}`, {
             method: 'PATCH',
             headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ inbound_agent_id: agentId }),
           });
-          req.log.info({ number: purchasedNumber, agentId }, '[phone/provision] Retell agent updated');
+          if (!patchRes.ok) {
+            const body = await patchRes.text().catch(() => '');
+            req.log.error(
+              { status: patchRes.status, body: body.slice(0, 500), number: purchasedNumber, agentId },
+              '[phone/provision] Retell PATCH non-2xx',
+            );
+          } else {
+            retellOk = true;
+            req.log.info({ number: purchasedNumber, agentId }, '[phone/provision] Retell agent updated');
+          }
         } catch (e: unknown) {
-          req.log.error({ error: e instanceof Error ? e.message : String(e) }, '[phone/provision] Retell update failed');
+          req.log.error({ error: e instanceof Error ? e.message : String(e) }, '[phone/provision] Retell PATCH threw');
         }
       } else {
-        // New number — import into Retell
+        // New number, OR pool row that was never imported (provider_id NULL).
+        // Either way: import via Retell to bind agent + create the entry.
         try {
           const result = await retellImportPhoneNumber(purchasedNumber, agentId ?? undefined);
-          retellPhoneNumberId = (result.phone_number_id as string | undefined) ?? null;
+          retellPhoneNumberId = (result.phone_number_id as string | undefined) ?? retellPhoneNumberId;
+          retellOk = !!retellPhoneNumberId;
         } catch (e: unknown) {
           req.log.error({ error: e instanceof Error ? e.message : String(e) }, '[phone/provision] Retell import failed');
         }
       }
+    } else if (!agentId) {
+      // No deployed agent yet — Retell binding skipped, but DB row still
+      // created so user sees the number. They can deploy + reassign later.
+      retellOk = true;
     }
 
-    // Save or update DB
+    if (!retellOk) {
+      // Rollback the pool-claim so the number returns to the pool for the next
+      // user. Without this, a Retell outage leaves the pool depleted.
+      if (poolNumberId) {
+        await pool.query(
+          `UPDATE phone_numbers SET org_id = NULL, agent_id = NULL WHERE id = $1`,
+          [poolNumberId],
+        ).catch((err: Error) => log.warn({ err: err.message, poolNumberId }, '[phone/provision] pool rollback failed'));
+      }
+      return reply.status(503).send({
+        error: 'Retell konnte die Nummer aktuell nicht verbinden. Bitte versuche es in einigen Minuten erneut.',
+      });
+    }
+
+    // Save or update DB.
+    //
+    // MEDIUM-A (Codex, DSGVO!): beim Pool-Reuse müssen customer_number und
+    // forwarding_type explizit auf NULL gesetzt werden + verified zurück auf
+    // false — sonst leakt die ehemalige Customer-Forwarding-Number (PII)
+    // an die nächste Org die diese Pool-Nummer claimt.
     if (poolNumberId) {
-      // Assign pool number to this org
       await pool.query(
-        `UPDATE phone_numbers SET org_id = $1, agent_id = $2, provider_id = $3 WHERE id = $4`,
+        `UPDATE phone_numbers
+         SET org_id = $1,
+             agent_id = $2,
+             provider_id = $3,
+             customer_number = NULL,
+             forwarding_type = NULL,
+             verified = true
+         WHERE id = $4`,
         [orgId, agentId, retellPhoneNumberId, poolNumberId],
       );
     } else {
@@ -727,17 +814,45 @@ export async function registerPhone(app: FastifyInstance) {
     };
   });
 
-  // POST /phone/twilio/import — import a Twilio-owned number into Retell
-  // This enables the Twilio number to receive inbound calls handled by the AI agent.
+  // POST /phone/twilio/import — import a Twilio-owned number into Retell.
+  // Audit-2026-04-26 Codex Counter-Review: dieser Endpoint hatte keinen
+  // Plan-Limit-Check und keinen Cross-Org-Schutz; ein Free-Plan-User mit
+  // Kenntnis einer beliebigen Phonbot-Pool-Nummer hätte sie für sich claimen
+  // können (`getTwilioClient()` greift auf den Plattform-Twilio-Account zu,
+  // also enumeriert die `incomingPhoneNumbers.list` UNSERE Numbers, nicht
+  // Kunden-eigene). Jetzt: gleicher Plan-Check wie /phone/provision +
+  // expliziter 409 wenn die Nummer schon einer anderen Org gehört (statt
+  // silent ON CONFLICT DO NOTHING das den Steal-Versuch nicht meldet).
   app.post('/phone/twilio/import', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
+
+    // Plan-Check (Audit-Round-6 CRITICAL-1 → HIGH per Codex).
+    const planDeny = await checkPhoneProvisionPlan(orgId);
+    if (planDeny) return reply.status(planDeny.status).send(planDeny.body);
 
     const parsed = z.object({
       number: z.string().min(1),  // e.g. "+493075937562"
     }).safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: 'number required (E.164 format)' });
     const { number } = parsed.data;
+
+    // Cross-Org-Schutz: refuse wenn die Nummer schon einer ANDEREN Org
+    // zugewiesen ist. Ohne das könnte ein Angreifer mit Kenntnis einer
+    // Phonbot-Pool-Nummer (oder einer fremden Customer-Nummer) sie für sich
+    // claimen — der ON CONFLICT DO NOTHING vorher hat den Steal silent
+    // beantwortet mit {ok:true} ohne Effekt.
+    const existing = await pool.query(
+      `SELECT org_id, method FROM phone_numbers WHERE number = $1`,
+      [number],
+    );
+    if (existing.rowCount && existing.rows[0].org_id && existing.rows[0].org_id !== orgId) {
+      log.warn(
+        { orgId, number, existingOrgId: existing.rows[0].org_id, method: existing.rows[0].method },
+        'phone/twilio/import refused — number already belongs to a different org',
+      );
+      return reply.status(409).send({ error: 'Diese Nummer ist bereits in Verwendung.' });
+    }
 
     // Verify the number belongs to this Twilio account
     try {
@@ -748,6 +863,7 @@ export async function registerPhone(app: FastifyInstance) {
       }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Twilio error';
+      log.error({ err: msg, orgId, number }, 'phone/twilio/import: Twilio lookup failed');
       return reply.status(500).send({ error: msg });
     }
 
@@ -762,17 +878,28 @@ export async function registerPhone(app: FastifyInstance) {
     try {
       const result = await retellImportPhoneNumber(number, agentId);
 
-      // Upsert into phone_numbers table
+      // Upsert into phone_numbers table. ON CONFLICT (number) DO UPDATE only
+      // if the existing row already belongs to this org (idempotent re-import).
+      // The cross-org block above already returned 409 for foreign-owned rows.
       await pool.query(
         `INSERT INTO phone_numbers (org_id, number, number_pretty, provider, provider_id, agent_id, method, verified)
          VALUES ($1, $2, $2, 'twilio', $3, $4, 'provisioned', true)
-         ON CONFLICT DO NOTHING`,
+         ON CONFLICT (number) DO UPDATE
+           SET org_id = EXCLUDED.org_id,
+               provider_id = COALESCE(EXCLUDED.provider_id, phone_numbers.provider_id),
+               agent_id = COALESCE(EXCLUDED.agent_id, phone_numbers.agent_id),
+               provider = 'twilio',
+               method = 'provisioned',
+               verified = true
+           WHERE phone_numbers.org_id = EXCLUDED.org_id
+              OR phone_numbers.org_id IS NULL`,
         [orgId, number, (result.phone_number_id as string | undefined) ?? null, agentId],
       );
 
       return { ok: true, number, retellPhoneNumberId: result.phone_number_id ?? null };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to import number into Retell';
+      log.error({ err: msg, orgId, number }, 'phone/twilio/import: Retell import failed');
       return reply.status(500).send({ error: msg });
     }
   });
@@ -795,20 +922,41 @@ export async function registerPhone(app: FastifyInstance) {
 
     if (phone.method === 'provisioned') {
       // Provisioned Twilio numbers → return to pool (don't delete, don't release from Twilio)
-      // Unassign agent in Retell so it's clean for next customer
+      // Unassign agent in Retell so it's clean for next customer.
+      // res.ok-Check (Codex MEDIUM-2 → HIGH): vorher silent-success bei 4xx/5xx.
       const key = process.env.RETELL_API_KEY;
       if (key && phone.provider_id) {
         try {
-          await fetch(`https://api.retellai.com/update-phone-number/${encodeURIComponent(phone.number)}`, {
+          const r = await fetch(`https://api.retellai.com/update-phone-number/${encodeURIComponent(phone.number)}`, {
             method: 'PATCH',
             headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ inbound_agent_id: null }),
           });
-        } catch { /* non-fatal */ }
+          if (!r.ok) {
+            const body = await r.text().catch(() => '');
+            req.log.warn(
+              { status: r.status, body: body.slice(0, 500), number: phone.number },
+              'phone/delete: Retell unbind non-2xx (number returned to pool but may still route to old agent)',
+            );
+          }
+        } catch (e: unknown) {
+          req.log.warn(
+            { err: e instanceof Error ? e.message : String(e), number: phone.number },
+            'phone/delete: Retell unbind threw',
+          );
+        }
       }
-      // Return to pool: set org_id and agent_id to NULL
+      // Return to pool: clear org-binding + customer-PII (DSGVO, Codex MEDIUM-A).
+      // Without this, the next org claiming this pool number inherits the
+      // previous customer's forwarding configuration.
       await pool.query(
-        `UPDATE phone_numbers SET org_id = NULL, agent_id = NULL WHERE id = $1`,
+        `UPDATE phone_numbers
+         SET org_id = NULL,
+             agent_id = NULL,
+             customer_number = NULL,
+             forwarding_type = NULL,
+             verified = false
+         WHERE id = $1`,
         [id],
       );
     } else {
@@ -854,15 +1002,26 @@ export async function registerPhone(app: FastifyInstance) {
     const newRetellAgentId = agentRow.rows[0]?.data?.retellAgentId;
     if (!newRetellAgentId) return reply.status(400).send({ error: 'Agent hat keine Retell-ID. Bitte erst deployen.' });
 
-    // Update in Retell
+    // Update in Retell. res.ok-Check (Codex MEDIUM-2 → HIGH): vorher wurden
+    // 4xx/5xx wie Erfolg behandelt → DB sagt "neuer Agent verbunden", Retell
+    // sagt "alter Agent läuft weiter", User sieht im UI was anderes als das
+    // was bei Inbound-Calls passiert.
     const key = process.env.RETELL_API_KEY;
     if (key) {
       try {
-        await fetch(`https://api.retellai.com/update-phone-number/${encodeURIComponent(phoneNumber)}`, {
+        const r = await fetch(`https://api.retellai.com/update-phone-number/${encodeURIComponent(phoneNumber)}`, {
           method: 'PATCH',
           headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ inbound_agent_id: newRetellAgentId }),
         });
+        if (!r.ok) {
+          const body = await r.text().catch(() => '');
+          req.log.error(
+            { status: r.status, body: body.slice(0, 500), phoneNumber, newRetellAgentId },
+            'phone/reassign: Retell PATCH non-2xx',
+          );
+          return reply.status(502).send({ error: `Retell hat den Wechsel nicht akzeptiert (Status ${r.status}). Bitte erneut versuchen.` });
+        }
       } catch (e: unknown) {
         return reply.status(500).send({ error: `Retell-Update fehlgeschlagen: ${e instanceof Error ? e.message : 'Unbekannt'}` });
       }
