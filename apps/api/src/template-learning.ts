@@ -86,14 +86,30 @@ async function extractCrossOrgLearnings(
   if (!pool) return;
   if (!analysis.bad_moments?.length) return;
 
-  // Get the org's industry from agent_configs
+  // Get the org's industry from agent_configs.
+  //
+  // Round-12 (Pattern-Pool fix): industry is now a first-class schema field
+  // that the OnboardingWizard sets to the source-template id. Pre-fix, every
+  // agent_config had `industry` null because the field never existed in the
+  // schema, so this early-return killed cross-org-learning for ALL orgs.
+  //
+  // Round-12 Codex code-review caught: an earlier draft had a
+  // `data->>'templateId'` whitelist-fallback for legacy configs — but
+  // templateId is NEVER persisted into agent_configs.data anywhere in the
+  // write-path (verified across the repo). The fallback was dead code.
+  // Removed. Legacy orgs without industry stay unclustered until their
+  // owner explicitly picks a template (re-runs onboarding) or a backfill
+  // script tags them. Whichever comes first.
   const configRes = await pool.query(
-    `SELECT data->>'industry' AS industry, data->>'templateId' AS template_id
+    `SELECT data->>'industry' AS industry
      FROM agent_configs WHERE org_id = $1 ORDER BY updated_at DESC LIMIT 1`,
     [orgId],
   );
   const industry: string | null = configRes.rows[0]?.industry ?? null;
-  const templateId: string | null = configRes.rows[0]?.template_id ?? null;
+  // templateId reserved for legacy compatibility with existing
+  // checkAndCreateTemplateLearning() signature; pass null until/if the field
+  // gets persisted in a future round.
+  const templateId: string | null = null;
 
   if (!industry) return; // Can't do cross-org learning without industry tag
 
@@ -187,11 +203,19 @@ async function extractConversationPattern(
 ): Promise<void> {
   if (!pool) return;
 
-  // Get the transcript text + org industry
+  // Get the transcript text + industry. Round-12 cleanup (Codex code-review):
+  // earlier draft did a LEFT JOIN to agent_configs to fall back through
+  // cfg_industry / cfg_templateId, but (a) the LEFT JOIN was ambiguous for
+  // multi-agent orgs (Pro/Agency: matches arbitrary agent), (b) cfg_templateId
+  // is dead code (never persisted), (c) call_transcripts.industry is itself
+  // populated from agent_configs.industry by analyzeCall (insights.ts:1098),
+  // so the cfg_industry fallback was redundant — when an org had industry
+  // set on its config, every transcript already inherited it. Reverting to
+  // the simple read.
   const transcriptRes = await pool.query(
-    `SELECT ct.transcript, ct.industry
-     FROM call_transcripts ct
-     WHERE ct.call_id = $1 AND ct.org_id = $2
+    `SELECT transcript, industry
+     FROM call_transcripts
+     WHERE call_id = $1 AND org_id = $2
      LIMIT 1`,
     [callId, orgId],
   );
