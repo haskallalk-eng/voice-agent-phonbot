@@ -267,6 +267,15 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
     resolveClaim = resolve;
     rejectClaim = reject;
   });
+  // Audit-Round-11 (Codex post-fix concern): the first caller does NOT await
+  // `claim` — they run the creation work inline and resolve/reject the claim
+  // for any concurrent second callers. If creation fails and no second caller
+  // arrived, the rejected `claim` is observerless → Node emits an unhandled-
+  // rejection warning, and on `--unhandled-rejections=strict` (or future
+  // Node defaults) it crashes the process. The no-op `.catch` adds a silent
+  // observer that does NOT swallow the original error: the first caller's
+  // try/catch still re-throws to its own caller.
+  claim.catch(() => { /* observer for second-caller-absent case */ });
   pendingDemoCreate.set(templateId, claim);
 
   try {
