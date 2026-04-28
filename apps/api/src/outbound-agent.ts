@@ -628,17 +628,24 @@ export async function registerOutbound(app: FastifyInstance) {
     const { id } = params.data;
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
 
-    const suggestion = await pool.query(
-      `SELECT suggested_change, issue_summary FROM outbound_suggestions
-       WHERE id = $1 AND org_id = $2 AND status = 'pending'`,
+    // Audit-Round-12 BLOCKER (review-pass logic agent): TOCTOU. Two
+    // concurrent /apply calls both pass the SELECT WHERE status='pending',
+    // both invoke analyzeAndImproveOutboundPrompt, both write a new
+    // version → duplicate prompt-version history. Atomically claim the
+    // row first via UPDATE ... WHERE status='pending' RETURNING — only
+    // one caller wins, the other gets 409.
+    const claim = await pool.query(
+      `UPDATE outbound_suggestions
+          SET status = 'applied', applied_at = now()
+        WHERE id = $1 AND org_id = $2 AND status = 'pending'
+        RETURNING suggested_change, issue_summary`,
       [id, orgId],
     );
-    if (!suggestion.rowCount) return reply.status(404).send({ error: 'Not found' });
-    const row = suggestion.rows[0] as { suggested_change: string; issue_summary: string };
+    if (!claim.rowCount) return reply.status(409).send({ error: 'Already applied or not found' });
+    const row = claim.rows[0] as { suggested_change: string; issue_summary: string };
 
     const { analyzeAndImproveOutboundPrompt } = await import('./outbound-insights.js');
     await analyzeAndImproveOutboundPrompt(orgId, row.suggested_change, `Manuell angewendet: ${row.issue_summary}`);
-    await pool.query(`UPDATE outbound_suggestions SET status = 'applied', applied_at = now() WHERE id = $1`, [id]);
     return { ok: true };
   });
 

@@ -202,13 +202,25 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
 
   // Audit-Round-11 MED (Codex P2): a11y — Esc-to-close, focus-trap, restore
   // focus on unmount. role/aria-modal go on the inner panel below.
+  // Audit-Round-12 BLOCKER (review-pass): the Esc handler must call
+  // stopActiveCall() *directly* through the ref instead of going through
+  // handleClose(), because handleClose closes over `callState` and a `[]`
+  // dep array would freeze that closure at the initial 'idle' state — Esc
+  // during an active call would then skip stopCall() and leave the mic on.
+  // Refs (clientRef) and props (onClose) are reference-stable, so the
+  // handler can safely use them without re-running the effect.
   const dialogRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const previouslyFocused = (typeof document !== 'undefined' ? document.activeElement : null) as HTMLElement | null;
     function handleKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         e.preventDefault();
-        handleClose();
+        // Always idempotent — stopCall on a null ref is a no-op.
+        if (clientRef.current) {
+          try { clientRef.current.stopCall(); } catch { /* ignore */ }
+          clientRef.current = null;
+        }
+        onClose();
         return;
       }
       if (e.key !== 'Tab' || !dialogRef.current) return;
@@ -240,8 +252,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
       document.removeEventListener('keydown', handleKey);
       previouslyFocused?.focus?.();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [onClose]);
 
   return (
     <div
@@ -261,6 +272,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
         {/* Close */}
         <button
           onClick={handleClose}
+          aria-label="Schließen"
           className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 hover:text-white transition-all"
         >
           ✕
@@ -431,17 +443,23 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
                 <form onSubmit={submitCallback} className="space-y-3">
                   <div>
                     <label className="block text-xs font-medium text-white/50 mb-1">Name</label>
-                    <input type="text" required value={cbName} onChange={(e) => setCbName(e.target.value)} placeholder="Max Mustermann"
+                    <input type="text" required value={cbName}
+                      onChange={(e) => { setCbName(e.target.value); if (cbError) setCbError(null); }}
+                      placeholder="Max Mustermann"
                       className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none focus:ring-2 focus:ring-orange-500/40 transition-all" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-white/50 mb-1">E-Mail</label>
-                    <input type="email" required value={cbEmail} onChange={(e) => setCbEmail(e.target.value)} placeholder="max@firma.de"
+                    <input type="email" required value={cbEmail}
+                      onChange={(e) => { setCbEmail(e.target.value); if (cbError) setCbError(null); }}
+                      placeholder="max@firma.de"
                       className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none focus:ring-2 focus:ring-orange-500/40 transition-all" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-white/50 mb-1">Telefon</label>
-                    <input type="tel" required value={cbPhone} onChange={(e) => setCbPhone(e.target.value)} placeholder="+49 170 1234567"
+                    <input type="tel" required value={cbPhone}
+                      onChange={(e) => { setCbPhone(e.target.value); if (cbError) setCbError(null); }}
+                      placeholder="+49 170 1234567"
                       className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none focus:ring-2 focus:ring-orange-500/40 transition-all" />
                   </div>
                   <button type="submit" disabled={cbLoading}

@@ -641,9 +641,19 @@ export async function registerDemo(app: FastifyInstance) {
       .catch((err: Error) => app.log.warn({ err: err.message }, 'demo/callback signup-link email failed'));
     const signupSms = await sendSignupLinkSms({ to: phone, name, logger: app.log });
 
-    // Try outbound call via Retell
+    // Try outbound call via Retell.
+    // Audit-Round-12 P3 (review-pass security agent): if pool is configured
+    // but the lead INSERT failed, the outbound call would otherwise create
+    // a Retell call we cannot anchor to a DB lead — DSGVO Art. 5(1)(e)
+    // (storage limitation) + Art. 17 (right to erasure) require us to be
+    // able to delete every personal data trace via cleanupOldLeads().
+    // Without a leadId there's no DB hook for that. Skip the call.
     const fromNumber = process.env.RETELL_OUTBOUND_NUMBER; // e.g. "+4930123456"
-    if (fromNumber) {
+    const canCall = fromNumber && (!pool || leadId);
+    if (fromNumber && pool && !leadId) {
+      app.log.warn({ phone }, 'demo/callback: skipping outbound call because lead INSERT failed (DSGVO untracked-call guard)');
+    }
+    if (canCall) {
       try {
         const agentId = await getOrCreateSalesAgent();
         const metadata: Record<string, string> = { leadName: name };
@@ -670,7 +680,7 @@ export async function registerDemo(app: FastifyInstance) {
         const msg = e instanceof Error ? e.message : 'unknown error';
         app.log.warn({ err: msg, phone }, 'Outbound call failed');
       }
-    } else {
+    } else if (!fromNumber) {
       app.log.warn('RETELL_OUTBOUND_NUMBER not configured — skipping outbound call');
     }
 
