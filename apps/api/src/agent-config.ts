@@ -89,6 +89,16 @@ const AgentConfigSchema = z.object({
     reason: z.string().min(1).default('handoff'),
   }).default({ enabled: true, reason: 'handoff' }),
 
+  // Industry cluster-key for cross-org pattern-pool (template-learning.ts).
+  // Set when the customer applies a curated template (id of the template) or
+  // hand-picked later. Without it (or templateId-fallback through
+  // CURATED_INDUSTRY_KEYS) the org's calls never enter the cross-org learning
+  // pipeline — `processTemplateLearning` early-returns when both fields are
+  // null. Round-12 (Pattern-Pool fix): keeping this `optional()` so existing
+  // configs without the field don't get force-materialized to a random
+  // industry, just like recordCalls in Round 11.
+  industry: z.string().optional(),
+
   // Recording-Toggle (PrivacyTab → "Anrufe aufzeichnen"). When true:
   //   • disclosure prompt-block in agent-instructions.ts mentions recording,
   //   • Retell agent uses data_storage_setting='everything' (default),

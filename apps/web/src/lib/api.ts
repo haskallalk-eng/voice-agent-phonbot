@@ -242,6 +242,11 @@ export type AgentConfig = {
   recordCalls?: boolean;
   dataRetentionDays?: number;    // 0 = don't store, 30/90/365 etc.
 
+  // Industry cluster-key for the cross-org pattern-pool. Set by the onboarding
+  // wizard (= source template id) or hand-picked later. Optional for
+  // backward-compat with legacy configs.
+  industry?: string;
+
   // Variable extraction
   extractedVariables?: ExtractedVariable[];
 
