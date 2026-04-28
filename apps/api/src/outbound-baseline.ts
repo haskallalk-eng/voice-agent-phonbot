@@ -92,6 +92,17 @@ Wenn der Angerufene nach DEINEM Spelling abweicht ("nein, das X war ein S"), kor
 ## Anrufzeiten (Anstand)
 Wenn der Angerufene am Anfang sagt "ich bin gerade in einer Besprechung", "ich fahre Auto", "ich bin nicht alleine", "rufen Sie später an" — biete einen konkreten Alternativ-Termin an (heute Nachmittag, morgen vormittag) und beende den Anruf, ohne den eigentlichen Pitch anzufangen.`;
 
+// Audit-Round-10 HIGH: in-process cache (parallel to platform-baseline.ts).
+// 5-min TTL + explicit bust on admin override-edit. Separate cache from the
+// inbound baseline because they're orthogonal — editing one shouldn't
+// invalidate the other.
+const OUTBOUND_CACHE_TTL_MS = 5 * 60 * 1000;
+let _cache: { val: string; ts: number } | null = null;
+
+export function bustOutboundBaselineCache(): void {
+  _cache = null;
+}
+
 /**
  * Read the admin-edited outbound baseline if present, fall back to the
  * compiled-in default. Stored under template_id='__outbound__' in
@@ -99,11 +110,18 @@ Wenn der Angerufene am Anfang sagt "ich bin gerade in einer Besprechung", "ich f
  * so we have one editing surface in the admin UI.
  */
 export async function loadOutboundBaseline(): Promise<string> {
+  if (_cache && Date.now() - _cache.ts < OUTBOUND_CACHE_TTL_MS) return _cache.val;
   if (!pool) return OUTBOUND_BASELINE_PROMPT;
   const res = await pool.query(
     `SELECT epilogue FROM demo_prompt_overrides WHERE template_id = '__outbound__'`,
   ).catch(() => null);
-  if (!res || !res.rowCount) return OUTBOUND_BASELINE_PROMPT;
-  const stored = res.rows[0].epilogue as string;
-  return stored && stored.trim() ? stored : OUTBOUND_BASELINE_PROMPT;
+  let val: string;
+  if (!res || !res.rowCount) {
+    val = OUTBOUND_BASELINE_PROMPT;
+  } else {
+    const stored = res.rows[0].epilogue as string;
+    val = stored && stored.trim() ? stored : OUTBOUND_BASELINE_PROMPT;
+  }
+  _cache = { val, ts: Date.now() };
+  return val;
 }

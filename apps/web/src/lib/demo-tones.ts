@@ -5,37 +5,65 @@
 
 const RINGBACK_HZ = 425;
 
-export function playForwardingTone(): Promise<void> {
-  return new Promise((resolve) => {
-    if (typeof window === 'undefined') return resolve();
-    const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctor) return resolve();
-    const ctx = new Ctor();
-    const osc = ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.value = RINGBACK_HZ;
-    const gain = ctx.createGain();
-    gain.gain.value = 0;
-    osc.connect(gain).connect(ctx.destination);
+// Audit-Round-10 MEDIUM: Module-level guard against overlapping tones (e.g.
+// a Retell SDK reconnect firing call_ended twice). One tone in flight at a
+// time; subsequent calls until it finishes are no-ops.
+let _toneInFlight = false;
 
-    const t0 = ctx.currentTime;
-    // Ring 1: 0.0 – 1.0 s
-    gain.gain.setValueAtTime(0, t0);
-    gain.gain.linearRampToValueAtTime(0.18, t0 + 0.05);
-    gain.gain.setValueAtTime(0.18, t0 + 0.95);
-    gain.gain.linearRampToValueAtTime(0, t0 + 1.0);
-    // Pause 1.0 – 1.4 s, Ring 2: 1.4 – 2.4 s
-    gain.gain.setValueAtTime(0, t0 + 1.4);
-    gain.gain.linearRampToValueAtTime(0.18, t0 + 1.45);
-    gain.gain.setValueAtTime(0.18, t0 + 2.35);
-    gain.gain.linearRampToValueAtTime(0, t0 + 2.4);
+export async function playForwardingTone(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  if (_toneInFlight) return;
+  const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctor) return;
 
-    osc.start(t0);
-    osc.stop(t0 + 2.5);
-    osc.onended = () => {
-      ctx.close().catch(() => { /* ignore */ });
+  _toneInFlight = true;
+  const ctx = new Ctor();
+  // Audit-Round-10 MEDIUM: iOS Safari + Chrome with strict autoplay policy
+  // create AudioContexts in 'suspended' state when the first sound is not
+  // adjacent to a user gesture. We were calling this from the retell-SDK
+  // call_ended handler — ~30-60s after the original click — so the gesture
+  // was long gone. Best-effort resume(); if it fails we still finish the
+  // promise so the UI doesn't hang waiting for a tone that will never play.
+  try { await ctx.resume(); } catch { /* policy denied — proceed silently */ }
+
+  return new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      _toneInFlight = false;
+      ctx.close().catch(() => { /* already closed */ });
       resolve();
     };
+
+    try {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = RINGBACK_HZ;
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      osc.connect(gain).connect(ctx.destination);
+
+      const t0 = ctx.currentTime;
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(0.18, t0 + 0.05);
+      gain.gain.setValueAtTime(0.18, t0 + 0.95);
+      gain.gain.linearRampToValueAtTime(0, t0 + 1.0);
+      gain.gain.setValueAtTime(0, t0 + 1.4);
+      gain.gain.linearRampToValueAtTime(0.18, t0 + 1.45);
+      gain.gain.setValueAtTime(0.18, t0 + 2.35);
+      gain.gain.linearRampToValueAtTime(0, t0 + 2.4);
+
+      osc.start(t0);
+      osc.stop(t0 + 2.5);
+      osc.onended = finish;
+      // Hard timeout backstop: if onended never fires (tab hidden, AudioContext
+      // suspended again, browser bug), resolve after 3s so the Promise never
+      // hangs in the heap.
+      setTimeout(finish, 3000);
+    } catch {
+      finish();
+    }
   });
 }
 

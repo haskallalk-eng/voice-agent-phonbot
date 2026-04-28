@@ -279,6 +279,20 @@ function DatenschutzContent() {
           Art. 6 Abs. 1 lit. a DSGVO (Einwilligung durch Formular-Eintragung).
         </p>
 
+        <h3 className="text-sm font-semibold text-white/90 mt-3 mb-1">Verbesserung unserer KI-Modelle</h3>
+        <p>
+          Zur kontinuierlichen Verbesserung unseres Sprach-Agenten speichern wir in bestimmten Fällen
+          kurze Ausschnitte aus Gesprächs-Auswertungen, an denen unsere Plattform-Administratoren
+          manuelle Korrekturen vorgenommen haben (sogenannte Korrektur-Tupel: Original-Vorschlag +
+          überarbeiteter Text + Begründung). Diese werden für bis zu 365 Tage in einer separaten
+          internen Tabelle gespeichert und dienen ausschließlich als Trainingssignal für die nächste
+          Generation unseres Vorschlags-Generators. Personenbezogene Inhalte werden vor der Speicherung
+          durch unseren PII-Filter (Telefonnummern, E-Mail-Adressen, Kontodaten) bereinigt; die Tupel
+          enthalten keine vollständigen Anrufprotokolle. Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO
+          (berechtigtes Interesse an Produkt-Qualitätssicherung). Sie können einer Verarbeitung
+          widersprechen — schreiben Sie uns an info@phonbot.de.
+        </p>
+
         <h3 className="text-sm font-semibold text-white/90 mt-3 mb-1">Twilio (Telefonie-Infrastruktur)</h3>
         <p>
           Für die eigentliche Telefonverbindung (Durchleitung, Rufnummern, SIP-Trunk, SMS) verwenden

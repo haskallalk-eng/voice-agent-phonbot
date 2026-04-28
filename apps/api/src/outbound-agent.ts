@@ -406,26 +406,26 @@ export async function triggerSalesCall(params: {
   const reserve = await tryReserveMinutes(params.orgId, DEFAULT_CALL_RESERVE_MINUTES);
   if (!reserve.allowed) return { ok: false, error: 'USAGE_LIMIT_REACHED' };
 
-  // Get from number (org's provisioned number)
-  const phoneRes = await pool.query(
-    `SELECT number FROM phone_numbers WHERE org_id = $1 AND method = 'provisioned' AND verified = true ORDER BY created_at LIMIT 1`,
-    [params.orgId],
-  );
+  // Audit-Round-10 HIGH: 3 unrelated DB lookups parallelised. Previously
+  // sequential (~30 ms total), now ~10 ms — visible on outbound-call-burst
+  // campaigns. getOutboundConfig is also a single SELECT internally, so all
+  // four reads fan out together.
+  const [phoneRes, cfg, orgRes, cfgRes] = await Promise.all([
+    pool.query(
+      `SELECT number FROM phone_numbers WHERE org_id = $1 AND method = 'provisioned' AND verified = true ORDER BY created_at LIMIT 1`,
+      [params.orgId],
+    ),
+    getOutboundConfig(params.orgId),
+    pool.query(`SELECT name FROM orgs WHERE id = $1`, [params.orgId]),
+    pool.query(
+      `SELECT data->>'name' AS agent_name FROM agent_configs WHERE org_id = $1 ORDER BY updated_at DESC LIMIT 1`,
+      [params.orgId],
+    ),
+  ]);
   const fromNumber = phoneRes.rows[0]?.number ?? process.env.RETELL_OUTBOUND_NUMBER ?? null;
   if (!fromNumber) return { ok: false, error: 'NO_OUTBOUND_NUMBER' };
-
-  const cfg = await getOutboundConfig(params.orgId);
-
-  // Look up org name and agent name for dynamic variables
-  let orgName = 'Phonbot';
-  let agentName = 'Alex';
-  const orgRes = await pool.query(`SELECT name FROM orgs WHERE id = $1`, [params.orgId]);
-  orgName = (orgRes.rows[0]?.name as string | undefined) ?? orgName;
-  const cfgRes = await pool.query(
-    `SELECT data->>'name' AS agent_name FROM agent_configs WHERE org_id = $1 ORDER BY updated_at DESC LIMIT 1`,
-    [params.orgId],
-  );
-  agentName = (cfgRes.rows[0]?.agent_name as string | undefined) ?? agentName;
+  const orgName = (orgRes.rows[0]?.name as string | undefined) ?? 'Phonbot';
+  const agentName = (cfgRes.rows[0]?.agent_name as string | undefined) ?? 'Alex';
 
   // Render prompt with call-specific variables
   const prompt = cfg.prompt

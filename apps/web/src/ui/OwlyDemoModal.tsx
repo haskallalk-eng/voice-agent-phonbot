@@ -106,10 +106,16 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
     e.preventDefault();
     setCbLoading(true);
     try {
+      // Audit-Round-10 LOW: timeout via AbortSignal so a hung backend can't
+      // leave the button stuck on "…" forever. 10 s is generous for a simple
+      // form-POST; the user UI flips to success after this regardless (the
+      // server-side rate-limit + global cap still apply, so a silent UX
+      // success on timeout is preferable to a frozen button).
       await fetch('/api/demo/callback', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ name: cbName, email: cbEmail, phone: cbPhone }),
+        signal: AbortSignal.timeout(10_000),
       });
     } catch {
       // Fail silently — still show success for UX

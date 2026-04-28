@@ -53,6 +53,7 @@ const DEMO_POST_CALL_FIELDS: PostCallAnalysisField[] = [
 
 import { pool } from './db.js';
 import { redis } from './redis.js';
+import { log } from './logger.js';
 import { verifyTurnstile } from './captcha.js';
 import { sendSignupLinkEmail } from './email.js';
 import { sendSignupLinkSms, signupLinkUrl } from './sms.js';
@@ -118,7 +119,13 @@ async function writeDemoAgent(templateId: string, agentId: string): Promise<void
        VALUES ($1, $2)
        ON CONFLICT (agent_id) DO UPDATE SET template_id = EXCLUDED.template_id`,
       [agentId, templateId],
-    ).catch(() => { /* non-critical — Redis still serves the fast-path */ });
+    ).catch((err: Error) => {
+      // Audit-Round-10 MEDIUM: don't silent-swallow per CLAUDE.md §13. Redis
+      // still serves the fast-path so this is non-critical, but if the DB
+      // backstop is broken we want Ops to see it before a Redis flush takes
+      // out the lookup.
+      log.warn({ err: err.message, agentId, templateId }, 'demo_agent_templates insert failed (non-critical, Redis still authoritative)');
+    });
   }
 }
 
@@ -208,15 +215,26 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
     // Include older versioned keys in the scan so a deploy that bumps the
     // cache key cleans up its own predecessors. Cheap — Redis SCAN is O(N)
     // total across all keys, not O(N) per pattern.
+    // Audit-Round-10 MEDIUM: batch DEL statt N sequenzieller RTTs. Bei 200
+    // gecachten Demo-Agents waren das vorher 200 Redis-Roundtrips (~100 ms
+    // bei LAN, sekundenlang bei Cross-Region). Jetzt 1 RTT pro 100 Keys.
+    // Local `r` capture so the closure's type-narrowing survives.
+    const r = redis;
     for (const pattern of ['demo_agent:v4:*', 'demo_agent_meta:v4:*', 'demo_agent:v3:*', 'demo_agent_meta:v3:*']) {
       try {
-        for await (const key of redis.scanIterator({ MATCH: pattern, COUNT: 100 })) {
-          const list = Array.isArray(key) ? key : [key];
-          for (const k of list) {
-            await redis.del(k);
-            flushed++;
-          }
+        const batch: string[] = [];
+        const drain = async () => {
+          if (!batch.length) return;
+          await r.del(batch);
+          flushed += batch.length;
+          batch.length = 0;
+        };
+        for await (const key of r.scanIterator({ MATCH: pattern, COUNT: 100 })) {
+          if (Array.isArray(key)) batch.push(...key);
+          else batch.push(key);
+          if (batch.length >= 100) await drain();
         }
+        await drain();
       } catch {
         /* non-critical */
       }
@@ -234,19 +252,31 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
 const pendingDemoCreate = new Map<string, Promise<string>>();
 
 async function getOrCreateDemoAgent(templateId: string): Promise<string> {
-  const cached = await readDemoAgent(templateId);
-  if (cached) return cached;
+  // Audit-Round-10 BLOCKER 2: reserve the in-flight slot SYNCHRONOUSLY before
+  // any await. The previous order (cache-check → in-flight-check → IIFE → set)
+  // had a window where two parallel callers both passed the cache miss, both
+  // saw an empty in-flight map, and both created a fresh IIFE → 2× Retell-
+  // Agent. Set + get on Map are synchronous, so checking + reserving in the
+  // same micro-task makes this race-free per-container.
+  const existing = pendingDemoCreate.get(templateId);
+  if (existing) return existing;
 
-  const inflight = pendingDemoCreate.get(templateId);
-  if (inflight) return inflight;
+  let resolveClaim!: (v: string) => void;
+  let rejectClaim!: (e: unknown) => void;
+  const claim = new Promise<string>((resolve, reject) => {
+    resolveClaim = resolve;
+    rejectClaim = reject;
+  });
+  pendingDemoCreate.set(templateId, claim);
 
-  const creation = (async () => {
+  try {
+    // Cache-check happens AFTER reserving the slot. Any caller arriving during
+    // the cache-lookup or downstream creation already sees `claim` and waits.
+    const cached = await readDemoAgent(templateId);
+    if (cached) { resolveClaim(cached); return cached; }
+
     const template = TEMPLATES.find((t) => t.id === templateId);
     if (!template) throw new Error('Unknown template');
-
-    // Double-check under the in-flight lock: another container may have cached.
-    const cached2 = await readDemoAgent(templateId);
-    if (cached2) return cached2;
 
     // Three-layer prompt for demo agents:
     //   1. Platform-Baseline — admin-editable, applies to every Phonbot agent
@@ -256,8 +286,6 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
     //      override individually via demo_prompt_overrides.
     //   3. Demo-addendum — admin-editable, applies only to demos. Demo-mode
     //      disclaimer, contact-trio, simulation note.
-    // Cache key v3 is bumped whenever the assembly logic changes — the admin
-    // "Cache leeren"-Button hard-flushes Redis if needed.
     const platformBaseline = await loadPlatformBaseline();
     const overrides = await readDemoPromptOverrides(templateId);
     const basePrompt = overrides.basePrompt ?? template.prompt;
@@ -271,8 +299,6 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
     });
 
     // Wire webhook so call_ended pings /retell/webhook → demo_calls insert.
-    // Without WEBHOOK_BASE_URL (dev) we skip the URL — calls still work, but
-    // there's nowhere for Retell to POST to, so no persistence in dev.
     const webhookBase = process.env.WEBHOOK_BASE_URL?.replace(/\/$/, '');
     const agent = await retellCreateAgent({
       name: `Demo: ${template.name}`,
@@ -284,12 +310,11 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
     });
 
     await writeDemoAgent(templateId, agent.agent_id);
+    resolveClaim(agent.agent_id);
     return agent.agent_id;
-  })();
-
-  pendingDemoCreate.set(templateId, creation);
-  try {
-    return await creation;
+  } catch (err) {
+    rejectClaim(err);
+    throw err;
   } finally {
     pendingDemoCreate.delete(templateId);
   }
