@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
 type LegalPage = 'impressum' | 'datenschutz' | 'agb';
 
@@ -511,6 +511,47 @@ export function LegalModal({ page, onClose }: Props) {
     if (e.target === e.currentTarget) onClose();
   }
 
+  // Audit-Round-11 MED (Codex P2): a11y — Esc-to-close, focus-trap, focus
+  // restore. Mirrors the OwlyDemoModal pattern.
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const previouslyFocused = (typeof document !== 'undefined' ? document.activeElement : null) as HTMLElement | null;
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab' || !dialogRef.current) return;
+      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (!first || !last) return;
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener('keydown', handleKey);
+    queueMicrotask(() => {
+      const first = dialogRef.current?.querySelector<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled])',
+      );
+      first?.focus();
+    });
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+      previouslyFocused?.focus?.();
+    };
+  }, [onClose]);
+
   return (
     <div
       onClick={handleBackdrop}
@@ -518,6 +559,10 @@ export function LegalModal({ page, onClose }: Props) {
       style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="legal-modal-title"
         className="relative w-full max-w-2xl rounded-3xl overflow-hidden fade-up"
         style={{
           background: 'rgba(15,15,24,0.97)',
@@ -535,7 +580,7 @@ export function LegalModal({ page, onClose }: Props) {
           className="flex items-center justify-between px-6 py-5 shrink-0"
           style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}
         >
-          <h2 className="text-lg font-bold text-white">{TITLES[page]}</h2>
+          <h2 id="legal-modal-title" className="text-lg font-bold text-white">{TITLES[page]}</h2>
           <button
             onClick={onClose}
             aria-label="Schließen"

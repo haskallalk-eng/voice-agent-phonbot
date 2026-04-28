@@ -622,17 +622,22 @@ export async function registerOutbound(app: FastifyInstance) {
   // POST /outbound/suggestions/:id/apply
   app.post('/outbound/suggestions/:id/apply', { onRequest: [app.authenticate, requireCustomerOutbound] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
-    const { id } = req.params as { id: string };
+    // Audit-Round-11 MED (Codex): UUID validation + explicit columns (no SELECT *).
+    const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid id' });
+    const { id } = params.data;
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
 
     const suggestion = await pool.query(
-      `SELECT * FROM outbound_suggestions WHERE id = $1 AND org_id = $2 AND status = 'pending'`,
+      `SELECT suggested_change, issue_summary FROM outbound_suggestions
+       WHERE id = $1 AND org_id = $2 AND status = 'pending'`,
       [id, orgId],
     );
     if (!suggestion.rowCount) return reply.status(404).send({ error: 'Not found' });
+    const row = suggestion.rows[0] as { suggested_change: string; issue_summary: string };
 
     const { analyzeAndImproveOutboundPrompt } = await import('./outbound-insights.js');
-    await analyzeAndImproveOutboundPrompt(orgId, suggestion.rows[0].suggested_change, `Manuell angewendet: ${suggestion.rows[0].issue_summary}`);
+    await analyzeAndImproveOutboundPrompt(orgId, row.suggested_change, `Manuell angewendet: ${row.issue_summary}`);
     await pool.query(`UPDATE outbound_suggestions SET status = 'applied', applied_at = now() WHERE id = $1`, [id]);
     return { ok: true };
   });
@@ -640,7 +645,9 @@ export async function registerOutbound(app: FastifyInstance) {
   // POST /outbound/suggestions/:id/reject
   app.post('/outbound/suggestions/:id/reject', { onRequest: [app.authenticate, requireCustomerOutbound] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
-    const { id } = req.params as { id: string };
+    const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid id' });
+    const { id } = params.data;
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
     await pool.query(
       `UPDATE outbound_suggestions SET status = 'rejected' WHERE id = $1 AND org_id = $2`,
@@ -821,7 +828,11 @@ export async function registerOutbound(app: FastifyInstance) {
   app.patch('/outbound/leads/:id', { onRequest: [app.authenticate, requireCustomerOutbound] }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
     const { orgId } = req.user as JwtPayload;
-    const { id } = req.params as { id: string };
+    // Audit-Round-11 MED (Codex): UUID validation. Without it a malformed
+    // :id surfaces as Postgres 22P02 → 500 with the SQL error in the body.
+    const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid id' });
+    const { id } = params.data;
     const body = z.object({
       status: z.enum(['new', 'contacted', 'converted', 'lost']).optional(),
       notes: z.string().max(2000).optional(),
@@ -855,7 +866,9 @@ export async function registerOutbound(app: FastifyInstance) {
   app.delete('/outbound/leads/:id', { onRequest: [app.authenticate, requireCustomerOutbound] }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
     const { orgId } = req.user as JwtPayload;
-    const { id } = req.params as { id: string };
+    const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid id' });
+    const { id } = params.data;
     await pool.query(`DELETE FROM crm_leads WHERE id = $1 AND org_id = $2`, [id, orgId]);
     return { ok: true };
   });

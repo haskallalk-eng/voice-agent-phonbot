@@ -148,17 +148,19 @@ Bewertungskriterien:
       log.warn({ err: err instanceof Error ? err.message : String(err), orgId, callId }, 'outbound-insights: conv_score update failed');
     });
 
-    // Trigger batch learning after enough calls
-    const { rowCount } = await pool.query(
-      `SELECT id FROM outbound_calls WHERE org_id = $1 AND conv_score IS NOT NULL AND status = 'analyzed'`,
+    // Trigger batch learning after enough calls.
+    // Audit-Round-11 MED (Codex F-03): use COUNT(*) instead of SELECT id.
+    // The previous `SELECT id` returned every row only to read .rowCount,
+    // wasting bandwidth + memory once an org has thousands of analyzed
+    // calls. COUNT returns one int.
+    const cnt = await pool.query<{ n: string }>(
+      `SELECT COUNT(*)::bigint AS n FROM outbound_calls WHERE org_id = $1 AND conv_score IS NOT NULL AND status = 'analyzed'`,
       [orgId],
     );
+    const total = Number(cnt.rows[0]?.n ?? '0');
     // Audit-Round-10 MEDIUM: guard against `0 % N === 0` triggering on a
-    // cold-start org that has never had a successful analysis. Without the
-    // `> 0` check the very first row (count=0) would invoke consolidate,
-    // which then no-ops via its own MIN_CALLS_FOR_LEARNING-guard but still
-    // burns one unnecessary DB query and OpenAI-call setup.
-    if ((rowCount ?? 0) > 0 && (rowCount ?? 0) % MIN_CALLS_FOR_LEARNING === 0) {
+    // cold-start org that has never had a successful analysis.
+    if (total > 0 && total % MIN_CALLS_FOR_LEARNING === 0) {
       consolidateAndLearn(orgId).catch((e) => {
         log.warn({ err: e instanceof Error ? e.message : String(e), orgId }, 'outbound-insights: consolidate failed');
       });
@@ -359,11 +361,19 @@ export async function analyzeAndImproveOutboundPrompt(
     ? newPromptOrAddition
     : current + '\n\n' + newPromptOrAddition;
 
-  // Save version history
+  // Save version history. Audit-Round-11 LOW (Codex F-07): precompute the
+  // call_count instead of inlining a subquery — keeps the INSERT params
+  // homogeneous and lets the planner skip a sequential scan when this runs
+  // inside an explainable transaction in the future.
+  const cntRes = await pool.query<{ n: string }>(
+    `SELECT COUNT(*)::bigint AS n FROM outbound_calls WHERE org_id = $1 AND conv_score IS NOT NULL`,
+    [orgId],
+  );
+  const callCount = Number(cntRes.rows[0]?.n ?? '0');
   await pool.query(
     `INSERT INTO outbound_prompt_versions (org_id, version, prompt, reason, avg_conv_score, call_count)
-     VALUES ($1, $2, $3, $4, $5, (SELECT COUNT(*) FROM outbound_calls WHERE org_id = $1 AND conv_score IS NOT NULL))`,
-    [orgId, nextVersion, newPrompt, reason, avgScore ?? null],
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [orgId, nextVersion, newPrompt, reason, avgScore ?? null, callCount],
   );
 
   // Update org's prompt and version

@@ -1,5 +1,5 @@
 // Note: file named OwlyDemoModal for historical reasons, mascot is now "Chipy"
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { RetellWebClient } from 'retell-client-js-sdk';
 import { createDemoCall } from '../lib/api.js';
 import { useWebCallCleanup } from '../lib/use-web-call-cleanup.js';
@@ -49,6 +49,26 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
   const [cbName, setCbName] = useState('');
   const [cbSent, setCbSent] = useState(false);
   const [cbLoading, setCbLoading] = useState(false);
+  const [cbError, setCbError] = useState<string | null>(null);
+
+  function stopActiveCall() {
+    if (clientRef.current) {
+      try { clientRef.current.stopCall(); } catch { /* idempotent */ }
+      clientRef.current = null;
+    }
+  }
+
+  function switchTab(next: ModalTab) {
+    if (next === tab) return;
+    // Audit-Round-11 MED (Codex): tab-switch from an active webcall left the
+    // Retell client + microphone running in the background.
+    if (callState === 'active' || callState === 'connecting') {
+      stopActiveCall();
+      setCallState('ended');
+      setAgentTalking(false);
+    }
+    setTab(next);
+  }
 
   async function startWebCall(templateId: string) {
     if (callState === 'active' || callState === 'connecting') return;
@@ -56,6 +76,25 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
     setCallState('connecting');
     setCallError(null);
     try {
+      // iOS Safari verliert den user-gesture nach jedem await — wenn wir den
+      // Mic-Prompt erst nach dem Token-Fetch aufrufen, wird er stumm verworfen
+      // und Retell hängt beim Verbinden. Deshalb Mic-Permission SYNCHRON hier,
+      // bevor irgendein await läuft. Spiegelt DemoSection.tsx.
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          stream.getTracks().forEach((t) => t.stop());
+        } catch (micErr: unknown) {
+          const name = (micErr as { name?: string })?.name ?? '';
+          if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+            throw new Error('Mikrofon-Zugriff wurde abgelehnt. Bitte erlaube den Zugriff in den Browser-Einstellungen und versuche es nochmal.');
+          }
+          if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+            throw new Error('Kein Mikrofon gefunden. Bitte verbinde ein Mikrofon und versuche es nochmal.');
+          }
+          throw new Error('Mikrofon-Zugriff nicht möglich. Bitte prüfe deine Browser-Einstellungen.');
+        }
+      }
       const res = await createDemoCall(templateId);
       if (!res.access_token) throw new Error('Kein Zugriffstoken');
       const client = new RetellWebClient();
@@ -105,22 +144,44 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
   async function submitCallback(e: React.FormEvent) {
     e.preventDefault();
     setCbLoading(true);
+    setCbError(null);
     try {
-      // Audit-Round-10 LOW: timeout via AbortSignal so a hung backend can't
-      // leave the button stuck on "…" forever. 10 s is generous for a simple
-      // form-POST; the user UI flips to success after this regardless (the
-      // server-side rate-limit + global cap still apply, so a silent UX
-      // success on timeout is preferable to a frozen button).
-      await fetch('/api/demo/callback', {
+      // Audit-Round-10 LOW: 10 s timeout so a hung backend can't freeze the
+      // button. Audit-Round-11 BLOCKER (Codex): check response.ok — the prior
+      // version always set cbSent=true in finally, so 4xx/5xx (rate-limit,
+      // bad phone-prefix, captcha-fail) silently showed "we'll call you" to
+      // the user. Now show an error message on non-2xx so the user can
+      // actually retry.
+      const res = await fetch('/api/demo/callback', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ name: cbName, email: cbEmail, phone: cbPhone }),
         signal: AbortSignal.timeout(10_000),
       });
-    } catch {
-      // Fail silently — still show success for UX
-    } finally {
+      if (!res.ok) {
+        let serverMsg = '';
+        try {
+          const body = await res.json() as { error?: string };
+          serverMsg = body?.error ?? '';
+        } catch { /* non-JSON body */ }
+        if (res.status === 429) {
+          setCbError('Zu viele Anfragen. Bitte versuche es in ein paar Minuten erneut.');
+        } else if (res.status >= 400 && res.status < 500) {
+          setCbError(serverMsg || 'Eingaben prüfen — wir konnten den Rückruf nicht anlegen.');
+        } else {
+          setCbError('Server-Fehler. Bitte versuche es kurz später erneut.');
+        }
+        return;
+      }
       setCbSent(true);
+    } catch (err: unknown) {
+      const name = (err as { name?: string })?.name ?? '';
+      if (name === 'AbortError' || name === 'TimeoutError') {
+        setCbError('Verbindung zu langsam. Bitte versuche es nochmal.');
+      } else {
+        setCbError('Netzwerkfehler. Bitte versuche es nochmal.');
+      }
+    } finally {
       setCbLoading(false);
     }
   }
@@ -139,6 +200,49 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
 
   const activeTemplateMeta = DEMO_TEMPLATES.find((t) => t.id === selectedTemplate);
 
+  // Audit-Round-11 MED (Codex P2): a11y — Esc-to-close, focus-trap, restore
+  // focus on unmount. role/aria-modal go on the inner panel below.
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const previouslyFocused = (typeof document !== 'undefined' ? document.activeElement : null) as HTMLElement | null;
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleClose();
+        return;
+      }
+      if (e.key !== 'Tab' || !dialogRef.current) return;
+      const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (!first || !last) return;
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener('keydown', handleKey);
+    // Focus first interactive element shortly after mount.
+    queueMicrotask(() => {
+      const first = dialogRef.current?.querySelector<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled])',
+      );
+      first?.focus();
+    });
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+      previouslyFocused?.focus?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div
       onClick={handleBackdrop}
@@ -146,6 +250,10 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
       style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="chipy-demo-modal-title"
         className="relative w-full max-w-md glass-strong rounded-3xl overflow-hidden fade-up max-h-[90vh] overflow-y-auto"
         style={{ boxShadow: '0 0 80px rgba(249,115,22,0.15), 0 0 0 1px rgba(255,255,255,0.08)' }}
         onClick={(e) => e.stopPropagation()}
@@ -161,7 +269,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
         {/* Header — Chipy intro */}
         <div className="px-6 pt-8 pb-4 text-center">
           <FoxLogo size="lg" glow animate className="mx-auto mb-3" />
-          <h2 className="text-xl font-bold text-white">Hey! Ich bin Chipy</h2>
+          <h2 id="chipy-demo-modal-title" className="text-xl font-bold text-white">Hey! Ich bin Chipy</h2>
           <p className="text-sm text-white/50 mt-1">
             Dein KI-Telefonassistent. Hör rein wie ich für verschiedene Branchen arbeite — oder lass dich zurückrufen.
           </p>
@@ -170,7 +278,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
         {/* Tabs */}
         <div className="flex gap-1 mx-6 mb-4 bg-white/5 rounded-xl p-1">
           <button
-            onClick={() => setTab('webcall')}
+            onClick={() => switchTab('webcall')}
             className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
               tab === 'webcall' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/70'
             }`}
@@ -178,7 +286,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
             Demos anhören
           </button>
           <button
-            onClick={() => setTab('callback')}
+            onClick={() => switchTab('callback')}
             className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
               tab === 'callback' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/70'
             }`}
@@ -341,6 +449,9 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
                     style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
                     {cbLoading ? '…' : 'Chipy soll mich anrufen'}
                   </button>
+                  {cbError && (
+                    <p className="text-sm text-red-400 text-center mt-2" role="alert">{cbError}</p>
+                  )}
                 </form>
                 <p className="text-xs text-white/25 text-center mt-3">Kein Spam. Daten nur für den Demo-Anruf.</p>
               </>
