@@ -615,11 +615,10 @@ async function runMigrationBody() {
   // LATERAL-JOIN COUNT(*) on /admin/orgs sequentially scans agent_configs
   // per org row. Same applies to any org-scoped lookup of an agent.
   await pool.query(`CREATE INDEX IF NOT EXISTS agent_configs_org_id_idx ON agent_configs(org_id);`);
-  // Composite partial index for outbound_calls — accelerates the
-  // org_id + status='analyzed' + conv_score IS NOT NULL filter used in
-  // analyzeOutboundCall (the trigger-threshold COUNT) and the version-
-  // history INSERT. The partial WHERE keeps the index small.
-  await pool.query(`CREATE INDEX IF NOT EXISTS outbound_calls_org_status_score_idx ON outbound_calls(org_id, status) WHERE conv_score IS NOT NULL;`);
+  // Note: the partial composite index on outbound_calls (org_id, status)
+  // WHERE conv_score IS NOT NULL lives in migrateOutbound() because the
+  // outbound_calls table itself is created there. Doing it here would
+  // throw on a fresh DB whose outbound schema has not been initialised.
 
   // Audit-Round-7 HIGH-3: surface Retell-LLM-sync failures (insights.setPrompt
   // fire-and-forget). Frontend banner can read these and prompt re-deploy.

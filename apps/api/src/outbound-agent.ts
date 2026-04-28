@@ -242,6 +242,12 @@ export async function migrateOutbound() {
   await pool.query(`CREATE INDEX IF NOT EXISTS crm_leads_phone_created_idx ON crm_leads(phone, created_at DESC);`);
   // Index call_id for Retell webhook lookups (UPDATE ... WHERE call_id = $1). Without this → full table scan.
   await pool.query(`CREATE INDEX IF NOT EXISTS outbound_calls_call_id_idx ON outbound_calls(call_id);`);
+  // Audit-Round-12.6 (Codex final): partial composite index for the hot
+  // count query in outbound-insights.ts (analyzeOutboundCall trigger-
+  // threshold). Lives here, not in db.ts, because outbound_calls itself
+  // is created in this migration and is missing from a fresh-DB run of
+  // migrate() alone.
+  await pool.query(`CREATE INDEX IF NOT EXISTS outbound_calls_org_status_score_idx ON outbound_calls(org_id, status) WHERE conv_score IS NOT NULL;`);
   // UNIQUE to match call_transcripts.call_id and prevent duplicate rows from webhook retries.
   await pool.query(`
     DO $$
@@ -644,8 +650,27 @@ export async function registerOutbound(app: FastifyInstance) {
     if (!claim.rowCount) return reply.status(409).send({ error: 'Already applied or not found' });
     const row = claim.rows[0] as { suggested_change: string; issue_summary: string };
 
+    // Audit-Round-12.6 (Codex final): if analyzeAndImproveOutboundPrompt
+    // throws (DB write failure, Retell sync failure, OpenAI 5xx) we
+    // already committed the claim → without this rollback the suggestion
+    // would be stuck `applied` with no actual prompt update and no retry
+    // path. Reset to 'pending' on failure so the user can hit Übernehmen
+    // again, AND surface the error so it isn't silent.
     const { analyzeAndImproveOutboundPrompt } = await import('./outbound-insights.js');
-    await analyzeAndImproveOutboundPrompt(orgId, row.suggested_change, `Manuell angewendet: ${row.issue_summary}`);
+    try {
+      await analyzeAndImproveOutboundPrompt(orgId, row.suggested_change, `Manuell angewendet: ${row.issue_summary}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      app.log.error({ err: msg, suggestionId: id, orgId }, 'analyzeAndImproveOutboundPrompt failed after suggestion claim');
+      // Roll the claim back so the user can retry. Best-effort — if this
+      // also fails the suggestion stays applied but the operator at least
+      // sees the prior error in logs.
+      await pool.query(
+        `UPDATE outbound_suggestions SET status = 'pending', applied_at = NULL WHERE id = $1 AND org_id = $2`,
+        [id, orgId],
+      ).catch((rollErr: Error) => app.log.error({ err: rollErr.message, suggestionId: id }, 'suggestion claim-rollback failed'));
+      return reply.status(500).send({ error: 'Apply failed. Bitte erneut versuchen.' });
+    }
     return { ok: true };
   });
 
