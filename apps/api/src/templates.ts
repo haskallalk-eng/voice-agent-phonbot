@@ -12,11 +12,24 @@ export type Template = {
   servicesText: string;
   openingHours: string;
   tools: string[];
+  /**
+   * Industry cluster-key used by the cross-org pattern-pool (template-learning.ts).
+   * Same value as `id` for the curated templates here — but kept as a separate
+   * field so a customer can later override (e.g. a hairdresser-template-clone
+   * tagged as `industry: 'beauty'` to pool with cosmetic studios).
+   * Round-12 (Pattern-Pool industry-Tag fix): without this, every Template's
+   * agents have `data->>'industry'` = NULL → cross-org learning never fires.
+   */
+  industry: string;
 };
+
+// CURATED_INDUSTRY_KEYS is exported at the end of this file — derived from
+// TEMPLATES after the array is constructed. See bottom of file.
 
 export const TEMPLATES: Template[] = [
   {
     id: 'hairdresser',
+    industry: 'hairdresser',
     icon: '💇',
     name: 'Friseur / Salon',
     description: 'Terminbuchungen, Öffnungszeiten, Preisauskunft',
@@ -38,6 +51,7 @@ TONFALL: Locker, freundlich, kurze Sätze.`,
   },
   {
     id: 'tradesperson',
+    industry: 'tradesperson',
     icon: '🔧',
     name: 'Handwerker',
     description: 'Auftragsannahme, Terminanfragen, Notdienst',
@@ -59,6 +73,7 @@ TONFALL: Sachlich, beruhigend, effizient.`,
   },
   {
     id: 'cleaning',
+    industry: 'cleaning',
     icon: '🧹',
     name: 'Reinigung',
     description: 'Angebote, Terminplanung, Sonderwünsche',
@@ -80,6 +95,7 @@ TONFALL: Freundlich, strukturiert, verbindlich.`,
   },
   {
     id: 'restaurant',
+    industry: 'restaurant',
     icon: '🍕',
     name: 'Restaurant',
     description: 'Reservierungen, Speisekarte, Öffnungszeiten',
@@ -100,6 +116,7 @@ TONFALL: Warm, gastfreundlich. "Sehr gerne!" statt "Ja."`,
   },
   {
     id: 'auto',
+    industry: 'auto',
     icon: '🚗',
     name: 'Autowerkstatt',
     description: 'Terminvereinbarung, Kostenvoranschläge, Abholung',
@@ -126,6 +143,7 @@ TONFALL: Kompetent, nüchtern, effizient.`,
     // Simulation 1:1 (gen-landing-pages.mjs BRANCHEN[5].dialogue), damit der
     // Visitor das Live-Erlebnis als Fortsetzung des gelesenen Dialogs erfährt.
     id: 'solo',
+    industry: 'solo',
     icon: '🎧',
     name: 'Selbstständige',
     description: 'Erstgespräch, Buchung, Discovery-Call',
@@ -174,3 +192,15 @@ Wenn der Anrufer sich verabschiedet, sag einmal beiläufig: "Falls du selbst sow
     tools: ['calendar.findSlots', 'calendar.book', 'ticket.create'],
   },
 ];
+
+/**
+ * Whitelist of curated-template industry keys. Round-12 (Pattern-Pool fix):
+ * template-learning.ts uses this as a safety-net when an agent_config carries
+ * `templateId` but no explicit `industry` — only IDs in this set may serve as
+ * fallback industry-key. Random tenant-generated custom templateIds (e.g.
+ * `org-12345`) stay UNCLUSTERED so cross-org-learning never accidentally pools
+ * unrelated tenants by sharing a coincidental string.
+ */
+export const CURATED_INDUSTRY_KEYS: ReadonlySet<string> = new Set(
+  TEMPLATES.map((t) => t.industry),
+);
