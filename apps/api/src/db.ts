@@ -497,10 +497,36 @@ async function runMigrationBody() {
   // (doubles OpenAI analysis cost). PRIMARY KEY on call_id is the dedup key.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS processed_retell_events (
-      call_id     TEXT PRIMARY KEY,
+      call_id     TEXT NOT NULL,
       event_type  TEXT NOT NULL,
       received_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+  `);
+  // Audit-Round-10 BLOCKER 1: PK was historically (call_id) which prevented
+  // dedup of distinct event types for the same call (call_ended +
+  // call_analyzed both fire for the same call_id). Composite PK lets each
+  // event-type-per-call dedup independently. Migration: drop old PK if it
+  // exists with the single-column shape, then create the composite PK.
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        WHERE t.relname = 'processed_retell_events'
+          AND c.contype = 'p'
+          AND array_length(c.conkey, 1) = 1
+      ) THEN
+        ALTER TABLE processed_retell_events DROP CONSTRAINT processed_retell_events_pkey;
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        WHERE t.relname = 'processed_retell_events' AND c.contype = 'p'
+      ) THEN
+        ALTER TABLE processed_retell_events ADD PRIMARY KEY (call_id, event_type);
+      END IF;
+    END$$;
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS processed_retell_events_received_idx ON processed_retell_events(received_at);`);
 

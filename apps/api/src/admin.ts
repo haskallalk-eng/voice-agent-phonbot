@@ -5,8 +5,8 @@ import { pool } from './db.js';
 import { log } from './logger.js';
 import { TEMPLATES } from './templates.js';
 import { DEMO_END_INSTRUCTIONS, DEFAULT_SALES_PROMPT, flushDemoAgentCache } from './demo.js';
-import { PLATFORM_BASELINE_PROMPT } from './platform-baseline.js';
-import { OUTBOUND_BASELINE_PROMPT } from './outbound-baseline.js';
+import { PLATFORM_BASELINE_PROMPT, bustPlatformBaselineCache } from './platform-baseline.js';
+import { OUTBOUND_BASELINE_PROMPT, bustOutboundBaselineCache } from './outbound-baseline.js';
 
 /**
  * Audit-Round-8 (Codex M07-MEDIUM-C): admin cross-org reads are intentional
@@ -210,10 +210,18 @@ export async function registerAdmin(app: FastifyInstance) {
   });
 
   // ── PATCH /admin/leads/:id ────────────────────────────────────────────────
-  app.patch('/admin/leads/:id', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  // Audit-Round-10 MEDIUM: Rate-Limit + UUID-Validation. Without limit, a
+  // hijacked admin token can mass-mutate leads in a tight loop. UUID-Schema
+  // prevents 500-Postgres-error-leak when malformed id strings hit the query.
+  app.patch('/admin/leads/:id', {
+    ...auth,
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
 
-    const { id } = req.params as { id: string };
+    const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid id' });
+    const { id } = params.data;
     const body = z.object({
       status: z.enum(['new', 'contacted', 'converted', 'lost']).optional(),
       notes: z.string().optional(),
@@ -243,10 +251,14 @@ export async function registerAdmin(app: FastifyInstance) {
   });
 
   // ── DELETE /admin/leads/:id ───────────────────────────────────────────────
-  app.delete('/admin/leads/:id', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.delete('/admin/leads/:id', {
+    ...auth,
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
-    const { id } = req.params as { id: string };
-    await pool.query(`DELETE FROM crm_leads WHERE id = $1`, [id]);
+    const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid id' });
+    await pool.query(`DELETE FROM crm_leads WHERE id = $1`, [params.data.id]);
     return { ok: true };
   });
 
@@ -293,9 +305,14 @@ export async function registerAdmin(app: FastifyInstance) {
   // Move a demo_calls row into crm_leads. Caller's email is required (the CRM
   // table makes it NOT NULL); when the demo only captured a phone, the admin
   // must supply an email manually via the request body.
-  app.post('/admin/demo-calls/:id/promote', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/admin/demo-calls/:id/promote', {
+    ...auth,
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
-    const { id } = req.params as { id: string };
+    const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid id' });
+    const { id } = params.data;
     const overrides = z.object({
       email: z.string().email().optional(),
       phone: z.string().optional(),
@@ -304,7 +321,14 @@ export async function registerAdmin(app: FastifyInstance) {
     }).safeParse(req.body ?? {});
     if (!overrides.success) return reply.status(400).send({ error: 'Invalid body', details: overrides.error.flatten() });
 
-    const dcRes = await pool.query(`SELECT * FROM demo_calls WHERE id = $1`, [id]);
+    // Audit-Round-10 LOW: don't SELECT * — transcript is potentially KB-large
+    // and not needed for promote. Only the columns we use plus the conflict-
+    // marker promoted_lead_id are read.
+    const dcRes = await pool.query(
+      `SELECT id, call_id, template_id, caller_name, caller_email, caller_phone, intent_summary, promoted_lead_id
+         FROM demo_calls WHERE id = $1`,
+      [id],
+    );
     if (!dcRes.rowCount) return reply.status(404).send({ error: 'Demo call not found' });
     const dc = dcRes.rows[0] as {
       id: string; call_id: string; template_id: string;
@@ -391,7 +415,10 @@ export async function registerAdmin(app: FastifyInstance) {
   // ── PUT /admin/demo-prompts/:scope ────────────────────────────────────────
   // scope = '__global__' (epilogue applies to every template) or a templateId.
   // Setting epilogue=null deletes the override (= falls back to in-code default).
-  app.put('/admin/demo-prompts/:scope', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.put('/admin/demo-prompts/:scope', {
+    ...auth,
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
     const { scope } = req.params as { scope: string };
     const RESERVED_SCOPES = ['__global__', '__platform__', '__outbound__', '__sales__'];
@@ -407,42 +434,62 @@ export async function registerAdmin(app: FastifyInstance) {
     const { epilogue, basePrompt } = parsed.data;
     const adminEmail = (req.user as Record<string, unknown> | undefined)?.email as string | undefined;
 
-    // Capture the PRE-edit state so the audit trail has every version, not
-    // just the latest. Reads the current row (if any) and inserts it as the
-    // pre-image into prompt_override_history. The actual edit follows below.
-    const preState = await pool.query(
-      `SELECT epilogue, base_prompt FROM demo_prompt_overrides WHERE template_id = $1`,
-      [scope],
-    );
-    if (preState.rowCount) {
-      await pool.query(
-        `INSERT INTO prompt_override_history (template_id, epilogue, base_prompt, changed_by, change_kind)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [
-          scope,
-          (preState.rows[0].epilogue as string) ?? null,
-          (preState.rows[0].base_prompt as string) ?? null,
-          adminEmail ?? null,
-          epilogue === null && (basePrompt === null || basePrompt === undefined) ? 'revert' : 'edit',
-        ],
-      ).catch((err: Error) => req.log.warn({ err: err.message, scope }, 'prompt_override_history insert failed'));
+    // Audit-Round-10 MEDIUM: history+upsert in one transaction. Without this,
+    // a doppelclick (or two parallel admins editing the same scope) reads
+    // the same pre-state, both insert it into history (duplicate audit
+    // entries), and one of the upserts is the loser of a read-modify-write
+    // race. SELECT ... FOR UPDATE on the demo_prompt_overrides row
+    // serialises edits per scope; if no row exists yet, the upsert creates
+    // it under the same lock.
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const preState = await client.query(
+        `SELECT epilogue, base_prompt FROM demo_prompt_overrides WHERE template_id = $1 FOR UPDATE`,
+        [scope],
+      );
+      if (preState.rowCount) {
+        await client.query(
+          `INSERT INTO prompt_override_history (template_id, epilogue, base_prompt, changed_by, change_kind)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [
+            scope,
+            (preState.rows[0].epilogue as string) ?? null,
+            (preState.rows[0].base_prompt as string) ?? null,
+            adminEmail ?? null,
+            epilogue === null && (basePrompt === null || basePrompt === undefined) ? 'revert' : 'edit',
+          ],
+        );
+      }
+
+      if (epilogue === null && (basePrompt === null || basePrompt === undefined)) {
+        await client.query(`DELETE FROM demo_prompt_overrides WHERE template_id = $1`, [scope]);
+      } else {
+        await client.query(
+          `INSERT INTO demo_prompt_overrides (template_id, epilogue, base_prompt, updated_by)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (template_id) DO UPDATE SET
+             epilogue    = COALESCE(EXCLUDED.epilogue, demo_prompt_overrides.epilogue),
+             base_prompt = CASE WHEN $5 THEN EXCLUDED.base_prompt ELSE demo_prompt_overrides.base_prompt END,
+             updated_at  = now(),
+             updated_by  = EXCLUDED.updated_by`,
+          [scope, epilogue ?? '', basePrompt ?? null, adminEmail ?? null, basePrompt !== undefined],
+        );
+      }
+
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => { /* already rolled back */ });
+      throw err;
+    } finally {
+      client.release();
     }
 
-    if (epilogue === null && (basePrompt === null || basePrompt === undefined)) {
-      // Both unset = drop the row entirely (revert to defaults).
-      await pool.query(`DELETE FROM demo_prompt_overrides WHERE template_id = $1`, [scope]);
-    } else {
-      await pool.query(
-        `INSERT INTO demo_prompt_overrides (template_id, epilogue, base_prompt, updated_by)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (template_id) DO UPDATE SET
-           epilogue    = COALESCE(EXCLUDED.epilogue, demo_prompt_overrides.epilogue),
-           base_prompt = CASE WHEN $5 THEN EXCLUDED.base_prompt ELSE demo_prompt_overrides.base_prompt END,
-           updated_at  = now(),
-           updated_by  = EXCLUDED.updated_by`,
-        [scope, epilogue ?? '', basePrompt ?? null, adminEmail ?? null, basePrompt !== undefined],
-      );
-    }
+    // Audit-Round-10 HIGH: bust the in-process baseline caches so the
+    // edited prompt takes effect immediately for new agent-deploys, not after
+    // the 5-min TTL.
+    if (scope === '__platform__') bustPlatformBaselineCache();
+    if (scope === '__outbound__') bustOutboundBaselineCache();
 
     // Force every cached demo agent to re-create with the new prompt next call.
     const flush = await flushDemoAgentCache();
@@ -492,7 +539,10 @@ export async function registerAdmin(app: FastifyInstance) {
   // Restore a prior snapshot from prompt_override_history into the live
   // demo_prompt_overrides row. The current state is itself appended to
   // history first (so the restore is also reversible).
-  app.post('/admin/demo-prompts/history/:id/restore', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/admin/demo-prompts/history/:id/restore', {
+    ...auth,
+    config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
     const { id } = req.params as { id: string };
     const adminEmail = (req.user as Record<string, unknown> | undefined)?.email as string | undefined;
@@ -531,6 +581,8 @@ export async function registerAdmin(app: FastifyInstance) {
       );
     }
 
+    if (row.template_id === '__platform__') bustPlatformBaselineCache();
+    if (row.template_id === '__outbound__') bustOutboundBaselineCache();
     const flush = await flushDemoAgentCache();
     return { ok: true, restoredScope: row.template_id, flushed: flush.flushed };
   });
@@ -561,102 +613,72 @@ export async function registerAdmin(app: FastifyInstance) {
     }).safeParse(req.query);
     if (!q.success) return reply.status(400).send({ error: 'Invalid query', details: q.error.flatten() });
 
-    const promptSuggRes = await pool.query(
-      `SELECT ps.id, ps.created_at, ps.org_id, o.name AS org_name,
-              ps.category, ps.issue_summary, ps.suggested_addition,
-              ps.status AS source_status,
-              ld.scope, ld.status AS decision_status, ld.decided_at, ld.decided_by, ld.reject_reason
-         FROM prompt_suggestions ps
-         LEFT JOIN orgs o ON o.id = ps.org_id
-         LEFT JOIN learning_decisions ld
-           ON ld.source_kind = 'prompt_suggestion' AND ld.source_id = ps.id
-        ORDER BY ps.created_at DESC
-        LIMIT $1`,
-      [q.data.limit],
+    // Audit-Round-10 HIGH: status-Filter + ORDER + LIMIT in EINER SQL-Query
+    // statt 2× LIMIT 200 + JS-merge + JS-filter. Vorher konnten bis zu 400
+    // Rows geladen werden, um nach Filter ggf. nur 1 zu zeigen.
+    // - effective_status: pending falls keine Decision, sonst decision.status.
+    // - WHERE-Filter in beiden UNION-Branches identisch via $1.
+    const want = q.data.status;
+    const effectiveFilter = want === 'all'
+      ? 'TRUE'
+      : `COALESCE(ld.status, 'pending') = $2`;
+    const args: unknown[] = [q.data.limit];
+    if (want !== 'all') args.push(want);
+
+    const merged = await pool.query(
+      `SELECT * FROM (
+         SELECT 'prompt_suggestion'::text AS kind,
+                ps.id, ps.created_at, ps.org_id, o.name AS org_name,
+                NULL::text AS template_id,
+                ps.issue_summary AS summary, ps.suggested_addition AS proposed,
+                jsonb_build_object('category', ps.category) AS source_meta,
+                ps.status AS source_status,
+                ld.scope, ld.status AS decision_status,
+                ld.decided_at, ld.decided_by, ld.reject_reason
+           FROM prompt_suggestions ps
+           LEFT JOIN orgs o ON o.id = ps.org_id
+           LEFT JOIN learning_decisions ld
+             ON ld.source_kind = 'prompt_suggestion' AND ld.source_id = ps.id
+          WHERE ${effectiveFilter}
+         UNION ALL
+         SELECT 'template_learning'::text AS kind,
+                tl.id, tl.created_at, NULL::uuid AS org_id, NULL::text AS org_name,
+                tl.template_id,
+                tl.learning_type AS summary, tl.content AS proposed,
+                jsonb_build_object('sourceCount', tl.source_count, 'confidence', tl.confidence) AS source_meta,
+                tl.status AS source_status,
+                ld.scope, ld.status AS decision_status,
+                ld.decided_at, ld.decided_by, ld.reject_reason
+           FROM template_learnings tl
+           LEFT JOIN learning_decisions ld
+             ON ld.source_kind = 'template_learning' AND ld.source_id = tl.id
+          WHERE ${effectiveFilter}
+       ) merged
+       ORDER BY created_at DESC
+       LIMIT $1`,
+      args,
     );
 
-    const tmplLearnRes = await pool.query(
-      `SELECT tl.id, tl.created_at, tl.template_id, tl.learning_type,
-              tl.content, tl.source_count, tl.confidence,
-              tl.status AS source_status,
-              ld.scope, ld.status AS decision_status, ld.decided_at, ld.decided_by, ld.reject_reason
-         FROM template_learnings tl
-         LEFT JOIN learning_decisions ld
-           ON ld.source_kind = 'template_learning' AND ld.source_id = tl.id
-        ORDER BY tl.created_at DESC
-        LIMIT $1`,
-      [q.data.limit],
-    );
+    const items = merged.rows.map((r: Record<string, unknown>) => ({
+      kind: r.kind as 'prompt_suggestion' | 'template_learning',
+      id: r.id as string,
+      created_at: (r.created_at as Date).toISOString(),
+      summary: (r.summary as string) ?? '',
+      proposed: (r.proposed as string) ?? '',
+      orgId: (r.org_id as string) ?? null,
+      orgName: (r.org_name as string) ?? null,
+      templateId: (r.template_id as string) ?? null,
+      sourceMeta: (r.source_meta as Record<string, unknown>) ?? {},
+      sourceStatus: (r.source_status as string) ?? 'pending',
+      decision: r.scope || r.decision_status ? {
+        scope: (r.scope as string) ?? null,
+        status: (r.decision_status as string) ?? null,
+        decidedAt: r.decided_at ? (r.decided_at as Date).toISOString() : null,
+        decidedBy: (r.decided_by as string) ?? null,
+        rejectReason: (r.reject_reason as string) ?? null,
+      } : null,
+    }));
 
-    type Row = {
-      kind: 'prompt_suggestion' | 'template_learning';
-      id: string;
-      created_at: string;
-      summary: string;
-      proposed: string;
-      orgId: string | null;
-      orgName: string | null;
-      templateId: string | null;
-      sourceMeta: Record<string, unknown>;
-      sourceStatus: string;
-      decision: { scope: string | null; status: string | null; decidedAt: string | null; decidedBy: string | null; rejectReason: string | null } | null;
-    };
-    const items: Row[] = [];
-    for (const r of promptSuggRes.rows as Array<Record<string, unknown>>) {
-      items.push({
-        kind: 'prompt_suggestion',
-        id: r.id as string,
-        created_at: (r.created_at as Date).toISOString(),
-        summary: (r.issue_summary as string) ?? '',
-        proposed: (r.suggested_addition as string) ?? '',
-        orgId: (r.org_id as string) ?? null,
-        orgName: (r.org_name as string) ?? null,
-        templateId: null,
-        sourceMeta: { category: r.category },
-        sourceStatus: (r.source_status as string) ?? 'pending',
-        decision: r.scope || r.decision_status ? {
-          scope: (r.scope as string) ?? null,
-          status: (r.decision_status as string) ?? null,
-          decidedAt: r.decided_at ? (r.decided_at as Date).toISOString() : null,
-          decidedBy: (r.decided_by as string) ?? null,
-          rejectReason: (r.reject_reason as string) ?? null,
-        } : null,
-      });
-    }
-    for (const r of tmplLearnRes.rows as Array<Record<string, unknown>>) {
-      items.push({
-        kind: 'template_learning',
-        id: r.id as string,
-        created_at: (r.created_at as Date).toISOString(),
-        summary: (r.learning_type as string) ?? '',
-        proposed: (r.content as string) ?? '',
-        orgId: null,
-        orgName: null,
-        templateId: (r.template_id as string) ?? null,
-        sourceMeta: { sourceCount: r.source_count, confidence: r.confidence },
-        sourceStatus: (r.source_status as string) ?? 'pending',
-        decision: r.scope || r.decision_status ? {
-          scope: (r.scope as string) ?? null,
-          status: (r.decision_status as string) ?? null,
-          decidedAt: r.decided_at ? (r.decided_at as Date).toISOString() : null,
-          decidedBy: (r.decided_by as string) ?? null,
-          rejectReason: (r.reject_reason as string) ?? null,
-        } : null,
-      });
-    }
-
-    // Sort newest first across both source kinds.
-    items.sort((a, b) => b.created_at.localeCompare(a.created_at));
-
-    if (q.data.status !== 'all') {
-      const want = q.data.status;
-      return {
-        items: items.filter((i) => {
-          const effective = i.decision?.status ?? 'pending';
-          return effective === want;
-        }),
-      };
-    }
     return { items };
   });
 
@@ -667,7 +689,10 @@ export async function registerAdmin(app: FastifyInstance) {
   // scope contains 'org', we mark the underlying prompt_suggestion as
   // 'applied' so the org's own learning pipeline will roll it into their
   // prompt on next deploy.
-  app.post('/admin/learnings/decide', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post('/admin/learnings/decide', {
+    ...auth,
+    config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
     const parsed = z.object({
       sourceKind: z.enum(['prompt_suggestion', 'template_learning']),

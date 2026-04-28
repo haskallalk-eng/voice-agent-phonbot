@@ -45,17 +45,38 @@ Wenn der Anrufer nach DEINEM Spelling abweicht ("nein, das X war ein S"), korrig
 - Nimm keine sensiblen Daten auf, die für den Anrufgrund nicht gebraucht werden (kein Geburtsdatum für eine reine Terminanfrage, keine Kontodaten am Telefon).
 - Bei Themen, die offensichtlich Heilkunde, Rechtsberatung, Therapie oder Steuer-Beratung sind und der Geschäftsbetrieb diese Themen nicht ausdrücklich abdeckt, sag dass du dafür nicht der richtige Ansprechpartner bist und biete entweder Weiterleitung oder Rückruf an.`;
 
+// Audit-Round-10 HIGH: in-process cache. Both deployToRetell + ensureCallback
+// + every analyzeCall hit this on the hot path; without caching that's a DB
+// round-trip per LLM-update. The text only changes when an admin PUTs a new
+// override → bustPlatformBaselineCache() is called from the admin handler
+// after the upsert. TTL safeguards us against forgetting to bust (e.g. a new
+// edit path that doesn't call the bust function): 5 min is short enough that
+// stale baselines don't linger forever, long enough to absorb burst traffic.
+const PLATFORM_CACHE_TTL_MS = 5 * 60 * 1000;
+let _cache: { val: string; ts: number } | null = null;
+
+export function bustPlatformBaselineCache(): void {
+  _cache = null;
+}
+
 /**
  * Read the admin-edited platform baseline if present, fall back to the
  * compiled-in default. Stored under the special row template_id='__platform__'
  * in demo_prompt_overrides (single source of truth for prompt overrides).
  */
 export async function loadPlatformBaseline(): Promise<string> {
+  if (_cache && Date.now() - _cache.ts < PLATFORM_CACHE_TTL_MS) return _cache.val;
   if (!pool) return PLATFORM_BASELINE_PROMPT;
   const res = await pool.query(
     `SELECT epilogue FROM demo_prompt_overrides WHERE template_id = '__platform__'`,
   ).catch(() => null);
-  if (!res || !res.rowCount) return PLATFORM_BASELINE_PROMPT;
-  const stored = res.rows[0].epilogue as string;
-  return stored && stored.trim() ? stored : PLATFORM_BASELINE_PROMPT;
+  let val: string;
+  if (!res || !res.rowCount) {
+    val = PLATFORM_BASELINE_PROMPT;
+  } else {
+    const stored = res.rows[0].epilogue as string;
+    val = stored && stored.trim() ? stored : PLATFORM_BASELINE_PROMPT;
+  }
+  _cache = { val, ts: Date.now() };
+  return val;
 }

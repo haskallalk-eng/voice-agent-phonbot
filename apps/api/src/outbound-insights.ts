@@ -153,7 +153,12 @@ Bewertungskriterien:
       `SELECT id FROM outbound_calls WHERE org_id = $1 AND conv_score IS NOT NULL AND status = 'analyzed'`,
       [orgId],
     );
-    if ((rowCount ?? 0) % MIN_CALLS_FOR_LEARNING === 0) {
+    // Audit-Round-10 MEDIUM: guard against `0 % N === 0` triggering on a
+    // cold-start org that has never had a successful analysis. Without the
+    // `> 0` check the very first row (count=0) would invoke consolidate,
+    // which then no-ops via its own MIN_CALLS_FOR_LEARNING-guard but still
+    // burns one unnecessary DB query and OpenAI-call setup.
+    if ((rowCount ?? 0) > 0 && (rowCount ?? 0) % MIN_CALLS_FOR_LEARNING === 0) {
       consolidateAndLearn(orgId).catch((e) => {
         log.warn({ err: e instanceof Error ? e.message : String(e), orgId }, 'outbound-insights: consolidate failed');
       });

@@ -385,7 +385,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         const claim = await pool.query(
           `INSERT INTO processed_retell_events (call_id, event_type)
            VALUES ($1, $2)
-           ON CONFLICT (call_id) DO NOTHING
+           ON CONFLICT (call_id, event_type) DO NOTHING
            RETURNING call_id`,
           [dedupCallId, 'call_ended'],
         );
@@ -595,6 +595,28 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     if (event === 'call_analyzed') {
       const agentId = (call as RetellCallData).agent_id;
       const callId = (call as RetellCallData).call_id;
+
+      // Audit-Round-10 BLOCKER 1: idempotency gate for call_analyzed (was only
+      // on call_ended). Without this, Retell-retry on a slow handler runs
+      // mergeTicketMetadata twice (idempotent via JSONB-COALESCE) AND
+      // double-fires `variable.extracted` to customer webhooks (NOT idempotent
+      // — customer sees the event twice). Composite PK (call_id, event_type)
+      // lets call_ended and call_analyzed dedup independently for the same
+      // call_id.
+      if (callId && pool) {
+        const claim = await pool.query(
+          `INSERT INTO processed_retell_events (call_id, event_type)
+           VALUES ($1, $2)
+           ON CONFLICT (call_id, event_type) DO NOTHING
+           RETURNING call_id`,
+          [callId, 'call_analyzed'],
+        );
+        if (!claim.rowCount) {
+          req.log.info({ callId }, 'retell call_analyzed dedup hit — skipping');
+          return { ok: true, deduped: true };
+        }
+      }
+
       const analysis = (call as RetellCallData & { call_analysis?: Record<string, unknown> }).call_analysis;
       const extracted = (analysis?.custom_analysis_data as Record<string, unknown> | undefined) ?? null;
       const orgId = agentId ? await getOrgIdByAgentId(agentId) : null;
