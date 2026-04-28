@@ -544,7 +544,12 @@ export async function registerAdmin(app: FastifyInstance) {
     config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
-    const { id } = req.params as { id: string };
+    // Audit-Round-11 (Codex INCOMPLETE): UUID validation was missing on this
+    // route. Without it, malformed `id` would surface as a Postgres 22P02
+    // 500-error and leak the SQL error message in the response body.
+    const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid id' });
+    const { id } = params.data;
     const adminEmail = (req.user as Record<string, unknown> | undefined)?.email as string | undefined;
 
     const snap = await pool.query(
