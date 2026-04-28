@@ -360,14 +360,33 @@ REGELN:
 `;
 
 // Read admin-edited Sales prompt if set, otherwise the compiled-in default.
+// Audit-Round-11 LOW (Codex F-05): 5-min in-process cache. Mirrors the
+// pattern in platform-baseline / outbound-baseline. Bust on admin write
+// via bustSalesPromptCache() (called from the PUT/restore handlers, same
+// places that flush demo + outbound caches).
+let _salesPromptCache: { value: string; loadedAt: number } | null = null;
+const SALES_PROMPT_TTL_MS = 5 * 60 * 1000;
+export function bustSalesPromptCache() { _salesPromptCache = null; }
+
 async function loadSalesPrompt(): Promise<string> {
-  if (!pool) return DEFAULT_SALES_PROMPT;
+  const now = Date.now();
+  if (_salesPromptCache && now - _salesPromptCache.loadedAt < SALES_PROMPT_TTL_MS) {
+    return _salesPromptCache.value;
+  }
+  if (!pool) {
+    _salesPromptCache = { value: DEFAULT_SALES_PROMPT, loadedAt: now };
+    return DEFAULT_SALES_PROMPT;
+  }
   const res = await pool.query(
     `SELECT epilogue FROM demo_prompt_overrides WHERE template_id = '__sales__'`,
   ).catch(() => null);
-  if (!res || !res.rowCount) return DEFAULT_SALES_PROMPT;
-  const stored = res.rows[0].epilogue as string;
-  return stored && stored.trim() ? stored : DEFAULT_SALES_PROMPT;
+  let value = DEFAULT_SALES_PROMPT;
+  if (res && res.rowCount) {
+    const stored = res.rows[0].epilogue as string;
+    if (stored && stored.trim()) value = stored;
+  }
+  _salesPromptCache = { value, loadedAt: now };
+  return value;
 }
 
 // Sales agent ID — Redis-backed (shared across containers, survives restarts)
@@ -376,52 +395,79 @@ async function loadSalesPrompt(): Promise<string> {
 // agents lack that.
 let salesAgentIdMem: string | null = null;
 const SALES_AGENT_KEY = 'sales_agent:phonbot:v4';
+let pendingSalesCreate: Promise<string> | null = null;
 
 export async function getOrCreateSalesAgent(): Promise<string> {
-  if (redis?.isOpen) {
-    const cached = await redis.get(SALES_AGENT_KEY).catch(() => null);
-    if (cached) return cached;
-    // Audit-Round-9 H1/M3: do NOT write back into salesAgentIdMem here.
-    // The in-mem fallback is only for Redis-offline mode; a fresh Redis
-    // read during a concurrent flushDemoAgentCache() could otherwise re-
-    // populate the in-mem with the soon-to-be-deleted value, leaving a
-    // stale value that surfaces if Redis later goes offline.
-  } else if (salesAgentIdMem) {
-    return salesAgentIdMem;
-  }
+  // Audit-Round-11 MED (Codex): mirror the demo-agent dedup. Without this,
+  // two parallel callbacks racing on a cold cache both miss Redis, both
+  // create a fresh sales LLM + Retell-Agent, and the loser becomes orphan
+  // spend. A single in-flight Promise (sales agent is global, so no key
+  // map) is enough: synchronously check + assign before any await.
+  if (pendingSalesCreate) return pendingSalesCreate;
 
-  const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';
-  // Layer Outbound-Baseline + (admin-overridable) Sales-Prompt. Outbound
-  // baseline carries DSGVO-Widerspruch + KI-Identifikation + DIN-5009 etc.
-  const outboundBaseline = await loadOutboundBaseline();
-  const salesPrompt = await loadSalesPrompt();
-  const llm = await createLLM({
-    generalPrompt: `${outboundBaseline}\n\n${salesPrompt}`,
-    tools: [DEMO_END_CALL_TOOL],
-    model,
+  let resolveClaim!: (v: string) => void;
+  let rejectClaim!: (e: unknown) => void;
+  const claim = new Promise<string>((resolve, reject) => {
+    resolveClaim = resolve;
+    rejectClaim = reject;
   });
+  // Same observerless-rejection guard as getOrCreateDemoAgent.
+  claim.catch(() => { /* observer for second-caller-absent case */ });
+  pendingSalesCreate = claim;
 
-  const agent = await retellCreateAgent({
-    name: 'Phonbot Sales Callback',
-    llmId: llm.llm_id,
-    voiceId: DEFAULT_VOICE_ID,
-    language: 'de-DE',
-  });
+  try {
+    if (redis?.isOpen) {
+      const cached = await redis.get(SALES_AGENT_KEY).catch(() => null);
+      if (cached) { resolveClaim(cached); return cached; }
+      // Audit-Round-9 H1/M3: do NOT write back into salesAgentIdMem here.
+      // The in-mem fallback is only for Redis-offline mode; a fresh Redis
+      // read during a concurrent flushDemoAgentCache() could otherwise re-
+      // populate the in-mem with the soon-to-be-deleted value, leaving a
+      // stale value that surfaces if Redis later goes offline.
+    } else if (salesAgentIdMem) {
+      resolveClaim(salesAgentIdMem);
+      return salesAgentIdMem;
+    }
 
-  salesAgentIdMem = agent.agent_id;
-  // 7-day TTL — if the Retell agent gets deleted (manual cleanup, account
-  // rotation), the cache expires and the next call regenerates it. Without
-  // TTL a stale agent_id sticks forever and every Sales call after deletion
-  // would 404 from Retell.
-  if (redis?.isOpen) await redis.set(SALES_AGENT_KEY, agent.agent_id, { EX: 7 * 24 * 60 * 60 }).catch(() => {});
+    const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';
+    // Layer Outbound-Baseline + (admin-overridable) Sales-Prompt. Outbound
+    // baseline carries DSGVO-Widerspruch + KI-Identifikation + DIN-5009 etc.
+    const outboundBaseline = await loadOutboundBaseline();
+    const salesPrompt = await loadSalesPrompt();
+    const llm = await createLLM({
+      generalPrompt: `${outboundBaseline}\n\n${salesPrompt}`,
+      tools: [DEMO_END_CALL_TOOL],
+      model,
+    });
 
-  // Register as outbound agent on the configured phone number
-  const outboundNumber = process.env.RETELL_OUTBOUND_NUMBER;
-  if (outboundNumber) {
-    await updatePhoneNumber(outboundNumber, { outboundAgentId: agent.agent_id });
+    const agent = await retellCreateAgent({
+      name: 'Phonbot Sales Callback',
+      llmId: llm.llm_id,
+      voiceId: DEFAULT_VOICE_ID,
+      language: 'de-DE',
+    });
+
+    salesAgentIdMem = agent.agent_id;
+    // 7-day TTL — if the Retell agent gets deleted (manual cleanup, account
+    // rotation), the cache expires and the next call regenerates it. Without
+    // TTL a stale agent_id sticks forever and every Sales call after deletion
+    // would 404 from Retell.
+    if (redis?.isOpen) await redis.set(SALES_AGENT_KEY, agent.agent_id, { EX: 7 * 24 * 60 * 60 }).catch(() => {});
+
+    // Register as outbound agent on the configured phone number
+    const outboundNumber = process.env.RETELL_OUTBOUND_NUMBER;
+    if (outboundNumber) {
+      await updatePhoneNumber(outboundNumber, { outboundAgentId: agent.agent_id });
+    }
+
+    resolveClaim(agent.agent_id);
+    return agent.agent_id;
+  } catch (err) {
+    rejectClaim(err);
+    throw err;
+  } finally {
+    pendingSalesCreate = null;
   }
-
-  return agent.agent_id;
 }
 
 // Demo leads are persisted in crm_leads (DB). No in-memory duplicate —
@@ -569,17 +615,27 @@ export async function registerDemo(app: FastifyInstance) {
       }
     }
 
-    const leadId = crypto.randomUUID();
-    app.log.info({ leadId, name, email, phone }, 'New demo callback lead');
-
-    // Persist lead in CRM database (single source of truth; org_id=NULL = platform-anonymous)
+    // Audit-Round-11 BLOCKER (Codex): persist the lead and use its DB id as
+    // the correlation key for both the Retell metadata AND the post-call
+    // UPDATE. Previously a fire-and-forget INSERT was followed by an
+    // UPDATE matching on (email, phone, status='new'), which could touch
+    // multiple rows (old uncontacted leads outside the 24h dedup window) —
+    // and the random `leadId` we sent to Retell was never persisted at all.
     // DSGVO Art. 5: leads are auto-deleted after 90 days by cleanupOldLeads() in db.ts
+    let leadId: string | null = null;
     if (pool) {
-      pool.query(
-        `INSERT INTO crm_leads (name, email, phone, source, status) VALUES ($1, $2, $3, 'demo-callback', 'new')`,
-        [name, email, phone],
-      ).catch((err: Error) => app.log.warn({ err: err.message }, 'crm_leads insert failed'));
+      try {
+        const ins = await pool.query(
+          `INSERT INTO crm_leads (name, email, phone, source, status) VALUES ($1, $2, $3, 'demo-callback', 'new') RETURNING id`,
+          [name, email, phone],
+        );
+        leadId = (ins.rows[0]?.id as string) ?? null;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        app.log.warn({ err: msg }, 'crm_leads insert failed');
+      }
     }
+    app.log.info({ leadId, name, email, phone }, 'New demo callback lead');
 
     sendSignupLinkEmail({ toEmail: email, name })
       .catch((err: Error) => app.log.warn({ err: err.message }, 'demo/callback signup-link email failed'));
@@ -590,23 +646,25 @@ export async function registerDemo(app: FastifyInstance) {
     if (fromNumber) {
       try {
         const agentId = await getOrCreateSalesAgent();
+        const metadata: Record<string, string> = { leadName: name };
+        if (leadId) metadata.leadId = leadId;
         const call = await createPhoneCall({
           agentId,
           toNumber: phone,
           fromNumber,
-          metadata: { leadId, leadName: name },
+          metadata,
           dynamicVariables: {
             signup_link: signupLinkUrl(),
             signup_sms_sent: signupSms.ok ? 'true' : 'false',
           },
         });
-        app.log.info({ callId: call.call_id, phone }, 'Outbound sales call initiated');
-        // Mark lead as called
-        if (pool) {
+        app.log.info({ callId: call.call_id, phone, leadId }, 'Outbound sales call initiated');
+        // Mark lead as called — by id, never by (email,phone,status)
+        if (pool && leadId) {
           pool.query(
-            `UPDATE crm_leads SET status = 'contacted', call_id = $1 WHERE email = $2 AND phone = $3 AND status = 'new'`,
-            [call.call_id, email, phone],
-          ).catch(() => {/* non-critical */});
+            `UPDATE crm_leads SET status = 'contacted', call_id = $1 WHERE id = $2`,
+            [call.call_id, leadId],
+          ).catch((err: Error) => app.log.warn({ err: err.message, leadId }, 'crm_leads contacted-update failed'));
         }
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : 'unknown error';

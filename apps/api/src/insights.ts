@@ -20,6 +20,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import OpenAI from 'openai';
+import { z } from 'zod';
 import { pool } from './db.js';
 import { log, logBg } from './logger.js';
 import { computeSatisfactionScore, extractSignalsFromCall, storeSatisfactionData } from './satisfaction-signals.js';
@@ -1391,7 +1392,10 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
   app.post('/insights/suggestions/:id/apply', { onRequest: [app.authenticate] }, async (req, reply) => {
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
     const orgId = (req.user as { orgId: string }).orgId;
-    const { id } = req.params as { id: string };
+    // Audit-Round-11 MED (Codex): UUID validation on raw param.
+    const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid id' });
+    const { id } = params.data;
     // Optional customText — customer may edit the suggested addition in-place
     // before hitting Übernehmen (e.g. fill in actual parking info Chipy
     // couldn't know). Falls back to the stored suggestion when omitted.
@@ -1431,7 +1435,9 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
   app.post('/insights/suggestions/:id/reject', { onRequest: [app.authenticate] }, async (req, reply) => {
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
     const orgId = (req.user as { orgId: string }).orgId;
-    const { id } = req.params as { id: string };
+    const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid id' });
+    const { id } = params.data;
     await pool.query(`UPDATE prompt_suggestions SET status='rejected' WHERE id=$1 AND org_id=$2`, [id, orgId]);
     return { ok: true };
   });
@@ -1439,7 +1445,9 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
   app.post('/insights/versions/:id/restore', { onRequest: [app.authenticate] }, async (req, reply) => {
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
     const orgId = (req.user as { orgId: string }).orgId;
-    const { id } = req.params as { id: string };
+    const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid id' });
+    const { id } = params.data;
     const res = await pool.query(`SELECT prompt FROM prompt_versions WHERE id=$1 AND org_id=$2`, [id, orgId]);
     if (res.rows.length === 0) return reply.status(404).send({ error: 'Not found' });
     await setPrompt(orgId, res.rows[0].prompt as string, 'manual_restore');

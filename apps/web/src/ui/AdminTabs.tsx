@@ -514,7 +514,9 @@ export function LearningsTab() {
     setEditingId(item.id);
     setDraftText(item.proposed);
     setDraftReason('');
-    setDraftScope(item.kind === 'template_learning' ? 'systemic' : 'systemic');
+    // Audit-Round-11 LOW (Codex): both branches resolved to 'systemic'.
+    // Default is 'systemic' for both kinds — admin can flip in the dropdown.
+    setDraftScope('systemic');
   }
 
   function cancelEdit() {

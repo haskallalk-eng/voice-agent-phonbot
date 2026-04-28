@@ -4,7 +4,7 @@ import bcrypt from 'bcrypt';
 import { pool } from './db.js';
 import { log } from './logger.js';
 import { TEMPLATES } from './templates.js';
-import { DEMO_END_INSTRUCTIONS, DEFAULT_SALES_PROMPT, flushDemoAgentCache } from './demo.js';
+import { DEMO_END_INSTRUCTIONS, DEFAULT_SALES_PROMPT, flushDemoAgentCache, bustSalesPromptCache } from './demo.js';
 import { PLATFORM_BASELINE_PROMPT, bustPlatformBaselineCache } from './platform-baseline.js';
 import { OUTBOUND_BASELINE_PROMPT, bustOutboundBaselineCache } from './outbound-baseline.js';
 
@@ -490,6 +490,7 @@ export async function registerAdmin(app: FastifyInstance) {
     // the 5-min TTL.
     if (scope === '__platform__') bustPlatformBaselineCache();
     if (scope === '__outbound__') bustOutboundBaselineCache();
+    if (scope === '__sales__') bustSalesPromptCache();
 
     // Force every cached demo agent to re-create with the new prompt next call.
     const flush = await flushDemoAgentCache();
@@ -552,44 +553,65 @@ export async function registerAdmin(app: FastifyInstance) {
     const { id } = params.data;
     const adminEmail = (req.user as Record<string, unknown> | undefined)?.email as string | undefined;
 
-    const snap = await pool.query(
-      `SELECT template_id, epilogue, base_prompt FROM prompt_override_history WHERE id = $1`,
-      [id],
-    );
-    if (!snap.rowCount) return reply.status(404).send({ error: 'History entry not found' });
-    const row = snap.rows[0] as { template_id: string; epilogue: string | null; base_prompt: string | null };
+    // Audit-Round-11 BLOCKER (Codex HIGH-1): mirror the PUT handler. Without a
+    // transaction + FOR UPDATE, two parallel restores (or a restore racing
+    // with a PUT) read the same pre-state, both insert it into history, and
+    // the loser's UPSERT silently overwrites the winner. The previous version
+    // also .catch()-swallowed the history insert, masking the loss.
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    const current = await pool.query(
-      `SELECT epilogue, base_prompt FROM demo_prompt_overrides WHERE template_id = $1`,
-      [row.template_id],
-    );
-    if (current.rowCount) {
-      await pool.query(
-        `INSERT INTO prompt_override_history (template_id, epilogue, base_prompt, changed_by, change_kind)
-         VALUES ($1, $2, $3, $4, 'edit')`,
-        [row.template_id, current.rows[0].epilogue ?? null, current.rows[0].base_prompt ?? null, adminEmail ?? null],
-      ).catch((err: Error) => req.log.warn({ err: err.message }, 'prompt_override_history pre-restore insert failed'));
-    }
-
-    if (row.epilogue === null && row.base_prompt === null) {
-      await pool.query(`DELETE FROM demo_prompt_overrides WHERE template_id = $1`, [row.template_id]);
-    } else {
-      await pool.query(
-        `INSERT INTO demo_prompt_overrides (template_id, epilogue, base_prompt, updated_by)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (template_id) DO UPDATE SET
-           epilogue    = EXCLUDED.epilogue,
-           base_prompt = EXCLUDED.base_prompt,
-           updated_at  = now(),
-           updated_by  = EXCLUDED.updated_by`,
-        [row.template_id, row.epilogue ?? '', row.base_prompt, adminEmail ?? null],
+      const snap = await client.query(
+        `SELECT template_id, epilogue, base_prompt FROM prompt_override_history WHERE id = $1`,
+        [id],
       );
-    }
+      if (!snap.rowCount) {
+        await client.query('ROLLBACK');
+        return reply.status(404).send({ error: 'History entry not found' });
+      }
+      const row = snap.rows[0] as { template_id: string; epilogue: string | null; base_prompt: string | null };
 
-    if (row.template_id === '__platform__') bustPlatformBaselineCache();
-    if (row.template_id === '__outbound__') bustOutboundBaselineCache();
-    const flush = await flushDemoAgentCache();
-    return { ok: true, restoredScope: row.template_id, flushed: flush.flushed };
+      const current = await client.query(
+        `SELECT epilogue, base_prompt FROM demo_prompt_overrides WHERE template_id = $1 FOR UPDATE`,
+        [row.template_id],
+      );
+      if (current.rowCount) {
+        await client.query(
+          `INSERT INTO prompt_override_history (template_id, epilogue, base_prompt, changed_by, change_kind)
+           VALUES ($1, $2, $3, $4, 'edit')`,
+          [row.template_id, current.rows[0].epilogue ?? null, current.rows[0].base_prompt ?? null, adminEmail ?? null],
+        );
+      }
+
+      if (row.epilogue === null && row.base_prompt === null) {
+        await client.query(`DELETE FROM demo_prompt_overrides WHERE template_id = $1`, [row.template_id]);
+      } else {
+        await client.query(
+          `INSERT INTO demo_prompt_overrides (template_id, epilogue, base_prompt, updated_by)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (template_id) DO UPDATE SET
+             epilogue    = EXCLUDED.epilogue,
+             base_prompt = EXCLUDED.base_prompt,
+             updated_at  = now(),
+             updated_by  = EXCLUDED.updated_by`,
+          [row.template_id, row.epilogue ?? '', row.base_prompt, adminEmail ?? null],
+        );
+      }
+
+      await client.query('COMMIT');
+
+      if (row.template_id === '__platform__') bustPlatformBaselineCache();
+      if (row.template_id === '__outbound__') bustOutboundBaselineCache();
+      if (row.template_id === '__sales__') bustSalesPromptCache();
+      const flush = await flushDemoAgentCache();
+      return { ok: true, restoredScope: row.template_id, flushed: flush.flushed };
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => { /* already rolled back */ });
+      throw err;
+    } finally {
+      client.release();
+    }
   });
 
   // ── POST /admin/demo-prompts/flush-cache ──────────────────────────────────
@@ -1067,12 +1089,25 @@ export async function registerAdmin(app: FastifyInstance) {
       offset: z.coerce.number().int().min(0).default(0),
     }).parse(req.query);
 
+    // Audit-Round-11 LOW (Codex F-04): replace per-row correlated subqueries
+    // (executed once per orgs-row, two seq-scans each) with two LATERAL
+    // JOINs that the planner can drive via the agent_configs.org_id /
+    // users.org_id indexes once per org row. At 100 orgs the prior shape
+    // did 200 sub-scans; this does 2 indexed lookups per row.
     const { rows } = await pool.query(
       `SELECT o.id, o.name, o.slug, o.plan, o.plan_status, o.is_active, o.created_at,
               o.minutes_used, o.minutes_limit,
-              (SELECT COUNT(*) FROM agent_configs ac WHERE ac.org_id = o.id) as agents_count,
-              (SELECT COUNT(*) FROM users u2 WHERE u2.org_id = o.id) as users_count
+              ac.agents_count,
+              uc.users_count
        FROM orgs o
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::bigint AS agents_count
+         FROM agent_configs WHERE org_id = o.id
+       ) ac ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::bigint AS users_count
+         FROM users WHERE org_id = o.id
+       ) uc ON TRUE
        ORDER BY o.created_at DESC
        LIMIT $1 OFFSET $2`,
       [q.limit, q.offset],
