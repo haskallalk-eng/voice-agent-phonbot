@@ -44,6 +44,12 @@ if (model && !KNOWN_TOOL_CAPABLE_MODELS.has(model)) {
 // Dev / test: skipped so contributors don't need every key to run the app
 // locally. JWT_SECRET and DATABASE_URL are enforced elsewhere (auth / db).
 if (process.env.NODE_ENV === 'production') {
+  // Audit-Round-13: WEBHOOK_SIGNING_SECRET ist jetzt hard-required nachdem
+  // die env-var auf prod gesetzt wurde (Round 7 → soft-warn → Round 13 →
+  // promote). Separation von JWT_SECRET schützt Customer-Webhook-Signaturen
+  // vor JWT-Rotation. Falls die Werte aktuell gleich sind (Migration-
+  // Strategie), ist das OK — nur muss WEBHOOK_SIGNING_SECRET ab jetzt
+  // explizit existieren, sonst boot-fail statt silent JWT_SECRET-Fallback.
   const REQUIRED_PROD_SECRETS = [
     'DATABASE_URL',
     'JWT_SECRET',
@@ -54,23 +60,11 @@ if (process.env.NODE_ENV === 'production') {
     'TWILIO_AUTH_TOKEN',
     'STRIPE_SECRET_KEY',
     'STRIPE_WEBHOOK_SECRET',
+    'WEBHOOK_SIGNING_SECRET',
   ] as const;
   const missing = REQUIRED_PROD_SECRETS.filter((k) => !process.env[k] || process.env[k]!.trim() === '');
   if (missing.length > 0) {
     process.stderr.write(`[env] FATAL: missing required production secrets: ${missing.join(', ')}\n`);
     throw new Error(`Missing required production env vars: ${missing.join(', ')}`);
-  }
-
-  // Audit-Round-7 Codex MEDIUM-A: WEBHOOK_SIGNING_SECRET should be separate from
-  // JWT_SECRET so a JWT rotation doesn't silently break every customer's
-  // webhook-signature-validation. We don't make it hard-required yet
-  // (would crash any deploy that hasn't set it); we soft-warn so Ops sees
-  // the gap and can set it before the next JWT rotation. Once set on all
-  // envs, promote into REQUIRED_PROD_SECRETS in a follow-up.
-  const SOFT_REQUIRED_PROD_SECRETS = ['WEBHOOK_SIGNING_SECRET'] as const;
-  const softMissing = SOFT_REQUIRED_PROD_SECRETS.filter((k) => !process.env[k] || process.env[k]!.trim() === '');
-  if (softMissing.length > 0) {
-    process.stderr.write(`[env] WARN: missing recommended production secrets (will be required soon): ${softMissing.join(', ')}\n`);
-    process.stderr.write(`[env] WARN: WEBHOOK_SIGNING_SECRET falls back to JWT_SECRET — a JWT rotation will silently break customer webhook signatures. Set this before the next rotation.\n`);
   }
 }
