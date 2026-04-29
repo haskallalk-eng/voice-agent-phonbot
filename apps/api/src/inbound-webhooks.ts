@@ -225,15 +225,17 @@ export async function fireInboundWebhooks(
       }
       // Per-webhook signing secret is derived deterministically from a single
       // server secret + (tenantId, webhookId). No DB column needed; customer
-      // can reconstruct it on our side to expose in the UI later. If
-      // WEBHOOK_SIGNING_SECRET is unset, fall back to JWT_SECRET (already
-      // required in prod by env.ts) so there is never an unsigned delivery.
+      // can reconstruct it on our side to expose in the UI later.
       //
-      // ⚠️ Audit-Round-7 Codex MEDIUM-A: the JWT_SECRET fallback is dangerous
-      // long-term — any JWT rotation breaks every customer's webhook-signature
-      // validation silently. env.ts now warn-logs at boot when
-      // WEBHOOK_SIGNING_SECRET is missing in prod. Move WEBHOOK_SIGNING_SECRET
-      // into hard-required REQUIRED_PROD_SECRETS once it's set on all envs.
+      // Audit-Round-13: WEBHOOK_SIGNING_SECRET is now hard-required in prod
+      // (env.ts:46-67). The JWT_SECRET-fallback stays as defense-in-depth for
+      // dev environments without an explicit value, but in prod the boot
+      // already failed if WEBHOOK_SIGNING_SECRET is unset so the fallback
+      // branch is unreachable there. Migration was: set WEBHOOK_SIGNING_
+      // SECRET = JWT_SECRET on prod env first → all customer signatures stay
+      // valid since the same key derives the same per-hook secret → then
+      // promote to hard-required. JWT_SECRET can now be rotated independently
+      // without breaking customer webhook validators.
       const signingKey = process.env.WEBHOOK_SIGNING_SECRET || process.env.JWT_SECRET || '';
       const perHookSecret = crypto
         .createHmac('sha256', signingKey)
