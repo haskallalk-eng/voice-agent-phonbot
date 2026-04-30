@@ -19,12 +19,14 @@
  */
 
 import type { FastifyInstance } from 'fastify';
+import crypto from 'node:crypto';
 import OpenAI from 'openai';
 import { z } from 'zod';
 import { pool } from './db.js';
 import { log, logBg } from './logger.js';
 import { computeSatisfactionScore, extractSignalsFromCall, storeSatisfactionData } from './satisfaction-signals.js';
 import { redactPII } from './pii.js';
+import { CURATED_INDUSTRY_KEYS } from './templates.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? '' });
 const MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
@@ -1504,5 +1506,167 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
     );
     const remaining = parseInt(remainingRes.rows[0]?.cnt ?? '0', 10);
     return { ok: true, processed, failed, remaining };
+  });
+
+  // Audit-Round-14 (Codex Plan-Review): industry-backfill for legacy orgs that
+  // pre-date Round-12. Without `agent_configs.data->>'industry'` set,
+  // template-learning.ts:114 early-returns and the org never enters cross-org
+  // learning. Pre-R12 there was no UI for the field — onboarding-wizard sets
+  // it for new orgs, so this endpoint is the only way to retro-tag old ones.
+  //
+  // Scope (per Codex Plan-Review):
+  //  - per-tenant admin trigger (NOT bulk-LLM-inference — wrong tag would
+  //    silently poison the cross-org pool which other tenants read; the
+  //    industry field is the clustering key, no UI confidence-gate exists).
+  //  - body: { tenantId, industry, dryRun? }; tenantId is the agent_configs
+  //    primary key (NOT orgId — Pro/Agency orgs have multiple tenants).
+  //  - industry validated against CURATED_INDUSTRY_KEYS — arbitrary strings
+  //    rejected to avoid pool-fragmentation by typo.
+  //  - response: { processed, remaining } shaped like /embed-backfill above.
+  //  - M4: ALSO updates historical `call_transcripts.industry` for the same
+  //    tenant so already-analyzed calls re-enter the learning pool. Without
+  //    this, only future calls from the tenant get clustered.
+  //  - dryRun: returns counts WITHOUT writing — gives an admin a preview.
+  app.post('/admin/agents/backfill-industry', {
+    onRequest: [app.authenticate],
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    if (!pool) return reply.status(503).send({ error: 'Database not configured' });
+    // Codex Round-14 review HIGH (A4): match the strict admin gate from
+    // admin.ts:55. `app.authenticate` only verifies the JWT signature; without
+    // the aud-check, a regular user-JWT with a manipulated `admin: true`
+    // claim would pass the simple `payload.admin` test on its own.
+    const payload = req.user as Record<string, unknown>;
+    if (!payload.admin || payload.aud !== 'phonbot:admin') {
+      return reply.status(403).send({ error: 'Platform-admin only' });
+    }
+
+    const Body = z.object({
+      tenantId: z.string().min(1).max(120),
+      industry: z.string().min(1).max(60),
+      dryRun: z.boolean().optional().default(false),
+    });
+    const parsed = Body.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid body', details: parsed.error.flatten() });
+    }
+    const { tenantId, industry, dryRun } = parsed.data;
+
+    if (!CURATED_INDUSTRY_KEYS.has(industry)) {
+      return reply.status(400).send({
+        error: 'INVALID_INDUSTRY',
+        message: `Industry must be one of the curated keys.`,
+        validKeys: [...CURATED_INDUSTRY_KEYS],
+      });
+    }
+
+    // Codex Round-14 review HIGH (A1): serialize concurrent backfill calls per
+    // tenant. Without the lock, two admins (or a double-submit) could both pass
+    // the SELECT+409-gate and both call UPDATE; the conditional WHERE in the
+    // config-UPDATE makes only one win, but the response would falsely report
+    // `ok: true, processed: 0` to the loser instead of 409.
+    //
+    // Postgres advisory locks take a 64-bit signed int. Hash the tenantId into
+    // an int64 deterministically. xact_lock auto-releases at COMMIT/ROLLBACK
+    // — we wrap the SELECT-write-write in a single client transaction.
+    const lockKey = (() => {
+      const h = crypto.createHash('sha1').update(`industry-backfill:${tenantId}`).digest();
+      // Read 8 bytes as signed BigInt, fits Postgres bigint.
+      return h.readBigInt64BE(0);
+    })();
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [lockKey.toString()]);
+
+      const cfgRes = await client.query<{ org_id: string | null; industry: string | null }>(
+        `SELECT org_id, data->>'industry' AS industry
+         FROM agent_configs WHERE tenant_id = $1 LIMIT 1`,
+        [tenantId],
+      );
+      if (!cfgRes.rows.length) {
+        await client.query('ROLLBACK');
+        return reply.status(404).send({ error: 'TENANT_NOT_FOUND', tenantId });
+      }
+      const row = cfgRes.rows[0]!;
+      if (row.industry) {
+        await client.query('ROLLBACK');
+        return reply.status(409).send({
+          error: 'ALREADY_TAGGED',
+          currentIndustry: row.industry,
+          message: 'Tenant already has industry set; refusing to overwrite. Edit via the agent-builder if intentional.',
+        });
+      }
+
+      // How many transcripts are missing industry for this tenant's org?
+      let transcriptCandidates = 0;
+      if (row.org_id) {
+        const trRes = await client.query<{ cnt: string }>(
+          `SELECT COUNT(*)::text AS cnt FROM call_transcripts
+           WHERE org_id = $1 AND (industry IS NULL OR industry = '')`,
+          [row.org_id],
+        );
+        transcriptCandidates = parseInt(trRes.rows[0]?.cnt ?? '0', 10);
+      }
+
+      if (dryRun) {
+        await client.query('ROLLBACK');
+        return {
+          ok: true,
+          dryRun: true,
+          tenantId,
+          orgId: row.org_id,
+          industry,
+          wouldUpdateConfig: 1,
+          wouldUpdateTranscripts: transcriptCandidates,
+        };
+      }
+
+      // jsonb_set wins over a full data-replace: leaves all other config fields
+      // untouched, atomic, no read-modify-write race with concurrent writes.
+      const cfgUpd = await client.query<{ tenant_id: string }>(
+        `UPDATE agent_configs
+           SET data = jsonb_set(data, '{industry}', to_jsonb($1::text)),
+               updated_at = now()
+         WHERE tenant_id = $2 AND (data->>'industry' IS NULL OR data->>'industry' = '')
+         RETURNING tenant_id`,
+        [industry, tenantId],
+      );
+      const configsUpdated = cfgUpd.rowCount ?? 0;
+
+      let transcriptsUpdated = 0;
+      if (row.org_id) {
+        const trUpd = await client.query(
+          `UPDATE call_transcripts
+             SET industry = $1
+           WHERE org_id = $2 AND (industry IS NULL OR industry = '')`,
+          [industry, row.org_id],
+        );
+        transcriptsUpdated = trUpd.rowCount ?? 0;
+      }
+
+      await client.query('COMMIT');
+
+      log.info(
+        { tenantId, orgId: row.org_id, industry, configsUpdated, transcriptsUpdated, actor: payload.email },
+        'admin: industry-backfill applied',
+      );
+
+      return {
+        ok: true,
+        tenantId,
+        orgId: row.org_id,
+        industry,
+        processed: configsUpdated,
+        transcriptsUpdated,
+        remaining: configsUpdated === 0 ? 1 : 0,
+      };
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+      throw err;
+    } finally {
+      client.release();
+    }
   });
 }
