@@ -42,3 +42,12 @@ test-migrate.mjs
 **/scratch/
 **/tmp-*.mjs
 **/tmp-*.ts
+
+# Compliance — only signed contracts + DPF-Screenshots stay outside the repo.
+# Eigene TIA-Bewertungen, VVT (.md), Mail-Templates und DPA-Vorlage sind
+# Mindrails-interne Dokumente, keine Anbieter-Geheimnisse — die werden
+# getrackt damit Team + Audits Zugriff haben.
+compliance/dpas/
+compliance/dpf-verifications/
+compliance/vvt.xlsx
+compliance/vvt.csv

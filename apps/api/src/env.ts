@@ -67,4 +67,28 @@ if (process.env.NODE_ENV === 'production') {
     process.stderr.write(`[env] FATAL: missing required production secrets: ${missing.join(', ')}\n`);
     throw new Error(`Missing required production env vars: ${missing.join(', ')}`);
   }
+
+  // Audit-Round-15 (M2 from R14 Codex Plan-Review): RETELL_TOOL_AUTH_SECRET is
+  // entering soft-warn phase. The actual signing code (agent-config.ts:554 +
+  // retell-webhooks.ts:271) already throws in prod when neither this nor
+  // JWT_SECRET is set, so we never sign tool URLs with `dev-retell-tool-auth`
+  // by accident. The risk is the *fallback* itself: every Retell agent
+  // currently in production has tool URLs HMAC-signed using JWT_SECRET. If an
+  // operator rotates JWT_SECRET tomorrow without first migrating to a separate
+  // RETELL_TOOL_AUTH_SECRET, every existing agent's tool calls instantly fail
+  // signature verification — same class of incident as the WEBHOOK_SIGNING_
+  // SECRET drift R7→R13 fixed for customer webhooks.
+  //
+  // Migration: set RETELL_TOOL_AUTH_SECRET = JWT_SECRET on prod first
+  // (signatures stay valid because deterministic HMAC over the same key), then
+  // promote to REQUIRED_PROD_SECRETS in a future round. JWT_SECRET can then be
+  // rotated without breaking Retell tool-URL validation.
+  if (!process.env.RETELL_TOOL_AUTH_SECRET || process.env.RETELL_TOOL_AUTH_SECRET.trim() === '') {
+    process.stderr.write(
+      `[env] WARNING: RETELL_TOOL_AUTH_SECRET is unset in production — ` +
+      `tool-URL signatures will fall back to JWT_SECRET. Set RETELL_TOOL_AUTH_SECRET = JWT_SECRET ` +
+      `before rotating JWT_SECRET, otherwise every existing Retell agent's tool calls will fail. ` +
+      `Will become hard-required in a future round (matches the WEBHOOK_SIGNING_SECRET migration).\n`,
+    );
+  }
 }
