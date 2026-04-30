@@ -100,7 +100,28 @@ describe('resolveOrgIdFromSubscription (M3)', () => {
     expect(got).toBe('org-from-meta');
   });
 
-  it('returns null when neither metadata nor DB yields an orgId', async () => {
+  it('falls through to subscription_id last-resort when metadata + customer mapping both fail', async () => {
+    // Step 1 (customer mapping) miss
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    // Step 3 (subscription_id mapping) hit
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: 'org-from-sub' }], rowCount: 1 });
+    const got = await resolveOrgIdFromSubscription(
+      makeSub({ metaOrgId: null, customerId: 'cus_unknown' }),
+    );
+    expect(got).toBe('org-from-sub');
+    // Confirm last-resort SQL queries stripe_subscription_id, not customer
+    const lastCallSql = mockQuery.mock.calls.at(-1)![0] as string;
+    expect(lastCallSql).toContain('stripe_subscription_id');
+    expect(mockWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ subId: 'sub_test' }),
+      expect.stringContaining('last-resort'),
+    );
+  });
+
+  it('returns null when ALL three resolutions miss (customer + meta + sub_id)', async () => {
+    // Step 1 miss
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    // Step 3 miss
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
     const got = await resolveOrgIdFromSubscription(
       makeSub({ metaOrgId: null, customerId: 'cus_unknown' }),
@@ -116,12 +137,24 @@ describe('resolveOrgIdFromSubscription (M3)', () => {
     expect(mockQuery).not.toHaveBeenCalled();
   });
 
-  it('returns null when customer is missing and metadata is empty', async () => {
+  it('falls through to subscription_id when both customer and metadata are missing', async () => {
+    // No customer → skip step 1; no meta → skip step 2; subscription_id fires.
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: 'org-from-sub' }], rowCount: 1 });
+    const got = await resolveOrgIdFromSubscription(
+      makeSub({ metaOrgId: null, customerId: null }),
+    );
+    expect(got).toBe('org-from-sub');
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+    const sql = mockQuery.mock.calls[0]![0] as string;
+    expect(sql).toContain('stripe_subscription_id');
+  });
+
+  it('returns null when nothing resolves at all (no customer, no meta, no sub_id mapping)', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
     const got = await resolveOrgIdFromSubscription(
       makeSub({ metaOrgId: null, customerId: null }),
     );
     expect(got).toBeNull();
-    expect(mockQuery).not.toHaveBeenCalled();
   });
 
   it('handles expanded customer object (sub.customer.id) the same as a string', async () => {

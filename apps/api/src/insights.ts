@@ -1575,6 +1575,14 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
       return h.readBigInt64BE(0);
     })();
 
+    // Phase 1: configs UPDATE inside an advisory-locked transaction.
+    // Phase 2 (transcript backfill) runs OUTSIDE the lock, in batched
+    // pool.query calls — see the comment near the batched UPDATE loop for
+    // why. The two-phase split keeps client.release() exactly once via the
+    // try/finally below; phase 2 uses `pool.query` directly (auto-commit).
+    let phase1OrgId: string | null = null;
+    let configsUpdated = 0;
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -1633,40 +1641,75 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
          RETURNING tenant_id`,
         [industry, tenantId],
       );
-      const configsUpdated = cfgUpd.rowCount ?? 0;
+      configsUpdated = cfgUpd.rowCount ?? 0;
+      phase1OrgId = row.org_id;
 
-      let transcriptsUpdated = 0;
-      if (row.org_id) {
-        const trUpd = await client.query(
-          `UPDATE call_transcripts
-             SET industry = $1
-           WHERE org_id = $2 AND (industry IS NULL OR industry = '')`,
-          [industry, row.org_id],
-        );
-        transcriptsUpdated = trUpd.rowCount ?? 0;
-      }
-
+      // Audit-Round-16 (Codex Plan-Review HIGH C): COMMIT here, then drop
+      // out of the try/finally so the advisory lock is released BEFORE we
+      // batch the transcript backfill. Reasons:
+      //   1. The pg_advisory_xact_lock is held until COMMIT — keeping it
+      //      across the transcript bulk would block any concurrent admin
+      //      whose tenantId happens to hash to the same lock-key (collision
+      //      is rare with sha1's 64-bit truncation but not zero).
+      //   2. A long single UPDATE on call_transcripts at huge tenants holds
+      //      row-locks against the live analyzeCall enrichment writer
+      //      (insights.ts:1097-1110). Batching in small commits below
+      //      releases each batch's locks immediately and lets enrichment
+      //      writes interleave.
       await client.query('COMMIT');
-
-      log.info(
-        { tenantId, orgId: row.org_id, industry, configsUpdated, transcriptsUpdated, actor: payload.email },
-        'admin: industry-backfill applied',
-      );
-
-      return {
-        ok: true,
-        tenantId,
-        orgId: row.org_id,
-        industry,
-        processed: configsUpdated,
-        transcriptsUpdated,
-        remaining: configsUpdated === 0 ? 1 : 0,
-      };
     } catch (err) {
       try { await client.query('ROLLBACK'); } catch { /* ignore */ }
       throw err;
     } finally {
       client.release();
     }
+
+    // Phase 2: batched transcript backfill OUTSIDE the lock.
+    //
+    // Idempotency: each batch is `WHERE industry IS NULL OR industry = ''`,
+    // so a crash mid-batch leaves a partial backfill that the next admin
+    // call (or a re-run with the same tenantId) finishes off. The
+    // ALREADY_TAGGED gate above only checks the config row, not the
+    // transcripts — once config is tagged, transcript backfill is
+    // "best-effort, resumable" rather than "one-shot only". Re-running with
+    // the same tenantId hits the 409 above; recovery is via a separate
+    // /admin/agents/backfill-transcripts endpoint (R17 backlog) or direct
+    // SQL by ops.
+    const TRANSCRIPT_BATCH_SIZE = 1000;
+    const MAX_BATCHES = 1000; // 1000 × 1000 = 1M transcripts hard ceiling
+    let transcriptsUpdated = 0;
+    if (phase1OrgId && pool) {
+      for (let i = 0; i < MAX_BATCHES; i += 1) {
+        const trUpd = await pool.query(
+          `UPDATE call_transcripts
+             SET industry = $1
+           WHERE id IN (
+             SELECT id FROM call_transcripts
+             WHERE org_id = $2 AND (industry IS NULL OR industry = '')
+             ORDER BY id
+             LIMIT $3
+           )`,
+          [industry, phase1OrgId, TRANSCRIPT_BATCH_SIZE],
+        );
+        const batchCount = trUpd.rowCount ?? 0;
+        transcriptsUpdated += batchCount;
+        if (batchCount < TRANSCRIPT_BATCH_SIZE) break;
+      }
+    }
+
+    log.info(
+      { tenantId, orgId: phase1OrgId, industry, configsUpdated, transcriptsUpdated, actor: payload.email },
+      'admin: industry-backfill applied',
+    );
+
+    return {
+      ok: true,
+      tenantId,
+      orgId: phase1OrgId,
+      industry,
+      processed: configsUpdated,
+      transcriptsUpdated,
+      remaining: configsUpdated === 0 ? 1 : 0,
+    };
   });
 }

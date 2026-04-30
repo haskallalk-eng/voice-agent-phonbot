@@ -392,21 +392,31 @@ export async function retryFailedInvoiceItems(): Promise<void> {
 
 /**
  * Audit-Round-15 (M3 from R14 Codex review): resolve a Stripe-Subscription to
- * a Phonbot orgId using the same defence-in-depth pattern as syncSubscription:
- * trust `metadata.orgId` but cross-check against the stripe_customer_id →
- * orgs.id mapping we persisted at customer-create time. The DB mapping wins on
- * mismatch (a dashboard operator can edit subscription metadata; the customer
- * record is the source of truth).
+ * a Phonbot orgId using a defence-in-depth chain.
  *
- * Returns null when neither metadata nor the DB mapping yields an orgId — the
- * caller should log + skip rather than guess. Used by the deleted/pause/resume
- * branches that previously trusted `metadata.orgId` directly.
+ *   1. `stripe_customer_id` → orgs.id  (canonical, persisted at customer-create)
+ *   2. `metadata.orgId`                (set at subscription-create, can be edited)
+ *   3. `stripe_subscription_id` → orgs.id (last-resort, R16 Codex Plan-Review B4)
+ *
+ * Step 1 wins on mismatch with step 2 — a dashboard operator can edit
+ * subscription metadata, but the customer record is the source of truth, and
+ * silently mutating the wrong org's billing state would be a serious incident.
+ *
+ * Step 3 was added in R16 to handle import-orphan edge cases: subscriptions
+ * created out-of-band (Stripe-CLI, support-team, manual-import) where neither
+ * the customer-mapping nor metadata was populated, but a previous webhook
+ * already persisted `orgs.stripe_subscription_id` via syncSubscription. Without
+ * this, a `subscription.deleted` for such a sub silently no-ops.
+ *
+ * Returns null only if all three resolutions fail — the caller should log +
+ * skip rather than guess.
  */
 export async function resolveOrgIdFromSubscription(sub: Stripe.Subscription): Promise<string | null> {
   if (!pool) return null;
   const metaOrgId = sub.metadata?.orgId ?? null;
   const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
 
+  // Step 1 — customer mapping wins.
   if (customerId) {
     const mapRes = await pool.query<{ id: string }>(
       `SELECT id FROM orgs WHERE stripe_customer_id = $1 LIMIT 1`,
@@ -423,7 +433,27 @@ export async function resolveOrgIdFromSubscription(sub: Stripe.Subscription): Pr
       return dbOrgId;
     }
   }
-  return metaOrgId;
+
+  // Step 2 — trust metadata.
+  if (metaOrgId) return metaOrgId;
+
+  // Step 3 — last-resort: subscription_id mapping (R16 Codex MEDIUM B4).
+  if (sub.id) {
+    const subRes = await pool.query<{ id: string }>(
+      `SELECT id FROM orgs WHERE stripe_subscription_id = $1 LIMIT 1`,
+      [sub.id],
+    );
+    const dbOrgId = subRes.rows[0]?.id ?? null;
+    if (dbOrgId) {
+      log.warn(
+        { subId: sub.id, customerId: customerId ?? null },
+        'billing: orgId resolved via subscription_id last-resort fallback (no customer-mapping or metadata.orgId)',
+      );
+      return dbOrgId;
+    }
+  }
+
+  return null;
 }
 
 // NOTE: Free plan minutes are one-time (no monthly reset).
