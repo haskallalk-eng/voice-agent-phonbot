@@ -390,6 +390,42 @@ export async function retryFailedInvoiceItems(): Promise<void> {
   }
 }
 
+/**
+ * Audit-Round-15 (M3 from R14 Codex review): resolve a Stripe-Subscription to
+ * a Phonbot orgId using the same defence-in-depth pattern as syncSubscription:
+ * trust `metadata.orgId` but cross-check against the stripe_customer_id →
+ * orgs.id mapping we persisted at customer-create time. The DB mapping wins on
+ * mismatch (a dashboard operator can edit subscription metadata; the customer
+ * record is the source of truth).
+ *
+ * Returns null when neither metadata nor the DB mapping yields an orgId — the
+ * caller should log + skip rather than guess. Used by the deleted/pause/resume
+ * branches that previously trusted `metadata.orgId` directly.
+ */
+export async function resolveOrgIdFromSubscription(sub: Stripe.Subscription): Promise<string | null> {
+  if (!pool) return null;
+  const metaOrgId = sub.metadata?.orgId ?? null;
+  const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer?.id;
+
+  if (customerId) {
+    const mapRes = await pool.query<{ id: string }>(
+      `SELECT id FROM orgs WHERE stripe_customer_id = $1 LIMIT 1`,
+      [customerId],
+    );
+    const dbOrgId = mapRes.rows[0]?.id ?? null;
+    if (dbOrgId) {
+      if (metaOrgId && metaOrgId !== dbOrgId) {
+        log.warn(
+          { metaOrgId, dbOrgId, customerId, subId: sub.id },
+          'billing: metadata.orgId mismatch with stripe_customer_id mapping; trusting DB',
+        );
+      }
+      return dbOrgId;
+    }
+  }
+  return metaOrgId;
+}
+
 // NOTE: Free plan minutes are one-time (no monthly reset).
 // Paid plans reset at billing period renewal via syncSubscription.
 async function syncSubscription(sub: Stripe.Subscription) {
@@ -691,16 +727,11 @@ export async function registerBilling(app: FastifyInstance) {
         await syncSubscription(newSub);
         // Auto-provision a German phone number for new paying customers.
         // Stripe-first checkouts (no orgId in metadata) still get provisioned:
-        // we fall back to looking the org up via stripe_customer_id, which
-        // syncSubscription has just populated.
-        let newOrgId = newSub.metadata?.orgId;
-        if (!newOrgId && pool) {
-          const custId = typeof newSub.customer === 'string' ? newSub.customer : newSub.customer?.id;
-          if (custId) {
-            const r = await pool.query('SELECT id FROM orgs WHERE stripe_customer_id = $1', [custId]);
-            newOrgId = r.rows[0]?.id as string | undefined;
-          }
-        }
+        // resolveOrgIdFromSubscription handles both paths (metadata-first +
+        // stripe_customer_id fallback). Audit-Round-15: previously inlined
+        // here with a slightly different shape; consolidating onto the helper
+        // so future Stripe-event branches share one resolution path.
+        const newOrgId = await resolveOrgIdFromSubscription(newSub);
         if (newOrgId && newSub.status === 'active') {
           autoProvisionGermanNumber(newOrgId).catch((err: unknown) => {
             req.log.warn({ err: (err as Error).message, orgId: newOrgId }, 'auto-provision phone after subscription.created failed');
@@ -728,13 +759,21 @@ export async function registerBilling(app: FastifyInstance) {
         // returning user can at least keep using whatever's left of their
         // free allowance — without giving them a fresh refill.
         if (event.type === 'customer.subscription.deleted' && pool) {
-          const orgId = sub.metadata?.orgId;
+          // Audit-Round-15 (M3): resolve via stripe_customer_id mapping with
+          // metadata fallback, not bare metadata.orgId. A dashboard-edited
+          // metadata could otherwise reset the wrong org's minutes.
+          const orgId = await resolveOrgIdFromSubscription(sub);
           if (orgId) {
             await pool.query(
               `UPDATE orgs SET minutes_used = LEAST(minutes_used, minutes_limit) WHERE id = $1`,
               [orgId],
             ).catch((err: Error) =>
               log.error({ err: err.message, orgId }, 'billing: free-plan minutes_used reset failed'),
+            );
+          } else {
+            log.warn(
+              { subId: sub.id, customerId: typeof sub.customer === 'string' ? sub.customer : sub.customer?.id },
+              'billing: subscription.deleted with no resolvable orgId — minutes_used cap skipped',
             );
           }
         }
@@ -743,12 +782,20 @@ export async function registerBilling(app: FastifyInstance) {
       case 'customer.subscription.paused':
       case 'customer.subscription.resumed': {
         const sub = event.data.object as Stripe.Subscription;
-        const orgId = sub.metadata?.orgId;
+        // Audit-Round-15 (M3): same resolution path. A pause/resume webhook
+        // with edited metadata could otherwise toggle the wrong org's
+        // plan_status to 'paused' and lock them out of their dashboard.
+        const orgId = await resolveOrgIdFromSubscription(sub);
         if (orgId && pool) {
           const status = event.type === 'customer.subscription.paused' ? 'paused' : 'active';
           await pool.query(
             `UPDATE orgs SET plan_status = $1 WHERE id = $2`,
             [status, orgId],
+          );
+        } else if (!orgId) {
+          log.warn(
+            { subId: sub.id, evt: event.type, customerId: typeof sub.customer === 'string' ? sub.customer : sub.customer?.id },
+            'billing: subscription pause/resume with no resolvable orgId — plan_status update skipped',
           );
         }
         break;
