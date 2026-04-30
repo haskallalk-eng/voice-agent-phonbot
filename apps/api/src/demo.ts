@@ -35,7 +35,20 @@ export const DEMO_END_INSTRUCTIONS = `
 ## Demo-Modus
 Du bist eine LIVE-Demo auf phonbot.de. Der Anrufer ist ein Website-Besucher, der dich gerade testet. Spiel realistisch mit, aber erfinde keine echten Termine, Preise oder Kalenderdaten — wenn du einen Slot vorschlägst, sind Beispiel-Slots wie "Donnerstag 14 Uhr" ok, aber bestätige nichts als "verbindlich gebucht".
 
-## Selbstreflexion (Meta-Fragen über dich, Phonbot, KI)
+## Pro-aktive Richtungs-Angabe — wenn der Anrufer unsicher ist
+Wenn der Anrufer in den ersten 1–2 Turns nicht klar sagt was er will (zögert, "ähm", "weiß nicht", Stille), führe das Gespräch aktiv und biete 3 konkrete Optionen an. Beispiel-Formulierungen je nach Branche:
+- Friseur: "Soll ich dir einen Termin buchen, dir kurz erzählen welche Services wir haben, oder hast du eine Frage zu mir und Phonbot?"
+- Handwerker: "Geht's um einen neuen Auftrag, eine Frage zu unseren Leistungen, oder zu Phonbot selbst — was passt am besten?"
+- Restaurant: "Reservierung, Frage zur Speisekarte, oder zur Demo selbst — wo darf ich anfangen?"
+- Selbstständige: "Discovery-Call buchen, kurz Sandras Themen erfragen, oder eine Frage zu Phonbot — was wär für dich gerade interessant?"
+
+Die DRITTE Option ist immer "Frage zu Phonbot / zur Demo" — das öffnet die Meta-Konversation explizit. Das gehört zur Demo-Erfahrung dazu: der Anrufer testet ja auch ob du als KI-Assistent über dich selbst sprechen kannst.
+
+Wenn er eine konkrete Richtung wählt, fokussiere dich darauf. Wenn er meta will (Phonbot, KI, Preise) → siehe Selbstreflexion-Sektion unten.
+
+## Selbstreflexion (Meta-Fragen über dich, Phonbot, KI) — GILT FÜR JEDE BRANCHE
+Diese Sektion gilt UNABHÄNGIG davon welche Branchen-Rolle (Friseur, Handwerker, Reinigung, Restaurant, Werkstatt, Selbstständige …) du gerade spielst. Auch wenn dein Branchen-Prompt sagt "Du bist die Telefonassistenz von Demo-Salon" — du bleibst gleichzeitig Chipy, der KI-Telefonassistent von Phonbot, und du KENNST dich.
+
 Du heißt **Chipy** — das ist DEIN Name. NIE sagen "Ich bin ein virtueller Assistent und habe keinen Namen". Wenn der Anrufer dich nach DEINEM Namen fragt, antworte direkt: "Ich heiße Chipy". Wenn er dich um die Buchstabierung bittet: "C wie Chemnitz, H wie Hamburg, I wie Ingelheim, P wie Potsdam, Y wie Ypsilon".
 
 Du bist Chipy — der KI-Telefonassistent von Phonbot. In dieser Demo übernimmst du die Rolle der Telefonassistenz dieses Geschäfts. Wenn der Anrufer DICH oder Phonbot anspricht, antworte ehrlich und kurz, und führ dann sanft zurück zum Demo-Inhalt. Beispiele:
@@ -105,7 +118,7 @@ const inMemDemoAgents = new Map<string, { agentId: string; createdAt: number }>(
 
 async function readDemoAgent(templateId: string): Promise<string | null> {
   if (redis?.isOpen) {
-    const v = await redis.get(`demo_agent:v7:${templateId}`).catch(() => null);
+    const v = await redis.get(`demo_agent:v8:${templateId}`).catch(() => null);
     return v ?? null;
     // Audit-Round-9 H1: when Redis is online but the key is absent (legit
     // flush, scaled-out container B that never wrote it), DO NOT fall back
@@ -139,9 +152,9 @@ async function writeDemoAgent(templateId: string, agentId: string): Promise<void
   inMemDemoAgentMeta.set(agentId, { templateId, createdAt: Date.now() });
   if (redis?.isOpen) {
     await Promise.all([
-      redis.set(`demo_agent:v7:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {}),
+      redis.set(`demo_agent:v8:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {}),
       // Reverse direction: webhook sees agent_id, needs templateId. Same TTL.
-      redis.set(`demo_agent_meta:v7:${agentId}`, templateId, { EX: CACHE_TTL_SEC }).catch(() => {}),
+      redis.set(`demo_agent_meta:v8:${agentId}`, templateId, { EX: CACHE_TTL_SEC }).catch(() => {}),
     ]);
   }
   // Audit-Round-9 H3: durable DB mirror of the reverse-lookup. Redis is the
@@ -258,7 +271,7 @@ export async function maybeSendDemoSignupLink(
  */
 export async function readDemoCallTemplate(agentId: string): Promise<string | null> {
   if (redis?.isOpen) {
-    const v = await redis.get(`demo_agent_meta:v7:${agentId}`).catch(() => null);
+    const v = await redis.get(`demo_agent_meta:v8:${agentId}`).catch(() => null);
     if (v) return v;
     // Skip in-mem when Redis is online (H1): in-mem could be stale across
     // containers and we now have a durable DB layer below.
@@ -321,7 +334,7 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
       const removed = await redis.del(SALES_AGENT_KEY);
       flushed += typeof removed === 'number' ? removed : 0;
       // Clean up previous versions on the way past.
-      await redis.del(['sales_agent:phonbot:v3', 'sales_agent:phonbot:v4', 'sales_agent:phonbot:v5', 'sales_agent:phonbot:v6']).catch(() => {});
+      await redis.del(['sales_agent:phonbot:v3', 'sales_agent:phonbot:v4', 'sales_agent:phonbot:v5', 'sales_agent:phonbot:v6', 'sales_agent:phonbot:v7']).catch(() => {});
     } catch {
       /* non-critical */
     }
@@ -334,6 +347,7 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
     // Local `r` capture so the closure's type-narrowing survives.
     const r = redis;
     for (const pattern of [
+      'demo_agent:v8:*', 'demo_agent_meta:v8:*',
       'demo_agent:v7:*', 'demo_agent_meta:v7:*',
       'demo_agent:v6:*', 'demo_agent_meta:v6:*',
       'demo_agent:v5:*', 'demo_agent_meta:v5:*',
@@ -521,14 +535,12 @@ async function loadSalesPrompt(): Promise<string> {
 }
 
 // Sales agent ID — Redis-backed (shared across containers, survives restarts)
-// In-memory fallback for when Redis is down. Cache key bumps to v7 because
-// DEFAULT_SALES_PROMPT and the platform-baseline grew Tool-Disziplin,
-// Audio-Quality-Fallback, Transfer-Request-Handling, Anti-Repetition,
-// Slot-Auswahl-Bestätigung and Chipy-Selbstwahrnehmung sections (driven by
-// 2026-04-29/30 demo-call feedback). Plus DEMO_POST_CALL_FIELDS gained
-// wants_signup_link enum.
+// In-memory fallback for when Redis is down. Cache key bumps to v8 because
+// platform-baseline gained Context-Retention (anti-re-greeting after stuck
+// end_call) and DEMO_END_INSTRUCTIONS gained pro-aktive Richtungs-Angabe +
+// stronger meta-self-awareness wording. v7 agents shipped without these.
 let salesAgentIdMem: string | null = null;
-const SALES_AGENT_KEY = 'sales_agent:phonbot:v7';
+const SALES_AGENT_KEY = 'sales_agent:phonbot:v8';
 let pendingSalesCreate: Promise<string> | null = null;
 
 export async function getOrCreateSalesAgent(): Promise<string> {
