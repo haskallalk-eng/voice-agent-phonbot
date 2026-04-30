@@ -24,7 +24,7 @@
 | Rechtsgrundlage | Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung mit Geschäftskunde) — für Endkunden-Anrufer: zusätzlich Art. 6 Abs. 1 lit. f (berechtigtes Interesse des Anrufers an Anliegen-Bearbeitung + Geschäftskunden an effizienter Kundenkommunikation) |
 | Betroffene | Anrufer der Geschäftskunden (Endverbraucher, Interessenten, Bestandskunden) |
 | Datenkategorien | Stammdaten (Name, Telefonnummer, E-Mail), Inhaltsdaten (Audio sofern aktiviert, Transkripte, Anliegen-Zusammenfassungen), Metadaten (Datum, Dauer, Outcome) |
-| Empfänger / Sub-Processoren | Supabase (DB, EU), IONOS (Hosting, EU), Retell AI (Voice-Runtime, US-SCC), OpenAI (LLM, US-DPF+SCC), Twilio (Telefonie, US-DPF+SCC), Cartesia (TTS, US-SCC), ElevenLabs (TTS-Clone, US-SCC, optional), Resend (Mail, US-SCC), Sentry (Error-Monitoring, US-DPF+SCC), Cloudflare (CDN+CAPTCHA, US-DPF+SCC) |
+| Empfänger / Sub-Processoren | Supabase (DB, EU), IONOS (Hosting, EU), Retell AI (Voice-Runtime, US-SCC), OpenAI (LLM, US-DPF+SCC), Twilio (Telefonie, US-DPF+SCC), Cartesia (TTS Standard, US-SCC), ElevenLabs (TTS Premium-Stimmen, US-SCC), Resend (Mail, US-SCC), Sentry (Error-Monitoring, US-DPF+SCC), Cloudflare (CDN+CAPTCHA, US-DPF+SCC) |
 | Drittlandtransfer | USA — Schutzgarantien: SCC + ggf. DPF + TIA pro Anbieter (siehe `compliance/tias/`) |
 | Aufbewahrungsfrist | Anrufer-Daten: 90 Tage rolling für nicht-konvertierte Leads; bis Vertragsende für Bestandskunden-Anrufe; max. 10 Jahre für Rechnungs-relevante Metadaten (§ 147 AO) |
 | TOMs | siehe AVV Anhang 1 (`/avv/#a1`); zentral: AES-256-GCM at rest, TLS in transit, PII-Redaction in Logs, Rate-Limits, CAPTCHA, Multi-Tenant-org_id-Scoping |

@@ -126,13 +126,30 @@ function withDefault(voices: CuratedVoice[]): CuratedVoice[] {
   return voices.map((v, i) => (i === 0 ? { ...v, isDefault: true } : v));
 }
 
-// ── DE — 11 native voices ──────────────────────────────────────────────
-// Chipy (HQ + Standard) are German-specific custom clones. Cartesia's
-// 9-voice Std lineup is Sonic-native for DE. 11labs actors are English
-// and would speak German with an accent — excluded.
+// ── DE — 19 native + multilingual-HQ voices ────────────────────────────
+// Tier-Zusammensetzung:
+//  • Chipy (HQ) = ElevenLabs Hassieb-Kalla custom clone, vollständig DE-nativ
+//  • Chipy Basic (Standard) = Cartesia Chipy clone, DE-nativ
+//  • 8× Cartesia Sonic Standard (DE-nativ über Sonic-DE)
+//  • 8× ElevenLabs Multilingual-v2 (HQ): die englischen 11labs-Actors klingen
+//    seit Multilingual-v2 (2024) auf DE sehr ordentlich — nicht 100 % nativ,
+//    aber deutlich höher in akustischer Qualität (Stimm-Tiefe, Atmung,
+//    Mikro-Pausen) als die DE-nativen Standard-Stimmen. Aktiviert via
+//    Retell's Default-11labs-Library — kein BYO-Key nötig. +5 Ct/Min
+//    Surcharge wie alle HQ-Voices.
 const DE_VOICES: CuratedVoice[] = [
-  { id: CHIPY_HQ_ID,  name: 'Chipy',       tier: 'hq',       gender: 'male',   provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: CHIPY_STD_ID, name: 'Chipy Basic', tier: 'standard', gender: 'male',   provider: 'cartesia' },
+  { id: CHIPY_HQ_ID,        name: 'Chipy',       tier: 'hq',       gender: 'male',   provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: CHIPY_STD_ID,       name: 'Chipy Basic', tier: 'standard', gender: 'male',   provider: 'cartesia' },
+  // ── ElevenLabs HQ (Multilingual-v2 auf Deutsch) ─────────────────────
+  { id: '11labs-Sarah',     name: 'Sarah',       tier: 'hq',       gender: 'female', provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: '11labs-Charlotte', name: 'Charlotte',   tier: 'hq',       gender: 'female', provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: '11labs-Matilda',   name: 'Matilda',     tier: 'hq',       gender: 'female', provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: '11labs-Lily',      name: 'Lily',        tier: 'hq',       gender: 'female', provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: '11labs-Daniel',    name: 'Daniel HQ',   tier: 'hq',       gender: 'male',   provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: '11labs-Brian',     name: 'Brian',       tier: 'hq',       gender: 'male',   provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: '11labs-Adam',      name: 'Adam',        tier: 'hq',       gender: 'male',   provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: '11labs-James',     name: 'James',       tier: 'hq',       gender: 'male',   provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  // ── Cartesia Sonic Standard (DE-nativ) ──────────────────────────────
   ...buildCartesiaStd({
     f1: 'Eva',   f2: 'Lina',   f3: 'Nora',    f4: 'Emma',  f5: 'Clara',  f6: 'Greta',
     m1: 'Jonas', m2: 'Stefan', m3: 'Daniel',
