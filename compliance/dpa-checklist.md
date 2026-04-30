@@ -12,17 +12,17 @@ Verwende dies als Tracking-Liste. Lege jede signierte/heruntergeladene Vertragsk
 | **OpenAI** | [openai.com/policies/data-processing-addendum](https://openai.com/policies/data-processing-addendum/) → platform.openai.com → Settings → Compliance | DPF ✓ | ⬜ | ⬜ |
 | **Twilio** | [twilio.com/legal/data-processing-addendum](https://www.twilio.com/en-us/legal/data-processing-addendum) → Console → Compliance | DPF ✓ | ⬜ | ⬜ |
 | **Stripe** | DPA ist Teil der ToS bei Stripe Payments Europe Ltd (Dublin) — Dashboard → Settings → Compliance | EU-Vertrag | ⬜ | ⬜ |
-| **Resend** | [resend.com/legal/dpa](https://resend.com/legal/dpa) → Account → Settings → Legal | SCC inkludiert | ⬜ | ⬜ |
+| **Resend** | [resend.com/legal/dpa](https://resend.com/legal/dpa) → Account → Settings → Legal | SCC inkludiert | ✅ 2026-04-30 | ✅ `dpas/resend/2026-04-30-Resend-DPA-DocuSign.pdf` |
 | **Sentry** | [sentry.io/legal/dpa](https://sentry.io/legal/dpa/) → Settings → Organization → Legal | DPF ✓ | ⬜ | ⬜ |
 | **ElevenLabs** | [elevenlabs.io/dpa](https://elevenlabs.io/dpa) → Account → Settings → Legal | SCC inkludiert | ⬜ | ⬜ |
 | **Cloudflare** | [cloudflare.com/cloudflare-customer-dpa](https://www.cloudflare.com/cloudflare-customer-dpa/) → Account Home → Configurations | DPF ✓ | ⬜ | ⬜ |
-| **IONOS** | IONOS-Kundencenter → Vertragsunterlagen → "AV-Vertrag (Art. 28 DSGVO)" · alternativ direkt: [ionos.de/terms-gtc/terms-data-processing](https://www.ionos.de/terms-gtc/terms-data-processing) | EU-only · BSI C5 zertifiziert | ⬜ | ⬜ |
+| **IONOS** | IONOS-Kundencenter → Vertragsunterlagen → "AV-Vertrag (Art. 28 DSGVO)" · alternativ direkt: [ionos.de/terms-gtc/terms-data-processing](https://www.ionos.de/terms-gtc/terms-data-processing) | EU-only · BSI C5 zertifiziert | ✅ 2026-04-30 | ✅ `dpas/ionos/2026-04-30-IONOS-AVV.pdf` |
 
 ## Per E-Mail anfragen (Mail-Vorlagen liegen unter `compliance/dpa-requests/`)
 
 | Anbieter | E-Mail | Vorlage | Status |
 |---|---|---|---|
-| **Retell AI** | support@retellai.com, legal@retellai.com | [`2026-04-30-retell-dpa-request.eml`](dpa-requests/2026-04-30-retell-dpa-request.eml) | ⬜ versendet ⬜ Antwort erhalten ⬜ DPA signiert |
+| **Retell AI** | ~~support@retellai.com, legal@retellai.com~~ — direkt via DocuSign-Self-Service akzeptiert (Mail-Anfrage nicht mehr nötig) | [`2026-04-30-retell-dpa-request.eml`](dpa-requests/2026-04-30-retell-dpa-request.eml) (obsolet) | ✅ 2026-04-30 DocuSign-signiert · `dpas/retell/2026-04-30-Retell-DPA-DocuSign.pdf` |
 | **Cartesia** | support@cartesia.ai, legal@cartesia.ai | [`2026-04-30-cartesia-dpa-request.eml`](dpa-requests/2026-04-30-cartesia-dpa-request.eml) | ⬜ versendet ⬜ Antwort erhalten ⬜ DPA signiert |
 
 **Wie versenden:**
