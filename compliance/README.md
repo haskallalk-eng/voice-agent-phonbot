@@ -90,9 +90,9 @@ Siehe `.gitignore` Sektion „Compliance".
 
 | Verantwortung | Rolle |
 |---|---|
-| Geschäftsführung Datenschutz | Hassieb Kalla, Geschäftsführer |
+| Geschäftsführung Datenschutz | Hans Waier, Geschäftsführer |
 | Vertragsabschluss DPA / SCC | Geschäftsführung |
-| Technische Sicherheitsmaßnahmen | Engineering-Lead (Hassieb Kalla) |
+| Technische Sicherheitsmaßnahmen | Engineering-Lead (Hans Waier) |
 | Anlaufstelle Betroffenenrechte | info@phonbot.de |
 | DSGVO-Behörde (Aufsicht) | Berliner Beauftragte für Datenschutz und Informationsfreiheit (BlnBDI), Friedrichstraße 219, 10969 Berlin |
 
