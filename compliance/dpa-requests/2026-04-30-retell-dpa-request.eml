@@ -1,0 +1,58 @@
+To: support@retellai.com
+Cc: legal@retellai.com
+From: info@phonbot.de
+Subject: Data Processing Agreement (DPA) + SCC Request — EU Customer (Mindrails UG / Phonbot)
+X-Unsent: 1
+Content-Type: text/plain; charset=utf-8
+MIME-Version: 1.0
+
+Hi Retell team,
+
+We're an EU-based customer (Mindrails UG, Berlin, Germany), currently
+building phonbot.de — a B2B SaaS that uses Retell to provide a voice-
+agent platform to small and mid-sized German businesses.
+
+Under GDPR Article 28, we're required to have a signed Data Processing
+Agreement in place with every processor that handles personal data on
+our behalf, before we can put Retell in our production stack. Our
+go-live target is mid-Q2 2026 and Retell is in our published sub-
+processor list (https://phonbot.de/sub-processors/).
+
+Could you please send us:
+
+1. Your standard Data Processing Addendum (DPA) — pre-signed PDF
+   preferred, or DocuSign link.
+
+2. EU Standard Contractual Clauses (SCC) — Module 3 (processor-to-
+   processor), since Retell acts as our sub-processor for our customers'
+   end-callers.
+
+3. Confirmation of your current DPF (EU-US Data Privacy Framework)
+   certification status, if any. We're tracking this on
+   dataprivacyframework.gov but appreciate a direct statement for our
+   internal Transfer Impact Assessment.
+
+4. Confirmation that data sent through your API is NOT used to train
+   any AI model — i.e. an explicit zero-retention / no-training
+   commitment for API-tier traffic.
+
+5. A list of any sub-processors you in turn rely on (LLM providers,
+   telephony carriers, hosting), including the country each operates
+   from. We need this for our own published sub-processor list.
+
+Account details:
+  Company:       Mindrails UG (haftungsbeschränkt)
+  Country:       Germany
+  Account email: info@phonbot.de
+  Workspace:     phonbot.de
+
+Happy to share our own DPA template if that speeds things up — let me
+know if you'd prefer your form or ours.
+
+Best regards,
+Hassieb Kalla
+Geschäftsführer
+Mindrails UG (haftungsbeschränkt)
+Scharnhorststraße 8, 12307 Berlin, Germany
+info@phonbot.de · +49 30 75937169
+https://phonbot.de

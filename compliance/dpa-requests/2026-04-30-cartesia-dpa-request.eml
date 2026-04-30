@@ -1,0 +1,50 @@
+To: support@cartesia.ai
+Cc: legal@cartesia.ai
+From: info@phonbot.de
+Subject: Data Processing Agreement (DPA) + SCC Request — EU Customer (Mindrails UG / Phonbot)
+X-Unsent: 1
+Content-Type: text/plain; charset=utf-8
+MIME-Version: 1.0
+
+Hi Cartesia team,
+
+We're an EU-based B2B SaaS (Mindrails UG, Berlin, Germany) building
+phonbot.de — a voice-agent platform that uses Cartesia for text-to-
+speech in production. Cartesia is in our published sub-processor list
+at https://phonbot.de/sub-processors/.
+
+Under GDPR Article 28, we need a signed Data Processing Agreement in
+place before going live. Could you please send:
+
+1. Your standard Data Processing Addendum (DPA) — pre-signed PDF or
+   DocuSign link.
+
+2. EU Standard Contractual Clauses (SCC) — Module 3 (processor-to-
+   processor) appended to the DPA.
+
+3. Confirmation of your current DPF (EU-US Data Privacy Framework)
+   certification status, if any.
+
+4. Confirmation that text input sent via your API is NOT used for
+   model training (zero-retention commitment for API tier).
+
+5. A list of any sub-processors Cartesia in turn relies on (hosting,
+   GPU compute, etc.) and their country of operation.
+
+If you don't currently maintain a standard DPA template, we can share
+ours as a starting point — just let us know.
+
+Account details:
+  Company:       Mindrails UG (haftungsbeschränkt)
+  Country:       Germany
+  Account email: info@phonbot.de
+  Use case:      TTS for German-language voice agent (de-DE),
+                 streaming audio over WebRTC
+
+Best regards,
+Hassieb Kalla
+Geschäftsführer
+Mindrails UG (haftungsbeschränkt)
+Scharnhorststraße 8, 12307 Berlin, Germany
+info@phonbot.de · +49 30 75937169
+https://phonbot.de
