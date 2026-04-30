@@ -2,7 +2,7 @@
 
 > Pflicht-Dokument nach Schrems II (EuGH C-311/18) für jeden Datentransfer in ein Drittland ohne Angemessenheitsbeschluss. Eines pro Sub-Processor.
 >
-> **Stand:** YYYY-MM-DD · **Verantwortlich:** Hassieb Kalla, Mindrails UG · **Re-Verifikation:** halbjährlich
+> **Stand:** YYYY-MM-DD · **Verantwortlich:** Hans Waier, Mindrails UG · **Re-Verifikation:** halbjährlich
 
 ---
 
@@ -11,7 +11,7 @@
 - **Firma:** Mindrails UG (haftungsbeschränkt)
 - **Sitz:** Scharnhorststraße 8, 12307 Berlin, Deutschland
 - **Anwendung:** Phonbot — KI-Telefonassistent SaaS
-- **Geschäftsführung:** Hassieb Kalla
+- **Geschäftsführung:** Hans Waier
 - **DSB:** *kein bestellter DSB; geringe Zahl von Beschäftigten unter Pflichtschwelle*
 
 ## 2. Datenimporteur (Sub-Processor)
@@ -94,7 +94,7 @@
 
 | Datum | Verifiziert von | Änderungen seit letzter Prüfung | DPF-Status |
 |---|---|---|---|
-| `YYYY-MM-DD` | Hassieb Kalla | initiale Erstellung | `<aktiv / inaktiv>` |
+| `YYYY-MM-DD` | Hans Waier | initiale Erstellung | `<aktiv / inaktiv>` |
 
 **Nächste Re-Verifikation fällig:** `YYYY-MM-DD` (+6 Monate)
 

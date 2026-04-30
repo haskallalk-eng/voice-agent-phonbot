@@ -2,7 +2,7 @@
 
 > Pflicht-Dokument nach **Art. 30 Abs. 1 DSGVO** für jeden Verantwortlichen mit ≥ 250 Beschäftigten ODER bei nicht-gelegentlicher / risikoreicher Verarbeitung. Beides trifft auf Mindrails zu (Phonbot verarbeitet kontinuierlich personenbezogene Daten von Anrufern).
 >
-> **Stand:** 2026-04-30 · **Version:** 1.0 · **Verantwortlich:** Hassieb Kalla, Geschäftsführer
+> **Stand:** 2026-04-30 · **Version:** 1.0 · **Verantwortlich:** Hans Waier, Geschäftsführer
 
 ## A. Verantwortlicher
 
@@ -10,7 +10,7 @@
 |---|---|
 | Firma | Mindrails UG (haftungsbeschränkt) |
 | Anschrift | Scharnhorststraße 8, 12307 Berlin |
-| Vertretungsberechtigt | Hassieb Kalla, Geschäftsführer |
+| Vertretungsberechtigt | Hans Waier, Geschäftsführer |
 | Kontakt Datenschutz | info@phonbot.de · +49 30 75937169 |
 | Datenschutzbeauftragter | *kein bestellter DSB; Mindrails liegt unter den Pflichtschwellen des § 38 BDSG (regelmäßig < 20 Personen mit DV-Tätigkeiten, keine Kerngeschäfts-Verarbeitung besonderer Kategorien)* |
 
