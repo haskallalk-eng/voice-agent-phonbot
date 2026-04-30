@@ -43,13 +43,11 @@ test-migrate.mjs
 **/tmp-*.mjs
 **/tmp-*.ts
 
-# Compliance — checklists + e-mail templates ARE tracked, signed contracts are NOT.
-# Anbieter-Verträge enthalten Vertragsbedingungen die nicht öffentlich sind,
-# TIA-Bewertungen können Geschäftsgeheimnisse enthalten, VVT enthält Lieferanten-
-# Mappings die nicht ins Repo gehören. Halbjährliche DPF-Screenshots sind
-# erstaunlich groß und würden das Repo unnötig aufblähen.
+# Compliance — only signed contracts + DPF-Screenshots stay outside the repo.
+# Eigene TIA-Bewertungen, VVT (.md), Mail-Templates und DPA-Vorlage sind
+# Mindrails-interne Dokumente, keine Anbieter-Geheimnisse — die werden
+# getrackt damit Team + Audits Zugriff haben.
 compliance/dpas/
-compliance/tias/
 compliance/dpf-verifications/
 compliance/vvt.xlsx
 compliance/vvt.csv

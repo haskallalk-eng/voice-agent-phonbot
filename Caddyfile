@@ -60,6 +60,9 @@
     handle /outbound* {
         reverse_proxy api:3001
     }
+    handle /calendar* {
+        reverse_proxy api:3001
+    }
     handle /health {
         reverse_proxy api:3001
     }
