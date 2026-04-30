@@ -1,3 +1,10 @@
+// IPv4-first DNS-Resolution — ohne dies versucht Node auf Windows oft zuerst
+// IPv6 für Supabase-Hostnamen, was zu ENETUNREACH führt. Vorher als Shell-Flag
+// `node --dns-result-order=ipv4first` gesetzt — jetzt im App-Code, damit das
+// dev-Script Cross-Platform funktioniert (Bash + PowerShell + cmd.exe).
+import dns from 'node:dns';
+dns.setDefaultResultOrder('ipv4first');
+
 import './env.js'; // must be first — loads .env before anything reads process.env
 import { initSentry, Sentry } from './sentry.js';
 
