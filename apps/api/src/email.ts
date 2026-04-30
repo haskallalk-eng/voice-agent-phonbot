@@ -7,6 +7,25 @@ const APP_URL = process.env.APP_URL ?? 'https://phonbot.de';
 
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
+// Boot-time diagnostic — visible in container start logs. The 2026-04-24
+// "no emails for 6 days, no errors in Resend" debugging session showed that
+// silent RESEND_NOT_CONFIGURED is the failure mode that's hardest to spot:
+// nothing reaches Resend, nothing logs at request-time (before this fix), and
+// the only signal is the absence of activity. Loud-log on boot so the next
+// failure is visible the second the container starts.
+if (!resend) {
+  process.stderr.write(
+    `[email] WARNING: RESEND_API_KEY is empty or missing — all transactional emails will be silently skipped (signup-link, verification, password-reset, ticket, plan, payment-failed). Check apps/api/.env on the production server.\n`,
+  );
+} else {
+  // Mask the key prefix so we don't leak the value into Docker logs but still
+  // see at a glance that something is configured.
+  const masked = RESEND_API_KEY.length > 8 ? `${RESEND_API_KEY.slice(0, 4)}…${RESEND_API_KEY.slice(-4)}` : '<short>';
+  process.stderr.write(
+    `[email] Resend configured: key=${masked} from=${FROM_EMAIL} app=${APP_URL}\n`,
+  );
+}
+
 // ── Branded Email Template ─────────────────────────────────────────────────
 
 function brandedEmail(opts: { title: string; body: string; cta?: { label: string; url: string }; footer?: string }): string {
@@ -79,15 +98,24 @@ async function sendWithTimeout(p: Promise<unknown>, label: string, ms = 10_000):
   }
 }
 
-async function send(to: string, subject: string, text: string, html: string, replyTo?: string) {
-  if (!resend) return;
+export type EmailSendResult = { ok: true } | { ok: false; error: string };
+
+async function send(to: string, subject: string, text: string, html: string, replyTo?: string): Promise<EmailSendResult> {
+  if (!resend) return { ok: false, error: 'RESEND_NOT_CONFIGURED' };
   try {
     await sendWithTimeout(
       resend.emails.send({ from: FROM_EMAIL, to, subject, text, html, ...(replyTo ? { replyTo } : {}) }),
       subject,
     );
+    return { ok: true };
   } catch (e: unknown) {
-    process.stderr.write(`[email] Send failed (${subject}): ${e instanceof Error ? e.message : String(e)}\n`);
+    const error = e instanceof Error ? e.message : String(e);
+    // stderr keeps the audit trail when the caller doesn't log; callers SHOULD
+    // inspect the result and surface via Pino/Sentry so prod observability
+    // sees the actual Resend reason (from-address not verified, bounce, rate
+    // limit, etc.) — without this you lose the most common email-failure mode.
+    process.stderr.write(`[email] Send failed (${subject}): ${error}\n`);
+    return { ok: false, error };
   }
 }
 
@@ -236,7 +264,7 @@ export async function sendSignupAbandonedEmail(opts: {
   await send(opts.toEmail, 'Deine Phonbot-Anmeldung wartet auf dich', text, html);
 }
 
-export async function sendSignupLinkEmail(opts: { toEmail: string; name?: string | null }) {
+export async function sendSignupLinkEmail(opts: { toEmail: string; name?: string | null }): Promise<EmailSendResult> {
   const safeName = opts.name ? escapeHtml(opts.name) : null;
   const signupUrl = `${APP_URL}/login`;
   const html = brandedEmail({
@@ -250,7 +278,7 @@ export async function sendSignupLinkEmail(opts: { toEmail: string; name?: string
     footer: 'Demo-Rückruf angefordert · Phonbot',
   });
   const text = `Dein Phonbot-Testlink: ${signupUrl}\n\nDu kannst Phonbot kostenlos testen und deinen ersten Telefonagenten einrichten.`;
-  await send(opts.toEmail, 'Dein Phonbot-Testlink', text, html);
+  return send(opts.toEmail, 'Dein Phonbot-Testlink', text, html);
 }
 
 export async function sendPlanActivatedEmail(opts: { toEmail: string; orgName: string; planName: string; minutesLimit: number }) {
