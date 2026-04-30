@@ -16,7 +16,7 @@ Verwende dies als Tracking-Liste. Lege jede signierte/heruntergeladene Vertragsk
 | **Sentry** | [sentry.io/legal/dpa](https://sentry.io/legal/dpa/) → Settings → Organization → Legal | DPF ✓ | ⬜ | ⬜ |
 | **ElevenLabs** | [elevenlabs.io/dpa](https://elevenlabs.io/dpa) → Account → Settings → Legal | SCC inkludiert | ⬜ | ⬜ |
 | **Cloudflare** | [cloudflare.com/cloudflare-customer-dpa](https://www.cloudflare.com/cloudflare-customer-dpa/) → Account Home → Configurations | DPF ✓ | ⬜ | ⬜ |
-| **Hetzner** | AVV-PDF im Robot/Cloud Console → Vertragsdokumente | EU-only | ⬜ | ⬜ |
+| **IONOS** | IONOS-Kundencenter → Vertragsunterlagen → "AV-Vertrag (Art. 28 DSGVO)" · alternativ direkt: [ionos.de/terms-gtc/terms-data-processing](https://www.ionos.de/terms-gtc/terms-data-processing) | EU-only · BSI C5 zertifiziert | ⬜ | ⬜ |
 
 ## Per E-Mail anfragen (Mail-Vorlagen liegen unter `compliance/dpa-requests/`)
 
