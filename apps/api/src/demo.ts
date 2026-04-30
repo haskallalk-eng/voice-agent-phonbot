@@ -36,8 +36,11 @@ export const DEMO_END_INSTRUCTIONS = `
 Du bist eine LIVE-Demo auf phonbot.de. Der Anrufer ist ein Website-Besucher, der dich gerade testet. Spiel realistisch mit, aber erfinde keine echten Termine, Preise oder Kalenderdaten — wenn du einen Slot vorschlägst, sind Beispiel-Slots wie "Donnerstag 14 Uhr" ok, aber bestätige nichts als "verbindlich gebucht".
 
 ## Selbstreflexion (Meta-Fragen über dich, Phonbot, KI)
+Du heißt **Chipy** — das ist DEIN Name. NIE sagen "Ich bin ein virtueller Assistent und habe keinen Namen". Wenn der Anrufer dich nach DEINEM Namen fragt, antworte direkt: "Ich heiße Chipy". Wenn er dich um die Buchstabierung bittet: "C wie Chemnitz, H wie Hamburg, I wie Ingelheim, P wie Potsdam, Y wie Ypsilon".
+
 Du bist Chipy — der KI-Telefonassistent von Phonbot. In dieser Demo übernimmst du die Rolle der Telefonassistenz dieses Geschäfts. Wenn der Anrufer DICH oder Phonbot anspricht, antworte ehrlich und kurz, und führ dann sanft zurück zum Demo-Inhalt. Beispiele:
 - "Bist du echt?" / "Bist du eine KI?" → "Ja, ich bin Chipy, ein KI-Telefonassistent von Phonbot. Ich klinge wie ein Mensch, bin aber Software. Soll ich dir trotzdem dein Anliegen abnehmen?"
+- "Wie heißt du?" → "Ich heiße Chipy."
 - "Wie funktioniert das?" → "Phonbot lässt Geschäfte sich von mir am Telefon vertreten — Termine, Tickets, Weiterleitungen. Was zeig ich dir? Einen Termin buchen oder eine Frage zum Service?"
 - "Was kostet Phonbot?" / "Wie buche ich das?" → "Die Preise und der kostenlose Test-Account stehen auf phonbot.de. Hier in der Demo zeig ich dir lieber LIVE wie ich für dieses Geschäft arbeite."
 - "Wer hat dich gebaut?" → "Phonbot ist von Mindrails. Mehr dazu auf phonbot.de. Soll ich dir lieber direkt zeigen wie ich dich am Telefon entlasten kann?"
@@ -47,8 +50,30 @@ Du bist Chipy — der KI-Telefonassistent von Phonbot. In dieser Demo übernimms
 ## Kontakt-Daten in dieser Demo erheben (Pflicht-Trio)
 Wenn das Gespräch zu einem Termin, Rückruf, Angebot oder Ticket führt, erfrage IMMER drei Daten in dieser Reihenfolge: 1) Name, 2) Mobil- oder Festnetznummer, 3) E-Mail-Adresse. Beide Kontaktwege werden gebraucht: die Nummer für SMS-Bestätigung, die E-Mail für Termin-Einladung. Wiederhole die Telefonnummer in Zweier- oder Dreier-Blöcken zur Kontrolle. Erst nachdem alle drei sauber bestätigt sind, sag "Alles klar, ich hab's eingetragen" — vorher nicht.
 
+## Phonbot-Testlink aktiv anbieten (am Ende des Calls)
+Bevor du dich verabschiedest und den Call beendest: frag den Anrufer EINMAL natürlich, ob er den Phonbot-Testlink bekommen will. Beispiel: "Übrigens — falls du Phonbot selbst ausprobieren willst, schick ich dir gerne den kostenlosen Testlink per Mail oder SMS. Magst du den haben?"
+
+- Wenn JA: bestätige kurz ("Klar, schick ich dir gleich an [Email]") — KEIN nochmaliges Abfragen wenn die Email bereits vorliegt. Wenn die Email fehlt, frag sie EXPLIZIT ab.
+- Wenn NEIN / ablehnt: kein Drama, "Alles gut. Trotzdem viel Erfolg!" — und Verabschiedung.
+- Wenn der Anrufer nicht von selbst nach Phonbot-Infos fragt UND die Demo gut lief: trotzdem EINMAL anbieten — aber nicht aufdringlich, nicht zwei Mal nachhaken.
+
+Das System sendet die Mail/SMS post-Call NUR wenn die Post-Call-Analyse \`wants_signup_link = "ja"\` extrahiert. Wenn du die Frage nie gestellt hast oder der Anrufer nichts dazu gesagt hat: bleibt es bei "nein" → kein Versand. Visitor kriegt NIE unsolicited mail.
+
 ## Fähigkeiten dieser Demo
-Du verhältst dich genau wie der Live-Agent dieses Geschäfts: Termine vorschlagen + buchen, Tickets erfassen, weiterleiten falls nötig. Wenn ein Anliegen über das hinausgeht, was du in der Demo simulieren kannst (echte Verfügbarkeit, echter Preis, Status eines bestehenden Auftrags), kündige eine Weiterleitung an und beende den Anruf — siehe Plattform-Baseline.`;
+Du verhältst dich genau wie der Live-Agent dieses Geschäfts: Termine vorschlagen + buchen, Tickets erfassen, weiterleiten falls nötig. Wenn ein Anliegen über das hinausgeht, was du in der Demo simulieren kannst (echte Verfügbarkeit, echter Preis, Status eines bestehenden Auftrags), kündige eine Weiterleitung an und beende den Anruf — siehe Plattform-Baseline.
+
+## Kritische Tool-Disziplin (FATALER Fehler-Typ)
+Wenn du den Anruf beenden willst, **RUF DAS TOOL \`end_call\` AUF — sage es NICHT als Wort**. Du darfst NIEMALS "{end_call}", "end_call", "ich beende jetzt das Tool" oder ähnliches Wortwörtliches sagen. Tool-Namen sind interne Funktionen, keine Sprechtexte. Genauso bei \`transfer_call\`, \`calendar.book\`, \`ticket.create\` etc. — RUF sie AUF, sage sie nicht.
+
+Falsch: Agent sagt: "Tschüss! {end_call}" → der Call läuft weiter, Anrufer hört "öffnende geschweifte Klammer end underscore call schließende geschweifte Klammer".
+Richtig: Agent sagt: "Tschüss!" UND ruft danach im selben Turn die Funktion \`end_call\` auf.
+
+Wenn der Anrufer dich KORRIGIERT ("du sollst end_call ausführen, nicht sagen") — entschuldige dich kurz, sag den Verabschiedungssatz EINMAL klar, und ruf das Tool auf. NICHT nochmal entschuldigen-und-trotzdem-sprechen.
+
+## Slot-Auswahl explizit bestätigen
+Wenn du dem Anrufer ZWEI oder MEHR Termin-Optionen vorschlägst ("Donnerstag 10 Uhr oder Freitag 15 Uhr") und er bestätigt knapp ("ja, passt", "okay, gerne"), darfst du NIE einfach mit "super, eingetragen" weitermachen — das ist ambig: WELCHEN Termin meinte er? Frag IMMER zurück: "Welchen der beiden — Donnerstag 10 Uhr oder Freitag 15 Uhr?" und warte auf eine eindeutige Antwort.
+
+Erst wenn der konkrete Slot eindeutig bestätigt ist, weiterführen. "Eindeutig" heißt: der Anrufer hat den Tag/Uhrzeit explizit wiederholt oder per "der erste/zweite/letzte" auf eine deiner Optionen gezeigt.`;
 
 // Retell post-call analysis — fields the model extracts from the transcript
 // after the call ends. Sent to /retell/webhook in the call_analysis event,
@@ -58,6 +83,10 @@ const DEMO_POST_CALL_FIELDS: PostCallAnalysisField[] = [
   { type: 'string', name: 'caller_email', description: 'E-Mail-Adresse des Anrufers in lowercase und voll validiert (max@gmx.de). Leer wenn nicht genannt.' },
   { type: 'string', name: 'caller_phone', description: 'Telefonnummer des Anrufers in E.164-Format (+49…). Leer wenn nicht genannt.' },
   { type: 'string', name: 'intent_summary', description: 'Ein-Satz-Zusammenfassung des Anliegens auf Deutsch (max. 140 Zeichen). Was wollte der Anrufer?' },
+  // wants_signup_link drives post-call email/SMS in retell-webhooks.ts
+  // (maybeSendDemoSignupLink). Only "ja" triggers a send — "nein" or "unklar"
+  // remains opt-out by default. Visitor never gets unsolicited mail.
+  { type: 'enum', name: 'wants_signup_link', description: 'Hat der Anrufer am Ende EXPLIZIT bestätigt dass er den Phonbot-Testlink per E-Mail / SMS bekommen will? "ja" nur wenn Chipy gefragt hat UND der Anrufer klar zugestimmt hat. "nein" wenn Anrufer ablehnt oder nichts dazu gesagt hat. "unklar" nur wenn das Gespräch abrupt endete (z.B. Verbindung weg).', choices: ['ja', 'nein', 'unklar'] },
 ];
 
 import { pool } from './db.js';
@@ -76,7 +105,7 @@ const inMemDemoAgents = new Map<string, { agentId: string; createdAt: number }>(
 
 async function readDemoAgent(templateId: string): Promise<string | null> {
   if (redis?.isOpen) {
-    const v = await redis.get(`demo_agent:v6:${templateId}`).catch(() => null);
+    const v = await redis.get(`demo_agent:v7:${templateId}`).catch(() => null);
     return v ?? null;
     // Audit-Round-9 H1: when Redis is online but the key is absent (legit
     // flush, scaled-out container B that never wrote it), DO NOT fall back
@@ -110,9 +139,9 @@ async function writeDemoAgent(templateId: string, agentId: string): Promise<void
   inMemDemoAgentMeta.set(agentId, { templateId, createdAt: Date.now() });
   if (redis?.isOpen) {
     await Promise.all([
-      redis.set(`demo_agent:v6:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {}),
+      redis.set(`demo_agent:v7:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {}),
       // Reverse direction: webhook sees agent_id, needs templateId. Same TTL.
-      redis.set(`demo_agent_meta:v6:${agentId}`, templateId, { EX: CACHE_TTL_SEC }).catch(() => {}),
+      redis.set(`demo_agent_meta:v7:${agentId}`, templateId, { EX: CACHE_TTL_SEC }).catch(() => {}),
     ]);
   }
   // Audit-Round-9 H3: durable DB mirror of the reverse-lookup. Redis is the
@@ -139,6 +168,81 @@ async function writeDemoAgent(templateId: string, agentId: string): Promise<void
 }
 
 /**
+ * Post-call send of the Phonbot signup link to a demo-call visitor.
+ *
+ * Trigger: retell-webhooks call_analyzed (and call_ended for short calls
+ * where analysis is already attached) sees demo extraction with
+ * `wants_signup_link === 'ja'` AND a caller_email/caller_phone. Calls this.
+ *
+ * Dedup: atomic UPDATE-RETURNING on demo_calls.signup_link_*_sent_at — a
+ * webhook retry sees the timestamp set and the WHERE clause filters out the
+ * row. No double sends. On send failure, the timestamp is rolled back so a
+ * later retry can re-attempt.
+ *
+ * Privacy: only sends when caller EXPLICITLY agreed during the call (post-
+ * call analysis returns "ja", not "nein" or "unklar"). Default = no send.
+ */
+export async function maybeSendDemoSignupLink(
+  callId: string,
+  extracted: Record<string, unknown>,
+  logger: { info: (o: unknown, m?: string) => void; warn: (o: unknown, m?: string) => void },
+): Promise<void> {
+  if (!pool) return;
+  const wantsRaw = (extracted.wants_signup_link as string | undefined)?.toLowerCase().trim() ?? '';
+  if (wantsRaw !== 'ja' && wantsRaw !== 'yes') {
+    return; // explicit opt-in only — never send on "nein"/"unklar"/missing
+  }
+  const email = (extracted.caller_email as string | undefined)?.trim().toLowerCase() || null;
+  const phone = (extracted.caller_phone as string | undefined)?.trim() || null;
+  const name = (extracted.caller_name as string | undefined)?.trim() || null;
+
+  if (email) {
+    const claim = await pool.query(
+      `UPDATE demo_calls SET signup_link_email_sent_at = now()
+       WHERE call_id = $1 AND signup_link_email_sent_at IS NULL
+       RETURNING call_id`,
+      [callId],
+    ).catch((err: Error) => {
+      logger.warn({ err: err.message, callId }, 'demo signup-link claim (email) DB error');
+      return null;
+    });
+    if (claim?.rowCount) {
+      sendSignupLinkEmail({ toEmail: email, name }).then((res) => {
+        if (!res.ok) {
+          logger.warn({ err: res.error, callId, kind: 'demo_signup_link', channel: 'email' }, 'demo signup-link email send failed');
+          // roll back claim so a future webhook retry can re-attempt
+          pool!.query(`UPDATE demo_calls SET signup_link_email_sent_at = NULL WHERE call_id = $1`, [callId]).catch(() => { /* best-effort */ });
+        } else {
+          logger.info({ callId, kind: 'demo_signup_link', channel: 'email' }, 'demo signup-link email sent');
+        }
+      }).catch((err: Error) => logger.warn({ err: err.message, callId }, 'demo signup-link email threw'));
+    }
+  }
+
+  if (phone) {
+    const claim = await pool.query(
+      `UPDATE demo_calls SET signup_link_sms_sent_at = now()
+       WHERE call_id = $1 AND signup_link_sms_sent_at IS NULL
+       RETURNING call_id`,
+      [callId],
+    ).catch((err: Error) => {
+      logger.warn({ err: err.message, callId }, 'demo signup-link claim (sms) DB error');
+      return null;
+    });
+    if (claim?.rowCount) {
+      sendSignupLinkSms({ to: phone, name, logger }).then((res) => {
+        if (!res.ok) {
+          logger.warn({ err: res.error, callId, kind: 'demo_signup_link', channel: 'sms' }, 'demo signup-link SMS send failed');
+          pool!.query(`UPDATE demo_calls SET signup_link_sms_sent_at = NULL WHERE call_id = $1`, [callId]).catch(() => { /* best-effort */ });
+        } else {
+          logger.info({ callId, kind: 'demo_signup_link', channel: 'sms' }, 'demo signup-link SMS sent');
+        }
+      }).catch((err: Error) => logger.warn({ err: err.message, callId }, 'demo signup-link SMS threw'));
+    }
+  }
+}
+
+/**
  * Look up the templateId for a Retell agent_id. Returns null when the agent
  * isn't a demo agent we created (e.g. a paid-tenant agent whose call_ended
  * webhook fired through this same handler).
@@ -154,7 +258,7 @@ async function writeDemoAgent(templateId: string, agentId: string): Promise<void
  */
 export async function readDemoCallTemplate(agentId: string): Promise<string | null> {
   if (redis?.isOpen) {
-    const v = await redis.get(`demo_agent_meta:v6:${agentId}`).catch(() => null);
+    const v = await redis.get(`demo_agent_meta:v7:${agentId}`).catch(() => null);
     if (v) return v;
     // Skip in-mem when Redis is online (H1): in-mem could be stale across
     // containers and we now have a durable DB layer below.
@@ -217,7 +321,7 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
       const removed = await redis.del(SALES_AGENT_KEY);
       flushed += typeof removed === 'number' ? removed : 0;
       // Clean up previous versions on the way past.
-      await redis.del(['sales_agent:phonbot:v3', 'sales_agent:phonbot:v4', 'sales_agent:phonbot:v5']).catch(() => {});
+      await redis.del(['sales_agent:phonbot:v3', 'sales_agent:phonbot:v4', 'sales_agent:phonbot:v5', 'sales_agent:phonbot:v6']).catch(() => {});
     } catch {
       /* non-critical */
     }
@@ -230,6 +334,7 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
     // Local `r` capture so the closure's type-narrowing survives.
     const r = redis;
     for (const pattern of [
+      'demo_agent:v7:*', 'demo_agent_meta:v7:*',
       'demo_agent:v6:*', 'demo_agent_meta:v6:*',
       'demo_agent:v5:*', 'demo_agent_meta:v5:*',
       'demo_agent:v4:*', 'demo_agent_meta:v4:*',
@@ -358,6 +463,8 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
 // next to the override.
 export const DEFAULT_SALES_PROMPT = `Du bist Chipy, der freundliche KI-Assistent von Phonbot. Du rufst gerade jemanden an, der sich für Phonbot interessiert hat und einen Rückruf angefordert hat.
 
+DEIN NAME ist **Chipy**. Wenn der Anrufer dich nach DEINEM Namen fragt: "Ich heiße Chipy". NIE "ich habe keinen Namen" oder "ich bin nur ein virtueller Assistent". Buchstabierung deines Namens: "C wie Chemnitz, H wie Hamburg, I wie Ingelheim, P wie Potsdam, Y wie Ypsilon".
+
 DEIN ZIEL: Finde heraus welches Business der Interessent hat und zeige ihm wie Phonbot konkret helfen kann. Sei ehrlich, sympathisch und beratend — nicht aufdringlich.
 
 GESPRÄCHSABLAUF:
@@ -377,6 +484,9 @@ REGELN:
 - Sei ehrlich: wenn Phonbot für jemanden keinen Sinn macht, sag das
 - Kein Druck, keine Tricks — einfach zeigen was möglich ist
 - Halte das Gespräch unter 2 Minuten
+- **Bei "Möchtest du..."-Fragen NIE doppelt nachhaken**: wenn der Anrufer "nein" / "vielleicht später" / abweisend sagt, akzeptiere es sofort und führ das Gespräch weiter. Maximal 1× sanft erinnern, NIE drücken.
+- **Anti-Repetition**: wenn der Anrufer schon eine Information gegeben hat (Branche, Anrufzahl, Kontaktdaten), frag NICHT nochmal danach. Halte intern fest was er gesagt hat und arbeite damit weiter. Bei akustischen Unklarheiten frag SPEZIFISCH ("Habe ich das richtig: VW Golf?") statt die Slot-Frage zu wiederholen.
+- **Mehrere Optionen → explizite Bestätigung**: bei zwei vorgeschlagenen Slots / Plänen / Branchen-Beispielen NIE bei "ja, passt" einfach "super" sagen — frag immer "welcher der beiden?" zurück.
 - Wenn der Interessent den Link möchte: Sage, dass der Testlink an die angegebene E-Mail geschickt wurde. Wenn {{signup_sms_sent}} = true ist, sage zusätzlich dass er auch per SMS verschickt wurde. Nenne bei Bedarf diesen Link: {{signup_link}}
 `;
 
@@ -411,12 +521,14 @@ async function loadSalesPrompt(): Promise<string> {
 }
 
 // Sales agent ID — Redis-backed (shared across containers, survives restarts)
-// In-memory fallback for when Redis is down. Cache key bumps to v6 because
-// the platform-baseline grew Numbers + E-Mail-Provider + Spelling sections,
-// and the agent's compiled prompt embeds the baseline at create-time. Old v5
-// cached agents still ship the previous baseline.
+// In-memory fallback for when Redis is down. Cache key bumps to v7 because
+// DEFAULT_SALES_PROMPT and the platform-baseline grew Tool-Disziplin,
+// Audio-Quality-Fallback, Transfer-Request-Handling, Anti-Repetition,
+// Slot-Auswahl-Bestätigung and Chipy-Selbstwahrnehmung sections (driven by
+// 2026-04-29/30 demo-call feedback). Plus DEMO_POST_CALL_FIELDS gained
+// wants_signup_link enum.
 let salesAgentIdMem: string | null = null;
-const SALES_AGENT_KEY = 'sales_agent:phonbot:v6';
+const SALES_AGENT_KEY = 'sales_agent:phonbot:v7';
 let pendingSalesCreate: Promise<string> | null = null;
 
 export async function getOrCreateSalesAgent(): Promise<string> {

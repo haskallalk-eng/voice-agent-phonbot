@@ -40,7 +40,7 @@ import { checkForwardingVerificationMatch } from './phone.js';
 import { getCall, deleteCall } from './retell.js';
 import { fireInboundWebhooks } from './inbound-webhooks.js';
 import { sendBookingConfirmationSms, sendTicketAckSms } from './sms.js';
-import { readDemoCallTemplate } from './demo.js';
+import { readDemoCallTemplate, maybeSendDemoSignupLink } from './demo.js';
 import { redactPII } from './pii.js';
 
 const RETELL_API_KEY = process.env.RETELL_API_KEY ?? '';
@@ -581,6 +581,16 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
                 disconnectionReason ?? null,
               ],
             ).catch((err: Error) => req.log.error({ err: err.message, callId, templateId }, 'demo_calls insert failed'));
+            // Post-call signup-link send: if Chipy asked + caller said "ja",
+            // dispatch email/SMS now. Helper is internally fire-and-forget,
+            // dedup'd via DB UPDATE-RETURNING claim. For SHORT calls Retell
+            // attaches custom_analysis_data on call_ended; for long calls the
+            // mirror in call_analyzed branch below handles it.
+            if (extracted) {
+              maybeSendDemoSignupLink(callId, extracted, req.log).catch((err: Error) =>
+                req.log.warn({ err: err.message, callId }, 'maybeSendDemoSignupLink (call_ended) failed'),
+              );
+            }
           }
         }
       }
@@ -664,6 +674,13 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
                intent_summary = COALESCE(demo_calls.intent_summary, EXCLUDED.intent_summary)`,
             [callId, agentId, templateId, cn, ce, cp, intent],
           ).catch((err: Error) => req.log.warn({ err: err.message, callId }, 'demo_calls late-upsert failed'));
+          // Post-call signup-link send for long calls — call_analyzed is the
+          // primary path (call_ended above handles the short-call case where
+          // analysis already arrived). Dedup is in the helper (DB UPDATE-
+          // RETURNING) so a doppelt-fire across both branches is harmless.
+          maybeSendDemoSignupLink(callId, extracted, req.log).catch((err: Error) =>
+            req.log.warn({ err: err.message, callId }, 'maybeSendDemoSignupLink (call_analyzed) failed'),
+          );
         }
       }
     }

@@ -133,6 +133,12 @@ export async function migrateOutbound() {
   await pool.query(`COMMENT ON TABLE demo_calls IS 'DSGVO Art. 5: 90-day retention policy. Rows purged daily by cleanupOldLeads().';`);
   await pool.query(`CREATE INDEX IF NOT EXISTS demo_calls_template_created_idx ON demo_calls(template_id, created_at DESC);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS demo_calls_promoted_idx ON demo_calls(promoted_at) WHERE promoted_at IS NULL;`);
+  // Post-call signup-link send timestamps. Filled by maybeSendDemoSignupLink()
+  // in retell-webhooks when call_analyzed extracts wants_signup_link='ja' AND
+  // an email/phone. UPDATE-RETURNING claim is the dedup primitive — a webhook
+  // retry sees the timestamp set and skips a doppelt-Send.
+  await pool.query(`ALTER TABLE demo_calls ADD COLUMN IF NOT EXISTS signup_link_email_sent_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE demo_calls ADD COLUMN IF NOT EXISTS signup_link_sms_sent_at TIMESTAMPTZ`);
 
   // Audit-Round-9 H3: durable agent_id → template_id mapping.
   // Redis (demo_agent_meta:v4:*) is the fast-path lookup but expires on
