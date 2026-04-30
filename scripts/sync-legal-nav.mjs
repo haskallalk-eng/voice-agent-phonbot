@@ -22,6 +22,8 @@ const LEGAL_PAGES = [
   'apps/web/public/impressum/index.html',
   'apps/web/public/datenschutz/index.html',
   'apps/web/public/agb/index.html',
+  'apps/web/public/avv/index.html',
+  'apps/web/public/sub-processors/index.html',
 ];
 
 // Marker regexes.
