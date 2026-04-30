@@ -267,7 +267,7 @@ async function enforcePlanAgentLimitOnCreate(orgId: string, tenantId: string): P
   }
 }
 
-async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentConfig> {
+async function writeConfig(config: AgentConfig, orgId?: string, actorUserId?: string): Promise<AgentConfig> {
   const parsed = parseAgentConfig(config);
   const withIntegrations = await applyIntegrationEncryption(parsed, orgId);
   const normalized = await normalizeKnowledgeSources(withIntegrations as unknown as Record<string, unknown>) as AgentConfig;
@@ -338,6 +338,12 @@ async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentCo
     );
     // Persistent audit row (best-effort: never block the save). Insert-fail
     // gets logged but doesn't reverse the actual config change.
+    // Audit-Round-14 (Codex Plan-Review M1): changed_by is now the actor's
+    // userId when the call comes from a request-handler (PUT/POST). Falls
+    // back to orgId for callers that don't have a user-context (e.g. internal
+    // back-office writes from triggerCallback's auto-provisioning path) so
+    // the audit row never goes NULL — but the userId path is the one that
+    // answers "who flipped the toggle?" under behördlicher Prüfung.
     pool.query(
       `INSERT INTO privacy_setting_changes (org_id, tenant_id, setting, value_before, value_after, changed_by)
        VALUES ($1, $2, 'recordCalls', $3, $4, $5)`,
@@ -346,9 +352,7 @@ async function writeConfig(config: AgentConfig, orgId?: string): Promise<AgentCo
         normalized.tenantId,
         previousRecordCalls === undefined ? null : String(previousRecordCalls),
         normalized.recordCalls === undefined ? null : String(normalized.recordCalls),
-        // Without a request-context here we can only tag the org. Future:
-        // pass userId/email through the writeConfig call signature.
-        orgId ?? null,
+        actorUserId ?? orgId ?? null,
       ],
     ).catch((err: Error) => log.warn({ err: err.message, tenantId: normalized.tenantId }, 'privacy: audit-insert failed'));
   }
@@ -1262,7 +1266,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
   // Retell IDs are taken from the server-side row, NEVER from the request body —
   // otherwise an attacker could target a victim's retellLlmId via deploy.
   app.put('/agent-config', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { orgId } = req.user as JwtPayload;
+    const { orgId, userId } = req.user as JwtPayload;
     const raw = req.body as Record<string, unknown>;
     const tenantId = (typeof raw.tenantId === 'string' && raw.tenantId) ? raw.tenantId : orgId;
 
@@ -1283,7 +1287,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
       knowledgeBaseSignature: (serverIds as Record<string, unknown>).knowledgeBaseSignature,
     });
     try {
-      return toClientConfig(await writeConfig(body, orgId));
+      return toClientConfig(await writeConfig(body, orgId, userId));
     } catch (err) {
       const e = err as Error & { statusCode?: number; details?: { limit?: number; current?: number } };
       if (e.message === 'AGENTS_LIMIT_REACHED') {
@@ -1301,7 +1305,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
   // Deploy config to Retell AI (save + sync).
   // Same ownership gate + server-authoritative Retell IDs as PUT.
   app.post('/agent-config/deploy', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { orgId } = req.user as JwtPayload;
+    const { orgId, userId } = req.user as JwtPayload;
     const raw = req.body as Record<string, unknown>;
     const tenantId = (typeof raw.tenantId === 'string' && raw.tenantId) ? raw.tenantId : orgId;
 
@@ -1324,7 +1328,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
     const deployed = await deployToRetell(body, orgId);
     let saved: AgentConfig;
     try {
-      saved = await writeConfig(deployed, orgId);
+      saved = await writeConfig(deployed, orgId, userId);
     } catch (err) {
       const e = err as Error & { statusCode?: number; details?: { limit?: number } };
       if (e.message === 'AGENTS_LIMIT_REACHED') {

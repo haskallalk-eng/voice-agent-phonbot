@@ -79,6 +79,33 @@ function setCachedHooks(tenantId: string, hooks: InboundWebhookConfig[]): void {
   webhookCache.set(tenantId, { hooks, expires: Date.now() + WEBHOOK_CACHE_TTL_MS });
 }
 
+/**
+ * Per-webhook HMAC secret derivation.
+ *
+ * Single server-side master key + (tenantId, webhookId) → 32-byte secret used
+ * to sign the customer's outbound POST body. Deterministic so we can recompute
+ * it on demand (no DB column).
+ *
+ * Audit-Round-13: WEBHOOK_SIGNING_SECRET is now hard-required in prod
+ * (env.ts:46-67). The JWT_SECRET-fallback stays as defense-in-depth for dev
+ * environments without an explicit value; in prod, env.ts has already thrown
+ * if WEBHOOK_SIGNING_SECRET is missing, so the fallback branch is
+ * unreachable there. Migration was: set WEBHOOK_SIGNING_SECRET = JWT_SECRET on
+ * prod first → all customer signatures stay valid (same key derives the same
+ * per-hook secret) → then promote to hard-required. JWT_SECRET can now be
+ * rotated independently without breaking customer webhook validators.
+ *
+ * Audit-Round-14: extracted to a named export so __tests__ can verify
+ * the precedence WEBHOOK_SIGNING_SECRET > JWT_SECRET.
+ */
+export function deriveWebhookSecret(tenantId: string, webhookId: string): Buffer {
+  const signingKey = process.env.WEBHOOK_SIGNING_SECRET || process.env.JWT_SECRET || '';
+  return crypto
+    .createHmac('sha256', signingKey)
+    .update(`${tenantId}:${webhookId}`)
+    .digest();
+}
+
 /** Called by agent-config.ts:writeConfig after a successful save. */
 export function invalidateInboundWebhooksCache(tenantId: string): void {
   webhookCache.delete(tenantId);
@@ -223,24 +250,7 @@ export async function fireInboundWebhooks(
           );
         }
       }
-      // Per-webhook signing secret is derived deterministically from a single
-      // server secret + (tenantId, webhookId). No DB column needed; customer
-      // can reconstruct it on our side to expose in the UI later.
-      //
-      // Audit-Round-13: WEBHOOK_SIGNING_SECRET is now hard-required in prod
-      // (env.ts:46-67). The JWT_SECRET-fallback stays as defense-in-depth for
-      // dev environments without an explicit value, but in prod the boot
-      // already failed if WEBHOOK_SIGNING_SECRET is unset so the fallback
-      // branch is unreachable there. Migration was: set WEBHOOK_SIGNING_
-      // SECRET = JWT_SECRET on prod env first → all customer signatures stay
-      // valid since the same key derives the same per-hook secret → then
-      // promote to hard-required. JWT_SECRET can now be rotated independently
-      // without breaking customer webhook validators.
-      const signingKey = process.env.WEBHOOK_SIGNING_SECRET || process.env.JWT_SECRET || '';
-      const perHookSecret = crypto
-        .createHmac('sha256', signingKey)
-        .update(`${tenantId}:${h.id}`)
-        .digest();
+      const perHookSecret = deriveWebhookSecret(tenantId, h.id);
       const signature = crypto.createHmac('sha256', perHookSecret).update(body).digest('hex');
       try {
         const res = await fetch(check.url.toString(), {
@@ -298,15 +308,3 @@ export async function fireInboundWebhooks(
   );
 }
 
-/**
- * Derive the per-webhook signing secret the customer needs to verify
- * `X-Phonbot-Signature-256`. Returns hex string (same HMAC-key the fan-out
- * uses). Intended for a future "copy secret" UI — not used on the hot path.
- */
-export function deriveWebhookSecret(tenantId: string, webhookId: string): string {
-  const signingKey = process.env.WEBHOOK_SIGNING_SECRET || process.env.JWT_SECRET || '';
-  return crypto
-    .createHmac('sha256', signingKey)
-    .update(`${tenantId}:${webhookId}`)
-    .digest('hex');
-}
