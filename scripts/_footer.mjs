@@ -74,6 +74,8 @@ export const FOOTER_HTML = `<!--footer-html-begin-->
         <h4>Rechtliches</h4>
         <ul class="links">
           <li><a href="/datenschutz/">Datenschutz</a></li>
+          <li><a href="/avv/">AVV</a></li>
+          <li><a href="/sub-processors/">Sub-Processoren</a></li>
           <li><a href="/impressum/">Impressum</a></li>
           <li><a href="/agb/">AGB</a></li>
         </ul>

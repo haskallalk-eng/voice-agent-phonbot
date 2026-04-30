@@ -46,6 +46,8 @@ export function FooterSection({ onShowLegal, onGoToContact }: FooterSectionProps
             <h4 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">Rechtliches</h4>
             <ul className="space-y-2">
               <li><a href="/datenschutz/" className="text-sm text-white/40 hover:text-white/70 transition-colors">Datenschutz</a></li>
+              <li><a href="/avv/" className="text-sm text-white/40 hover:text-white/70 transition-colors">AVV</a></li>
+              <li><a href="/sub-processors/" className="text-sm text-white/40 hover:text-white/70 transition-colors">Sub-Processoren</a></li>
               <li><a href="/impressum/" className="text-sm text-white/40 hover:text-white/70 transition-colors">Impressum</a></li>
               <li><a href="/agb/" className="text-sm text-white/40 hover:text-white/70 transition-colors">AGB</a></li>
             </ul>
