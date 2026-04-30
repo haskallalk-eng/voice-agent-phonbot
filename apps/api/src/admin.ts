@@ -7,6 +7,7 @@ import { TEMPLATES } from './templates.js';
 import { DEMO_END_INSTRUCTIONS, DEFAULT_SALES_PROMPT, flushDemoAgentCache, bustSalesPromptCache } from './demo.js';
 import { PLATFORM_BASELINE_PROMPT, bustPlatformBaselineCache } from './platform-baseline.js';
 import { OUTBOUND_BASELINE_PROMPT, bustOutboundBaselineCache } from './outbound-baseline.js';
+import { sendSignupLinkEmail } from './email.js';
 
 /**
  * Audit-Round-8 (Codex M07-MEDIUM-C): admin cross-org reads are intentional
@@ -1113,5 +1114,28 @@ export async function registerAdmin(app: FastifyInstance) {
       [q.limit, q.offset],
     );
     return { items: rows };
+  });
+
+  // ── POST /admin/diag/email-test ──────────────────────────────────────────
+  // Diagnostic: trigger a signup-link email send to a body-provided address.
+  // Returns the actual Resend result so the admin can see why production
+  // emails go silent (RESEND_NOT_CONFIGURED, domain-not-verified, bounce, …)
+  // without grepping container logs. Rate-limited so an attacker who got an
+  // admin token still can't fan out a million sends through us.
+  app.post('/admin/diag/email-test', {
+    ...auth,
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const parsed = z.object({ to: z.string().email().max(200) }).safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'to (email) required', details: parsed.error.flatten() });
+    }
+    const result = await sendSignupLinkEmail({ toEmail: parsed.data.to, name: 'Admin-Test' });
+    return {
+      ...result,
+      resendConfigured: !!process.env.RESEND_API_KEY,
+      from: process.env.EMAIL_FROM ?? 'Phonbot <noreply@phonbot.de>',
+      to: parsed.data.to,
+    };
   });
 }

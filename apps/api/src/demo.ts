@@ -35,6 +35,15 @@ export const DEMO_END_INSTRUCTIONS = `
 ## Demo-Modus
 Du bist eine LIVE-Demo auf phonbot.de. Der Anrufer ist ein Website-Besucher, der dich gerade testet. Spiel realistisch mit, aber erfinde keine echten Termine, Preise oder Kalenderdaten — wenn du einen Slot vorschlägst, sind Beispiel-Slots wie "Donnerstag 14 Uhr" ok, aber bestätige nichts als "verbindlich gebucht".
 
+## Selbstreflexion (Meta-Fragen über dich, Phonbot, KI)
+Du bist Chipy — der KI-Telefonassistent von Phonbot. In dieser Demo übernimmst du die Rolle der Telefonassistenz dieses Geschäfts. Wenn der Anrufer DICH oder Phonbot anspricht, antworte ehrlich und kurz, und führ dann sanft zurück zum Demo-Inhalt. Beispiele:
+- "Bist du echt?" / "Bist du eine KI?" → "Ja, ich bin Chipy, ein KI-Telefonassistent von Phonbot. Ich klinge wie ein Mensch, bin aber Software. Soll ich dir trotzdem dein Anliegen abnehmen?"
+- "Wie funktioniert das?" → "Phonbot lässt Geschäfte sich von mir am Telefon vertreten — Termine, Tickets, Weiterleitungen. Was zeig ich dir? Einen Termin buchen oder eine Frage zum Service?"
+- "Was kostet Phonbot?" / "Wie buche ich das?" → "Die Preise und der kostenlose Test-Account stehen auf phonbot.de. Hier in der Demo zeig ich dir lieber LIVE wie ich für dieses Geschäft arbeite."
+- "Wer hat dich gebaut?" → "Phonbot ist von Mindrails. Mehr dazu auf phonbot.de. Soll ich dir lieber direkt zeigen wie ich dich am Telefon entlasten kann?"
+
+**Regel:** Maximal 1–2 Meta-Antworten pro Anruf, dann sanft zurück zur Demo-Aufgabe. Wenn der Anrufer ausschließlich Meta-Fragen stellt und die Demo nicht ausprobieren will, sag nach der zweiten: "Cool dass dich das interessiert — alle Details auf phonbot.de. Ich bin gleich wieder im Service-Modus, falls du die Demo ausprobieren willst." und ruf bei klarer Verabschiedung \`end_call\` auf.
+
 ## Kontakt-Daten in dieser Demo erheben (Pflicht-Trio)
 Wenn das Gespräch zu einem Termin, Rückruf, Angebot oder Ticket führt, erfrage IMMER drei Daten in dieser Reihenfolge: 1) Name, 2) Mobil- oder Festnetznummer, 3) E-Mail-Adresse. Beide Kontaktwege werden gebraucht: die Nummer für SMS-Bestätigung, die E-Mail für Termin-Einladung. Wiederhole die Telefonnummer in Zweier- oder Dreier-Blöcken zur Kontrolle. Erst nachdem alle drei sauber bestätigt sind, sag "Alles klar, ich hab's eingetragen" — vorher nicht.
 
@@ -67,7 +76,7 @@ const inMemDemoAgents = new Map<string, { agentId: string; createdAt: number }>(
 
 async function readDemoAgent(templateId: string): Promise<string | null> {
   if (redis?.isOpen) {
-    const v = await redis.get(`demo_agent:v4:${templateId}`).catch(() => null);
+    const v = await redis.get(`demo_agent:v6:${templateId}`).catch(() => null);
     return v ?? null;
     // Audit-Round-9 H1: when Redis is online but the key is absent (legit
     // flush, scaled-out container B that never wrote it), DO NOT fall back
@@ -101,9 +110,9 @@ async function writeDemoAgent(templateId: string, agentId: string): Promise<void
   inMemDemoAgentMeta.set(agentId, { templateId, createdAt: Date.now() });
   if (redis?.isOpen) {
     await Promise.all([
-      redis.set(`demo_agent:v4:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {}),
+      redis.set(`demo_agent:v6:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {}),
       // Reverse direction: webhook sees agent_id, needs templateId. Same TTL.
-      redis.set(`demo_agent_meta:v4:${agentId}`, templateId, { EX: CACHE_TTL_SEC }).catch(() => {}),
+      redis.set(`demo_agent_meta:v6:${agentId}`, templateId, { EX: CACHE_TTL_SEC }).catch(() => {}),
     ]);
   }
   // Audit-Round-9 H3: durable DB mirror of the reverse-lookup. Redis is the
@@ -145,7 +154,7 @@ async function writeDemoAgent(templateId: string, agentId: string): Promise<void
  */
 export async function readDemoCallTemplate(agentId: string): Promise<string | null> {
   if (redis?.isOpen) {
-    const v = await redis.get(`demo_agent_meta:v4:${agentId}`).catch(() => null);
+    const v = await redis.get(`demo_agent_meta:v6:${agentId}`).catch(() => null);
     if (v) return v;
     // Skip in-mem when Redis is online (H1): in-mem could be stale across
     // containers and we now have a durable DB layer below.
@@ -207,8 +216,8 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
     try {
       const removed = await redis.del(SALES_AGENT_KEY);
       flushed += typeof removed === 'number' ? removed : 0;
-      // Clean up the previous v3 key too on the way past.
-      await redis.del('sales_agent:phonbot:v3').catch(() => {});
+      // Clean up previous versions on the way past.
+      await redis.del(['sales_agent:phonbot:v3', 'sales_agent:phonbot:v4', 'sales_agent:phonbot:v5']).catch(() => {});
     } catch {
       /* non-critical */
     }
@@ -220,7 +229,12 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
     // bei LAN, sekundenlang bei Cross-Region). Jetzt 1 RTT pro 100 Keys.
     // Local `r` capture so the closure's type-narrowing survives.
     const r = redis;
-    for (const pattern of ['demo_agent:v4:*', 'demo_agent_meta:v4:*', 'demo_agent:v3:*', 'demo_agent_meta:v3:*']) {
+    for (const pattern of [
+      'demo_agent:v6:*', 'demo_agent_meta:v6:*',
+      'demo_agent:v5:*', 'demo_agent_meta:v5:*',
+      'demo_agent:v4:*', 'demo_agent_meta:v4:*',
+      'demo_agent:v3:*', 'demo_agent_meta:v3:*',
+    ]) {
       try {
         const batch: string[] = [];
         const drain = async () => {
@@ -314,6 +328,13 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
       llmId: llm.llm_id,
       voiceId: template.voice,
       language: template.language === 'de' ? 'de-DE' : 'en-US',
+      // Demo-only: Sensitivity runter von 1.0 (default) auf 0.5. Web-Demos
+      // laufen auf wechselnder Audio-Qualität (Laptop-Mics, Hintergrund), wo
+      // 1.0 zu Fehl-Interruptions führte — Anrufer fängt zu sprechen an, Agent
+      // hält kurz für ein Räuspern oder Tipp-Geräusch und wirkt zappelig.
+      // Paid-Customers behalten ihre eigene Tuning-Konfig (updateAgent setzt
+      // sensitivity nur explizit, nie als Side-Effect).
+      interruptionSensitivity: 0.5,
       webhookUrl: webhookBase ? `${webhookBase}/retell/webhook` : undefined,
       postCallAnalysisData: DEMO_POST_CALL_FIELDS,
     });
@@ -390,11 +411,12 @@ async function loadSalesPrompt(): Promise<string> {
 }
 
 // Sales agent ID — Redis-backed (shared across containers, survives restarts)
-// In-memory fallback for when Redis is down. Cache key bumps to v4 because
-// the prompt now layers Outbound-Baseline + Sales-Prompt — old v3 cached
-// agents lack that.
+// In-memory fallback for when Redis is down. Cache key bumps to v6 because
+// the platform-baseline grew Numbers + E-Mail-Provider + Spelling sections,
+// and the agent's compiled prompt embeds the baseline at create-time. Old v5
+// cached agents still ship the previous baseline.
 let salesAgentIdMem: string | null = null;
-const SALES_AGENT_KEY = 'sales_agent:phonbot:v4';
+const SALES_AGENT_KEY = 'sales_agent:phonbot:v6';
 let pendingSalesCreate: Promise<string> | null = null;
 
 export async function getOrCreateSalesAgent(): Promise<string> {
@@ -445,6 +467,12 @@ export async function getOrCreateSalesAgent(): Promise<string> {
       llmId: llm.llm_id,
       voiceId: DEFAULT_VOICE_ID,
       language: 'de-DE',
+      // Sales-Callback ruft Leute an die einen Rückruf angefragt haben — die
+      // sind beim ersten "Hallo?" oft zögerlich, hören kurz hin, fragen "wer
+      // ist da?". Bei interruption_sensitivity=1.0 unterbricht Chipy seinen
+      // eigenen Pitch wegen jedem "äh" → wirkt nervös. 0.5 lässt den Pitch
+      // sauber durchlaufen.
+      interruptionSensitivity: 0.5,
     });
 
     salesAgentIdMem = agent.agent_id;
@@ -608,8 +636,15 @@ export async function registerDemo(app: FastifyInstance) {
       );
       if (dup.rowCount) {
         app.log.info({ phone, ip: req.ip }, 'demo/callback dedup hit — skipping outbound call');
+        // Surface Resend errors via Pino — silent fire-and-forget hid from-
+        // address-not-verified / bounce / rate-limit failures and the user
+        // never got the link they asked for.
         sendSignupLinkEmail({ toEmail: email, name })
-          .catch((err: Error) => app.log.warn({ err: err.message }, 'demo/callback signup-link email failed'));
+          .then((res) => {
+            if (!res.ok) app.log.warn({ err: res.error, kind: 'signup_link', branch: 'dedup' }, 'demo/callback signup-link email failed');
+            else app.log.info({ kind: 'signup_link', branch: 'dedup' }, 'demo/callback signup-link email sent');
+          })
+          .catch((err: Error) => app.log.warn({ err: err.message, kind: 'signup_link', branch: 'dedup' }, 'demo/callback signup-link email threw'));
         const sms = await sendSignupLinkSms({ to: phone, name, logger: app.log });
         return { ok: true, smsSent: sms.ok };
       }
@@ -638,7 +673,11 @@ export async function registerDemo(app: FastifyInstance) {
     app.log.info({ leadId, name, email, phone }, 'New demo callback lead');
 
     sendSignupLinkEmail({ toEmail: email, name })
-      .catch((err: Error) => app.log.warn({ err: err.message }, 'demo/callback signup-link email failed'));
+      .then((res) => {
+        if (!res.ok) app.log.warn({ err: res.error, kind: 'signup_link', branch: 'main', leadId }, 'demo/callback signup-link email failed');
+        else app.log.info({ kind: 'signup_link', branch: 'main', leadId }, 'demo/callback signup-link email sent');
+      })
+      .catch((err: Error) => app.log.warn({ err: err.message, kind: 'signup_link', branch: 'main', leadId }, 'demo/callback signup-link email threw'));
     const signupSms = await sendSignupLinkSms({ to: phone, name, logger: app.log });
 
     // Try outbound call via Retell.
