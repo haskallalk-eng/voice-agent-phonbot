@@ -876,11 +876,33 @@ async function runMigrationBody() {
   // shrinks to zero once the org is fully backfilled, then auto-grows
   // again only if NULL transcripts are inserted (which they shouldn't, but
   // defence-in-depth is cheap).
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_transcripts_org_industry_null
-    ON call_transcripts(org_id)
-    WHERE industry IS NULL OR industry = '';
-  `);
+  //
+  // CONCURRENTLY (Codex Round-17 BLOCKER): the rest of migrate() runs in
+  // an implicit transaction-less context, but the *first* prod rollout of
+  // this index would otherwise take ACCESS EXCLUSIVE on call_transcripts
+  // and freeze every active call's transcript-write for the duration of
+  // the build. CONCURRENTLY does a two-pass build that only takes a brief
+  // SHARE UPDATE EXCLUSIVE lock — concurrent INSERTs proceed normally.
+  // Trade-off: CONCURRENTLY can fail (e.g. constraint conflict) and leave
+  // an INVALID index — wrap in try/catch so a failed build doesn't crash
+  // boot. The route still works without the index (just slower); a manual
+  // DROP + retry by ops handles the recovery path. NB: CONCURRENTLY cannot
+  // run inside a transaction block, so this MUST stay a top-level
+  // pool.query, not be hoisted into any future BEGIN/COMMIT migration
+  // wrapper.
+  try {
+    await pool.query(`
+      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_transcripts_org_industry_null
+      ON call_transcripts(org_id)
+      WHERE industry IS NULL OR industry = '';
+    `);
+  } catch (err) {
+    process.stderr.write(
+      `[db] WARNING: idx_transcripts_org_industry_null CONCURRENTLY build failed: ${(err as Error).message}\n` +
+      `Backfill route Phase-2 will fall back to sequential scans. ` +
+      `Manual recovery: DROP INDEX IF EXISTS idx_transcripts_org_industry_null; then retry CREATE INDEX CONCURRENTLY.\n`,
+    );
+  }
 
   // ── Satisfaction signals columns (added in learning v2) ───────────────────
   await pool.query(`ALTER TABLE call_transcripts ADD COLUMN IF NOT EXISTS satisfaction_score NUMERIC(4,2);`);
