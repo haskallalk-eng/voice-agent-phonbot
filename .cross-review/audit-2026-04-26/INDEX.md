@@ -59,3 +59,22 @@ Jeder Befund wird auf den vier Achsen aus `RULES.md` geprüft:
 - Phase 5 (Synthese) — 1 Session
 
 Gesamt: ~6–8 Sessions geschätzt. Wenn Codex parallel reviewed, deutlich schneller weil Befunde sofort gegengeprüft werden.
+
+## Status-Update 2026-05-01 (nach Round 14–17)
+
+Was sich seit der Index-Erstellung am Stand der „noch offen"-Items verändert hat:
+
+| Modul | Item | Status-Update | Round |
+|---|---|---|---|
+| 04 billing | MEDIUM-3 stderr.write → Pino | ✅ GEFIXT (war schon vor R14, hier nur dokumentiert) | — |
+| 04 billing | MEDIUM-1 Plan-Wechsel mid-cycle minutes_used | ⏳ noch offen | — |
+| 04 billing | MEDIUM-4 syncSubscription race | ⏳ noch offen, edge-case | — |
+| 04 billing | (zusätzlich) `subscription.deleted/paused/resumed/created` lasen `metadata.orgId` direkt | ✅ GEFIXT R15 + R16 (3-tier `resolveOrgIdFromSubscription` mit customer/metadata/sub_id-Fallback) | R15+R16 |
+| 07 tickets | HIGH-3 syncPromptToRetell silent-stderr | ✅ GEFIXT (Round 7, mit `last_retell_sync_error/at` + Frontend-Banner) | R7 |
+| 07 tickets | HIGH-4 outbound-insights silent-stderr | ✅ GEFIXT (vor R17 nicht mehr im Code, R17 verifiziert) | — |
+| 07 tickets | HIGH-2 PII im Email-Body | ⏳ UX-Konsens „Mail = Link only vs. gekürzter Snippet" steht aus | — |
+| 01 auth | HIGH-1 Refresh-Token Cross-Tab-Race | ⏳ Frontend BroadcastChannel-Refactor offen — R18-Backlog | — |
+| 05 calendar | MEDIUM-1/2/4 | ⏳ noch nicht angeschaut | — |
+| 06 phone | MEDIUM-3 + LOW-1/2/3 + NICE | ⏳ noch nicht angeschaut | — |
+
+Module 08–12 weiterhin pending. Quick-wins R14–R17 in den jeweiligen Vault-Notes (`Phonbot/ZuTun.md`).

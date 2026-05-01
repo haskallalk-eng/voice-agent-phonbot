@@ -419,7 +419,7 @@ export async function registerAuth(app: FastifyInstance) {
         tax_id_collection: { enabled: true },
         // Stripe Tax — only enable when the Stripe Dashboard side is fully
         // configured (DE registration + product tax codes set). Until then,
-        // billing keeps working with the Mindrails UG's existing VAT setup.
+        // billing keeps working with the Phonbot operator's existing VAT setup.
         // Set STRIPE_AUTOMATIC_TAX=1 once Stripe Tax is live.
         ...(process.env.STRIPE_AUTOMATIC_TAX === '1'
           ? { automatic_tax: { enabled: true } }

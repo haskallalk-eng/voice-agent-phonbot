@@ -1,9 +1,9 @@
 # Transfer Impact Assessment (TIA) — Twilio
 
-> **Stand:** 2026-04-30 · **Verantwortlich:** Hans Waier, Mindrails UG · **Re-Verifikation:** 2026-10-30
+> **Stand:** 2026-04-30 · **Verantwortlich:** Hans Waier, Hans Ulrich Waier · **Re-Verifikation:** 2026-10-30
 
 ## 1. Verantwortlicher
-Mindrails UG, Berlin · Phonbot.
+Hans Ulrich Waier, Berlin · Phonbot.
 
 ## 2. Datenimporteur
 **Twilio Inc.** · 101 Spear Street, San Francisco, CA 94105, USA · *(EU-Vertragspartner: Twilio Ireland Limited, Dublin)* · Rolle: Sub-Auftragsverarbeiter · Vertrag: DPA + SCC Modul 3 · DPF: aktiv (Stand 2026-04-30, Quelle: dataprivacyframework.gov).

@@ -1,7 +1,7 @@
 # ai.txt - AI Training & Usage Policy
 # https://spawning.ai/ai-txt
 
-# This file declares the policy of Phonbot (operated by Mindrails UG
+# This file declares the policy of Phonbot (operated by Hans Ulrich Waier
 # (haftungsbeschränkt), Berlin) regarding AI crawlers, training data usage,
 # and content retrieval for LLM-powered assistants.
 #

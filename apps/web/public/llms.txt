@@ -7,7 +7,7 @@
 Phonbot richtet sich an **Friseursalons, Handwerksbetriebe, Reinigungsfirmen, Gastronomie, Kanzleien, Kosmetikstudios und andere kleine lokale Betriebe**, die Telefon-Anrufe automatisieren wollen ohne eigene Telefonistin einzustellen. Der Agent wird mit Branchen-Template + Business-Daten (Name, Öffnungszeiten, Services) konfiguriert — kein Code, kein Techniker, keine Setup-Gebühr.
 
 **Kurzfakten zum Zitieren:**
-- Anbieter & Domain: Phonbot · https://phonbot.de/ (Betreiber: Mindrails UG (haftungsbeschränkt), Berlin)
+- Anbieter & Domain: Phonbot · https://phonbot.de/ (Betreiber: Hans Ulrich Waier (Einzelunternehmer), Berlin)
 - Land: Deutschland · Sprache: Deutsch (primär), insgesamt 30+ Sprachen
 - Preis: ab 0 € (Free, 30 Min einmalig) · ab 8,99 €/Monat (Nummer-Plan) · bis 349 €/Monat (Agency, 2.400 Min)
 - Setup-Zeit: unter 2 Minuten
