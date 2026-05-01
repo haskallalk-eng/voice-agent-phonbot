@@ -101,7 +101,11 @@ function makeSubscriptionEvent(
         object: 'subscription',
         customer: opts.customerId ?? 'cus_test',
         metadata: opts.metadataOrgId === null ? {} : { orgId: opts.metadataOrgId ?? 'org-from-meta' },
-        items: { data: [{ price: { id: 'price_test' } }] },
+        // syncSubscription reads `sub.items.data[0]?.plan.interval` (no second
+        // optional-chain) — fixture must include `.plan` or the route crashes.
+        // The deleted-test surfaced this; paused/resumed tests hit the same
+        // path but happened not to crash because of upstream luck.
+        items: { data: [{ price: { id: 'price_test' }, plan: { interval: 'month' } }] },
         status: 'active',
       },
     },
@@ -275,6 +279,75 @@ describe('Stripe webhook /billing/webhook — pause/resume/deleted route integra
     expect(mockWarn).toHaveBeenCalledWith(
       expect.objectContaining({ evt: 'customer.subscription.paused' }),
       expect.stringContaining('plan_status update skipped'),
+    );
+  });
+
+  it('deleted → resolver hit + minutes_used cap UPDATE (R17 coverage gap)', async () => {
+    // Audit-Round-17: R16 covered paused/resumed but not deleted. The
+    // deleted-branch is structurally similar (resolver → conditional UPDATE)
+    // but mutates orgs.minutes_used = LEAST(minutes_used, minutes_limit) so
+    // a returning user isn't locked out of their free plan.
+    //
+    // Capture any 500 root-cause via a default fallback (unconsumed fixtures
+    // would return undefined and crash the route silently).
+    mockQuery.mockResolvedValue({ rowCount: 1, rows: [] });
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ event_id: 'x' }] }) // dedup
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'org-real' }] }) // syncSubscription: customer mapping
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] }) // syncSubscription: UPDATE orgs (period-end check skipped — currentPeriodEnd undefined)
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'org-real' }] }) // resolver step 1
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] }); // route UPDATE minutes_used cap
+
+    const ev = makeSubscriptionEvent('customer.subscription.deleted', {
+      customerId: 'cus_real',
+      metadataOrgId: 'org-real',
+    });
+    const { rawBody, signature } = signedPayload(ev);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/billing/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': signature },
+      payload: rawBody,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const capCall = mockQuery.mock.calls.find(
+      (c) => typeof c[0] === 'string' && (c[0] as string).includes('minutes_used = LEAST'),
+    );
+    expect(capCall).toBeDefined();
+    const params = capCall![1] as unknown[];
+    expect(params).toContain('org-real');
+  });
+
+  it('deleted with NO resolvable orgId → log.warn + skip cap UPDATE', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ event_id: 'x' }] }) // dedup
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] }) // syncSubscription: customer miss
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] }) // resolver step 1 miss
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] }); // resolver step 3 miss
+
+    const ev = makeSubscriptionEvent('customer.subscription.deleted', {
+      customerId: 'cus_orphan',
+      metadataOrgId: null,
+    });
+    const { rawBody, signature } = signedPayload(ev);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/billing/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': signature },
+      payload: rawBody,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const capCall = mockQuery.mock.calls.find(
+      (c) => typeof c[0] === 'string' && (c[0] as string).includes('minutes_used = LEAST'),
+    );
+    expect(capCall).toBeUndefined();
+    expect(mockWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ subId: expect.any(String) }),
+      expect.stringContaining('minutes_used cap skipped'),
     );
   });
 

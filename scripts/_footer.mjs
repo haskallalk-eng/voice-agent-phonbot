@@ -89,7 +89,7 @@ export const FOOTER_HTML = `<!--footer-html-begin-->
       </div>
     </div>
     <div class="footer-bottom">
-      <p>© 2026 Phonbot · Ein Produkt der <a href="https://mindrails.de" rel="noopener">Mindrails UG</a> · Alle Rechte vorbehalten</p>
+      <p>© 2026 Phonbot · Ein Produkt von <a href="https://mindrails.de" rel="noopener">Hans Ulrich Waier</a> (Einzelunternehmer) · Alle Rechte vorbehalten</p>
       <p>DSGVO-konform · Server in Deutschland · <a href="mailto:info@phonbot.de">info@phonbot.de</a></p>
     </div>
   </div>

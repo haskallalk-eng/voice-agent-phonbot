@@ -1,9 +1,9 @@
 # Transfer Impact Assessment (TIA) — OpenAI
 
-> **Stand:** 2026-04-30 · **Verantwortlich:** Hans Waier, Mindrails UG · **Re-Verifikation:** 2026-10-30
+> **Stand:** 2026-04-30 · **Verantwortlich:** Hans Waier, Hans Ulrich Waier · **Re-Verifikation:** 2026-10-30
 
 ## 1. Verantwortlicher
-Mindrails UG (haftungsbeschränkt), Scharnhorststraße 8, 12307 Berlin · Phonbot — KI-Telefonassistent SaaS · Geschäftsführung: Hans Waier.
+Hans Ulrich Waier (Einzelunternehmer), Scharnhorststraße 8, 12307 Berlin · Phonbot — KI-Telefonassistent SaaS · Geschäftsführung: Hans Waier.
 
 ## 2. Datenimporteur
 **OpenAI, L.L.C.** · 1455 3rd Street, San Francisco, CA 94158, USA · *(EU-Tochter: OpenAI Ireland Ltd, Dublin — Vertragspartner für API-Kunden seit 2024)* · Rolle: Sub-Auftragsverarbeiter · Vertrag: DPA + SCC Modul 3 · DPF-Status: **aktiv** (Stand der Prüfung: 2026-04-30, Quelle: dataprivacyframework.gov)

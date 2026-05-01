@@ -14,7 +14,7 @@
 
 between
 
-**Mindrails UG (haftungsbeschränkt)**
+**Hans Ulrich Waier (Einzelunternehmer)**
 Scharnhorststraße 8, 12307 Berlin, Germany
 *("Controller")*
 
@@ -135,7 +135,7 @@ The liability of the Parties shall be governed by the Service Agreement and Art.
 
 **Signed for and on behalf of:**
 
-**Controller — Mindrails UG (haftungsbeschränkt)**
+**Controller — Hans Ulrich Waier (Einzelunternehmer)**
 
 Name: ___________________________
 Title: Geschäftsführer

@@ -19,7 +19,7 @@ function ImpressumContent() {
       <section>
         <h2 className="text-base font-semibold text-white mb-2">Angaben gemäß § 5 TMG</h2>
         <p>
-          Mindrails UG (haftungsbeschränkt)<br />
+          Hans Ulrich Waier (Einzelunternehmer)<br />
           Scharnhorststraße 8<br />
           12307 Berlin<br />
           Deutschland
@@ -29,7 +29,7 @@ function ImpressumContent() {
       <section>
         <h2 className="text-base font-semibold text-white mb-2">Vertreten durch</h2>
         <p>
-          Geschäftsführer: Hans Ulrich Waier
+          Inhaber: Hans Ulrich Waier
         </p>
       </section>
 
@@ -43,19 +43,19 @@ function ImpressumContent() {
       </section>
 
       <section>
-        <h2 className="text-base font-semibold text-white mb-2">Registereintrag</h2>
+        <h2 className="text-base font-semibold text-white mb-2">Rechtsform &amp; Registereintrag</h2>
         <p>
-          Eintragung im Handelsregister<br />
-          Registergericht: Amtsgericht Berlin-Charlottenburg<br />
-          Registernummer: HRB [TODO: Nummer einfügen]
+          Einzelunternehmen (Kleingewerbe gemäß § 14 GewO).<br />
+          Kein Handelsregistereintrag — Eintragung erfolgt erst bei späterer Umwandlung in eine
+          UG (haftungsbeschränkt) bzw. GmbH.
         </p>
       </section>
 
       <section>
-        <h2 className="text-base font-semibold text-white mb-2">Umsatzsteuer-ID</h2>
+        <h2 className="text-base font-semibold text-white mb-2">Umsatzsteuer</h2>
         <p>
-          Umsatzsteuer-Identifikationsnummer gemäß § 27 a Umsatzsteuergesetz:<br />
-          [TODO: USt-IdNr. einfügen, z.B. DE123456789]
+          Kleinunternehmer-Regelung gemäß § 19 UStG: Es wird keine Umsatzsteuer berechnet, daher
+          liegt keine Umsatzsteuer-Identifikationsnummer (USt-IdNr.) vor.
         </p>
       </section>
 
@@ -65,19 +65,16 @@ function ImpressumContent() {
         </h2>
         <p>
           Hans Ulrich Waier<br />
-          Mindrails UG (haftungsbeschränkt)<br />
           Scharnhorststraße 8, 12307 Berlin
         </p>
       </section>
 
       <section>
-        <h2 className="text-base font-semibold text-white mb-2">Konzernzugehörigkeit</h2>
+        <h2 className="text-base font-semibold text-white mb-2">Produktportfolio</h2>
         <p>
-          Phonbot ist ein Produkt der{' '}
-          <a href="https://mindrails.de" target="_blank" rel="noopener" className="text-orange-400 hover:text-orange-300 underline">
-            Mindrails UG (haftungsbeschränkt)
-          </a>
-          . Weitere Produkte: Sozibot (in Entwicklung).
+          Phonbot ist ein Produkt von Hans Ulrich Waier (Einzelunternehmer). Weitere geplante
+          Produkte unter dem Mindrails-Banner: Sozibot, Kanzleibot — alle aktuell als
+          Einzelunternehmer-Tätigkeit.
         </p>
       </section>
 
@@ -141,8 +138,7 @@ function DatenschutzContent() {
         <h2 className="text-base font-semibold text-white mb-2">1. Verantwortlicher</h2>
         <p>
           Verantwortlicher im Sinne der DSGVO ist:<br />
-          Mindrails UG (haftungsbeschränkt)<br />
-          Geschäftsführer: Hans Ulrich Waier<br />
+          Hans Ulrich Waier (Einzelunternehmer)<br />
           Scharnhorststraße 8, 12307 Berlin<br />
           E-Mail: info@phonbot.de
         </p>
@@ -351,7 +347,7 @@ function DatenschutzContent() {
         <h2 className="text-base font-semibold text-white mb-2">6. Kontakt Datenschutz</h2>
         <p>
           Bei Fragen zum Datenschutz wende dich an:<br />
-          Mindrails UG (haftungsbeschränkt)<br />
+          Hans Ulrich Waier (Einzelunternehmer)<br />
           z. Hd. Hans Ulrich Waier<br />
           Scharnhorststraße 8, 12307 Berlin<br />
           Telefon: +49 30 75937169<br />
@@ -371,7 +367,7 @@ function AgbContent() {
       <section>
         <h2 className="text-base font-semibold text-white mb-2">§ 1 Geltungsbereich</h2>
         <p>
-          Diese Allgemeinen Geschäftsbedingungen (AGB) gelten für alle Verträge zwischen der Mindrails UG (haftungsbeschränkt) (nachfolgend „Anbieter") und dem Kunden (nachfolgend „Nutzer") über die Nutzung
+          Diese Allgemeinen Geschäftsbedingungen (AGB) gelten für alle Verträge zwischen von Hans Ulrich Waier (Einzelunternehmer) (nachfolgend „Anbieter") und dem Kunden (nachfolgend „Nutzer") über die Nutzung
           der Phonbot-Plattform. Abweichende Bedingungen des Nutzers werden nicht anerkannt, es sei
           denn, der Anbieter stimmt ihrer Geltung ausdrücklich schriftlich zu.
         </p>

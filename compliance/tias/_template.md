@@ -2,13 +2,13 @@
 
 > Pflicht-Dokument nach Schrems II (EuGH C-311/18) für jeden Datentransfer in ein Drittland ohne Angemessenheitsbeschluss. Eines pro Sub-Processor.
 >
-> **Stand:** YYYY-MM-DD · **Verantwortlich:** Hans Waier, Mindrails UG · **Re-Verifikation:** halbjährlich
+> **Stand:** YYYY-MM-DD · **Verantwortlich:** Hans Waier, Hans Ulrich Waier · **Re-Verifikation:** halbjährlich
 
 ---
 
 ## 1. Verantwortlicher (Datenexporteur)
 
-- **Firma:** Mindrails UG (haftungsbeschränkt)
+- **Firma:** Hans Ulrich Waier (Einzelunternehmer)
 - **Sitz:** Scharnhorststraße 8, 12307 Berlin, Deutschland
 - **Anwendung:** Phonbot — KI-Telefonassistent SaaS
 - **Geschäftsführung:** Hans Waier

@@ -1,4 +1,4 @@
-# Verzeichnis von Verarbeitungstätigkeiten (VVT) — Mindrails UG / Phonbot
+# Verzeichnis von Verarbeitungstätigkeiten (VVT) — Hans Ulrich Waier / Phonbot
 
 > Pflicht-Dokument nach **Art. 30 Abs. 1 DSGVO** für jeden Verantwortlichen mit ≥ 250 Beschäftigten ODER bei nicht-gelegentlicher / risikoreicher Verarbeitung. Beides trifft auf Mindrails zu (Phonbot verarbeitet kontinuierlich personenbezogene Daten von Anrufern).
 >
@@ -8,7 +8,7 @@
 
 | Feld | Wert |
 |---|---|
-| Firma | Mindrails UG (haftungsbeschränkt) |
+| Firma | Hans Ulrich Waier (Einzelunternehmer) |
 | Anschrift | Scharnhorststraße 8, 12307 Berlin |
 | Vertretungsberechtigt | Hans Waier, Geschäftsführer |
 | Kontakt Datenschutz | info@phonbot.de · +49 30 75937169 |

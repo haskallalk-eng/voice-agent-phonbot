@@ -868,6 +868,19 @@ async function runMigrationBody() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_transcripts_industry ON call_transcripts(industry);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_transcripts_score ON call_transcripts(score);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_transcripts_created ON call_transcripts(created_at DESC);`);
+  // Audit-Round-17 (R16 self-finding): partial index dedicated to the
+  // industry-backfill Phase-2 batch loop (insights.ts:1647). Without this,
+  // each 1000-row batch triggers a sequential scan over the org_id slice
+  // re-evaluating `industry IS NULL OR industry = ''` per row. Partial
+  // indexes are tiny because they only cover rows matching the predicate —
+  // shrinks to zero once the org is fully backfilled, then auto-grows
+  // again only if NULL transcripts are inserted (which they shouldn't, but
+  // defence-in-depth is cheap).
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_transcripts_org_industry_null
+    ON call_transcripts(org_id)
+    WHERE industry IS NULL OR industry = '';
+  `);
 
   // ── Satisfaction signals columns (added in learning v2) ───────────────────
   await pool.query(`ALTER TABLE call_transcripts ADD COLUMN IF NOT EXISTS satisfaction_score NUMERIC(4,2);`);

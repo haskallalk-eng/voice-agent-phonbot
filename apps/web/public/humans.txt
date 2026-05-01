@@ -2,7 +2,7 @@
 
 /* TEAM */
 
-  Product: Phonbot (operated by Mindrails UG (haftungsbeschränkt))
+  Product: Phonbot (operated by Hans Ulrich Waier (Einzelunternehmer))
   Contact: info [at] phonbot.de
   Location: Berlin, Deutschland
 

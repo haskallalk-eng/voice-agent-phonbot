@@ -1,9 +1,9 @@
 # Transfer Impact Assessment (TIA) — Sentry (Functional Software, Inc.)
 
-> **Stand:** 2026-04-30 · **Verantwortlich:** Hans Waier, Mindrails UG · **Re-Verifikation:** 2026-10-30
+> **Stand:** 2026-04-30 · **Verantwortlich:** Hans Waier, Hans Ulrich Waier · **Re-Verifikation:** 2026-10-30
 
 ## 1. Verantwortlicher
-Mindrails UG, Berlin · Phonbot.
+Hans Ulrich Waier, Berlin · Phonbot.
 
 ## 2. Datenimporteur
 **Functional Software, Inc.** d/b/a **Sentry** · 132 Hawthorne Street, San Francisco, CA 94107, USA · Rolle: Sub-Auftragsverarbeiter · Vertrag: DPA + SCC (Click-Wrap auf sentry.io/legal/dpa) · DPF: aktiv (Re-Verifikation auf dataprivacyframework.gov, Stand 2026-04-30).

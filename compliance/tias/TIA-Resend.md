@@ -1,9 +1,9 @@
 # Transfer Impact Assessment (TIA) — Resend
 
-> **Stand:** 2026-04-30 · **Verantwortlich:** Hans Waier, Mindrails UG · **Re-Verifikation:** 2026-10-30
+> **Stand:** 2026-04-30 · **Verantwortlich:** Hans Waier, Hans Ulrich Waier · **Re-Verifikation:** 2026-10-30
 
 ## 1. Verantwortlicher
-Mindrails UG, Berlin · Phonbot.
+Hans Ulrich Waier, Berlin · Phonbot.
 
 ## 2. Datenimporteur
 **Resend, Inc.** · 2261 Market Street #4111, San Francisco, CA 94114, USA · Rolle: Sub-Auftragsverarbeiter · Vertrag: DPA + SCC (Click-Wrap auf resend.com/legal/dpa) · DPF: zu verifizieren.

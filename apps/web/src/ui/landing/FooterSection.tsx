@@ -66,16 +66,16 @@ export function FooterSection({ onShowLegal, onGoToContact }: FooterSectionProps
         {/* Bottom row: copyright + DSGVO + parent company */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-white/5 pt-6">
           <p className="text-xs text-white/30">
-            © {new Date().getFullYear()} Phonbot · Ein Produkt der{' '}
+            © {new Date().getFullYear()} Phonbot · Ein Produkt von{' '}
             <a
               href="https://mindrails.de"
               target="_blank"
               rel="noopener"
               className="text-white/50 hover:text-white/80 transition-colors underline decoration-white/20 hover:decoration-orange-400/60"
             >
-              Mindrails UG
+              Hans Ulrich Waier
             </a>
-            {' · Alle Rechte vorbehalten'}
+            {' (Einzelunternehmer) · Alle Rechte vorbehalten'}
           </p>
           <p className="text-xs text-white/30">
             DSGVO-konform · Server in Deutschland ·{' '}

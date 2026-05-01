@@ -637,8 +637,8 @@ function buildPage(d) {
           name: 'Phonbot',
           url: 'https://phonbot.de/',
           parentOrganization: {
-            '@type': 'Organization',
-            name: 'Mindrails UG (haftungsbeschränkt)',
+            '@type': 'Person',
+            name: 'Hans Ulrich Waier',
             url: 'https://mindrails.de/',
           },
         },
