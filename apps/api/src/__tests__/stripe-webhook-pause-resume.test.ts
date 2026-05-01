@@ -172,19 +172,19 @@ describe('Stripe webhook /billing/webhook — pause/resume/deleted route integra
   });
 
   it('paused → resolver hit + UPDATE plan_status=paused', async () => {
+    // Audit-Round-17 (Codex review B-MEDIUM cleanup): paused/resumed branches
+    // do NOT call syncSubscription — they jump straight to
+    // resolveOrgIdFromSubscription. Earlier R16 fixture-chain queued
+    // syncSubscription-shaped rows that the route never consumed; the test
+    // happened to pass anyway because the leftover fixtures filled the
+    // resolver + UPDATE positions. Tightened to the actual path:
+    //   1. dedup INSERT
+    //   2. resolver step 1: customer mapping SELECT
+    //   3. route UPDATE plan_status
     mockQuery
-      // dedup INSERT (rowCount 1 = first time)
-      .mockResolvedValueOnce({ rowCount: 1, rows: [{ event_id: 'x' }] })
-      // syncSubscription SELECT (mapping)
-      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'org-real' }] })
-      // syncSubscription period-end SELECT
-      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
-      // syncSubscription UPDATE orgs ... main row
-      .mockResolvedValueOnce({ rowCount: 1, rows: [] })
-      // resolver SELECT (step 1: customer mapping)
-      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'org-real' }] })
-      // route UPDATE plan_status
-      .mockResolvedValueOnce({ rowCount: 1, rows: [] });
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ event_id: 'x' }] }) // dedup
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'org-real' }] }) // resolver step 1
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] }); // route UPDATE plan_status
 
     const ev = makeSubscriptionEvent('customer.subscription.paused', {
       customerId: 'cus_real',
@@ -215,13 +215,11 @@ describe('Stripe webhook /billing/webhook — pause/resume/deleted route integra
   });
 
   it('resumed → UPDATE plan_status=active', async () => {
+    // Same shape as paused — resolver + UPDATE only.
     mockQuery
-      .mockResolvedValueOnce({ rowCount: 1, rows: [{ event_id: 'x' }] })
-      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'org-real' }] })
-      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
-      .mockResolvedValueOnce({ rowCount: 1, rows: [] })
-      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'org-real' }] })
-      .mockResolvedValueOnce({ rowCount: 1, rows: [] });
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ event_id: 'x' }] }) // dedup
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'org-real' }] }) // resolver step 1
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] }); // route UPDATE plan_status
 
     const ev = makeSubscriptionEvent('customer.subscription.resumed', {
       customerId: 'cus_real',
@@ -247,11 +245,10 @@ describe('Stripe webhook /billing/webhook — pause/resume/deleted route integra
 
   it('paused with NO resolvable orgId → log.warn + skip plan_status UPDATE', async () => {
     mockQuery
-      .mockResolvedValueOnce({ rowCount: 1, rows: [{ event_id: 'x' }] })
-      // syncSubscription resolver: customer SELECT miss
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ event_id: 'x' }] }) // dedup
+      // resolver step 1 (customer mapping): miss
       .mockResolvedValueOnce({ rowCount: 0, rows: [] })
-      // resolver step 1 (customer): miss
-      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      // step 2 metadata-null: skip (no SELECT)
       // resolver step 3 (subscription_id last-resort): miss
       .mockResolvedValueOnce({ rowCount: 0, rows: [] });
 

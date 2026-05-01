@@ -206,15 +206,15 @@ describe('PUT /agent-config — privacy_setting_changes.changed_by audit (E2)', 
     expect(params[4]).toBe('user-42'); // changed_by — THE M1 FIX
   });
 
-  it('falls back to orgId only when actor userId is missing (legacy callers)', async () => {
-    // The current route always passes userId, so this case isn't hit via HTTP.
-    // The test pins the writeConfig fallback so an internal caller (like
-    // triggerCallback) without a request-context still gets a non-null
-    // changed_by — just with reduced forensic value.
-    //
-    // We assert this indirectly: when `req.user.userId` is empty string, the
-    // route still passes it to writeConfig, and the INSERT receives '' (the
-    // ?? fallback in writeConfig only kicks in for `undefined`, not '').
+  it('preserves empty-string userId verbatim (?? falls through only on null/undefined)', async () => {
+    // Codex Round-17 LOW: the writeConfig fallback `actorUserId ?? orgId ?? null`
+    // only kicks in for null/undefined — '' is non-nullish under ??, so an
+    // empty string is preserved literally. The HTTP path never produces an
+    // empty userId (JWT requires it), so this is purely a contract pin: if
+    // a future internal caller passes '' explicitly, the audit row gets ''
+    // not the orgId fallback. If we ever want '' to trigger fallback, switch
+    // ?? to `||` in agent-config.ts:355 — that change must come with a
+    // discussion because `0` and `false` would also trigger fallback then.
     primeFlipQueue({
       prevRecordCalls: true,
       ownedRow: { tenant_id: 'demo', org_id: 'org-1', data: { tenantId: 'demo', recordCalls: true } },
