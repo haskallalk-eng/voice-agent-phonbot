@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { AgentConfig } from '../../lib/api.js';
 import { deleteAgent, getAccessToken } from '../../lib/api.js';
 import { IconAgent } from './shared.js';
+import { PasswordInput } from '../PasswordInput.js';
 
 function usePhoneNumbers() {
   const [numbers, setNumbers] = useState<{ agent_id: string | null }[]>([]);
@@ -196,8 +197,7 @@ function DeleteAgentModal({ agent, onClose, onDeleted }: { agent: AgentConfig; o
             <label className="block text-xs text-white/40 mb-1.5">
               Dieser Agent ist länger als 30 Tage aktiv. Bitte Passwort bestätigen:
             </label>
-            <input
-              type="password"
+            <PasswordInput
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Dein Passwort"

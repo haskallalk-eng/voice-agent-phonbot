@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { resetPassword } from '../lib/api.js';
 import { FoxLogo } from './FoxLogo.js';
+import { PasswordInput } from './PasswordInput.js';
 
 export function ResetPasswordPage() {
   const params = new URLSearchParams(window.location.search);
@@ -67,8 +68,7 @@ export function ResetPasswordPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs text-white/40 mb-1.5">Neues Passwort</label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/30 focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 outline-none"
@@ -78,8 +78,7 @@ export function ResetPasswordPage() {
               </div>
               <div>
                 <label className="block text-xs text-white/40 mb-1.5">Passwort bestätigen</label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={confirm}
                   onChange={e => setConfirm(e.target.value)}
                   className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/30 focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 outline-none"

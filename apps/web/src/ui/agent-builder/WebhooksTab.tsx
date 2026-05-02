@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { AgentConfig, ExtractedVariable, InboundWebhook, ApiIntegration, ApiEndpoint } from '../../lib/api.js';
 import { SectionCard, Input, Toggle, IconFileText, IconWebhook, IconPlug } from './shared.js';
+import { PasswordInput } from '../PasswordInput.js';
 
 /** Server returns authValue as "__phonbot_auth_masked__:••••xyz9" so we never
  *  show the real secret in the browser. The UI displays the hint part; when
@@ -126,10 +127,9 @@ function ApiIntegrationEditor({ items, onChange }: { items: ApiIntegration[]; on
 
           {api.authType !== 'none' && (
             <div>
-              <input
+              <PasswordInput
                 value={isMaskedAuth(api.authValue) ? '' : (api.authValue ?? '')}
                 onChange={(e) => patch(i, { authValue: e.target.value })}
-                type="password"
                 autoComplete="off"
                 spellCheck={false}
                 placeholder={
@@ -143,13 +143,6 @@ function ApiIntegrationEditor({ items, onChange }: { items: ApiIntegration[]; on
                   // we keep the sentinel so an empty submit preserves the stored key;
                   // only overwrite when the user actually types.
                   if (isMaskedAuth(api.authValue)) e.currentTarget.value = '';
-                }}
-                onBlur={(e) => {
-                  // If the user didn't type anything, restore the sentinel so it
-                  // round-trips to the server.
-                  if (e.currentTarget.value === '' && isMaskedAuth(api.authValue)) {
-                    // no-op: state already has sentinel
-                  }
                 }}
               />
               <p className="text-[11px] text-white/35 mt-1">

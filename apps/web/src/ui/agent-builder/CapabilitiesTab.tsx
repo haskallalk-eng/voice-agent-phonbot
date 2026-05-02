@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { AgentConfig, CallRoutingRule, LiveWebAccess } from '../../lib/api.js';
 import { ForwardingHint } from '../ForwardingHint.js';
+import { PasswordInput } from '../PasswordInput.js';
 import {
   getCalendarStatus,
   getGoogleCalendarAuthUrl,
@@ -427,11 +428,10 @@ function CalendarConnector({ integrations, onChange }: {
       {showCalcomInput && (
         <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-4 space-y-3">
           <p className="text-sm text-white/70">Cal.com API Key eingeben:</p>
-          <input
+          <PasswordInput
             value={calcomKey}
             onChange={(e) => setCalcomKey(e.target.value)}
             placeholder="cal_live_..."
-            type="password"
             autoComplete="off"
             spellCheck={false}
             autoCorrect="off"
