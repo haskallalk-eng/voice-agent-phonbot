@@ -283,8 +283,8 @@ export function BehaviorTab({
       <PromptView config={config} onUpdate={onUpdate} />
 
       {/* Section Blocks */}
-      <SectionCard title="Verhaltens-Abschnitte" icon={IconMessageSquare}>
-        <p className="text-xs text-white/40 mb-3">Hier schreibst du deinen System-Prompt — wähle Abschnitte, und Chipy bekommt automatisch den passenden Textblock dazu. Nochmal klicken entfernt ihn.</p>
+      <SectionCard title="System-Prompt" icon={IconMessageSquare}>
+        <p className="text-xs text-white/40 mb-3">Definiert WIE der Agent sich verhält — Tonfall, Regeln, Eskalation. Wähle Abschnitte, und Chipy bekommt automatisch den passenden Textblock dazu. Nochmal klicken entfernt ihn.</p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-5">
           {PROMPT_SECTIONS.map((sec) => {
             const isActive = activePromptSections.has(sec.id);
@@ -580,9 +580,9 @@ function PromptView({
   const tasks = useMemo(() => roleTaskList(selectedRoles), [selectedRoles]);
 
   return (
-    <SectionCard title="System-Prompt" icon={IconTemplate}>
+    <SectionCard title="Rollen-Prompt" icon={IconTemplate}>
       <p className="text-xs text-white/40 mb-3">
-        So liest der Agent das Gespräch. Jeder farbige Abschnitt ist direkt editierbar — das Textfeld wächst automatisch mit.
+        Definiert WER der Agent ist und WELCHE Aufgaben er abdeckt. Jeder farbige Abschnitt ist direkt editierbar — das Textfeld wächst automatisch mit.
       </p>
 
       <div className="space-y-3">
