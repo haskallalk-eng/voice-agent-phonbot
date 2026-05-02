@@ -15,7 +15,7 @@ Verwende dies als Tracking-Liste. Lege jede signierte/heruntergeladene Vertragsk
 | **Resend** | [resend.com/legal/dpa](https://resend.com/legal/dpa) → Account → Settings → Legal | SCC inkludiert | ✅ 2026-04-30 | ✅ `dpas/resend/2026-04-30-Resend-DPA-DocuSign.pdf` |
 | **Sentry** | [sentry.io/legal/dpa](https://sentry.io/legal/dpa/) → Settings → Organization → Legal | DPF ✓ | ⬜ | ⬜ |
 | **ElevenLabs** | [elevenlabs.io/dpa](https://elevenlabs.io/dpa) → Account → Settings → Legal | SCC inkludiert | ⬜ | ⬜ |
-| **Cloudflare** | [cloudflare.com/cloudflare-customer-dpa](https://www.cloudflare.com/cloudflare-customer-dpa/) → Account Home → Configurations · Click-Wrap-Acceptance | DPF ✓ | ✅ 2026-05-02 (DPA v6.4) | ✅ `dpas/cloudflare/2026-05-02-Cloudflare-DPA-v6.4.pdf` |
+| **Cloudflare** | DPA **by-incorporation** in Self-Serve Subscription Agreement — keine separate Annahme nötig. PDF von [cloudflare.com/cloudflare-customer-dpa](https://www.cloudflare.com/cloudflare-customer-dpa/) als Dokumentations-Nachweis | DPF ✓ | ✅ 2026-05-02 (gültig via Subscription, DPA v6.4) | ✅ `dpas/cloudflare/2026-05-02-Cloudflare-DPA-v6.4.pdf` |
 | **IONOS** | IONOS-Kundencenter → Vertragsunterlagen → "AV-Vertrag (Art. 28 DSGVO)" · alternativ direkt: [ionos.de/terms-gtc/terms-data-processing](https://www.ionos.de/terms-gtc/terms-data-processing) | EU-only · BSI C5 zertifiziert | ✅ 2026-04-30 | ✅ `dpas/ionos/2026-04-30-IONOS-AVV.pdf` |
 
 ## Per E-Mail anfragen (Mail-Vorlagen liegen unter `compliance/dpa-requests/`)
