@@ -10,7 +10,7 @@ Verwende dies als Tracking-Liste. Lege jede signierte/heruntergeladene Vertragsk
 |---|---|---|---|---|
 | **Supabase** | [supabase.com/legal/dpa](https://supabase.com/legal/dpa) → Dashboard → Settings → Organization → Legal · DocuSign-Flow | EU-only (Frankfurt) | ✅ 2026-05-02 (DocuSign) | ✅ `dpas/supabase/2026-05-02-Supabase-DPA-DocuSign.pdf` |
 | **OpenAI** | [openai.com/policies/data-processing-addendum](https://openai.com/policies/data-processing-addendum/) → platform.openai.com → Settings → Compliance | DPF ✓ | ⬜ | ⬜ |
-| **Twilio** | [twilio.com/legal/data-processing-addendum](https://www.twilio.com/en-us/legal/data-processing-addendum) → Console → Compliance | DPF ✓ | ⬜ | ⬜ |
+| **Twilio** | DPA **by-incorporation** in Customer Agreement — keine separate Annahme nötig. PDF-Text von [twilio.com/legal/data-protection-addendum](https://www.twilio.com/legal/data-protection-addendum) als Dokumentations-Nachweis | DPF ✓ + BCRs + SCC + UK-IDTA (4 parallele Mechanismen) | ✅ 2026-05-02 by-incorporation (April-2026-Version) | ✅ `dpas/twilio/2026-05-02-Twilio-DPA-text.md` |
 | **Stripe** | DPA ist Teil der ToS bei Stripe Payments Europe Ltd (Dublin) — Dashboard → Settings → Compliance | EU-Vertrag | ⬜ | ⬜ |
 | **Resend** | [resend.com/legal/dpa](https://resend.com/legal/dpa) → Account → Settings → Legal | SCC inkludiert | ✅ 2026-04-30 | ✅ `dpas/resend/2026-04-30-Resend-DPA-DocuSign.pdf` |
 | **Sentry** | [sentry.io/legal/dpa](https://sentry.io/legal/dpa/) → Settings → Organization → Legal | DPF ✓ | ⬜ | ⬜ |
