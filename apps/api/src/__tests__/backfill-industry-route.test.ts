@@ -353,9 +353,31 @@ describe('POST /admin/agents/backfill-industry — route integration', () => {
     expect(mockQuery).not.toHaveBeenCalled();
   });
 
-  it('backfill-transcripts: 404 when org has no industry-tagged config and none passed', async () => {
+  // R19 query order for /admin/agents/backfill-transcripts:
+  //   1. EXISTS(SELECT 1 FROM orgs WHERE id) — A1 disambiguation
+  //   2. (if no explicit industry) DISTINCT data->>'industry' FROM agent_configs
+  //   3. COUNT pending transcripts
+  //   4. (if !dryRun) SELECT pg_try_advisory_lock(...)
+  //   5. UPDATE batch loop
+  //   6. (if !dryRun) SELECT pg_advisory_unlock(...)
+
+  it('backfill-transcripts: 404 ORG_NOT_FOUND when EXISTS check fails (R19 A1)', async () => {
     const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
-    mockQuery.mockResolvedValueOnce({ rowCount: 0, rows: [] });
+    mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [{ exists: false }] }); // EXISTS → false
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/agents/backfill-transcripts',
+      payload: { orgId: 'org-ghost' },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(JSON.parse(res.body).error).toBe('ORG_NOT_FOUND');
+  });
+
+  it('backfill-transcripts: 404 NO_INDUSTRY_CONFIGURED when org exists but no config tagged', async () => {
+    const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ exists: true }] }) // EXISTS → true
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] }); // DISTINCT industry → empty
     const res = await app.inject({
       method: 'POST',
       url: '/admin/agents/backfill-transcripts',
@@ -367,10 +389,12 @@ describe('POST /admin/agents/backfill-industry — route integration', () => {
 
   it('backfill-transcripts: 409 AMBIGUOUS_INDUSTRY when configs disagree', async () => {
     const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
-    mockQuery.mockResolvedValueOnce({
-      rowCount: 2,
-      rows: [{ industry: 'hairdresser' }, { industry: 'restaurant' }],
-    });
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ exists: true }] })
+      .mockResolvedValueOnce({
+        rowCount: 2,
+        rows: [{ industry: 'hairdresser' }, { industry: 'restaurant' }],
+      });
     const res = await app.inject({
       method: 'POST',
       url: '/admin/agents/backfill-transcripts',
@@ -384,6 +408,7 @@ describe('POST /admin/agents/backfill-industry — route integration', () => {
 
   it('backfill-transcripts: 400 INVALID_INDUSTRY when explicit industry not curated', async () => {
     const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
+    mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [{ exists: true }] });
     const res = await app.inject({
       method: 'POST',
       url: '/admin/agents/backfill-transcripts',
@@ -391,14 +416,14 @@ describe('POST /admin/agents/backfill-industry — route integration', () => {
     });
     expect(res.statusCode).toBe(400);
     expect(JSON.parse(res.body).error).toBe('INVALID_INDUSTRY');
-    expect(mockQuery).not.toHaveBeenCalled();
   });
 
-  it('backfill-transcripts: dryRun returns counts without writing', async () => {
+  it('backfill-transcripts: dryRun returns counts without writing or locking', async () => {
     const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
     mockQuery
-      .mockResolvedValueOnce({ rowCount: 1, rows: [{ industry: 'hairdresser' }] })
-      .mockResolvedValueOnce({ rowCount: 1, rows: [{ cnt: '500' }] });
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ exists: true }] }) // EXISTS
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ industry: 'hairdresser' }] }) // DISTINCT
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ cnt: '500' }] }); // COUNT
 
     const res = await app.inject({
       method: 'POST',
@@ -408,20 +433,27 @@ describe('POST /admin/agents/backfill-industry — route integration', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.dryRun).toBe(true);
-    expect(body.industry).toBe('hairdresser');
     expect(body.wouldUpdateTranscripts).toBe(500);
-    const updCall = mockQuery.mock.calls.find(
-      (c) => typeof c[0] === 'string' && (c[0] as string).includes('UPDATE call_transcripts'),
+    // No advisory lock on dryRun.
+    const lockCall = mockQuery.mock.calls.find(
+      (c) => typeof c[0] === 'string' && (c[0] as string).includes('pg_try_advisory_lock'),
     );
-    expect(updCall).toBeUndefined();
+    expect(lockCall).toBeUndefined();
   });
 
-  it('backfill-transcripts: happy path single batch < limit exits cleanly', async () => {
+  it('backfill-transcripts: happy path acquires lock + batches + releases lock', async () => {
+    // R19 BLOCKER fix (Codex): lock + batch UPDATEs + unlock all run on the
+    // SAME pool.connect() client. mockClientQuery handles those; mockQuery
+    // handles only pool.query (EXISTS, DISTINCT, COUNT).
     const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
     mockQuery
-      .mockResolvedValueOnce({ rowCount: 1, rows: [{ industry: 'hairdresser' }] })
-      .mockResolvedValueOnce({ rowCount: 1, rows: [{ cnt: '600' }] })
-      .mockResolvedValueOnce({ rowCount: 600, rows: [] });
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ exists: true }] }) // EXISTS (pool)
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ industry: 'hairdresser' }] }) // DISTINCT (pool)
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ cnt: '600' }] }); // COUNT (pool)
+    mockClientQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ locked: true }] }) // try_advisory_lock (client)
+      .mockResolvedValueOnce({ rowCount: 600, rows: [] }) // batch UPDATE (client, < 1000 → exit)
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] }); // advisory_unlock (client)
 
     const res = await app.inject({
       method: 'POST',
@@ -432,13 +464,51 @@ describe('POST /admin/agents/backfill-industry — route integration', () => {
     const body = JSON.parse(res.body);
     expect(body.transcriptsUpdated).toBe(600);
     expect(body.remaining).toBe(0);
+    expect(body.truncated).toBe(false);
+    expect(body.maxBatchesHit).toBe(false);
+
+    const unlockCall = mockClientQuery.mock.calls.find(
+      (c) => typeof c[0] === 'string' && (c[0] as string).includes('pg_advisory_unlock'),
+    );
+    expect(unlockCall).toBeDefined();
+    // Critical: lock + unlock both fired on the same client — mockRelease
+    // must have been called exactly once (lockClient.release in finally).
+    expect(mockRelease).toHaveBeenCalledTimes(1);
+  });
+
+  it('backfill-transcripts: 423 LOCKED when concurrent run holds the lock (R19 A2)', async () => {
+    const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ exists: true }] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ industry: 'hairdresser' }] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ cnt: '100' }] });
+    mockClientQuery.mockResolvedValueOnce({ rowCount: 1, rows: [{ locked: false }] }); // contended
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/agents/backfill-transcripts',
+      payload: { orgId: 'org1' },
+    });
+    expect(res.statusCode).toBe(423);
+    expect(JSON.parse(res.body).error).toBe('LOCKED');
+    // No batch UPDATE — early-return on lock-miss.
+    const updCall = mockClientQuery.mock.calls.find(
+      (c) => typeof c[0] === 'string' && (c[0] as string).includes('UPDATE call_transcripts'),
+    );
+    expect(updCall).toBeUndefined();
+    // Client still released even though we never acquired the lock.
+    expect(mockRelease).toHaveBeenCalledTimes(1);
   });
 
   it('backfill-transcripts: explicit industry skips industry-derive query', async () => {
     const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
     mockQuery
-      .mockResolvedValueOnce({ rowCount: 1, rows: [{ cnt: '0' }] })
-      .mockResolvedValueOnce({ rowCount: 0, rows: [] });
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ exists: true }] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ cnt: '0' }] });
+    mockClientQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ locked: true }] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] }) // batch UPDATE returns 0 → exit
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] }); // unlock
 
     const res = await app.inject({
       method: 'POST',

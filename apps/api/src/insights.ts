@@ -1755,6 +1755,20 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
     const { orgId, dryRun } = parsed.data;
     let { industry } = parsed.data;
 
+    // Audit-Round-19 (Codex R18 review A1): disambiguate "org doesn't exist"
+    // from "org exists but no config has industry set". Both used to collapse
+    // to 404 NO_INDUSTRY_CONFIGURED, which made debugging admin tickets
+    // harder ("did the orgId typo silently 404 me, or is the org legit but
+    // missing config?"). Cheap extra round-trip on an admin-only,
+    // rate-limited route.
+    const existsRes = await pool.query<{ exists: boolean }>(
+      `SELECT EXISTS(SELECT 1 FROM orgs WHERE id = $1) AS exists`,
+      [orgId],
+    );
+    if (!existsRes.rows[0]?.exists) {
+      return reply.status(404).send({ error: 'ORG_NOT_FOUND', orgId });
+    }
+
     // If industry not provided, derive from the org's tagged config row(s).
     // Reject when the org's configs disagree on industry — admin can pass
     // explicit `industry` to override.
@@ -1768,7 +1782,7 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
       if (cfgRes.rows.length === 0) {
         return reply.status(404).send({
           error: 'NO_INDUSTRY_CONFIGURED',
-          message: 'Org has no agent_config with industry set. Run /admin/agents/backfill-industry first or pass `industry` explicitly.',
+          message: 'Org exists but no agent_config has industry set. Run /admin/agents/backfill-industry first or pass `industry` explicitly.',
         });
       }
       if (cfgRes.rows.length > 1) {
@@ -1807,29 +1821,96 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
       };
     }
 
-    // Same batched-loop shape as the original endpoint's Phase 2.
-    const TRANSCRIPT_BATCH_SIZE = 1000;
-    const MAX_BATCHES = 1000;
+    // Audit-Round-19 (Codex R18 review A2 + Codex R19 review B BLOCKER):
+    // session-scoped advisory lock per orgId to prevent two concurrent admin
+    // double-runs from scanning the same backfill candidates twice.
+    //
+    // CRITICAL: pg_try_advisory_lock is SESSION-scoped — the lock binds to
+    // the Postgres connection that acquired it. If we call try_advisory_lock
+    // via pool.query() (random pool connection A), then call advisory_unlock
+    // via pool.query() (likely a different connection B), the unlock is a
+    // no-op on B and connection A holds the lock until idle-timeout (30s).
+    // Fix: dedicated `client = await pool.connect()` so lock + every batch
+    // UPDATE + unlock all share the same backend connection.
+    //
+    // Trade-off: the batch-loop now holds one pool slot for its entire
+    // duration. With max=20 and the route rate-limited to 30/min, that's
+    // acceptable. Worst case at MAX_BATCHES=1000 × ~10ms each ≈ 10s.
+    //
+    // sha1(orgId).readBigInt64BE(0) matches the lock-key-derivation in
+    // /admin/agents/backfill-industry (insights.ts:1572-1576) so the two
+    // related routes share a key-space — running both endpoints
+    // concurrently for the same org would also block each other.
+    const lockKey = (() => {
+      const h = crypto.createHash('sha1').update(`industry-backfill:${orgId}`).digest();
+      return h.readBigInt64BE(0);
+    })();
+
+    const lockClient = await pool.connect();
     let transcriptsUpdated = 0;
-    for (let i = 0; i < MAX_BATCHES; i += 1) {
-      const trUpd = await pool.query(
-        `UPDATE call_transcripts
-           SET industry = $1
-         WHERE id IN (
-           SELECT id FROM call_transcripts
-           WHERE org_id = $2 AND (industry IS NULL OR industry = '')
-           ORDER BY id
-           LIMIT $3
-         )`,
-        [industry, orgId, TRANSCRIPT_BATCH_SIZE],
+    let truncated = false;
+    try {
+      const lockRes = await lockClient.query<{ locked: boolean }>(
+        `SELECT pg_try_advisory_lock($1::bigint) AS locked`,
+        [lockKey.toString()],
       );
-      const batchCount = trUpd.rowCount ?? 0;
-      transcriptsUpdated += batchCount;
-      if (batchCount < TRANSCRIPT_BATCH_SIZE) break;
+      if (!lockRes.rows[0]?.locked) {
+        return reply.status(423).send({
+          error: 'LOCKED',
+          message: 'Another backfill is in progress for this org. Retry in a moment.',
+          orgId,
+        });
+      }
+
+      // Same batched-loop shape as the original endpoint's Phase 2 — but on
+      // the lock-holding client so all batch UPDATEs route through the same
+      // connection that owns the advisory lock.
+      const TRANSCRIPT_BATCH_SIZE = 1000;
+      const MAX_BATCHES = 1000;
+      try {
+        for (let i = 0; i < MAX_BATCHES; i += 1) {
+          const trUpd = await lockClient.query(
+            `UPDATE call_transcripts
+               SET industry = $1
+             WHERE id IN (
+               SELECT id FROM call_transcripts
+               WHERE org_id = $2 AND (industry IS NULL OR industry = '')
+               ORDER BY id
+               LIMIT $3
+             )`,
+            [industry, orgId, TRANSCRIPT_BATCH_SIZE],
+          );
+          const batchCount = trUpd.rowCount ?? 0;
+          transcriptsUpdated += batchCount;
+          if (batchCount < TRANSCRIPT_BATCH_SIZE) break;
+          // Last iteration ran a full batch — if MAX_BATCHES is exhausted
+          // there's likely still pending data and the caller needs another
+          // run. A3 "truncated" flag surfaces this so the caller doesn't
+          // mistake a hard-cap for "all done" silence.
+          if (i === MAX_BATCHES - 1) truncated = true;
+        }
+      } finally {
+        // Release the advisory lock on the SAME client that acquired it.
+        // pg_advisory_unlock is idempotent — and even if it throws, the
+        // outer finally still releases the client back to the pool, at
+        // which point pg auto-releases all session-locks the connection
+        // held. So this catch-and-warn is best-effort cosmetic.
+        await lockClient.query(`SELECT pg_advisory_unlock($1::bigint)`, [lockKey.toString()])
+          .catch((err: Error) => log.warn({ err: err.message, orgId }, 'transcript-backfill: advisory_unlock failed'));
+      }
+    } finally {
+      lockClient.release();
+    }
+
+    if (truncated) {
+      log.warn(
+        { orgId, industry, transcriptsUpdated, maxBatchesHit: 1000 },
+        'admin: transcript-backfill MAX_BATCHES ceiling hit — caller must re-run to finish',
+      );
     }
 
     log.info(
-      { orgId, industry, transcriptsUpdated, candidates, actor: payload.email },
+      { orgId, industry, transcriptsUpdated, candidates, actor: payload.email, truncated },
       'admin: transcript-backfill applied',
     );
 
@@ -1839,6 +1920,11 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
       industry,
       transcriptsUpdated,
       remaining: Math.max(0, candidates - transcriptsUpdated),
+      // A3: explicit truncated flag so callers can detect "more work to do"
+      // without inferring from comparing transcriptsUpdated to candidates
+      // (which is racy if new transcripts arrive during the run).
+      truncated,
+      maxBatchesHit: truncated,
     };
   });
 }

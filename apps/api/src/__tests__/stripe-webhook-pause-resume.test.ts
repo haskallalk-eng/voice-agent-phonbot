@@ -392,25 +392,20 @@ describe('Stripe webhook /billing/webhook — pause/resume/deleted route integra
   // ── R18: subscription.updated coverage + downgrade-cap (billing MEDIUM-1) ──
 
   it('updated with downgrade (Pro→Starter) caps minutes_used to new limit', async () => {
-    // R18: previously, a user mid-cycle plan-downgrade saw
-    // minutes_used > minutes_limit immediately because the syncSubscription
-    // UPDATE only set minutes_limit, not minutes_used. Fix: detect
-    // newLimit < oldLimit and inline `minutes_used = LEAST(...)` in the
-    // same UPDATE — atomic, no separate read-modify-write.
-    //
-    // Codex C2 cleanup: use an explicit Starter price-ID matched via
-    // STRIPE_PRICE_STARTER env stub so the PLANS lookup hits a real plan
-    // instead of relying on the unknown-price→free fallback (which R18's B2
-    // fix now suppresses). Old limit = 1000 (test value > Starter's 360),
-    // new limit = Starter (360) → downgrade detected.
+    // R18: detect newLimit < oldLimit and inline LEAST(...) in the UPDATE.
+    // R19: syncSubscription now wraps SELECT-FOR-UPDATE + UPDATE in a single
+    // transaction (billing MEDIUM-4) — fixture queue must include BEGIN +
+    // COMMIT alongside the SELECT and UPDATE.
     mockQuery
-      .mockResolvedValueOnce({ rowCount: 1, rows: [{ event_id: 'x' }] }) // dedup
-      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'org-real' }] }) // syncSubscription resolver SELECT
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ event_id: 'x' }] }) // dedup (pool.query)
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'org-real' }] }) // syncSub resolver (pool.query)
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] }) // BEGIN (client.query)
       .mockResolvedValueOnce({
         rowCount: 1,
         rows: [{ period_end_unix: '1735689600', minutes_limit: 1000 }],
-      }) // pre-UPDATE SELECT (R18 widened to include minutes_limit)
-      .mockResolvedValueOnce({ rowCount: 1, rows: [] }); // UPDATE orgs
+      }) // SELECT FOR UPDATE (client.query)
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] }) // UPDATE orgs (client.query)
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] }); // COMMIT (client.query)
 
     const ev = makeSubscriptionEvent('customer.subscription.updated', {
       customerId: 'cus_real',
@@ -452,11 +447,13 @@ describe('Stripe webhook /billing/webhook — pause/resume/deleted route integra
     mockQuery
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ event_id: 'x' }] }) // dedup
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'org-real' }] }) // resolver
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] }) // BEGIN (R19)
       .mockResolvedValueOnce({
         rowCount: 1,
         rows: [{ period_end_unix: '1735689600', minutes_limit: 360 }],
-      }) // pre-UPDATE: Starter limit (360 > 30 free → would normally downgrade)
-      .mockResolvedValueOnce({ rowCount: 1, rows: [] }); // UPDATE orgs
+      }) // SELECT FOR UPDATE: Starter limit (would normally trigger downgrade)
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] }) // UPDATE orgs
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] }); // COMMIT (R19)
 
     const ev = makeSubscriptionEvent('customer.subscription.updated', {
       customerId: 'cus_real',
@@ -494,12 +491,14 @@ describe('Stripe webhook /billing/webhook — pause/resume/deleted route integra
     mockQuery
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ event_id: 'x' }] }) // dedup
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'org-real' }] }) // resolver
-      // Pre-UPDATE SELECT: old limit was 30 (free), new will also be 30 → no downgrade.
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] }) // BEGIN (R19)
+      // SELECT FOR UPDATE: old limit was 30 (free), new will also be 30 → no downgrade.
       .mockResolvedValueOnce({
         rowCount: 1,
         rows: [{ period_end_unix: '1735689600', minutes_limit: 30 }],
       })
-      .mockResolvedValueOnce({ rowCount: 1, rows: [] }); // UPDATE orgs
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] }) // UPDATE orgs
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] }); // COMMIT (R19)
 
     const ev = makeSubscriptionEvent('customer.subscription.updated', {
       customerId: 'cus_real',
@@ -535,11 +534,13 @@ describe('Stripe webhook /billing/webhook — pause/resume/deleted route integra
     mockQuery
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ event_id: 'x' }] }) // dedup
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'org-real' }] }) // resolver
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] }) // BEGIN (R19)
       .mockResolvedValueOnce({
         rowCount: 1,
         rows: [{ period_end_unix: null, minutes_limit: null }],
       })
-      .mockResolvedValueOnce({ rowCount: 1, rows: [] }); // UPDATE orgs
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] }) // UPDATE orgs
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] }); // COMMIT (R19)
 
     const ev = makeSubscriptionEvent('customer.subscription.updated', {
       customerId: 'cus_real',
