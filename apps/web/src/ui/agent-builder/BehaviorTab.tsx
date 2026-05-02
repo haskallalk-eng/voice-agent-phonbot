@@ -788,42 +788,123 @@ const TOOL_META: Record<typeof KNOWN_TOOLS[number], ToolMeta> = {
   },
 };
 
+// Pro Rolle: welche Tools EMPFEHLEN sich? Universal: ticket.create (Sicherheits-
+// netz, fängt jedes Anliegen ohne Datenverlust). Nur appointment braucht zusätzlich
+// die zwei Calendar-Tools (Slots suchen + buchen). Diese Map treibt den Smart-
+// Defaults-Banner — der erscheint nur wenn das aktuelle tools-Array vom Empfehl-
+// ten-Set abweicht. Ein-Klick-Übernahme, keine Auto-Mutation hinter dem Rücken.
+const ROLE_TOOL_HINTS: Record<string, ReadonlyArray<typeof KNOWN_TOOLS[number]>> = {
+  reception: ['ticket.create'],
+  appointment: ['calendar.findSlots', 'calendar.book', 'ticket.create'],
+  support: ['ticket.create'],
+  orders: ['ticket.create'],
+  emergency: ['ticket.create'],
+  info: ['ticket.create'],
+};
+
+function recommendedToolsFor(roleIds: string[]): Set<string> {
+  const out = new Set<string>();
+  for (const id of roleIds) {
+    const hints = ROLE_TOOL_HINTS[id];
+    if (hints) for (const t of hints) out.add(t);
+  }
+  return out;
+}
+
 function ToolsBlock({ config, onUpdate }: { config: AgentConfig; onUpdate: (p: Partial<AgentConfig>) => void }) {
+  const roleIds = readSelectedRoles(config);
+  const recommended = useMemo(() => recommendedToolsFor(roleIds), [roleIds.join(',')]);
+  const active = useMemo(() => new Set(config.tools), [config.tools.join(',')]);
+  const missing = useMemo(() => {
+    const m: string[] = [];
+    recommended.forEach((t) => { if (!active.has(t)) m.push(t); });
+    return m;
+  }, [recommended, active]);
+  const extra = useMemo(() => {
+    const e: string[] = [];
+    active.forEach((t) => { if (!recommended.has(t) && (KNOWN_TOOLS as readonly string[]).includes(t)) e.push(t); });
+    return e;
+  }, [recommended, active]);
+
   function toggle(tool: string) {
     const next = new Set(config.tools);
     if (next.has(tool)) next.delete(tool);
     else next.add(tool);
     onUpdate({ tools: Array.from(next) });
   }
+
+  function applyRecommended() {
+    // Behalte Tools die NICHT in KNOWN_TOOLS sind (forward-compat falls
+    // Custom-Tools je hier landen). Setze nur das KNOWN_TOOLS-Subset auf
+    // recommended.
+    const preserved = config.tools.filter((t) => !(KNOWN_TOOLS as readonly string[]).includes(t));
+    onUpdate({ tools: [...preserved, ...recommended] });
+  }
+
   return (
     <div className="mt-5">
       <span className="text-xs font-medium text-white/40 uppercase tracking-wider block mb-1">Aktive Tools</span>
       <p className="text-[11px] text-white/30 mb-3">Funktionen die Chipy während des Anrufs ausführen kann. Ohne Häkchen kann er die Aktion nicht auslösen — egal was im Prompt steht.</p>
+
+      {/* Smart-Defaults-Banner: erscheint NUR wenn die gewählten Rollen Tools
+          empfehlen die nicht aktiviert sind, oder wenn Tools aktiv sind die
+          keine gewählte Rolle braucht. Ein-Klick-Korrektur. */}
+      {roleIds.length > 0 && (missing.length > 0 || extra.length > 0) && (
+        <div className="mb-3 rounded-xl border border-cyan-400/25 bg-cyan-400/[0.04] px-3 py-2.5 flex items-center gap-3 flex-wrap">
+          <div className="flex-1 min-w-0">
+            <p className="text-[11px] text-cyan-200/85 leading-snug">
+              {missing.length > 0 && (
+                <>Empfohlen für deine Rollen: {missing.map((t) => TOOL_META[t as typeof KNOWN_TOOLS[number]]?.label ?? t).join(', ')}.</>
+              )}
+              {missing.length > 0 && extra.length > 0 && ' '}
+              {extra.length > 0 && (
+                <>Aktiv ohne passende Rolle: {extra.map((t) => TOOL_META[t as typeof KNOWN_TOOLS[number]]?.label ?? t).join(', ')}.</>
+              )}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={applyRecommended}
+            className="text-[11px] px-3 py-1.5 rounded-lg bg-cyan-400/15 hover:bg-cyan-400/25 text-cyan-100 border border-cyan-400/30 transition-colors cursor-pointer whitespace-nowrap"
+          >
+            Empfehlung übernehmen
+          </button>
+        </div>
+      )}
+
       <div className="grid sm:grid-cols-3 gap-2">
         {KNOWN_TOOLS.map((tool) => {
           const meta = TOOL_META[tool];
-          const active = config.tools.includes(tool);
+          const isActive = active.has(tool);
+          const isRecommended = recommended.has(tool);
           return (
             <button
               key={tool}
               type="button"
               onClick={() => toggle(tool)}
               className={`group relative flex items-start gap-2.5 text-left rounded-xl border px-3 py-2.5 transition-all cursor-pointer ${
-                active
+                isActive
                   ? 'border-orange-500/45 bg-orange-500/[0.07]'
-                  : 'border-white/[0.07] bg-white/[0.03] hover:border-white/15 hover:bg-white/[0.05]'
+                  : isRecommended
+                    ? 'border-cyan-400/30 bg-cyan-400/[0.03] hover:border-cyan-400/50'
+                    : 'border-white/[0.07] bg-white/[0.03] hover:border-white/15 hover:bg-white/[0.05]'
               }`}
             >
-              {active && (
+              {isActive && (
                 <span aria-hidden className="absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
                   <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 </span>
               )}
-              <meta.Icon size={16} className={`shrink-0 mt-0.5 transition-colors ${active ? 'text-orange-300' : 'text-white/35 group-hover:text-white/55'}`} />
-              <div className="min-w-0 pr-5">
-                <p className={`text-xs font-semibold leading-tight transition-colors ${active ? 'text-white' : 'text-white/65 group-hover:text-white/85'}`}>
+              {!isActive && isRecommended && (
+                <span aria-hidden className="absolute top-2 right-2 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-cyan-200 bg-cyan-400/10 border border-cyan-400/30 rounded">
+                  empf.
+                </span>
+              )}
+              <meta.Icon size={16} className={`shrink-0 mt-0.5 transition-colors ${isActive ? 'text-orange-300' : isRecommended ? 'text-cyan-300/70' : 'text-white/35 group-hover:text-white/55'}`} />
+              <div className="min-w-0 pr-7">
+                <p className={`text-xs font-semibold leading-tight transition-colors ${isActive ? 'text-white' : isRecommended ? 'text-white/80' : 'text-white/65 group-hover:text-white/85'}`}>
                   {meta.label}
                 </p>
                 <p className="text-[10px] text-white/35 mt-1 leading-snug">{meta.description}</p>
