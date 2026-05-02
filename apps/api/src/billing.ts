@@ -486,8 +486,22 @@ async function syncSubscription(sub: Stripe.Subscription) {
 
   const priceId = sub.items.data[0]?.price.id ?? null;
   // Match against both monthly AND yearly price IDs
-  const plan = Object.values(PLANS).find((p) => p.stripePriceId === priceId || p.stripePriceIdYearly === priceId)?.id ?? 'free';
+  const matchedPlan = Object.values(PLANS).find((p) => p.stripePriceId === priceId || p.stripePriceIdYearly === priceId)?.id ?? null;
+  const plan = matchedPlan ?? 'free';
   const minutesLimit = PLANS[plan as PlanId]?.minutesLimit ?? 30;
+  // Audit-Round-18 (Codex review B2): a non-null price.id that doesn't map to
+  // any PLAN was previously a silent free-fallback. R18's downgrade-cap makes
+  // that destructive — the fall-through would now also slam minutes_used down
+  // to 30. log.warn so a freshly-added Stripe-Price-ID we forgot to wire up
+  // surfaces in Sentry instead of quietly capping every active customer's
+  // usage. The cap-suppression below uses this flag.
+  if (priceId && !matchedPlan) {
+    log.warn(
+      { subId: sub.id, orgId, priceId },
+      'billing: stripe price.id not mapped to any PLAN — falling back to free; minutes_used cap suppressed for safety',
+    );
+  }
+  const planFromUnknownPrice = priceId !== null && matchedPlan === null;
 
   // Check if this is a period renewal (reset minutes_used).
   // Stripe sends current_period_end as Unix seconds; Postgres stores TIMESTAMPTZ.
@@ -496,18 +510,45 @@ async function syncSubscription(sub: Stripe.Subscription) {
   // Compare via EXTRACT(EPOCH) in SQL so both sides are integer Unix seconds.
   const currentPeriodEnd = (sub as unknown as { current_period_end?: number }).current_period_end ?? null;
   let resetMinutes = false;
-  if (currentPeriodEnd && pool) {
+  // Audit-Round-18 (2026-04-26 audit billing MEDIUM-1): widen the pre-UPDATE
+  // SELECT to include `minutes_limit` so we can detect a mid-cycle DOWNGRADE
+  // (Pro→Starter) and cap `minutes_used`. Without this, a returning user
+  // sees "You're over your limit" immediately after switching because their
+  // burned-minutes count is still from the higher-limit plan.
+  //
+  // Codex Plan-Review C (R18): bundle into the existing pre-UPDATE SELECT —
+  // no second round-trip. We also keep this read whether or not
+  // currentPeriodEnd is set, because downgrade detection is independent of
+  // period rotation.
+  let oldMinutesLimit: number | null = null;
+  if (pool) {
     const existing = await pool.query(
-      `SELECT EXTRACT(EPOCH FROM current_period_end)::bigint AS period_end_unix FROM orgs WHERE id = $1`,
+      `SELECT EXTRACT(EPOCH FROM current_period_end)::bigint AS period_end_unix,
+              minutes_limit
+       FROM orgs WHERE id = $1`,
       [orgId],
     );
     const oldEndUnix = existing.rows[0]?.period_end_unix;
+    oldMinutesLimit = (existing.rows[0]?.minutes_limit as number | undefined) ?? null;
     // oldEndUnix is null when the org has never had a period set (first subscription).
     // We only reset when we have a previous period AND it's actually different.
-    if (oldEndUnix != null && Number(oldEndUnix) !== currentPeriodEnd) {
+    if (currentPeriodEnd && oldEndUnix != null && Number(oldEndUnix) !== currentPeriodEnd) {
       resetMinutes = true; // Period changed = new billing cycle
     }
   }
+
+  // Downgrade-cap: only cap when (a) there's a real previous limit (not first
+  // subscription), (b) the new limit is strictly smaller, (c) we are NOT
+  // already resetting minutes_used to 0 (a period-rollover wipes the counter
+  // anyway), AND (d) the new plan came from a real PLAN match — not from the
+  // silent free-fallback for an unknown stripe price.id (Codex R18 B2: would
+  // otherwise destructively cap every active customer when we forget to wire
+  // a new Stripe-Price-ID). Composing the column expression inline keeps the
+  // UPDATE atomic — no read-modify-write race against concurrent usage writes.
+  const downgrade = oldMinutesLimit !== null && minutesLimit < oldMinutesLimit && !planFromUnknownPrice;
+  const minutesUsedExpr = resetMinutes
+    ? ',\n      minutes_used = 0'
+    : (downgrade ? ',\n      minutes_used = LEAST(minutes_used, $7::int)' : '');
 
   await pool.query(
     `UPDATE orgs SET
@@ -516,7 +557,7 @@ async function syncSubscription(sub: Stripe.Subscription) {
       stripe_subscription_id = $4,
       plan_interval = $5,
       current_period_end = to_timestamp($6),
-      minutes_limit = $7${resetMinutes ? ',\n      minutes_used = 0' : ''}
+      minutes_limit = $7${minutesUsedExpr}
      WHERE id = $1`,
     [
       orgId,

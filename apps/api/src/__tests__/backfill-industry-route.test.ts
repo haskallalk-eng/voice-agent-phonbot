@@ -339,4 +339,117 @@ describe('POST /admin/agents/backfill-industry — route integration', () => {
     expect(body.transcriptsUpdated).toBe(0);
     expect(mockQuery).toHaveBeenCalledTimes(1); // exactly one batch attempt
   });
+
+  // ── R18: /admin/agents/backfill-transcripts (Phase-2 recovery endpoint) ──
+
+  it('backfill-transcripts: 403 for non-admin user JWT', async () => {
+    const app = await buildApp({ admin: false, aud: 'phonbot:user', userId: 'u1', orgId: 'org1', role: 'owner' });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/agents/backfill-transcripts',
+      payload: { orgId: 'org1' },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it('backfill-transcripts: 404 when org has no industry-tagged config and none passed', async () => {
+    const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
+    mockQuery.mockResolvedValueOnce({ rowCount: 0, rows: [] });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/agents/backfill-transcripts',
+      payload: { orgId: 'org1' },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(JSON.parse(res.body).error).toBe('NO_INDUSTRY_CONFIGURED');
+  });
+
+  it('backfill-transcripts: 409 AMBIGUOUS_INDUSTRY when configs disagree', async () => {
+    const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
+    mockQuery.mockResolvedValueOnce({
+      rowCount: 2,
+      rows: [{ industry: 'hairdresser' }, { industry: 'restaurant' }],
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/agents/backfill-transcripts',
+      payload: { orgId: 'org1' },
+    });
+    expect(res.statusCode).toBe(409);
+    const body = JSON.parse(res.body);
+    expect(body.error).toBe('AMBIGUOUS_INDUSTRY');
+    expect(body.industries).toEqual(expect.arrayContaining(['hairdresser', 'restaurant']));
+  });
+
+  it('backfill-transcripts: 400 INVALID_INDUSTRY when explicit industry not curated', async () => {
+    const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/agents/backfill-transcripts',
+      payload: { orgId: 'org1', industry: 'spaceship-repair' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toBe('INVALID_INDUSTRY');
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it('backfill-transcripts: dryRun returns counts without writing', async () => {
+    const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ industry: 'hairdresser' }] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ cnt: '500' }] });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/agents/backfill-transcripts',
+      payload: { orgId: 'org1', dryRun: true },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.dryRun).toBe(true);
+    expect(body.industry).toBe('hairdresser');
+    expect(body.wouldUpdateTranscripts).toBe(500);
+    const updCall = mockQuery.mock.calls.find(
+      (c) => typeof c[0] === 'string' && (c[0] as string).includes('UPDATE call_transcripts'),
+    );
+    expect(updCall).toBeUndefined();
+  });
+
+  it('backfill-transcripts: happy path single batch < limit exits cleanly', async () => {
+    const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ industry: 'hairdresser' }] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ cnt: '600' }] })
+      .mockResolvedValueOnce({ rowCount: 600, rows: [] });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/agents/backfill-transcripts',
+      payload: { orgId: 'org1' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.transcriptsUpdated).toBe(600);
+    expect(body.remaining).toBe(0);
+  });
+
+  it('backfill-transcripts: explicit industry skips industry-derive query', async () => {
+    const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ cnt: '0' }] })
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/agents/backfill-transcripts',
+      payload: { orgId: 'org1', industry: 'restaurant' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).industry).toBe('restaurant');
+    const deriveCall = mockQuery.mock.calls.find(
+      (c) => typeof c[0] === 'string' && (c[0] as string).includes("data->>'industry'"),
+    );
+    expect(deriveCall).toBeUndefined();
+  });
 });

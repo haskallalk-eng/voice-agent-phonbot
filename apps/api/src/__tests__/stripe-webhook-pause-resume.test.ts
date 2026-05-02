@@ -62,6 +62,11 @@ vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_dummy_for_billing_integration_tests');
 vi.stubEnv('STRIPE_WEBHOOK_SECRET', TEST_WEBHOOK_SECRET);
 // Quiet down env-validation warnings during prod-like asserts
 vi.stubEnv('NODE_ENV', 'test');
+// Audit-Round-18 (Codex C2 fix): real Stripe price-IDs the PLANS lookup will
+// match. Without these, the test would fall through to the "free" branch which
+// R18's silent-fallback warning + suppression now catches separately.
+vi.stubEnv('STRIPE_PRICE_STARTER', 'price_starter_test');
+vi.stubEnv('STRIPE_PRICE_PRO', 'price_pro_test');
 
 const { registerBilling } = await import('../billing.js');
 
@@ -82,8 +87,17 @@ function signedPayload(event: object): { rawBody: string; signature: string } {
 }
 
 function makeSubscriptionEvent(
-  type: 'customer.subscription.paused' | 'customer.subscription.resumed' | 'customer.subscription.deleted',
-  opts: { id?: string; customerId?: string | null; metadataOrgId?: string | null } = {},
+  type:
+    | 'customer.subscription.paused'
+    | 'customer.subscription.resumed'
+    | 'customer.subscription.deleted'
+    | 'customer.subscription.updated',
+  opts: {
+    id?: string;
+    customerId?: string | null;
+    metadataOrgId?: string | null;
+    priceId?: string;
+  } = {},
 ): object {
   const subId = opts.id ?? `sub_test_${Math.random().toString(36).slice(2, 8)}`;
   return {
@@ -105,7 +119,7 @@ function makeSubscriptionEvent(
         // optional-chain) — fixture must include `.plan` or the route crashes.
         // The deleted-test surfaced this; paused/resumed tests hit the same
         // path but happened not to crash because of upstream luck.
-        items: { data: [{ price: { id: 'price_test' }, plan: { interval: 'month' } }] },
+        items: { data: [{ price: { id: opts.priceId ?? 'price_test' }, plan: { interval: 'month' } }] },
         status: 'active',
       },
     },
@@ -373,5 +387,181 @@ describe('Stripe webhook /billing/webhook — pause/resume/deleted route integra
 
     // Only ONE query (the dedup INSERT). Resolver never reached.
     expect(mockQuery).toHaveBeenCalledTimes(1);
+  });
+
+  // ── R18: subscription.updated coverage + downgrade-cap (billing MEDIUM-1) ──
+
+  it('updated with downgrade (Pro→Starter) caps minutes_used to new limit', async () => {
+    // R18: previously, a user mid-cycle plan-downgrade saw
+    // minutes_used > minutes_limit immediately because the syncSubscription
+    // UPDATE only set minutes_limit, not minutes_used. Fix: detect
+    // newLimit < oldLimit and inline `minutes_used = LEAST(...)` in the
+    // same UPDATE — atomic, no separate read-modify-write.
+    //
+    // Codex C2 cleanup: use an explicit Starter price-ID matched via
+    // STRIPE_PRICE_STARTER env stub so the PLANS lookup hits a real plan
+    // instead of relying on the unknown-price→free fallback (which R18's B2
+    // fix now suppresses). Old limit = 1000 (test value > Starter's 360),
+    // new limit = Starter (360) → downgrade detected.
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ event_id: 'x' }] }) // dedup
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'org-real' }] }) // syncSubscription resolver SELECT
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ period_end_unix: '1735689600', minutes_limit: 1000 }],
+      }) // pre-UPDATE SELECT (R18 widened to include minutes_limit)
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] }); // UPDATE orgs
+
+    const ev = makeSubscriptionEvent('customer.subscription.updated', {
+      customerId: 'cus_real',
+      metadataOrgId: 'org-real',
+      priceId: 'price_starter_test', // matches STRIPE_PRICE_STARTER stub above
+    });
+    const { rawBody, signature } = signedPayload(ev);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/billing/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': signature },
+      payload: rawBody,
+    });
+
+    expect(res.statusCode).toBe(200);
+
+    const updateCall = mockQuery.mock.calls.find(
+      (c) =>
+        typeof c[0] === 'string' &&
+        (c[0] as string).includes('UPDATE orgs SET') &&
+        (c[0] as string).includes('plan = $2'),
+    );
+    expect(updateCall).toBeDefined();
+    expect(updateCall![0] as string).toContain('LEAST(minutes_used');
+    // Bind-check (Codex C1): $7 is the new minutes_limit, here Starter = 360.
+    const params = updateCall![1] as unknown[];
+    expect(params[1]).toBe('starter'); // $2 plan
+    expect(params[6]).toBe(360); // $7 minutes_limit (Starter default)
+  });
+
+  it('updated with UNKNOWN price.id → free-fallback BUT cap suppressed (R18 B2 safety)', async () => {
+    // Codex Round-18 B2: a non-null price.id that doesn't map to any PLAN
+    // used to silently fall through to 'free' (minutesLimit=30). With R18's
+    // downgrade-cap, that would slam every active customer's minutes_used
+    // down to 30. The B2 fix logs a warning AND suppresses the LEAST-cap
+    // when matchedPlan is null — so the user keeps their minutes until ops
+    // wires the new Stripe-Price-ID into PLANS.
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ event_id: 'x' }] }) // dedup
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'org-real' }] }) // resolver
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ period_end_unix: '1735689600', minutes_limit: 360 }],
+      }) // pre-UPDATE: Starter limit (360 > 30 free → would normally downgrade)
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] }); // UPDATE orgs
+
+    const ev = makeSubscriptionEvent('customer.subscription.updated', {
+      customerId: 'cus_real',
+      metadataOrgId: 'org-real',
+      priceId: 'price_unknown_test', // NOT in PLANS — triggers free-fallback
+    });
+    const { rawBody, signature } = signedPayload(ev);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/billing/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': signature },
+      payload: rawBody,
+    });
+
+    expect(res.statusCode).toBe(200);
+
+    const updateCall = mockQuery.mock.calls.find(
+      (c) =>
+        typeof c[0] === 'string' &&
+        (c[0] as string).includes('UPDATE orgs SET') &&
+        (c[0] as string).includes('plan = $2'),
+    );
+    expect(updateCall).toBeDefined();
+    // CAP MUST BE SUPPRESSED — even though new (30) < old (360).
+    expect(updateCall![0] as string).not.toContain('LEAST(minutes_used');
+    // Warning was logged so ops can fix the missing PRICE-ID mapping.
+    expect(mockWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ priceId: 'price_unknown_test' }),
+      expect.stringContaining('not mapped to any PLAN'),
+    );
+  });
+
+  it('updated WITHOUT downgrade (same/upgrade) does NOT include LEAST cap', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ event_id: 'x' }] }) // dedup
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'org-real' }] }) // resolver
+      // Pre-UPDATE SELECT: old limit was 30 (free), new will also be 30 → no downgrade.
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ period_end_unix: '1735689600', minutes_limit: 30 }],
+      })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] }); // UPDATE orgs
+
+    const ev = makeSubscriptionEvent('customer.subscription.updated', {
+      customerId: 'cus_real',
+      metadataOrgId: 'org-real',
+    });
+    const { rawBody, signature } = signedPayload(ev);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/billing/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': signature },
+      payload: rawBody,
+    });
+
+    expect(res.statusCode).toBe(200);
+
+    const updateCall = mockQuery.mock.calls.find(
+      (c) =>
+        typeof c[0] === 'string' &&
+        (c[0] as string).includes('UPDATE orgs SET') &&
+        (c[0] as string).includes('plan = $2'),
+    );
+    expect(updateCall).toBeDefined();
+    // Same-or-upgrade: no LEAST cap, no minutes_used reset.
+    expect(updateCall![0] as string).not.toContain('LEAST(minutes_used');
+    expect(updateCall![0] as string).not.toContain('minutes_used = 0');
+  });
+
+  it('updated with first-subscription (oldLimit=null) does NOT cap', async () => {
+    // First-subscription path: pre-UPDATE SELECT returns null period+limit
+    // because the org has never had any subscription before. The downgrade
+    // check requires oldLimit !== null, so no LEAST cap applies.
+    mockQuery
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ event_id: 'x' }] }) // dedup
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 'org-real' }] }) // resolver
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ period_end_unix: null, minutes_limit: null }],
+      })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] }); // UPDATE orgs
+
+    const ev = makeSubscriptionEvent('customer.subscription.updated', {
+      customerId: 'cus_real',
+      metadataOrgId: 'org-real',
+    });
+    const { rawBody, signature } = signedPayload(ev);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/billing/webhook',
+      headers: { 'content-type': 'application/json', 'stripe-signature': signature },
+      payload: rawBody,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const updateCall = mockQuery.mock.calls.find(
+      (c) =>
+        typeof c[0] === 'string' &&
+        (c[0] as string).includes('UPDATE orgs SET') &&
+        (c[0] as string).includes('plan = $2'),
+    );
+    expect(updateCall).toBeDefined();
+    expect(updateCall![0] as string).not.toContain('LEAST(minutes_used');
   });
 });
