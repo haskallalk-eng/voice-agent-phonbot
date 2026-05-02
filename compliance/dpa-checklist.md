@@ -8,7 +8,7 @@ Verwende dies als Tracking-Liste. Lege jede signierte/heruntergeladene Vertragsk
 
 | Anbieter | DPA-Dialog | DPF? | Status | Datei abgelegt |
 |---|---|---|---|---|
-| **Supabase** | [supabase.com/legal/dpa](https://supabase.com/legal/dpa) → Dashboard → Settings → Organization → Legal | EU-only (Frankfurt) | ⬜ | ⬜ |
+| **Supabase** | [supabase.com/legal/dpa](https://supabase.com/legal/dpa) → Dashboard → Settings → Organization → Legal · DocuSign-Flow | EU-only (Frankfurt) | ✅ 2026-05-02 (DocuSign) | ✅ `dpas/supabase/2026-05-02-Supabase-DPA-DocuSign.pdf` |
 | **OpenAI** | [openai.com/policies/data-processing-addendum](https://openai.com/policies/data-processing-addendum/) → platform.openai.com → Settings → Compliance | DPF ✓ | ⬜ | ⬜ |
 | **Twilio** | [twilio.com/legal/data-processing-addendum](https://www.twilio.com/en-us/legal/data-processing-addendum) → Console → Compliance | DPF ✓ | ⬜ | ⬜ |
 | **Stripe** | DPA ist Teil der ToS bei Stripe Payments Europe Ltd (Dublin) — Dashboard → Settings → Compliance | EU-Vertrag | ⬜ | ⬜ |
