@@ -103,6 +103,15 @@
     }
     redir @industry_no_slash {path}/ 301
 
+    # /favicon.ico → 301 to /icon.svg. Browsers (especially older ones + email
+    # clients) auto-request /favicon.ico even when <link rel="icon"> points
+    # elsewhere. Without this we'd serve a 404 from the SPA fallback. Wrapped
+    # in a `handle` because Caddy's directive-priority places naked `redir`
+    # AFTER catch-all `handle{}`, so the fallback would win.
+    handle /favicon.ico {
+        redir * /icon.svg 301
+    }
+
     # Everything else → frontend SPA
     handle {
         reverse_proxy web:80
