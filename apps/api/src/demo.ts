@@ -60,8 +60,13 @@ Du bist Chipy — der KI-Telefonassistent von Phonbot. In dieser Demo übernimms
 
 **Regel:** Maximal 1–2 Meta-Antworten pro Anruf, dann sanft zurück zur Demo-Aufgabe. Wenn der Anrufer ausschließlich Meta-Fragen stellt und die Demo nicht ausprobieren will, sag nach der zweiten: "Cool dass dich das interessiert — alle Details auf phonbot.de. Ich bin gleich wieder im Service-Modus, falls du die Demo ausprobieren willst." und ruf bei klarer Verabschiedung \`end_call\` auf.
 
-## Kontakt-Daten in dieser Demo erheben (Pflicht-Trio)
-Wenn das Gespräch zu einem Termin, Rückruf, Angebot oder Ticket führt, erfrage IMMER drei Daten in dieser Reihenfolge: 1) Name, 2) Mobil- oder Festnetznummer, 3) E-Mail-Adresse. Beide Kontaktwege werden gebraucht: die Nummer für SMS-Bestätigung, die E-Mail für Termin-Einladung. Wiederhole die Telefonnummer in Zweier- oder Dreier-Blöcken zur Kontrolle. Erst nachdem alle drei sauber bestätigt sind, sag "Alles klar, ich hab's eingetragen" — vorher nicht.
+## Kontakt-Daten in dieser Demo erheben (flexibel, NICHT zwingend alle drei)
+Wenn das Gespräch zu einem Termin, Rückruf, Angebot oder Ticket führt, frag in dieser Reihenfolge: 1) Name, 2) Mobil- oder Festnetznummer, 3) E-Mail-Adresse. Wiederhole die Telefonnummer in Zweier- oder Dreier-Blöcken zur Kontrolle.
+
+**WICHTIG — Flexibilität (siehe Plattform-Baseline „Datenflexibilität"):**
+- Wenn der Anrufer einen Kanal explizit ablehnt ("brauch ich nicht", "ohne Email"), akzeptiere das BEIM ERSTEN MAL. Frag NICHT zweimal nach. Geh weiter mit dem was du hast.
+- Mindest-Daten: **Name + ein Kontaktweg** (Telefon ODER Email). Wenn du beides hast, super — aber ein Kanal reicht.
+- Erst wenn die Daten sauber bestätigt sind, sag "Alles klar, ich hab's eingetragen" — vorher nicht.
 
 ## Phonbot-Testlink aktiv anbieten (am Ende des Calls)
 Bevor du dich verabschiedest und den Call beendest: frag den Anrufer EINMAL natürlich, ob er den Phonbot-Testlink bekommen will. Beispiel: "Übrigens — falls du Phonbot selbst ausprobieren willst, schick ich dir gerne den kostenlosen Testlink per Mail oder SMS. Magst du den haben?"
@@ -118,7 +123,7 @@ const inMemDemoAgents = new Map<string, { agentId: string; createdAt: number }>(
 
 async function readDemoAgent(templateId: string): Promise<string | null> {
   if (redis?.isOpen) {
-    const v = await redis.get(`demo_agent:v9:${templateId}`).catch(() => null);
+    const v = await redis.get(`demo_agent:v10:${templateId}`).catch(() => null);
     return v ?? null;
     // Audit-Round-9 H1: when Redis is online but the key is absent (legit
     // flush, scaled-out container B that never wrote it), DO NOT fall back
@@ -152,9 +157,9 @@ async function writeDemoAgent(templateId: string, agentId: string): Promise<void
   inMemDemoAgentMeta.set(agentId, { templateId, createdAt: Date.now() });
   if (redis?.isOpen) {
     await Promise.all([
-      redis.set(`demo_agent:v9:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {}),
+      redis.set(`demo_agent:v10:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {}),
       // Reverse direction: webhook sees agent_id, needs templateId. Same TTL.
-      redis.set(`demo_agent_meta:v9:${agentId}`, templateId, { EX: CACHE_TTL_SEC }).catch(() => {}),
+      redis.set(`demo_agent_meta:v10:${agentId}`, templateId, { EX: CACHE_TTL_SEC }).catch(() => {}),
     ]);
   }
   // Audit-Round-9 H3: durable DB mirror of the reverse-lookup. Redis is the
@@ -271,7 +276,7 @@ export async function maybeSendDemoSignupLink(
  */
 export async function readDemoCallTemplate(agentId: string): Promise<string | null> {
   if (redis?.isOpen) {
-    const v = await redis.get(`demo_agent_meta:v9:${agentId}`).catch(() => null);
+    const v = await redis.get(`demo_agent_meta:v10:${agentId}`).catch(() => null);
     if (v) return v;
     // Skip in-mem when Redis is online (H1): in-mem could be stale across
     // containers and we now have a durable DB layer below.
@@ -334,7 +339,7 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
       const removed = await redis.del(SALES_AGENT_KEY);
       flushed += typeof removed === 'number' ? removed : 0;
       // Clean up previous versions on the way past.
-      await redis.del(['sales_agent:phonbot:v3', 'sales_agent:phonbot:v4', 'sales_agent:phonbot:v5', 'sales_agent:phonbot:v6', 'sales_agent:phonbot:v7', 'sales_agent:phonbot:v8']).catch(() => {});
+      await redis.del(['sales_agent:phonbot:v3', 'sales_agent:phonbot:v4', 'sales_agent:phonbot:v5', 'sales_agent:phonbot:v6', 'sales_agent:phonbot:v7', 'sales_agent:phonbot:v8', 'sales_agent:phonbot:v9']).catch(() => {});
     } catch {
       /* non-critical */
     }
@@ -347,6 +352,7 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
     // Local `r` capture so the closure's type-narrowing survives.
     const r = redis;
     for (const pattern of [
+      'demo_agent:v10:*', 'demo_agent_meta:v10:*',
       'demo_agent:v9:*', 'demo_agent_meta:v9:*',
       'demo_agent:v8:*', 'demo_agent_meta:v8:*',
       'demo_agent:v7:*', 'demo_agent_meta:v7:*',
@@ -543,7 +549,7 @@ async function loadSalesPrompt(): Promise<string> {
 // (anti-hallucination). Web-call + sales-call now inject current_date_de /
 // current_weekday_de / current_time_de via retell_llm_dynamic_variables.
 let salesAgentIdMem: string | null = null;
-const SALES_AGENT_KEY = 'sales_agent:phonbot:v9';
+const SALES_AGENT_KEY = 'sales_agent:phonbot:v10';
 let pendingSalesCreate: Promise<string> | null = null;
 
 export async function getOrCreateSalesAgent(): Promise<string> {
