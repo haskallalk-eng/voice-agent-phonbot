@@ -662,6 +662,13 @@ export async function registerBilling(app: FastifyInstance) {
       allow_promotion_codes: true,
       // VAT-ID Collection: B2B-EU reverse-charge support.
       tax_id_collection: { enabled: true },
+      // Stripe API: tax_id_collection on an EXISTING customer requires
+      // customer_update.name='auto' so Stripe is allowed to write the tax-id-
+      // derived legal name back to the customer record. Without this, the
+      // session-create call 400s with "Tax ID collection requires updating
+      // business name on the customer." Address auto-update pairs naturally
+      // for Stripe-Tax + invoice-address use cases later.
+      customer_update: { name: 'auto', address: 'auto' },
       // Stripe Tax — guard so billing keeps working until the Stripe Tax
       // dashboard side (DE registration + product tax codes) is configured.
       // Flip STRIPE_AUTOMATIC_TAX=1 once Stripe Tax is live.
