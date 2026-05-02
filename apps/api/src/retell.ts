@@ -534,10 +534,19 @@ export type WebCallResponse = {
   access_token: string;
 };
 
-export async function createWebCall(agentId: string): Promise<WebCallResponse> {
+export async function createWebCall(
+  agentId: string,
+  opts?: { dynamicVariables?: Record<string, string>; metadata?: Record<string, string> },
+): Promise<WebCallResponse> {
+  const body: Record<string, unknown> = { agent_id: agentId };
+  // Inject per-call temporal awareness + any caller-supplied vars. Without
+  // this, the LLM has no idea what "today" or "tomorrow" maps to and either
+  // hallucinates or refuses to book — known Retell-community pattern.
+  if (opts?.dynamicVariables) body.retell_llm_dynamic_variables = opts.dynamicVariables;
+  if (opts?.metadata) body.metadata = opts.metadata;
   return retellRequest('/v2/create-web-call', {
     method: 'POST',
-    body: JSON.stringify({ agent_id: agentId }),
+    body: JSON.stringify(body),
   });
 }
 
