@@ -118,7 +118,7 @@ const inMemDemoAgents = new Map<string, { agentId: string; createdAt: number }>(
 
 async function readDemoAgent(templateId: string): Promise<string | null> {
   if (redis?.isOpen) {
-    const v = await redis.get(`demo_agent:v8:${templateId}`).catch(() => null);
+    const v = await redis.get(`demo_agent:v9:${templateId}`).catch(() => null);
     return v ?? null;
     // Audit-Round-9 H1: when Redis is online but the key is absent (legit
     // flush, scaled-out container B that never wrote it), DO NOT fall back
@@ -152,9 +152,9 @@ async function writeDemoAgent(templateId: string, agentId: string): Promise<void
   inMemDemoAgentMeta.set(agentId, { templateId, createdAt: Date.now() });
   if (redis?.isOpen) {
     await Promise.all([
-      redis.set(`demo_agent:v8:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {}),
+      redis.set(`demo_agent:v9:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {}),
       // Reverse direction: webhook sees agent_id, needs templateId. Same TTL.
-      redis.set(`demo_agent_meta:v8:${agentId}`, templateId, { EX: CACHE_TTL_SEC }).catch(() => {}),
+      redis.set(`demo_agent_meta:v9:${agentId}`, templateId, { EX: CACHE_TTL_SEC }).catch(() => {}),
     ]);
   }
   // Audit-Round-9 H3: durable DB mirror of the reverse-lookup. Redis is the
@@ -271,7 +271,7 @@ export async function maybeSendDemoSignupLink(
  */
 export async function readDemoCallTemplate(agentId: string): Promise<string | null> {
   if (redis?.isOpen) {
-    const v = await redis.get(`demo_agent_meta:v8:${agentId}`).catch(() => null);
+    const v = await redis.get(`demo_agent_meta:v9:${agentId}`).catch(() => null);
     if (v) return v;
     // Skip in-mem when Redis is online (H1): in-mem could be stale across
     // containers and we now have a durable DB layer below.
@@ -334,7 +334,7 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
       const removed = await redis.del(SALES_AGENT_KEY);
       flushed += typeof removed === 'number' ? removed : 0;
       // Clean up previous versions on the way past.
-      await redis.del(['sales_agent:phonbot:v3', 'sales_agent:phonbot:v4', 'sales_agent:phonbot:v5', 'sales_agent:phonbot:v6', 'sales_agent:phonbot:v7']).catch(() => {});
+      await redis.del(['sales_agent:phonbot:v3', 'sales_agent:phonbot:v4', 'sales_agent:phonbot:v5', 'sales_agent:phonbot:v6', 'sales_agent:phonbot:v7', 'sales_agent:phonbot:v8']).catch(() => {});
     } catch {
       /* non-critical */
     }
@@ -347,6 +347,7 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
     // Local `r` capture so the closure's type-narrowing survives.
     const r = redis;
     for (const pattern of [
+      'demo_agent:v9:*', 'demo_agent_meta:v9:*',
       'demo_agent:v8:*', 'demo_agent_meta:v8:*',
       'demo_agent:v7:*', 'demo_agent_meta:v7:*',
       'demo_agent:v6:*', 'demo_agent_meta:v6:*',
@@ -535,12 +536,14 @@ async function loadSalesPrompt(): Promise<string> {
 }
 
 // Sales agent ID — Redis-backed (shared across containers, survives restarts)
-// In-memory fallback for when Redis is down. Cache key bumps to v8 because
-// platform-baseline gained Context-Retention (anti-re-greeting after stuck
-// end_call) and DEMO_END_INSTRUCTIONS gained pro-aktive Richtungs-Angabe +
-// stronger meta-self-awareness wording. v7 agents shipped without these.
+// In-memory fallback for when Redis is down. Cache key bumps to v9 because
+// platform-baseline gained Date/Time-Awareness (with {{current_*}} dynamic
+// variables), Empathy + Frust-Erkennung, Single-Question-Disziplin,
+// Konversations-Ton, Out-of-Scope-with-Alternative, and Confidence-Honesty
+// (anti-hallucination). Web-call + sales-call now inject current_date_de /
+// current_weekday_de / current_time_de via retell_llm_dynamic_variables.
 let salesAgentIdMem: string | null = null;
-const SALES_AGENT_KEY = 'sales_agent:phonbot:v8';
+const SALES_AGENT_KEY = 'sales_agent:phonbot:v9';
 let pendingSalesCreate: Promise<string> | null = null;
 
 export async function getOrCreateSalesAgent(): Promise<string> {
@@ -706,7 +709,27 @@ export async function registerDemo(app: FastifyInstance) {
 
     try {
       const agentId = await getOrCreateDemoAgent(templateId);
-      const call = await createWebCall(agentId);
+      // Inject current date/time as dynamic variables — the LLM can't know
+      // "today" otherwise and would hallucinate "tomorrow Donnerstag" in the
+      // wrong week. Retell substitutes {{current_*}} placeholders in the
+      // compiled prompt at call-start.
+      const now = new Date();
+      const berlinFmt = new Intl.DateTimeFormat('de-DE', {
+        timeZone: 'Europe/Berlin', weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+      });
+      const timeFmt = new Intl.DateTimeFormat('de-DE', {
+        timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit',
+      });
+      const isoDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' }).format(now);
+      const weekdayDe = new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', weekday: 'long' }).format(now);
+      const call = await createWebCall(agentId, {
+        dynamicVariables: {
+          current_date_de: berlinFmt.format(now),     // "Freitag, 02. Mai 2026"
+          current_date_iso: isoDate,                   // "2026-05-02"
+          current_weekday_de: weekdayDe,               // "Freitag"
+          current_time_de: timeFmt.format(now),        // "14:30"
+        },
+      });
       return { ok: true, ...call };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to create demo call';
@@ -829,6 +852,12 @@ export async function registerDemo(app: FastifyInstance) {
           dynamicVariables: {
             signup_link: signupLinkUrl(),
             signup_sms_sent: signupSms.ok ? 'true' : 'false',
+            // Same date/time injection as web demo — without these the agent
+            // hallucinates which day "morgen" means and books wrong slots.
+            current_date_de: new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }).format(new Date()),
+            current_date_iso: new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' }).format(new Date()),
+            current_weekday_de: new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', weekday: 'long' }).format(new Date()),
+            current_time_de: new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' }).format(new Date()),
           },
         });
         app.log.info({ callId: call.call_id, phone, leadId }, 'Outbound sales call initiated');
