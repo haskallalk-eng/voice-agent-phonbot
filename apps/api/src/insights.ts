@@ -1712,4 +1712,133 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
       remaining: configsUpdated === 0 ? 1 : 0,
     };
   });
+
+  // Audit-Round-18 (R16-known-limitation, R17 Codex MEDIUM E): companion to
+  // /admin/agents/backfill-industry that handles the partial-state recovery
+  // case. The industry-backfill route is a two-phase op: Phase 1 commits the
+  // config row's industry inside the advisory-locked transaction, Phase 2
+  // batches transcript backfill OUTSIDE the lock. If Phase 1 commits and
+  // Phase 2 crashes mid-batch (process kill, network drop, batch-loop
+  // exception), the config row is tagged but a chunk of historical
+  // transcripts still has industry NULL. Re-running the original endpoint is
+  // a no-op because the 409 ALREADY_TAGGED gate trips on the config row.
+  //
+  // This endpoint reads the industry from the existing config and resumes
+  // the transcript-only batch loop. Same admin-gate, same resolver-pattern
+  // for orgId, same batched-commit shape as Phase 2 above.
+  //
+  // Codex Plan-Review B (R18): orgId is the lock-key — call_transcripts is
+  // org-keyed, not tenant-keyed (db.ts:847+). One org can have multiple
+  // agent_configs (Pro/Agency tier) — the route reads the most-recently-
+  // updated config row to discover the canonical industry. If two of the
+  // org's configs disagree on industry, refuse with 409 (would otherwise
+  // tag transcripts with whichever the SELECT happened to win).
+  app.post('/admin/agents/backfill-transcripts', {
+    onRequest: [app.authenticate],
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req, reply) => {
+    if (!pool) return reply.status(503).send({ error: 'Database not configured' });
+    const payload = req.user as Record<string, unknown>;
+    if (!payload.admin || payload.aud !== 'phonbot:admin') {
+      return reply.status(403).send({ error: 'Platform-admin only' });
+    }
+
+    const Body = z.object({
+      orgId: z.string().min(1).max(120),
+      industry: z.string().min(1).max(60).optional(),
+      dryRun: z.boolean().optional().default(false),
+    });
+    const parsed = Body.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid body', details: parsed.error.flatten() });
+    }
+    const { orgId, dryRun } = parsed.data;
+    let { industry } = parsed.data;
+
+    // If industry not provided, derive from the org's tagged config row(s).
+    // Reject when the org's configs disagree on industry — admin can pass
+    // explicit `industry` to override.
+    if (!industry) {
+      const cfgRes = await pool.query<{ industry: string | null }>(
+        `SELECT DISTINCT data->>'industry' AS industry
+         FROM agent_configs
+         WHERE org_id = $1 AND data->>'industry' IS NOT NULL AND data->>'industry' != ''`,
+        [orgId],
+      );
+      if (cfgRes.rows.length === 0) {
+        return reply.status(404).send({
+          error: 'NO_INDUSTRY_CONFIGURED',
+          message: 'Org has no agent_config with industry set. Run /admin/agents/backfill-industry first or pass `industry` explicitly.',
+        });
+      }
+      if (cfgRes.rows.length > 1) {
+        return reply.status(409).send({
+          error: 'AMBIGUOUS_INDUSTRY',
+          industries: cfgRes.rows.map((r) => r.industry),
+          message: 'Org has multiple configs with conflicting industries. Pass `industry` explicitly to disambiguate.',
+        });
+      }
+      industry = cfgRes.rows[0]!.industry!;
+    }
+
+    if (!CURATED_INDUSTRY_KEYS.has(industry)) {
+      return reply.status(400).send({
+        error: 'INVALID_INDUSTRY',
+        message: `Industry must be one of the curated keys.`,
+        validKeys: [...CURATED_INDUSTRY_KEYS],
+      });
+    }
+
+    // Count remaining backfill candidates first (also serves as dryRun result).
+    const countRes = await pool.query<{ cnt: string }>(
+      `SELECT COUNT(*)::text AS cnt FROM call_transcripts
+       WHERE org_id = $1 AND (industry IS NULL OR industry = '')`,
+      [orgId],
+    );
+    const candidates = parseInt(countRes.rows[0]?.cnt ?? '0', 10);
+
+    if (dryRun) {
+      return {
+        ok: true,
+        dryRun: true,
+        orgId,
+        industry,
+        wouldUpdateTranscripts: candidates,
+      };
+    }
+
+    // Same batched-loop shape as the original endpoint's Phase 2.
+    const TRANSCRIPT_BATCH_SIZE = 1000;
+    const MAX_BATCHES = 1000;
+    let transcriptsUpdated = 0;
+    for (let i = 0; i < MAX_BATCHES; i += 1) {
+      const trUpd = await pool.query(
+        `UPDATE call_transcripts
+           SET industry = $1
+         WHERE id IN (
+           SELECT id FROM call_transcripts
+           WHERE org_id = $2 AND (industry IS NULL OR industry = '')
+           ORDER BY id
+           LIMIT $3
+         )`,
+        [industry, orgId, TRANSCRIPT_BATCH_SIZE],
+      );
+      const batchCount = trUpd.rowCount ?? 0;
+      transcriptsUpdated += batchCount;
+      if (batchCount < TRANSCRIPT_BATCH_SIZE) break;
+    }
+
+    log.info(
+      { orgId, industry, transcriptsUpdated, candidates, actor: payload.email },
+      'admin: transcript-backfill applied',
+    );
+
+    return {
+      ok: true,
+      orgId,
+      industry,
+      transcriptsUpdated,
+      remaining: Math.max(0, candidates - transcriptsUpdated),
+    };
+  });
 }
