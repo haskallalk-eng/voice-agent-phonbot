@@ -67,8 +67,8 @@ Was sich seit der Index-Erstellung am Stand der „noch offen"-Items verändert 
 | Modul | Item | Status-Update | Round |
 |---|---|---|---|
 | 04 billing | MEDIUM-3 stderr.write → Pino | ✅ GEFIXT (war schon vor R14, hier nur dokumentiert) | — |
-| 04 billing | MEDIUM-1 Plan-Wechsel mid-cycle minutes_used | ⏳ noch offen | — |
-| 04 billing | MEDIUM-4 syncSubscription race | ⏳ noch offen, edge-case | — |
+| 04 billing | MEDIUM-1 Plan-Wechsel mid-cycle minutes_used | ✅ GEFIXT R18 (pre-UPDATE SELECT widened um minutes_limit, inline `LEAST(minutes_used, $7::int)` wenn downgrade) | R18 |
+| 04 billing | MEDIUM-4 syncSubscription SELECT-then-UPDATE race | ✅ GEFIXT R19 (BEGIN/SELECT FOR UPDATE/UPDATE/COMMIT in client tx, parallele syncSubscription serialisieren) | R19 |
 | 04 billing | (zusätzlich) `subscription.deleted/paused/resumed/created` lasen `metadata.orgId` direkt | ✅ GEFIXT R15 + R16 (3-tier `resolveOrgIdFromSubscription` mit customer/metadata/sub_id-Fallback) | R15+R16 |
 | 07 tickets | HIGH-3 syncPromptToRetell silent-stderr | ✅ GEFIXT (Round 7, mit `last_retell_sync_error/at` + Frontend-Banner) | R7 |
 | 07 tickets | HIGH-4 outbound-insights silent-stderr | ✅ GEFIXT (vor R17 nicht mehr im Code, R17 verifiziert) | — |

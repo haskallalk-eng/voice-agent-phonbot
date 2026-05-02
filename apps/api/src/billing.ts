@@ -509,66 +509,90 @@ async function syncSubscription(sub: Stripe.Subscription) {
   // transitions and can mis-fire in both directions (false reset OR missed reset).
   // Compare via EXTRACT(EPOCH) in SQL so both sides are integer Unix seconds.
   const currentPeriodEnd = (sub as unknown as { current_period_end?: number }).current_period_end ?? null;
-  let resetMinutes = false;
-  // Audit-Round-18 (2026-04-26 audit billing MEDIUM-1): widen the pre-UPDATE
-  // SELECT to include `minutes_limit` so we can detect a mid-cycle DOWNGRADE
-  // (Pro→Starter) and cap `minutes_used`. Without this, a returning user
-  // sees "You're over your limit" immediately after switching because their
-  // burned-minutes count is still from the higher-limit plan.
+
+  // Audit-Round-19 (2026-04-26 audit billing MEDIUM-4 + Codex R18 review D1):
+  // wrap the pre-UPDATE SELECT and the UPDATE in a single transaction with
+  // `SELECT ... FOR UPDATE` on the orgs row. The previous shape did two
+  // separate pool.query calls — webhook + sofort-sync running in parallel
+  // could both read the same `oldMinutesLimit` / `period_end_unix`, both
+  // make the same branch decision (resetMinutes / downgrade), then both
+  // UPDATE. Last-writer-wins meant the *value* converged to the right
+  // state in most cases, but the period-end-renewal check can mis-fire
+  // when both runs see the OLD period_end → both decide resetMinutes=true →
+  // first writes period_end + minutes_used=0 → second wipes minutes_used
+  // again even though the user already used minutes during the gap.
   //
-  // Codex Plan-Review C (R18): bundle into the existing pre-UPDATE SELECT —
-  // no second round-trip. We also keep this read whether or not
-  // currentPeriodEnd is set, because downgrade detection is independent of
-  // period rotation.
-  let oldMinutesLimit: number | null = null;
-  if (pool) {
-    const existing = await pool.query(
+  // FOR UPDATE serializes the readers; the second one waits for the first
+  // commit, then re-reads the now-fresh period_end (so its
+  // `oldEndUnix === currentPeriodEnd` check correctly sees no rollover and
+  // skips the reset).
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Audit-Round-18 (billing MEDIUM-1): widen pre-UPDATE SELECT to include
+    // minutes_limit so we can detect a mid-cycle DOWNGRADE.
+    // Audit-Round-19 (billing MEDIUM-4): FOR UPDATE locks the orgs row so
+    // a parallel syncSubscription serialises behind us.
+    const existing = await client.query<{
+      period_end_unix: string | null;
+      minutes_limit: number | null;
+    }>(
       `SELECT EXTRACT(EPOCH FROM current_period_end)::bigint AS period_end_unix,
               minutes_limit
-       FROM orgs WHERE id = $1`,
+       FROM orgs WHERE id = $1
+       FOR UPDATE`,
       [orgId],
     );
+
     const oldEndUnix = existing.rows[0]?.period_end_unix;
-    oldMinutesLimit = (existing.rows[0]?.minutes_limit as number | undefined) ?? null;
+    const oldMinutesLimit = (existing.rows[0]?.minutes_limit as number | undefined) ?? null;
+
+    let resetMinutes = false;
     // oldEndUnix is null when the org has never had a period set (first subscription).
     // We only reset when we have a previous period AND it's actually different.
     if (currentPeriodEnd && oldEndUnix != null && Number(oldEndUnix) !== currentPeriodEnd) {
       resetMinutes = true; // Period changed = new billing cycle
     }
+
+    // Downgrade-cap: only cap when (a) there's a real previous limit (not first
+    // subscription), (b) the new limit is strictly smaller, (c) we are NOT
+    // already resetting minutes_used to 0 (a period-rollover wipes the counter
+    // anyway), AND (d) the new plan came from a real PLAN match — not from the
+    // silent free-fallback for an unknown stripe price.id (Codex R18 B2).
+    // Composing the column expression inline keeps the UPDATE atomic.
+    const downgrade = oldMinutesLimit !== null && minutesLimit < oldMinutesLimit && !planFromUnknownPrice;
+    const minutesUsedExpr = resetMinutes
+      ? ',\n      minutes_used = 0'
+      : (downgrade ? ',\n      minutes_used = LEAST(minutes_used, $7::int)' : '');
+
+    await client.query(
+      `UPDATE orgs SET
+        plan = $2,
+        plan_status = $3,
+        stripe_subscription_id = $4,
+        plan_interval = $5,
+        current_period_end = to_timestamp($6),
+        minutes_limit = $7${minutesUsedExpr}
+       WHERE id = $1`,
+      [
+        orgId,
+        plan,
+        sub.status,
+        sub.id,
+        sub.items.data[0]?.plan.interval ?? null,
+        currentPeriodEnd,
+        minutesLimit,
+      ],
+    );
+
+    await client.query('COMMIT');
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    throw err;
+  } finally {
+    client.release();
   }
-
-  // Downgrade-cap: only cap when (a) there's a real previous limit (not first
-  // subscription), (b) the new limit is strictly smaller, (c) we are NOT
-  // already resetting minutes_used to 0 (a period-rollover wipes the counter
-  // anyway), AND (d) the new plan came from a real PLAN match — not from the
-  // silent free-fallback for an unknown stripe price.id (Codex R18 B2: would
-  // otherwise destructively cap every active customer when we forget to wire
-  // a new Stripe-Price-ID). Composing the column expression inline keeps the
-  // UPDATE atomic — no read-modify-write race against concurrent usage writes.
-  const downgrade = oldMinutesLimit !== null && minutesLimit < oldMinutesLimit && !planFromUnknownPrice;
-  const minutesUsedExpr = resetMinutes
-    ? ',\n      minutes_used = 0'
-    : (downgrade ? ',\n      minutes_used = LEAST(minutes_used, $7::int)' : '');
-
-  await pool.query(
-    `UPDATE orgs SET
-      plan = $2,
-      plan_status = $3,
-      stripe_subscription_id = $4,
-      plan_interval = $5,
-      current_period_end = to_timestamp($6),
-      minutes_limit = $7${minutesUsedExpr}
-     WHERE id = $1`,
-    [
-      orgId,
-      plan,
-      sub.status,
-      sub.id,
-      sub.items.data[0]?.plan.interval ?? null,
-      currentPeriodEnd,
-      minutesLimit,
-    ],
-  );
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
