@@ -12,6 +12,7 @@ import {
   assembleRolePrompt, generalAssistantBlock, roleIntro, roleTaskList,
   IconTemplate, IconMessageSquare,
 } from './shared.js';
+import { IconCalendar, IconTickets } from '../PhonbotIcons.js';
 import { AdaptiveTextarea } from '../../components/AdaptiveTextarea.js';
 
 export interface BehaviorTabProps {
@@ -322,34 +323,9 @@ export function BehaviorTab({
           activeIds={activePromptSections}
         />
 
-        <div className="mt-4">
-          <span className="text-xs font-medium text-white/40 uppercase tracking-wider block mb-2">Aktive Tools</span>
-          <div className="flex flex-wrap gap-2">
-            {KNOWN_TOOLS.map((tool) => (
-              <label key={tool} className="flex items-center gap-2 text-xs cursor-pointer select-none text-white/55">
-                <input type="checkbox" checked={config.tools.includes(tool)}
-                  onChange={(e) => {
-                    const next = new Set(config.tools);
-                    e.target.checked ? next.add(tool) : next.delete(tool);
-                    onUpdate({ tools: Array.from(next) });
-                  }}
-                  className="rounded border-white/20 bg-white/5 text-orange-500 focus:ring-orange-500/50" />
-                <code className="text-[11px] bg-white/[0.07] text-white/50 px-2 py-0.5 rounded">{tool}</code>
-              </label>
-            ))}
-          </div>
-        </div>
+        <ToolsBlock config={config} onUpdate={onUpdate} />
 
-        <div className="mt-4 flex items-center gap-4">
-          <Toggle checked={config.fallback.enabled}
-            onChange={(v) => onUpdate({ fallback: { ...config.fallback, enabled: v } })}
-            label="Fallback / Handoff aktiv" />
-          {config.fallback.enabled && (
-            <Input value={config.fallback.reason}
-              onChange={(e) => onUpdate({ fallback: { ...config.fallback, reason: e.target.value } })}
-              placeholder="Grund" className="!w-48" />
-          )}
-        </div>
+        <FallbackBlock config={config} onUpdate={onUpdate} />
       </SectionCard>
     </>
   );
@@ -780,5 +756,120 @@ function RoleCard({
         </pre>
       )}
     </SectionCard>
+  );
+}
+
+// ── Aktive Tools — descriptive cards instead of bare checkboxes ──────────────
+
+type ToolMeta = {
+  label: string;
+  description: string;
+  Icon: React.FC<{ size?: number; className?: string }>;
+  rawName: string;
+};
+const TOOL_META: Record<typeof KNOWN_TOOLS[number], ToolMeta> = {
+  'calendar.findSlots': {
+    label: 'Freie Termine suchen',
+    description: 'Schaut nach freien Slots im verbundenen Kalender (Google, Outlook, Cal.com oder Chipy intern). Vorschlag aus Live-Verfügbarkeit statt Phantasie.',
+    Icon: IconCalendar,
+    rawName: 'calendar.findSlots',
+  },
+  'calendar.book': {
+    label: 'Termin buchen',
+    description: 'Bucht den Slot direkt im Kalender. Bei Fehler (z.B. Slot weg) → automatischer Fallback: Rückruf-Ticket + SMS-Bestätigung.',
+    Icon: IconCalendar,
+    rawName: 'calendar.book',
+  },
+  'ticket.create': {
+    label: 'Rückruf-Ticket erfassen',
+    description: 'Speichert das Anliegen mit Name, Nummer und Anlass in deiner Inbox. Anrufer bekommt SMS-Bestätigung. Empfohlen für JEDEN Agent als sicherer Fallback.',
+    Icon: IconTickets,
+    rawName: 'ticket.create',
+  },
+};
+
+function ToolsBlock({ config, onUpdate }: { config: AgentConfig; onUpdate: (p: Partial<AgentConfig>) => void }) {
+  function toggle(tool: string) {
+    const next = new Set(config.tools);
+    if (next.has(tool)) next.delete(tool);
+    else next.add(tool);
+    onUpdate({ tools: Array.from(next) });
+  }
+  return (
+    <div className="mt-5">
+      <span className="text-xs font-medium text-white/40 uppercase tracking-wider block mb-1">Aktive Tools</span>
+      <p className="text-[11px] text-white/30 mb-3">Funktionen die Chipy während des Anrufs ausführen kann. Ohne Häkchen kann er die Aktion nicht auslösen — egal was im Prompt steht.</p>
+      <div className="grid sm:grid-cols-3 gap-2">
+        {KNOWN_TOOLS.map((tool) => {
+          const meta = TOOL_META[tool];
+          const active = config.tools.includes(tool);
+          return (
+            <button
+              key={tool}
+              type="button"
+              onClick={() => toggle(tool)}
+              className={`group relative flex items-start gap-2.5 text-left rounded-xl border px-3 py-2.5 transition-all cursor-pointer ${
+                active
+                  ? 'border-orange-500/45 bg-orange-500/[0.07]'
+                  : 'border-white/[0.07] bg-white/[0.03] hover:border-white/15 hover:bg-white/[0.05]'
+              }`}
+            >
+              {active && (
+                <span aria-hidden className="absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </span>
+              )}
+              <meta.Icon size={16} className={`shrink-0 mt-0.5 transition-colors ${active ? 'text-orange-300' : 'text-white/35 group-hover:text-white/55'}`} />
+              <div className="min-w-0 pr-5">
+                <p className={`text-xs font-semibold leading-tight transition-colors ${active ? 'text-white' : 'text-white/65 group-hover:text-white/85'}`}>
+                  {meta.label}
+                </p>
+                <p className="text-[10px] text-white/35 mt-1 leading-snug">{meta.description}</p>
+                <code className="text-[9px] text-white/25 mt-1.5 block font-mono">{meta.rawName}</code>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Fallback / Handoff — descriptive card ────────────────────────────────────
+
+function FallbackBlock({ config, onUpdate }: { config: AgentConfig; onUpdate: (p: Partial<AgentConfig>) => void }) {
+  return (
+    <div className="mt-5">
+      <span className="text-xs font-medium text-white/40 uppercase tracking-wider block mb-1">Notausgang / Eskalation</span>
+      <p className="text-[11px] text-white/30 mb-3">Wenn Chipy ein Anliegen nicht selbst lösen kann (Anrufer verlangt Mensch, Notfall, außerhalb der Branche): Rückruf-Ticket mit Eskalations-Marker statt Sackgassen-Antwort.</p>
+      <div className={`rounded-xl border px-4 py-3 transition-all ${
+        config.fallback.enabled
+          ? 'border-cyan-400/30 bg-cyan-400/[0.04]'
+          : 'border-white/[0.07] bg-white/[0.03]'
+      }`}>
+        <div className="flex items-center gap-3 flex-wrap">
+          <Toggle
+            checked={config.fallback.enabled}
+            onChange={(v) => onUpdate({ fallback: { ...config.fallback, enabled: v } })}
+            label={config.fallback.enabled ? 'Eskalation aktiv' : 'Eskalation deaktiviert'}
+          />
+          {config.fallback.enabled && (
+            <Input
+              value={config.fallback.reason}
+              onChange={(e) => onUpdate({ fallback: { ...config.fallback, reason: e.target.value } })}
+              placeholder="Standard-Grund, z.B. „technische Beratung erforderlich"
+              className="!flex-1 !w-auto !min-w-[12rem]"
+            />
+          )}
+        </div>
+        {config.fallback.enabled && (
+          <p className="text-[10px] text-white/35 mt-2 leading-snug">
+            Der Grund wird jedem eskalierten Ticket angehängt — dein Team sieht im Posteingang sofort warum Chipy übergeben hat.
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
