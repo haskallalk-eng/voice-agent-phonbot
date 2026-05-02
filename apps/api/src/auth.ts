@@ -417,6 +417,11 @@ export async function registerAuth(app: FastifyInstance) {
         // §14 UStG / B2B-EU reverse-charge: collect customer VAT-ID so the
         // invoice carries it and reverse-charge applies for cross-border B2B.
         tax_id_collection: { enabled: true },
+        // Stripe API: tax_id_collection requires customer_update.name='auto'
+        // so the tax-id-derived legal name can be written back to the
+        // customer. Without this Stripe rejects the session-create call with
+        // a 400. Same fix lives in billing.ts /billing/checkout.
+        customer_update: { name: 'auto', address: 'auto' },
         // Stripe Tax — only enable when the Stripe Dashboard side is fully
         // configured (DE registration + product tax codes set). Until then,
         // billing keeps working with the Phonbot operator's existing VAT setup.
