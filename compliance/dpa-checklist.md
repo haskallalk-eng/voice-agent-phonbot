@@ -23,7 +23,7 @@ Verwende dies als Tracking-Liste. Lege jede signierte/heruntergeladene Vertragsk
 | Anbieter | E-Mail | Vorlage | Status |
 |---|---|---|---|
 | **Retell AI** | ~~support@retellai.com, legal@retellai.com~~ — direkt via DocuSign-Self-Service akzeptiert (Mail-Anfrage nicht mehr nötig) | [`2026-04-30-retell-dpa-request.eml`](dpa-requests/2026-04-30-retell-dpa-request.eml) (obsolet) | ✅ 2026-04-30 DocuSign-signiert · `dpas/retell/2026-04-30-Retell-DPA-DocuSign.pdf` |
-| **Cartesia** | support@cartesia.ai, legal@cartesia.ai | [`2026-04-30-cartesia-dpa-request.eml`](dpa-requests/2026-04-30-cartesia-dpa-request.eml) | ⬜ versendet ⬜ Antwort erhalten ⬜ DPA signiert |
+| **Cartesia** | ~~support@cartesia.ai~~ — Cartesia-Support antwortete mit Verweis auf [cartesia.ai/legal/dpa](https://www.cartesia.ai/legal/dpa). DPA ist **by-incorporation** Teil der Master Service Agreement, keine separate Signatur nötig. **TODO: Zero Data Retention im Account aktivieren** | [`2026-04-30-cartesia-dpa-request.eml`](dpa-requests/2026-04-30-cartesia-dpa-request.eml) (obsolet) | ✅ 2026-05-02 by-incorporation · `dpas/cartesia/2026-05-02-Cartesia-DPA-text.md` |
 
 **Wie versenden:**
 1. Doppelklick auf die `.eml`-Datei → öffnet sich in Outlook/Thunderbird/Apple Mail mit allen Headers vorbelegt
