@@ -11,6 +11,7 @@ import {
   IconRestaurant,
 } from '../PhonbotIcons.js';
 import { IconCar } from '../PhonbotIcons.js';
+import { OpeningHoursEditor } from '../agent-builder/OpeningHoursEditor.js';
 
 type IconComponent = React.ComponentType<{ size?: number; className?: string }>;
 const TEMPLATE_CONFIG: Record<string, {
@@ -464,13 +465,9 @@ export function OnboardingWizard({ onComplete }: Props) {
               <label className="block text-xs font-medium text-white/60 mb-1.5 uppercase tracking-wide">
                 Öffnungszeiten
               </label>
-              <input
-                type="text"
+              <OpeningHoursEditor
                 value={form.openingHours}
-                onChange={(e) => setForm({ ...form, openingHours: e.target.value })}
-                placeholder="z.B. Mo-Fr 09:00–18:00, Sa 10:00–14:00"
-                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/30
-                  focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all"
+                onChange={(v) => setForm({ ...form, openingHours: v })}
               />
             </div>
 
