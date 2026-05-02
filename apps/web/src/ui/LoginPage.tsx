@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { useAuth } from '../lib/auth.js';
 import { forgotPassword, createCheckoutSession, startCheckoutSignup } from '../lib/api.js';
 import { FoxLogo } from './FoxLogo.js';
+import { PasswordInput } from './PasswordInput.js';
 
 type Mode = 'login' | 'register';
 
@@ -282,8 +283,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
                 <label className="block text-xs font-medium text-white/60 mb-1.5 uppercase tracking-wide">
                   Passwort
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   placeholder={mode === 'register' ? 'Min. 8 Zeichen' : '••••••••'}
                   autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
                   className={`w-full rounded-xl bg-white/5 border px-4 py-2.5 text-sm text-white placeholder-white/30

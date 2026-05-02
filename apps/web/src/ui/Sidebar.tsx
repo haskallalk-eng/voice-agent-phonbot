@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { Page } from './App.js';
 import type { AuthUser, AuthOrg } from '../lib/auth.js';
 import { PhonbotBrand } from './FoxLogo.js';
+import { PasswordInput } from './PasswordInput.js';
 import {
   IconHome,
   IconCalls,
@@ -85,8 +86,7 @@ function DeleteAccountModal({ onClose, onLogout }: { onClose: () => void; onLogo
         </div>
         <div>
           <label className="block text-xs text-white/40 mb-1.5">Passwort zur Bestätigung</label>
-          <input
-            type="password"
+          <PasswordInput
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
