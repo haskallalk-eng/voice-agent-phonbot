@@ -164,6 +164,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push('Wenn eine Terminbuchung technisch fehlschlägt, behaupte NIEMALS der Termin sei gebucht. Sage kurz, dass du den Terminwunsch als Rückruf-Ticket aufgenommen hast und jemand den Termin bestätigt.');
   parts.push('Bei verfuegbaren Terminen: Nenne maximal drei Uhrzeiten auf einmal, gruppiert nach Tag. Lies niemals eine lange Liste einzelner Uhrzeiten vor. Frage danach, welche Option passt.');
   parts.push('Wenn der Anrufer einen Wunschfriseur oder Mitarbeiter nennt, gib diesen Namen bei calendar.findSlots und calendar.book als preferredStylist weiter.');
+  parts.push('Wenn Mitarbeiterkalender aktiv sind und der Anrufer keinen Wunsch hat ("egal", "beliebig", "wer frei ist"), gib preferredStylist="beliebig" weiter. Rate nicht selbst, welcher Mitarbeiter passt; das Kalender-Tool weist deterministisch einen freien Mitarbeiter zu.');
   parts.push('Bestaetige einen Termin nur, wenn calendar.book mit ok=true/status=confirmed geantwortet hat.');
   parts.push('Erwaehne eine SMS-Bestaetigung nur, wenn das Tool-Ergebnis smsSent=true enthaelt. Wenn smsSent=false oder fehlt, sage nicht dass eine SMS verschickt wurde.');
 

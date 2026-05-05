@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createTicket } from './tickets.js';
 import type { readConfig } from './agent-config.js';
 import { appendTraceEvent } from './traces.js';
-import { findFreeSlots, bookSlot } from './calendar.js';
+import { findFreeSlots, findFreeSlotsForAnyStaff, bookSlot, bookSlotForAnyStaff } from './calendar.js';
 import { sendBookingConfirmationSms, sendTicketAckSms } from './sms.js';
 import { pool } from './db.js';
 
@@ -60,7 +60,7 @@ export function getOpenAITools(cfg: AgentConfig) {
           service: { type: 'string', description: 'Requested service, if known.' },
           range: { type: 'string', description: 'Requested date range, e.g. next week.' },
           preferredTime: { type: 'string', description: 'Preferred time or day from the customer.' },
-          preferredStylist: { type: 'string', description: 'Requested staff member/stylist name, if the caller names one.' },
+          preferredStylist: { type: 'string', description: 'Requested staff member/stylist name. Use "beliebig" when the caller has no staff preference.' },
         },
         additionalProperties: false,
       },
@@ -79,7 +79,7 @@ export function getOpenAITools(cfg: AgentConfig) {
           customerPhone: { type: 'string' },
           preferredTime: { type: 'string', description: 'Confirmed slot/time.' },
           service: { type: 'string', description: 'Booked service.' },
-          preferredStylist: { type: 'string', description: 'Requested staff member/stylist name, if any.' },
+          preferredStylist: { type: 'string', description: 'Requested staff member/stylist name. Use "beliebig" when the caller has no staff preference.' },
           notes: { type: 'string' },
         },
         required: ['preferredTime', 'service'],
@@ -128,7 +128,7 @@ function normalizeIncomingToolName(name: string): KnownToolName | null {
   }
 }
 
-async function resolveStaffByName(orgId: string, requested: string | undefined): Promise<{ staffId: string | null; requested: string | null; matchedName: string | null; staffModeActive: boolean }> {
+async function resolveStaffByName(orgId: string, requested: string | undefined): Promise<{ staffId: string | null; requested: string | null; matchedName: string | null; staffModeActive: boolean; anyStaff: boolean }> {
   const name = requested?.trim() ?? '';
   const activeStaff = pool
     ? (await pool.query<{ id: string; name: string }>(
@@ -137,10 +137,11 @@ async function resolveStaffByName(orgId: string, requested: string | undefined):
       )).rows
     : [];
   const staffModeActive = activeStaff.length > 0;
-  if (/^(egal|beliebig|irgendwer|wer frei ist|kein wunsch|keine praferenz|any|anyone)$/i.test(name)) {
-    return { staffId: activeStaff[0]?.id ?? null, requested: name || null, matchedName: activeStaff[0]?.name ?? null, staffModeActive };
+  const anyStaff = /^(egal|beliebig|irgendwer|wer frei ist|wer gerade frei ist|kein wunsch|keine praferenz|keine präferenz|any|anyone)$/i.test(name);
+  if (anyStaff) {
+    return { staffId: null, requested: name || null, matchedName: null, staffModeActive, anyStaff: true };
   }
-  if (!name || name.length < 2 || !pool) return { staffId: null, requested: name || null, matchedName: null, staffModeActive };
+  if (!name || name.length < 2 || !pool) return { staffId: null, requested: name || null, matchedName: null, staffModeActive, anyStaff: false };
   const byName = await pool.query<{ id: string; name: string }>(
     `SELECT id, name
        FROM calendar_staff
@@ -163,7 +164,7 @@ async function resolveStaffByName(orgId: string, requested: string | undefined):
       LIMIT 1`,
     [orgId, name],
   );
-  return { staffId: byName.rows[0]?.id ?? null, requested: name, matchedName: byName.rows[0]?.name ?? null, staffModeActive };
+  return { staffId: byName.rows[0]?.id ?? null, requested: name, matchedName: byName.rows[0]?.name ?? null, staffModeActive, anyStaff: false };
 }
 
 export async function executeKnownTool(input: {
@@ -178,7 +179,7 @@ export async function executeKnownTool(input: {
     case 'calendar.findSlots': {
       const args = FindSlotsArgsSchema.parse(input.args ?? {});
       const staff = await resolveStaffByName(input.tenantId, args.preferredStylist);
-      if (staff.staffModeActive && !staff.staffId) {
+      if (staff.staffModeActive && !staff.staffId && staff.requested && !staff.anyStaff) {
         return {
           ok: false,
           source: 'staff-required',
@@ -191,27 +192,35 @@ export async function executeKnownTool(input: {
             : 'Mitarbeiterkalender ist aktiv. Frage nach Wunschfriseur oder ob ein beliebiger verfuegbarer Mitarbeiter passt.',
         };
       }
-      const result = await findFreeSlots(input.tenantId, {
-        date: args.preferredTime,
-        range: args.range,
-        service: args.service,
-        staffId: staff.staffId,
-      });
+      const teamMode = staff.staffModeActive && !staff.staffId;
+      const result = teamMode
+        ? await findFreeSlotsForAnyStaff(input.tenantId, {
+            date: args.preferredTime,
+            range: args.range,
+            service: args.service,
+          })
+        : await findFreeSlots(input.tenantId, {
+            date: args.preferredTime,
+            range: args.range,
+            service: args.service,
+            staffId: staff.staffId,
+          });
       return {
         ok: true,
         source: result.source,
         slots: result.slots,
         service: args.service ?? null,
-        preferredStylist: staff.matchedName ?? staff.requested,
+        preferredStylist: staff.matchedName ?? (teamMode ? 'Beliebiger freier Mitarbeiter' : staff.requested),
         staffId: staff.staffId,
-        ...(staff.requested && !staff.staffId ? { instruction: 'Der Wunschfriseur wurde nicht eindeutig gefunden. Frage kurz nach einem anderen Mitarbeiter oder ob ein beliebiger verfuegbarer Mitarbeiter passt.' } : {}),
+        ...(teamMode ? { instruction: 'Biete diese Zeiten als Team-Termine an. Der konkrete Mitarbeiter wird beim Buchen automatisch nach Verfuegbarkeit zugewiesen.' } : {}),
       };
     }
 
     case 'calendar.book': {
       const args = BookArgsSchema.parse(input.args ?? {});
       const staff = await resolveStaffByName(input.tenantId, args.preferredStylist);
-      if (staff.staffModeActive && !staff.staffId) {
+      const teamMode = staff.staffModeActive && !staff.staffId && (!staff.requested || staff.anyStaff);
+      if (staff.staffModeActive && !staff.staffId && staff.requested && !staff.anyStaff) {
         return {
           ok: false,
           status: staff.requested ? 'staff_not_found' : 'staff_required',
@@ -223,15 +232,27 @@ export async function executeKnownTool(input: {
           staffId: null,
         };
       }
-      const result = await bookSlot(input.tenantId, {
-        customerName: args.customerName ?? 'Unbekannt',
-        customerPhone: args.customerPhone ?? '',
-        time: args.preferredTime,
-        service: args.service,
-        notes: args.notes,
-        sourceCallId: input.sessionId,
-        staffId: staff.staffId,
-      });
+      const result = teamMode
+        ? await bookSlotForAnyStaff(input.tenantId, {
+            customerName: args.customerName ?? 'Unbekannt',
+            customerPhone: args.customerPhone ?? '',
+            time: args.preferredTime,
+            service: args.service,
+            notes: args.notes,
+            sourceCallId: input.sessionId,
+          })
+        : await bookSlot(input.tenantId, {
+            customerName: args.customerName ?? 'Unbekannt',
+            customerPhone: args.customerPhone ?? '',
+            time: args.preferredTime,
+            service: args.service,
+            notes: args.notes,
+            sourceCallId: input.sessionId,
+            staffId: staff.staffId,
+          });
+      const assignedStaffId = 'assignedStaffId' in result ? result.assignedStaffId ?? null : staff.staffId;
+      const assignedStaffName = 'assignedStaffName' in result ? result.assignedStaffName ?? null : staff.matchedName ?? staff.requested;
+      const resultStylist = assignedStaffName ?? (teamMode ? 'Beliebiger freier Mitarbeiter' : staff.requested);
       if (!result.ok) {
         // Fallback: create ticket when calendar unavailable
         const ticket = await createTicket({
@@ -259,8 +280,8 @@ export async function executeKnownTool(input: {
           partial: result.partial ?? false,
           smsSent: sms.ok,
           smsError: sms.ok ? null : sms.error,
-          preferredStylist: staff.matchedName ?? staff.requested,
-          staffId: staff.staffId,
+          preferredStylist: resultStylist,
+          staffId: assignedStaffId,
           message: 'Terminwunsch als Ticket gespeichert.',
         };
       }
@@ -280,8 +301,8 @@ export async function executeKnownTool(input: {
         smsSent: sms.ok,
         smsError: sms.ok ? null : sms.error,
         ...args,
-        preferredStylist: staff.matchedName ?? staff.requested,
-        staffId: staff.staffId,
+        preferredStylist: resultStylist,
+        staffId: assignedStaffId,
       };
     }
 
