@@ -69,6 +69,12 @@ function detailValue(customer: Customer, key: string): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
+function isValidOptionalEmail(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(trimmed);
+}
+
 function normalizeQuestionId(label: string): string {
   const slug = label
     .trim()
@@ -140,6 +146,7 @@ export function CustomersPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [customQuestion, setCustomQuestion] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
+  const [showEmailHint, setShowEmailHint] = useState(false);
 
   const moduleConfig = useMemo(() => normalizeModule(config?.customerModule), [config?.customerModule]);
   const enabled = status?.available ? moduleConfig.enabled !== false : false;
@@ -149,6 +156,7 @@ export function CustomersPage() {
   const customQuestions = questions.filter((q) => q.builtin !== true);
   const existingCount = useMemo(() => customers.filter((c) => c.customer_type === 'existing').length, [customers]);
   const pendingCount = useMemo(() => customers.filter((c) => c.customer_type === 'pending').length, [customers]);
+  const emailInvalid = !isValidOptionalEmail(form.email);
 
   async function load() {
     setLoading(true);
@@ -260,6 +268,12 @@ export function CustomersPage() {
   async function submitCustomer(e: React.FormEvent) {
     e.preventDefault();
     if (!form.fullName.trim()) return;
+    if (emailInvalid) {
+      setShowEmailHint(true);
+      setError(null);
+      setNotice(null);
+      return;
+    }
     const customFields = Object.fromEntries(
       customQuestions
         .filter((q) => q.enabled !== false)
@@ -287,6 +301,7 @@ export function CustomersPage() {
         details,
       });
       setForm(EMPTY_FORM);
+      setShowEmailHint(false);
       const list = await getCustomers(search);
       setCustomers(list.items ?? []);
       setNotice('Kunde als Bestandskunde gespeichert.');
@@ -478,12 +493,39 @@ export function CustomersPage() {
       </section>
 
       <section className="grid gap-5 lg:grid-cols-[0.9fr_1.35fr]">
-        <form onSubmit={submitCustomer} className="rounded-2xl border border-white/[0.07] bg-white/[0.035] p-5 space-y-3">
+        <form onSubmit={submitCustomer} noValidate className="rounded-2xl border border-white/[0.07] bg-white/[0.035] p-5 space-y-3">
           <h2 className="text-sm font-semibold text-white">Kunde manuell anlegen</h2>
           <p className="text-xs text-white/35">Das Formular nutzt dieselben aktiven Felder wie der Bot. Manuell angelegte Kunden werden direkt als Bestandskunde gespeichert.</p>
           <input value={form.fullName} onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))} placeholder="Vor- und Nachname" className="w-full rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none focus:border-orange-400/50" />
           <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="Telefonnummer für Erkennung" className="w-full rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none focus:border-orange-400/50" />
-          <input value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="E-Mail optional" className="w-full rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none focus:border-orange-400/50" />
+          <div className="space-y-1.5">
+            <input
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              value={form.email}
+              onBlur={() => setShowEmailHint(emailInvalid)}
+              onChange={(e) => {
+                const nextEmail = e.target.value;
+                setForm((f) => ({ ...f, email: nextEmail }));
+                if (isValidOptionalEmail(nextEmail)) setShowEmailHint(false);
+              }}
+              placeholder="E-Mail optional"
+              aria-invalid={showEmailHint && emailInvalid}
+              aria-describedby={showEmailHint && emailInvalid ? 'customer-email-hint' : undefined}
+              className={[
+                'w-full rounded-xl border bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none transition-colors',
+                showEmailHint && emailInvalid
+                  ? 'border-amber-400/45 focus:border-amber-300/60'
+                  : 'border-white/10 focus:border-orange-400/50',
+              ].join(' ')}
+            />
+            {showEmailHint && emailInvalid && (
+              <p id="customer-email-hint" className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/80">
+                Die E-Mail sieht noch unvollständig aus. Bitte prüfe sie, z.B. name@salon.de, oder lass das Feld leer.
+              </p>
+            )}
+          </div>
           {active('service') && <input value={form.service} onChange={(e) => setForm((f) => ({ ...f, service: e.target.value }))} placeholder="Gewünschte Leistung" className="w-full rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none focus:border-orange-400/50" />}
           {active('preferredTime') && <input value={form.preferredTime} onChange={(e) => setForm((f) => ({ ...f, preferredTime: e.target.value }))} placeholder="Terminwunsch" className="w-full rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none focus:border-orange-400/50" />}
           {active('preferredStylist') && <input value={form.preferredStylist} onChange={(e) => setForm((f) => ({ ...f, preferredStylist: e.target.value }))} placeholder="Wunschfriseur" className="w-full rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none focus:border-orange-400/50" />}
