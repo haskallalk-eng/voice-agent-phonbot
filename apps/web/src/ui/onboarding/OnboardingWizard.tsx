@@ -236,9 +236,10 @@ export function OnboardingWizard({ onComplete }: Props) {
         // CURATED_INDUSTRY_KEYS for legacy configs, but we also send it
         // explicitly here so new configs are clean.
         industry: template.id,
-        // Onboarded agents start with recordCalls implicit-on (legacy default
-        // = `undefined` treated as on by every backend consumer). Customer
-        // can later toggle off in PrivacyTab.
+        // Default-on for sales/product value, paired with an explicit verbal
+        // consent gate in agent-instructions.ts. If the caller declines, the
+        // system deletes audio/transcript and keeps only business metadata.
+        recordCalls: true,
       };
       const result = await deployAgentConfig(config);
       const agentId = result.retellAgentId ?? null;

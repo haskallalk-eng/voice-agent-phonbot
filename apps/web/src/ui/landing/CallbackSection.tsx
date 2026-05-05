@@ -8,6 +8,7 @@ export function CallbackSection() {
   const [phone, setPhone] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [name, setName] = React.useState('');
+  const [privacyConsent, setPrivacyConsent] = React.useState(false);
   const turnstileRef = React.useRef<TurnstileHandle>(null);
   const [state, setState] = React.useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const ref = React.useRef<HTMLElement>(null);
@@ -15,7 +16,7 @@ export function CallbackSection() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!phone.trim() || !email.trim()) return;
+    if (!phone.trim() || !email.trim() || !privacyConsent) return;
     setState('loading');
     try {
       // Execute Turnstile on-demand — only when user actually submits
@@ -29,6 +30,7 @@ export function CallbackSection() {
           phone: phone.trim(),
           email: email.trim(),
           name: name.trim() || undefined,
+          privacyConsent: true,
           turnstileToken: token || undefined,
         }),
       });
@@ -163,6 +165,18 @@ export function CallbackSection() {
                       className="w-full rounded-xl bg-white/[0.05] border border-white/[0.08] px-4 py-3 text-sm text-white placeholder-white/20 focus:outline-none focus:border-orange-500/40 focus:ring-1 focus:ring-orange-500/20 transition-all"
                     />
                   </div>
+                  <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs text-white/45">
+                    <input
+                      type="checkbox"
+                      checked={privacyConsent}
+                      onChange={(e) => setPrivacyConsent(e.target.checked)}
+                      required
+                      className="mt-0.5 accent-orange-500"
+                    />
+                    <span>
+                      Ich bin einverstanden, dass Chipy mich für die Demo anruft und der Demo-Anruf als Audio/Transkript bis zu 90 Tage zur Demo-Qualität und Lead-Bearbeitung gespeichert wird.
+                    </span>
+                  </label>
                   {/* Turnstile — invisible, execute-on-demand at submit time */}
                   <TurnstileWidget ref={turnstileRef} mode="execute" theme="dark" />
                   {state === 'error' && (
@@ -172,11 +186,11 @@ export function CallbackSection() {
                   )}
                   <button
                     type="submit"
-                    disabled={state === 'loading' || !phone.trim() || !email.trim()}
+                    disabled={state === 'loading' || !phone.trim() || !email.trim() || !privacyConsent}
                     className="w-full rounded-xl px-6 py-3.5 font-bold text-white text-sm disabled:opacity-40 transition-all duration-300 hover:scale-[1.02] cursor-pointer"
                     style={{
                       background: 'linear-gradient(135deg, #F97316, #EA580C)',
-                      boxShadow: state !== 'loading' && phone.trim() && email.trim() ? '0 4px 24px rgba(249,115,22,0.3)' : 'none',
+                      boxShadow: state !== 'loading' && phone.trim() && email.trim() && privacyConsent ? '0 4px 24px rgba(249,115,22,0.3)' : 'none',
                     }}
                   >
                     {state === 'loading' ? (

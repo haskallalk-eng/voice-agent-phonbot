@@ -237,7 +237,8 @@ a.inline:hover{color:#FDBA74;text-decoration-color:#FDBA74}
 
       <section id="s2">
         <h2><span class="paragraph">§ 2</span>Vertragsschluss</h2>
-        <p>Der Vertrag kommt durch die Registrierung auf der Plattform und die Bestätigung durch den Anbieter zustande. Mit der Registrierung erklärt der Nutzer, die vorliegenden AGB gelesen und akzeptiert zu haben sowie als Unternehmer im Sinne von § 14 BGB zu handeln. Die Vertragssprache ist Deutsch.</p>
+        <p>Der Vertrag kommt durch die Registrierung auf der Plattform und die Bestätigung durch den Anbieter zustande. Bei zahlungspflichtigen Plänen kommt der Vertrag erst zustande, wenn der Nutzer den Stripe-Checkout erfolgreich abschließt und der Anbieter die Buchung technisch bestätigt. Mit der Registrierung oder Buchung erklärt der Nutzer, die vorliegenden AGB, die Datenschutzerklärung und den Auftragsverarbeitungsvertrag gelesen und akzeptiert zu haben sowie als Unternehmer im Sinne von § 14 BGB zu handeln. Die Vertragssprache ist Deutsch.</p>
+        <p>Der Anbieter speichert die Annahme der rechtlichen Dokumente versioniert mit Zeitstempel, IP-Adresse, User-Agent, Plan, Zahlungsintervall und Stripe-Referenzen, soweit diese im jeweiligen Flow anfallen.</p>
         <p>Der Anbieter behält sich das Recht vor, Registrierungen ohne Angabe von Gründen abzulehnen. Eine Registrierung ist nur für Personen ab 18 Jahren sowie für Unternehmen mit rechtsfähigem Vertreter zulässig.</p>
       </section>
 
@@ -270,7 +271,7 @@ a.inline:hover{color:#FDBA74;text-decoration-color:#FDBA74}
         <h2><span class="paragraph">§ 5</span>Zahlungsbedingungen</h2>
         <p>Die Vergütung richtet sich nach dem zum Zeitpunkt der Buchung geltenden Preismodell auf der Website. Die ausgewiesenen Preise sind Endpreise.</p>
         <p><strong>Kleinunternehmerregelung:</strong> Gemäß § 19 UStG wird keine Umsatzsteuer berechnet und folglich auf den Rechnungen nicht ausgewiesen. Sollte der Anbieter die Kleinunternehmergrenzen überschreiten oder freiwillig zur Regelbesteuerung wechseln, werden die Preise ab dem Folgemonat um die gesetzliche Umsatzsteuer (derzeit 19 %) ergänzt; bestehende Kunden werden hierüber rechtzeitig schriftlich informiert.</p>
-<p>Die Zahlung erfolgt zu Beginn des gewählten Abrechnungszeitraums per Kreditkarte oder SEPA-Lastschrift über den Zahlungsdienstleister Stripe. Bei Zahlungsverzug ist der Anbieter berechtigt, den Zugang zur Plattform zu sperren. Überschreitungen des gebuchten Minutenvolumens werden gemäß dem aktuellen Tarif über die nächste Stripe-Rechnung abgerechnet.</p>
+<p>Die Zahlung erfolgt zu Beginn des gewählten Abrechnungszeitraums per Kreditkarte oder SEPA-Lastschrift über den Zahlungsdienstleister Stripe. Stripe stellt nach erfolgreicher Zahlung einen Zahlungsbeleg bzw. eine Rechnung im Kundenportal bereit; Phonbot kann zusätzlich Zahlungs- und Planbestätigungen per E-Mail versenden. Bei Zahlungsverzug ist der Anbieter berechtigt, den Zugang zur Plattform zu sperren. Überschreitungen des gebuchten Minutenvolumens werden gemäß dem aktuellen Tarif über die nächste Stripe-Rechnung abgerechnet.</p>
         <p><strong>Sekundengenaue Abrechnung:</strong> Gesprächsminuten werden sekundengenau ermittelt und in Dezimalminuten (zwei Nachkommastellen) verrechnet. Ein Anruf von 61 Sekunden zählt als 1,02 Minuten, nicht als 2 Minuten. Der Kunde zahlt ausschließlich für die tatsächlich genutzte Gesprächszeit.</p>
       </section>
 

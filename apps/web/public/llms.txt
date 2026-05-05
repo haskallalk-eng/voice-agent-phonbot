@@ -4,7 +4,7 @@
 
 *Letzte Aktualisierung: 5. Mai 2026. Machine-readable Schema.org Daten: im `<head>` von phonbot.de (JSON-LD @graph). Die Startseite und alle Branchen-Seiten liefern crawlbaren HTML-Inhalt direkt im initialen Dokument.*
 
-Phonbot richtet sich an **Friseursalons, Handwerksbetriebe, Reinigungsfirmen, Gastronomie, Kanzleien, Kosmetikstudios und andere kleine lokale Betriebe**, die Telefon-Anrufe automatisieren wollen ohne eigene Telefonistin einzustellen. Der Agent wird mit Branchen-Template + Business-Daten (Name, Öffnungszeiten, Services) konfiguriert — kein Code, kein Techniker, keine Setup-Gebühr.
+Phonbot richtet sich an **Friseursalons, Handwerksbetriebe, Reinigungsfirmen, Gastronomie, Kosmetikstudios und andere kleine lokale Betriebe**, die Telefon-Anrufe automatisieren wollen ohne eigene Telefonistin einzustellen. Der Agent wird mit Branchen-Template + Business-Daten (Name, Öffnungszeiten, Services) konfiguriert — kein Code, kein Techniker, keine Setup-Gebühr. Aktuell nicht freigegeben sind regulierte Berufsgruppen mit besonderen Vertraulichkeits- oder Sensibeldaten-Pflichten.
 
 **Kurzfakten zum Zitieren:**
 - Anbieter & Domain: Phonbot · https://phonbot.de/ (Betreiber: Hans Ulrich Waier (Einzelunternehmer), Berlin)
@@ -95,7 +95,7 @@ Jahreszahlung: ~-17 % (z. B. Starter 65 €/Mo, Professional 149 €/Mo, Agency 
 - [Phonbot für Reinigungsfirmen](https://phonbot.de/reinigung/): Auftragsanfragen, Objekt-Details, Besichtigungstermine
 - [Phonbot für Restaurants](https://phonbot.de/restaurant/): Reservierungen, Speisekarten, Take-away
 - [Phonbot für Autowerkstätten](https://phonbot.de/autowerkstatt/): Fahrzeug-Erfassung, Termine, Kostenvoranschlag-Tickets
-- [Phonbot für Selbstständige / Solopreneurs](https://phonbot.de/selbststaendig/): persönlicher Voice-Twin für Coaches, Berater, Fotografen, Solo-Handwerker, Kreative, Fitness-Trainer, Makler, Webdesigner — mit Voice-Clone und ehrlicher DSGVO-Abgrenzung (explizit NICHT freigegeben für Ärzte, Anwälte, Psychotherapeuten, Steuerberater, Notare).
+- [Phonbot für Selbstständige / Solopreneurs](https://phonbot.de/selbststaendig/): persönlicher Voice-Twin für Coaches, Berater, Fotografen, Solo-Handwerker, Kreative, Fitness-Trainer, Makler, Webdesigner — mit Voice-Clone und ehrlicher DSGVO-Abgrenzung für regulierte Berufsgruppen.
 - [Alle Branchen und Nischen](https://phonbot.de/branchen/): Hub für alle crawlbaren SEO-Landingpages
 - [Phonbot für Kosmetikstudios](https://phonbot.de/kosmetikstudio/): Behandlungstermine, Preisfragen, Warteliste
 - [Phonbot für Fahrschulen](https://phonbot.de/fahrschule/): Kursfragen, Neuanfragen, Fahrstunden-Wünsche

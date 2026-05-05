@@ -554,6 +554,21 @@ async function runMigrationBody() {
     );
   `);
 
+  // § 201 StGB / Art. 6 DSGVO: evidence trail for calls where audio/transcript
+  // are retained. The transcript itself contains the caller's verbal answer;
+  // this row makes the prompt version + first transcript excerpt searchable.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS recording_consents (
+      call_id                  TEXT PRIMARY KEY,
+      org_id                   TEXT,
+      agent_id                 TEXT,
+      prompt_version           TEXT NOT NULL,
+      consent_evidence_excerpt TEXT,
+      recorded_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS recording_consents_org_idx ON recording_consents(org_id, recorded_at DESC);`);
+
   // Stripe-first registrations: stash credentials + org details here when the
   // user submits the register form. Real user + org rows are only created
   // after Stripe checkout succeeds (webhook or finalize-checkout endpoint).

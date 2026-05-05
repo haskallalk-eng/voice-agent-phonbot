@@ -341,8 +341,9 @@ const BRANCHEN = [
     // 6. Selbstständige / Solopreneur (2026-04-24)
     // Zielgruppe: Coaches, Berater, Fotografen, Handwerker-Solo, Kreative,
     // Fitness-/Yoga-Trainer, Makler, Webdesigner. Positioniert als
-    // „Persönlicher Voice-Twin" — bewusst abgegrenzt gegen Ärzte, Anwälte,
-    // Therapeuten (DSGVO Art. 9 / § 203 StGB) via `negativeList`-Block.
+    // „Persönlicher Voice-Twin" — bewusst abgegrenzt gegen regulierte
+    // Berufsgruppen mit Sensibeldaten-/Berufsgeheimnis-Pflichten via
+    // `negativeList`-Block.
     slug: 'selbststaendig',
     templateId: 'solo',
     emoji: '💼',
@@ -414,8 +415,8 @@ const BRANCHEN = [
       { q: 'Kann ich später zwischen den Plänen wechseln?', a: 'Jederzeit, monatlich. Der Starter-Plan beginnt bei 79 €/Monat (inklusive 360 Freiminuten + Voice-Clone + alle Integrationen). Brauchst du nur eine Phonbot-Nummer ohne eigenen Agent-Account, gibt es den Nummer-Plan ab 8,99 €/Monat — der ist aber kein vollständiger Assistent, sondern nur die technische Anbindung.' },
     ],
     negativeList: {
-      heading: 'Nicht geeignet für Heil-, Rechts- und Steuerberufe',
-      body: 'Phonbot ist aktuell <strong>nicht freigegeben</strong> für: Ärzte, Zahnärzte, Psychotherapeuten, Heilpraktiker, Physiotherapeuten mit Heilbehandlungs-Schwerpunkt, Anwälte, Steuerberater, Notare, Mediatoren. Diese Berufsgruppen verarbeiten besondere personenbezogene Daten (DSGVO Art. 9) oder unterliegen Berufsgeheimnissen (§ 203 StGB) — wir bauen dafür zuerst die erforderlichen vertraglichen und technischen Schutzmaßnahmen (Auftragsverarbeitung nach Art. 28, Pseudonymisierung, sektorspezifische Einwilligungs-Flows). Auch Lebens-/Mindset-Coaches mit quasi-therapeutischer Arbeit fallen in diese Gruppe.',
+      heading: 'Nicht geeignet für regulierte Berufsgruppen',
+      body: 'Phonbot ist aktuell <strong>nicht freigegeben</strong> für regulierte Berufsgruppen mit besonderen Vertraulichkeits-, Berufsgeheimnis- oder Sensibeldaten-Pflichten. Für diese Einsätze bauen wir zuerst die erforderlichen vertraglichen und technischen Schutzmaßnahmen wie erweiterte Auftragsverarbeitung, Pseudonymisierung und sektorspezifische Einwilligungs-Flows.',
       waitlistHint: 'Warteliste für dein Segment? Schreib eine E-Mail an info@phonbot.de — wir melden uns, sobald die Freigabe steht.',
     },
     ctaHeading: 'Dein persönlicher Telefonassistent — <span class="accent">in 5 Minuten aktiv</span>',

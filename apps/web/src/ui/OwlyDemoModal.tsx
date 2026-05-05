@@ -39,6 +39,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
   const [callState, setCallState] = useState<CallState>('idle');
   const [agentTalking, setAgentTalking] = useState(false);
   const [callError, setCallError] = useState<string | null>(null);
+  const [webConsent, setWebConsent] = useState(false);
   const clientRef = useRef<RetellWebClient | null>(null);
   const lastAgentMessageRef = useRef<string>('');
   useWebCallCleanup(clientRef);
@@ -50,6 +51,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
   const [cbSent, setCbSent] = useState(false);
   const [cbLoading, setCbLoading] = useState(false);
   const [cbError, setCbError] = useState<string | null>(null);
+  const [cbConsent, setCbConsent] = useState(false);
 
   function stopActiveCall() {
     if (clientRef.current) {
@@ -72,6 +74,11 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
 
   async function startWebCall(templateId: string) {
     if (callState === 'active' || callState === 'connecting') return;
+    if (!webConsent) {
+      setCallError('Bitte bestätige zuerst den Demo-Datenschutzhinweis.');
+      setCallState('error');
+      return;
+    }
     setSelectedTemplate(templateId);
     setCallState('connecting');
     setCallError(null);
@@ -95,7 +102,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
           throw new Error('Mikrofon-Zugriff nicht möglich. Bitte prüfe deine Browser-Einstellungen.');
         }
       }
-      const res = await createDemoCall(templateId);
+      const res = await createDemoCall(templateId, undefined, true);
       if (!res.access_token) throw new Error('Kein Zugriffstoken');
       const client = new RetellWebClient();
       clientRef.current = client;
@@ -143,6 +150,10 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
 
   async function submitCallback(e: React.FormEvent) {
     e.preventDefault();
+    if (!cbConsent) {
+      setCbError('Bitte bestätige zuerst den Demo-Datenschutzhinweis.');
+      return;
+    }
     setCbLoading(true);
     setCbError(null);
     try {
@@ -155,7 +166,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
       const res = await fetch('/api/demo/callback', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: cbName, email: cbEmail, phone: cbPhone }),
+        body: JSON.stringify({ name: cbName, email: cbEmail, phone: cbPhone, privacyConsent: true }),
         signal: AbortSignal.timeout(10_000),
       });
       if (!res.ok) {
@@ -332,6 +343,17 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
                     </button>
                   ))}
                 </div>
+                <label className="mb-3 flex items-start gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs text-white/45">
+                  <input
+                    type="checkbox"
+                    checked={webConsent}
+                    onChange={(e) => setWebConsent(e.target.checked)}
+                    className="mt-0.5 accent-orange-500"
+                  />
+                  <span>
+                    Ich bin einverstanden, dass diese Demo als Audio/Transkript verarbeitet und bis zu 90 Tage zur Demo-Qualität und Lead-Bearbeitung gespeichert wird. Der Agent weist zu Beginn zusätzlich auf KI und Aufzeichnung hin.
+                  </span>
+                </label>
                 <p className="text-xs text-white/25 text-center">Kein Account · Mikrofon wird benötigt · ca. 30 Sek.</p>
               </div>
             )}
@@ -462,6 +484,18 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
                       placeholder="+49 170 1234567"
                       className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none focus:ring-2 focus:ring-orange-500/40 transition-all" />
                   </div>
+                  <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs text-white/45">
+                    <input
+                      type="checkbox"
+                      checked={cbConsent}
+                      onChange={(e) => { setCbConsent(e.target.checked); if (cbError) setCbError(null); }}
+                      required
+                      className="mt-0.5 accent-orange-500"
+                    />
+                    <span>
+                      Ich bin einverstanden, dass Chipy mich für die Demo anruft und der Demo-Anruf als Audio/Transkript bis zu 90 Tage zur Demo-Qualität und Lead-Bearbeitung gespeichert wird.
+                    </span>
+                  </label>
                   <button type="submit" disabled={cbLoading}
                     className="w-full py-3.5 rounded-2xl font-bold text-white text-sm transition-all hover:scale-[1.02] disabled:opacity-50 mt-1"
                     style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
