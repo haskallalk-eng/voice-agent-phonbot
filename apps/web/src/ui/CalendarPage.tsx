@@ -277,20 +277,35 @@ function DayDrawer({
             <div className="space-y-1.5">
               <p className="text-[10px] font-semibold text-white/30 uppercase tracking-widest">Termine</p>
               {dayBookings.map(b => (
-                <div key={b.id} data-booking-id={b.id} className="flex items-start gap-3 rounded-xl bg-white/5 px-3 py-2.5">
-                  <div className="shrink-0 text-orange-400 font-mono text-xs mt-0.5 w-10">{formatTime(b.slot_time)}</div>
+                <div
+                  key={b.id}
+                  data-booking-id={b.id}
+                  className="group relative overflow-hidden rounded-2xl border border-orange-500/15 bg-gradient-to-r from-orange-500/[0.10] via-white/[0.045] to-cyan-500/[0.07] p-3 shadow-[0_14px_42px_rgba(0,0,0,0.22)]"
+                >
+                  <div className="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-orange-400/10 blur-2xl transition-opacity group-hover:opacity-80" />
+                  <div className="relative flex items-start gap-3">
+                    <div className="shrink-0 rounded-xl border border-orange-400/20 bg-black/25 px-2.5 py-2 text-center">
+                      <p className="font-mono text-xs font-semibold text-orange-200">{formatTime(b.slot_time)}</p>
+                      <p className="mt-0.5 text-[9px] uppercase tracking-[0.14em] text-white/25">Uhr</p>
+                    </div>
                   <button
                     type="button"
                     onClick={() => onOpenCustomer(b)}
-                    className="group flex-1 min-w-0 text-left cursor-pointer"
+                    className="min-w-0 flex-1 text-left cursor-pointer"
                     title="Kundendetails öffnen"
                   >
-                    <p className="text-sm font-medium text-white truncate group-hover:text-orange-200 transition-colors">{b.customer_name}</p>
-                    <p className="text-xs text-white/40">{b.customer_phone}{b.service ? ` · ${b.service}` : ''}</p>
-                    {b.notes && <p className="text-xs text-white/30 mt-0.5">{b.notes}</p>}
-                    <p className="text-[10px] text-orange-300/45 mt-1 group-hover:text-orange-200/70 transition-colors">Kundendetails öffnen</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-sm font-semibold text-white transition-colors group-hover:text-orange-100">{b.customer_name}</p>
+                      {b.service && <span className="rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[10px] text-white/45">{b.service}</span>}
+                    </div>
+                    <p className="mt-1 truncate text-xs text-white/40">{b.customer_phone || 'Keine Nummer gespeichert'}</p>
+                    {b.notes && <p className="mt-1 line-clamp-2 text-xs text-white/30">{b.notes}</p>}
+                    <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-orange-400/20 bg-orange-500/10 px-2 py-1 text-[10px] font-semibold text-orange-100/70 transition-colors group-hover:text-orange-50">
+                      Kundendetails öffnen
+                    </span>
                   </button>
-                  <button onClick={() => onDeleteBooking(b.id)} className="shrink-0 text-red-400/50 hover:text-red-400 transition-colors text-xs cursor-pointer">Löschen</button>
+                  <button onClick={() => onDeleteBooking(b.id)} className="shrink-0 rounded-lg px-2 py-1 text-xs text-red-300/45 transition-colors hover:bg-red-500/10 hover:text-red-200 cursor-pointer">Löschen</button>
+                  </div>
                 </div>
               ))}
             </div>
