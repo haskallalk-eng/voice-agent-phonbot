@@ -87,6 +87,7 @@ function checkPage(rel, url, opts = {}) {
   if (!robots.includes('index') || !robots.includes('follow')) fail(`${url}: robots index/follow missing`);
   if (bodyText.length < (opts.minText ?? 900)) fail(`${url}: too little crawlable body text (${bodyText.length} chars)`);
   if (!graph.length) fail(`${url}: JSON-LD missing`);
+  if (!/<main\b/i.test(html)) fail(`${url}: main landmark missing`);
   if (!html.includes('/llms.txt') || !html.includes('/llms-full.txt')) fail(`${url}: LLM alternate links missing`);
   if (/fonts\.googleapis|fonts\.gstatic/.test(html)) fail(`${url}: external Google Fonts detected`);
   if (/Für Phonbot wird JavaScript benötigt|JavaScript benötigt/i.test(html)) fail(`${url}: JS-required snippet text still present`);
@@ -117,7 +118,7 @@ function checkBranches() {
     if (!graph.some((item) => item['@type'] === 'WebPage')) fail(`${url}: WebPage JSON-LD missing`);
     if (!graph.some((item) => item['@type'] === 'FAQPage')) fail(`${url}: FAQPage JSON-LD missing`);
     const offer = graph.find((item) => item['@type'] === 'Service')?.offers;
-    const expected = slug === 'selbststaendig' ? '79' : '8.99';
+    const expected = '79';
     if (String(offer?.price) !== expected) fail(`${url}: offer price ${offer?.price ?? 'missing'} != ${expected}`);
   }
 }
@@ -132,6 +133,8 @@ function checkNiches() {
     for (const type of ['WebPage', 'Service', 'FAQPage', 'BreadcrumbList']) {
       if (!graph.some((item) => item['@type'] === type)) fail(`${url}: JSON-LD ${type} missing`);
     }
+    const offer = graph.find((item) => item['@type'] === 'Service')?.offers;
+    if (String(offer?.price) !== '79') fail(`${url}: offer price ${offer?.price ?? 'missing'} != 79`);
   }
 }
 
@@ -153,8 +156,25 @@ function checkSupportPages() {
 
 function checkLegal() {
   for (const slug of LEGAL) {
-    checkPage(`${slug}/index.html`, `${SITE}/${slug}/`, { minText: 700 });
+    const rel = `${slug}/index.html`;
+    const url = `${SITE}/${slug}/`;
+    checkPage(rel, url, { minText: 700 });
+    const graph = graphItems(jsonLdBlocks(read(rel)));
+    if (!graph.some((item) => item['@type'] === 'WebPage')) fail(`${url}: WebPage JSON-LD missing`);
+    if (!graph.some((item) => item['@type'] === 'BreadcrumbList')) fail(`${url}: BreadcrumbList JSON-LD missing`);
   }
+}
+
+function listIndexFiles(dir) {
+  const out = [];
+  if (!fs.existsSync(dir)) return out;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'assets' || entry.name === '.well-known') continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...listIndexFiles(full));
+    else if (entry.name === 'index.html') out.push(full);
+  }
+  return out;
 }
 
 function checkSitemapAndRobots() {
@@ -171,6 +191,7 @@ function checkSitemapAndRobots() {
     }
   }
   if (!/Sitemap:\s*https:\/\/phonbot\.de\/sitemap\.xml/i.test(robots)) fail('robots.txt sitemap line missing');
+  if (!/Disallow:\s*\/calendar/i.test(robots)) fail('robots.txt should disallow /calendar backend routes');
   for (const bot of ['OAI-SearchBot', 'ChatGPT-User', 'Claude-SearchBot', 'PerplexityBot']) {
     if (!robots.includes(`User-agent: ${bot}`)) fail(`robots.txt missing AI search bot ${bot}`);
   }
@@ -178,6 +199,40 @@ function checkSitemapAndRobots() {
     const block = new RegExp(`User-agent:\\s*${bot}[\\s\\S]{0,80}Disallow:\\s*/`, 'i');
     if (!block.test(robots)) fail(`robots.txt should block training bot ${bot}`);
   }
+}
+
+function checkSitemapDrift() {
+  const sitemap = read('sitemap.xml');
+  const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+  const indexFiles = listIndexFiles(DIST);
+  const urlsFromFiles = indexFiles
+    .map((file) => {
+      const rel = path.relative(DIST, file).replace(/\\/g, '/');
+      return rel === 'index.html' ? `${SITE}/` : `${SITE}/${rel.replace(/\/index\.html$/, '/')}`;
+    })
+    .filter((url) => !url.includes('/admin/') && !url.includes('/dashboard/'));
+
+  for (const url of urlsFromFiles) {
+    if (!locs.includes(url)) fail(`Sitemap missing public index file ${url}`);
+  }
+  for (const url of locs) {
+    const rel = url === `${SITE}/`
+      ? 'index.html'
+      : `${url.replace(`${SITE}/`, '').replace(/\/$/, '')}/index.html`;
+    if (!fs.existsSync(path.join(DIST, rel))) fail(`Sitemap URL has no static file ${url}`);
+  }
+}
+
+function checkCanonicalRedirectConfig() {
+  const caddy = fs.existsSync('Caddyfile') ? fs.readFileSync('Caddyfile', 'utf8') : '';
+  const nginx = fs.existsSync('apps/web/nginx.conf') ? fs.readFileSync('apps/web/nginx.conf', 'utf8') : '';
+  if (!/redir\s+\/index\.html\s+\/\s+301/.test(caddy)) fail('Caddyfile: /index.html canonical redirect missing');
+  if (!/redir\s+\/friseur\/index\.html\s+\/friseur\/\s+301/.test(caddy)) fail('Caddyfile: branch /index.html canonical redirects missing');
+  if (!/return\s+301\s+\/\$1/.test(nginx)) fail('nginx.conf: nested /index.html redirect missing');
+  if (/Cache-Control\s+"no-cache,\s*no-store,\s*must-revalidate"[\s\S]{0,160}try_files\s+\$uri\s+\$uri\/\s+=404/.test(nginx)) {
+    fail('nginx.conf: public SEO routes still use no-store');
+  }
+  if (!/location\s+=\s+\/nav\.js[\s\S]*max-age=0/.test(nginx)) fail('nginx.conf: /nav.js must not be immutable cached');
 }
 
 function checkServerConfig() {
@@ -209,8 +264,10 @@ if (!fs.existsSync(DIST)) {
   checkSupportPages();
   checkBranches();
   checkNiches();
-  checkLegal();
-  checkSitemapAndRobots();
+checkLegal();
+checkSitemapAndRobots();
+checkSitemapDrift();
+checkCanonicalRedirectConfig();
   checkServerConfig();
 }
 

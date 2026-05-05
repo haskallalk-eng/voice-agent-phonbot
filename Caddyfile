@@ -35,7 +35,7 @@ www.{$DOMAIN:phonbot.de} {
     # X-Robots-Tag instead of robots.txt alone so crawlers can actually see
     # the noindex signal.
     @nonpublic {
-        path /dashboard /dashboard/* /admin /admin/* /onboarding /onboarding/* /reset-password /login /register /app /app/* /settings /settings/* /auth /auth/* /api /api/* /billing* /retell* /webhook* /outbound* /health
+        path /dashboard /dashboard/* /admin /admin/* /onboarding /onboarding/* /reset-password /login /register /app /app/* /settings /settings/* /auth /auth/* /api /api/* /billing* /calendar* /retell* /webhook* /outbound* /health
     }
     header @nonpublic X-Robots-Tag "noindex, nofollow, noarchive"
 
@@ -110,6 +110,29 @@ www.{$DOMAIN:phonbot.de} {
         path /branchen /kontakt /friseur /handwerker /reinigung /restaurant /autowerkstatt /selbststaendig /kosmetikstudio /fahrschule /immobilienmakler /versicherungsmakler /fitnessstudio /energieberater /hausverwaltung /ferienwohnung /impressum /datenschutz /agb /avv /sub-processors
     }
     redir @canonical_no_slash {path}/ 301
+
+    redir /index.html / 301
+    redir /branchen/index.html /branchen/ 301
+    redir /kontakt/index.html /kontakt/ 301
+    redir /friseur/index.html /friseur/ 301
+    redir /handwerker/index.html /handwerker/ 301
+    redir /reinigung/index.html /reinigung/ 301
+    redir /restaurant/index.html /restaurant/ 301
+    redir /autowerkstatt/index.html /autowerkstatt/ 301
+    redir /selbststaendig/index.html /selbststaendig/ 301
+    redir /kosmetikstudio/index.html /kosmetikstudio/ 301
+    redir /fahrschule/index.html /fahrschule/ 301
+    redir /immobilienmakler/index.html /immobilienmakler/ 301
+    redir /versicherungsmakler/index.html /versicherungsmakler/ 301
+    redir /fitnessstudio/index.html /fitnessstudio/ 301
+    redir /energieberater/index.html /energieberater/ 301
+    redir /hausverwaltung/index.html /hausverwaltung/ 301
+    redir /ferienwohnung/index.html /ferienwohnung/ 301
+    redir /impressum/index.html /impressum/ 301
+    redir /datenschutz/index.html /datenschutz/ 301
+    redir /agb/index.html /agb/ 301
+    redir /avv/index.html /avv/ 301
+    redir /sub-processors/index.html /sub-processors/ 301
 
     # /favicon.ico → 301 to /icon.svg. Browsers (especially older ones + email
     # clients) auto-request /favicon.ico even when <link rel="icon"> points

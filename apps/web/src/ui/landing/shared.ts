@@ -33,9 +33,9 @@ export const TEMPLATE_PREVIEWS: Record<string, string> = {
 
 export const FEATURES: FeatureItem[] = [
   { Icon: IconBolt, title: 'In 2 Minuten live', desc: 'Template wählen, Daten eintragen, fertig. Kein Techniker, kein Setup-Marathon.' },
-  { Icon: IconPhone, title: 'Kein Anruf geht verloren', desc: '24/7 erreichbar — auch nachts und am Wochenende. Jeder Anruf ist ein möglicher Auftrag.' },
+  { Icon: IconPhone, title: 'Weniger Anrufe verpassen', desc: '24/7 erreichbar — auch nachts und am Wochenende. Viele Anrufe sind mögliche Aufträge.' },
   { Icon: IconSettings, title: 'Deine Nummer bleibt', desc: 'Einfach weiterleiten. Kein Nummernwechsel, keine Unterbrechung für deine Kunden.' },
-  { Icon: IconCalendar, title: 'Termine? Erledigt.', desc: 'Chipy bucht direkt in deinen Kalender — ohne Rückfragen, ohne Wartezeit.' },
+  { Icon: IconCalendar, title: 'Termine? Strukturiert.', desc: 'Chipy prüft freie Slots und bucht erst, wenn der Kalender die Buchung bestätigt.' },
   { Icon: IconTickets, title: 'Nichts bleibt liegen', desc: 'Was Chipy nicht sofort löst, wird zum strukturierten Ticket. Kein Zettelchaos.' },
   { Icon: IconInsights, title: 'Wird mit jedem Anruf besser', desc: 'Chipy analysiert Gespräche und optimiert sich selbst — dein Agent lernt aus jeder Interaktion.' },
 ];
@@ -64,8 +64,8 @@ export const FAQ_ITEMS = [
     a: 'Phonbot verbindet sich mit Google Calendar, Microsoft Outlook oder Cal.com. Termine werden direkt eingetragen — ohne dass du eingreifen musst.',
   },
   {
-    q: 'Ist Phonbot DSGVO-konform?',
-    a: 'Ja. Server stehen in Deutschland (EU). Gesprächsdaten werden verschlüsselt gespeichert und können auf Wunsch jederzeit gelöscht werden.',
+    q: 'Wie ist Phonbot datenschutzrechtlich aufgestellt?',
+    a: 'Phonbot ist DSGVO-fokussiert: AVV verfügbar, Hosting in Deutschland/EU und verschlüsselte Speicherung. Für Telefonie und KI werden einzelne Subprozessoren mit USA-Bezug über SCC/DPF abgesichert.',
   },
   {
     q: 'Für welche Branchen ist Phonbot geeignet?',

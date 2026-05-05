@@ -6,7 +6,7 @@ export const CORE_INDUSTRY_PAGES = [
     slug: 'friseur',
     name: 'Friseure',
     title: 'KI-Telefonassistent fuer Friseure',
-    description: 'Termine, Oeffnungszeiten, Preisauskuenfte und Rueckrufwuensche fuer Salons.',
+    description: 'Salon-Termine, Wunschfriseur, Neukunden, Oeffnungszeiten, Preise und Rueckrufwuensche.',
   },
   {
     slug: 'handwerker',

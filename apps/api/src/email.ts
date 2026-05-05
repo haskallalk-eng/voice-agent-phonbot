@@ -5,6 +5,7 @@ import { legalSnapshot } from './legal.js';
 const RESEND_API_KEY = process.env.RESEND_API_KEY ?? '';
 const FROM_EMAIL = process.env.EMAIL_FROM ?? 'Phonbot <noreply@phonbot.de>';
 const APP_URL = process.env.APP_URL ?? 'https://phonbot.de';
+const TAX_NOTICE = process.env.PHONBOT_TAX_NOTICE?.trim() ?? '';
 
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
@@ -306,6 +307,9 @@ export async function sendPlanActivatedEmail(opts: {
   const overage = typeof opts.overchargePerMinute === 'number'
     ? `${opts.overchargePerMinute.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR/Minute`
     : 'gemaess gebuchtem Tarif';
+  const taxNoticeHtml = TAX_NOTICE
+    ? `<p style="margin:0 0 10px 0;">${escapeHtml(TAX_NOTICE)}</p>`
+    : '<p style="margin:0 0 10px 0;">Rechnungs- und Steuerdetails findest du auf der Stripe-Rechnung bzw. im Kundenportal.</p>';
   const html = brandedEmail({
     title: `${safePlan}-Plan aktiviert`,
     body: `
@@ -316,7 +320,7 @@ export async function sendPlanActivatedEmail(opts: {
       </div>
       <p style="margin:0 0 10px 0;">Vertragsbestätigung: ${intervalLabel}, kündbar zum Ende des Abrechnungszeitraums über das Nutzerkonto oder per E-Mail an info@phonbot.de.</p>
       <p style="margin:0 0 10px 0;">Zusatzminuten werden sekundengenau abgerechnet: ${escapeHtml(overage)}.</p>
-      <p style="margin:0 0 10px 0;">Es gilt die Kleinunternehmerregelung nach § 19 UStG; es wird keine Umsatzsteuer ausgewiesen, solange diese Regelung für Phonbot gilt.</p>
+      ${taxNoticeHtml}
       <p style="margin:0 0 10px 0;">Vertragsdokumente: <a href="${escapeHtml(docs.terms.url)}" style="color:#F97316;">AGB</a> · <a href="${escapeHtml(docs.privacy.url)}" style="color:#F97316;">Datenschutz</a> · <a href="${escapeHtml(docs.dpa.url)}" style="color:#F97316;">AVV</a>.</p>
       ${opts.invoiceUrl ? `<p style="margin:0 0 10px 0;">Rechnung/Beleg: <a href="${escapeHtml(opts.invoiceUrl)}" style="color:#F97316;">bei Stripe ansehen</a>.</p>` : ''}
       <p style="margin:0;">Du kannst jetzt eine Telefonnummer aktivieren und deinen Agent live schalten.</p>
@@ -329,7 +333,7 @@ export async function sendPlanActivatedEmail(opts: {
     `Kontingent: ${opts.minutesLimit} Minuten / Monat.`,
     `Vertragsbestätigung: ${intervalLabel}, kündbar zum Ende des Abrechnungszeitraums über das Nutzerkonto oder per E-Mail an info@phonbot.de.`,
     `Zusatzminuten: ${overage}.`,
-    'Kleinunternehmerregelung nach § 19 UStG: keine Umsatzsteuer ausgewiesen, solange diese Regelung für Phonbot gilt.',
+    TAX_NOTICE || 'Rechnungs- und Steuerdetails findest du auf der Stripe-Rechnung bzw. im Kundenportal.',
     `AGB: ${docs.terms.url}`,
     `Datenschutz: ${docs.privacy.url}`,
     `AVV: ${docs.dpa.url}`,

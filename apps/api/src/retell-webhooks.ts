@@ -14,13 +14,8 @@
  *   • POST /retell/tools/*   (custom-function dispatchers)
  *     verifyRetellToolRequest() — OR-chain:
  *       1. valid HMAC (Retell may add per-tool signing in future), OR
- *       2. signed-tenant-id query param we set when registering the tool, OR
- *       3. body-carried _retell_agent_id, cross-checked via
- *          getOrgIdByAgentId() against agent_configs (unknown agent → 403
- *          / demo-only fallback per handler).
- *     Acceptable here because Retell does NOT send x-retell-signature on
- *     Custom-Function calls. The agent_id check binds the call to a known
- *     org, giving the same tenant-isolation guarantee HMAC would.
+ *       2. signed-tenant-id query param we set when registering the tool.
+ *     Body-carried agent_id is treated only as context. It is not a secret.
  */
 
 import crypto from 'node:crypto';
@@ -123,23 +118,19 @@ function verifyRetellSignature(req: RawBodyRequest): boolean {
  *
  * Accept EITHER:
  *   1. Valid HMAC signature (if Retell ever adds it per-tool in future), OR
- *   2. Body contains _retell_agent_id — the handler below will then
- *      getOrgIdByAgentId() it; unknown agents get 403 or demo-only fallback,
- *      matching the isolation guarantee HMAC would provide. An attacker
- *      would need to know a specific 32-char agent_id from Retell's namespace
- *      to forge a tool call, and even then only the agent's own org is
- *      affected.
+ *   2. Signed tenant query params that we put into every registered tool URL.
+ *
+ * A body-carried _retell_agent_id is not accepted as authentication anymore:
+ * agent ids can appear in logs, customer exports, or support screenshots. The
+ * handlers still read agent_id to resolve context after the request has passed
+ * this URL/signature gate.
  *
  * Webhook auth (call_ended etc.) stays strict HMAC — those mutate billing.
  */
 function verifyRetellToolRequest(req: RawBodyRequest): boolean {
   if (verifyRetellSignature(req)) return true;
   if (getSignedToolTenantId(req)) return true;
-  const body = (req.body ?? {}) as Record<string, unknown>;
-  const args = (body.args ?? body) as Record<string, unknown>;
-  const call = (body.call ?? {}) as Record<string, unknown>;
-  const agentId = (args?._retell_agent_id ?? args?.agent_id ?? body?._retell_agent_id ?? body?.agent_id ?? call.agent_id) as unknown;
-  return typeof agentId === 'string' && agentId.length > 0;
+  return false;
 }
 
 // getOrgIdByAgentId + invalidateOrgIdCache live in org-id-cache.ts (breaks

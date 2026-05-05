@@ -12,5 +12,9 @@
     "seo:generate": "node scripts/gen-landing-pages.mjs && node scripts/gen-seo-cluster-pages.mjs && node scripts/gen-seo-manifests.mjs && node scripts/sync-legal-nav.mjs",
     "seo:audit": "node scripts/seo-audit.mjs",
     "prepare": "git config core.hooksPath .githooks || true"
+  },
+  "devDependencies": {
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "typescript-eslint": "^8.59.2"
   }
 }
