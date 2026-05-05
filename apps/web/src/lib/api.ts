@@ -957,6 +957,13 @@ export type ChipyBooking = {
   id: string; customer_name: string; customer_phone: string;
   service: string | null; notes: string | null; slot_time: string;
 };
+export type ChipyBookingInput = {
+  customer_name: string;
+  customer_phone: string;
+  service?: string;
+  notes?: string;
+  slot_time: string;
+};
 
 export function getChipyCalendar() {
   return request<{ schedule: ChipySchedule; blocks: ChipyBlock[]; bookings: ChipyBooking[] }>('/calendar/chipy');
@@ -1000,11 +1007,28 @@ export function removeStaffChipyBlock(staffId: string, blockId: string) {
 export function getChipyBookings(from: string, to: string) {
   return request<{ bookings: ChipyBooking[] }>(`/calendar/chipy/bookings?from=${from}&to=${to}`);
 }
-export function createChipyBooking(data: { customer_name: string; customer_phone: string; service?: string; notes?: string; slot_time: string }) {
+export function createChipyBooking(data: ChipyBookingInput) {
   return request<{ ok: boolean; booking: ChipyBooking }>('/calendar/chipy/bookings', { method: 'POST', body: JSON.stringify(data) });
 }
 export function deleteChipyBooking(id: string) {
   return request<{ ok: boolean }>(`/calendar/chipy/bookings/${id}`, { method: 'DELETE' });
+}
+export function getStaffChipyBookings(staffId: string, from: string, to: string) {
+  return request<{ bookings: ChipyBooking[] }>(
+    `/calendar/staff/${encodeURIComponent(staffId)}/chipy/bookings?from=${from}&to=${to}`,
+  );
+}
+export function createStaffChipyBooking(staffId: string, data: ChipyBookingInput) {
+  return request<{ ok: boolean; booking: ChipyBooking }>(
+    `/calendar/staff/${encodeURIComponent(staffId)}/chipy/bookings`,
+    { method: 'POST', body: JSON.stringify(data) },
+  );
+}
+export function deleteStaffChipyBooking(staffId: string, id: string) {
+  return request<{ ok: boolean }>(
+    `/calendar/staff/${encodeURIComponent(staffId)}/chipy/bookings/${encodeURIComponent(id)}`,
+    { method: 'DELETE' },
+  );
 }
 
 // External calendar events (Google / Microsoft / cal.com) — synced every

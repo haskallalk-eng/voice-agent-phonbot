@@ -2838,6 +2838,14 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
   });
   const StaffParamsSchema = z.object({ id: z.string().uuid() });
   const StaffBlockParamsSchema = z.object({ id: z.string().uuid(), blockId: z.string().uuid() });
+  const StaffBookingParamsSchema = z.object({ id: z.string().uuid(), bookingId: z.string().uuid() });
+  const ChipyBookingBodySchema = z.object({
+    customer_name: z.string().min(1).max(200),
+    customer_phone: z.string().min(1).max(50),
+    service: z.string().max(200).optional(),
+    notes: z.string().max(1000).optional(),
+    slot_time: z.string().min(1),
+  });
 
   app.get('/calendar/staff', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
@@ -3024,6 +3032,75 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
     return reply.send({ ok: true });
   });
 
+  app.get('/calendar/staff/:id/chipy/bookings', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { orgId } = req.user as JwtPayload;
+    const params = StaffParamsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid staff id' });
+    const staff = await resolveRouteStaff(orgId, params.data.id, reply);
+    if (!staff.ok) return;
+    const staffId = staff.staffId!;
+    if (!pool) return reply.send({ bookings: [] });
+
+    const query = req.query as { from?: string; to?: string };
+    const from = query.from ?? new Date().toISOString().slice(0, 10);
+    const toDate = query.to ?? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const res = await pool.query(
+      `SELECT id, customer_name, customer_phone, service, notes, slot_time, created_at
+       FROM staff_chipy_bookings
+       WHERE org_id = $1 AND staff_id = $2 AND slot_time >= $3::date AND slot_time < ($4::date + interval '1 day')
+       ORDER BY slot_time`,
+      [orgId, staffId, from, toDate],
+    );
+    return reply.send({ bookings: res.rows });
+  });
+
+  app.post('/calendar/staff/:id/chipy/bookings', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { orgId } = req.user as JwtPayload;
+    const params = StaffParamsSchema.safeParse(req.params);
+    const parsed = ChipyBookingBodySchema.safeParse(req.body);
+    if (!params.success || !parsed.success) {
+      return reply.status(400).send({ error: 'Ungültige Daten', details: parsed.success ? undefined : parsed.error.flatten() });
+    }
+    const staff = await resolveRouteStaff(orgId, params.data.id, reply);
+    if (!staff.ok) return;
+    const staffId = staff.staffId!;
+    if (!pool) return reply.send({ ok: true, id: 'mock' });
+
+    try {
+      const res = await pool.query(
+        `INSERT INTO staff_chipy_bookings (org_id, staff_id, customer_name, customer_phone, service, notes, slot_time)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id, customer_name, customer_phone, service, notes, slot_time, created_at`,
+        [orgId, staffId, parsed.data.customer_name, parsed.data.customer_phone, parsed.data.service ?? null, parsed.data.notes ?? null, parsed.data.slot_time],
+      );
+      return reply.send({ ok: true, booking: res.rows[0] });
+    } catch (e: unknown) {
+      const err = e as { code?: string };
+      if (err.code === '23505') {
+        return reply.status(409).send({
+          error: 'Dieser Zeitslot ist bereits gebucht. Bitte wähle einen anderen Slot.',
+          code: 'SLOT_TAKEN',
+        });
+      }
+      throw e;
+    }
+  });
+
+  app.delete('/calendar/staff/:id/chipy/bookings/:bookingId', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { orgId } = req.user as JwtPayload;
+    const params = StaffBookingParamsSchema.safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid staff booking id' });
+    const staff = await resolveRouteStaff(orgId, params.data.id, reply);
+    if (!staff.ok) return;
+    const staffId = staff.staffId!;
+    if (!pool) return reply.send({ ok: true });
+    await pool.query(
+      `DELETE FROM staff_chipy_bookings WHERE id = $1 AND org_id = $2 AND staff_id = $3`,
+      [params.data.bookingId, orgId, staffId],
+    );
+    return reply.send({ ok: true });
+  });
+
   app.post('/calendar/chipy/block', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
     const parsed = ChipyBlockSchema.safeParse(req.body);
@@ -3089,13 +3166,7 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
   /** POST /calendar/chipy/bookings — create a manual booking */
   app.post('/calendar/chipy/bookings', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { orgId } = req.user as JwtPayload;
-    const parsed = z.object({
-      customer_name: z.string().min(1).max(200),
-      customer_phone: z.string().min(1).max(50),
-      service: z.string().max(200).optional(),
-      notes: z.string().max(1000).optional(),
-      slot_time: z.string().min(1), // ISO datetime
-    }).safeParse(req.body);
+    const parsed = ChipyBookingBodySchema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: 'Ungültige Daten', details: parsed.error.flatten() });
     if (!pool) return { ok: true, id: 'mock' };
     try {
