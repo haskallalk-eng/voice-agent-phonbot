@@ -507,6 +507,33 @@ async function getCalendarStaff(orgId: string): Promise<CalendarStaff[]> {
   return res.rows;
 }
 
+async function rankAvailableStaffForSlot(orgId: string, staff: CalendarStaff[], slotTime: Date): Promise<CalendarStaff[]> {
+  const availability = await Promise.all(
+    staff.map(async (member) => ({
+      member,
+      available: await isChipySlotAvailable(orgId, slotTime, member.id).catch(() => false),
+    })),
+  );
+  const available = availability.filter((item) => item.available).map((item) => item.member);
+  if (!pool || available.length <= 1) return available;
+
+  const counts = await pool.query<{ staff_id: string; bookings: number }>(
+    `SELECT staff_id::text AS staff_id, count(*)::int AS bookings
+       FROM staff_chipy_bookings
+      WHERE org_id = $1
+        AND staff_id = ANY($2::uuid[])
+        AND (slot_time AT TIME ZONE 'Europe/Berlin')::date = ($3::timestamptz AT TIME ZONE 'Europe/Berlin')::date
+      GROUP BY staff_id`,
+    [orgId, available.map((member) => member.id), slotTime.toISOString()],
+  );
+  const bookingsByStaff = new Map(counts.rows.map((row) => [row.staff_id, Number(row.bookings) || 0]));
+  return available.sort((a, b) =>
+    (bookingsByStaff.get(a.id) ?? 0) - (bookingsByStaff.get(b.id) ?? 0)
+    || a.sort_order - b.sort_order
+    || a.name.localeCompare(b.name),
+  );
+}
+
 async function upsertCalendarConnection(input: {
   orgId: string;
   staffId?: string | null;
@@ -1766,6 +1793,39 @@ async function findFreeSlotsByContract(
   return { slots: [...new Set(slots)].sort(), source: sources.join('+') };
 }
 
+export async function findFreeSlotsForAnyStaff(
+  orgId: string,
+  opts: { date?: string; range?: string; service?: string },
+): Promise<{ slots: string[]; source: string; staffCount: number }> {
+  const staff = await getCalendarStaff(orgId);
+  if (staff.length === 0) {
+    const result = await findFreeSlotsByContract(orgId, opts);
+    return { ...result, staffCount: 0 };
+  }
+
+  const perStaff = await Promise.all(
+    staff.map(async (member) => {
+      const result = await findFreeSlotsByContract(orgId, { ...opts, staffId: member.id });
+      return { member, result };
+    }),
+  );
+  const slots = new Set<string>();
+  const sources = new Set<string>();
+
+  for (const item of perStaff) {
+    for (const slot of item.result.slots) slots.add(slot);
+    for (const source of item.result.source.split('+')) {
+      if (source) sources.add(source);
+    }
+  }
+
+  return {
+    slots: [...slots].sort(),
+    source: `team:${sources.size ? [...sources].sort().join('+') : 'chipy'}`,
+    staffCount: staff.length,
+  };
+}
+
 /** Resolve a human-readable slot like "Montag 14:00" to a concrete date string. */
 function resolveSlotDate(slot: string, now: Date): { dateStr: string; timeStr: string | null } | null {
   // ISO format: "2026-04-21T14:00"
@@ -1987,6 +2047,69 @@ export async function bookSlot(
       externalResults: results,
     };
   }, staffId);
+}
+
+export async function bookSlotForAnyStaff(
+  orgId: string,
+  opts: {
+    customerName: string;
+    customerPhone: string;
+    time: string;
+    service: string;
+    notes?: string;
+    sourceCallId?: string;
+  },
+): Promise<{
+  ok: boolean;
+  eventId?: string;
+  bookingId?: number | string;
+  chipyBookingId?: string;
+  externalResults?: ExternalBookingResult[];
+  partial?: boolean;
+  error?: string;
+  assignedStaffId?: string | null;
+  assignedStaffName?: string | null;
+}> {
+  const staff = await getCalendarStaff(orgId);
+  if (staff.length === 0) {
+    const result = await bookSlot(orgId, { ...opts, staffId: null });
+    return { ...result, assignedStaffId: null, assignedStaffName: null };
+  }
+
+  const slotTime = parseSlotTime(opts.time);
+  if (!slotTime) return { ok: false, error: `Cannot parse time: ${opts.time}` };
+
+  const candidates = await rankAvailableStaffForSlot(orgId, staff, slotTime);
+  const contractCandidates: CalendarStaff[] = [];
+  for (const member of candidates) {
+    const result = await findFreeSlotsByContract(orgId, {
+      date: opts.time,
+      service: opts.service,
+      staffId: member.id,
+    });
+    if (result.slots.some((slot) => {
+      const parsed = parseSlotTime(slot);
+      return Boolean(parsed && Math.abs(parsed.getTime() - slotTime.getTime()) < 60_000);
+    })) {
+      contractCandidates.push(member);
+    }
+  }
+
+  const errors: string[] = [];
+  for (const member of contractCandidates) {
+    const result = await bookSlot(orgId, { ...opts, staffId: member.id });
+    if (result.ok) {
+      return { ...result, assignedStaffId: member.id, assignedStaffName: member.name };
+    }
+    if (result.error) errors.push(`${member.name}: ${result.error}`);
+  }
+
+  return {
+    ok: false,
+    error: errors.length > 0
+      ? `No available staff for ${opts.time}: ${errors.join('; ')}`
+      : `No available staff for ${opts.time}`,
+  };
 }
 
 async function bookSlotForConnection(

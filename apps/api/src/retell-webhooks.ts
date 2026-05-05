@@ -30,7 +30,7 @@ import { createTicket, mergeTicketMetadata } from './tickets.js';
 import { appendTraceEvent } from './traces.js';
 import { reconcileMinutes, DEFAULT_CALL_RESERVE_MINUTES } from './usage.js';
 import { pool } from './db.js';
-import { findFreeSlots, bookSlot } from './calendar.js';
+import { findFreeSlots, findFreeSlotsForAnyStaff, bookSlot, bookSlotForAnyStaff } from './calendar.js';
 import { triggerCallback, readConfig } from './agent-config.js';
 import { executeIntegrationCall, type ApiIntegration } from './api-integrations.js';
 import { analyzeCall } from './insights.js';
@@ -352,7 +352,7 @@ async function resolveCalendarStaffForTool(
       )).rows
     : [];
   const staffModeActive = activeStaff.length > 0;
-  const anyStaff = Boolean(requested && /^(egal|beliebig|irgendwer|wer frei ist|kein wunsch|keine praferenz|any|anyone)$/i.test(requested));
+  const anyStaff = Boolean(requested && /^(egal|beliebig|irgendwer|wer frei ist|wer gerade frei ist|kein wunsch|keine praferenz|keine präferenz|any|anyone)$/i.test(requested));
   if (!pool) return { staffId: explicitStaffId ?? null, requested, matchedName: null, staffModeActive, anyStaff };
 
   if (explicitStaffId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(explicitStaffId)) {
@@ -364,7 +364,7 @@ async function resolveCalendarStaffForTool(
     return { staffId: null, requested: requested ?? explicitStaffId, matchedName: null, staffModeActive, anyStaff: false };
   }
 
-  if (anyStaff) return { staffId: activeStaff[0]?.id ?? null, requested, matchedName: activeStaff[0]?.name ?? null, staffModeActive, anyStaff: true };
+  if (anyStaff) return { staffId: null, requested, matchedName: null, staffModeActive, anyStaff: true };
   if (!requested || requested.length < 2) return { staffId: null, requested, matchedName: null, staffModeActive, anyStaff: false };
   const byName = await pool.query<{ id: string; name: string }>(
     `SELECT id, name
@@ -1014,7 +1014,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
     if (orgIdForSlots) {
       const staff = await resolveCalendarStaffForTool(orgIdForSlots, args);
-      if (staff.staffModeActive && !staff.staffId) {
+      if (staff.staffModeActive && !staff.staffId && staff.requested && !staff.anyStaff) {
         result = {
           ok: false,
           source: 'staff-required',
@@ -1029,23 +1029,30 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
             : 'Mitarbeiterkalender ist aktiv. Frage nach einem Wunschfriseur oder ob ein beliebiger freier Mitarbeiter passt, bevor du Termine suchst.',
         };
       } else {
-      const { slots, source } = await findFreeSlots(orgIdForSlots, {
-        date: (args.date as string | undefined) ?? (args.preferredTime as string | undefined),
-        range: args.range as string | undefined,
-        service: args.service as string | undefined,
-        staffId: staff.staffId,
-      });
-      result = {
-        ok: true,
-        source,
-        ...compactRetellSlots(slots),
-        service: args.service ?? null,
-        range: args.range ?? null,
-        preferredTime: args.preferredTime ?? null,
-        preferredStylist: staff.matchedName ?? staff.requested,
-        staffId: staff.staffId,
-        ...(staff.requested && !staff.staffId ? { instruction: 'Der Wunschfriseur wurde nicht eindeutig gefunden. Biete die gefundenen Salon-Termine an oder frage kurz nach einem anderen Mitarbeiter.' } : {}),
-      };
+        const teamMode = staff.staffModeActive && !staff.staffId;
+        const slotResult = teamMode
+          ? await findFreeSlotsForAnyStaff(orgIdForSlots, {
+              date: (args.date as string | undefined) ?? (args.preferredTime as string | undefined),
+              range: args.range as string | undefined,
+              service: args.service as string | undefined,
+            })
+          : await findFreeSlots(orgIdForSlots, {
+              date: (args.date as string | undefined) ?? (args.preferredTime as string | undefined),
+              range: args.range as string | undefined,
+              service: args.service as string | undefined,
+              staffId: staff.staffId,
+            });
+        result = {
+          ok: true,
+          source: slotResult.source,
+          ...compactRetellSlots(slotResult.slots),
+          service: args.service ?? null,
+          range: args.range ?? null,
+          preferredTime: args.preferredTime ?? null,
+          preferredStylist: staff.matchedName ?? (teamMode ? 'Beliebiger freier Mitarbeiter' : staff.requested),
+          staffId: staff.staffId,
+          ...(teamMode ? { instruction: 'Biete diese Zeiten als Team-Termine an. Der konkrete Mitarbeiter wird beim Buchen automatisch nach Verfuegbarkeit zugewiesen.' } : {}),
+        };
       }
     } else {
       // Fallback: no calendar connected — return demo slots
@@ -1110,6 +1117,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       const customerPhone = await resolveCallerPhone(body, args, callId);
       const preferredTime = (args.preferredTime as string | undefined) ?? (args.time as string | undefined) ?? '';
       const staff = await resolveCalendarStaffForTool(orgIdForBook, args);
+      const teamMode = staff.staffModeActive && !staff.staffId && (!staff.requested || staff.anyStaff);
       const service = (args.service as string | undefined) ?? '';
       const notes = args.notes as string | undefined;
       const approval = await canBookForCustomerApproval({
@@ -1127,11 +1135,11 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           customerName,
           customerPhone,
           preferredTime,
-          preferredStylist: staff.matchedName ?? staff.requested,
+          preferredStylist: staff.matchedName ?? (teamMode ? 'Beliebiger freier Mitarbeiter' : staff.requested),
           staffId: staff.staffId,
           service,
         };
-      } else if (staff.staffModeActive && !staff.staffId) {
+      } else if (staff.staffModeActive && !staff.staffId && staff.requested && !staff.anyStaff) {
         result = {
           ok: false,
           status: staff.requested ? 'staff_not_found' : 'staff_required',
@@ -1149,15 +1157,27 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         };
       } else {
         const businessName = await getOrgName(orgIdForBook);
-        const booking = await bookSlot(orgIdForBook, {
-          customerName,
-          customerPhone,
-          time: preferredTime,
-          service,
-          notes,
-          sourceCallId: callId,
-          staffId: staff.staffId,
-        });
+        const booking = teamMode
+          ? await bookSlotForAnyStaff(orgIdForBook, {
+              customerName,
+              customerPhone,
+              time: preferredTime,
+              service,
+              notes,
+              sourceCallId: callId,
+            })
+          : await bookSlot(orgIdForBook, {
+              customerName,
+              customerPhone,
+              time: preferredTime,
+              service,
+              notes,
+              sourceCallId: callId,
+              staffId: staff.staffId,
+            });
+        const assignedStaffId = 'assignedStaffId' in booking ? booking.assignedStaffId ?? null : staff.staffId;
+        const assignedStaffName = 'assignedStaffName' in booking ? booking.assignedStaffName ?? null : staff.matchedName ?? staff.requested;
+        const resultStylist = assignedStaffName ?? (teamMode ? 'Beliebiger freier Mitarbeiter' : staff.requested);
 
         if (!booking.ok) {
           try {
@@ -1196,8 +1216,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
               customerName,
               customerPhone: ticket.customer_phone,
               preferredTime,
-              preferredStylist: staff.matchedName ?? staff.requested,
-              staffId: staff.staffId,
+              preferredStylist: resultStylist,
+              staffId: assignedStaffId,
               service,
             };
           } catch (e: unknown) {
@@ -1223,8 +1243,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
               customerName,
               customerPhone,
               preferredTime,
-              preferredStylist: staff.matchedName ?? staff.requested,
-              staffId: staff.staffId,
+              preferredStylist: resultStylist,
+              staffId: assignedStaffId,
               service,
             };
           }
@@ -1251,8 +1271,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
             customerName,
             customerPhone,
             preferredTime,
-            preferredStylist: staff.matchedName ?? staff.requested,
-            staffId: staff.staffId,
+            preferredStylist: resultStylist,
+            staffId: assignedStaffId,
             service,
           };
         }

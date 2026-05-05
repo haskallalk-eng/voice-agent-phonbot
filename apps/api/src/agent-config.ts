@@ -548,7 +548,7 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
           service: { type: 'string', description: 'Requested service, if known.' },
           range: { type: 'string', description: 'Requested date range, e.g. next week.' },
           preferredTime: { type: 'string', description: 'Preferred time or day from the customer.' },
-          preferredStylist: { type: 'string', description: 'Requested staff member/stylist name, if the caller names one.' },
+          preferredStylist: { type: 'string', description: 'Requested staff member/stylist name. Use "beliebig" when the caller has no staff preference.' },
         },
       },
     });
@@ -569,7 +569,7 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
           customerPhone: { type: 'string', description: 'Caller phone number. Optional when Retell provides from_number.' },
           preferredTime: { type: 'string', description: 'Confirmed slot/time.' },
           service: { type: 'string', description: 'Booked service.' },
-          preferredStylist: { type: 'string', description: 'Requested staff member/stylist name, if any.' },
+          preferredStylist: { type: 'string', description: 'Requested staff member/stylist name. Use "beliebig" when the caller has no staff preference.' },
           notes: { type: 'string' },
         },
       },
