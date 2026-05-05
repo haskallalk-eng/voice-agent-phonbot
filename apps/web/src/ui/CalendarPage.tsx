@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   getCalendarStatus, connectCalcom, disconnectCalendar,
   getGoogleCalendarAuthUrl, getMicrosoftCalendarAuthUrl,
@@ -80,8 +81,10 @@ function BookingModal({
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)' }}>
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)' }}>
       <div className="w-full max-w-md rounded-2xl border border-white/10 p-6 space-y-5" style={{ background: '#14141F' }} role="dialog" aria-modal="true" aria-labelledby="booking-modal-title">
         <div className="flex items-center justify-between">
           <div>
@@ -133,7 +136,8 @@ function BookingModal({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -185,8 +189,10 @@ function DayDrawer({
   const [tbEnd, setTbEnd] = useState('17:00');
   const [tbReason, setTbReason] = useState('');
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overscroll-contain" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
       <div className="w-full max-w-md max-h-[calc(100vh-2rem)] rounded-2xl border border-white/10 overflow-hidden shadow-[0_28px_90px_rgba(0,0,0,0.55)]" style={{ background: '#14141F' }} role="dialog" aria-modal="true" aria-labelledby="day-drawer-title">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
@@ -356,7 +362,8 @@ function DayDrawer({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -1223,7 +1230,7 @@ function StaffPanel({ onStaffChange }: { onStaffChange?: (count: number) => void
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
             <p className="text-sm font-bold text-white">Mitarbeiter</p>
-            <p className="text-xs text-white/35 mt-1">Sobald hier mindestens eine Person angelegt ist, ist der Mitarbeiterkalender die aktive Buchungslogik. Jede Person bekommt eigene Verfügbarkeit und eigene Verbindungen.</p>
+            <p className="text-xs text-white/35 mt-1">Sobald hier mindestens eine Person angelegt ist, wird der Betriebskalender für Bot-Buchungen ausgeschaltet. Jede Person bekommt eigene Verfügbarkeit und eigene Verbindungen.</p>
           </div>
           {selected && (
             <button onClick={() => { void handleDeleteSelected(); }} disabled={savingStaff}
@@ -1257,7 +1264,7 @@ function StaffPanel({ onStaffChange }: { onStaffChange?: (count: number) => void
             ))}
           </div>
         ) : (
-          <p className="text-sm text-white/35 py-4">Noch keine Mitarbeiter angelegt. Dann bleibt automatisch der eine Salon-Kalender aktiv.</p>
+          <p className="text-sm text-white/35 py-4">Noch keine Mitarbeiter angelegt. Dann bleibt automatisch der Betriebskalender aktiv.</p>
         )}
       </div>
 
@@ -1401,7 +1408,7 @@ export function CalendarPage({ focusBookingId }: { focusBookingId?: string | nul
   const providerMeta = PROVIDER_META[calendarStatus?.provider ?? ''] ?? DEFAULT_PROVIDER_META;
 
   const TABS: { id: Tab; label: string }[] = [
-    { id: 'calendar', label: 'Normaler Kalender' },
+    { id: 'calendar', label: 'Betriebskalender' },
     { id: 'staff', label: 'Mitarbeiterkalender' },
   ];
   const staffModeActive = staffCount > 0;
@@ -1494,12 +1501,21 @@ export function CalendarPage({ focusBookingId }: { focusBookingId?: string | nul
         {tab === 'calendar' && (
           <div className="space-y-5">
             {staffModeActive && (
-              <div className="rounded-2xl border border-orange-500/20 bg-orange-500/10 p-4">
-                <p className="text-sm font-semibold text-orange-100">Mitarbeiterkalender ist aktiv</p>
-                <p className="text-xs text-orange-100/65 mt-1 leading-relaxed">
-                  Weil {staffCount} Mitarbeiter angelegt {staffCount === 1 ? 'ist' : 'sind'}, nutzt Phonbot für Bot-Buchungen die Mitarbeiterkalender. Der normale Salon-Kalender bleibt hier sichtbar, ist aber nicht die aktive Buchungsquelle.
-                </p>
-                <button onClick={() => setTab('staff')} className="mt-3 rounded-xl border border-orange-500/25 bg-orange-500/15 px-3 py-2 text-xs font-semibold text-orange-100 hover:bg-orange-500/20">
+              <div className="rounded-3xl border border-orange-500/20 p-5 shadow-[0_18px_60px_rgba(249,115,22,0.10)]" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.13), rgba(255,255,255,0.035) 48%, rgba(6,182,212,0.10))' }}>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-100/65">Kalenderlogik</p>
+                    <p className="mt-1 text-base font-bold text-white">Mitarbeiterkalender aktiv</p>
+                    <p className="mt-1 text-xs text-white/55 leading-relaxed">
+                      Sobald Mitarbeiter angelegt sind, bucht Phonbot pro Person. Der Betriebskalender bleibt sichtbar, ist aber für Bot-Buchungen ausgeschaltet.
+                    </p>
+                  </div>
+                  <div className="grid gap-2 text-xs">
+                    <span className="rounded-full border border-orange-400/25 bg-orange-500/15 px-3 py-1.5 text-orange-100">Mitarbeiterkalender: aktiv</span>
+                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-white/45">Betriebskalender: aus</span>
+                  </div>
+                </div>
+                <button onClick={() => setTab('staff')} className="mt-4 rounded-xl border border-orange-500/25 bg-orange-500/15 px-3 py-2 text-xs font-semibold text-orange-100 hover:bg-orange-500/20">
                   Mitarbeiterkalender öffnen
                 </button>
               </div>
@@ -1508,8 +1524,8 @@ export function CalendarPage({ focusBookingId }: { focusBookingId?: string | nul
             <section className={['rounded-2xl border border-white/10 p-5', staffModeActive ? 'opacity-55' : ''].join(' ')} style={{ background: 'rgba(255,255,255,0.02)' }}>
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-white">Salon-Kalender</p>
-                  <p className="text-xs text-white/35 mt-1">{staffModeActive ? 'Durch Mitarbeiterkalender ersetzt.' : 'Allgemeine Termine, Sperren und freie Zeiten.'}</p>
+                  <p className="text-sm font-semibold text-white">Betriebskalender</p>
+                  <p className="text-xs text-white/35 mt-1">{staffModeActive ? 'Für Bot-Buchungen durch Mitarbeiterkalender ersetzt.' : 'Allgemeine Termine, Sperren und freie Zeiten.'}</p>
                 </div>
               </div>
               <MonthlyCalendar
