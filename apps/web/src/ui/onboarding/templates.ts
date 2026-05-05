@@ -15,6 +15,8 @@ export type Template = {
   };
 };
 
+const CHIPY_DEFAULT_VOICE_ID = 'custom_voice_f428053d5d6100d7a2611e0cc4';
+
 export const TEMPLATES: Template[] = [
   {
     id: 'hairdresser',
@@ -24,7 +26,7 @@ export const TEMPLATES: Template[] = [
     defaults: {
       name: 'Salon-Assistent',
       language: 'de',
-      voice: 'custom_voice_28bd4920fa6523c6ac8c4e527b',
+      voice: CHIPY_DEFAULT_VOICE_ID,
       businessDescription: 'Friseursalon für Damen und Herren mit Walk-in und Terminbuchung.',
       servicesText: '',
       openingHours: 'Mo-Fr 09:00-18:00, Sa 09:00-14:00',
@@ -57,7 +59,7 @@ TONFALL: Locker, freundlich, unkompliziert. Kurze Sätze, maximal 2 pro Antwort.
     defaults: {
       name: 'Handwerker-Assistent',
       language: 'de',
-      voice: 'custom_voice_28bd4920fa6523c6ac8c4e527b',
+      voice: CHIPY_DEFAULT_VOICE_ID,
       businessDescription: 'Handwerksbetrieb für Installation, Reparaturen und Wartung.',
       servicesText: '',
       openingHours: 'Mo-Fr 07:00-17:00',
@@ -90,7 +92,7 @@ TONFALL: Sachlich, beruhigend, effizient. Kurze Sätze. Zeige Verständnis: "Das
     defaults: {
       name: 'Restaurant-Assistent',
       language: 'de',
-      voice: 'custom_voice_28bd4920fa6523c6ac8c4e527b',
+      voice: CHIPY_DEFAULT_VOICE_ID,
       businessDescription: 'Restaurant mit regionaler und saisonaler Küche.',
       servicesText: '',
       openingHours: 'Di-Sa 11:30-14:30, 17:30-22:00, So 11:30-15:00',
@@ -123,7 +125,7 @@ TONFALL: Warm, gastfreundlich, enthusiastisch aber nicht übertrieben. "Sehr ger
     defaults: {
       name: 'Werkstatt-Assistent',
       language: 'de',
-      voice: 'custom_voice_28bd4920fa6523c6ac8c4e527b',
+      voice: CHIPY_DEFAULT_VOICE_ID,
       businessDescription: 'Freie Kfz-Werkstatt für alle Marken.',
       servicesText: '',
       openingHours: 'Mo-Fr 07:30-17:00, Sa 08:00-12:00',
@@ -158,7 +160,7 @@ TONFALL: Kompetent, nüchtern, effizient. Kurze Sätze, kein Upselling.`,
     defaults: {
       name: 'Reinigungs-Assistent',
       language: 'de',
-      voice: 'custom_voice_28bd4920fa6523c6ac8c4e527b',
+      voice: CHIPY_DEFAULT_VOICE_ID,
       businessDescription: 'Professionelle Gebäudereinigung und Haushaltsreinigung.',
       servicesText: '',
       openingHours: 'Mo-Fr 08:00-18:00',
@@ -193,7 +195,7 @@ TONFALL: Freundlich, strukturiert, verbindlich. Vermittle Zuverlässigkeit.`,
     defaults: {
       name: 'Mein Agent',
       language: 'de',
-      voice: 'custom_voice_28bd4920fa6523c6ac8c4e527b',
+      voice: CHIPY_DEFAULT_VOICE_ID,
       businessDescription: '',
       servicesText: '',
       openingHours: 'Mo-Fr 09:00-17:00',

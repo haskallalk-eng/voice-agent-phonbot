@@ -42,6 +42,7 @@ import { fireInboundWebhooks } from './inbound-webhooks.js';
 import { sendBookingConfirmationSms, sendTicketAckSms } from './sms.js';
 import { readDemoCallTemplate, maybeSendDemoSignupLink } from './demo.js';
 import { redactPII } from './pii.js';
+import { customerModuleActiveForAgentConfig, lookupCustomer, upsertCustomer } from './customers.js';
 
 const RETELL_API_KEY = process.env.RETELL_API_KEY ?? '';
 
@@ -303,6 +304,111 @@ async function getOrgIdByTenantId(tenantId: string): Promise<string | null> {
     [tenantId],
   );
   return (res.rows[0]?.org_id as string | undefined) ?? null;
+}
+
+async function getToolOrgContext(req: FastifyRequest, body: RetellEventBody, args: Record<string, unknown>): Promise<{
+  callId: string;
+  agentId?: string;
+  signedTenantId: string | null;
+  orgId: string | null;
+  tenantId: string | null;
+}> {
+  const callId = getRetellCallId(body, args) ?? 'retell';
+  const agentId = getRetellAgentId(body, args);
+  const signedTenantId = getSignedToolTenantId(req);
+  const orgId = agentId
+    ? await getOrgIdByAgentId(agentId)
+    : signedTenantId
+      ? await getOrgIdByTenantId(signedTenantId)
+      : null;
+  return { callId, agentId, signedTenantId, orgId, tenantId: signedTenantId ?? orgId };
+}
+
+function stringArg(args: Record<string, unknown>, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = args[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+async function resolveCalendarStaffForTool(
+  orgId: string,
+  args: Record<string, unknown>,
+): Promise<{ staffId: string | null; requested: string | null; matchedName: string | null }> {
+  const explicitStaffId = stringArg(args, 'staffId', 'staff_id');
+  const requested = stringArg(args, 'preferredStylist', 'preferred_stylist', 'staffName', 'staff_name', 'stylist', 'employeeName') ?? null;
+  if (!pool) return { staffId: explicitStaffId ?? null, requested, matchedName: null };
+
+  if (explicitStaffId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(explicitStaffId)) {
+    const byId = await pool.query<{ id: string; name: string }>(
+      `SELECT id, name FROM calendar_staff WHERE org_id = $1 AND id = $2 AND active = true LIMIT 1`,
+      [orgId, explicitStaffId],
+    );
+    if (byId.rows[0]) return { staffId: byId.rows[0].id, requested, matchedName: byId.rows[0].name };
+    return { staffId: null, requested: requested ?? explicitStaffId, matchedName: null };
+  }
+
+  if (!requested || requested.length < 2) return { staffId: null, requested, matchedName: null };
+  const byName = await pool.query<{ id: string; name: string }>(
+    `SELECT id, name
+       FROM calendar_staff
+      WHERE org_id = $1
+        AND active = true
+        AND (
+          lower(name) = lower($2)
+          OR lower(name) LIKE lower($2) || '%'
+          OR lower(name) LIKE '%' || lower($2) || '%'
+          OR lower($2) LIKE '%' || lower(name) || '%'
+        )
+      ORDER BY
+        CASE
+          WHEN lower(name) = lower($2) THEN 0
+          WHEN lower(name) LIKE lower($2) || '%' THEN 1
+          ELSE 2
+        END,
+        sort_order,
+        name
+      LIMIT 1`,
+    [orgId, requested],
+  );
+  return { staffId: byName.rows[0]?.id ?? null, requested, matchedName: byName.rows[0]?.name ?? null };
+}
+
+async function isCustomerModuleActiveForTool(tenantId: string | null, orgId: string | null): Promise<boolean> {
+  if (!tenantId || !orgId) return false;
+  const cfg = await readConfig(tenantId, orgId);
+  return customerModuleActiveForAgentConfig(cfg);
+}
+
+async function maybeUpsertCustomerFromTool(params: {
+  tenantId: string | null;
+  orgId: string | null;
+  callId: string;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customerType?: 'new' | 'existing' | 'unknown';
+  details?: Record<string, unknown>;
+  notes?: string | null;
+  log: FastifyRequest['log'];
+}): Promise<void> {
+  try {
+    const name = params.customerName?.trim();
+    if (!params.orgId || !name || /^(unbekannt|unknown|anonymous)$/i.test(name)) return;
+    if (!await isCustomerModuleActiveForTool(params.tenantId, params.orgId)) return;
+    await upsertCustomer({
+      orgId: params.orgId,
+      fullName: name,
+      phone: params.customerPhone,
+      customerType: params.customerType ?? 'unknown',
+      sourceCallId: params.callId,
+      details: params.details ?? {},
+      notes: params.notes,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    params.log.warn({ err: message, orgId: params.orgId, callId: params.callId }, 'customer upsert failed');
+  }
 }
 
 export async function registerRetellWebhooks(app: FastifyInstance) {
@@ -690,6 +796,130 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
   // ── Tool endpoints ─────────────────────────────────────────────────────────
 
+  // --- customer.lookup ---
+  app.post('/retell/tools/customer.lookup', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!verifyRetellToolRequest(req as RawBodyRequest)) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const body = req.body as RetellEventBody;
+    const args = retellArgs(body);
+    const ctx = await getToolOrgContext(req, body, args);
+
+    await appendTraceEvent({
+      type: 'tool_call',
+      sessionId: ctx.callId,
+      tenantId: ctx.orgId ?? undefined,
+      agentId: ctx.agentId ?? undefined,
+      tool: 'customer.lookup',
+      input: args,
+      at: now(),
+    } as Parameters<typeof appendTraceEvent>[0]);
+
+    let result: Record<string, unknown>;
+    if (!ctx.orgId || !await isCustomerModuleActiveForTool(ctx.tenantId, ctx.orgId)) {
+      result = {
+        ok: true,
+        status: 'disabled',
+        instruction: 'Kundenmodul ist nicht aktiv. Stelle keine Bestandskunden-/Neukundenfrage und nutze den normalen Flow.',
+      };
+    } else {
+      const phone = stringArg(args, 'customerPhone', 'customer_phone', 'phone', 'from_number') ?? await resolveCallerPhone(body, args, ctx.callId);
+      const name = stringArg(args, 'customerName', 'customer_name', 'name');
+      result = await lookupCustomer({ orgId: ctx.orgId, phone, name });
+    }
+
+    await appendTraceEvent({
+      type: 'tool_result',
+      sessionId: ctx.callId,
+      tenantId: ctx.orgId ?? undefined,
+      agentId: ctx.agentId ?? undefined,
+      tool: 'customer.lookup',
+      output: result,
+      at: now(),
+    } as Parameters<typeof appendTraceEvent>[0]);
+
+    return result;
+  });
+
+  // --- customer.upsert ---
+  app.post('/retell/tools/customer.upsert', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!verifyRetellToolRequest(req as RawBodyRequest)) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const body = req.body as RetellEventBody;
+    const args = retellArgs(body);
+    const ctx = await getToolOrgContext(req, body, args);
+
+    await appendTraceEvent({
+      type: 'tool_call',
+      sessionId: ctx.callId,
+      tenantId: ctx.orgId ?? undefined,
+      agentId: ctx.agentId ?? undefined,
+      tool: 'customer.upsert',
+      input: args,
+      at: now(),
+    } as Parameters<typeof appendTraceEvent>[0]);
+
+    let result: Record<string, unknown>;
+    if (!ctx.orgId || !await isCustomerModuleActiveForTool(ctx.tenantId, ctx.orgId)) {
+      result = {
+        ok: true,
+        status: 'disabled',
+        instruction: 'Kundenmodul ist nicht aktiv. Speichere keine Kundendaten.',
+      };
+    } else {
+      const customerName = stringArg(args, 'customerName', 'customer_name', 'name');
+      if (!customerName || /^(unbekannt|unknown|anonymous)$/i.test(customerName)) {
+        result = {
+          ok: false,
+          error: 'MISSING_CUSTOMER_NAME',
+          instruction: 'Frage erst nach dem Namen, dann rufe customer_upsert erneut auf.',
+        };
+      } else {
+        const customerPhone = stringArg(args, 'customerPhone', 'customer_phone', 'phone') ?? await resolveCallerPhone(body, args, ctx.callId);
+        const details = {
+          service: stringArg(args, 'service'),
+          preferredTime: stringArg(args, 'preferredTime', 'preferred_time', 'time'),
+          preferredStylist: stringArg(args, 'preferredStylist', 'preferred_stylist'),
+          hairLength: stringArg(args, 'hairLength', 'hair_length'),
+          hairHistory: stringArg(args, 'hairHistory', 'hair_history'),
+          allergies: stringArg(args, 'allergies'),
+          source: 'retell-tool',
+        };
+        const row = await upsertCustomer({
+          orgId: ctx.orgId,
+          fullName: customerName,
+          phone: customerPhone,
+          email: stringArg(args, 'email'),
+          customerType: stringArg(args, 'customerType', 'customer_type') as 'new' | 'existing' | 'unknown' | undefined,
+          notes: stringArg(args, 'notes'),
+          sourceCallId: ctx.callId,
+          details,
+        });
+        result = {
+          ok: true,
+          status: row ? 'saved' : 'not_persisted',
+          customerId: row?.id ?? null,
+          instruction: 'Kundendaten wurden still aktualisiert. Sage nicht, dass ein Datenbankeintrag erstellt wurde; fahre normal im Gespraech fort.',
+        };
+      }
+    }
+
+    await appendTraceEvent({
+      type: 'tool_result',
+      sessionId: ctx.callId,
+      tenantId: ctx.orgId ?? undefined,
+      agentId: ctx.agentId ?? undefined,
+      tool: 'customer.upsert',
+      output: result,
+      at: now(),
+    } as Parameters<typeof appendTraceEvent>[0]);
+
+    return result;
+  });
+
   // --- calendar.findSlots ---
   app.post('/retell/tools/calendar.findSlots', async (req: FastifyRequest, reply: FastifyReply) => {
     // Tool auth: see TOOL_AUTH_NOTE at top of file. Lifecycle webhook uses
@@ -727,16 +957,20 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       service?: unknown;
       range?: unknown;
       preferredTime?: unknown;
+      preferredStylist?: unknown;
+      staffId?: string | null;
       allSlotsCount?: number;
       moreCount?: number;
       instruction?: string;
     };
 
     if (orgIdForSlots) {
+      const staff = await resolveCalendarStaffForTool(orgIdForSlots, args);
       const { slots, source } = await findFreeSlots(orgIdForSlots, {
         date: (args.date as string | undefined) ?? (args.preferredTime as string | undefined),
         range: args.range as string | undefined,
         service: args.service as string | undefined,
+        staffId: staff.staffId,
       });
       result = {
         ok: true,
@@ -745,6 +979,9 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         service: args.service ?? null,
         range: args.range ?? null,
         preferredTime: args.preferredTime ?? null,
+        preferredStylist: staff.matchedName ?? staff.requested,
+        staffId: staff.staffId,
+        ...(staff.requested && !staff.staffId ? { instruction: 'Der Wunschfriseur wurde nicht eindeutig gefunden. Biete die gefundenen Salon-Termine an oder frage kurz nach einem anderen Mitarbeiter.' } : {}),
       };
     } else {
       // Fallback: no calendar connected — return demo slots
@@ -755,6 +992,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         service: args.service ?? null,
         range: args.range ?? null,
         preferredTime: args.preferredTime ?? null,
+        preferredStylist: args.preferredStylist ?? args.preferred_stylist ?? null,
       };
     }
 
@@ -807,108 +1045,132 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       const customerName = (args.customerName as string | undefined) ?? 'Unbekannt';
       const customerPhone = await resolveCallerPhone(body, args, callId);
       const preferredTime = (args.preferredTime as string | undefined) ?? (args.time as string | undefined) ?? '';
+      const staff = await resolveCalendarStaffForTool(orgIdForBook, args);
       const service = (args.service as string | undefined) ?? '';
       const notes = args.notes as string | undefined;
-      const businessName = await getOrgName(orgIdForBook);
-      const booking = await bookSlot(orgIdForBook, {
-        customerName,
-        customerPhone,
-        time: preferredTime,
-        service,
-        notes,
-        sourceCallId: callId,
-      });
-
-      if (!booking.ok) {
-        try {
-          const ticket = await createTicket({
-            tenantId: signedTenantIdForBook ?? orgIdForBook,
-            source: 'phone',
-            sessionId: callId,
-            reason: 'calendar-unavailable',
-            customerName,
-            customerPhone: ticketPhoneOrUnknown(customerPhone),
-            preferredTime,
-            service,
-            notes,
-          }, { allowUnverifiedPhone: true });
-          const sms = await sendTicketAckSms({
-            to: ticket.customer_phone,
-            businessName,
-            reason: 'calendar-unavailable',
-            service,
-            logger: req.log,
-          });
-
-          result = {
-            ok: true,
-            status: 'fallback_ticket_created',
-            fallback: true,
-            ticketId: ticket.id,
-            ticketStatus: ticket.status,
-            error: booking.error ?? null,
-            chipyBookingId: booking.chipyBookingId ?? null,
-            externalResults: booking.externalResults ?? [],
-            partial: booking.partial ?? false,
-            smsSent: sms.ok,
-            smsError: sms.ok ? null : sms.error,
-            message: 'Kalenderbuchung fehlgeschlagen, Rueckruf-Ticket wurde erstellt.',
-            customerName,
-            customerPhone: ticket.customer_phone,
-            preferredTime,
-            service,
-          };
-        } catch (e: unknown) {
-          const code = (e as { code?: string })?.code;
-          req.log.error(
-            {
-              err: e instanceof Error ? e.message : String(e),
-              code,
-              orgId: orgIdForBook,
-              callId,
-            },
-            'retell calendar.book fallback ticket failed',
-          );
-          result = {
-            ok: false,
-            status: 'failed',
-            fallback: false,
-            error: booking.error ?? 'CALENDAR_BOOK_FAILED',
-            fallbackError: code ?? 'TICKET_CREATE_FAILED',
-            chipyBookingId: booking.chipyBookingId ?? null,
-            externalResults: booking.externalResults ?? [],
-            partial: booking.partial ?? false,
-            customerName,
-            customerPhone,
-            preferredTime,
-            service,
-          };
-        }
-      } else {
-        const sms = await sendBookingConfirmationSms({
-          to: customerPhone,
-          businessName,
-          customerName,
-          service,
-          preferredTime,
-          logger: req.log,
-        });
+      if (staff.requested && !staff.staffId) {
         result = {
-          ok: booking.ok,
-          status: booking.ok ? 'confirmed' : 'failed',
-          eventId: booking.eventId ?? null,
-          bookingId: booking.bookingId ?? null,
-          chipyBookingId: booking.chipyBookingId ?? null,
-          externalResults: booking.externalResults ?? [],
-          partial: booking.partial ?? false,
-          error: booking.error ?? null,
-          smsSent: sms.ok,
-          smsError: sms.ok ? null : sms.error,
+          ok: false,
+          status: 'staff_not_found',
+          error: 'STAFF_NOT_FOUND',
+          message: 'Der Wunschfriseur wurde nicht eindeutig gefunden.',
+          instruction: 'Buche keinen allgemeinen Salon-Termin. Frage kurz nach einem anderen Mitarbeiter oder ob ein beliebiger verfuegbarer Mitarbeiter passt.',
           customerName,
           customerPhone,
           preferredTime,
+          preferredStylist: staff.requested,
+          staffId: null,
           service,
         };
+      } else {
+        const businessName = await getOrgName(orgIdForBook);
+        const booking = await bookSlot(orgIdForBook, {
+          customerName,
+          customerPhone,
+          time: preferredTime,
+          service,
+          notes,
+          sourceCallId: callId,
+          staffId: staff.staffId,
+        });
+
+        if (!booking.ok) {
+          try {
+            const ticket = await createTicket({
+              tenantId: signedTenantIdForBook ?? orgIdForBook,
+              source: 'phone',
+              sessionId: callId,
+              reason: 'calendar-unavailable',
+              customerName,
+              customerPhone: ticketPhoneOrUnknown(customerPhone),
+              preferredTime,
+              service,
+              notes,
+            }, { allowUnverifiedPhone: true });
+            const sms = await sendTicketAckSms({
+              to: ticket.customer_phone,
+              businessName,
+              reason: 'calendar-unavailable',
+              service,
+              logger: req.log,
+            });
+
+            result = {
+              ok: true,
+              status: 'fallback_ticket_created',
+              fallback: true,
+              ticketId: ticket.id,
+              ticketStatus: ticket.status,
+              error: booking.error ?? null,
+              chipyBookingId: booking.chipyBookingId ?? null,
+              externalResults: booking.externalResults ?? [],
+              partial: booking.partial ?? false,
+              smsSent: sms.ok,
+              smsError: sms.ok ? null : sms.error,
+              message: 'Kalenderbuchung fehlgeschlagen, Rueckruf-Ticket wurde erstellt.',
+              customerName,
+              customerPhone: ticket.customer_phone,
+              preferredTime,
+              preferredStylist: staff.matchedName ?? staff.requested,
+              staffId: staff.staffId,
+              service,
+            };
+          } catch (e: unknown) {
+            const code = (e as { code?: string })?.code;
+            req.log.error(
+              {
+                err: e instanceof Error ? e.message : String(e),
+                code,
+                orgId: orgIdForBook,
+                callId,
+              },
+              'retell calendar.book fallback ticket failed',
+            );
+            result = {
+              ok: false,
+              status: 'failed',
+              fallback: false,
+              error: booking.error ?? 'CALENDAR_BOOK_FAILED',
+              fallbackError: code ?? 'TICKET_CREATE_FAILED',
+              chipyBookingId: booking.chipyBookingId ?? null,
+              externalResults: booking.externalResults ?? [],
+              partial: booking.partial ?? false,
+              customerName,
+              customerPhone,
+              preferredTime,
+              preferredStylist: staff.matchedName ?? staff.requested,
+              staffId: staff.staffId,
+              service,
+            };
+          }
+        } else {
+          const sms = await sendBookingConfirmationSms({
+            to: customerPhone,
+            businessName,
+            customerName,
+            service,
+            preferredTime,
+            logger: req.log,
+          });
+          result = {
+            ok: booking.ok,
+            status: booking.ok ? 'confirmed' : 'failed',
+            eventId: booking.eventId ?? null,
+            bookingId: booking.bookingId ?? null,
+            chipyBookingId: booking.chipyBookingId ?? null,
+            externalResults: booking.externalResults ?? [],
+            partial: booking.partial ?? false,
+            error: booking.error ?? null,
+            smsSent: sms.ok,
+            smsError: sms.ok ? null : sms.error,
+            customerName,
+            customerPhone,
+            preferredTime,
+            preferredStylist: staff.matchedName ?? staff.requested,
+            staffId: staff.staffId,
+            service,
+          };
+        }
       }
     } else {
       // Fallback: no org/calendar — confirm as demo
@@ -922,6 +1184,26 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         service: args.service ?? null,
         notes: args.notes ?? null,
       };
+    }
+
+    if (orgIdForBook) {
+      await maybeUpsertCustomerFromTool({
+        tenantId: signedTenantIdForBook ?? orgIdForBook,
+        orgId: orgIdForBook,
+        callId,
+        customerName: (result.customerName as string | undefined) ?? (args.customerName as string | undefined),
+        customerPhone: (result.customerPhone as string | undefined) ?? await resolveCallerPhone(body, args, callId),
+        customerType: 'unknown',
+        details: {
+          service: result.service,
+          preferredTime: result.preferredTime,
+          preferredStylist: result.preferredStylist,
+          bookingStatus: result.status,
+          source: 'calendar.book',
+        },
+        notes: args.notes as string | undefined,
+        log: req.log,
+      });
     }
 
     await appendTraceEvent({
@@ -1041,6 +1323,23 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         smsSent: sms.ok,
         smsError: sms.ok ? null : sms.error,
       };
+
+      await maybeUpsertCustomerFromTool({
+        tenantId,
+        orgId,
+        callId,
+        customerName: row.customer_name,
+        customerPhone: row.customer_phone,
+        customerType: 'unknown',
+        details: {
+          service: row.service,
+          preferredTime: row.preferred_time,
+          reason: row.reason,
+          source: 'ticket.create',
+        },
+        notes: row.notes,
+        log: req.log,
+      });
 
       await appendTraceEvent({
         type: 'tool_result',

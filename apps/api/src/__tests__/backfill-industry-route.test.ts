@@ -144,8 +144,8 @@ describe('POST /admin/agents/backfill-industry — route integration', () => {
     mockClientQuery
       // BEGIN
       .mockResolvedValueOnce({ rowCount: 0, rows: [] })
-      // pg_advisory_xact_lock
-      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      // pg_try_advisory_xact_lock
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ locked: true }] })
       // SELECT cfg → empty
       .mockResolvedValueOnce({ rowCount: 0, rows: [] })
       // ROLLBACK
@@ -165,7 +165,7 @@ describe('POST /admin/agents/backfill-industry — route integration', () => {
     const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
     mockClientQuery
       .mockResolvedValueOnce({ rowCount: 0, rows: [] }) // BEGIN
-      .mockResolvedValueOnce({ rowCount: 0, rows: [] }) // lock
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ locked: true }] }) // lock
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ org_id: 'org1', industry: 'restaurant' }] }) // SELECT cfg
       .mockResolvedValueOnce({ rowCount: 0, rows: [] }); // ROLLBACK
 
@@ -184,7 +184,7 @@ describe('POST /admin/agents/backfill-industry — route integration', () => {
     const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
     mockClientQuery
       .mockResolvedValueOnce({ rowCount: 0, rows: [] }) // BEGIN
-      .mockResolvedValueOnce({ rowCount: 0, rows: [] }) // lock
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ locked: true }] }) // lock
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ org_id: 'org1', industry: null }] }) // SELECT cfg
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ cnt: '42' }] }) // SELECT COUNT transcripts
       .mockResolvedValueOnce({ rowCount: 0, rows: [] }); // ROLLBACK
@@ -210,7 +210,7 @@ describe('POST /admin/agents/backfill-industry — route integration', () => {
     const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
     mockClientQuery
       .mockResolvedValueOnce({ rowCount: 0, rows: [] }) // BEGIN
-      .mockResolvedValueOnce({ rowCount: 0, rows: [] }) // lock
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ locked: true }] }) // lock
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ org_id: 'org1', industry: null }] }) // SELECT cfg
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ cnt: '500' }] }) // COUNT transcripts
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ tenant_id: 'demo' }] }) // UPDATE configs
@@ -240,7 +240,7 @@ describe('POST /admin/agents/backfill-industry — route integration', () => {
     expect(phase2Sql).toContain('LIMIT $3');
   });
 
-  it('uses pg_advisory_xact_lock with a deterministic key for the tenantId', async () => {
+  it('uses pg_try_advisory_xact_lock with a deterministic key for the tenantId', async () => {
     // Codex Round-16 (E3): the lock is the advisory_xact_lock that serializes
     // concurrent admin calls per-tenant. Without it, two parallel POSTs both
     // pre-pass the 409-gate and both proceed to UPDATE — the conditional
@@ -251,7 +251,7 @@ describe('POST /admin/agents/backfill-industry — route integration', () => {
     const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
     mockClientQuery
       .mockResolvedValueOnce({ rowCount: 0, rows: [] }) // BEGIN
-      .mockResolvedValueOnce({ rowCount: 0, rows: [] }) // pg_advisory_xact_lock
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ locked: true }] }) // pg_try_advisory_xact_lock
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ org_id: 'org1', industry: null }] }) // SELECT cfg
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ cnt: '0' }] }) // COUNT
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ tenant_id: 'demo' }] }) // UPDATE configs
@@ -267,7 +267,7 @@ describe('POST /admin/agents/backfill-industry — route integration', () => {
 
     // Find the advisory-lock SELECT and check the key shape.
     const lockCall = mockClientQuery.mock.calls.find(
-      (c) => typeof c[0] === 'string' && (c[0] as string).includes('pg_advisory_xact_lock'),
+      (c) => typeof c[0] === 'string' && (c[0] as string).includes('pg_try_advisory_xact_lock'),
     );
     expect(lockCall).toBeDefined();
     expect((lockCall![0] as string)).toContain('$1::bigint');
@@ -296,7 +296,7 @@ describe('POST /admin/agents/backfill-industry — route integration', () => {
     const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
     mockClientQuery
       .mockResolvedValueOnce({ rowCount: 0, rows: [] }) // BEGIN
-      .mockResolvedValueOnce({ rowCount: 0, rows: [] }) // pg_advisory_xact_lock (waits then acquires)
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ locked: true }] }) // pg_try_advisory_xact_lock
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ org_id: 'org1', industry: 'restaurant' }] }) // SELECT cfg — first call already wrote
       .mockResolvedValueOnce({ rowCount: 0, rows: [] }); // ROLLBACK
 
@@ -318,7 +318,7 @@ describe('POST /admin/agents/backfill-industry — route integration', () => {
     const app = await buildApp({ admin: true, aud: 'phonbot:admin', email: 'a@b.de' });
     mockClientQuery
       .mockResolvedValueOnce({ rowCount: 0, rows: [] })
-      .mockResolvedValueOnce({ rowCount: 0, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ locked: true }] })
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ org_id: 'org1', industry: null }] })
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ cnt: '0' }] })
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ tenant_id: 'demo' }] })

@@ -36,6 +36,8 @@ import {
 import { syncOpeningHoursToChipy } from './opening-hours-sync.js';
 import { PLANS, type PlanId } from './billing.js';
 import { invalidateInboundWebhooksCache } from './inbound-webhooks.js';
+import { isVoiceAllowedForOrg } from './voice-ownership.js';
+import { customerModuleActiveForAgentConfig, customerModuleStatus } from './customers.js';
 
 const AgentConfigSchema = z.object({
   tenantId: z.string().min(1).default('demo'),
@@ -117,6 +119,13 @@ const AgentConfigSchema = z.object({
   // never touched the toggle. Optional + treat `undefined` as legacy-on at
   // every consumer site (`!== false` checks instead of `=== true`).
   recordCalls: z.boolean().optional(),
+  customerModule: z.object({
+    enabled: z.boolean().optional().default(false),
+    // Server-only flag. The API sets this for info@mindrails.de so the module
+    // can be tested outside a hairdresser-tagged agent without exposing it as
+    // a client-controlled permission bit.
+    mindrailsInternal: z.boolean().optional(),
+  }).optional(),
 
   // Retell AI references (set after first deploy)
   retellAgentId: z.string().optional(),
@@ -228,11 +237,39 @@ async function applyIntegrationEncryption(
  * Every HTTP response that returns AgentConfig must funnel through this.
  */
 function toClientConfig(config: AgentConfig): AgentConfig {
+  let out = config;
+  const customerModule = (config as Record<string, unknown>).customerModule as
+    | { enabled?: boolean; mindrailsInternal?: boolean }
+    | undefined;
+  if (customerModule?.mindrailsInternal !== undefined) {
+    const { mindrailsInternal: _mindrailsInternal, ...clientCustomerModule } = customerModule;
+    out = { ...config, customerModule: clientCustomerModule } as AgentConfig;
+  }
   const integrations = (config as Record<string, unknown>).apiIntegrations as
     | ApiIntegration[] | undefined;
-  if (!integrations?.length) return config;
+  if (!integrations?.length) return out;
   const masked = maskApiIntegrationsForClient(integrations);
-  return { ...config, apiIntegrations: masked } as AgentConfig;
+  return { ...out, apiIntegrations: masked } as AgentConfig;
+}
+
+async function applyCustomerModuleServerFlags(raw: Record<string, unknown>, orgId: string, userId: string): Promise<Record<string, unknown>> {
+  const incoming = raw.customerModule;
+  if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) return raw;
+  const requested = incoming as Record<string, unknown>;
+  const status = await customerModuleStatus(orgId, userId);
+  const requestedForHairdresser = raw.industry === 'hairdresser';
+  if (requested.enabled === true && !status.available && !requestedForHairdresser) {
+    const err = new Error('CUSTOMER_MODULE_UNAVAILABLE') as Error & { statusCode?: number };
+    err.statusCode = 403;
+    throw err;
+  }
+  return {
+    ...raw,
+    customerModule: {
+      enabled: requested.enabled === true,
+      mindrailsInternal: status.reason === 'mindrails',
+    },
+  };
 }
 
 /**
@@ -267,8 +304,16 @@ async function enforcePlanAgentLimitOnCreate(orgId: string, tenantId: string): P
   }
 }
 
+async function enforceVoiceAllowedForOrg(orgId: string, config: AgentConfig): Promise<void> {
+  if (await isVoiceAllowedForOrg(orgId, config.voice)) return;
+  const err = new Error('VOICE_NOT_ALLOWED') as Error & { statusCode?: number };
+  err.statusCode = 403;
+  throw err;
+}
+
 async function writeConfig(config: AgentConfig, orgId?: string, actorUserId?: string): Promise<AgentConfig> {
   const parsed = parseAgentConfig(config);
+  if (orgId) await enforceVoiceAllowedForOrg(orgId, parsed);
   const withIntegrations = await applyIntegrationEncryption(parsed, orgId);
   const normalized = await normalizeKnowledgeSources(withIntegrations as unknown as Record<string, unknown>) as AgentConfig;
   if (!pool) {
@@ -417,6 +462,45 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
     });
   }
 
+  if (customerModuleActiveForAgentConfig(config)) {
+    tools.push({
+      type: 'custom',
+      name: 'customer_lookup',
+      description: 'Silent customer lookup for hairdresser agents. Use at the beginning of an inbound call with the caller phone number, and later with a spelled name if phone did not match. Do not mention the lookup to the caller.',
+      url: `${webhookBaseUrl}/retell/tools/customer.lookup?${signedQuery}`,
+      parameters: {
+        type: 'object',
+        properties: {
+          customerPhone: { type: 'string', description: 'Caller phone number. Prefer Retell from_number when available.' },
+          customerName: { type: 'string', description: 'Full customer name, especially when the caller claims to be an existing customer but the number did not match.' },
+        },
+      },
+    });
+    tools.push({
+      type: 'custom',
+      name: 'customer_upsert',
+      description: 'Silently create or update a hairdresser customer after collecting minimal booking details. Do not tell the caller that a database tool is running.',
+      url: `${webhookBaseUrl}/retell/tools/customer.upsert?${signedQuery}`,
+      parameters: {
+        type: 'object',
+        required: ['customerName'],
+        properties: {
+          customerName: { type: 'string' },
+          customerPhone: { type: 'string', description: 'Caller phone number. Optional when Retell provides from_number.' },
+          email: { type: 'string' },
+          customerType: { type: 'string', enum: ['new', 'existing', 'unknown'] },
+          service: { type: 'string', description: 'Requested salon service.' },
+          preferredTime: { type: 'string', description: 'Requested or confirmed appointment time.' },
+          preferredStylist: { type: 'string' },
+          hairLength: { type: 'string', description: 'kurz, schulterlang, lang, or caller wording.' },
+          hairHistory: { type: 'string', description: 'Recent color, bleaching, smoothing, perm or other chemical treatment.' },
+          allergies: { type: 'string', description: 'Allergies, intolerances, sensitive scalp, only if relevant.' },
+          notes: { type: 'string' },
+        },
+      },
+    });
+  }
+
   if (enabled.has('calendar.findSlots')) {
     tools.push({
       type: 'custom',
@@ -430,6 +514,7 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
           service: { type: 'string', description: 'Requested service, if known.' },
           range: { type: 'string', description: 'Requested date range, e.g. next week.' },
           preferredTime: { type: 'string', description: 'Preferred time or day from the customer.' },
+          preferredStylist: { type: 'string', description: 'Requested staff member/stylist name, if the caller names one.' },
         },
       },
     });
@@ -450,6 +535,7 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
           customerPhone: { type: 'string', description: 'Caller phone number. Optional when Retell provides from_number.' },
           preferredTime: { type: 'string', description: 'Confirmed slot/time.' },
           service: { type: 'string', description: 'Booked service.' },
+          preferredStylist: { type: 'string', description: 'Requested staff member/stylist name, if any.' },
           notes: { type: 'string' },
         },
       },
@@ -634,6 +720,7 @@ function buildPostCallAnalysisData(config: AgentConfig): PostCallAnalysisField[]
 }
 
 export async function deployToRetell(config: AgentConfig, orgId?: string): Promise<AgentConfig> {
+  if (orgId) await enforceVoiceAllowedForOrg(orgId, config);
   const preparedConfig = await syncRetellKnowledgeBase(config as unknown as Record<string, unknown>, orgId) as AgentConfig;
   const webhookBase = getWebhookBaseUrl();
   // Platform-Baseline-Prefix: admin-edited quality floor (spelling alphabet,
@@ -1274,10 +1361,19 @@ export async function registerAgentConfig(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Not your agent' });
     }
 
+    let rawWithServerFlags: Record<string, unknown>;
+    try {
+      rawWithServerFlags = await applyCustomerModuleServerFlags(raw, orgId, userId);
+    } catch (err) {
+      const e = err as Error & { statusCode?: number };
+      if (e.statusCode === 403) return reply.status(403).send({ error: e.message });
+      throw err;
+    }
+
     const existing = await loadOwnedConfigRow(tenantId, orgId);
     const serverIds = existing.exists ? existing.data : {} as Partial<AgentConfig>;
     const body = parseAgentConfig({
-      ...raw,
+      ...rawWithServerFlags,
       tenantId,
       retellLlmId: serverIds.retellLlmId,
       retellAgentId: serverIds.retellAgentId,
@@ -1297,6 +1393,12 @@ export async function registerAgentConfig(app: FastifyInstance) {
           ...e.details,
         });
       }
+      if (e.message === 'VOICE_NOT_ALLOWED') {
+        return reply.status(403).send({
+          error: 'VOICE_NOT_ALLOWED',
+          message: 'Diese geklonte Stimme gehoert nicht zu deiner Organisation.',
+        });
+      }
       if (e.statusCode === 409) return reply.status(409).send({ error: e.message });
       throw err;
     }
@@ -1313,10 +1415,19 @@ export async function registerAgentConfig(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Not your agent' });
     }
 
+    let rawWithServerFlags: Record<string, unknown>;
+    try {
+      rawWithServerFlags = await applyCustomerModuleServerFlags(raw, orgId, userId);
+    } catch (err) {
+      const e = err as Error & { statusCode?: number };
+      if (e.statusCode === 403) return reply.status(403).send({ error: e.message });
+      throw err;
+    }
+
     const existing = await loadOwnedConfigRow(tenantId, orgId);
     const serverIds = existing.exists ? existing.data : {} as Partial<AgentConfig>;
     const body = parseAgentConfig({
-      ...raw,
+      ...rawWithServerFlags,
       tenantId,
       retellLlmId: serverIds.retellLlmId,
       retellAgentId: serverIds.retellAgentId,
@@ -1325,7 +1436,19 @@ export async function registerAgentConfig(app: FastifyInstance) {
       retellKnowledgeBaseId: (serverIds as Record<string, unknown>).retellKnowledgeBaseId,
       knowledgeBaseSignature: (serverIds as Record<string, unknown>).knowledgeBaseSignature,
     });
-    const deployed = await deployToRetell(body, orgId);
+    let deployed: AgentConfig;
+    try {
+      deployed = await deployToRetell(body, orgId);
+    } catch (err) {
+      const e = err as Error & { statusCode?: number };
+      if (e.message === 'VOICE_NOT_ALLOWED') {
+        return reply.status(403).send({
+          error: 'VOICE_NOT_ALLOWED',
+          message: 'Diese geklonte Stimme gehoert nicht zu deiner Organisation.',
+        });
+      }
+      throw err;
+    }
     let saved: AgentConfig;
     try {
       saved = await writeConfig(deployed, orgId, userId);
@@ -1336,6 +1459,12 @@ export async function registerAgentConfig(app: FastifyInstance) {
           error: 'AGENTS_LIMIT_REACHED',
           message: `Dein Plan erlaubt maximal ${e.details?.limit ?? '?'} Agent(s). Upgrade für mehr.`,
           ...e.details,
+        });
+      }
+      if (e.message === 'VOICE_NOT_ALLOWED') {
+        return reply.status(403).send({
+          error: 'VOICE_NOT_ALLOWED',
+          message: 'Diese geklonte Stimme gehoert nicht zu deiner Organisation.',
         });
       }
       if (e.statusCode === 409) return reply.status(409).send({ error: e.message });

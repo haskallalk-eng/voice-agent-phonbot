@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { setAccessToken } from './api';
+import { broadcastSessionCleared, refreshAccessToken, setAccessToken, subscribeAuthBroadcast } from './api';
 
 export type AuthUser = {
   id: string;
@@ -77,6 +77,17 @@ function hasSessionHint(): boolean {
   return document.cookie.split(';').some((c) => c.trim().startsWith('vas_has_session='));
 }
 
+function clearClientAuthStorage() {
+  try {
+    for (const store of [localStorage, sessionStorage]) {
+      for (let i = store.length - 1; i >= 0; i--) {
+        const k = store.key(i);
+        if (k && (k.startsWith('phonbot_') || k === 'vas_token')) store.removeItem(k);
+      }
+    }
+  } catch { /* storage unavailable */ }
+}
+
 // Try to swap the refresh cookie for a fresh access token. Returns the new
 // token on success, null on failure (refresh expired/revoked → user must log in).
 // Publishes the token into the api.ts module store so request() can pick it up.
@@ -85,20 +96,7 @@ async function tryRefresh(): Promise<string | null> {
   // visitor on the landing page, no point asking the server.
   if (!hasSessionHint()) return null;
 
-  const refreshUrls = ['/api/auth/refresh', '/auth/refresh'];
-  for (const url of refreshUrls) {
-    try {
-      const data = await fetchJson<{ token: string }>(url, { method: 'POST' });
-      if (data?.token) {
-        setAccessToken(data.token);
-        return data.token;
-      }
-    } catch {
-      // Try the legacy visible path once. Older cookies were accidentally scoped
-      // to /auth, so the browser will not send them to /api/auth/refresh.
-    }
-  }
-  return null;
+  return refreshAccessToken();
 }
 
 type AuthResponse = { token: string; user: AuthUser; org: AuthOrg };
@@ -116,6 +114,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setAccessToken(state.token);
   }, [state.token]);
+
+  useEffect(() => subscribeAuthBroadcast((message) => {
+    if (message.type === 'refresh-success') {
+      setState((s) => ({ ...s, token: message.token }));
+    } else if (message.type === 'session-cleared') {
+      clearClientAuthStorage();
+      setAccessToken(null);
+      setState({ token: null, user: null, org: null, bootstrapping: false });
+    }
+  }), []);
 
   // On mount: refresh cookie → access token → /auth/me. If refresh fails,
   // user is truly logged out. The refresh cookie is httpOnly so JS can't
@@ -210,16 +218,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Wipe any stale app-state keys that should not survive a logout (F-08).
     // Covers localStorage and sessionStorage so a subsequent user doesn't see
     // the previous account's onboarding progress / UI prefs.
-    try {
-      for (const store of [localStorage, sessionStorage]) {
-        for (let i = store.length - 1; i >= 0; i--) {
-          const k = store.key(i);
-          if (k && (k.startsWith('phonbot_') || k === 'vas_token')) store.removeItem(k);
-        }
-      }
-    } catch { /* storage unavailable */ }
+    clearClientAuthStorage();
     setAccessToken(null);
     setState({ token: null, user: null, org: null, bootstrapping: false });
+    broadcastSessionCleared();
   }, []);
 
   return (

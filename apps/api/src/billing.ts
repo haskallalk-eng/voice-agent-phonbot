@@ -489,45 +489,66 @@ async function syncSubscription(sub: Stripe.Subscription) {
   const plan = Object.values(PLANS).find((p) => p.stripePriceId === priceId || p.stripePriceIdYearly === priceId)?.id ?? 'free';
   const minutesLimit = PLANS[plan as PlanId]?.minutesLimit ?? 30;
 
-  // Check if this is a period renewal (reset minutes_used).
-  // Stripe sends current_period_end as Unix seconds; Postgres stores TIMESTAMPTZ.
-  // Comparing via `new Date(oldEnd).getTime() !== cpe*1000` drifts under DST
-  // transitions and can mis-fire in both directions (false reset OR missed reset).
-  // Compare via EXTRACT(EPOCH) in SQL so both sides are integer Unix seconds.
   const currentPeriodEnd = (sub as unknown as { current_period_end?: number }).current_period_end ?? null;
-  let resetMinutes = false;
-  if (currentPeriodEnd && pool) {
-    const existing = await pool.query(
-      `SELECT EXTRACT(EPOCH FROM current_period_end)::bigint AS period_end_unix FROM orgs WHERE id = $1`,
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Serialize read -> reset decision -> update for this org. Webhook and
+    // immediate sync can run in parallel; the row lock keeps minutes reset
+    // decisions from being based on the same stale current_period_end.
+    const existing = await client.query(
+      `SELECT EXTRACT(EPOCH FROM current_period_end)::bigint AS period_end_unix
+         FROM orgs
+        WHERE id = $1
+        FOR UPDATE`,
       [orgId],
     );
+    if (!existing.rowCount) {
+      await client.query('COMMIT');
+      log.warn({ orgId, subId: sub.id }, 'billing: syncSubscription org row missing');
+      return;
+    }
+
+    // Check if this is a period renewal (reset minutes_used).
+    // Stripe sends current_period_end as Unix seconds; Postgres stores TIMESTAMPTZ.
+    // Compare via EXTRACT(EPOCH) in SQL so both sides are integer Unix seconds.
+    let resetMinutes = false;
     const oldEndUnix = existing.rows[0]?.period_end_unix;
     // oldEndUnix is null when the org has never had a period set (first subscription).
     // We only reset when we have a previous period AND it's actually different.
-    if (oldEndUnix != null && Number(oldEndUnix) !== currentPeriodEnd) {
+    if (currentPeriodEnd != null && oldEndUnix != null && Number(oldEndUnix) !== currentPeriodEnd) {
       resetMinutes = true; // Period changed = new billing cycle
     }
-  }
 
-  await pool.query(
-    `UPDATE orgs SET
-      plan = $2,
-      plan_status = $3,
-      stripe_subscription_id = $4,
-      plan_interval = $5,
-      current_period_end = to_timestamp($6),
-      minutes_limit = $7${resetMinutes ? ',\n      minutes_used = 0' : ''}
-     WHERE id = $1`,
-    [
-      orgId,
-      plan,
-      sub.status,
-      sub.id,
-      sub.items.data[0]?.plan.interval ?? null,
-      currentPeriodEnd,
-      minutesLimit,
-    ],
-  );
+    await client.query(
+      `UPDATE orgs SET
+        plan = $2,
+        plan_status = $3,
+        stripe_subscription_id = $4,
+        plan_interval = $5,
+        current_period_end = to_timestamp($6),
+        minutes_limit = $7${resetMinutes ? ',\n        minutes_used = 0' : ''}
+       WHERE id = $1`,
+      [
+        orgId,
+        plan,
+        sub.status,
+        sub.id,
+        sub.items.data[0]?.plan.interval ?? null,
+        currentPeriodEnd,
+        minutesLimit,
+      ],
+    );
+
+    await client.query('COMMIT');
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch { /* ignore */ }
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────

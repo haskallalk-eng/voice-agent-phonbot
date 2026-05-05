@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { AgentConfig, CallRoutingRule, LiveWebAccess } from '../../lib/api.js';
+import type { AgentConfig, CalendarStatus, CallRoutingRule, LiveWebAccess } from '../../lib/api.js';
 import { ForwardingHint } from '../ForwardingHint.js';
 import { PasswordInput } from '../PasswordInput.js';
 import {
@@ -306,6 +306,20 @@ const CALENDAR_PROVIDERS: { id: 'google' | 'outlook' | 'calcom' | 'caldav'; Icon
   { id: 'caldav',  Icon: IconWebhook,     name: 'CalDAV',              desc: 'Nextcloud, iCloud, etc.' },
 ];
 
+function toUiCalendarProvider(provider: string): 'google' | 'outlook' | 'calcom' | null {
+  if (provider === 'google') return 'google';
+  if (provider === 'microsoft') return 'outlook';
+  if (provider === 'calcom') return 'calcom';
+  return null;
+}
+
+function toApiCalendarProvider(provider: string): 'google' | 'microsoft' | 'calcom' | undefined {
+  if (provider === 'google') return 'google';
+  if (provider === 'outlook' || provider === 'microsoft') return 'microsoft';
+  if (provider === 'calcom') return 'calcom';
+  return undefined;
+}
+
 function CalendarConnector({ integrations, onChange }: {
   integrations: AgentConfig['calendarIntegrations'] & {};
   onChange: (v: NonNullable<AgentConfig['calendarIntegrations']>) => void;
@@ -313,7 +327,7 @@ function CalendarConnector({ integrations, onChange }: {
   const [loading, setLoading] = useState(false);
   const [calcomKey, setCalcomKey] = useState('');
   const [showCalcomInput, setShowCalcomInput] = useState(false);
-  const [serverConnection, setServerConnection] = useState<{ connected: boolean; provider: string | null; email: string | null } | null>(null);
+  const [, setServerConnection] = useState<CalendarStatus | null>(null);
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const pollTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -331,19 +345,33 @@ function CalendarConnector({ integrations, onChange }: {
       const status = await getCalendarStatus();
       setServerConnection(status);
       // Sync server state into config integrations
-      if (status.connected && status.provider) {
+      const connectedProviders = status.connections?.filter((conn) => conn.connected)
+        ?? (status.connected && status.provider ? [{ provider: status.provider, email: status.email }] : []);
+      if (connectedProviders.length) {
         const existing = integrations ?? [];
-        const providerName = CALENDAR_PROVIDERS.find(p => p.id === status.provider)?.name ?? status.provider;
-        const alreadyExists = existing.find(c => c.provider === status.provider);
-        if (!alreadyExists) {
-          onChange([...existing, {
-            provider: status.provider as 'google' | 'outlook' | 'calcom' | 'caldav',
-            connected: true,
-            email: status.email ?? undefined,
-            label: providerName,
-          }]);
-        } else if (!alreadyExists.connected) {
-          onChange(existing.map(c => c.provider === status.provider ? { ...c, connected: true, email: status.email ?? undefined } : c));
+        let next = existing;
+        for (const conn of connectedProviders) {
+          const uiProvider = toUiCalendarProvider(conn.provider);
+          if (!uiProvider) continue;
+          const providerName = CALENDAR_PROVIDERS.find(p => p.id === uiProvider)?.name ?? conn.provider;
+          const alreadyExists = next.find(c => c.provider === uiProvider || (uiProvider === 'outlook' && String(c.provider) === 'microsoft'));
+          if (!alreadyExists) {
+            next = [...next, {
+              provider: uiProvider,
+              connected: true,
+              email: conn.email ?? undefined,
+              label: providerName,
+            }];
+          } else if (!alreadyExists.connected || alreadyExists.email !== (conn.email ?? undefined)) {
+            next = next.map(c => (
+              c.provider === alreadyExists.provider
+                ? { ...c, provider: uiProvider, connected: true, email: conn.email ?? undefined, label: providerName }
+                : c
+            ));
+          }
+        }
+        if (next !== existing) {
+          onChange(next);
         }
       }
     } catch { /* non-fatal */ }
@@ -360,7 +388,7 @@ function CalendarConnector({ integrations, onChange }: {
         if (pollRef.current) clearInterval(pollRef.current);
         pollRef.current = setInterval(async () => {
           const s = await getCalendarStatus();
-          if (s.connected && s.provider === 'google') {
+          if (s.connections?.some((conn) => conn.provider === 'google' && conn.connected) || (s.connected && s.provider === 'google')) {
             if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
             void loadStatus();
           }
@@ -373,7 +401,7 @@ function CalendarConnector({ integrations, onChange }: {
         if (pollRef.current) clearInterval(pollRef.current);
         pollRef.current = setInterval(async () => {
           const s = await getCalendarStatus();
-          if (s.connected && s.provider === 'microsoft') {
+          if (s.connections?.some((conn) => conn.provider === 'microsoft' && conn.connected) || (s.connected && s.provider === 'microsoft')) {
             if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
             void loadStatus();
           }
@@ -408,11 +436,13 @@ function CalendarConnector({ integrations, onChange }: {
   }
 
   async function handleDisconnect(provider: string) {
+    const apiProvider = toApiCalendarProvider(provider);
+    if (!apiProvider) return;
     setLoading(true);
     try {
-      await disconnectCalendar();
+      await disconnectCalendar(apiProvider);
       setServerConnection(null);
-      onChange((integrations ?? []).filter(c => c.provider !== provider));
+      onChange((integrations ?? []).filter(c => c.provider !== provider && c.provider !== apiProvider));
     } catch { /* non-fatal */ }
     setLoading(false);
   }
