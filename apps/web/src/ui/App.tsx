@@ -300,11 +300,11 @@ function Dashboard() {
           {page === 'agent' && <AgentBuilder onNavigate={setPage} />}
           {page === 'test' && <TestConsole onNavigate={setPage} />}
           {page === 'tickets' && <TicketInbox focusId={focusId} />}
-          {page === 'customers' && <CustomersPage />}
+          {page === 'customers' && <CustomersPage focusCustomerId={focusId} />}
           {page === 'logs' && <CallLog focusId={focusId} />}
           {page === 'billing' && <BillingPage />}
           {page === 'phone' && <PhoneManager onNavigate={setPage as (page: string) => void} />}
-          {page === 'calendar' && <CalendarPage focusBookingId={focusId} />}
+          {page === 'calendar' && <CalendarPage focusBookingId={focusId} onNavigate={navigate} />}
           {page === 'insights' && <InsightsPage />}
         </div>
       </main>
