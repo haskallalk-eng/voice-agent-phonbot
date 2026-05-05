@@ -228,7 +228,11 @@ function checkCanonicalRedirectConfig() {
   const nginx = fs.existsSync('apps/web/nginx.conf') ? fs.readFileSync('apps/web/nginx.conf', 'utf8') : '';
   if (!/redir\s+\/index\.html\s+\/\s+301/.test(caddy)) fail('Caddyfile: /index.html canonical redirect missing');
   if (!/redir\s+\/friseur\/index\.html\s+\/friseur\/\s+301/.test(caddy)) fail('Caddyfile: branch /index.html canonical redirects missing');
+  if (!/path[\s\S]*\/calendar\s+\/calendar\/\*/.test(caddy)) fail('Caddyfile: /calendar noindex matcher must cover exact and nested paths');
   if (!/return\s+301\s+\/\$1/.test(nginx)) fail('nginx.conf: nested /index.html redirect missing');
+  if (!/absolute_redirect\s+off;/.test(nginx)) fail('nginx.conf: nginx must not emit scheme-downgraded absolute redirects behind Caddy');
+  if (/try_files\s+\$uri\s+\$uri\/\s+=404/.test(nginx)) fail('nginx.conf: directory try_files can emit http:// redirects behind Caddy');
+  if (!/try_files\s+\$uri\/index\.html\s+\$uri\s+=404/.test(nginx)) fail('nginx.conf: SEO directory routes should serve index.html without nginx redirects');
   if (/Cache-Control\s+"no-cache,\s*no-store,\s*must-revalidate"[\s\S]{0,160}try_files\s+\$uri\s+\$uri\/\s+=404/.test(nginx)) {
     fail('nginx.conf: public SEO routes still use no-store');
   }
@@ -252,7 +256,7 @@ function checkServerConfig() {
   if (/try_files\s+\$uri\s+\$uri\/\s+\/index\.html/.test(nginx)) {
     fail('nginx.conf: catch-all SPA fallback still creates indexable soft-404s');
   }
-  if (!/try_files\s+\$uri\s+\$uri\/\s+=404/.test(nginx)) {
+  if (!/try_files\s+\$uri\/index\.html\s+\$uri\s+=404/.test(nginx)) {
     fail('nginx.conf: unknown routes should resolve to 404');
   }
 }

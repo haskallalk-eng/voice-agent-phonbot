@@ -35,7 +35,7 @@ www.{$DOMAIN:phonbot.de} {
     # X-Robots-Tag instead of robots.txt alone so crawlers can actually see
     # the noindex signal.
     @nonpublic {
-        path /dashboard /dashboard/* /admin /admin/* /onboarding /onboarding/* /reset-password /login /register /app /app/* /settings /settings/* /auth /auth/* /api /api/* /billing* /calendar* /retell* /webhook* /outbound* /health
+        path /dashboard /dashboard/* /admin /admin/* /onboarding /onboarding/* /reset-password /reset-password/* /login /register /app /app/* /settings /settings/* /auth /auth/* /api /api/* /billing /billing/* /calendar /calendar/* /retell /retell/* /webhook /webhook/* /outbound /outbound/* /health
     }
     header @nonpublic X-Robots-Tag "noindex, nofollow, noarchive"
 
