@@ -8,6 +8,7 @@ import {
   getCustomers,
   saveAgentConfig,
   updateCustomer,
+  ApiError,
   type AgentConfig,
   type Customer,
   type CustomerModuleConfig,
@@ -75,6 +76,26 @@ function isValidOptionalEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(trimmed);
 }
 
+const CUSTOMER_FOCUS_STORAGE_KEY = 'phonbot_focus_customer';
+
+function readStoredCustomerFocus(id: string | null | undefined): string | null {
+  if (!id) return null;
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(CUSTOMER_FOCUS_STORAGE_KEY) ?? 'null') as { id?: string; search?: string } | null;
+    return parsed?.id === id && typeof parsed.search === 'string' ? parsed.search : null;
+  } catch {
+    return null;
+  }
+}
+
+function isInvalidCustomerEmailError(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    const code = error.parsedBody?.error;
+    return code === 'INVALID_CUSTOMER_EMAIL' || /invalid email/i.test(error.userMessage);
+  }
+  return error instanceof Error && /invalid email|INVALID_CUSTOMER_EMAIL/i.test(error.message);
+}
+
 function normalizeQuestionId(label: string): string {
   const slug = label
     .trim()
@@ -135,7 +156,69 @@ function TogglePill({ active, disabled = false }: { active: boolean; disabled?: 
   );
 }
 
-export function CustomersPage() {
+function customerTypeLabel(customer: Customer): string {
+  return customer.customer_type === 'existing' ? 'Bestandskunde' : customer.customer_type === 'pending' ? 'Pending' : customer.customer_type === 'new' ? 'Neukunde' : 'Unklar';
+}
+
+function customerDetailRows(customer: Customer, questions: CustomerQuestionConfig[]) {
+  const rows: Array<{ label: string; value: string }> = [];
+  for (const question of questions) {
+    if (!question.detailsKey) continue;
+    const value = detailValue(customer, question.detailsKey);
+    if (value) rows.push({ label: question.label, value });
+  }
+
+  const customFields = customer.details?.customFields;
+  if (customFields && typeof customFields === 'object' && !Array.isArray(customFields)) {
+    for (const [label, raw] of Object.entries(customFields as Record<string, unknown>)) {
+      if (typeof raw === 'string' && raw.trim()) rows.push({ label, value: raw.trim() });
+    }
+  }
+
+  return rows;
+}
+
+function CustomerDetails({ customer, questions }: { customer: Customer; questions: CustomerQuestionConfig[] }) {
+  const rows = customerDetailRows(customer, questions);
+  return (
+    <div className="mx-4 mb-4 rounded-2xl border border-orange-500/15 bg-gradient-to-br from-orange-500/[0.08] via-white/[0.035] to-cyan-500/[0.06] p-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.16em] text-white/30">Kontakt</p>
+          <p className="mt-1 text-sm text-white/80">{customer.phone_normalized ?? customer.phone ?? 'Keine Nummer gespeichert'}</p>
+          <p className="text-xs text-white/40">{customer.email ?? 'Keine E-Mail gespeichert'}</p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.16em] text-white/30">Status</p>
+          <p className="mt-1 text-sm text-white/80">{customerTypeLabel(customer)}</p>
+          <p className="text-xs text-white/40">Aktualisiert: {dateLabel(customer.updated_at)}</p>
+        </div>
+      </div>
+
+      {rows.length > 0 ? (
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          {rows.map((row) => (
+            <div key={`${row.label}:${row.value}`} className="rounded-xl border border-white/8 bg-black/15 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.13em] text-white/28">{row.label}</p>
+              <p className="mt-1 text-sm text-white/75">{row.value}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-4 rounded-xl border border-white/8 bg-black/15 px-3 py-2 text-sm text-white/35">Noch keine Zusatzdetails gespeichert.</p>
+      )}
+
+      {customer.notes && (
+        <div className="mt-3 rounded-xl border border-white/8 bg-black/15 px-3 py-2">
+          <p className="text-[10px] uppercase tracking-[0.13em] text-white/28">Interne Notiz</p>
+          <p className="mt-1 text-sm text-white/70 whitespace-pre-wrap">{customer.notes}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | null } = {}) {
   const [status, setStatus] = useState<CustomerModuleStatus | null>(null);
   const [config, setConfig] = useState<AgentConfig | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -147,6 +230,8 @@ export function CustomersPage() {
   const [customQuestion, setCustomQuestion] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
   const [showEmailHint, setShowEmailHint] = useState(false);
+  const [emailRejected, setEmailRejected] = useState(false);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(focusCustomerId ?? null);
 
   const moduleConfig = useMemo(() => normalizeModule(config?.customerModule), [config?.customerModule]);
   const enabled = status?.available ? moduleConfig.enabled !== false : false;
@@ -157,6 +242,7 @@ export function CustomersPage() {
   const existingCount = useMemo(() => customers.filter((c) => c.customer_type === 'existing').length, [customers]);
   const pendingCount = useMemo(() => customers.filter((c) => c.customer_type === 'pending').length, [customers]);
   const emailInvalid = !isValidOptionalEmail(form.email);
+  const showEmailValidation = showEmailHint && (emailInvalid || emailRejected);
 
   async function load() {
     setLoading(true);
@@ -169,8 +255,14 @@ export function CustomersPage() {
       setStatus(nextStatus);
       setConfig(nextConfig);
       if (nextStatus.available) {
-        const list = await getCustomers(search);
+        let list = await getCustomers(search);
+        const focusSearch = readStoredCustomerFocus(focusCustomerId);
+        if (focusCustomerId && !search.trim() && focusSearch && !(list.items ?? []).some((customer) => customer.id === focusCustomerId)) {
+          setSearch(focusSearch);
+          list = await getCustomers(focusSearch);
+        }
         setCustomers(list.items ?? []);
+        if (focusCustomerId) setSelectedCustomerId(focusCustomerId);
       } else {
         setCustomers([]);
       }
@@ -185,6 +277,19 @@ export function CustomersPage() {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!focusCustomerId || loading) return;
+    setSelectedCustomerId(focusCustomerId);
+    const timer = window.setTimeout(() => {
+      const el = document.querySelector<HTMLElement>(`[data-customer-id="${CSS.escape(focusCustomerId)}"]`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('focus-pulse');
+      window.setTimeout(() => el.classList.remove('focus-pulse'), 2200);
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [focusCustomerId, loading, customers]);
 
   async function saveModule(nextModule: CustomerModuleConfig, message: string) {
     if (!config) return;
@@ -270,6 +375,7 @@ export function CustomersPage() {
     if (!form.fullName.trim()) return;
     if (emailInvalid) {
       setShowEmailHint(true);
+      setEmailRejected(false);
       setError(null);
       setNotice(null);
       return;
@@ -302,10 +408,17 @@ export function CustomersPage() {
       });
       setForm(EMPTY_FORM);
       setShowEmailHint(false);
+      setEmailRejected(false);
       const list = await getCustomers(search);
       setCustomers(list.items ?? []);
       setNotice('Kunde als Bestandskunde gespeichert.');
     } catch (e: unknown) {
+      if (isInvalidCustomerEmailError(e)) {
+        setShowEmailHint(true);
+        setEmailRejected(true);
+        setError(null);
+        return;
+      }
       setError(e instanceof Error ? e.message : 'Kunde konnte nicht gespeichert werden.');
     } finally {
       setSaving(false);
@@ -508,19 +621,20 @@ export function CustomersPage() {
               onChange={(e) => {
                 const nextEmail = e.target.value;
                 setForm((f) => ({ ...f, email: nextEmail }));
+                setEmailRejected(false);
                 if (isValidOptionalEmail(nextEmail)) setShowEmailHint(false);
               }}
               placeholder="E-Mail optional"
-              aria-invalid={showEmailHint && emailInvalid}
-              aria-describedby={showEmailHint && emailInvalid ? 'customer-email-hint' : undefined}
+              aria-invalid={showEmailValidation}
+              aria-describedby={showEmailValidation ? 'customer-email-hint' : undefined}
               className={[
                 'w-full rounded-xl border bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none transition-colors',
-                showEmailHint && emailInvalid
+                showEmailValidation
                   ? 'border-amber-400/45 focus:border-amber-300/60'
                   : 'border-white/10 focus:border-orange-400/50',
               ].join(' ')}
             />
-            {showEmailHint && emailInvalid && (
+            {showEmailValidation && (
               <p id="customer-email-hint" className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/80">
                 Die E-Mail sieht noch unvollständig aus. Bitte prüfe sie, z.B. name@salon.de, oder lass das Feld leer.
               </p>
@@ -561,8 +675,22 @@ export function CustomersPage() {
               <div className="p-8 text-sm text-white/35">Laden...</div>
             ) : customers.length === 0 ? (
               <div className="p-8 text-sm text-white/35">Noch keine Kunden gespeichert.</div>
-            ) : customers.map((customer) => (
-              <div key={customer.id} className="p-4 flex gap-4 items-start">
+            ) : customers.map((customer) => {
+              const isOpen = selectedCustomerId === customer.id;
+              return (
+              <div key={customer.id} data-customer-id={customer.id} className={isOpen ? 'bg-white/[0.025]' : ''}>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedCustomerId(isOpen ? null : customer.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedCustomerId(isOpen ? null : customer.id);
+                    }
+                  }}
+                  className="p-4 flex gap-4 items-start cursor-pointer hover:bg-white/[0.025] transition-colors"
+                >
                 <div className="h-10 w-10 rounded-2xl bg-white/[0.06] text-white/45 flex items-center justify-center shrink-0">
                   <IconUser size={18} />
                 </div>
@@ -577,18 +705,13 @@ export function CustomersPage() {
                           ? 'border-orange-500/25 bg-orange-500/10 text-orange-100/80'
                           : 'border-white/10 text-white/35',
                     ].join(' ')}>
-                      {customer.customer_type === 'existing' ? 'Bestandskunde' : customer.customer_type === 'pending' ? 'Pending' : customer.customer_type === 'new' ? 'Neukunde' : 'Unklar'}
+                      {customerTypeLabel(customer)}
                     </span>
                   </div>
                   <p className="text-xs text-white/35 mt-1">{customer.phone_normalized ?? customer.phone ?? 'keine Nummer'} {customer.email ? ` - ${customer.email}` : ''}</p>
-                  <p className="text-xs text-white/30 mt-1">Zuletzt aktualisiert: {dateLabel(customer.updated_at)}</p>
-                  {(detailValue(customer, 'service') || detailValue(customer, 'hairLength') || customer.notes) && (
-                    <p className="text-xs text-white/45 mt-2 line-clamp-2">
-                      {[detailValue(customer, 'service'), detailValue(customer, 'hairLength'), customer.notes].filter(Boolean).join(' - ')}
-                    </p>
-                  )}
+                  <p className="text-xs text-white/30 mt-1">{isOpen ? 'Details geöffnet' : 'Anklicken, um Details zu sehen'} · Aktualisiert: {dateLabel(customer.updated_at)}</p>
                 </div>
-                <div className="flex shrink-0 flex-col gap-2 items-end">
+                <div className="flex shrink-0 flex-col gap-2 items-end" onClick={(e) => e.stopPropagation()}>
                   {customer.customer_type === 'pending' && (
                     <button onClick={() => { void approveCustomer(customer); }} disabled={saving} className="text-xs rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1.5 text-emerald-200/80 hover:text-emerald-100 disabled:opacity-40">
                       Bestätigen
@@ -597,9 +720,13 @@ export function CustomersPage() {
                   <button onClick={() => { void removeCustomer(customer.id); }} disabled={saving} className="text-xs text-red-300/45 hover:text-red-300 disabled:opacity-40">
                     Löschen
                   </button>
+                  <span className="text-[11px] text-orange-200/45">{isOpen ? 'Schließen' : 'Details'}</span>
                 </div>
+                </div>
+                {isOpen && <CustomerDetails customer={customer} questions={questions} />}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>

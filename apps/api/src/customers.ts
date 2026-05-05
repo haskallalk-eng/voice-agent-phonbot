@@ -253,6 +253,20 @@ const CustomerInput = z.object({
   details: z.record(z.string(), z.unknown()).optional().default({}),
 });
 
+function sendCustomerInputError(reply: FastifyReply, error: z.ZodError) {
+  if (error.issues.some((issue) => issue.path[0] === 'email')) {
+    return reply.status(400).send({
+      error: 'INVALID_CUSTOMER_EMAIL',
+      message: 'Die E-Mail sieht noch unvollstaendig aus. Bitte pruefe sie oder lass das Feld leer.',
+    });
+  }
+
+  return reply.status(400).send({
+    error: 'INVALID_CUSTOMER_INPUT',
+    message: 'Bitte pruefe die Kundendaten.',
+  });
+}
+
 export async function lookupCustomer(params: {
   orgId: string;
   phone?: string | null;
@@ -487,7 +501,9 @@ export async function registerCustomers(app: FastifyInstance) {
   app.post('/customers', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const user = await requireCustomerModule(req, reply);
     if (!user) return reply;
-    const body = CustomerInput.parse(req.body ?? {});
+    const parsed = CustomerInput.safeParse(req.body ?? {});
+    if (!parsed.success) return sendCustomerInputError(reply, parsed.error);
+    const body = parsed.data;
     const row = await upsertCustomer({
       orgId: user.orgId,
       fullName: body.fullName,
@@ -506,7 +522,9 @@ export async function registerCustomers(app: FastifyInstance) {
     const user = await requireCustomerModule(req, reply);
     if (!user) return reply;
     const params = z.object({ id: z.string().uuid() }).parse(req.params);
-    const body = CustomerInput.partial().parse(req.body ?? {});
+    const parsed = CustomerInput.partial().safeParse(req.body ?? {});
+    if (!parsed.success) return sendCustomerInputError(reply, parsed.error);
+    const body = parsed.data;
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
     const phoneNormalized = normalizeCustomerPhone(body.phone);
     const normalizedName = body.fullName ? normalizeName(body.fullName) : undefined;

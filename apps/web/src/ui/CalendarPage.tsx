@@ -8,8 +8,9 @@ import {
   getExternalCalendarEvents,
   getCalendarStaff, createCalendarStaff, updateCalendarStaff, deleteCalendarStaff,
   getStaffChipyCalendar, saveStaffChipySchedule, addStaffChipyBlock, removeStaffChipyBlock,
+  getCustomers,
 } from '../lib/api.js';
-import type { CalendarProvider, CalendarStatus, CalendarStaff, ChipySchedule, ChipyBlock, ChipyBooking, ExternalCalendarEvent } from '../lib/api.js';
+import type { CalendarProvider, CalendarStatus, CalendarStaff, ChipySchedule, ChipyBlock, ChipyBooking, ExternalCalendarEvent, Customer } from '../lib/api.js';
 import { FoxLogo } from './FoxLogo.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -34,6 +35,34 @@ function formatTime(iso: string) {
 }
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+const CUSTOMER_FOCUS_STORAGE_KEY = 'phonbot_focus_customer';
+
+function normalizeLookupPhone(value: string | null | undefined): string {
+  return (value ?? '').replace(/\D/g, '');
+}
+
+function findBookingCustomer(booking: ChipyBooking, customers: Customer[]): Customer | null {
+  const bookingPhone = normalizeLookupPhone(booking.customer_phone);
+  if (bookingPhone) {
+    const byPhone = customers.find((customer) => {
+      const customerPhone = normalizeLookupPhone(customer.phone_normalized ?? customer.phone);
+      return customerPhone && (customerPhone === bookingPhone || customerPhone.endsWith(bookingPhone) || bookingPhone.endsWith(customerPhone));
+    });
+    if (byPhone) return byPhone;
+  }
+
+  const bookingName = booking.customer_name.trim().toLowerCase();
+  return customers.find((customer) => customer.full_name.trim().toLowerCase() === bookingName) ?? customers[0] ?? null;
+}
+
+function storeCustomerFocus(customer: Customer, search: string) {
+  try {
+    sessionStorage.setItem(CUSTOMER_FOCUS_STORAGE_KEY, JSON.stringify({ id: customer.id, search }));
+  } catch {
+    // Non-critical: the ID deep-link still works for customers in the loaded list.
+  }
 }
 
 // ── Provider badge ────────────────────────────────────────────────────────────
@@ -144,7 +173,7 @@ function BookingModal({
 // ── Day Detail Drawer ─────────────────────────────────────────────────────────
 
 function DayDrawer({
-  date, bookings, blocks, externalEvents, onClose, onAddBooking, onDeleteBooking, onAddBlock, onRemoveBlock,
+  date, bookings, blocks, externalEvents, onClose, onAddBooking, onDeleteBooking, onOpenCustomer, onAddBlock, onRemoveBlock,
 }: {
   date: Date;
   bookings: ChipyBooking[];
@@ -153,6 +182,7 @@ function DayDrawer({
   onClose: () => void;
   onAddBooking: () => void;
   onDeleteBooking: (id: string) => void;
+  onOpenCustomer: (booking: ChipyBooking) => void;
   onAddBlock: (opts?: { start_time?: string; end_time?: string; reason?: string }) => void;
   onRemoveBlock: (id: string) => Promise<void>;
 }) {
@@ -249,11 +279,17 @@ function DayDrawer({
               {dayBookings.map(b => (
                 <div key={b.id} data-booking-id={b.id} className="flex items-start gap-3 rounded-xl bg-white/5 px-3 py-2.5">
                   <div className="shrink-0 text-orange-400 font-mono text-xs mt-0.5 w-10">{formatTime(b.slot_time)}</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{b.customer_name}</p>
+                  <button
+                    type="button"
+                    onClick={() => onOpenCustomer(b)}
+                    className="group flex-1 min-w-0 text-left cursor-pointer"
+                    title="Kundendetails öffnen"
+                  >
+                    <p className="text-sm font-medium text-white truncate group-hover:text-orange-200 transition-colors">{b.customer_name}</p>
                     <p className="text-xs text-white/40">{b.customer_phone}{b.service ? ` · ${b.service}` : ''}</p>
                     {b.notes && <p className="text-xs text-white/30 mt-0.5">{b.notes}</p>}
-                  </div>
+                    <p className="text-[10px] text-orange-300/45 mt-1 group-hover:text-orange-200/70 transition-colors">Kundendetails öffnen</p>
+                  </button>
                   <button onClick={() => onDeleteBooking(b.id)} className="shrink-0 text-red-400/50 hover:text-red-400 transition-colors text-xs cursor-pointer">Löschen</button>
                 </div>
               ))}
@@ -1307,7 +1343,13 @@ function StaffPanel({ onStaffChange }: { onStaffChange?: (count: number) => void
 
 type Tab = 'calendar' | 'staff';
 
-export function CalendarPage({ focusBookingId }: { focusBookingId?: string | null } = {}) {
+export function CalendarPage({
+  focusBookingId,
+  onNavigate,
+}: {
+  focusBookingId?: string | null;
+  onNavigate?: (page: 'customers', focusId?: string | null) => void;
+} = {}) {
   const [tab, setTab] = useState<Tab>('calendar');
   const [calendarStatus, setCalendarStatus] = useState<CalendarStatus | null>(null);
   const [staffCount, setStaffCount] = useState(0);
@@ -1382,6 +1424,28 @@ export function CalendarPage({ focusBookingId }: { focusBookingId?: string | nul
     } catch (e: unknown) {
       setCalendarError((e instanceof Error ? e.message : null) ?? 'Termin konnte nicht gelöscht werden');
     }
+  }
+
+  async function handleOpenBookingCustomer(booking: ChipyBooking) {
+    if (!onNavigate) return;
+    const phoneQuery = normalizeLookupPhone(booking.customer_phone);
+    const queries = [phoneQuery, booking.customer_phone, booking.customer_name].map((value) => value?.trim()).filter((value): value is string => Boolean(value));
+    for (const query of queries) {
+      try {
+        const result = await getCustomers(query);
+        const customer = findBookingCustomer(booking, result.items ?? []);
+        if (customer) {
+          storeCustomerFocus(customer, query);
+          setSelectedDay(null);
+          onNavigate('customers', customer.id);
+          return;
+        }
+      } catch (e: unknown) {
+        setCalendarError((e instanceof Error ? e.message : null) ?? 'Kunde konnte nicht geöffnet werden');
+        return;
+      }
+    }
+    setCalendarError('Zu diesem Termin wurde kein passender Kunde im Kundenmodul gefunden.');
   }
 
   async function handleAddBlock(date: Date, opts?: { start_time?: string; end_time?: string; reason?: string }) {
@@ -1579,6 +1643,7 @@ export function CalendarPage({ focusBookingId }: { focusBookingId?: string | nul
           onClose={() => setSelectedDay(null)}
           onAddBooking={() => setShowAddBooking(true)}
           onDeleteBooking={handleDeleteBooking}
+          onOpenCustomer={(booking) => { void handleOpenBookingCustomer(booking); }}
           onAddBlock={(opts) => { handleAddBlock(selectedDay, opts); if (!opts?.start_time) setSelectedDay(null); }}
           onRemoveBlock={async (id) => { await removeChipyBlock(id); setBlocks(prev => prev.filter(b => b.id !== id)); }}
         />
