@@ -128,9 +128,19 @@ function normalizeIncomingToolName(name: string): KnownToolName | null {
   }
 }
 
-async function resolveStaffByName(orgId: string, requested: string | undefined): Promise<{ staffId: string | null; requested: string | null; matchedName: string | null }> {
+async function resolveStaffByName(orgId: string, requested: string | undefined): Promise<{ staffId: string | null; requested: string | null; matchedName: string | null; staffModeActive: boolean }> {
   const name = requested?.trim() ?? '';
-  if (!name || name.length < 2 || !pool) return { staffId: null, requested: name || null, matchedName: null };
+  const activeStaff = pool
+    ? (await pool.query<{ id: string; name: string }>(
+        `SELECT id, name FROM calendar_staff WHERE org_id = $1 AND active = true ORDER BY sort_order, name`,
+        [orgId],
+      )).rows
+    : [];
+  const staffModeActive = activeStaff.length > 0;
+  if (/^(egal|beliebig|irgendwer|wer frei ist|kein wunsch|keine praferenz|any|anyone)$/i.test(name)) {
+    return { staffId: activeStaff[0]?.id ?? null, requested: name || null, matchedName: activeStaff[0]?.name ?? null, staffModeActive };
+  }
+  if (!name || name.length < 2 || !pool) return { staffId: null, requested: name || null, matchedName: null, staffModeActive };
   const byName = await pool.query<{ id: string; name: string }>(
     `SELECT id, name
        FROM calendar_staff
@@ -153,7 +163,7 @@ async function resolveStaffByName(orgId: string, requested: string | undefined):
       LIMIT 1`,
     [orgId, name],
   );
-  return { staffId: byName.rows[0]?.id ?? null, requested: name, matchedName: byName.rows[0]?.name ?? null };
+  return { staffId: byName.rows[0]?.id ?? null, requested: name, matchedName: byName.rows[0]?.name ?? null, staffModeActive };
 }
 
 export async function executeKnownTool(input: {
@@ -168,6 +178,19 @@ export async function executeKnownTool(input: {
     case 'calendar.findSlots': {
       const args = FindSlotsArgsSchema.parse(input.args ?? {});
       const staff = await resolveStaffByName(input.tenantId, args.preferredStylist);
+      if (staff.staffModeActive && !staff.staffId) {
+        return {
+          ok: false,
+          source: 'staff-required',
+          slots: [],
+          service: args.service ?? null,
+          preferredStylist: staff.requested,
+          staffId: null,
+          instruction: staff.requested
+            ? 'Der Wunschfriseur wurde nicht eindeutig gefunden. Frage kurz nach einem anderen Mitarbeiter oder ob ein beliebiger verfuegbarer Mitarbeiter passt.'
+            : 'Mitarbeiterkalender ist aktiv. Frage nach Wunschfriseur oder ob ein beliebiger verfuegbarer Mitarbeiter passt.',
+        };
+      }
       const result = await findFreeSlots(input.tenantId, {
         date: args.preferredTime,
         range: args.range,
@@ -188,12 +211,14 @@ export async function executeKnownTool(input: {
     case 'calendar.book': {
       const args = BookArgsSchema.parse(input.args ?? {});
       const staff = await resolveStaffByName(input.tenantId, args.preferredStylist);
-      if (staff.requested && !staff.staffId) {
+      if (staff.staffModeActive && !staff.staffId) {
         return {
           ok: false,
-          status: 'staff_not_found',
-          error: 'STAFF_NOT_FOUND',
-          instruction: 'Buche keinen allgemeinen Salon-Termin. Frage kurz nach einem anderen Mitarbeiter oder ob ein beliebiger verfuegbarer Mitarbeiter passt.',
+          status: staff.requested ? 'staff_not_found' : 'staff_required',
+          error: staff.requested ? 'STAFF_NOT_FOUND' : 'STAFF_REQUIRED',
+          instruction: staff.requested
+            ? 'Buche keinen allgemeinen Salon-Termin. Frage kurz nach einem anderen Mitarbeiter oder ob ein beliebiger verfuegbarer Mitarbeiter passt.'
+            : 'Buche keinen allgemeinen Salon-Termin. Frage nach Wunschfriseur oder ob ein beliebiger verfuegbarer Mitarbeiter passt.',
           preferredStylist: staff.requested,
           staffId: null,
         };

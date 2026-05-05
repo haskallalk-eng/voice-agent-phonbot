@@ -42,7 +42,14 @@ import { fireInboundWebhooks } from './inbound-webhooks.js';
 import { sendBookingConfirmationSms, sendTicketAckSms } from './sms.js';
 import { readDemoCallTemplate, maybeSendDemoSignupLink } from './demo.js';
 import { redactPII } from './pii.js';
-import { customerModuleActiveForAgentConfig, lookupCustomer, upsertCustomer } from './customers.js';
+import {
+  customerModuleActiveForAgentConfig,
+  getActiveCustomerDetailsKeys,
+  normalizeCustomerModuleConfig,
+  lookupCustomer,
+  upsertCustomer,
+  type CustomerModuleConfig,
+} from './customers.js';
 
 const RETELL_API_KEY = process.env.RETELL_API_KEY ?? '';
 
@@ -335,21 +342,30 @@ function stringArg(args: Record<string, unknown>, ...keys: string[]): string | u
 async function resolveCalendarStaffForTool(
   orgId: string,
   args: Record<string, unknown>,
-): Promise<{ staffId: string | null; requested: string | null; matchedName: string | null }> {
+): Promise<{ staffId: string | null; requested: string | null; matchedName: string | null; staffModeActive: boolean; anyStaff: boolean }> {
   const explicitStaffId = stringArg(args, 'staffId', 'staff_id');
   const requested = stringArg(args, 'preferredStylist', 'preferred_stylist', 'staffName', 'staff_name', 'stylist', 'employeeName') ?? null;
-  if (!pool) return { staffId: explicitStaffId ?? null, requested, matchedName: null };
+  const activeStaff = pool
+    ? (await pool.query<{ id: string; name: string }>(
+        `SELECT id, name FROM calendar_staff WHERE org_id = $1 AND active = true ORDER BY sort_order, name`,
+        [orgId],
+      )).rows
+    : [];
+  const staffModeActive = activeStaff.length > 0;
+  const anyStaff = Boolean(requested && /^(egal|beliebig|irgendwer|wer frei ist|kein wunsch|keine praferenz|any|anyone)$/i.test(requested));
+  if (!pool) return { staffId: explicitStaffId ?? null, requested, matchedName: null, staffModeActive, anyStaff };
 
   if (explicitStaffId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(explicitStaffId)) {
     const byId = await pool.query<{ id: string; name: string }>(
       `SELECT id, name FROM calendar_staff WHERE org_id = $1 AND id = $2 AND active = true LIMIT 1`,
       [orgId, explicitStaffId],
     );
-    if (byId.rows[0]) return { staffId: byId.rows[0].id, requested, matchedName: byId.rows[0].name };
-    return { staffId: null, requested: requested ?? explicitStaffId, matchedName: null };
+    if (byId.rows[0]) return { staffId: byId.rows[0].id, requested, matchedName: byId.rows[0].name, staffModeActive, anyStaff: false };
+    return { staffId: null, requested: requested ?? explicitStaffId, matchedName: null, staffModeActive, anyStaff: false };
   }
 
-  if (!requested || requested.length < 2) return { staffId: null, requested, matchedName: null };
+  if (anyStaff) return { staffId: activeStaff[0]?.id ?? null, requested, matchedName: activeStaff[0]?.name ?? null, staffModeActive, anyStaff: true };
+  if (!requested || requested.length < 2) return { staffId: null, requested, matchedName: null, staffModeActive, anyStaff: false };
   const byName = await pool.query<{ id: string; name: string }>(
     `SELECT id, name
        FROM calendar_staff
@@ -372,13 +388,39 @@ async function resolveCalendarStaffForTool(
       LIMIT 1`,
     [orgId, requested],
   );
-  return { staffId: byName.rows[0]?.id ?? null, requested, matchedName: byName.rows[0]?.name ?? null };
+  return { staffId: byName.rows[0]?.id ?? null, requested, matchedName: byName.rows[0]?.name ?? null, staffModeActive, anyStaff: false };
 }
 
-async function isCustomerModuleActiveForTool(tenantId: string | null, orgId: string | null): Promise<boolean> {
-  if (!tenantId || !orgId) return false;
+async function getCustomerModuleForTool(tenantId: string | null, orgId: string | null): Promise<{
+  active: boolean;
+  customerModule: CustomerModuleConfig;
+}> {
+  if (!tenantId || !orgId) return { active: false, customerModule: normalizeCustomerModuleConfig(null) };
   const cfg = await readConfig(tenantId, orgId);
-  return customerModuleActiveForAgentConfig(cfg);
+  return {
+    active: customerModuleActiveForAgentConfig(cfg),
+    customerModule: normalizeCustomerModuleConfig(cfg.customerModule),
+  };
+}
+
+async function canBookForCustomerApproval(params: {
+  tenantId: string | null;
+  orgId: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+}): Promise<{ allowed: boolean; instruction?: string }> {
+  const module = await getCustomerModuleForTool(params.tenantId, params.orgId);
+  if (!params.orgId || !module.active || module.customerModule.allowBookingWithoutApproval !== false) return { allowed: true };
+  const match = await lookupCustomer({
+    orgId: params.orgId,
+    phone: params.customerPhone,
+    name: params.customerName,
+  });
+  if (match.customer?.customer_type === 'existing') return { allowed: true };
+  return {
+    allowed: false,
+    instruction: 'Kundenmodul-Einstellung: Termine ohne Freigabe ist aus. Buche keinen festen Termin fuer neue oder pending Kunden; erstelle nur ein Rueckruf-/Terminwunsch-Ticket.',
+  };
 }
 
 async function maybeUpsertCustomerFromTool(params: {
@@ -387,7 +429,7 @@ async function maybeUpsertCustomerFromTool(params: {
   callId: string;
   customerName?: string | null;
   customerPhone?: string | null;
-  customerType?: 'new' | 'existing' | 'unknown';
+  customerType?: 'new' | 'existing' | 'unknown' | 'pending';
   details?: Record<string, unknown>;
   notes?: string | null;
   log: FastifyRequest['log'];
@@ -395,12 +437,12 @@ async function maybeUpsertCustomerFromTool(params: {
   try {
     const name = params.customerName?.trim();
     if (!params.orgId || !name || /^(unbekannt|unknown|anonymous)$/i.test(name)) return;
-    if (!await isCustomerModuleActiveForTool(params.tenantId, params.orgId)) return;
+    if (!(await getCustomerModuleForTool(params.tenantId, params.orgId)).active) return;
     await upsertCustomer({
       orgId: params.orgId,
       fullName: name,
       phone: params.customerPhone,
-      customerType: params.customerType ?? 'unknown',
+      customerType: params.customerType ?? 'pending',
       sourceCallId: params.callId,
       details: params.details ?? {},
       notes: params.notes,
@@ -817,7 +859,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     } as Parameters<typeof appendTraceEvent>[0]);
 
     let result: Record<string, unknown>;
-    if (!ctx.orgId || !await isCustomerModuleActiveForTool(ctx.tenantId, ctx.orgId)) {
+    const moduleForLookup = await getCustomerModuleForTool(ctx.tenantId, ctx.orgId);
+    if (!ctx.orgId || !moduleForLookup.active) {
       result = {
         ok: true,
         status: 'disabled',
@@ -863,7 +906,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     } as Parameters<typeof appendTraceEvent>[0]);
 
     let result: Record<string, unknown>;
-    if (!ctx.orgId || !await isCustomerModuleActiveForTool(ctx.tenantId, ctx.orgId)) {
+    const moduleForUpsert = await getCustomerModuleForTool(ctx.tenantId, ctx.orgId);
+    if (!ctx.orgId || !moduleForUpsert.active) {
       result = {
         ok: true,
         status: 'disabled',
@@ -879,21 +923,25 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         };
       } else {
         const customerPhone = stringArg(args, 'customerPhone', 'customer_phone', 'phone') ?? await resolveCallerPhone(body, args, ctx.callId);
-        const details = {
-          service: stringArg(args, 'service'),
-          preferredTime: stringArg(args, 'preferredTime', 'preferred_time', 'time'),
-          preferredStylist: stringArg(args, 'preferredStylist', 'preferred_stylist'),
-          hairLength: stringArg(args, 'hairLength', 'hair_length'),
-          hairHistory: stringArg(args, 'hairHistory', 'hair_history'),
-          allergies: stringArg(args, 'allergies'),
-          source: 'retell-tool',
-        };
+        const activeDetails = getActiveCustomerDetailsKeys(moduleForUpsert.customerModule);
+        const customFieldsRaw = args.customFields;
+        const customFields = customFieldsRaw && typeof customFieldsRaw === 'object' && !Array.isArray(customFieldsRaw)
+          ? Object.fromEntries(Object.entries(customFieldsRaw as Record<string, unknown>).filter(([, value]) => typeof value === 'string' && value.trim()))
+          : undefined;
+        const details: Record<string, unknown> = { source: 'retell-tool' };
+        if (activeDetails.has('service')) details.service = stringArg(args, 'service');
+        if (activeDetails.has('preferredTime')) details.preferredTime = stringArg(args, 'preferredTime', 'preferred_time', 'time');
+        if (activeDetails.has('preferredStylist')) details.preferredStylist = stringArg(args, 'preferredStylist', 'preferred_stylist');
+        if (activeDetails.has('hairLength')) details.hairLength = stringArg(args, 'hairLength', 'hair_length');
+        if (activeDetails.has('hairHistory')) details.hairHistory = stringArg(args, 'hairHistory', 'hair_history');
+        if (activeDetails.has('allergies')) details.allergies = stringArg(args, 'allergies');
+        if (customFields && Object.keys(customFields).length) details.customFields = customFields;
         const row = await upsertCustomer({
           orgId: ctx.orgId,
           fullName: customerName,
           phone: customerPhone,
           email: stringArg(args, 'email'),
-          customerType: stringArg(args, 'customerType', 'customer_type') as 'new' | 'existing' | 'unknown' | undefined,
+          customerType: 'pending',
           notes: stringArg(args, 'notes'),
           sourceCallId: ctx.callId,
           details,
@@ -966,6 +1014,21 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
     if (orgIdForSlots) {
       const staff = await resolveCalendarStaffForTool(orgIdForSlots, args);
+      if (staff.staffModeActive && !staff.staffId) {
+        result = {
+          ok: false,
+          source: 'staff-required',
+          slots: [],
+          service: args.service ?? null,
+          range: args.range ?? null,
+          preferredTime: args.preferredTime ?? null,
+          preferredStylist: null,
+          staffId: null,
+          instruction: staff.requested
+            ? 'Mitarbeiterkalender ist aktiv, aber der genannte Wunschfriseur wurde nicht gefunden. Frage nach einem anderen Mitarbeiter oder ob ein beliebiger freier Mitarbeiter passt.'
+            : 'Mitarbeiterkalender ist aktiv. Frage nach einem Wunschfriseur oder ob ein beliebiger freier Mitarbeiter passt, bevor du Termine suchst.',
+        };
+      } else {
       const { slots, source } = await findFreeSlots(orgIdForSlots, {
         date: (args.date as string | undefined) ?? (args.preferredTime as string | undefined),
         range: args.range as string | undefined,
@@ -983,6 +1046,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         staffId: staff.staffId,
         ...(staff.requested && !staff.staffId ? { instruction: 'Der Wunschfriseur wurde nicht eindeutig gefunden. Biete die gefundenen Salon-Termine an oder frage kurz nach einem anderen Mitarbeiter.' } : {}),
       };
+      }
     } else {
       // Fallback: no calendar connected — return demo slots
       result = {
@@ -1048,13 +1112,34 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       const staff = await resolveCalendarStaffForTool(orgIdForBook, args);
       const service = (args.service as string | undefined) ?? '';
       const notes = args.notes as string | undefined;
-      if (staff.requested && !staff.staffId) {
+      const approval = await canBookForCustomerApproval({
+        tenantId: signedTenantIdForBook ?? orgIdForBook,
+        orgId: orgIdForBook,
+        customerName,
+        customerPhone,
+      });
+      if (!approval.allowed) {
         result = {
           ok: false,
-          status: 'staff_not_found',
-          error: 'STAFF_NOT_FOUND',
-          message: 'Der Wunschfriseur wurde nicht eindeutig gefunden.',
-          instruction: 'Buche keinen allgemeinen Salon-Termin. Frage kurz nach einem anderen Mitarbeiter oder ob ein beliebiger verfuegbarer Mitarbeiter passt.',
+          status: 'customer_approval_required',
+          error: 'CUSTOMER_APPROVAL_REQUIRED',
+          instruction: approval.instruction,
+          customerName,
+          customerPhone,
+          preferredTime,
+          preferredStylist: staff.matchedName ?? staff.requested,
+          staffId: staff.staffId,
+          service,
+        };
+      } else if (staff.staffModeActive && !staff.staffId) {
+        result = {
+          ok: false,
+          status: staff.requested ? 'staff_not_found' : 'staff_required',
+          error: staff.requested ? 'STAFF_NOT_FOUND' : 'STAFF_REQUIRED',
+          message: staff.requested ? 'Der Wunschfriseur wurde nicht eindeutig gefunden.' : 'Mitarbeiterkalender ist aktiv, aber kein Mitarbeiter wurde ausgewählt.',
+          instruction: staff.requested
+            ? 'Buche keinen allgemeinen Salon-Termin. Frage kurz nach einem anderen Mitarbeiter oder ob ein beliebiger verfuegbarer Mitarbeiter passt.'
+            : 'Buche keinen allgemeinen Salon-Termin. Frage nach Wunschfriseur oder ob ein beliebiger verfuegbarer Mitarbeiter passt.',
           customerName,
           customerPhone,
           preferredTime,
@@ -1193,7 +1278,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         callId,
         customerName: (result.customerName as string | undefined) ?? (args.customerName as string | undefined),
         customerPhone: (result.customerPhone as string | undefined) ?? await resolveCallerPhone(body, args, callId),
-        customerType: 'unknown',
+        customerType: 'pending',
         details: {
           service: result.service,
           preferredTime: result.preferredTime,
@@ -1330,7 +1415,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         callId,
         customerName: row.customer_name,
         customerPhone: row.customer_phone,
-        customerType: 'unknown',
+        customerType: 'pending',
         details: {
           service: row.service,
           preferredTime: row.preferred_time,
