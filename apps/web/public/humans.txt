@@ -18,7 +18,7 @@
 
 /* SITE */
 
-  Last update: 2026/04/14
+  Last update: 2026/05/05
   Language: Deutsch (primär), EN/FR/ES/IT/TR/PL/NL
   Standards: HTML5, CSS4, ES2023, Schema.org, llms.txt
   Components: React 19, TypeScript, Tailwind 4, Vite 6, Fastify 5

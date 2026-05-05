@@ -2,11 +2,14 @@
 // Run after `pnpm --filter @vas/web build`.
 import fs from 'node:fs';
 import path from 'node:path';
+import { SITE, CORE_INDUSTRY_PAGES, SEO_NICHE_PAGES, SUPPORT_PAGES, ALL_SEO_PAGE_SLUGS } from './seo-pages.mjs';
 
 const DIST = path.resolve('apps/web/dist');
-const SITE = 'https://phonbot.de';
-const BRANCHES = ['friseur', 'handwerker', 'reinigung', 'restaurant', 'autowerkstatt', 'selbststaendig'];
+const BRANCHES = CORE_INDUSTRY_PAGES.map((page) => page.slug);
+const NICHES = SEO_NICHE_PAGES.map((page) => page.slug);
+const SUPPORT = SUPPORT_PAGES.map((page) => page.slug);
 const LEGAL = ['impressum', 'datenschutz', 'agb', 'avv', 'sub-processors'];
+const INDEXABLE = [...SUPPORT, ...BRANCHES, ...NICHES, ...LEGAL];
 
 const failures = [];
 const warnings = [];
@@ -119,6 +122,35 @@ function checkBranches() {
   }
 }
 
+function checkNiches() {
+  for (const slug of NICHES) {
+    const rel = `${slug}/index.html`;
+    const url = `${SITE}/${slug}/`;
+    checkPage(rel, url, { minText: 2200 });
+    const html = read(rel);
+    const graph = graphItems(jsonLdBlocks(html));
+    for (const type of ['WebPage', 'Service', 'FAQPage', 'BreadcrumbList']) {
+      if (!graph.some((item) => item['@type'] === type)) fail(`${url}: JSON-LD ${type} missing`);
+    }
+  }
+}
+
+function checkSupportPages() {
+  for (const slug of SUPPORT) {
+    const rel = `${slug}/index.html`;
+    const url = `${SITE}/${slug}/`;
+    checkPage(rel, url, { minText: slug === 'kontakt' ? 900 : 1800 });
+    const html = read(rel);
+    const graph = graphItems(jsonLdBlocks(html));
+    if (slug === 'branchen' && !graph.some((item) => item['@type'] === 'CollectionPage')) {
+      fail(`${url}: CollectionPage JSON-LD missing`);
+    }
+    if (slug === 'kontakt' && !graph.some((item) => item['@type'] === 'ContactPage')) {
+      fail(`${url}: ContactPage JSON-LD missing`);
+    }
+  }
+}
+
 function checkLegal() {
   for (const slug of LEGAL) {
     checkPage(`${slug}/index.html`, `${SITE}/${slug}/`, { minText: 700 });
@@ -130,7 +162,7 @@ function checkSitemapAndRobots() {
   const robots = read('robots.txt');
   const llms = read('llms.txt');
   const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
-  const expected = [`${SITE}/`, ...BRANCHES.map((s) => `${SITE}/${s}/`), ...LEGAL.map((s) => `${SITE}/${s}/`)];
+  const expected = [`${SITE}/`, ...INDEXABLE.map((s) => `${SITE}/${s}/`)];
 
   for (const url of expected) {
     if (!locs.includes(url)) fail(`Sitemap missing ${url}`);
@@ -148,13 +180,38 @@ function checkSitemapAndRobots() {
   }
 }
 
+function checkServerConfig() {
+  const caddy = fs.readFileSync(path.resolve('Caddyfile'), 'utf8');
+  const nginx = fs.readFileSync(path.resolve('apps/web/nginx.conf'), 'utf8');
+
+  if (!/www\.\{\$DOMAIN:phonbot\.de\}/.test(caddy) || !/redir https:\/\/\{\$DOMAIN:phonbot\.de\}\{uri\} 301/.test(caddy)) {
+    fail('Caddyfile: www apex redirect missing');
+  }
+  if (!/@private_query/.test(caddy) || !/query page=login page=register page=contact/.test(caddy)) {
+    fail('Caddyfile: private query noindex matcher missing');
+  }
+  for (const slug of [...ALL_SEO_PAGE_SLUGS, ...LEGAL]) {
+    if (!caddy.includes(`/${slug}`)) fail(`Caddyfile: missing canonical slash redirect for /${slug}`);
+    if (!nginx.includes(slug)) fail(`nginx.conf: missing static route for /${slug}/`);
+  }
+  if (/try_files\s+\$uri\s+\$uri\/\s+\/index\.html/.test(nginx)) {
+    fail('nginx.conf: catch-all SPA fallback still creates indexable soft-404s');
+  }
+  if (!/try_files\s+\$uri\s+\$uri\/\s+=404/.test(nginx)) {
+    fail('nginx.conf: unknown routes should resolve to 404');
+  }
+}
+
 if (!fs.existsSync(DIST)) {
   fail('apps/web/dist missing. Run `pnpm --filter @vas/web build` first.');
 } else {
   checkRoot();
+  checkSupportPages();
   checkBranches();
+  checkNiches();
   checkLegal();
   checkSitemapAndRobots();
+  checkServerConfig();
 }
 
 for (const msg of warnings) console.warn(`WARN ${msg}`);
