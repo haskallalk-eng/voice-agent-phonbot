@@ -31,7 +31,7 @@ type AuthContextValue = AuthState & {
     orgName: string,
     email: string,
     password: string,
-    flags: { isBusiness: true; termsAccepted: true },
+    flags: { isBusiness: true; termsAccepted: true; privacyAccepted: true; avvAccepted: true },
   ) => Promise<void>;
   finalizeCheckout: (sessionId: string) => Promise<void>;
   logout: () => void;
@@ -176,7 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     orgName: string,
     email: string,
     password: string,
-    flags: { isBusiness: true; termsAccepted: true },
+    flags: { isBusiness: true; termsAccepted: true; privacyAccepted: true; avvAccepted: true },
   ) => {
     const data = await apiFetch<AuthResponse>('/auth/register', {
       method: 'POST',

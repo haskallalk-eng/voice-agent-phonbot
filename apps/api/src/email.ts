@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import { escapeHtml } from './utils.js';
+import { legalSnapshot } from './legal.js';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY ?? '';
 const FROM_EMAIL = process.env.EMAIL_FROM ?? 'Phonbot <noreply@phonbot.de>';
@@ -66,7 +67,7 @@ function brandedEmail(opts: { title: string; body: string; cta?: { label: string
   <!-- Footer -->
   <div style="text-align:center;margin-top:24px;">
     <p style="color:rgba(255,255,255,0.2);font-size:11px;margin:0;">
-      ${opts.footer ? escapeHtml(opts.footer) : 'Phonbot by Mindrails \u00b7 phonbot.de'}
+      ${opts.footer ? escapeHtml(opts.footer) : 'Phonbot \u00b7 phonbot.de'}
     </p>
   </div>
 
@@ -99,6 +100,14 @@ async function sendWithTimeout(p: Promise<unknown>, label: string, ms = 10_000):
 }
 
 export type EmailSendResult = { ok: true } | { ok: false; error: string };
+
+function formatEuroCents(cents: number, currency = 'eur'): string {
+  try {
+    return new Intl.NumberFormat('de-DE', { style: 'currency', currency: currency.toUpperCase() }).format(cents / 100);
+  } catch {
+    return `${(cents / 100).toFixed(2)} ${currency.toUpperCase()}`;
+  }
+}
 
 async function send(to: string, subject: string, text: string, html: string, replyTo?: string): Promise<EmailSendResult> {
   if (!resend) return { ok: false, error: 'RESEND_NOT_CONFIGURED' };
@@ -281,23 +290,84 @@ export async function sendSignupLinkEmail(opts: { toEmail: string; name?: string
   return send(opts.toEmail, 'Dein Phonbot-Testlink', text, html);
 }
 
-export async function sendPlanActivatedEmail(opts: { toEmail: string; orgName: string; planName: string; minutesLimit: number }) {
+export async function sendPlanActivatedEmail(opts: {
+  toEmail: string;
+  orgName: string;
+  planName: string;
+  minutesLimit: number;
+  interval?: 'month' | 'year' | null;
+  overchargePerMinute?: number | null;
+  invoiceUrl?: string | null;
+}) {
   const safeOrg = escapeHtml(opts.orgName);
   const safePlan = escapeHtml(opts.planName);
+  const docs = legalSnapshot(APP_URL);
+  const intervalLabel = opts.interval === 'year' ? 'Jahresabo' : 'Monatsabo';
+  const overage = typeof opts.overchargePerMinute === 'number'
+    ? `${opts.overchargePerMinute.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR/Minute`
+    : 'gemaess gebuchtem Tarif';
   const html = brandedEmail({
-    title: `${safePlan}-Plan aktiviert ✅`,
+    title: `${safePlan}-Plan aktiviert`,
     body: `
       <p style="margin:0 0 16px 0;"><strong style="color:#fff;">${safeOrg}</strong>, dein ${safePlan}-Plan ist aktiv!</p>
       <div style="background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.15);border-radius:12px;padding:16px;margin:0 0 16px 0;">
         <p style="margin:0;color:rgba(255,255,255,0.5);font-size:13px;">Dein Kontingent</p>
         <p style="margin:4px 0 0 0;font-size:24px;font-weight:700;color:#F97316;">${opts.minutesLimit} Minuten / Monat</p>
       </div>
+      <p style="margin:0 0 10px 0;">Vertragsbestätigung: ${intervalLabel}, kündbar zum Ende des Abrechnungszeitraums über das Nutzerkonto oder per E-Mail an info@phonbot.de.</p>
+      <p style="margin:0 0 10px 0;">Zusatzminuten werden sekundengenau abgerechnet: ${escapeHtml(overage)}.</p>
+      <p style="margin:0 0 10px 0;">Es gilt die Kleinunternehmerregelung nach § 19 UStG; es wird keine Umsatzsteuer ausgewiesen, solange diese Regelung für Phonbot gilt.</p>
+      <p style="margin:0 0 10px 0;">Vertragsdokumente: <a href="${escapeHtml(docs.terms.url)}" style="color:#F97316;">AGB</a> · <a href="${escapeHtml(docs.privacy.url)}" style="color:#F97316;">Datenschutz</a> · <a href="${escapeHtml(docs.dpa.url)}" style="color:#F97316;">AVV</a>.</p>
+      ${opts.invoiceUrl ? `<p style="margin:0 0 10px 0;">Rechnung/Beleg: <a href="${escapeHtml(opts.invoiceUrl)}" style="color:#F97316;">bei Stripe ansehen</a>.</p>` : ''}
       <p style="margin:0;">Du kannst jetzt eine Telefonnummer aktivieren und deinen Agent live schalten.</p>
     `,
     cta: { label: 'Dashboard öffnen', url: APP_URL },
     footer: `${opts.orgName} · ${opts.planName}-Plan · Phonbot`,
   });
-  await send(opts.toEmail, `${opts.planName}-Plan aktiviert — Phonbot`, `Dein ${opts.planName}-Plan ist aktiv! ${opts.minutesLimit} Min/Monat.`, html);
+  const text = [
+    `Dein ${opts.planName}-Plan ist aktiv.`,
+    `Kontingent: ${opts.minutesLimit} Minuten / Monat.`,
+    `Vertragsbestätigung: ${intervalLabel}, kündbar zum Ende des Abrechnungszeitraums über das Nutzerkonto oder per E-Mail an info@phonbot.de.`,
+    `Zusatzminuten: ${overage}.`,
+    'Kleinunternehmerregelung nach § 19 UStG: keine Umsatzsteuer ausgewiesen, solange diese Regelung für Phonbot gilt.',
+    `AGB: ${docs.terms.url}`,
+    `Datenschutz: ${docs.privacy.url}`,
+    `AVV: ${docs.dpa.url}`,
+    opts.invoiceUrl ? `Rechnung/Beleg: ${opts.invoiceUrl}` : null,
+  ].filter(Boolean).join('\n');
+  await send(opts.toEmail, `${opts.planName}-Plan aktiviert — Phonbot`, text, html);
+}
+
+export async function sendInvoicePaidEmail(opts: {
+  toEmail: string;
+  orgName: string;
+  amountPaidCents: number;
+  currency: string;
+  hostedInvoiceUrl?: string | null;
+  invoicePdf?: string | null;
+  invoiceNumber?: string | null;
+}) {
+  const safeOrg = escapeHtml(opts.orgName);
+  const amount = formatEuroCents(opts.amountPaidCents, opts.currency);
+  const invoiceUrl = opts.hostedInvoiceUrl ?? opts.invoicePdf ?? null;
+  const html = brandedEmail({
+    title: 'Rechnung bezahlt',
+    body: `
+      <p style="margin:0 0 12px 0;"><strong style="color:#fff;">${safeOrg}</strong>, deine Phonbot-Zahlung wurde verbucht.</p>
+      <p style="margin:0 0 10px 0;">Betrag: <strong style="color:#fff;">${escapeHtml(amount)}</strong>${opts.invoiceNumber ? ` · Rechnung ${escapeHtml(opts.invoiceNumber)}` : ''}</p>
+      <p style="margin:0 0 10px 0;">Die Rechnung bleibt zusätzlich im Stripe-Kundenportal unter deiner Rechnungshistorie abrufbar.</p>
+      ${invoiceUrl ? `<p style="margin:0;">Direktlink: <a href="${escapeHtml(invoiceUrl)}" style="color:#F97316;">Rechnung/Beleg ansehen</a>.</p>` : ''}
+    `,
+    cta: { label: invoiceUrl ? 'Rechnung ansehen' : 'Billing öffnen', url: invoiceUrl ?? `${APP_URL}/billing` },
+    footer: `${opts.orgName} · Phonbot Rechnung`,
+  });
+  const text = [
+    'Deine Phonbot-Zahlung wurde verbucht.',
+    `Betrag: ${amount}`,
+    opts.invoiceNumber ? `Rechnung: ${opts.invoiceNumber}` : null,
+    invoiceUrl ? `Rechnung/Beleg: ${invoiceUrl}` : `Billing: ${APP_URL}/billing`,
+  ].filter(Boolean).join('\n');
+  await send(opts.toEmail, 'Rechnung bezahlt — Phonbot', text, html);
 }
 
 export async function sendUsageWarningEmail(opts: { toEmail: string; orgName: string; minutesUsed: number; minutesLimit: number; percent: number }) {
@@ -329,7 +399,7 @@ export async function sendPaymentFailedEmail(opts: { toEmail: string; orgName: s
     body: `
       <p style="margin:0 0 12px 0;"><strong style="color:#fff;">${safeOrg}</strong>, deine letzte Zahlung konnte nicht verarbeitet werden.</p>
       <p style="margin:0 0 16px 0;">Bitte aktualisiere deine Zahlungsmethode um deinen Service ohne Unterbrechung weiterzunutzen.</p>
-      <p style="margin:0;color:rgba(255,255,255,0.4);font-size:13px;">Wenn das Problem bestehen bleibt, kontaktiere uns unter info@mindrails.de.</p>
+      <p style="margin:0;color:rgba(255,255,255,0.4);font-size:13px;">Wenn das Problem bestehen bleibt, kontaktiere uns unter info@phonbot.de.</p>
     `,
     cta: { label: 'Zahlungsmethode aktualisieren', url: `${APP_URL}/billing` },
   });

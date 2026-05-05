@@ -17,7 +17,7 @@ function ImpressumContent() {
   return (
     <div className="space-y-6 text-white/80 text-sm leading-relaxed">
       <section>
-        <h2 className="text-base font-semibold text-white mb-2">Angaben gemäß § 5 TMG</h2>
+        <h2 className="text-base font-semibold text-white mb-2">Angaben gemäß § 5 DDG</h2>
         <p>
           Hans Ulrich Waier (Einzelunternehmer)<br />
           Scharnhorststraße 8<br />
@@ -101,10 +101,9 @@ function ImpressumContent() {
       <section>
         <h2 className="text-base font-semibold text-white mb-2">Haftung für Inhalte</h2>
         <p>
-          Als Diensteanbieter sind wir gemäß § 7 Abs. 1 TMG für eigene Inhalte auf diesen Seiten nach
-          den allgemeinen Gesetzen verantwortlich. Nach §§ 8 bis 10 TMG sind wir als Diensteanbieter
-          jedoch nicht verpflichtet, übermittelte oder gespeicherte fremde Informationen zu überwachen
-          oder nach Umständen zu forschen, die auf eine rechtswidrige Tätigkeit hinweisen.
+          Als Diensteanbieter sind wir für eigene Inhalte auf diesen Seiten nach den allgemeinen
+          Gesetzen verantwortlich. Eine Verpflichtung zur Überwachung übermittelter oder gespeicherter
+          fremder Informationen besteht nur nach Maßgabe der gesetzlichen Vorgaben.
         </p>
       </section>
 
@@ -371,6 +370,11 @@ function AgbContent() {
           der Phonbot-Plattform. Abweichende Bedingungen des Nutzers werden nicht anerkannt, es sei
           denn, der Anbieter stimmt ihrer Geltung ausdrücklich schriftlich zu.
         </p>
+        <p className="mt-2">
+          Phonbot richtet sich ausschließlich an Unternehmer im Sinne von § 14 BGB. Verträge mit
+          Verbrauchern werden nicht geschlossen; mit Registrierung oder Buchung bestätigt der Nutzer
+          seine gewerbliche oder selbständige Tätigkeit.
+        </p>
       </section>
 
       <section>
@@ -378,7 +382,8 @@ function AgbContent() {
         <p>
           Der Vertrag kommt durch die Registrierung auf der Plattform und die Bestätigung durch den
           Anbieter zustande. Mit der Registrierung erklärt der Nutzer, die vorliegenden AGB gelesen und
-          akzeptiert zu haben. Die Vertragssprache ist Deutsch.
+          akzeptiert zu haben. Bei zahlungspflichtigen Plänen wird die Buchung über Stripe bestätigt.
+          Die Vertragssprache ist Deutsch.
         </p>
         <p className="mt-2">
           Der Anbieter behält sich das Recht vor, Registrierungen ohne Angabe von Gründen abzulehnen.
@@ -430,14 +435,14 @@ function AgbContent() {
         <h2 className="text-base font-semibold text-white mb-2">§ 5 Zahlungsbedingungen</h2>
         <p>
           Die Vergütung richtet sich nach dem zum Zeitpunkt der Buchung geltenden Preismodell auf der
-          Website. Alle Preise verstehen sich zzgl. der gesetzlichen Mehrwertsteuer, sofern nicht anders
-          angegeben.
+          Website. Aufgrund der Kleinunternehmerregelung nach § 19 UStG wird keine Umsatzsteuer
+          berechnet und auf Rechnungen nicht ausgewiesen, solange diese Regelung für Phonbot gilt.
         </p>
         <p className="mt-2">
-          Die Zahlung erfolgt monatlich im Voraus per Kreditkarte oder SEPA-Lastschrift über den
+          Die Zahlung erfolgt zu Beginn des gewählten Abrechnungszeitraums per Kreditkarte oder SEPA-Lastschrift über den
           Zahlungsdienstleister Stripe. Bei Zahlungsverzug ist der Anbieter berechtigt, den Zugang zur
           Plattform zu sperren. Überschreitungen des gebuchten Minutenvolumens werden gemäß dem
-          aktuellen Tarif im Folgemonat abgerechnet.
+          aktuellen Tarif über die nächste Stripe-Rechnung abgerechnet.
         </p>
         <p className="mt-2">
           <strong>Sekundengenaue Abrechnung:</strong> Gesprächsminuten werden sekundengenau ermittelt und
@@ -451,7 +456,7 @@ function AgbContent() {
         <h2 className="text-base font-semibold text-white mb-2">§ 6 Laufzeit und Kündigung</h2>
         <p>
           Verträge werden auf unbestimmte Zeit geschlossen und können jeweils zum Ende des
-          Abrechnungszeitraums (Monat) gekündigt werden. Die Kündigung kann jederzeit im Nutzerkonto
+          gewählten Abrechnungszeitraums (Monat oder Jahr) gekündigt werden. Die Kündigung kann jederzeit im Nutzerkonto
           oder per E-Mail an info@phonbot.de erfolgen.
         </p>
         <p className="mt-2">

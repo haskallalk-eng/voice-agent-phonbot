@@ -26,6 +26,10 @@ REQUIRED_VARS=(
   "RETELL_API_KEY|Retell Dashboard → API Keys"
   "STRIPE_SECRET_KEY|Stripe Dashboard → Developers → API Keys"
   "STRIPE_WEBHOOK_SECRET|Stripe Dashboard → Webhooks → Signing secret"
+  "STRIPE_PRICE_NUMMER|Stripe monthly price for Nummer plan"
+  "STRIPE_PRICE_STARTER|Stripe monthly price for Starter plan"
+  "STRIPE_PRICE_PRO|Stripe monthly price for Pro plan"
+  "STRIPE_PRICE_AGENCY|Stripe monthly price for Agency plan"
   "RESEND_API_KEY|Resend Dashboard → API Keys"
   "APP_URL|e.g. https://phonbot.de"
   "WEBHOOK_BASE_URL|Same as APP_URL for Caddy setups"
@@ -63,6 +67,10 @@ for entry in "${REQUIRED_VARS[@]}"; do
   if [[ -z "$VALUE" || "$VALUE" == "sk_live_..." || "$VALUE" == "key_..." || "$VALUE" == "re_..." || "$VALUE" == "whsec_..." || "$VALUE" == "price_..." ]]; then
     echo "  ❌ $VAR — MISSING or placeholder"
     echo "     → $HINT"
+    MISSING=$((MISSING + 1))
+  elif [[ "$VAR" == "STRIPE_SECRET_KEY" && "$VALUE" == sk_test_* ]]; then
+    echo "  âŒ $VAR â€” test-mode key, not usable for production sales"
+    echo "     â†’ Set a live Stripe secret key (sk_live_...) before deploying paid checkout."
     MISSING=$((MISSING + 1))
   else
     echo "  ✅ $VAR"

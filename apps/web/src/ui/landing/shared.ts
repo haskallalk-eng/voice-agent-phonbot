@@ -81,7 +81,7 @@ export const FAQ_ITEMS = [
   },
   {
     q: 'Was passiert wenn mein Minutenkontingent aufgebraucht ist?',
-    a: 'Der Agent bleibt aktiv — zusätzliche Minuten werden zum günstigen Überschreitungspreis (ab 0,06 €/Min) abgerechnet. Du wirst per E-Mail informiert.',
+    a: 'Der Agent bleibt aktiv — zusätzliche Minuten werden je nach Plan zum Überschreitungspreis von 0,15–0,22 €/Min abgerechnet. Du wirst per E-Mail informiert.',
   },
 ];
 

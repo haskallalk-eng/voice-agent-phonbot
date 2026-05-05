@@ -5,6 +5,7 @@ import {
   getBillingStatus,
   createCheckoutSession,
   createPortalSession,
+  LEGAL_CONFIRMATION,
   type Plan,
   type BillingStatus,
 } from '../lib/api.js';
@@ -53,6 +54,7 @@ function PlanBadge({ status }: { status: string }) {
 
 export function BillingPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [legalAccepted, setLegalAccepted] = useState(false);
   const [flash, setFlash] = useState<{ type: 'ok' | 'error'; text: string } | null>(() => {
     const params = new URLSearchParams(window.location.search);
     let initial: { type: 'ok' | 'error'; text: string } | null = null;
@@ -107,9 +109,13 @@ export function BillingPage() {
   const effectiveFlash = flash ?? (queryError ? { type: 'error' as const, text: 'Billing-Daten konnten nicht geladen werden.' } : null);
 
   async function handleUpgrade(planId: string) {
+    if (!legalAccepted) {
+      setFlash({ type: 'error', text: 'Bitte bestätige zuerst AGB, Datenschutz, AVV und B2B-Status.' });
+      return;
+    }
     setActionLoading(planId);
     try {
-      const { url } = await createCheckoutSession(planId, billingInterval);
+      const { url } = await createCheckoutSession(planId, billingInterval, LEGAL_CONFIRMATION);
       window.location.href = url;
     } catch (e: unknown) {
       // F4: don't echo raw `e.message` into the UI — pg-error / stack traces
@@ -227,6 +233,23 @@ export function BillingPage() {
             </div>
           )}
         </div>
+        <label className="mb-4 flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs text-white/55">
+          <input
+            type="checkbox"
+            checked={legalAccepted}
+            onChange={(e) => setLegalAccepted(e.target.checked)}
+            className="mt-0.5 rounded border-white/20 bg-white/5 text-orange-500 focus:ring-orange-500/50"
+          />
+          <span>
+            Ich handle als Unternehmer im Sinne von &sect;14 BGB und akzeptiere die aktuellen{' '}
+            <a href="/agb/" target="_blank" rel="noopener" className="text-orange-400 underline hover:text-orange-300">AGB</a>
+            ,{' '}
+            <a href="/datenschutz/" target="_blank" rel="noopener" className="text-orange-400 underline hover:text-orange-300">Datenschutzerkl&auml;rung</a>
+            {' '}und den{' '}
+            <a href="/avv/" target="_blank" rel="noopener" className="text-orange-400 underline hover:text-orange-300">AVV</a>
+            {' '}f&uuml;r diese Buchung.
+          </span>
+        </label>
         {/* ── Main plans: 3-col grid (Starter / Pro / Agency) ── */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
           {plans.filter(p => !['free', 'nummer'].includes(p.id)).map((plan) => {
@@ -285,7 +308,7 @@ export function BillingPage() {
                   })}
                 </ul>
                 {!isCurrent && (
-                  <button onClick={() => handleUpgrade(plan.id)} disabled={!!actionLoading}
+                  <button onClick={() => handleUpgrade(plan.id)} disabled={!!actionLoading || !legalAccepted}
                     className="w-full rounded-xl bg-gradient-to-r from-orange-500 to-cyan-500 hover:opacity-90 disabled:opacity-50 text-white text-sm font-medium py-2 transition-opacity">
                     {actionLoading === plan.id ? '…' : 'Auswählen'}
                   </button>
@@ -308,11 +331,11 @@ export function BillingPage() {
               <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72c.12.96.36 1.9.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.34 1.85.58 2.81.7A2 2 0 0122 16.92z"/>
             </svg>
             <span className="text-white/50">
-              <span className="text-white/70 font-medium">Eigene Telefonnummer</span> · 8,99€/Mo · 70 Min inkl. · +0,20€/Min Überschreitung
+              <span className="text-white/70 font-medium">Eigene Telefonnummer</span> · 8,99€/Mo · 70 Min inkl. · +0,22€/Min Überschreitung
             </span>
           </div>
           {currentPlan !== 'nummer' ? (
-            <button onClick={() => handleUpgrade('nummer')} disabled={!!actionLoading}
+            <button onClick={() => handleUpgrade('nummer')} disabled={!!actionLoading || !legalAccepted}
               className="text-sm font-medium text-orange-400 hover:text-orange-300 transition-colors whitespace-nowrap">
               {actionLoading === 'nummer' ? '…' : 'Nummer aktivieren →'}
             </button>
@@ -324,7 +347,7 @@ export function BillingPage() {
 
       {/* Overage note */}
       <p className="text-xs text-white/30">
-        Überschreitung: Nummer 0,20€/Min · Starter 0,10€/Min · Pro 0,08€/Min · Agency 0,06€/Min. Alle Preise zzgl. MwSt.
+        Überschreitung: Nummer 0,22€/Min · Starter 0,22€/Min · Pro 0,20€/Min · Agency 0,15€/Min. Kleinunternehmerregelung nach §19 UStG: keine Umsatzsteuer ausgewiesen.
       </p>
     </div>
   );

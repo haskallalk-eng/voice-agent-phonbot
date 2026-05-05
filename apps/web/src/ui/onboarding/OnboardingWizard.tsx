@@ -1119,6 +1119,7 @@ export function OnboardingWizard({ onComplete }: Props) {
 
 function UpgradeModal({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState<string | null>(null);
+  const [legalAccepted, setLegalAccepted] = useState(false);
 
   const plans = [
     { id: 'starter', name: 'Starter', price: '79', features: ['✦ Telefonnummer inklusive', '360 Min/Monat', '1 Agent'], accent: '#F97316' },
@@ -1127,10 +1128,11 @@ function UpgradeModal({ onClose }: { onClose: () => void }) {
   ];
 
   async function handleSelect(planId: string) {
+    if (!legalAccepted) return;
     setLoading(planId);
     try {
-      const { createCheckoutSession } = await import('../../lib/api.js');
-      const result = await createCheckoutSession(planId, 'month');
+      const { createCheckoutSession, LEGAL_CONFIRMATION } = await import('../../lib/api.js');
+      const result = await createCheckoutSession(planId, 'month', LEGAL_CONFIRMATION);
       if (result.url) window.location.href = result.url;
     } catch {
       setLoading(null);
@@ -1151,6 +1153,23 @@ function UpgradeModal({ onClose }: { onClose: () => void }) {
           </div>
           <div className="w-16" />
         </div>
+
+        <label className="mb-4 flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs text-white/55">
+          <input
+            type="checkbox"
+            checked={legalAccepted}
+            onChange={(e) => setLegalAccepted(e.target.checked)}
+            className="mt-0.5 rounded border-white/20 bg-white/5 text-orange-500 focus:ring-orange-500/50"
+          />
+          <span>
+            Ich handle als Unternehmer im Sinne von &sect;14 BGB und akzeptiere{' '}
+            <a href="/agb/" target="_blank" rel="noopener" className="text-orange-400 underline hover:text-orange-300">AGB</a>
+            ,{' '}
+            <a href="/datenschutz/" target="_blank" rel="noopener" className="text-orange-400 underline hover:text-orange-300">Datenschutz</a>
+            {' '}und{' '}
+            <a href="/avv/" target="_blank" rel="noopener" className="text-orange-400 underline hover:text-orange-300">AVV</a>.
+          </span>
+        </label>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {plans.map(p => (
@@ -1189,7 +1208,7 @@ function UpgradeModal({ onClose }: { onClose: () => void }) {
               </ul>
               <button
                 onClick={() => handleSelect(p.id)}
-                disabled={loading !== null}
+                disabled={loading !== null || !legalAccepted}
                 className="w-full rounded-lg py-2.5 text-xs font-semibold disabled:opacity-50 transition-all hover:brightness-110 cursor-pointer mt-5"
                 style={{
                   background: 'rgba(249,115,22,0.05)',

@@ -16,6 +16,19 @@ import cookie from '@fastify/cookie';
 const mockRows: Record<string, unknown[]> = {};
 const mockQuery = vi.fn().mockImplementation(async (sql: string, params?: unknown[]) => {
   // Simple router based on SQL content
+  if (sql.includes('FROM pending_registrations') && sql.includes('FOR UPDATE')) {
+    return {
+      rowCount: 1,
+      rows: [{
+        id: 'pending-1',
+        email: 'paid@test.de',
+        org_name: 'Paid Org',
+        password_hash: '$2b$12$mock',
+        plan_id: 'starter',
+        billing_interval: 'year',
+      }],
+    };
+  }
   if (sql.includes('SELECT id FROM users WHERE email')) {
     return { rowCount: 0, rows: [] };
   }
@@ -53,6 +66,12 @@ const mockQuery = vi.fn().mockImplementation(async (sql: string, params?: unknow
   if (sql.includes('UPDATE refresh_tokens SET revoked_at')) {
     return { rowCount: 1 };
   }
+  if (sql.includes('UPDATE legal_acceptances')) {
+    return { rowCount: 1 };
+  }
+  if (sql.includes('DELETE FROM pending_registrations')) {
+    return { rowCount: 1 };
+  }
   return { rowCount: 0, rows: [] };
 });
 
@@ -84,7 +103,7 @@ vi.mock('../email.js', () => ({
   sendPasswordResetEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
-const { registerAuth } = await import('../auth.js');
+const { registerAuth, materializePendingRegistration } = await import('../auth.js');
 
 describe('auth flow (TEST-01)', () => {
   let app: ReturnType<typeof Fastify>;
@@ -104,7 +123,7 @@ describe('auth flow (TEST-01)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/auth/register',
-      payload: { orgName: 'Test Org', email: 'new@test.de', password: 'securepass123', isBusiness: true, termsAccepted: true },
+      payload: { orgName: 'Test Org', email: 'new@test.de', password: 'securepass123', isBusiness: true, termsAccepted: true, privacyAccepted: true, avvAccepted: true },
     });
     expect(res.statusCode).toBe(201);
     const body = JSON.parse(res.body);
@@ -176,9 +195,23 @@ describe('auth flow (TEST-01)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/auth/register',
-      payload: { orgName: 'Edge Org', email: 'edge@test.de', password: 'a'.repeat(72), isBusiness: true, termsAccepted: true },
+      payload: { orgName: 'Edge Org', email: 'edge@test.de', password: 'a'.repeat(72), isBusiness: true, termsAccepted: true, privacyAccepted: true, avvAccepted: true },
     });
     expect(res.statusCode).toBe(201);
+  });
+
+  it('materializePendingRegistration activates the paid plan even before subscription webhook sync', async () => {
+    mockQuery.mockClear();
+    const res = await materializePendingRegistration({
+      pendingId: 'pending-1',
+      stripeCustomerId: 'cus_paid_123',
+    });
+
+    expect(res?.orgId).toBe('org-1');
+    expect(res?.userId).toBe('user-1');
+    const orgInsert = mockQuery.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO orgs'));
+    expect(orgInsert).toBeDefined();
+    expect(orgInsert?.[1]).toEqual(expect.arrayContaining(['Paid Org', 'cus_paid_123', 'starter', 'year', 360]));
   });
 
   // Edge-case: password over 72 bytes rejected (D5 guard)
