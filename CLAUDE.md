@@ -174,6 +174,18 @@ Hintergrund: 2026-04-21 wurden drei Scripts mit hardcodetem Supabase-DB-Passwort
 2. Datei aus Working-Tree entfernen, ersetzen durch `process.env.X`
 3. Für die paranoide Säuberung optional `git filter-repo --path <file> --invert-paths` + force-push (koordinieren mit Termi + Prod-Deploy!)
 
+### 18. PRODUCTION DEPLOY / SSH
+- Production server: `root@87.106.111.213`
+- SSH key: `~/.ssh/id_ed25519`
+- Repo path on server: `/opt/phonbot`
+- Safe deploy command:
+  ```bash
+  ssh -i ~/.ssh/id_ed25519 root@87.106.111.213 "cd /opt/phonbot && bash scripts/check-prod-env.sh && bash scripts/deploy.sh"
+  ```
+- Before deploy: push the commit first, then verify server is clean with `cd /opt/phonbot && git status -sb`.
+- After deploy: verify `docker compose ps` on the server and `https://phonbot.de/health` from outside.
+- IMPORTANT: do NOT use `docker compose build --no-cache` / `BUILD_CLEAN=1` on the VPS unless the user explicitly asks. It previously OOM-crashed the server; cached `docker compose build` is the normal deploy path.
+
 ### 16. COORDINATION (Termi + Vaso)
 - **`.coordination/`** im Repo-Root (gitignored) enthält die Agent-Koordination.
 - Nicht committen. Nicht löschen. Bei Session-Start: `README.md → identity.md → RULES.md → inbox → findings.md` lesen.
