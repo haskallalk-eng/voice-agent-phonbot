@@ -14,6 +14,43 @@ export const RECORDING_CONSENT_PROMPT_VERSION = 'recording-consent-v2026-05-05';
 const DEFAULT_INSTRUCTIONS =
   'Du bist eine freundliche Telefonassistenz für ein lokales Unternehmen. Ziel: Termine buchen, Fragen beantworten, fehlende Details erfragen. Halte Antworten kurz, gesprochen und höflich. Maximal 2 Sätze pro Antwort.';
 
+const LANGUAGE_LABELS: Record<string, string> = {
+  de: 'Deutsch',
+  en: 'Englisch',
+  fr: 'Franzoesisch',
+  es: 'Spanisch',
+  it: 'Italienisch',
+  tr: 'Tuerkisch',
+  pl: 'Polnisch',
+  nl: 'Niederlaendisch',
+  pt: 'Portugiesisch',
+  ru: 'Russisch',
+  ja: 'Japanisch',
+  ko: 'Koreanisch',
+  zh: 'Chinesisch',
+  ar: 'Arabisch',
+  hi: 'Hindi',
+  sv: 'Schwedisch',
+  da: 'Daenisch',
+  fi: 'Finnisch',
+  no: 'Norwegisch',
+  cs: 'Tschechisch',
+  sk: 'Slowakisch',
+  hu: 'Ungarisch',
+  ro: 'Rumaenisch',
+  el: 'Griechisch',
+  bg: 'Bulgarisch',
+  hr: 'Kroatisch',
+  uk: 'Ukrainisch',
+  id: 'Indonesisch',
+  ms: 'Malaiisch',
+  vi: 'Vietnamesisch',
+};
+
+function languageLabel(language: string): string {
+  return LANGUAGE_LABELS[language] ?? language;
+}
+
 /**
  * Parse structured opening hours and determine open/closed status.
  * Expected format: "Mo-Fr 09:00-18:00, Sa 10:00-14:00" or free-text.
@@ -163,13 +200,32 @@ export function buildAgentInstructions(cfg: AgentConfig) {
     }
   }
 
-  parts.push(`Hauptsprache: ${cfg.language === 'de' ? 'Deutsch' : 'Englisch'}`);
+  const enabledTools = new Set(cfg.tools ?? []);
+  const calendarFindSlotsEnabled = enabledTools.has('calendar.findSlots');
+  const calendarBookEnabled = enabledTools.has('calendar.book');
+  const ticketCreateEnabled = enabledTools.has('ticket.create');
+
+  parts.push(`Hauptsprache: ${languageLabel(cfg.language)}`);
   parts.push('Bleibe immer kurz, gesprochen und praxisnah. Maximal 2 Sätze pro Antwort.');
-  parts.push('Wenn eine Terminbuchung technisch fehlschlägt, behaupte NIEMALS der Termin sei gebucht. Sage kurz, dass du den Terminwunsch als Rückruf-Ticket aufgenommen hast und jemand den Termin bestätigt.');
-  parts.push('Bei verfuegbaren Terminen: Nenne maximal drei Uhrzeiten auf einmal, gruppiert nach Tag. Lies niemals eine lange Liste einzelner Uhrzeiten vor. Frage danach, welche Option passt.');
-  parts.push('Wenn der Anrufer einen Wunschfriseur oder Mitarbeiter nennt, gib diesen Namen bei calendar.findSlots und calendar.book als preferredStylist weiter.');
-  parts.push('Wenn Mitarbeiterkalender aktiv sind und der Anrufer keinen Wunsch hat ("egal", "beliebig", "wer frei ist"), gib preferredStylist="beliebig" weiter. Rate nicht selbst, welcher Mitarbeiter passt; das Kalender-Tool weist deterministisch einen freien Mitarbeiter zu.');
-  parts.push('Bestaetige einen Termin nur, wenn calendar.book mit ok=true/status=confirmed geantwortet hat.');
+  if (calendarFindSlotsEnabled) {
+    parts.push('Bei verfuegbaren Terminen: Nenne maximal drei Uhrzeiten auf einmal, gruppiert nach Tag. Lies niemals eine lange Liste einzelner Uhrzeiten vor. Frage danach, welche Option passt.');
+  } else {
+    parts.push('Kalender-Suche ist fuer diesen Agenten deaktiviert. Erfinde keine freien Zeiten und behaupte nicht, du haettest den Kalender geprueft.');
+  }
+  if (calendarFindSlotsEnabled || calendarBookEnabled) {
+    const enabledCalendarTools = [
+      calendarFindSlotsEnabled ? 'calendar.findSlots' : null,
+      calendarBookEnabled ? 'calendar.book' : null,
+    ].filter(Boolean).join(' und ');
+    parts.push(`Wenn der Anrufer einen Wunschfriseur oder Mitarbeiter nennt, gib diesen Namen bei ${enabledCalendarTools} als preferredStylist weiter.`);
+    parts.push('Wenn Mitarbeiterkalender aktiv sind und der Anrufer keinen Wunsch hat ("egal", "beliebig", "wer frei ist"), gib preferredStylist="beliebig" weiter. Rate nicht selbst, welcher Mitarbeiter passt; das Kalender-Tool weist deterministisch einen freien Mitarbeiter zu.');
+  }
+  if (calendarBookEnabled) {
+    parts.push('Wenn eine Terminbuchung technisch fehlschlaegt, behaupte NIEMALS der Termin sei gebucht. Sage kurz, dass du den Terminwunsch als Rueckruf-Ticket aufgenommen hast und jemand den Termin bestaetigt.');
+    parts.push('Bestaetige einen Termin nur, wenn calendar.book mit ok=true/status=confirmed geantwortet hat.');
+  } else {
+    parts.push('Terminbuchung ist fuer diesen Agenten deaktiviert. Sage nicht, dass ein Termin fest gebucht wurde; nimm den Wunsch nur als Notiz oder Rueckruf auf.');
+  }
   parts.push('Erwaehne eine SMS-Bestaetigung nur, wenn das Tool-Ergebnis smsSent=true enthaelt. Wenn smsSent=false oder fehlt, sage nicht dass eine SMS verschickt wurde.');
 
   if (cfg.fallback.enabled) {
@@ -196,7 +252,11 @@ export function buildAgentInstructions(cfg: AgentConfig) {
         const toolName = transferToolName(e164);
         parts.push(`- ${rule.description} → rufe das Tool "${toolName}" auf (leitet weiter an ${e164})`);
       } else if (rule.action === 'ticket') {
-        parts.push(`- ${rule.description} → Rückruf-Ticket erstellen (Tool "ticket_create")`);
+        if (ticketCreateEnabled) {
+          parts.push(`- ${rule.description} → Rückruf-Ticket erstellen (Tool "ticket_create")`);
+        } else {
+          parts.push(`- ${rule.description} → Rückrufwunsch im Gespräch zusammenfassen; das Ticket-Tool ist fuer diesen Agenten deaktiviert.`);
+        }
       } else if (rule.action === 'hangup') {
         parts.push(`- ${rule.description} → Tool "end_call" aufrufen`);
       }
@@ -238,9 +298,13 @@ export function buildAgentInstructions(cfg: AgentConfig) {
     parts.push(`- Wenn der Anrufer neu oder pending ist: Sammle nur diese fuer diesen Tenant aktivierten Felder, immer einzeln: ${activeQuestionText || 'Name und Anliegen'}.`);
     parts.push('- Bei Bestandskunden: Frage nicht alles neu ab. Klaere nur Anliegen, Terminwunsch, ob derselbe Service wie letztes Mal gewuenscht ist, Wunschfriseur und ob sich Haarlaenge/Farbe/Zustand seit dem letzten Besuch veraendert haben.');
     parts.push('- Nach Name plus mindestens Anliegen/Service rufst du "customer_upsert" still auf. Bot-angelegte Kunden bleiben pending, bis der Friseur sie in Phonbot bestaetigt. Speichere keine ueberfluessigen Daten wie Geburtsdatum, Adresse, Fotos oder Marketing-Einwilligungen im Telefonflow.');
-    parts.push(customerModule.allowBookingWithoutApproval !== false
-      ? '- Einstellung "Termine ohne Freigabe buchen" ist AN: Du darfst fuer neue oder pending Kunden einen Termin buchen, wenn der Anrufer den Slot bestaetigt.'
-      : '- Einstellung "Termine ohne Freigabe buchen" ist AUS: Buche fuer neue oder pending Kunden keinen festen Kalendertermin. Erstelle stattdessen ein Ticket/Rueckruf mit Terminwunsch und sage, dass der Salon den Termin bestaetigt.');
+    if (!calendarBookEnabled) {
+      parts.push('- Terminbuchung ist deaktiviert: Buche fuer neue, pending oder bestehende Kunden keinen festen Kalendertermin. Notiere den Terminwunsch nur als Rueckruf/Ticket, falls das Ticket-Tool aktiv ist.');
+    } else {
+      parts.push(customerModule.allowBookingWithoutApproval !== false
+        ? '- Einstellung "Termine ohne Freigabe buchen" ist AN: Du darfst fuer neue oder pending Kunden einen Termin buchen, wenn der Anrufer den Slot bestaetigt.'
+        : '- Einstellung "Termine ohne Freigabe buchen" ist AUS: Buche fuer neue oder pending Kunden keinen festen Kalendertermin. Erstelle stattdessen ein Ticket/Rueckruf mit Terminwunsch und sage, dass der Salon den Termin bestaetigt.');
+    }
   }
 
   // ── End-of-call feedback (non-intrusive) ──────────────────────────────────

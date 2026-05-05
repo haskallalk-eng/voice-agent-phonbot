@@ -932,19 +932,19 @@ function TransferInfoCard({ config, onNavigateTab }: { config: AgentConfig; onNa
       onClick={() => onNavigateTab?.('capabilities')}
       className={`group relative flex items-start gap-2.5 text-left rounded-xl border px-3 py-2.5 transition-all cursor-pointer ${
         hasTransfer
-          ? 'border-violet-400/40 bg-violet-400/[0.05]'
+          ? 'border-cyan-400/40 bg-cyan-400/[0.05]'
           : 'border-dashed border-white/[0.10] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.04]'
       }`}
     >
       {hasTransfer && (
-        <span aria-hidden className="absolute top-2 right-2 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-violet-200 bg-violet-400/15 border border-violet-400/30 rounded">
+        <span aria-hidden className="absolute top-2 right-2 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-cyan-200 bg-cyan-400/15 border border-cyan-400/30 rounded">
           {rules.length === 1 ? 'aktiv' : `${rules.length} Regeln`}
         </span>
       )}
       {!hasTransfer && (
         <span aria-hidden className="absolute top-2 right-2 text-[10px] text-white/30">→</span>
       )}
-      <IconPhoneForward size={16} className={`shrink-0 mt-0.5 transition-colors ${hasTransfer ? 'text-violet-300' : 'text-white/30 group-hover:text-white/50'}`} />
+      <IconPhoneForward size={16} className={`shrink-0 mt-0.5 transition-colors ${hasTransfer ? 'text-cyan-300' : 'text-white/30 group-hover:text-white/50'}`} />
       <div className="min-w-0 pr-12">
         <p className={`text-xs font-semibold leading-tight transition-colors ${hasTransfer ? 'text-white' : 'text-white/55 group-hover:text-white/80'}`}>
           Live-Weiterleitung

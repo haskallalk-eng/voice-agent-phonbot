@@ -111,7 +111,7 @@ export function PreviewTab({ config, preview, voices, deploying, onDeploy, onPre
             </div>
 
             <button
-              onClick={() => getAgentPreview().then(onPreviewUpdate)}
+              onClick={() => getAgentPreview(config.tenantId).then(onPreviewUpdate)}
               className="flex items-center gap-1.5 text-[11px] text-white/40 hover:text-orange-400 transition-colors cursor-pointer mb-3"
             >
               <IconRefresh size={12} /> Technische Vorschau laden

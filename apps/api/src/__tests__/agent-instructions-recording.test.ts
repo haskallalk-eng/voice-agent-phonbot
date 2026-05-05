@@ -69,3 +69,18 @@ describe('buildAgentInstructions: recording disclosure', () => {
     expect(out).toContain('Beispiel AG');
   });
 });
+
+describe('buildAgentInstructions: agent-builder toggles', () => {
+  it('respects disabled calendar tools in the prompt', () => {
+    const out = buildAgentInstructions(baseCfg({ tools: ['ticket.create'] }));
+    expect(out).toContain('Kalender-Suche ist fuer diesen Agenten deaktiviert');
+    expect(out).toContain('Terminbuchung ist fuer diesen Agenten deaktiviert');
+    expect(out).not.toContain('Bestaetige einen Termin nur, wenn calendar.book');
+  });
+
+  it('uses the configured main language label', () => {
+    const out = buildAgentInstructions(baseCfg({ language: 'fr' }));
+    expect(out).toContain('Hauptsprache: Franzoesisch');
+    expect(out).not.toContain('Hauptsprache: Englisch');
+  });
+});
