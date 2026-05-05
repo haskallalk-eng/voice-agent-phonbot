@@ -574,6 +574,28 @@ export async function listAgents(): Promise<RetellAgent[]> {
   return retellRequest('/list-agents');
 }
 
+export async function deleteAgent(agentId: string): Promise<void> {
+  const res = await fetch(`${RETELL_API}/delete-agent/${encodeURIComponent(agentId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${getApiKey()}` },
+    signal: AbortSignal.timeout(RETELL_TIMEOUT_MS),
+  });
+  if (!res.ok && res.status !== 204 && res.status !== 404) {
+    throw new Error(`Retell delete-agent ${res.status}: ${await res.text()}`);
+  }
+}
+
+export async function deleteLLM(llmId: string): Promise<void> {
+  const res = await fetch(`${RETELL_API}/delete-retell-llm/${encodeURIComponent(llmId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${getApiKey()}` },
+    signal: AbortSignal.timeout(RETELL_TIMEOUT_MS),
+  });
+  if (!res.ok && res.status !== 204 && res.status !== 404) {
+    throw new Error(`Retell delete-retell-llm ${res.status}: ${await res.text()}`);
+  }
+}
+
 // --- Voices ---
 
 export type RetellVoice = {
@@ -631,11 +653,11 @@ export async function listPhoneNumbers(): Promise<RetellPhoneNumber[]> {
 
 export async function updatePhoneNumber(
   phoneNumber: string,
-  config: { outboundAgentId?: string; inboundAgentId?: string },
+  config: { outboundAgentId?: string | null; inboundAgentId?: string | null },
 ): Promise<void> {
   const body: Record<string, unknown> = {};
-  if (config.outboundAgentId) body.outbound_agent_id = config.outboundAgentId;
-  if (config.inboundAgentId) body.inbound_agent_id = config.inboundAgentId;
+  if (config.outboundAgentId !== undefined) body.outbound_agent_id = config.outboundAgentId;
+  if (config.inboundAgentId !== undefined) body.inbound_agent_id = config.inboundAgentId;
 
   await retellRequest(`/update-phone-number/${encodeURIComponent(phoneNumber)}`, {
     method: 'PATCH',

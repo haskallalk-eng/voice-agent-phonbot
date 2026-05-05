@@ -17,6 +17,9 @@ import {
   getCall,
   getAgent as retellGetAgent,
   getLLM as retellGetLlm,
+  deleteAgent as retellDeleteAgent,
+  deleteLLM as retellDeleteLlm,
+  updatePhoneNumber as retellUpdatePhoneNumber,
   DEFAULT_VOICE_ID,
   type RetellTool,
   type PostCallAnalysisField,
@@ -1543,16 +1546,55 @@ export async function registerAgentConfig(app: FastifyInstance) {
       if (!valid) return reply.status(403).send({ error: 'Falsches Passwort.' });
     }
 
-    // Delete from DB
-    await pool.query(`DELETE FROM agent_configs WHERE tenant_id = $1 AND org_id = $2`, [tenantId, orgId]);
+    const data = (check.rows[0].data ?? {}) as Record<string, unknown>;
+    const retellAgentIds = [data.retellAgentId, data.retellCallbackAgentId]
+      .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+    const retellLlmIds = [data.retellLlmId, data.retellCallbackLlmId]
+      .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
 
-    // Unassign phone numbers that were connected to this agent's retell ID
-    const retellAgentId = check.rows[0].data?.retellAgentId;
-    if (retellAgentId) {
-      await pool.query(`UPDATE phone_numbers SET agent_id = NULL WHERE agent_id = $1 AND org_id = $2`, [retellAgentId, orgId]);
+    let connectedNumbers: string[] = [];
+    if (retellAgentIds.length) {
+      const numbers = await pool.query(
+        `SELECT number FROM phone_numbers WHERE org_id = $1 AND agent_id = ANY($2::text[])`,
+        [orgId, retellAgentIds],
+      );
+      connectedNumbers = numbers.rows
+        .map((row) => row.number)
+        .filter((n): n is string => typeof n === 'string' && n.trim().length > 0);
     }
 
-    return { ok: true };
+    // Delete local state first so the UI cannot keep routing new calls to a
+    // removed agent. External Retell cleanup is best-effort but logged loudly;
+    // the orphan-cleanup script can safely retry anything that fails here.
+    await pool.query(`DELETE FROM agent_configs WHERE tenant_id = $1 AND org_id = $2`, [tenantId, orgId]);
+    if (retellAgentIds.length) {
+      await pool.query(
+        `UPDATE phone_numbers SET agent_id = NULL WHERE org_id = $1 AND agent_id = ANY($2::text[])`,
+        [orgId, retellAgentIds],
+      );
+    }
+
+    const cleanup = await Promise.allSettled([
+      ...connectedNumbers.map((number) => retellUpdatePhoneNumber(number, { inboundAgentId: null })),
+      ...retellAgentIds.map((id) => retellDeleteAgent(id)),
+    ]);
+    cleanup.push(...await Promise.allSettled(retellLlmIds.map((id) => retellDeleteLlm(id))));
+    const cleanupFailed = cleanup.filter((r) => r.status === 'rejected').length;
+    if (cleanupFailed) {
+      req.log.warn(
+        {
+          tenantId,
+          orgId,
+          cleanupFailed,
+          errors: cleanup
+            .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+            .map((r) => r.reason instanceof Error ? r.reason.message : String(r.reason)),
+        },
+        'agent-config/delete: Retell cleanup partially failed',
+      );
+    }
+
+    return { ok: true, cleanupFailed };
   });
 
   // Create a web call for testing (requires deployed agent)
