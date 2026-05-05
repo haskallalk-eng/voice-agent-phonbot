@@ -78,6 +78,7 @@ vi.mock('../retell.js', () => ({
   getAgent: vi.fn(),
   getLLM: vi.fn(),
   DEFAULT_VOICE_ID: 'voice-default',
+  DEFAULT_STANDARD_VOICE_ID: 'voice-standard',
 }));
 
 vi.mock('../twilio-openai-bridge.js', () => ({

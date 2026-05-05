@@ -7,14 +7,15 @@
 
 const RETELL_API = 'https://api.retellai.com';
 
-// Default voice for new demo agents + fallback when an agent config has no explicit voice.
-// "Chipy" is now the ElevenLabs Hassieb-Kalla clone (custom voice at Retell,
-// 11labs backend) — higher audio quality than the Cartesia version, at
-// ~$0.040/min vs ~$0.015/min. Override via env RETELL_DEFAULT_VOICE_ID
-// without a code deploy; the Cartesia original still exists at Retell as
-// custom_voice_28bd4920fa6523c6ac8c4e527b for rollback if costs spike.
+// Default voices for new demo agents + fallback when an agent config has no explicit voice.
+// HQ prioritizes human quality: a native German ElevenLabs voice on multilingual_v2.
+// Standard prioritizes robust/lower-cost phone delivery: Cartesia Sonic 3 German
+// Conversational Woman, imported into this Retell workspace as a community voice.
+export const DEFAULT_STANDARD_VOICE_ID =
+  process.env.RETELL_DEFAULT_STANDARD_VOICE_ID ?? 'custom_voice_6c5fa792073cea70bc19314f26';
+
 export const DEFAULT_VOICE_ID =
-  process.env.RETELL_DEFAULT_VOICE_ID ?? 'custom_voice_5269b3f4732a77b9030552fd67';
+  process.env.RETELL_DEFAULT_HQ_VOICE_ID ?? process.env.RETELL_DEFAULT_VOICE_ID ?? '11labs-Carola';
 
 function getApiKey(): string {
   const key = process.env.RETELL_API_KEY;
@@ -106,6 +107,8 @@ export type RetellAgent = {
   agent_name: string | null;
   response_engine: { type: string; llm_id: string };
   voice_id: string;
+  voice_model?: string | null;
+  fallback_voice_ids?: string[] | null;
   voice_speed?: number;
   language?: string;
 };
@@ -241,6 +244,22 @@ function defaultBackchannel(): boolean {
   return process.env.RETELL_AGENT_BACKCHANNEL !== 'false';
 }
 
+function defaultReminderTriggerMs(): number {
+  const raw = process.env.RETELL_AGENT_REMINDER_TRIGGER_MS;
+  if (raw === undefined || raw === '') return 3_000;
+  const v = Number(raw);
+  if (!Number.isFinite(v) || v < 1_000) return 3_000;
+  return v;
+}
+
+function defaultReminderMaxCount(): number {
+  const raw = process.env.RETELL_AGENT_REMINDER_MAX_COUNT;
+  if (raw === undefined || raw === '') return 1;
+  const v = Number(raw);
+  if (!Number.isFinite(v) || v < 0 || v > 5) return 1;
+  return Math.round(v);
+}
+
 /** Hard timeout — Retell hangs up after N ms of unbroken silence.
  *  Default 45 s so a caller who wandered off / dropped the line can't
  *  rack up open minutes forever. */
@@ -277,12 +296,83 @@ export type RetellDataStorageSetting =
   | 'everything_except_pii'
   | 'basic_attributes_only';
 
+type RetellVoiceModel =
+  | 'eleven_turbo_v2'
+  | 'eleven_flash_v2'
+  | 'eleven_turbo_v2_5'
+  | 'eleven_flash_v2_5'
+  | 'eleven_multilingual_v2'
+  | 'eleven_v3'
+  | 'sonic-3'
+  | 'sonic-3-latest'
+  | 'tts-1'
+  | 'gpt-4o-mini-tts'
+  | 'speech-02-turbo'
+  | 'speech-2.8-turbo'
+  | 's1'
+  | 's2-pro';
+
+type VoiceRuntimeConfig = {
+  voiceModel?: RetellVoiceModel | null;
+  voiceTemperature?: number;
+  fallbackVoiceIds?: string[] | null;
+};
+
+function envNumber(name: string, fallback: number, min: number, max: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  const v = Number(raw);
+  return Number.isFinite(v) && v >= min && v <= max ? v : fallback;
+}
+
+function envCsv(name: string, fallback: string[]): string[] {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === '') return fallback;
+  return raw.split(',').map((v) => v.trim()).filter(Boolean);
+}
+
+function defaultRuntimeForVoice(voiceId: string): VoiceRuntimeConfig | null {
+  if (voiceId === DEFAULT_VOICE_ID) {
+    return {
+      voiceModel: (process.env.RETELL_DEFAULT_VOICE_MODEL as RetellVoiceModel | undefined) ?? 'eleven_multilingual_v2',
+      voiceTemperature: envNumber('RETELL_DEFAULT_VOICE_TEMPERATURE', 0.55, 0, 2),
+      fallbackVoiceIds: envCsv('RETELL_DEFAULT_FALLBACK_VOICE_IDS', [DEFAULT_STANDARD_VOICE_ID]),
+    };
+  }
+  if (voiceId === DEFAULT_STANDARD_VOICE_ID) {
+    return {
+      voiceModel: (process.env.RETELL_DEFAULT_STANDARD_VOICE_MODEL as RetellVoiceModel | undefined) ?? 'sonic-3-latest',
+      voiceTemperature: envNumber('RETELL_DEFAULT_STANDARD_VOICE_TEMPERATURE', 0.55, 0, 2),
+      fallbackVoiceIds: envCsv('RETELL_DEFAULT_STANDARD_FALLBACK_VOICE_IDS', [DEFAULT_VOICE_ID]),
+    };
+  }
+  return null;
+}
+
+function applyVoiceRuntime(
+  body: Record<string, unknown>,
+  voiceId: string,
+  config: VoiceRuntimeConfig,
+): void {
+  const defaults = defaultRuntimeForVoice(voiceId);
+  const voiceModel = config.voiceModel !== undefined ? config.voiceModel : defaults?.voiceModel;
+  const voiceTemperature = config.voiceTemperature !== undefined ? config.voiceTemperature : defaults?.voiceTemperature;
+  const fallbackVoiceIds = config.fallbackVoiceIds !== undefined ? config.fallbackVoiceIds : defaults?.fallbackVoiceIds;
+
+  if (voiceModel !== undefined) body.voice_model = voiceModel;
+  if (voiceTemperature !== undefined) body.voice_temperature = voiceTemperature;
+  if (fallbackVoiceIds !== undefined) body.fallback_voice_ids = fallbackVoiceIds;
+}
+
 export async function createAgent(config: {
   name: string;
   llmId: string;
   voiceId?: string;
   language?: string;
   voiceSpeed?: number;
+  voiceModel?: RetellVoiceModel | null;
+  voiceTemperature?: number;
+  fallbackVoiceIds?: string[] | null;
   responsiveness?: number;
   maxCallDurationMs?: number;
   interruptionSensitivity?: number;
@@ -292,10 +382,11 @@ export async function createAgent(config: {
   postCallAnalysisData?: PostCallAnalysisField[];
   dataStorageSetting?: RetellDataStorageSetting;
 }): Promise<RetellAgent> {
+  const voiceId = config.voiceId ?? DEFAULT_VOICE_ID;
   const body: Record<string, unknown> = {
     agent_name: config.name,
     response_engine: { type: 'retell-llm', llm_id: config.llmId },
-    voice_id: config.voiceId ?? DEFAULT_VOICE_ID,
+    voice_id: voiceId,
     language: config.language ?? 'de-DE',
     voice_speed: config.voiceSpeed,
     responsiveness: config.responsiveness,
@@ -304,8 +395,11 @@ export async function createAgent(config: {
     allow_user_dtmf: config.allowUserDtmf,
     enable_dynamic_responsiveness: true,
     max_call_duration_ms: config.maxCallDurationMs,
+    reminder_trigger_ms: defaultReminderTriggerMs(),
+    reminder_max_count: defaultReminderMaxCount(),
     end_call_after_silence_ms: defaultEndCallSilenceMs(),
   };
+  applyVoiceRuntime(body, voiceId, config);
   // webhook_url is per-agent — without it, Retell never sends call_ended
   // (which means no billing reconcile, no transcript store, no DELETE on
   // consent-declined calls). Agent-level is correct because web calls
@@ -328,6 +422,9 @@ export async function updateAgent(
     language?: string;
     llmId?: string;
     voiceSpeed?: number;
+    voiceModel?: RetellVoiceModel | null;
+    voiceTemperature?: number;
+    fallbackVoiceIds?: string[] | null;
     responsiveness?: number;
     maxCallDurationMs?: number;
     interruptionSensitivity?: number;
@@ -344,6 +441,8 @@ export async function updateAgent(
   // configured in the Retell dashboard. Now we only override when asked.
   const body: Record<string, unknown> = {
     enable_dynamic_responsiveness: true,
+    reminder_trigger_ms: defaultReminderTriggerMs(),
+    reminder_max_count: defaultReminderMaxCount(),
     end_call_after_silence_ms: defaultEndCallSilenceMs(),
   };
   if (config.interruptionSensitivity !== undefined) body.interruption_sensitivity = config.interruptionSensitivity;
@@ -356,6 +455,7 @@ export async function updateAgent(
   if (config.voiceId !== undefined) body.voice_id = config.voiceId;
   if (config.language !== undefined) body.language = config.language;
   if (config.llmId !== undefined) body.response_engine = { type: 'retell-llm', llm_id: config.llmId };
+  if (config.voiceId !== undefined) applyVoiceRuntime(body, config.voiceId, config);
   if (config.webhookUrl !== undefined) body.webhook_url = config.webhookUrl;
   if (config.postCallAnalysisData !== undefined) body.post_call_analysis_data = config.postCallAnalysisData;
   if (config.dataStorageSetting !== undefined) body.data_storage_setting = config.dataStorageSetting;

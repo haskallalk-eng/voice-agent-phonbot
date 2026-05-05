@@ -28,7 +28,7 @@
  *    recording language).
  */
 
-import { DEFAULT_VOICE_ID } from './retell.js';
+import { DEFAULT_STANDARD_VOICE_ID, DEFAULT_VOICE_ID } from './retell.js';
 
 export interface CuratedVoice {
   id: string;
@@ -69,8 +69,8 @@ const STD_IDS = {
   n1: 'openai-alloy',
 } as const;
 
-const CHIPY_HQ_ID = DEFAULT_VOICE_ID;                          // ElevenLabs Hassieb-Kalla clone (DE)
-const CHIPY_STD_ID = 'custom_voice_28bd4920fa6523c6ac8c4e527b'; // Cartesia Chipy clone (DE)
+const CHIPY_HQ_ID = DEFAULT_VOICE_ID;             // ElevenLabs Carola (DE), quality-first default
+const CHIPY_STD_ID = DEFAULT_STANDARD_VOICE_ID;   // Cartesia German Conversational Woman, Sonic 3
 
 // ── Builders ───────────────────────────────────────────────────────────
 
@@ -137,9 +137,11 @@ function withDefault(voices: CuratedVoice[]): CuratedVoice[] {
 //    Mikro-Pausen) als die DE-nativen Standard-Stimmen. Aktiviert via
 //    Retell's Default-11labs-Library — kein BYO-Key nötig. +5 Ct/Min
 //    Surcharge wie alle HQ-Voices.
+// Current Chipy defaults are intentionally vendor voices, not the older clones:
+// HQ = native German ElevenLabs, Standard = German Cartesia Sonic.
 const DE_VOICES: CuratedVoice[] = [
-  { id: CHIPY_HQ_ID,        name: 'Chipy',       tier: 'hq',       gender: 'male',   provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: CHIPY_STD_ID,       name: 'Chipy Basic', tier: 'standard', gender: 'male',   provider: 'cartesia' },
+  { id: CHIPY_HQ_ID,        name: 'Chipy HQ',       tier: 'hq',       gender: 'female', provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: CHIPY_STD_ID,       name: 'Chipy Standard', tier: 'standard', gender: 'female', provider: 'cartesia' },
   // ── ElevenLabs HQ (Multilingual-v2 auf Deutsch) ─────────────────────
   { id: '11labs-Sarah',     name: 'Sarah',       tier: 'hq',       gender: 'female', provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
   { id: '11labs-Charlotte', name: 'Charlotte',   tier: 'hq',       gender: 'female', provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
