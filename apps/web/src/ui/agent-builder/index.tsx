@@ -177,6 +177,10 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
       setConfig(merged);
       savedConfigRef.current = JSON.stringify(merged);
       setView('edit');
+      setPreview(null);
+      const prev = await getAgentPreview(merged.tenantId);
+      setPreview(prev);
+      void refreshAgentStats(merged.tenantId);
     } catch {
       // fallback
     }
@@ -199,7 +203,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
         if (merged.retellAgentId) setView('list');
         else setView('edit');
       }
-      const prev = await getAgentPreview();
+      const prev = await getAgentPreview(merged.tenantId);
       setPreview(prev);
       // Pull live latency from Retell for this agent. Non-blocking —
       // empty result just hides the chip until real calls arrive.
@@ -228,13 +232,17 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
     setStatus(null);
     try {
       // If already deployed, sync to Retell so voice/config changes take effect immediately
+      let nextConfig = config;
       if (config.retellAgentId) {
         const result = await deployAgentConfig(config);
-        setConfig((c) => c ? { ...c, ...result.config } : c);
+        nextConfig = { ...config, ...result.config };
+        setConfig(nextConfig);
       } else {
-        await saveAgentConfig(config);
+        const saved = await saveAgentConfig(config);
+        nextConfig = { ...config, ...saved };
+        setConfig(nextConfig);
       }
-      const prev = await getAgentPreview();
+      const prev = await getAgentPreview(nextConfig.tenantId);
       setPreview(prev);
       await loadAllAgents(); // refresh agent list after save (name changes etc.)
       // Update snapshot so isDirty resets
@@ -245,7 +253,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
       setStatus({ type: 'ok', text: 'Gespeichert ✅' });
       // Voice/Prompt changes can shift latency — pull fresh stats so the
       // chip reflects the new config within a second, not 15.
-      void refreshAgentStats(config.tenantId);
+      void refreshAgentStats(nextConfig.tenantId);
     } catch {
       setStatus({ type: 'error', text: 'Speichern fehlgeschlagen' });
     } finally {
@@ -259,8 +267,9 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
     setStatus(null);
     try {
       const result = await deployAgentConfig(config);
-      setConfig((c) => c ? { ...c, ...result.config } : c);
-      const prev = await getAgentPreview();
+      const nextConfig = { ...config, ...result.config };
+      setConfig(nextConfig);
+      const prev = await getAgentPreview(nextConfig.tenantId);
       setPreview(prev);
       await loadAllAgents(); // refresh agent list after deploy
       // Update snapshot so isDirty resets
@@ -271,7 +280,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
       setStatus({ type: 'ok', text: `Deployed — Agent: ${result.retellAgentId ?? '–'}` });
       // Fresh deploy = new agent config live at Retell → pull stats so
       // the chip starts showing the new agent's measurements.
-      void refreshAgentStats(config.tenantId);
+      void refreshAgentStats(nextConfig.tenantId);
     } catch (e: unknown) {
       // F4: Retell-API-errors / pg-errors carry implementation details that
       // shouldn't surface to the customer-facing UI. Console-log for ops,

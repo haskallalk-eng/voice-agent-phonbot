@@ -556,8 +556,9 @@ export function deployAgentConfig(config: AgentConfig) {
   });
 }
 
-export function getAgentPreview() {
-  return request<AgentPreview>(`/agent-config/preview`);
+export function getAgentPreview(tenantId?: string) {
+  const query = tenantId ? `?tenantId=${encodeURIComponent(tenantId)}` : '';
+  return request<AgentPreview>(`/agent-config/preview${query}`);
 }
 
 export function createWebCall(agentTenantId?: string) {

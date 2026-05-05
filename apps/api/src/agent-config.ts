@@ -160,16 +160,47 @@ const AgentConfigSchema = z.object({
 
 type AgentConfig = z.infer<typeof AgentConfigSchema>;
 
-const CORE_AGENT_TOOLS = ['calendar.findSlots', 'calendar.book', 'ticket.create'] as const;
 const KNOWLEDGE_PDF_MAX_BYTES = 50 * 1024 * 1024;
 
-function withCoreAgentTools(tools: string[] | undefined): string[] {
-  return [...new Set([...CORE_AGENT_TOOLS, ...(tools ?? [])])];
+function parseAgentConfig(input: unknown): AgentConfig {
+  return AgentConfigSchema.parse(input);
 }
 
-function parseAgentConfig(input: unknown): AgentConfig {
-  const config = AgentConfigSchema.parse(input);
-  return { ...config, tools: withCoreAgentTools(config.tools) };
+const CALLBACK_LANGUAGE_LABELS: Record<string, string> = {
+  de: 'German',
+  en: 'English',
+  fr: 'French',
+  es: 'Spanish',
+  it: 'Italian',
+  tr: 'Turkish',
+  pl: 'Polish',
+  nl: 'Dutch',
+  pt: 'Portuguese',
+  ru: 'Russian',
+  ja: 'Japanese',
+  ko: 'Korean',
+  zh: 'Chinese',
+  ar: 'Arabic',
+  hi: 'Hindi',
+  sv: 'Swedish',
+  da: 'Danish',
+  fi: 'Finnish',
+  no: 'Norwegian',
+  cs: 'Czech',
+  sk: 'Slovak',
+  hu: 'Hungarian',
+  ro: 'Romanian',
+  el: 'Greek',
+  bg: 'Bulgarian',
+  hr: 'Croatian',
+  uk: 'Ukrainian',
+  id: 'Indonesian',
+  ms: 'Malay',
+  vi: 'Vietnamese',
+};
+
+function callbackLanguageLabel(language: string): string {
+  return CALLBACK_LANGUAGE_LABELS[language] ?? language;
 }
 
 const memory = new Map<string, AgentConfig>();
@@ -458,7 +489,7 @@ export function transferToolName(target: string): string {
 /** Map our tool names to Retell custom function definitions. */
 function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTool[] {
   const tools: RetellTool[] = [];
-  const enabled = new Set(withCoreAgentTools(config.tools));
+  const enabled = new Set(config.tools ?? []);
   const signedQuery = buildToolAuthQuery(config.tenantId);
 
   // Retell's built-in end_call tool — must be explicitly registered
@@ -886,7 +917,24 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
  * Callback LLM prompt. Uses Retell dynamic variables:
  * {{customer_name}}, {{callback_reason}}, {{callback_service}}, {{agent_name}}, {{business_name}}
  */
-function buildCallbackPrompt(): string {
+function buildCallbackPrompt(config: AgentConfig): string {
+  if (config.language !== 'de') {
+    const language = callbackLanguageLabel(config.language);
+    return [
+      `You are {{agent_name}}, the AI phone assistant for {{business_name}}. Speak ${language} throughout the call unless the customer clearly switches language.`,
+      'You are making an OUTBOUND callback. You are calling the customer back, not receiving an inbound call.',
+      '',
+      'Customer name: {{customer_name}}',
+      'Request: {{callback_reason}}',
+      'Service: {{callback_service}}',
+      '',
+      'Start the conversation in that language with the meaning of: "Hello {{customer_name}}, this is {{agent_name}} from {{business_name}}. I am calling you back about: {{callback_reason}}. Can I help you now?"',
+      'Keep responses short and clear. Ask only one question at a time.',
+      'If you can book an appointment, do it directly. If not, create a new ticket.',
+      'End the call politely once everything is resolved.',
+    ].join('\n');
+  }
+
   return [
     'Du bist {{agent_name}}, der KI-Telefonassistent von {{business_name}}.',
     'Du führst gerade einen AUSGEHENDEN Rückruf durch — du rufst den Kunden zurück, nicht umgekehrt.',
@@ -929,7 +977,7 @@ async function ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise
     // wrong here — outbound has fundamentally different rules.
     const outboundBaseline = await loadOutboundBaseline();
     const llm = await createLLM({
-      generalPrompt: `${outboundBaseline}\n\n${buildCallbackPrompt()}`,
+      generalPrompt: `${outboundBaseline}\n\n${buildCallbackPrompt(config)}`,
       tools: [],
       model,
     });
@@ -944,7 +992,7 @@ async function ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise
     // log and continue, the customer's previous prompt remains active.
     const outboundBaseline = await loadOutboundBaseline();
     await updateLLM(callbackLlmId, {
-      generalPrompt: `${outboundBaseline}\n\n${buildCallbackPrompt()}`,
+      generalPrompt: `${outboundBaseline}\n\n${buildCallbackPrompt(config)}`,
     }).catch((err: Error) => {
       log.warn({ err: err.message, orgId, callbackLlmId }, 'callback LLM baseline-refresh failed (non-fatal)');
     });
@@ -1257,7 +1305,9 @@ export async function registerAgentConfig(app: FastifyInstance) {
   // Preview generated instructions
   app.get('/agent-config/preview', { ...auth }, async (req: FastifyRequest) => {
     const { orgId } = req.user as JwtPayload;
-    const config = await readConfig(orgId, orgId);
+    const query = req.query as { tenantId?: unknown };
+    const requestedTenantId = typeof query.tenantId === 'string' ? query.tenantId.trim() : '';
+    const config = await readConfig(requestedTenantId || orgId, orgId);
     return {
       instructions: buildAgentInstructions(config),
       tools: config.tools,

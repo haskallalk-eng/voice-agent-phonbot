@@ -60,7 +60,7 @@ export function PrivacyTab({ config, onUpdate }: PrivacyTabProps) {
           </div>
         )}
         <div className="ml-14 text-xs text-white/40">
-          Änderung greift nach dem nächsten <strong>Deploy</strong> des Agents — der laufende Retell-Agent behält bis dahin seine alten Einstellungen.
+          Bei bereits deployten Agents wird diese Einstellung beim <strong>Speichern</strong> direkt zu Retell synchronisiert. Neue Agents übernehmen sie beim ersten Deploy.
         </div>
 
         <Field label="Audio & Transkript aufbewahren">
