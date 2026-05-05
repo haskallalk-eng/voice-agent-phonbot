@@ -186,8 +186,8 @@ function DayDrawer({
   const [tbReason, setTbReason] = useState('');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
-      <div className="w-full max-w-md rounded-2xl border border-white/10 overflow-hidden" style={{ background: '#14141F' }} role="dialog" aria-modal="true" aria-labelledby="day-drawer-title">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
+      <div className="w-full max-w-md max-h-[calc(100vh-2rem)] rounded-2xl border border-white/10 overflow-hidden shadow-[0_28px_90px_rgba(0,0,0,0.55)]" style={{ background: '#14141F' }} role="dialog" aria-modal="true" aria-labelledby="day-drawer-title">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
           <div>
@@ -207,7 +207,7 @@ function DayDrawer({
           <button onClick={onClose} className="text-white/30 hover:text-white/70 transition-colors text-lg leading-none" aria-label="Schließen">✕</button>
         </div>
 
-        <div className="px-5 py-4 max-h-[70vh] overflow-y-auto space-y-4">
+        <div className="px-5 py-4 max-h-[calc(100vh-12rem)] overflow-y-auto space-y-4">
           {/* Active blocks list */}
           {dayBlocks.length > 0 && (
             <div className="space-y-1.5">
