@@ -5,7 +5,7 @@ import {
   getGoogleCalendarAuthUrl, getMicrosoftCalendarAuthUrl,
   getChipyCalendar, saveChipySchedule, addChipyBlock, removeChipyBlock,
   getChipyBookings, createChipyBooking, deleteChipyBooking,
-  getExternalCalendarEvents,
+  getExternalCalendarEvents, getStaffExternalCalendarEvents,
   getCalendarStaff, createCalendarStaff, updateCalendarStaff, deleteCalendarStaff,
   getStaffChipyCalendar, saveStaffChipySchedule, addStaffChipyBlock, removeStaffChipyBlock,
   getStaffChipyBookings, createStaffChipyBooking, deleteStaffChipyBooking,
@@ -1102,6 +1102,7 @@ function StaffPanel({
   const [staffSchedule, setStaffSchedule] = useState<ChipySchedule>(DEFAULT_SCHEDULE);
   const [staffBlocks, setStaffBlocks] = useState<ChipyBlock[]>([]);
   const [staffBookings, setStaffBookings] = useState<ChipyBooking[]>([]);
+  const [staffExternalEvents, setStaffExternalEvents] = useState<ExternalCalendarEvent[]>([]);
   const [selectedStaffDay, setSelectedStaffDay] = useState<Date | null>(null);
   const [showStaffAddBooking, setShowStaffAddBooking] = useState(false);
   const [staffStatus, setStaffStatus] = useState<CalendarStatus | null>(null);
@@ -1129,14 +1130,16 @@ function StaffPanel({
     const from = isoDate(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1));
     const to = isoDate(new Date(new Date().getFullYear(), new Date().getMonth() + 3, 0));
     try {
-      const [chipy, bookings, status] = await Promise.all([
+      const [chipy, bookings, status, external] = await Promise.all([
         getStaffChipyCalendar(staffId),
         getStaffChipyBookings(staffId, from, to),
         getCalendarStatus(staffId),
+        getStaffExternalCalendarEvents(staffId, from, to).catch(() => ({ events: [] as ExternalCalendarEvent[] })),
       ]);
       setStaffSchedule({ ...DEFAULT_SCHEDULE, ...chipy.schedule });
       setStaffBlocks(chipy.blocks);
       setStaffBookings(bookings.bookings);
+      setStaffExternalEvents(external.events);
       setStaffStatus(status);
     } catch (e: unknown) {
       setError((e instanceof Error ? e.message : null) ?? 'Mitarbeiter-Kalender konnte nicht geladen werden');
@@ -1155,6 +1158,7 @@ function StaffPanel({
     setStaffSchedule(DEFAULT_SCHEDULE);
     setStaffBlocks([]);
     setStaffBookings([]);
+    setStaffExternalEvents([]);
     setStaffStatus(null);
   }, [selectedId]);
 
@@ -1486,7 +1490,7 @@ function StaffPanel({
           date={selectedStaffDay}
           bookings={staffBookings}
           blocks={staffBlocks}
-          externalEvents={[]}
+          externalEvents={staffExternalEvents}
           onClose={() => setSelectedStaffDay(null)}
           onAddBooking={() => setShowStaffAddBooking(true)}
           onDeleteBooking={(id) => { void handleStaffDeleteBooking(id); }}

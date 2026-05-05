@@ -14,6 +14,7 @@ type Status = 'online' | 'offline' | 'api-down';
 const HEALTH_URL = '/api/health';
 const PING_INTERVAL_MS = 30_000;
 const PING_TIMEOUT_MS = 5_000;
+const INITIAL_PING_DELAY_MS = 8_000;
 
 export function ConnectionStatus() {
   const [status, setStatus] = useState<Status>('online');
@@ -29,6 +30,7 @@ export function ConnectionStatus() {
 
     // Periodic health ping — only when tab is visible (save battery/bandwidth)
     let timer: ReturnType<typeof setInterval> | null = null;
+    let initialTimer: ReturnType<typeof setTimeout> | null = null;
 
     async function ping() {
       if (!navigator.onLine) return;
@@ -49,11 +51,15 @@ export function ConnectionStatus() {
     }
 
     function startPolling() {
-      if (timer) return;
-      ping();
-      timer = setInterval(ping, PING_INTERVAL_MS);
+      if (timer || initialTimer) return;
+      initialTimer = setTimeout(() => {
+        initialTimer = null;
+        ping();
+        timer = setInterval(ping, PING_INTERVAL_MS);
+      }, INITIAL_PING_DELAY_MS);
     }
     function stopPolling() {
+      if (initialTimer) { clearTimeout(initialTimer); initialTimer = null; }
       if (timer) { clearInterval(timer); timer = null; }
     }
 

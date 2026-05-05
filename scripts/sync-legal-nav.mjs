@@ -17,6 +17,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { NAV_STYLE, NAV_HTML } from './_nav.mjs';
 import { FOOTER_STYLE, FOOTER_HTML } from './_footer.mjs';
+import { SITE, TODAY } from './seo-pages.mjs';
 
 const LEGAL_PAGES = [
   'apps/web/public/impressum/index.html',
@@ -43,6 +44,75 @@ const NAV_HTML_SEED_RE    = /<header class="ph-header">[\s\S]*?<\/header>/;
 // terminator that appears in every legal page.
 const FOOTER_CSS_SEED_RE  = /\.site-footer\{[\s\S]*?\.footer-bottom a:hover\{color:rgba\(255,255,255,\.8\)[^}]*\}/;
 const FOOTER_HTML_SEED_RE = /<footer class="site-footer">[\s\S]*?<\/footer>/;
+const JSON_LD_RE = /<script\s+type="application\/ld\+json">[\s\S]*?<\/script>/i;
+
+function decodeEntities(value) {
+  return String(value)
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'");
+}
+
+function metaContent(src, name) {
+  const m = src.match(new RegExp(`<meta\\s+name="${name}"\\s+content="([\\s\\S]*?)"\\s*/?>`, 'i'));
+  return decodeEntities((m?.[1] ?? '').replace(/\s+/g, ' ').trim());
+}
+
+function tagText(src, tag) {
+  const m = src.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'i'));
+  return decodeEntities((m?.[1] ?? '').replace(/\s+/g, ' ').trim());
+}
+
+function canonical(src) {
+  const m = src.match(/<link\s+rel="canonical"\s+href="([^"]+)"/i);
+  return m?.[1] ?? '';
+}
+
+function legalPageLabel(url) {
+  const slug = url.replace(/^https:\/\/phonbot\.de\//, '').replace(/\/$/, '');
+  return {
+    impressum: 'Impressum',
+    datenschutz: 'Datenschutzerklärung',
+    agb: 'AGB',
+    avv: 'AVV',
+    'sub-processors': 'Sub-Processoren',
+  }[slug] ?? slug;
+}
+
+function legalJsonLd(src) {
+  const url = canonical(src);
+  const name = tagText(src, 'title');
+  const description = metaContent(src, 'description');
+  const label = legalPageLabel(url);
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'WebPage',
+        '@id': `${url}#webpage`,
+        url,
+        name,
+        description,
+        inLanguage: 'de-DE',
+        dateModified: TODAY,
+        isPartOf: { '@id': `${SITE}/#website` },
+        publisher: { '@type': 'Organization', name: 'Phonbot', url: `${SITE}/` },
+        breadcrumb: { '@id': `${url}#breadcrumb` },
+      },
+      {
+        '@type': 'BreadcrumbList',
+        '@id': `${url}#breadcrumb`,
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Phonbot', item: `${SITE}/` },
+          { '@type': 'ListItem', position: 2, name: label, item: url },
+        ],
+      },
+    ],
+  };
+  return `<script type="application/ld+json">\n${JSON.stringify(jsonLd)}\n</script>`;
+}
 
 function applyBlock(src, markedRe, seedRe, replacement, label, file) {
   if (markedRe.test(src)) return src.replace(markedRe, replacement);
@@ -92,6 +162,13 @@ for (const rel of LEGAL_PAGES) {
   if (!src.includes('/nav.js')) {
     src = src.replace('</body>', '<script src="/nav.js" defer></script>\n</body>');
   }
+  src = src.replace(/<link rel="icon" href="\/favicon\.ico" \/>/g, '<link rel="icon" type="image/svg+xml" href="/icon.svg" />');
+
+  // 5. Legal pages should expose WebPage + BreadcrumbList, not only breadcrumbs.
+  const ld = legalJsonLd(src);
+  src = JSON_LD_RE.test(src)
+    ? src.replace(JSON_LD_RE, ld)
+    : src.replace('</head>', `${ld}\n</head>`);
 
   if (src !== original) {
     fs.writeFileSync(file, src);

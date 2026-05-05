@@ -1049,6 +1049,12 @@ export function getExternalCalendarEvents(from: string, to: string) {
   return request<{ events: ExternalCalendarEvent[] }>(`/calendar/external-events?from=${from}&to=${to}`);
 }
 
+export function getStaffExternalCalendarEvents(staffId: string, from: string, to: string) {
+  return request<{ events: ExternalCalendarEvent[] }>(
+    `/calendar/staff/${encodeURIComponent(staffId)}/external-events?from=${from}&to=${to}`,
+  );
+}
+
 // --- Billing ---
 
 export type Plan = {

@@ -6,6 +6,7 @@ import { FOOTER_STYLE, FOOTER_HTML } from './_footer.mjs';
 import { SITE, TODAY, CORE_INDUSTRY_PAGES, SEO_NICHE_PAGES, ALL_INDUSTRY_PAGES } from './seo-pages.mjs';
 
 const OUT_DIR = path.resolve('apps/web/public');
+const FULL_AGENT_STARTER_PRICE = '79';
 
 const germanPairs = [
   ['fuer', 'für'], ['Fuer', 'Für'], ['Oeff', 'Öff'], ['oeff', 'öff'], ['Foerder', 'Förder'], ['foerder', 'förder'],
@@ -81,7 +82,7 @@ function pageHead({ title, description, slug, jsonLd }) {
 <meta name="twitter:title" content="${esc(title)}" />
 <meta name="twitter:description" content="${esc(description)}" />
 <meta name="twitter:image" content="${SITE}/og-image.png" />
-<link rel="icon" href="/favicon.ico" />
+<link rel="icon" type="image/svg+xml" href="/icon.svg" />
 <script type="application/ld+json">
 ${json(jsonLd)}
 </script>
@@ -116,7 +117,18 @@ function pageJsonLd(page) {
         areaServed: { '@type': 'Country', name: 'Deutschland' },
         audience: { '@type': 'BusinessAudience', audienceType: pretty(page.audience) },
         description: pretty(page.intro),
-        offers: { '@type': 'Offer', url, price: '8.99', priceCurrency: 'EUR' },
+        offers: {
+          '@type': 'Offer',
+          url,
+          price: FULL_AGENT_STARTER_PRICE,
+          priceCurrency: 'EUR',
+          priceSpecification: {
+            '@type': 'UnitPriceSpecification',
+            price: FULL_AGENT_STARTER_PRICE,
+            priceCurrency: 'EUR',
+            unitText: 'MONTH',
+          },
+        },
       },
       {
         '@type': 'FAQPage',

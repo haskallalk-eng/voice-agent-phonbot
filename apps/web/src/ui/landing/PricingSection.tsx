@@ -86,7 +86,10 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
       <div className="flex items-center justify-center gap-4 mb-10">
         <span className={`text-sm font-medium ${!yearly ? 'text-white' : 'text-white/40'}`}>Monatlich</span>
         <button
+          type="button"
           onClick={() => setYearly(!yearly)}
+          aria-label={yearly ? 'Auf monatliche Zahlung umstellen' : 'Auf jährliche Zahlung umstellen'}
+          aria-pressed={yearly}
           className="relative w-14 h-7 rounded-full transition-all duration-300"
           style={{ background: yearly ? 'linear-gradient(135deg, #F97316, #06B6D4)' : 'rgba(255,255,255,0.1)' }}
         >

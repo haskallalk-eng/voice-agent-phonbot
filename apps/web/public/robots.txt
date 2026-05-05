@@ -3,6 +3,7 @@ Allow: /
 Disallow: /api/
 Disallow: /auth/
 Disallow: /billing
+Disallow: /calendar
 Disallow: /webhook/
 Disallow: /outbound/
 Disallow: /health

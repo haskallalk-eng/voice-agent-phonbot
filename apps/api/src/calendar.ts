@@ -120,6 +120,17 @@ type CalendarConnectionStatus = {
   eventTypes?: CalcomEventType[];
 };
 
+type CalendarExternalEvent = {
+  provider: 'google' | 'microsoft' | 'calcom';
+  external_id: string;
+  calendar_id: string | null;
+  summary: string | null;
+  slot_start: string;
+  slot_end: string;
+  all_day: boolean;
+  status: 'confirmed' | 'tentative' | 'cancelled';
+};
+
 interface ExternalBookingResult {
   provider: string;
   connectionId: string;
@@ -685,6 +696,172 @@ async function getConnectionStatus(conn: CalendarConnection, orgId: string): Pro
   }
 
   return status;
+}
+
+function parseProviderEventTime(
+  start?: { date?: string; dateTime?: string },
+  end?: { date?: string; dateTime?: string },
+): { start: string; end: string; allDay: boolean } | null {
+  if (!start || !end) return null;
+  if (start.date && end.date) {
+    return {
+      start: new Date(`${start.date}T00:00:00Z`).toISOString(),
+      end: new Date(`${end.date}T00:00:00Z`).toISOString(),
+      allDay: true,
+    };
+  }
+  if (start.dateTime && end.dateTime) {
+    return {
+      start: new Date(start.dateTime).toISOString(),
+      end: new Date(end.dateTime).toISOString(),
+      allDay: false,
+    };
+  }
+  return null;
+}
+
+async function listExternalEventsForConnection(
+  conn: CalendarConnection,
+  fromIso: string,
+  toIso: string,
+): Promise<CalendarExternalEvent[]> {
+  const maxEvents = 500;
+
+  if (conn.provider === 'google') {
+    const token = await getValidTokenForConnection(conn);
+    if (!token) return [];
+    const calId = conn.calendar_id || 'primary';
+    const params = new URLSearchParams({
+      singleEvents: 'true',
+      maxResults: '250',
+      timeMin: fromIso,
+      timeMax: toIso,
+      orderBy: 'startTime',
+    });
+    const events: {
+      id: string;
+      status?: string;
+      summary?: string;
+      start?: { date?: string; dateTime?: string };
+      end?: { date?: string; dateTime?: string };
+    }[] = [];
+    let pageToken: string | null = null;
+    let safety = 0;
+    do {
+      const q = new URLSearchParams(params);
+      if (pageToken) q.set('pageToken', pageToken);
+      const resp = await calFetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?${q.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) return [];
+      const page = await resp.json() as { items?: typeof events; nextPageToken?: string };
+      for (const item of page.items ?? []) events.push(item);
+      pageToken = page.nextPageToken ?? null;
+    } while (pageToken && events.length < maxEvents && safety++ < 5);
+
+    return events.flatMap((event) => {
+      if (!event.id) return [];
+      const parsed = parseProviderEventTime(event.start, event.end);
+      if (!parsed) return [];
+      return [{
+        provider: 'google' as const,
+        external_id: event.id,
+        calendar_id: calId,
+        summary: (event.summary ?? '').slice(0, 500) || null,
+        slot_start: parsed.start,
+        slot_end: parsed.end,
+        all_day: parsed.allDay,
+        status: event.status === 'cancelled' ? 'cancelled' as const : 'confirmed' as const,
+      }];
+    });
+  }
+
+  if (conn.provider === 'microsoft') {
+    const token = await getValidMsTokenForConnection(conn);
+    if (!token) return [];
+    const url = `https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${encodeURIComponent(fromIso)}&endDateTime=${encodeURIComponent(toIso)}&$top=250&$orderby=start/dateTime`;
+    const events: {
+      id: string;
+      subject?: string;
+      isCancelled?: boolean;
+      isAllDay?: boolean;
+      start?: { dateTime: string };
+      end?: { dateTime: string };
+    }[] = [];
+    let nextLink: string | null = url;
+    let safety = 0;
+    while (nextLink && events.length < maxEvents && safety++ < 5) {
+      const resp = await calFetch(nextLink, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Prefer: 'outlook.timezone="UTC"',
+        },
+      });
+      if (!resp.ok) return [];
+      const page = await resp.json() as { value?: typeof events; '@odata.nextLink'?: string };
+      for (const item of page.value ?? []) events.push(item);
+      nextLink = page['@odata.nextLink'] ?? null;
+    }
+
+    return events.flatMap((event) => {
+      if (!event.id || !event.start?.dateTime || !event.end?.dateTime) return [];
+      return [{
+        provider: 'microsoft' as const,
+        external_id: event.id,
+        calendar_id: conn.calendar_id || null,
+        summary: (event.subject ?? '').slice(0, 500) || null,
+        slot_start: new Date(`${event.start.dateTime}Z`).toISOString(),
+        slot_end: new Date(`${event.end.dateTime}Z`).toISOString(),
+        all_day: !!event.isAllDay,
+        status: event.isCancelled ? 'cancelled' as const : 'confirmed' as const,
+      }];
+    });
+  }
+
+  if (conn.provider === 'calcom') {
+    const apiKey = conn.api_key;
+    if (!apiKey) return [];
+    type CalcomBooking = { uid: string; title?: string; startTime: string; endTime: string; status?: string };
+    const resp = await calFetch(`https://api.cal.com/v1/bookings?apiKey=${encodeURIComponent(apiKey)}&limit=250`);
+    if (!resp.ok) return [];
+    const page = await resp.json() as { bookings?: CalcomBooking[] };
+    const from = new Date(fromIso).getTime();
+    const to = new Date(toIso).getTime();
+    return (page.bookings ?? []).flatMap((booking) => {
+      if (!booking.uid || !booking.startTime || !booking.endTime) return [];
+      const startMs = new Date(booking.startTime).getTime();
+      const endMs = new Date(booking.endTime).getTime();
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < from || startMs > to) return [];
+      return [{
+        provider: 'calcom' as const,
+        external_id: booking.uid,
+        calendar_id: null,
+        summary: (booking.title ?? '').slice(0, 500) || null,
+        slot_start: new Date(booking.startTime).toISOString(),
+        slot_end: new Date(booking.endTime).toISOString(),
+        all_day: false,
+        status: booking.status === 'CANCELLED' || booking.status === 'REJECTED' ? 'cancelled' as const : 'confirmed' as const,
+      }];
+    });
+  }
+
+  return [];
+}
+
+async function listStaffExternalEvents(orgId: string, staffId: string, fromIso: string, toIso: string): Promise<CalendarExternalEvent[]> {
+  const connections = await getAllConnections(orgId, staffId);
+  const nested = await Promise.all(connections.map(async (conn) => {
+    try {
+      return await listExternalEventsForConnection(conn, fromIso, toIso);
+    } catch (err) {
+      log.warn(
+        { orgId, staffId, provider: conn.provider, err: (err as Error).message?.slice(0, 200) },
+        'calendar: staff external event fetch failed',
+      );
+      return [] as CalendarExternalEvent[];
+    }
+  }));
+  return nested.flat().sort((a, b) => a.slot_start.localeCompare(b.slot_start));
 }
 
 // ── Token Management (Microsoft) ─────────────────────────────────────────────
@@ -3145,6 +3322,33 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
     // but there's no reason to echo it back. `external_id` + provider is
     // enough for the UI to key on.
     return { events: rows.map(({ org_id: _oid, ...rest }) => rest) };
+  });
+
+  /** GET /calendar/staff/:id/external-events?from=YYYY-MM-DD&to=YYYY-MM-DD
+   * Staff-specific external calendars are not written into the org-scoped cache.
+   * Fetch them live for the staff calendar UI so connected Google/Outlook/Cal.com
+   * blocks are visible without risking cross-staff cache overwrites. */
+  app.get('/calendar/staff/:id/external-events', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { orgId } = req.user as JwtPayload;
+    const { id } = req.params as { id: string };
+    const q = req.query as { from?: string; to?: string };
+    if (!pool) return { events: [] };
+    try {
+      const staffId = await assertStaffBelongs(orgId, id);
+      if (!staffId) return { events: [] };
+      const from = q.from ?? new Date().toISOString().slice(0, 10);
+      const to = q.to ?? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const events = await listStaffExternalEvents(
+        orgId,
+        staffId,
+        `${from}T00:00:00.000Z`,
+        `${to}T23:59:59.999Z`,
+      );
+      return { events };
+    } catch (err) {
+      if (err instanceof StaffNotFoundError) return reply.status(404).send({ error: 'Staff not found' });
+      throw err;
+    }
   });
 
   /** GET /calendar/chipy/bookings?from=YYYY-MM-DD&to=YYYY-MM-DD — list bookings in a range */

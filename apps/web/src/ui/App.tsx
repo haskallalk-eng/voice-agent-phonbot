@@ -1,28 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '../lib/auth.js';
 import { getAgentConfig, resendVerification, type AgentConfig } from '../lib/api.js';
 import { LandingPage } from './landing/index.js';
 import { ContactPage } from './landing/ContactPage.js';
 import { LoginPage } from './LoginPage.js';
-import { OnboardingWizard } from './onboarding/OnboardingWizard.js';
-import { Sidebar } from './Sidebar.js';
-import { DashboardHome } from './DashboardHome.js';
-import { AgentBuilder } from './agent-builder/index.js';
-import { TestConsole } from './TestConsole.js';
-import { TicketInbox } from './TicketInbox.js';
-import { CustomersPage } from './CustomersPage.js';
-import { CallLog } from './CallLog.js';
-import { BillingPage } from './BillingPage.js';
-import { PhoneManager } from './PhoneManager.js';
-import { CalendarPage } from './CalendarPage.js';
-import { InsightsPage } from './InsightsPage.js';
 import { ToastProvider } from './Toast.js';
 import { FoxLogo, PhonbotBrand } from './FoxLogo.js';
 import { ConnectionStatus } from './ConnectionStatus.js';
-import { ChipyCopilot } from '../components/ChipyCopilot.js';
-import { AdminPage } from './AdminPage.js';
-import { ResetPasswordPage } from './ResetPasswordPage.js';
+
+const OnboardingWizard = lazy(() => import('./onboarding/OnboardingWizard.js').then((m) => ({ default: m.OnboardingWizard })));
+const Sidebar = lazy(() => import('./Sidebar.js').then((m) => ({ default: m.Sidebar })));
+const DashboardHome = lazy(() => import('./DashboardHome.js').then((m) => ({ default: m.DashboardHome })));
+const AgentBuilder = lazy(() => import('./agent-builder/index.js').then((m) => ({ default: m.AgentBuilder })));
+const TestConsole = lazy(() => import('./TestConsole.js').then((m) => ({ default: m.TestConsole })));
+const TicketInbox = lazy(() => import('./TicketInbox.js').then((m) => ({ default: m.TicketInbox })));
+const CustomersPage = lazy(() => import('./CustomersPage.js').then((m) => ({ default: m.CustomersPage })));
+const CallLog = lazy(() => import('./CallLog.js').then((m) => ({ default: m.CallLog })));
+const BillingPage = lazy(() => import('./BillingPage.js').then((m) => ({ default: m.BillingPage })));
+const PhoneManager = lazy(() => import('./PhoneManager.js').then((m) => ({ default: m.PhoneManager })));
+const CalendarPage = lazy(() => import('./CalendarPage.js').then((m) => ({ default: m.CalendarPage })));
+const InsightsPage = lazy(() => import('./InsightsPage.js').then((m) => ({ default: m.InsightsPage })));
+const ChipyCopilot = lazy(() => import('../components/ChipyCopilot.js').then((m) => ({ default: m.ChipyCopilot })));
+const AdminPage = lazy(() => import('./AdminPage.js').then((m) => ({ default: m.AdminPage })));
+const ResetPasswordPage = lazy(() => import('./ResetPasswordPage.js').then((m) => ({ default: m.ResetPasswordPage })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,6 +34,14 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+function FullPageLoading({ label = 'Laden...' }: { label?: string }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#0A0A0F]">
+      <p className="text-white/30 text-sm">{label}</p>
+    </div>
+  );
+}
 
 // ── Error Boundary ─────────────────────────────────────────────────────────────
 
@@ -310,7 +319,9 @@ function Dashboard() {
       </main>
 
       {/* Chipy Copilot — floating chat assistant, visible on all dashboard pages */}
-      <ChipyCopilot />
+      <Suspense fallback={null}>
+        <ChipyCopilot />
+      </Suspense>
     </div>
   );
 }
@@ -348,13 +359,24 @@ function AppGate() {
     if (!sid || sid === '{CHECKOUT_SESSION_ID}') return null;
     return sid;
   });
+  const [checkoutFinalizeError, setCheckoutFinalizeError] = useState<string | null>(null);
+  const [failedCheckoutSession, setFailedCheckoutSession] = useState<string | null>(null);
   useEffect(() => {
     if (!finalizing) return;
     let cancelled = false;
     (async () => {
       try {
+        setCheckoutFinalizeError(null);
         await finalizeCheckout(finalizing);
-      } catch { /* user will see the landing page with an error toast-less — non-critical */ }
+        setFailedCheckoutSession(null);
+      } catch (err) {
+        if (cancelled) return;
+        const msg = err instanceof Error && err.message
+          ? err.message
+          : 'Dein Konto konnte nach der Stripe-Zahlung nicht automatisch eingerichtet werden.';
+        setFailedCheckoutSession(finalizing);
+        setCheckoutFinalizeError(msg);
+      }
       finally {
         if (cancelled) return;
         const url = new URL(window.location.href);
@@ -413,6 +435,12 @@ function AppGate() {
     writeGateToUrl(next);
   }
 
+  function retryCheckoutFinalize() {
+    if (!failedCheckoutSession) return;
+    setCheckoutFinalizeError(null);
+    setFinalizing(failedCheckoutSession);
+  }
+
   // Wait for the auth bootstrap to finish before deciding landing-vs-Dashboard.
   // Without this the user briefly sees the landing page on a reload even though
   // they have a valid refresh cookie (F-14). Same spinner covers the short
@@ -427,7 +455,52 @@ function AppGate() {
     );
   }
 
-  if (token && user) return <Dashboard />;
+  if (checkoutFinalizeError) {
+    const supportHref = `mailto:info@phonbot.de?subject=${encodeURIComponent('Phonbot Checkout Hilfe')}&body=${encodeURIComponent(`Checkout Session: ${failedCheckoutSession ?? 'unbekannt'}\n\nFehler: ${checkoutFinalizeError}`)}`;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0A0A0F] px-4">
+        <div className="w-full max-w-md rounded-2xl border border-orange-500/20 bg-white/[0.04] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
+          <div className="flex items-center gap-3 mb-5">
+            <FoxLogo size={34} glow />
+            <PhonbotBrand />
+          </div>
+          <p className="text-sm font-semibold text-white mb-2">Zahlung erhalten, Konto noch nicht eingerichtet</p>
+          <p className="text-sm text-white/60 leading-relaxed mb-4">
+            Stripe hat dich zurueckgeschickt, aber Phonbot konnte dein Konto gerade nicht automatisch aktivieren.
+            Du kannst die Aktivierung erneut versuchen. Falls das weiter fehlschlaegt, schick uns die Checkout-Session aus der Mail.
+          </p>
+          <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-xs text-red-200 mb-5">
+            {checkoutFinalizeError}
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              type="button"
+              onClick={retryCheckoutFinalize}
+              disabled={!failedCheckoutSession}
+              className="flex-1 rounded-xl px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+            >
+              Aktivierung erneut versuchen
+            </button>
+            <a
+              href={supportHref}
+              className="flex-1 rounded-xl px-4 py-3 text-center text-sm font-semibold text-white/80 border border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
+            >
+              Support kontaktieren
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (token && user) {
+    return (
+      <Suspense fallback={<FullPageLoading />}>
+        <Dashboard />
+      </Suspense>
+    );
+  }
 
   if (gate === 'landing') {
     return (
@@ -463,7 +536,9 @@ export function App() {
   if (window.location.pathname === '/reset-password') {
     return (
       <ErrorBoundary>
-        <ResetPasswordPage />
+        <Suspense fallback={<FullPageLoading />}>
+          <ResetPasswordPage />
+        </Suspense>
       </ErrorBoundary>
     );
   }
@@ -474,7 +549,9 @@ export function App() {
   if (isAdminRoute) {
     return (
       <ErrorBoundary>
-        <AdminPage />
+        <Suspense fallback={<FullPageLoading />}>
+          <AdminPage />
+        </Suspense>
       </ErrorBoundary>
     );
   }

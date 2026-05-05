@@ -65,7 +65,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
               </button>
             </div>
             {/* Trust line — subtle, no "Keine Kreditkarte" badge */}
-            <p className="text-xs text-white/40 mt-4">✓ Kostenlos · ✓ Sofort einsatzbereit · ✓ DSGVO-konform</p>
+            <p className="text-xs text-white/40 mt-4">✓ Kostenlos · ✓ Sofort einsatzbereit · ✓ DSGVO-fokussiert</p>
           </div>
 
           {/* Right: Chipy mascot — clickable, opens demo modal */}
@@ -107,7 +107,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
             <span>In 2 Minuten live</span>
           </div>
           <div className="flex items-center gap-2 text-sm text-white/60">
-            <span>Server in Deutschland</span>
+            <span>Hosting in Deutschland/EU</span>
           </div>
           <div className="flex items-center gap-2 text-sm text-white/60">
             <IconPhone size={14} className="text-white/50" />

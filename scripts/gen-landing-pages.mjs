@@ -63,23 +63,24 @@ function stripLeadingEmoji(text, inlineSize = 14) {
 }
 
 const OUT_DIR = path.resolve('apps/web/public');
+const FULL_AGENT_STARTER_PRICE = '79';
 
 const BRANCHEN = [
   {
     slug: 'friseur',
     templateId: 'hairdresser',
     emoji: '✂️',
-    h1Text: 'Nie wieder das <span class="accent">Telefon abnehmen</span> zwischen den Schnitten.',
+    h1Text: 'KI-Telefonassistent für Friseursalons: <span class="accent">Termine buchen</span>, wenn niemand ans Telefon kann.',
     title: 'KI-Telefonassistent für Friseursalons · Termine automatisch buchen | Phonbot',
-    description: 'KI-Telefonassistent für Friseure: bucht Termine, beantwortet Öffnungszeiten und Preise, erstellt Rückruf-Tickets — 24/7 auf Deutsch. Ab 8,99 €/Monat.',
+    description: 'KI-Telefonassistent für Friseure: bucht Salon-Termine, fragt Leistung und Wunschfriseur ab, beantwortet Preise und Öffnungszeiten. Starter ab 79 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Friseure',
-    subtitle: 'Phonbot nimmt Anrufe an, bucht Termine direkt in deinen Kalender und beantwortet Standardfragen — während du föhnst, färbst oder schneidest. 24/7 auf Deutsch. Ab 8,99 €/Monat.',
+    subtitle: 'Phonbot nimmt Anrufe an, fragt Service, Terminwunsch und Wunschfriseur ab und bucht direkt in deinen Kalender — während du föhnst, färbst oder schneidest. Starter ab 79 €/Monat.',
     ogTitle: 'KI-Telefonassistent für Friseursalons · Phonbot',
-    ogDesc: 'Nie wieder Terminanrufe zwischen den Schnitten annehmen. Phonbot nimmt Anrufe an, bucht Termine direkt — 24/7 auf Deutsch.',
+    ogDesc: 'Nie wieder Terminanrufe zwischen den Schnitten: Phonbot fragt Wunschfriseur, Service und Zeit ab und bucht direkt.',
     serviceName: 'KI-Telefonassistent für Friseursalons',
     audienceType: 'Friseursalons & Barbershops',
     features: [
-      { icon: '📅', title: 'Terminbuchung', desc: '„Einen Haarschnitt am Donnerstag nachmittag?" — Phonbot prüft Kalender-Slots und bucht direkt. Keine Rückrufe nötig.' },
+      { icon: '📅', title: 'Terminbuchung', desc: '„Einen Haarschnitt am Donnerstag nachmittag?" — Phonbot prüft Kalender-Slots, Wunschfriseur und Dauer, bevor er bucht.' },
       { icon: '🕒', title: 'Öffnungszeiten', desc: '„Wann habt ihr Samstag offen?" — Phonbot antwortet sofort mit deinen konkreten Öffnungszeiten. Auch an Feiertagen.' },
       { icon: '💶', title: 'Preisauskunft', desc: '„Was kostet bei euch Färben?" — Phonbot kennt dein Leistungsverzeichnis und gibt präzise Preise weiter.' },
       { icon: '↩️', title: 'Rückruf-Tickets', desc: 'Für komplexe Anfragen (Beratungstermin, Spezial-Services) erstellt Phonbot automatisch ein Ticket mit allen Infos.' },
@@ -96,8 +97,8 @@ const BRANCHEN = [
     value: {
       headline: 'Was passiert, wenn <span class="accent">keiner abnimmt?</span>',
       insight: {
-        stat: '65 %',
-        claim: 'der Erstanrufer rufen nicht noch einmal an, wenn der Salon besetzt ist. Sie wählen den Nächsten in der Google-Suche.',
+        stat: 'Stoßzeit',
+        claim: 'ist genau dann, wenn viele Salons nicht ans Telefon können: Farbe einwirken lassen, föhnen, schneiden, Kundin beraten. Phonbot nimmt den Terminwunsch trotzdem auf.',
       },
       scenario: 'Typischer Salon mit 300 Anrufen pro Monat:',
       roi: [
@@ -106,15 +107,21 @@ const BRANCHEN = [
         { icon: 'star', label: 'Deine Ersparnis', amount: '1.421 €', per: '/Monat', highlight: true },
       ],
       extras: [
-        { icon: 'clock', title: 'Kein Anruf in Stoßzeiten verloren', desc: 'Während Föhnen, Färben oder Schnitt geht Chipy trotzdem dran — die Kundin bleibt.' },
-        { icon: 'phone', title: 'Parallelgespräche, keine Warteschleife', desc: 'Mehrere Kundinnen gleichzeitig — niemand hängt in der Leitung, niemand legt auf.' },
-        { icon: 'calendar', title: 'Nie doppelt gebucht', desc: 'Chipy prüft den Kalender in Echtzeit, bevor ein Termin bestätigt wird — sauberes Buch ohne Überlappungen.' },
+      { icon: 'clock', title: 'Weniger verpasste Anrufe in Stoßzeiten', desc: 'Während Föhnen, Färben oder Schnitt geht Chipy trotzdem dran und nimmt Terminwünsche strukturiert auf.' },
+      { icon: 'phone', title: 'Parallelgespräche statt Warteschleife', desc: 'Mehrere Kundinnen können gleichzeitig mit je einem Agenten sprechen, statt auf ein besetztes Telefon zu treffen.' },
+      { icon: 'calendar', title: 'Kalenderprüfung vor Bestätigung', desc: 'Chipy prüft freie Slots in Echtzeit und bestätigt erst, wenn calendar.book erfolgreich war.' },
       ],
     },
     faq: [
       { q: 'Kann Phonbot mehrere Stylisten im Salon unterscheiden?', a: 'Ja. Im Agent Builder legst du Mitarbeiter-Profile an, Phonbot bucht jedem den eigenen Kalender-Slot.' },
+      { q: 'Kann Phonbot Neukunden und Bestandskunden unterscheiden?', a: 'Ja. Wenn das Kundenmodul aktiv ist, prüft Phonbot die Telefonnummer im Hintergrund. Unbekannte Anrufer werden als Neukunde erfasst und als pending vorbereitet.' },
+      { q: 'Was passiert ohne Wunschfriseur?', a: 'Phonbot fragt nach Wunschfriseur oder ob ein beliebiger freier Mitarbeiter passt. Bei Mitarbeiterkalendern wird kein allgemeiner Salon-Termin gebucht.' },
+      { q: 'Kann Phonbot Termine verschieben oder absagen?', a: 'Aktuell erstellt Phonbot dafür ein strukturiertes Terminänderungs- oder Stornierungs-Ticket mit Kundendaten und Wunschzeit, damit dein Team sauber nachfasst.' },
+      { q: 'Welche Kalender werden unterstützt?', a: 'Google Calendar, Microsoft Outlook und Cal.com sind die Standard-Verbindungen. Im Mitarbeiterkalender-Modus bekommt jede Person eigene externe Verbindungen.' },
+      { q: 'Wie werden KI-Hinweis, Aufzeichnung und Datenschutz geregelt?', a: 'Der Agent weist zu Beginn auf KI-Nutzung und Aufzeichnung hin und fragt nach Zustimmung. AVV, Datenschutz und Subprozessoren sind öffentlich verlinkt.' },
+      { q: 'Was kostet Phonbot für einen kleinen Friseursalon wirklich?', a: 'Der volle KI-Telefonassistent mit Terminbuchung startet im Starter-Plan ab 79 €/Monat. Der Nummer-Plan ab 8,99 €/Monat ist nur die technische Telefon-Anbindung.' },
       { q: 'Was wenn eine Kundin sofort jemanden sprechen will?', a: 'Phonbot bietet Rückruf an („Ich notiere dich, ruf dich in 30 Min zurück") oder erstellt ein Prioritäts-Ticket.' },
-      { q: 'Versteht Phonbot Friseur-Fachbegriffe (Pony, Balayage, Keratin)?', a: 'Ja. Die KI ist nativ auf deutschem Sprachgebrauch trainiert, inkl. Dialekte und Friseur-Fachbegriffe.' },
+      { q: 'Versteht Phonbot Friseur-Fachbegriffe (Pony, Balayage, Keratin)?', a: 'Ja. Der Agent kann Friseur-Begriffe, Leistungen und Dauerregeln nutzen und fragt bei Unsicherheit nach.' },
       { q: 'Kann ich meine bisherige Salon-Nummer behalten?', a: 'Ja. Rufweiterleitung bei deinem Telefonanbieter einrichten, fertig. Kein Nummernwechsel nötig.' },
     ],
     ctaHeading: 'Salon-Agent einrichten — 30 Freiminuten',
@@ -125,7 +132,7 @@ const BRANCHEN = [
     emoji: '🔧',
     h1Text: 'Du bist auf der <span class="accent">Baustelle</span> — Phonbot nimmt den Anruf an.',
     title: 'KI-Telefonassistent für Handwerker & Handwerksbetriebe | Phonbot',
-    description: 'Phonbot ist der KI-Telefonassistent speziell für Handwerker. Nimmt Aufträge entgegen, priorisiert Notfälle, erstellt Tickets mit Kundendaten — 24/7 auf Deutsch. Ab 8,99 €/Monat.',
+    description: 'Phonbot ist der KI-Telefonassistent für Handwerker. Nimmt Aufträge entgegen, priorisiert Notfälle und erstellt Tickets — 24/7. Starter ab 79 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Handwerk',
     subtitle: 'Phonbot nimmt Anrufe an während du auf der Baustelle bist, unterscheidet Notdienst von regulären Terminen und erstellt strukturierte Tickets mit Kundendaten und Priorität.',
     ogTitle: 'KI-Telefonassistent für Handwerker · Phonbot',
@@ -179,7 +186,7 @@ const BRANCHEN = [
     emoji: '🧹',
     h1Text: 'Keine <span class="accent">Auftragsanfrage</span> mehr verpassen — auch beim Putzen.',
     title: 'KI-Telefonassistent für Reinigungsfirmen | Phonbot',
-    description: 'KI-Telefonassistent für Reinigungsfirmen: nimmt Auftragsanfragen an, erfasst Objekt-Details und plant Besichtigungstermine. Ab 8,99 €/Monat.',
+    description: 'KI-Telefonassistent für Reinigungsfirmen: nimmt Auftragsanfragen an, erfasst Objekt-Details und plant Besichtigungstermine. Starter ab 79 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Reinigung',
     subtitle: 'Phonbot nimmt Auftragsanfragen an, erfasst Objekt-Details und Leistungswünsche, und bucht Besichtigungstermine — während dein Team bei Kunden vor Ort putzt. 24/7 auf Deutsch.',
     ogTitle: 'KI-Telefonassistent für Reinigungsfirmen · Phonbot',
@@ -233,7 +240,7 @@ const BRANCHEN = [
     emoji: '🍽️',
     h1Text: 'In der <span class="accent">Küche</span> das Telefon verpasst? Nie wieder.',
     title: 'KI-Telefonassistent für Restaurants & Gastronomie | Phonbot',
-    description: 'Phonbot ist der KI-Telefonassistent für Restaurants. Nimmt Reservierungen an, beantwortet Speisekarten-Fragen, erfasst Take-away-Bestellungen — 24/7 auf Deutsch. Ab 8,99 €/Monat.',
+    description: 'Phonbot ist der KI-Telefonassistent für Restaurants. Nimmt Reservierungen an, beantwortet Speisekarten-Fragen und Take-away-Anfragen. Starter ab 79 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Restaurants',
     subtitle: 'Phonbot nimmt Reservierungen an während du in der Küche bist, beantwortet Fragen zur Speisekarte, erfasst Take-away-Bestellungen und bucht direkt in dein Reservierungssystem.',
     ogTitle: 'KI-Telefonassistent für Restaurants · Phonbot',
@@ -287,7 +294,7 @@ const BRANCHEN = [
     emoji: '🚗',
     h1Text: 'Der <span class="accent">Hebebühne</span> keinen Vorrang vor dem Kunden geben müssen.',
     title: 'KI-Telefonassistent für Autowerkstätten & Kfz-Meisterbetriebe | Phonbot',
-    description: 'KI-Telefonassistent für Autowerkstätten: nimmt Terminanfragen an, erfasst Fahrzeugdaten und erstellt Kostenvoranschlag-Tickets. Ab 8,99 €/Monat.',
+    description: 'KI-Telefonassistent für Autowerkstätten: nimmt Terminanfragen an, erfasst Fahrzeugdaten und erstellt Kostenvoranschlag-Tickets. Starter ab 79 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Autowerkstätten',
     subtitle: 'Phonbot nimmt Anrufe während du unter dem Auto liegst. Erfasst Fahrzeug (Marke, Modell, Baujahr), das Problem und den Wunschtermin — direkt als Ticket im Dashboard.',
     ogTitle: 'KI-Telefonassistent für Autowerkstätten · Phonbot',
@@ -350,7 +357,7 @@ const BRANCHEN = [
     offerPrice: '79',
     h1Text: 'Dein Handy klingelt, während du arbeitest? <span class="accent">Chipy geht ran.</span>',
     title: 'KI-Telefonassistent für Selbstständige · Keine Anrufe verpassen | Phonbot',
-    description: 'Chipy hebt ab, wenn du arbeitest. Für Freelancer, Coaches, Berater, Fotografen & Kreative. Termine buchen, Rückrufe verwalten, DSGVO-konform. Ab 79 €/Monat.',
+    description: 'Chipy hebt ab, wenn du arbeitest. Für Freelancer, Coaches, Berater, Fotografen & Kreative. Termine buchen, Rückrufe verwalten, DSGVO-fokussiert. Ab 79 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Selbstständige',
     subtitle: 'Der einzige KI-Telefonassistent, der nach dir klingt. Chipy nimmt deine Anrufe an — mit deiner Stimme, deinen Regeln — während du im Kundentermin, im Workshop oder im Deep Work bist. Starter-Plan 79 €/Monat inkl. 360 Minuten.',
     ogTitle: 'KI-Telefonassistent für Selbstständige · Phonbot',
@@ -487,6 +494,13 @@ p{color:rgba(255,255,255,.7)}
 .feature-icon svg{display:block;width:22px;height:22px}
 .feature h3{font-size:1.0625rem;margin-bottom:.5rem}
 .feature p{font-size:.9375rem;line-height:1.55}
+.intent-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;max-width:64rem;margin:0 auto}
+.intent-card{padding:1.25rem;border-radius:1rem;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08)}
+.intent-card strong{display:block;color:#fff;font-size:.95rem;margin-bottom:.4rem}
+.intent-card p{font-size:.9rem;color:rgba(255,255,255,.62);line-height:1.55}
+.context-links{display:flex;flex-wrap:wrap;gap:.65rem;justify-content:center;margin-top:1.75rem}
+.context-links a{font-size:.85rem;color:#9DECF8;text-decoration:none;border:1px solid rgba(6,182,212,.24);background:rgba(6,182,212,.07);border-radius:999px;padding:.45rem .8rem}
+.context-links a:hover{color:#fff;border-color:rgba(249,115,22,.35)}
 
 /* ── Call-style dialogue (glass card with animated chat bubbles) ── */
 .dialogue{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:1.5rem;padding:1.75rem;max-width:640px;margin:0 auto;position:relative;overflow:hidden}
@@ -534,10 +548,10 @@ p{color:rgba(255,255,255,.7)}
 .dialogue-typing span:nth-child(3){animation-delay:.3s}
 @keyframes typing-bounce{0%,80%,100%{transform:translateY(0);opacity:.5}40%{transform:translateY(-4px);opacity:1}}
 
-.dialogue-note{text-align:center;margin-top:1.5rem;font-size:.875rem;color:rgba(255,255,255,.45);animation:msg-in .9s 6.8s ease-out both}
+.dialogue-note{text-align:center;margin-top:1.5rem;font-size:.875rem;color:rgba(255,255,255,.68)}
 
 @media(prefers-reduced-motion:reduce){
-  .msg,.dialogue-note{animation:none!important;opacity:1!important;transform:none!important;animation-delay:0s!important}
+  .msg{animation:none!important;opacity:1!important;transform:none!important;animation-delay:0s!important}
   .dialogue-header .dot,.msg.bot .avatar,.dialogue-typing span{animation:none}
 }
 
@@ -618,9 +632,10 @@ p{color:rgba(255,255,255,.7)}
 ${FOOTER_STYLE}`;
 
 function buildPage(d) {
-  // Offer price must match the public pricing floor. Older branch pages used
-  // 49 EUR in JSON-LD, while the visible copy says "ab 8,99 EUR/Monat".
-  const offerPrice = d.offerPrice ?? '8.99';
+  // Offer price must describe the full AI assistant promoted on these pages.
+  // The 8.99 EUR Nummer plan is only phone-number connectivity, not the
+  // appointment-booking agent described in the landing copy.
+  const offerPrice = d.offerPrice ?? FULL_AGENT_STARTER_PRICE;
   const pageUrl = `https://phonbot.de/${d.slug}/`;
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -763,6 +778,30 @@ function buildPage(d) {
     )
     .join('\n        ');
 
+  const friseurIntentBlock = d.slug === 'friseur'
+    ? `
+<section>
+  <div class="container">
+    <h2>Gemacht für den Telefonalltag im <span class="accent">Friseursalon</span></h2>
+    <p class="section-lead">Phonbot ist nicht nur eine Mailbox. Der Agent fragt die Details ab, die dein Team für Salon-Termine wirklich braucht.</p>
+    <div class="intent-grid">
+      <div class="intent-card"><strong>Anrufannahme für Friseure</strong><p>Service, Dauer, Name, Rückrufnummer, Terminwunsch und Wunschfriseur werden sauber aufgenommen.</p></div>
+      <div class="intent-card"><strong>Balayage, Strähnen, Farbe</strong><p>Bei Farbe oder Chemie fragt Phonbot nach Vorbehandlung, Haarlänge und möglichen Allergien oder Kopfhaut-Themen.</p></div>
+      <div class="intent-card"><strong>Barbershop und Bartpflege</strong><p>Kurztermine, Bartpflege, Schnitt, Styling und Mitarbeiterwunsch lassen sich als eigene Leistungen hinterlegen.</p></div>
+      <div class="intent-card"><strong>Absagen und Umbuchungen</strong><p>Änderungswünsche werden als Ticket vorbereitet; neue Buchungen bestätigt Phonbot erst nach erfolgreicher Kalenderbuchung.</p></div>
+    </div>
+    <div class="context-links">
+      <a href="/#preise">Preise ansehen</a>
+      <a href="/kontakt/">Demo für Friseursalons anfragen</a>
+      <a href="/datenschutz/">Datenschutz</a>
+      <a href="/avv/">AVV</a>
+      <a href="/sub-processors/">Subprozessoren</a>
+      <a href="/kosmetikstudio/">Auch für Kosmetikstudios</a>
+    </div>
+  </div>
+</section>`
+    : '';
+
   // Optional persona-catalogue (only selbststaendig uses it today).
   // Renders as a responsive grid of small glass cards — each one is a
   // "das bin ich"-wiedererkennungs-trigger for a target segment. Skipped
@@ -836,7 +875,7 @@ function buildPage(d) {
 <meta name="twitter:image" content="https://phonbot.de/og-image.png" />
 <meta name="twitter:image:alt" content="${d.ogTitle}" />
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
-<link rel="icon" href="/favicon.ico" />
+<link rel="icon" type="image/svg+xml" href="/icon.svg" />
 <script type="application/ld+json">
 ${JSON.stringify(jsonLd)}
 </script>
@@ -851,6 +890,7 @@ ${JSON.stringify(jsonLd)}
 
 ${NAV_HTML}
 
+<main id="main">
 <header class="hero">
   <div class="container">
     <span class="hero-eyebrow"><span class="ic" aria-hidden="true">${e2svg(d.emoji, 14)}</span>${d.eyebrow}</span>
@@ -860,7 +900,7 @@ ${NAV_HTML}
       <a href="/?page=register" class="btn btn-primary">Kostenlos testen</a>
       <a href="/?demo=${d.templateId}#demo" class="btn btn-ghost">▶ Chipy live hören</a>
     </div>
-    <div class="trust-line">✓ Kostenlos starten · ✓ Sofort einsatzbereit · ✓ DSGVO-konform</div>
+    <div class="trust-line">✓ Kostenlos starten · ✓ Sofort einsatzbereit · ✓ DSGVO-fokussiert, AVV verfügbar</div>
   </div>
 </header>
 
@@ -892,6 +932,7 @@ ${NAV_HTML}
   </div>
 </section>
 ${personasBlock}
+${friseurIntentBlock}
 <section>
   <div class="container">
     <h2>${d.value.headline}</h2>
@@ -932,6 +973,7 @@ ${disclaimerBlock}
   </div>
 </section>
 
+</main>
 ${FOOTER_HTML}
 <script src="/nav.js" defer></script>
 </body>

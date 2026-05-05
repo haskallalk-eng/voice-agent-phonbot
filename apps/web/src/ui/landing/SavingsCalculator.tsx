@@ -82,6 +82,7 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
                           boxShadow: '0 0 12px rgba(249,115,22,0.4), 0 1px 3px rgba(0,0,0,0.4)',
                         }} />
                       <input type="range" min={sl.min} max={sl.max} step={sl.step} value={sl.v}
+                        aria-label={`${sl.l} einstellen`}
                         onChange={(e) => sl.s(Number(e.target.value))}
                         className="absolute inset-0 w-full opacity-0 cursor-pointer" />
                     </div>

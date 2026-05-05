@@ -126,15 +126,15 @@ export const NAV_HTML = `<!--nav-html-begin-->
       <a href="/#preise">Preise</a>
       <a href="/#faq">FAQ</a>
       <div class="ph-dd-wrap" id="ph-dd">
-        <button type="button" id="ph-dd-btn" class="ph-dd-btn ph-nav-btn" aria-haspopup="true" aria-expanded="false">Branchen ${CHEV}</button>
-        <div class="ph-dd-menu" role="menu">${industryLinksDesktop}</div>
+        <button type="button" id="ph-dd-btn" class="ph-dd-btn ph-nav-btn" aria-haspopup="true" aria-expanded="false" aria-controls="ph-dd-menu">Branchen ${CHEV}</button>
+        <div class="ph-dd-menu" id="ph-dd-menu" role="menu">${industryLinksDesktop}</div>
       </div>
       <a href="/kontakt/">Kontakt</a>
     </nav>
     <div class="ph-right">
       <a href="/?page=login" class="ph-login">Einloggen</a>
       <a href="/?page=register" class="ph-cta-btn">Kostenlos testen</a>
-      <button type="button" id="ph-burg" class="ph-burg" aria-label="Menü öffnen"><span></span><span></span><span></span></button>
+      <button type="button" id="ph-burg" class="ph-burg" aria-label="Menü öffnen" aria-expanded="false" aria-controls="ph-mob"><span></span><span></span><span></span></button>
     </div>
   </div>
   <div class="ph-mob" id="ph-mob">
