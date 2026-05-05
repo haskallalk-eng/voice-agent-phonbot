@@ -9,6 +9,7 @@ import {
   reassignPhoneAgent,
   verifyForwarding,
   createCheckoutSession,
+  LEGAL_CONFIRMATION,
   ApiError,
   type PhoneNumber,
   type AgentConfig,
@@ -393,6 +394,7 @@ export function PhoneManager({ onNavigate }: { onNavigate?: (page: string) => vo
   const [showAgentSelect, setShowAgentSelect] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
   const [newNumber, setNewNumber] = useState<string | null>(null);
+  const [billingLegalAccepted, setBillingLegalAccepted] = useState(false);
 
   async function handleProvision(agentTenantId?: string) {
     if (provisioning) return;
@@ -450,13 +452,29 @@ export function PhoneManager({ onNavigate }: { onNavigate?: (page: string) => vo
             <p className="text-sm font-semibold bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Eigene Telefonnummer ab 8,99€/Mo</p>
             <p className="text-xs text-white/35">Mit dem Nummer-Plan bekommst du eine eigene Telefonnummer + 70 Freiminuten. Dein Agent nimmt dann echte Anrufe entgegen.</p>
             <p className="text-[11px] text-cyan-400/50 mt-1">Tipp: Ab dem Starter-Plan (79€/Mo) ist eine Nummer bereits gratis inklusive.</p>
+            <label className="mx-auto flex max-w-md items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-[11px] text-white/45">
+              <input
+                type="checkbox"
+                checked={billingLegalAccepted}
+                onChange={(e) => setBillingLegalAccepted(e.target.checked)}
+                className="mt-0.5 rounded border-white/20 bg-white/5 text-orange-500 focus:ring-orange-500/50"
+              />
+              <span>
+                Ich handle als Unternehmer im Sinne von &sect;14 BGB und akzeptiere{' '}
+                <a href="/agb/" target="_blank" rel="noopener" className="text-orange-400 underline hover:text-orange-300">AGB</a>,{' '}
+                <a href="/datenschutz/" target="_blank" rel="noopener" className="text-orange-400 underline hover:text-orange-300">Datenschutz</a> und{' '}
+                <a href="/avv/" target="_blank" rel="noopener" className="text-orange-400 underline hover:text-orange-300">AVV</a>.
+              </span>
+            </label>
             <button onClick={async () => {
+              if (!billingLegalAccepted) return;
               try {
-                const res = await createCheckoutSession('nummer', 'month');
+                const res = await createCheckoutSession('nummer', 'month', LEGAL_CONFIRMATION);
                 if (res.url) window.location.href = res.url;
               } catch { onNavigate?.('billing'); }
             }}
-              className="rounded-lg px-5 py-2.5 text-xs font-semibold text-white transition-all hover:scale-[1.02] cursor-pointer"
+              disabled={!billingLegalAccepted}
+              className="rounded-lg px-5 py-2.5 text-xs font-semibold text-white transition-all hover:scale-[1.02] disabled:opacity-50 cursor-pointer"
               style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)', boxShadow: '0 4px 20px rgba(249,115,22,0.2)' }}>
               Nummer aktivieren — ab 8,99€/Mo
             </button>

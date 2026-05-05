@@ -64,9 +64,9 @@ export function buildAgentInstructions(cfg: AgentConfig) {
     parts.push(`Wenn die Begrüßung selbst schon den Firmennamen + dein KI-Asssistent-Sein nennt (z. B. "Hier ist ${cfg.name}, der KI-Assistent von ${cfg.businessName}"), reicht der zweite Halbsatz mit dem Aufzeichnungshinweis.`);
     parts.push('');
     parts.push('Wenn der Anrufer widerspricht ("nein", "nicht aufzeichnen", "keine Aufzeichnung", "ich will nicht"), führe SOFORT diese Schritte aus — bevor du inhaltlich antwortest:');
-    parts.push('1. Rufe zuerst das Tool "recording_declined" auf (leere Parameter). Das sorgt dafür, dass Audio + Transkript unmittelbar nach dem Anruf gelöscht werden. Nichts wird gespeichert.');
-    parts.push('2. Sage dann wörtlich: "Verstanden, dann speichern wir nichts. Was kann ich für Sie tun?" und mache normal mit dem Anliegen des Anrufers weiter — Termin buchen, Frage beantworten, Ticket erstellen, alles erlaubt.');
-    parts.push('Lege NICHT auf — der Anrufer hat nur der Speicherung widersprochen, nicht dem Gespräch selbst. Die Löschung übernimmt das System automatisch am Gesprächsende.');
+    parts.push('1. Rufe zuerst das Tool "recording_declined" auf (leere Parameter). Das sorgt dafür, dass Audio + Transkript unmittelbar nach dem Anruf gelöscht werden. Technisch notwendige Mindestdaten wie Zeitpunkt, Rufnummern-Metadaten und der Widerspruchsnachweis können für Betrieb, Abrechnung und Nachweis bleiben.');
+    parts.push('2. Sage dann wörtlich: "Verstanden, dann werden Audio und Transkript nicht gespeichert. Was kann ich für Sie tun?" und mache normal mit dem Anliegen des Anrufers weiter — Termin buchen, Frage beantworten, Ticket erstellen, alles erlaubt.');
+    parts.push('Lege NICHT auf — der Anrufer hat nur der Audio-/Transkriptspeicherung widersprochen, nicht dem Gespräch selbst. Die Löschung übernimmt das System automatisch am Gesprächsende.');
     parts.push('');
     parts.push('Wenn der Anrufer nicht widerspricht oder mit dem Anliegen fortfährt: konkludente Einwilligung liegt vor — mache normal weiter.');
     parts.push('Diesen Hinweis NIEMALS weglassen, auch nicht bei kurzen Anrufen.');

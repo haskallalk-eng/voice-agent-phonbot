@@ -1088,10 +1088,24 @@ export function getBillingStatus() {
   return request<BillingStatus>('/billing/status');
 }
 
-export function createCheckoutSession(planId: string, interval: 'month' | 'year' = 'month') {
+export type LegalConfirmation = {
+  isBusiness: true;
+  termsAccepted: true;
+  privacyAccepted: true;
+  avvAccepted: true;
+};
+
+export const LEGAL_CONFIRMATION: LegalConfirmation = {
+  isBusiness: true,
+  termsAccepted: true,
+  privacyAccepted: true,
+  avvAccepted: true,
+};
+
+export function createCheckoutSession(planId: string, interval: 'month' | 'year', legal: LegalConfirmation) {
   return request<{ url: string }>('/billing/checkout', {
     method: 'POST',
-    body: JSON.stringify({ planId, interval }),
+    body: JSON.stringify({ planId, interval, ...legal }),
   });
 }
 
@@ -1107,6 +1121,8 @@ export function startCheckoutSignup(input: {
   interval: 'month' | 'year';
   isBusiness: true;
   termsAccepted: true;
+  privacyAccepted: true;
+  avvAccepted: true;
 }) {
   return request<{ url: string }>('/auth/checkout-start', {
     method: 'POST',

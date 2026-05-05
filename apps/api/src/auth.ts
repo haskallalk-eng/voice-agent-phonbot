@@ -6,6 +6,7 @@ import { redis } from './redis.js';
 import { z } from 'zod';
 import { sendPasswordResetEmail, sendVerificationEmail, sendWelcomeEmail } from './email.js';
 import { stripe, PLANS, type PlanId } from './billing.js';
+import { insertLegalAcceptance } from './legal.js';
 
 // Per-user brute-force counter. The route-level rate-limit is per-IP (5–10/min);
 // a botnet of 100 IPs against one email easily slips through. We add a Redis-
@@ -164,14 +165,16 @@ const PASSWORD_MAX = 72;
 // isBusiness + termsAccepted: B2B-only contract. Backend enforces literal(true)
 // so a DevTools-edited form can't bypass the frontend checkbox — a consumer
 // signing up would otherwise keep §312g BGB Widerrufsrecht regardless of AGB
-// wording. AGB §1 + KVKG-Disclaimer rest on the user truthfully attesting they
-// signed up as a Gewerbetreibender.
+// wording. AGB §1 and the persisted legal_acceptances row rest on the user
+// truthfully attesting they signed up as a Gewerbetreibender.
 const RegisterBody = z.object({
   orgName: z.string().min(2).max(100),
   email: z.string().email(),
   password: z.string().min(PASSWORD_MIN).max(PASSWORD_MAX),
   isBusiness: z.literal(true),
   termsAccepted: z.literal(true),
+  privacyAccepted: z.literal(true),
+  avvAccepted: z.literal(true),
 });
 
 const CheckoutStartBody = z.object({
@@ -182,6 +185,8 @@ const CheckoutStartBody = z.object({
   interval: z.enum(['month', 'year']).default('month'),
   isBusiness: z.literal(true),
   termsAccepted: z.literal(true),
+  privacyAccepted: z.literal(true),
+  avvAccepted: z.literal(true),
 });
 
 const FinalizeCheckoutBody = z.object({
@@ -206,26 +211,36 @@ async function materializePendingFromSession(
   sessionId: string,
   stripeCustomerId: string | null,
 ): Promise<{ userId: string; orgId: string; email: string; role: 'owner' | 'admin' | 'member' } | null> {
+  return materializePendingRegistration({ sessionId, stripeCustomerId });
+}
+
+async function materializePendingRegistration(opts: {
+  pendingId?: string | null;
+  sessionId?: string | null;
+  stripeCustomerId: string | null;
+}): Promise<{ userId: string; orgId: string; email: string; role: 'owner' | 'admin' | 'member' } | null> {
   if (!pool) throw new Error('Database not configured');
+  if (!opts.sessionId && !opts.pendingId) return null;
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     // Lock the pending row so a concurrent webhook + finalize can't double-insert.
     const pending = await client.query(
-      `SELECT id, email, org_name, password_hash, plan_id
+      `SELECT id, email, org_name, password_hash, plan_id, billing_interval
          FROM pending_registrations
-        WHERE stripe_session_id = $1
+        WHERE ${opts.sessionId ? 'stripe_session_id = $1' : 'id = $1'}
         FOR UPDATE`,
-      [sessionId],
+      [opts.sessionId ?? opts.pendingId],
     );
     if (!pending.rowCount) {
       await client.query('ROLLBACK');
       return null; // already materialized (or never existed)
     }
     const p = pending.rows[0] as {
-      id: string; email: string; org_name: string; password_hash: string; plan_id: string;
+      id: string; email: string; org_name: string; password_hash: string; plan_id: PlanId; billing_interval: 'month' | 'year' | null;
     };
+    const plan = PLANS[p.plan_id] ?? PLANS.free;
 
     // Double-check: if the email was registered elsewhere in the meantime,
     // bail. Safer than overwriting.
@@ -238,10 +253,10 @@ async function materializePendingFromSession(
 
     const slug = p.org_name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'org';
     const orgRes = await client.query(
-      `INSERT INTO orgs (name, slug, stripe_customer_id)
-       VALUES ($1, $2, $3)
+      `INSERT INTO orgs (name, slug, stripe_customer_id, plan, plan_status, plan_interval, minutes_limit)
+       VALUES ($1, $2, $3, $4, 'active', $5, $6)
        RETURNING id`,
-      [p.org_name, slug + '-' + Date.now().toString(36), stripeCustomerId],
+      [p.org_name, slug + '-' + Date.now().toString(36), opts.stripeCustomerId, p.plan_id, p.billing_interval, plan.minutesLimit],
     );
     const orgId = orgRes.rows[0].id as string;
 
@@ -255,6 +270,17 @@ async function materializePendingFromSession(
     );
     const user = userRes.rows[0] as { id: string; role: 'owner' | 'admin' | 'member' };
 
+    await client.query(
+      `UPDATE legal_acceptances
+          SET org_id = $1,
+              user_id = $2,
+              stripe_session_id = COALESCE(stripe_session_id, $3),
+              stripe_customer_id = COALESCE(stripe_customer_id, $4),
+              metadata = metadata || jsonb_build_object('materializedAt', now())
+        WHERE pending_registration_id = $5`,
+      [orgId, user.id, opts.sessionId, opts.stripeCustomerId, p.id],
+    );
+
     await client.query('DELETE FROM pending_registrations WHERE id = $1', [p.id]);
     await client.query('COMMIT');
     return { userId: user.id, orgId, email: p.email, role: user.role };
@@ -266,7 +292,7 @@ async function materializePendingFromSession(
   }
 }
 
-export { materializePendingFromSession };
+export { materializePendingFromSession, materializePendingRegistration };
 
 export async function registerAuth(app: FastifyInstance) {
   // POST /auth/register — create org + owner user
@@ -277,7 +303,7 @@ export async function registerAuth(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'Invalid input', details: parsed.error.flatten() });
     }
-    const { orgName, email, password } = parsed.data;
+    const { orgName, email, password, isBusiness, termsAccepted, privacyAccepted, avvAccepted } = parsed.data;
 
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
@@ -334,6 +360,20 @@ export async function registerAuth(app: FastifyInstance) {
       }
       const user = userResult.rows[0];
 
+      await insertLegalAcceptance(client, {
+        source: 'register',
+        orgId: org.id,
+        userId: user.id,
+        email,
+        planId: 'free',
+        billingInterval: 'none',
+        isBusiness,
+        termsAccepted,
+        privacyAccepted,
+        avvAccepted,
+        req,
+      });
+
       await client.query('COMMIT');
 
       // Send verification + welcome emails when email service is configured
@@ -371,7 +411,7 @@ export async function registerAuth(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'Invalid input', details: parsed.error.flatten() });
     }
-    const { orgName, email, password, planId, interval } = parsed.data;
+    const { orgName, email, password, planId, interval, isBusiness, termsAccepted, privacyAccepted, avvAccepted } = parsed.data;
 
     const plan = PLANS[planId as PlanId];
     const priceId = interval === 'year' ? plan.stripePriceIdYearly : plan.stripePriceId;
@@ -414,6 +454,7 @@ export async function registerAuth(app: FastifyInstance) {
         success_url: `${appUrl}/?checkoutSession={CHECKOUT_SESSION_ID}`,
         cancel_url: `${appUrl}/`,
         allow_promotion_codes: true,
+        billing_address_collection: 'required',
         // §14 UStG / B2B-EU reverse-charge: collect customer VAT-ID so the
         // invoice carries it and reverse-charge applies for cross-border B2B.
         tax_id_collection: { enabled: true },
@@ -434,6 +475,24 @@ export async function registerAuth(app: FastifyInstance) {
         'UPDATE pending_registrations SET stripe_session_id = $1 WHERE id = $2',
         [session.id, pendingId],
       );
+      await insertLegalAcceptance(pool, {
+        source: 'checkout_signup',
+        pendingRegistrationId: pendingId,
+        email,
+        planId,
+        billingInterval: interval,
+        stripeSessionId: session.id,
+        stripeCustomerId: customer.id,
+        isBusiness,
+        termsAccepted,
+        privacyAccepted,
+        avvAccepted,
+        req,
+        metadata: {
+          stripeMode: 'subscription',
+          checkoutUrlCreated: true,
+        },
+      });
       return { url: session.url };
     } catch (err) {
       // Clean up the orphan pending row so the TTL job doesn't have to.

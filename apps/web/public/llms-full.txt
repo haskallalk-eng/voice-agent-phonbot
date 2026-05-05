@@ -148,7 +148,7 @@ Phonbot unterstützt über 30 Sprachen. Für 15 davon (u. a. Deutsch, Englisch, 
 Nein. Monatliche Pläne sind monatlich kündbar. Beim Jahresplan sparst du 20 %, aber es gibt keine Strafgebühren.
 
 ### Was passiert wenn mein Minutenkontingent aufgebraucht ist?
-Der Agent bleibt aktiv — zusätzliche Minuten werden zum günstigen Überschreitungspreis (ab 0,06 €/Min) abgerechnet. Du wirst per E-Mail informiert.
+Der Agent bleibt aktiv — zusätzliche Minuten werden je nach Tarif zum Überschreitungspreis von 0,15-0,22 €/Min abgerechnet. Du wirst per E-Mail informiert.
 
 ## 7. Branchen-Templates (Details)
 

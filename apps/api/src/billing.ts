@@ -4,15 +4,24 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { pool } from './db.js';
 import type { JwtPayload } from './auth.js';
-import { materializePendingFromSession } from './auth.js';
+import { materializePendingFromSession, materializePendingRegistration } from './auth.js';
 import { autoProvisionGermanNumber } from './phone.js';
-import { sendPlanActivatedEmail, sendPaymentFailedEmail } from './email.js';
+import { sendInvoicePaidEmail, sendPlanActivatedEmail, sendPaymentFailedEmail } from './email.js';
 import { log } from './logger.js';
+import { insertLegalAcceptance } from './legal.js';
 
 // ── Stripe client ─────────────────────────────────────────────────────────────
 
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY ?? '';
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? '';
+
+if (
+  process.env.NODE_ENV === 'production' &&
+  STRIPE_SECRET.startsWith('sk_test_') &&
+  process.env.ALLOW_STRIPE_TEST_IN_PRODUCTION !== '1'
+) {
+  throw new Error('Refusing to start production with a Stripe test-mode secret key.');
+}
 
 export const stripe = STRIPE_SECRET
   ? new Stripe(STRIPE_SECRET)
@@ -79,6 +88,14 @@ export const PLANS = {
 } as const;
 
 export type PlanId = keyof typeof PLANS;
+
+const REQUIRED_LIVE_PRICE_PLANS = ['nummer', 'starter', 'pro', 'agency'] as const;
+if (process.env.NODE_ENV === 'production' && STRIPE_SECRET) {
+  const missing = REQUIRED_LIVE_PRICE_PLANS.filter((id) => !PLANS[id].stripePriceId);
+  if (missing.length) {
+    throw new Error(`Missing Stripe monthly price IDs for paid plans: ${missing.join(', ')}`);
+  }
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -456,6 +473,24 @@ export async function resolveOrgIdFromSubscription(sub: Stripe.Subscription): Pr
   return null;
 }
 
+type InvoiceLinks = {
+  hostedInvoiceUrl: string | null;
+  invoicePdf: string | null;
+  invoiceNumber: string | null;
+};
+
+async function resolveInvoiceLinks(invoiceRef: string | Stripe.Invoice | null | undefined): Promise<InvoiceLinks> {
+  if (!stripe || !invoiceRef) return { hostedInvoiceUrl: null, invoicePdf: null, invoiceNumber: null };
+  const invoice = typeof invoiceRef === 'string'
+    ? await stripe.invoices.retrieve(invoiceRef).catch(() => null)
+    : invoiceRef;
+  return {
+    hostedInvoiceUrl: invoice?.hosted_invoice_url ?? null,
+    invoicePdf: invoice?.invoice_pdf ?? null,
+    invoiceNumber: invoice?.number ?? null,
+  };
+}
+
 // NOTE: Free plan minutes are one-time (no monthly reset).
 // Paid plans reset at billing period renewal via syncSubscription.
 async function syncSubscription(sub: Stripe.Subscription) {
@@ -604,9 +639,13 @@ export async function registerBilling(app: FastifyInstance) {
     const parsed = z.object({
       planId: z.enum(['nummer', 'starter', 'pro', 'agency']).default('nummer'),
       interval: z.enum(['month', 'year']).default('month'),
+      isBusiness: z.literal(true),
+      termsAccepted: z.literal(true),
+      privacyAccepted: z.literal(true),
+      avvAccepted: z.literal(true),
     }).safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: 'Invalid plan selection' });
-    const { planId, interval } = parsed.data;
+    const { planId, interval, isBusiness, termsAccepted, privacyAccepted, avvAccepted } = parsed.data;
     const plan = PLANS[planId];
 
     const priceId = interval === 'year' ? plan.stripePriceIdYearly : plan.stripePriceId;
@@ -669,6 +708,37 @@ export async function registerBilling(app: FastifyInstance) {
       } catch (err) {
         req.log.warn({ err: (err as Error).message, orgId, subId: updated.id }, 'post-update syncSubscription failed; relying on webhook');
       }
+      await insertLegalAcceptance(pool, {
+        source: 'billing_checkout',
+        orgId,
+        userId,
+        email,
+        planId,
+        billingInterval: interval,
+        stripeCustomerId: customerId,
+        isBusiness,
+        termsAccepted,
+        privacyAccepted,
+        avvAccepted,
+        req,
+        metadata: {
+          stripeSubscriptionId: updated.id,
+          prorationBehavior: 'create_prorations',
+          checkoutSessionCreated: false,
+        },
+      });
+      const invoice = await resolveInvoiceLinks(updated.latest_invoice);
+      sendPlanActivatedEmail({
+        toEmail: email,
+        orgName: name ?? 'Phonbot',
+        planName: plan.name,
+        minutesLimit: plan.minutesLimit,
+        interval,
+        overchargePerMinute: plan.overchargePerMinute,
+        invoiceUrl: invoice.hostedInvoiceUrl ?? invoice.invoicePdf,
+      }).catch((err: unknown) => {
+        req.log.warn({ err: (err as Error).message, orgId, subId: updated.id }, 'plan-update confirmation email send failed');
+      });
       return { url: `${appUrl}/billing?success=1&changed=1` };
     }
 
@@ -681,6 +751,7 @@ export async function registerBilling(app: FastifyInstance) {
       success_url: `${appUrl}/billing?success=1`,
       cancel_url: `${appUrl}/billing?canceled=1`,
       allow_promotion_codes: true,
+      billing_address_collection: 'required',
       // VAT-ID Collection: B2B-EU reverse-charge support.
       tax_id_collection: { enabled: true },
       // Stripe API: tax_id_collection on an EXISTING customer requires
@@ -696,6 +767,26 @@ export async function registerBilling(app: FastifyInstance) {
       ...(process.env.STRIPE_AUTOMATIC_TAX === '1'
         ? { automatic_tax: { enabled: true } }
         : {}),
+    });
+
+    await insertLegalAcceptance(pool, {
+      source: 'billing_checkout',
+      orgId,
+      userId,
+      email,
+      planId,
+      billingInterval: interval,
+      stripeSessionId: session.id,
+      stripeCustomerId: customerId,
+      isBusiness,
+      termsAccepted,
+      privacyAccepted,
+      avvAccepted,
+      req,
+      metadata: {
+        stripeMode: 'subscription',
+        checkoutSessionCreated: true,
+      },
     });
 
     return { url: session.url };
@@ -782,6 +873,28 @@ export async function registerBilling(app: FastifyInstance) {
       }
       case 'customer.subscription.created': {
         const newSub = event.data.object as Stripe.Subscription;
+        const pendingRegistrationId = newSub.metadata?.pendingRegistrationId;
+        if (pendingRegistrationId) {
+          const customerId = typeof newSub.customer === 'string' ? newSub.customer : newSub.customer?.id ?? null;
+          try {
+            const materialized = await materializePendingRegistration({
+              pendingId: pendingRegistrationId,
+              stripeCustomerId: customerId,
+            });
+            if (materialized?.orgId && !newSub.metadata?.orgId && stripe) {
+              stripe.subscriptions.update(newSub.id, {
+                metadata: { ...newSub.metadata, orgId: materialized.orgId },
+              }).catch((err: unknown) => {
+                req.log.warn({ err: (err as Error).message, subId: newSub.id, orgId: materialized.orgId }, 'subscription orgId metadata backfill failed');
+              });
+            }
+            if (materialized) {
+              req.log.info({ subId: newSub.id, orgId: materialized.orgId }, 'pending registration materialized via subscription.created');
+            }
+          } catch (err) {
+            req.log.error({ err: (err as Error).message, subId: newSub.id, pendingRegistrationId }, 'materialize pending from subscription.created failed');
+          }
+        }
         await syncSubscription(newSub);
         // Auto-provision a German phone number for new paying customers.
         // Stripe-first checkouts (no orgId in metadata) still get provisioned:
@@ -796,10 +909,23 @@ export async function registerBilling(app: FastifyInstance) {
           });
           if (pool) {
             pool.query(`SELECT u.email, o.name, o.plan, o.minutes_limit FROM users u JOIN orgs o ON o.id = u.org_id WHERE u.org_id = $1 AND u.role = 'owner' LIMIT 1`, [newOrgId])
-              .then(res => {
+              .then(async res => {
                 const r = res.rows[0];
-                if (r?.email) sendPlanActivatedEmail({ toEmail: r.email, orgName: r.name ?? 'Phonbot', planName: r.plan ?? 'Starter', minutesLimit: r.minutes_limit ?? 500 })
-                  .catch((e: unknown) => req.log.warn({ err: (e as Error).message }, 'plan-activated email send failed'));
+                if (r?.email) {
+                  const planId = (r.plan ?? 'starter') as PlanId;
+                  const planDef = PLANS[planId] ?? PLANS.starter;
+                  const interval = newSub.items.data[0]?.price?.recurring?.interval === 'year' ? 'year' : 'month';
+                  const invoice = await resolveInvoiceLinks(newSub.latest_invoice);
+                  sendPlanActivatedEmail({
+                    toEmail: r.email,
+                    orgName: r.name ?? 'Phonbot',
+                    planName: planDef.name,
+                    minutesLimit: r.minutes_limit ?? planDef.minutesLimit,
+                    interval,
+                    overchargePerMinute: planDef.overchargePerMinute,
+                    invoiceUrl: invoice.hostedInvoiceUrl ?? invoice.invoicePdf,
+                  }).catch((e: unknown) => req.log.warn({ err: (e as Error).message }, 'plan-activated email send failed'));
+                }
               }).catch((e: unknown) => req.log.warn({ err: (e as Error).message, orgId: newOrgId }, 'plan-activated owner lookup failed'));
           }
         }
@@ -856,6 +982,54 @@ export async function registerBilling(app: FastifyInstance) {
             'billing: subscription pause/resume with no resolvable orgId — plan_status update skipped',
           );
         }
+        break;
+      }
+      case 'invoice.paid': {
+        const invoiceRaw = event.data.object as unknown as Record<string, unknown>;
+        const invoiceId = typeof invoiceRaw.id === 'string' ? invoiceRaw.id : null;
+        const rawCustomer = invoiceRaw.customer;
+        const rawSub = invoiceRaw.subscription;
+        const customerId = typeof rawCustomer === 'string'
+          ? rawCustomer
+          : (rawCustomer != null && typeof rawCustomer === 'object' && 'id' in (rawCustomer as Record<string, unknown>))
+            ? ((rawCustomer as Record<string, unknown>).id as string)
+            : null;
+        const subId = typeof rawSub === 'string'
+          ? rawSub
+          : (rawSub != null && typeof rawSub === 'object' && 'id' in (rawSub as Record<string, unknown>))
+            ? ((rawSub as Record<string, unknown>).id as string)
+            : null;
+        if (!pool || (!customerId && !subId)) break;
+
+        const ownerRes = await pool.query(
+          `SELECT u.email, o.name
+             FROM orgs o
+             JOIN users u ON u.org_id = o.id AND u.role = 'owner'
+            WHERE ($1::text IS NOT NULL AND o.stripe_subscription_id = $1)
+               OR ($2::text IS NOT NULL AND o.stripe_customer_id = $2)
+            ORDER BY u.created_at
+            LIMIT 1`,
+          [subId, customerId],
+        );
+        const owner = ownerRes.rows[0];
+        if (!owner?.email) {
+          req.log.warn({ invoiceId, subId, customerId }, 'invoice.paid: no owner email found');
+          break;
+        }
+
+        const invoice = await resolveInvoiceLinks(invoiceId);
+        const amountPaidCents = typeof invoiceRaw.amount_paid === 'number' ? invoiceRaw.amount_paid : 0;
+        const currency = typeof invoiceRaw.currency === 'string' ? invoiceRaw.currency : 'eur';
+        const invoiceNumber = typeof invoiceRaw.number === 'string' ? invoiceRaw.number : invoice.invoiceNumber;
+        sendInvoicePaidEmail({
+          toEmail: owner.email,
+          orgName: owner.name ?? 'Phonbot',
+          amountPaidCents,
+          currency,
+          hostedInvoiceUrl: (typeof invoiceRaw.hosted_invoice_url === 'string' ? invoiceRaw.hosted_invoice_url : invoice.hostedInvoiceUrl),
+          invoicePdf: (typeof invoiceRaw.invoice_pdf === 'string' ? invoiceRaw.invoice_pdf : invoice.invoicePdf),
+          invoiceNumber,
+        }).catch((e: unknown) => req.log.warn({ err: (e as Error).message, invoiceId }, 'invoice-paid email send failed'));
         break;
       }
       case 'invoice.payment_failed': {

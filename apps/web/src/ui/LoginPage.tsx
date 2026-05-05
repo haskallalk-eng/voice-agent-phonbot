@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../lib/auth.js';
-import { forgotPassword, createCheckoutSession, startCheckoutSignup } from '../lib/api.js';
+import { forgotPassword, startCheckoutSignup, LEGAL_CONFIRMATION } from '../lib/api.js';
 import { FoxLogo } from './FoxLogo.js';
 import { PasswordInput } from './PasswordInput.js';
 
@@ -21,7 +21,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
   // §14 BGB Unternehmer-Bestätigung — Phonbot ist B2B-only. Ohne diese
   // Bestätigung greift bei natürlichen Personen das 14-Tage-Verbraucher-
   // Widerrufsrecht (§312g BGB). Die Checkbox ist Pflicht für Account-
-  // Erstellung; sie schließt das Widerrufsrecht rechtssicher aus.
+  // Erstellung; der Backend-Audit-Trail dokumentiert die B2B-Bestätigung.
   const [isBusiness, setIsBusiness] = useState(false);
 
   // Forgot password state
@@ -84,8 +84,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
           password: data.password,
           planId: plan as 'nummer' | 'starter' | 'pro' | 'agency',
           interval,
-          isBusiness: true,
-          termsAccepted: true,
+          ...LEGAL_CONFIRMATION,
         });
         window.location.href = url;
         return; // browser navigates away
@@ -95,25 +94,21 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
         await login(data.email, data.password);
       } else {
         await authRegister(data.orgName, data.email, data.password, {
-          isBusiness: true,
-          termsAccepted: true,
+          ...LEGAL_CONFIRMATION,
         });
       }
 
-      // Existing user logging in with a preselected plan still gets sent
-      // through the standard (authenticated) upgrade path.
+      // Existing users confirm current legal documents in Billing before a
+      // paid checkout is opened; keep the preselection for that view.
       if (plan && plan !== 'free') {
         try {
-          sessionStorage.removeItem('preselectedPlan');
-          sessionStorage.removeItem('preselectedInterval');
+          sessionStorage.setItem('preselectedPlan', plan);
+          sessionStorage.setItem('preselectedInterval', interval);
         } catch { /* ignore */ }
-        try {
-          const { url } = await createCheckoutSession(plan, interval);
-          window.location.href = url;
-          return;
-        } catch {
-          // Fall through to Dashboard — user can retry via BillingPage.
-        }
+        const url = new URL(window.location.href);
+        url.searchParams.delete('page');
+        url.hash = 'billing';
+        window.history.replaceState({}, '', url.toString());
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Etwas ist schiefgelaufen';
@@ -316,12 +311,16 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
                     />
                     <span className="text-xs text-white/50 leading-relaxed">
                       Ich akzeptiere die{' '}
-                      <a href="/?page=legal" className="text-orange-400 hover:text-orange-300 underline transition-colors">
+                      <a href="/datenschutz/" target="_blank" rel="noopener" className="text-orange-400 hover:text-orange-300 underline transition-colors">
                         Datenschutzerkl&auml;rung
                       </a>{' '}
-                      und{' '}
-                      <a href="/?page=legal" className="text-orange-400 hover:text-orange-300 underline transition-colors">
+                      , die{' '}
+                      <a href="/agb/" target="_blank" rel="noopener" className="text-orange-400 hover:text-orange-300 underline transition-colors">
                         AGB
+                      </a>{' '}
+                      und den{' '}
+                      <a href="/avv/" target="_blank" rel="noopener" className="text-orange-400 hover:text-orange-300 underline transition-colors">
+                        AVV
                       </a>.
                     </span>
                   </label>

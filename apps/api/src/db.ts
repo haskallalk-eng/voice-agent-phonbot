@@ -574,6 +574,41 @@ async function runMigrationBody() {
   await pool.query(`CREATE INDEX IF NOT EXISTS pending_registrations_email_idx ON pending_registrations(email);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS pending_registrations_session_idx ON pending_registrations(stripe_session_id);`);
 
+  // Click-wrap / legal proof trail. This is intentionally append-only: when a
+  // customer accepts AGB, Datenschutz, AVV and B2B status during register or
+  // checkout, we keep the exact document snapshot and request metadata for
+  // later contract, tax, or data-protection audits.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS legal_acceptances (
+      id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+      accepted_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+      source                   TEXT NOT NULL,
+      org_id                   UUID REFERENCES orgs(id) ON DELETE SET NULL,
+      user_id                  UUID REFERENCES users(id) ON DELETE SET NULL,
+      pending_registration_id  UUID,
+      email                    TEXT NOT NULL,
+      plan_id                  TEXT,
+      billing_interval         TEXT,
+      stripe_session_id        TEXT,
+      stripe_customer_id       TEXT,
+      ip_address               TEXT,
+      user_agent               TEXT,
+      is_business              BOOLEAN NOT NULL,
+      terms_accepted           BOOLEAN NOT NULL,
+      privacy_accepted         BOOLEAN NOT NULL,
+      avv_accepted             BOOLEAN NOT NULL,
+      document_hash            TEXT NOT NULL,
+      documents                JSONB NOT NULL,
+      metadata                 JSONB NOT NULL DEFAULT '{}'::jsonb
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS legal_acceptances_org_idx ON legal_acceptances(org_id, accepted_at DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS legal_acceptances_user_idx ON legal_acceptances(user_id, accepted_at DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS legal_acceptances_email_idx ON legal_acceptances(lower(email), accepted_at DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS legal_acceptances_pending_idx ON legal_acceptances(pending_registration_id) WHERE pending_registration_id IS NOT NULL;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS legal_acceptances_stripe_session_idx ON legal_acceptances(stripe_session_id) WHERE stripe_session_id IS NOT NULL;`);
+
   // One-time cleanup: delete orphan tickets (org_id IS NULL). These existed from
   // pre-auth days when /tickets was unauthenticated and tenant_id was a free-form
   // string. The legacy "OR (org_id IS NULL AND tenant_id = $orgId::text)" branches
