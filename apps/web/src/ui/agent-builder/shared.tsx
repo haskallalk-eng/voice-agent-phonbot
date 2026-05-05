@@ -348,7 +348,7 @@ export const DEFAULT_CONFIG_VALUES: Partial<AgentConfig> = {
   customVocabulary: [],
   enableDtmf: false,
   interruptionMode: 'allow',
-  recordCalls: false,
+  recordCalls: true,
   dataRetentionDays: 30,
   knowledgeSources: [],
   extractedVariables: [],

@@ -9,6 +9,8 @@ import {
 
 type AgentConfig = Awaited<ReturnType<typeof readConfig>>;
 
+export const RECORDING_CONSENT_PROMPT_VERSION = 'recording-consent-v2026-05-05';
+
 const DEFAULT_INSTRUCTIONS =
   'Du bist eine freundliche Telefonassistenz für ein lokales Unternehmen. Ziel: Termine buchen, Fragen beantworten, fehlende Details erfragen. Halte Antworten kurz, gesprochen und höflich. Maximal 2 Sätze pro Antwort.';
 
@@ -44,9 +46,9 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   }).format(new Date());
 
   // ── KI-Disclosure (EU AI Act Art. 50) [+ optional Recording notice § 201 StGB] ──
-  // EU AI Act Art. 50 (in force since Feb 2025): callers must be told they're
-  // talking to an AI system unless it's "obvious from context". Synthetic voices
-  // that sound human are explicitly NOT obvious, so we ALWAYS disclose — this
+  // EU AI Act Art. 50 applies from 2 Aug 2026. We comply early: callers must
+  // be told they're talking to an AI system unless it's "obvious from context".
+  // Synthetic voices that sound human are explicitly NOT obvious, so we ALWAYS disclose — this
   // block runs regardless of recording-state.
   //
   // The recording-disclosure (§ 201 StGB / Art. 6 DSGVO) only applies when the
@@ -59,16 +61,18 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push('');
   if (recordingActive) {
     parts.push('## KI-Hinweis + Aufzeichnungshinweis (PFLICHT — EU AI Act Art. 50 + § 201 StGB)');
-    parts.push(`Unmittelbar nach deiner Begrüßung — BEVOR du inhaltlich etwas besprichst — sage in einem natürlichen Satz, dass du eine KI bist UND dass das Gespräch aufgezeichnet wird. Beispiel:`);
-    parts.push(`"Hier ist ${cfg.name}, der KI-Assistent von ${cfg.businessName}. Unser Gespräch wird zur Qualitätssicherung aufgezeichnet — wenn Sie nicht einverstanden sind, sagen Sie es bitte jetzt, sonst mache ich gerne weiter."`);
+    parts.push(`Unmittelbar nach deiner Begrüßung — BEVOR du inhaltlich etwas besprichst — sage in einem natürlichen Satz, dass du eine KI bist, dass das Gespräch aufgezeichnet wird, und frage nach einer ausdrücklichen Zustimmung. Beispiel:`);
+    parts.push(`"Hier ist ${cfg.name}, der KI-Assistent von ${cfg.businessName}. Unser Gespräch wird zur Qualitätssicherung aufgezeichnet. Sind Sie mit der Aufzeichnung einverstanden? Bitte sagen Sie kurz ja, dann mache ich weiter."`);
     parts.push(`Wenn die Begrüßung selbst schon den Firmennamen + dein KI-Asssistent-Sein nennt (z. B. "Hier ist ${cfg.name}, der KI-Assistent von ${cfg.businessName}"), reicht der zweite Halbsatz mit dem Aufzeichnungshinweis.`);
     parts.push('');
-    parts.push('Wenn der Anrufer widerspricht ("nein", "nicht aufzeichnen", "keine Aufzeichnung", "ich will nicht"), führe SOFORT diese Schritte aus — bevor du inhaltlich antwortest:');
+    parts.push('Warte auf eine klare Zustimmung ("ja", "ist okay", "einverstanden", "passt"). Erst danach darfst du inhaltlich mit Anliegen, Termin, Ticket oder Beratung fortfahren.');
+    parts.push('Wenn der Anrufer nicht klar zustimmt, widerspricht ("nein", "nicht aufzeichnen", "keine Aufzeichnung", "ich will nicht") oder direkt mit seinem Anliegen beginnt ohne die Aufzeichnung zu bestätigen, führe SOFORT diese Schritte aus — bevor du inhaltlich antwortest:');
     parts.push('1. Rufe zuerst das Tool "recording_declined" auf (leere Parameter). Das sorgt dafür, dass Audio + Transkript unmittelbar nach dem Anruf gelöscht werden. Technisch notwendige Mindestdaten wie Zeitpunkt, Rufnummern-Metadaten und der Widerspruchsnachweis können für Betrieb, Abrechnung und Nachweis bleiben.');
     parts.push('2. Sage dann wörtlich: "Verstanden, dann werden Audio und Transkript nicht gespeichert. Was kann ich für Sie tun?" und mache normal mit dem Anliegen des Anrufers weiter — Termin buchen, Frage beantworten, Ticket erstellen, alles erlaubt.');
     parts.push('Lege NICHT auf — der Anrufer hat nur der Audio-/Transkriptspeicherung widersprochen, nicht dem Gespräch selbst. Die Löschung übernimmt das System automatisch am Gesprächsende.');
     parts.push('');
-    parts.push('Wenn der Anrufer nicht widerspricht oder mit dem Anliegen fortfährt: konkludente Einwilligung liegt vor — mache normal weiter.');
+    parts.push('Niemals aus Schweigen oder bloßem Weiterreden eine Einwilligung ableiten. Für gespeicherte Audio-/Transkriptdaten brauchst du eine klare Zustimmung.');
+    parts.push(`Compliance-Version: ${RECORDING_CONSENT_PROMPT_VERSION}.`);
     parts.push('Diesen Hinweis NIEMALS weglassen, auch nicht bei kurzen Anrufen.');
   } else {
     parts.push('## KI-Hinweis (PFLICHT — EU AI Act Art. 50)');

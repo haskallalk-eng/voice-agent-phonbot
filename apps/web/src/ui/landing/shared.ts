@@ -69,7 +69,7 @@ export const FAQ_ITEMS = [
   },
   {
     q: 'Für welche Branchen ist Phonbot geeignet?',
-    a: 'Phonbot ist optimiert für Friseure, Handwerker, Reinigung, Gastronomie, Autowerkstätten, Kanzleien, Kosmetikstudios und andere kleine Unternehmen mit vielen Anrufen und Terminwünschen. Der Agent passt sich deiner Branche über den Agent Builder an.',
+    a: 'Phonbot ist optimiert für Friseure, Handwerker, Reinigung, Gastronomie, Autowerkstätten, Kosmetikstudios und andere kleine Unternehmen mit vielen Anrufen und Terminwünschen. Reguliertere Berufsgruppen mit besonderen Vertraulichkeits- oder Sensibeldaten-Pflichten sind aktuell nicht freigegeben. Der Agent passt sich deiner Branche über den Agent Builder an.',
   },
   {
     q: 'Kann ich den Agenten auf mehrere Sprachen einstellen?',

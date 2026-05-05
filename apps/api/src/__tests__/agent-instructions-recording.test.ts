@@ -41,6 +41,8 @@ describe('buildAgentInstructions: recording disclosure', () => {
     const out = buildAgentInstructions(baseCfg({ recordCalls: true }));
     expect(out).toContain('Aufzeichnungshinweis');
     expect(out).toContain('aufgezeichnet');
+    expect(out).toContain('ausdrücklichen Zustimmung');
+    expect(out).toContain('Niemals aus Schweigen');
     expect(out).toContain('recording_declined');
   });
 

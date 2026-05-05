@@ -73,28 +73,16 @@ function ImpressumContent() {
         <h2 className="text-base font-semibold text-white mb-2">Produktportfolio</h2>
         <p>
           Phonbot ist ein Produkt von Hans Ulrich Waier (Einzelunternehmer). Weitere geplante
-          Produkte unter dem Mindrails-Banner: Sozibot, Kanzleibot — alle aktuell als
-          Einzelunternehmer-Tätigkeit.
+          Produkte unter dem Mindrails-Banner werden getrennt von Phonbot veröffentlicht.
         </p>
       </section>
 
       <section>
         <h2 className="text-base font-semibold text-white mb-2">Streitschlichtung</h2>
         <p>
-          Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit:{' '}
-          <a
-            href="https://ec.europa.eu/consumers/odr/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-orange-400 hover:text-orange-300 underline"
-          >
-            https://ec.europa.eu/consumers/odr/
-          </a>
-          . Unsere E-Mail-Adresse finden Sie oben im Impressum.
-        </p>
-        <p className="mt-2">
           Wir sind nicht bereit oder verpflichtet, an Streitbeilegungsverfahren vor einer
-          Verbraucherschlichtungsstelle teilzunehmen.
+          Verbraucherschlichtungsstelle teilzunehmen. Phonbot richtet sich ausschließlich an
+          Unternehmer im Sinne von § 14 BGB.
         </p>
       </section>
 
@@ -242,36 +230,40 @@ function DatenschutzContent() {
         <h3 className="text-sm font-semibold text-white/90 mt-3 mb-1">Retell AI (KI-Telefonie)</h3>
         <p>
           Für die KI-gestützte Sprachverarbeitung von Telefonanrufen verwenden wir Retell AI Inc., USA.
-          Bei Telefonanrufen werden Sprachdaten (Audio, Transkript, Metadaten wie Nummer und Anrufdauer)
-          zur Verarbeitung übertragen. Nutzer werden zu Beginn eines Anrufs auf die Aufzeichnung
-          hingewiesen (§ 201 StGB). Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO bzw. Art. 6 Abs. 1 lit.
-          a DSGVO. Datenübermittlung in die USA auf Basis der EU-Standardvertragsklauseln
-          (Art. 46 Abs. 2 lit. c DSGVO) sowie des EU-US Data Privacy Framework, sofern der Anbieter
-          zertifiziert ist.
+          Bei aktivierter Aufzeichnung werden Sprachdaten (Audio, Transkript, Metadaten wie Nummer und
+          Anrufdauer) zur Verarbeitung übertragen. Der KI-Agent weist zu Beginn des Anrufs auf KI-Nutzung
+          und Aufzeichnung hin und fragt nach einer klaren Zustimmung (§ 201 StGB). Wenn der Anrufer
+          nicht zustimmt, werden Audio und Transkript nicht dauerhaft gespeichert bzw. nach Gesprächsende
+          gelöscht; strukturierte Geschäftsdaten wie Name, Rückrufnummer, Anliegen, Termin- oder
+          Ticketdaten können weiterhin zur Vertragserfüllung verarbeitet werden. Rechtsgrundlage:
+          Art. 6 Abs. 1 lit. b DSGVO bzw. für Aufzeichnung/Speicherung Art. 6 Abs. 1 lit. a DSGVO.
+          Datenübermittlung in die USA auf Basis der EU-Standardvertragsklauseln (Art. 46 Abs. 2 lit. c
+          DSGVO) sowie des EU-US Data Privacy Framework, sofern der Anbieter zertifiziert ist.
         </p>
 
         <h3 className="text-sm font-semibold text-white/90 mt-3 mb-1">Demo-Anrufe auf phonbot.de</h3>
         <p>
           Wenn Sie auf phonbot.de die Live-Demo eines KI-Telefonassistenten nutzen (Web-Anruf direkt
-          im Browser), wird das Gesprächs-Transkript zusammen mit aus dem Gespräch extrahierten
-          Kontaktdaten (Name, E-Mail, Telefonnummer — sofern Sie diese im Demo-Gespräch nennen) für
-          bis zu 90 Tage in unserer Datenbank gespeichert. Wir verwenden diese Daten ausschließlich zur
-          Qualitätssicherung der Demo, zur Verbesserung des Sprach-Agenten und — sofern Sie im Demo-
-          Gespräch ein Interesse an unserem Produkt äußern — als Lead, den unser Team manuell
-          bearbeitet. Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an Produkt-
-          verbesserung und Lead-Aufnahme nach freiwilliger Anfrage). Sie können der Speicherung
-          jederzeit widersprechen — schreiben Sie uns dazu eine E-Mail an info@phonbot.de mit der
-          Anrufzeit; wir löschen den Datensatz dann manuell.
+          im Browser), starten wir den Demo-Anruf nur nach Bestätigung des Demo-Datenschutzhinweises.
+          Das Gesprächs-Transkript wird zusammen mit aus dem Gespräch extrahierten Kontaktdaten (Name,
+          E-Mail, Telefonnummer — sofern Sie diese im Demo-Gespräch nennen) für bis zu 90 Tage in
+          unserer Datenbank gespeichert. Wir verwenden diese Daten ausschließlich zur Qualitätssicherung
+          der Demo, zur Verbesserung des Sprach-Agenten und — sofern Sie im Demo-Gespräch ein Interesse
+          an unserem Produkt äußern — als Lead, den unser Team manuell bearbeitet. Rechtsgrundlage:
+          Art. 6 Abs. 1 lit. a DSGVO. Sie können der Speicherung jederzeit widersprechen — schreiben Sie
+          uns dazu eine E-Mail an info@phonbot.de mit der Anrufzeit; wir löschen den Datensatz dann
+          manuell.
         </p>
 
         <h3 className="text-sm font-semibold text-white/90 mt-3 mb-1">Demo-Rückrufe von Phonbot</h3>
         <p>
           Wenn Sie auf phonbot.de das Rückruf-Formular ausfüllen (Name, E-Mail, Telefonnummer), ruft
-          unser KI-Assistent Chipy Sie unter der angegebenen Nummer zurück. Der Anruf wird wie oben
-          beschrieben aufgezeichnet und für bis zu 90 Tage gespeichert. Sie können der weiteren
-          Kontaktaufnahme jederzeit widersprechen (DSGVO Art. 21) — Chipy akzeptiert ein
-          „kein Interesse" / „nicht mehr anrufen" sofort und beendet das Gespräch. Rechtsgrundlage:
-          Art. 6 Abs. 1 lit. a DSGVO (Einwilligung durch Formular-Eintragung).
+          unser KI-Assistent Chipy Sie unter der angegebenen Nummer zurück. Der Demo-Rückruf startet nur
+          nach Bestätigung des Demo-Datenschutzhinweises; der Anruf wird wie oben beschrieben
+          aufgezeichnet und für bis zu 90 Tage gespeichert. Sie können der weiteren Kontaktaufnahme
+          jederzeit widersprechen (DSGVO Art. 21) — Chipy akzeptiert ein „kein Interesse" / „nicht mehr
+          anrufen" sofort und beendet das Gespräch. Rechtsgrundlage: Art. 6 Abs. 1 lit. a DSGVO
+          (Einwilligung).
         </p>
 
         <h3 className="text-sm font-semibold text-white/90 mt-3 mb-1">Verbesserung unserer KI-Modelle</h3>
@@ -353,7 +345,7 @@ function DatenschutzContent() {
           E-Mail: info@phonbot.de
         </p>
         <p className="mt-2 text-white/50 text-xs">
-          Stand: April 2026
+          Stand: 5. Mai 2026
         </p>
       </section>
     </div>
@@ -500,7 +492,7 @@ function AgbContent() {
           Sondervermögen, ist Gerichtsstand der Sitz des Anbieters.
         </p>
         <p className="mt-2 text-white/50 text-xs">
-          Stand: März 2025
+          Stand: 5. Mai 2026
         </p>
       </section>
     </div>

@@ -606,10 +606,10 @@ export function getDemoTemplates() {
   return request<{ templates: DemoTemplate[] }>('/demo/templates');
 }
 
-export function createDemoCall(templateId: string, turnstileToken?: string) {
+export function createDemoCall(templateId: string, turnstileToken: string | undefined, privacyConsent: true) {
   return request<{ ok: boolean; call_id?: string; access_token?: string }>('/demo/call', {
     method: 'POST',
-    body: JSON.stringify({ templateId, turnstileToken }),
+    body: JSON.stringify({ templateId, turnstileToken, privacyConsent }),
   });
 }
 

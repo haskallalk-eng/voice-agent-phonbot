@@ -42,6 +42,7 @@ import { fireInboundWebhooks } from './inbound-webhooks.js';
 import { sendBookingConfirmationSms, sendTicketAckSms } from './sms.js';
 import { readDemoCallTemplate, maybeSendDemoSignupLink } from './demo.js';
 import { redactPII } from './pii.js';
+import { RECORDING_CONSENT_PROMPT_VERSION } from './agent-instructions.js';
 import {
   customerModuleActiveForAgentConfig,
   getActiveCustomerDetailsKeys,
@@ -585,12 +586,19 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         const silenceDurationMs = (call as RetellCallData & { silence_duration_ms?: number }).silence_duration_ms;
 
         if (recordingDeclined && callId) {
-          // Fire-and-forget: DELETE Retell's stored audio + transcript.
-          // Keep the flag row as audit trail that deletion was requested.
-          deleteCall(callId).then(
-            () => req.log.info({ callId }, 'recording_declined → Retell call deleted'),
-            (err: Error) => req.log.error({ err: err.message, callId }, 'deleteCall failed'),
-          );
+          // Wait for Retell deletion before acknowledging the terminal webhook.
+          // If this transiently fails, Retell retries the webhook and we try
+          // again instead of leaving stored audio/transcript behind silently.
+          try {
+            await deleteCall(callId);
+            req.log.info({ callId }, 'recording_declined → Retell call deleted');
+          } catch (err) {
+            req.log.error(
+              { err: err instanceof Error ? err.message : String(err), callId },
+              'recording_declined → Retell deleteCall failed',
+            );
+            throw err;
+          }
           // Skip transcript DB insert + analyzeCall — bill minutes only.
           return { ok: true, recordingDeclined: true };
         }
@@ -603,6 +611,22 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           // on failure — silent catches hide transcript loss, which then
           // cascades into no audit trail, no billing check, no learning).
           if (pool) {
+            await pool.query(
+              `INSERT INTO recording_consents (call_id, org_id, agent_id, prompt_version, consent_evidence_excerpt)
+               VALUES ($1, $2, $3, $4, $5)
+               ON CONFLICT (call_id) DO UPDATE SET
+                 org_id = EXCLUDED.org_id,
+                 agent_id = EXCLUDED.agent_id,
+                 prompt_version = EXCLUDED.prompt_version,
+                 consent_evidence_excerpt = EXCLUDED.consent_evidence_excerpt`,
+              [
+                callId,
+                orgId,
+                agentId ?? null,
+                RECORDING_CONSENT_PROMPT_VERSION,
+                transcript.slice(0, 1200),
+              ],
+            );
             pool.query(
               `INSERT INTO call_transcripts (org_id, call_id, direction, transcript, duration_sec, from_number, to_number, disconnection_reason, metadata)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)

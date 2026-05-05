@@ -11,21 +11,21 @@ export const LEGAL_DOCUMENTS = {
     title: 'Allgemeine Geschaeftsbedingungen',
     version: '2026-05-05',
     path: '/agb/',
-    sha256: '63c3a3f02ce74cffead135c824bba1241b0b1bf226ce12e8c4655b2d6b30c3de',
+    sha256: 'c389346f57185adc8272dbf4ad1ee2384031f7056763477f58acd9b3746c31c1',
   },
   privacy: {
     key: 'datenschutz',
     title: 'Datenschutzerklaerung',
     version: '2026-05-05',
     path: '/datenschutz/',
-    sha256: 'bb1af8cfeb998adc896ba30b9fd3de1391b0a2692c44f267cbcdeb57c57b7bda',
+    sha256: '7f19831997d4ba3fa9b85242465ef80b798de01e4ac1cd28f44cdeb30b62bc95',
   },
   dpa: {
     key: 'avv',
     title: 'Auftragsverarbeitungsvertrag',
     version: '1.1-2026-05-05',
     path: '/avv/',
-    sha256: '2f43ccf65686ccdc48ddab8e73ae80c6b2496abe50aac04a9ecaed1e6bbd3192',
+    sha256: '8feace97909886986a6d7c9358fa99c8a5d9c9fd8720e528b8fd8aed0a7bb0cc',
   },
 } as const;
 

@@ -706,6 +706,7 @@ export async function registerOutbound(app: FastifyInstance) {
       // Sanitize name: only letters, numbers, spaces, hyphens, apostrophes, umlauts (prompt-injection mitigation)
       name: z.string().max(50).regex(/^[\p{L}\p{N}\s'-]+$/u, 'Invalid characters in name').optional(),
       turnstileToken: z.string().optional(),
+      privacyConsent: z.literal(true),
     }).safeParse(req.body);
 
     if (!parsed.success) {

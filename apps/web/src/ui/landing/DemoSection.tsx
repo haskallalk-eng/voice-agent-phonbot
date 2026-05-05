@@ -113,6 +113,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
   const [agentTalking, setAgentTalking] = useState(false);
   const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [demoConsent, setDemoConsent] = useState(false);
   // Symmetric 6-card layout (2026-04-25): mit dem 6. Template (Mein Agent)
   // gehen 2+3 nicht mehr sauber auf — der zweite slice(2) wäre 4 Karten in
   // einem 3-Spalten-Grid → 3+1 hängt asymmetrisch. Wir konsolidieren auf
@@ -135,6 +136,12 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
 
   async function handleTemplateClick(templateId: string) {
     if (callState === 'active' || callState === 'connecting') return;
+    if (!demoConsent) {
+      setActiveTemplate(null);
+      setError('Bitte bestätige zuerst den Demo-Datenschutzhinweis.');
+      setCallState('error');
+      return;
+    }
     setActiveTemplate(templateId);
     setCallState('connecting');
     setError(null);
@@ -170,7 +177,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
         // without token. Backend will still enforce rate-limit + global-cap.
       }
 
-      const res = await createDemoCall(templateId, token || undefined);
+      const res = await createDemoCall(templateId, token || undefined, true);
       if (!res.access_token) {
         throw new Error('Kein Zugriffstoken erhalten');
       }
@@ -312,6 +319,17 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
                 </div>
               ))}
             </div>
+            <label className="mx-auto mb-8 flex max-w-2xl items-start gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left text-xs text-white/45">
+              <input
+                type="checkbox"
+                checked={demoConsent}
+                onChange={(e) => setDemoConsent(e.target.checked)}
+                className="mt-0.5 accent-orange-500"
+              />
+              <span>
+                Ich bin einverstanden, dass diese Demo als Audio/Transkript verarbeitet und bis zu 90 Tage zur Demo-Qualität und Lead-Bearbeitung gespeichert wird. Der Agent weist zu Beginn zusätzlich auf KI und Aufzeichnung hin.
+              </span>
+            </label>
             <div className="flex flex-col items-center gap-4 sm:gap-5 lg:gap-6 pb-10" style={{ overflow: 'visible' }}>
               <div className="grid w-full max-w-5xl grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-16 justify-items-center" style={{ overflow: 'visible' }}>
                 {allTemplates.map((t) => (
@@ -321,7 +339,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
             </div>
             {/* Reassurance */}
             <p className="text-center text-xs text-white/35 mt-2">
-              🔒 Kein Risiko, keine Daten — einfach ausprobieren
+              🔒 Keine Weitergabe an Dritte — Demo-Daten nur für Qualität und deine Anfrage
             </p>
             {/* Mic hint */}
             <p className="text-center text-xs text-white/30 mt-2 italic">

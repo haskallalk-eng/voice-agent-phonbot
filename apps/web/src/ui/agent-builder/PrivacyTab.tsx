@@ -9,6 +9,7 @@ export interface PrivacyTabProps {
 }
 
 export function PrivacyTab({ config, onUpdate }: PrivacyTabProps) {
+  const recordingEnabled = config.recordCalls ?? true;
   const [sharePatterns, setSharePatterns] = useState<boolean | null>(null);
   const [consentedAt, setConsentedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -46,24 +47,26 @@ export function PrivacyTab({ config, onUpdate }: PrivacyTabProps) {
   return (
     <SectionCard title="Aufzeichnung & Datenschutz" icon={IconPrivacy}>
       <div className="space-y-6">
-        <Toggle checked={config.recordCalls ?? true}
+        <Toggle checked={recordingEnabled}
           onChange={(v) => onUpdate({ recordCalls: v })}
           label="Anrufe aufzeichnen" />
-        {(config.recordCalls ?? true) ? (
+        {recordingEnabled ? (
           <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-4 py-3 text-sm text-yellow-300 ml-14">
-            Anrufer werden automatisch zu Beginn jedes Calls über die Aufzeichnung informiert (DSGVO/§ 201 StGB).
+            Standard: Aufzeichnung ist aktiv. Der Agent fragt zu Beginn jedes Calls nach klarer Zustimmung (DSGVO/§ 201 StGB). Bei Nein werden Audio + Transkript gelöscht; Name, Anliegen, Termin- oder Ticketdaten dürfen weiter als Geschäftsdaten gespeichert werden.
           </div>
         ) : (
           <div className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/60 ml-14">
-            Audio + Transkript werden nicht gespeichert. Anrufmetadaten (Dauer, Datum, Rufnummer) verbleiben für die Minutenabrechnung.
+            Audio + Transkript werden nicht gespeichert. Der Agent kann trotzdem strukturierte Geschäftsdaten wie Name, Rückrufnummer, Anliegen, Termin oder Ticket erfassen. Anrufmetadaten (Dauer, Datum, Rufnummer) verbleiben für Betrieb und Minutenabrechnung.
           </div>
         )}
         <div className="ml-14 text-xs text-white/40">
           Änderung greift nach dem nächsten <strong>Deploy</strong> des Agents — der laufende Retell-Agent behält bis dahin seine alten Einstellungen.
         </div>
 
-        <Field label="Gesprächsdaten aufbewahren">
+        <Field label="Audio & Transkript aufbewahren">
           <Select value={String(config.dataRetentionDays ?? 30)}
+            disabled={!recordingEnabled}
+            className={!recordingEnabled ? 'opacity-50 cursor-not-allowed' : ''}
             onChange={(e) => onUpdate({ dataRetentionDays: parseInt(e.target.value) })}>
             <option value="0">Nicht speichern (sofort löschen)</option>
             <option value="7">7 Tage</option>
@@ -72,6 +75,11 @@ export function PrivacyTab({ config, onUpdate }: PrivacyTabProps) {
             <option value="365">1 Jahr</option>
           </Select>
         </Field>
+        {!recordingEnabled && (
+          <div className="ml-14 text-xs text-white/40">
+            Diese Speicherdauer gilt nur, wenn Aufzeichnung aktiv ist und der Anrufer zustimmt.
+          </div>
+        )}
 
         {/* Cross-org pattern sharing — opt-in */}
         <div className="border-t border-white/10 pt-6">

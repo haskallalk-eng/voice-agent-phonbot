@@ -280,7 +280,7 @@ Die Sidebar hat folgende Bereiche. Erkläre dem Nutzer immer genau wo er hinklic
 ### 🤖 Agent Builder
 **So richtest du deinen Agent ein:**
 1. Sidebar → Agent Builder
-2. **Template wählen** (beim ersten Mal): Friseur, Handwerker, Arzt, Reinigung, Restaurant, KFZ-Werkstatt oder Custom
+2. **Template wählen** (beim ersten Mal): Friseur, Handwerker, Reinigung, Restaurant, KFZ-Werkstatt, Kosmetikstudio oder Custom
 3. **Grundeinstellungen:**
    - Name des Agents (z.B. "Lisa")
    - Name des Unternehmens
