@@ -28,6 +28,7 @@ const FOX_LOGO_SVG = [
 
 // Matches TEMPLATES in apps/web/src/ui/landing/shared.ts — keep in sync!
 const INDUSTRIES = [
+  { slug: 'branchen',      name: 'Alle Branchen', iconInner: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>' },
   { slug: 'friseur',       name: 'Friseur',       iconInner: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/>' },
   { slug: 'handwerker',    name: 'Handwerker',    iconInner: '<path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>' },
   { slug: 'reinigung',     name: 'Reinigung',     iconInner: '<path d="M3 21l7-7"/><path d="M13.5 5.5l5.19-1.04 1.04 5.2-9.23 9.23a2 2 0 01-2.83 0l-2.83-2.83a2 2 0 010-2.83z"/><path d="M7.4 13.4l4.24-4.24"/>' },
@@ -38,6 +39,14 @@ const INDUSTRIES = [
   // glyph (matches TEMPLATES.IconHeadphones in shared.ts) to visually
   // differentiate from the 5 classical trade branches above.
   { slug: 'selbststaendig', name: 'Selbstständige', iconInner: '<path d="M3 14h3a2 2 0 012 2v3a2 2 0 01-2 2H5a2 2 0 01-2-2v-8a9 9 0 0118 0v8a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3a2 2 0 012-2h3"/>' },
+  { slug: 'kosmetikstudio', name: 'Kosmetik', iconInner: '<path d="M12 2v20"/><path d="M5 7h14"/><path d="M7 7l-3 7h6z"/><path d="M17 7l-3 7h6z"/>' },
+  { slug: 'fahrschule', name: 'Fahrschule', iconInner: '<circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M5 17H3v-4l2-5h14l2 5v4h-2"/><path d="M7 8l-1.5 4h13L17 8"/>' },
+  { slug: 'immobilienmakler', name: 'Immobilien', iconInner: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>' },
+  { slug: 'versicherungsmakler', name: 'Versicherung', iconInner: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-5"/>' },
+  { slug: 'fitnessstudio', name: 'Fitness', iconInner: '<path d="M6 7v10"/><path d="M18 7v10"/><path d="M3 9v6"/><path d="M21 9v6"/><path d="M6 12h12"/>' },
+  { slug: 'energieberater', name: 'Energieberater', iconInner: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>' },
+  { slug: 'hausverwaltung', name: 'Hausverwaltung', iconInner: '<path d="M4 21V5a2 2 0 012-2h12a2 2 0 012 2v16"/><path d="M9 21v-6h6v6"/><path d="M8 7h.01M12 7h.01M16 7h.01M8 11h.01M12 11h.01M16 11h.01"/>' },
+  { slug: 'ferienwohnung', name: 'Ferienwohnung', iconInner: '<path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/><path d="M7 4h3"/>' },
 ];
 
 const industryIcon = (inner, s) =>
@@ -120,7 +129,7 @@ export const NAV_HTML = `<!--nav-html-begin-->
         <button type="button" id="ph-dd-btn" class="ph-dd-btn ph-nav-btn" aria-haspopup="true" aria-expanded="false">Branchen ${CHEV}</button>
         <div class="ph-dd-menu" role="menu">${industryLinksDesktop}</div>
       </div>
-      <a href="/?page=contact">Kontakt</a>
+      <a href="/kontakt/">Kontakt</a>
     </nav>
     <div class="ph-right">
       <a href="/?page=login" class="ph-login">Einloggen</a>
@@ -137,7 +146,7 @@ export const NAV_HTML = `<!--nav-html-begin-->
       <summary>Branchen ${CHEV}</summary>
       <div class="ph-mob-sub">${industryLinksMobile}</div>
     </details>
-    <a href="/?page=contact">Kontakt</a>
+    <a href="/kontakt/">Kontakt</a>
     <div class="ph-mob-cta">
       <a href="/?page=login" class="login">Einloggen</a>
       <a href="/?page=register" class="cta">Kostenlos testen</a>

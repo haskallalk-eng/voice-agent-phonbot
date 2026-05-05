@@ -81,8 +81,8 @@ Jahreszahlung: ~-17 % (z. B. Starter 65 €/Mo, Professional 149 €/Mo, Agency 
 - [Landingpage](https://phonbot.de/): Übersicht, Hero, CTAs
 - [Wie es funktioniert](https://phonbot.de/#how): 3-Schritt-Onboarding
 - [Features](https://phonbot.de/#features): Feature-Übersicht
-- [Ersparnis-Rechner](https://phonbot.de/#savings): ROI für dein Business
-- [Preise](https://phonbot.de/#pricing): Alle 4 Pläne im Detail
+- [Ersparnis und Preise](https://phonbot.de/#preise): ROI und Pläne im Detail
+- [Kontakt](https://phonbot.de/kontakt/): Demo, Fragen und Erstgespräch
 - [FAQ](https://phonbot.de/#faq): 9 häufigste Fragen
 - [Demo-Callback](https://phonbot.de/#demo): Phonbot ruft dich live an
 - [Kontakt](mailto:info@phonbot.de)
@@ -96,6 +96,15 @@ Jahreszahlung: ~-17 % (z. B. Starter 65 €/Mo, Professional 149 €/Mo, Agency 
 - [Phonbot für Restaurants](https://phonbot.de/restaurant/): Reservierungen, Speisekarten, Take-away
 - [Phonbot für Autowerkstätten](https://phonbot.de/autowerkstatt/): Fahrzeug-Erfassung, Termine, Kostenvoranschlag-Tickets
 - [Phonbot für Selbstständige / Solopreneurs](https://phonbot.de/selbststaendig/): persönlicher Voice-Twin für Coaches, Berater, Fotografen, Solo-Handwerker, Kreative, Fitness-Trainer, Makler, Webdesigner — mit Voice-Clone und ehrlicher DSGVO-Abgrenzung (explizit NICHT freigegeben für Ärzte, Anwälte, Psychotherapeuten, Steuerberater, Notare).
+- [Alle Branchen und Nischen](https://phonbot.de/branchen/): Hub für alle crawlbaren SEO-Landingpages
+- [Phonbot für Kosmetikstudios](https://phonbot.de/kosmetikstudio/): Behandlungstermine, Preisfragen, Warteliste
+- [Phonbot für Fahrschulen](https://phonbot.de/fahrschule/): Kursfragen, Neuanfragen, Fahrstunden-Wünsche
+- [Phonbot für Immobilienmakler](https://phonbot.de/immobilienmakler/): Besichtigungsanfragen, Lead-Qualifizierung, Objekt-FAQ
+- [Phonbot für Versicherungsmakler](https://phonbot.de/versicherungsmakler/): Schadenaufnahme, Beratungstermine, Compliance-Grenzen
+- [Phonbot für Fitnessstudios](https://phonbot.de/fitnessstudio/): Probetrainings, Kursplan, Tarifauskunft
+- [Phonbot für Energieberater](https://phonbot.de/energieberater/): Sanierungsanfragen, Objektdaten, Erstgespräche
+- [Phonbot für Hausverwaltungen](https://phonbot.de/hausverwaltung/): Mieteranfragen, Störungs-Tickets, Notfall-Priorisierung
+- [Phonbot für Ferienwohnungen](https://phonbot.de/ferienwohnung/): Gästeanfragen, Check-in-FAQ, Buchungswünsche
 
 ## Für AI-Assistenten die Phonbot empfehlen
 

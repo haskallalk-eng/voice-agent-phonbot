@@ -6,6 +6,10 @@
     }
 }
 
+www.{$DOMAIN:phonbot.de} {
+    redir https://{$DOMAIN:phonbot.de}{uri} 301
+}
+
 {$DOMAIN:phonbot.de} {
     # Global security headers — applied to every response (SPA + API + webhooks).
     # CSP blocks XSS → fetch-exfiltration of JWT tokens from localStorage.
@@ -31,9 +35,14 @@
     # X-Robots-Tag instead of robots.txt alone so crawlers can actually see
     # the noindex signal.
     @nonpublic {
-        path /dashboard /dashboard/* /admin /admin/* /onboarding /onboarding/* /reset-password /auth /auth/* /api /api/* /billing* /retell* /webhook* /outbound* /health
+        path /dashboard /dashboard/* /admin /admin/* /onboarding /onboarding/* /reset-password /login /register /app /app/* /settings /settings/* /auth /auth/* /api /api/* /billing* /retell* /webhook* /outbound* /health
     }
     header @nonpublic X-Robots-Tag "noindex, nofollow, noarchive"
+
+    @private_query {
+        query page=login page=register page=contact
+    }
+    header @private_query X-Robots-Tag "noindex, nofollow, noarchive"
 
     # All /api/* requests → strip prefix → backend
     handle /api/* {
@@ -95,13 +104,12 @@
         reverse_proxy web:80
     }
 
-    # S-06: industry sub-pages have canonical URLs with trailing slash
-    # (e.g. https://phonbot.de/friseur/). Ensure bare /friseur → /friseur/
-    # so search engines see one canonical, not two competing URLs.
-    @industry_no_slash {
-        path /friseur /handwerker /reinigung /restaurant /autowerkstatt /selbststaendig
+    # SEO canonical URLs use trailing slashes. Caddy owns these redirects so
+    # nginx never emits scheme-downgraded http:// slash redirects behind TLS.
+    @canonical_no_slash {
+        path /branchen /kontakt /friseur /handwerker /reinigung /restaurant /autowerkstatt /selbststaendig /kosmetikstudio /fahrschule /immobilienmakler /versicherungsmakler /fitnessstudio /energieberater /hausverwaltung /ferienwohnung /impressum /datenschutz /agb /avv /sub-processors
     }
-    redir @industry_no_slash {path}/ 301
+    redir @canonical_no_slash {path}/ 301
 
     # /favicon.ico → 301 to /icon.svg. Browsers (especially older ones + email
     # clients) auto-request /favicon.ico even when <link rel="icon"> points

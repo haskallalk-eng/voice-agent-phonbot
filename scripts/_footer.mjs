@@ -62,11 +62,20 @@ export const FOOTER_HTML = `<!--footer-html-begin-->
       <div>
         <h4>Branchen</h4>
         <ul class="links">
+          <li><a href="/branchen/">Alle Branchen</a></li>
           <li><a href="/friseur/">Friseur</a></li>
           <li><a href="/handwerker/">Handwerker</a></li>
           <li><a href="/reinigung/">Reinigung</a></li>
           <li><a href="/restaurant/">Restaurant</a></li>
           <li><a href="/autowerkstatt/">Autowerkstatt</a></li>
+          <li><a href="/kosmetikstudio/">Kosmetik</a></li>
+          <li><a href="/fahrschule/">Fahrschule</a></li>
+          <li><a href="/immobilienmakler/">Immobilien</a></li>
+          <li><a href="/versicherungsmakler/">Versicherung</a></li>
+          <li><a href="/fitnessstudio/">Fitness</a></li>
+          <li><a href="/energieberater/">Energieberater</a></li>
+          <li><a href="/hausverwaltung/">Hausverwaltung</a></li>
+          <li><a href="/ferienwohnung/">Ferienwohnung</a></li>
           <li><a href="/selbststaendig/">Selbstständige</a></li>
         </ul>
       </div>
@@ -83,7 +92,7 @@ export const FOOTER_HTML = `<!--footer-html-begin-->
       <div>
         <h4>Kontakt</h4>
         <ul class="links">
-          <li><a href="/?page=contact">Anfragen</a></li>
+          <li><a href="/kontakt/">Anfragen</a></li>
           <li><a href="/#faq">FAQ</a></li>
         </ul>
       </div>
