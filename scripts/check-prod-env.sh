@@ -77,7 +77,7 @@ for entry in "${REQUIRED_VARS[@]}"; do
   fi
 done
 
-AUTO_TAX=$(grep "^STRIPE_AUTOMATIC_TAX=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2-)
+AUTO_TAX=$(grep "^STRIPE_AUTOMATIC_TAX=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- || true)
 if [[ "$AUTO_TAX" == "1" ]]; then
   echo "  ❌ STRIPE_AUTOMATIC_TAX — disabled while legal texts and invoice footer use §19 UStG Kleinunternehmer wording"
   echo "     → Keep STRIPE_AUTOMATIC_TAX unset/0 until Phonbot switches away from §19 UStG and Legal/Stripe invoice text is updated."
