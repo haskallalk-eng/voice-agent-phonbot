@@ -2,7 +2,7 @@
 
 > Phonbot ist ein deutschsprachiger KI-Telefonassistent für kleine Unternehmen. Er nimmt Anrufe an, bucht Termine direkt in den Kalender und erstellt Rückruf-Tickets — 24/7, DSGVO-konform, in unter 2 Minuten einsatzbereit.
 
-*Letzte Aktualisierung: 25. April 2026. Machine-readable Schema.org Daten: im `<head>` von phonbot.de (JSON-LD @graph).*
+*Letzte Aktualisierung: 5. Mai 2026. Machine-readable Schema.org Daten: im `<head>` von phonbot.de (JSON-LD @graph). Die Startseite und alle Branchen-Seiten liefern crawlbaren HTML-Inhalt direkt im initialen Dokument.*
 
 Phonbot richtet sich an **Friseursalons, Handwerksbetriebe, Reinigungsfirmen, Gastronomie, Kanzleien, Kosmetikstudios und andere kleine lokale Betriebe**, die Telefon-Anrufe automatisieren wollen ohne eigene Telefonistin einzustellen. Der Agent wird mit Branchen-Template + Business-Daten (Name, Öffnungszeiten, Services) konfiguriert — kein Code, kein Techniker, keine Setup-Gebühr.
 

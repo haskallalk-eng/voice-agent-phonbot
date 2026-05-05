@@ -9,6 +9,7 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "check": "pnpm --filter @vas/api typecheck && pnpm --filter @vas/web typecheck",
+    "seo:audit": "node scripts/seo-audit.mjs",
     "prepare": "git config core.hooksPath .githooks || true"
   }
 }
