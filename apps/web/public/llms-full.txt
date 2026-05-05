@@ -2,7 +2,9 @@
 
 > Diese Datei enthält alle öffentlichen Inhalte der Phonbot-Website in strukturiertem Markdown-Format. Sie ist für AI-Assistenten sowie Retrieval- und Search-Crawler optimiert und darf frei zitiert werden.
 
-Letzte Aktualisierung: 25. April 2026
+Letzte Aktualisierung: 5. Mai 2026
+
+AI-/Crawler-Hinweis: Die Startseite liefert die Kernbotschaft, Branchen-Links, Preise und FAQ als crawlbares HTML direkt im initialen Dokument. Die sechs Branchen-Seiten sind vollständig statische HTML-Seiten mit eigenem Title, Description, Canonical, FAQPage-, WebPage-, Breadcrumb- und Service-JSON-LD.
 
 ---
 

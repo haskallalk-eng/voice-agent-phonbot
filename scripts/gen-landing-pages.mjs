@@ -71,7 +71,7 @@ const BRANCHEN = [
     emoji: '✂️',
     h1Text: 'Nie wieder das <span class="accent">Telefon abnehmen</span> zwischen den Schnitten.',
     title: 'KI-Telefonassistent für Friseursalons · Termine automatisch buchen | Phonbot',
-    description: 'Phonbot ist der KI-Telefonassistent speziell für Friseure & Salons. Bucht Termine direkt in deinen Kalender, nimmt Walk-in-Anfragen an, beantwortet Öffnungszeiten — 24/7 auf Deutsch. Ab 8,99 €/Monat.',
+    description: 'KI-Telefonassistent für Friseure: bucht Termine, beantwortet Öffnungszeiten und Preise, erstellt Rückruf-Tickets — 24/7 auf Deutsch. Ab 8,99 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Friseure',
     subtitle: 'Phonbot nimmt Anrufe an, bucht Termine direkt in deinen Kalender und beantwortet Standardfragen — während du föhnst, färbst oder schneidest. 24/7 auf Deutsch. Ab 8,99 €/Monat.',
     ogTitle: 'KI-Telefonassistent für Friseursalons · Phonbot',
@@ -179,7 +179,7 @@ const BRANCHEN = [
     emoji: '🧹',
     h1Text: 'Keine <span class="accent">Auftragsanfrage</span> mehr verpassen — auch beim Putzen.',
     title: 'KI-Telefonassistent für Reinigungsfirmen | Phonbot',
-    description: 'Phonbot ist der KI-Telefonassistent für Reinigungsbetriebe. Nimmt Auftragsanfragen entgegen, erfasst Objekt-Details (Größe, Frequenz), plant Besichtigungstermine — 24/7 auf Deutsch. Ab 8,99 €/Monat.',
+    description: 'KI-Telefonassistent für Reinigungsfirmen: nimmt Auftragsanfragen an, erfasst Objekt-Details und plant Besichtigungstermine. Ab 8,99 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Reinigung',
     subtitle: 'Phonbot nimmt Auftragsanfragen an, erfasst Objekt-Details und Leistungswünsche, und bucht Besichtigungstermine — während dein Team bei Kunden vor Ort putzt. 24/7 auf Deutsch.',
     ogTitle: 'KI-Telefonassistent für Reinigungsfirmen · Phonbot',
@@ -287,7 +287,7 @@ const BRANCHEN = [
     emoji: '🚗',
     h1Text: 'Der <span class="accent">Hebebühne</span> keinen Vorrang vor dem Kunden geben müssen.',
     title: 'KI-Telefonassistent für Autowerkstätten & Kfz-Meisterbetriebe | Phonbot',
-    description: 'Phonbot ist der KI-Telefonassistent für Autowerkstätten. Nimmt Terminanfragen, erfasst Fahrzeug- und Problemdaten, erstellt Kostenvoranschlag-Tickets — 24/7 auf Deutsch. Ab 8,99 €/Monat.',
+    description: 'KI-Telefonassistent für Autowerkstätten: nimmt Terminanfragen an, erfasst Fahrzeugdaten und erstellt Kostenvoranschlag-Tickets. Ab 8,99 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Autowerkstätten',
     subtitle: 'Phonbot nimmt Anrufe während du unter dem Auto liegst. Erfasst Fahrzeug (Marke, Modell, Baujahr), das Problem und den Wunschtermin — direkt als Ticket im Dashboard.',
     ogTitle: 'KI-Telefonassistent für Autowerkstätten · Phonbot',
@@ -424,7 +424,7 @@ const BRANCHEN = [
 
 const STYLE = `*{margin:0;padding:0;box-sizing:border-box}
 html{overflow-x:clip;max-width:100vw;scroll-behavior:smooth}
-body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#0A0A0F;color:#fff;line-height:1.6;overflow-x:clip;max-width:100vw;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;position:relative}
+body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0A0A0F;color:#fff;line-height:1.6;overflow-x:clip;max-width:100vw;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;position:relative}
 a{color:inherit;text-decoration:none}
 ::selection{background:rgba(249,115,22,0.3);color:#fff}
 .container{max-width:72rem;margin:0 auto;padding:0 1.5rem;position:relative;z-index:1}
@@ -617,14 +617,31 @@ p{color:rgba(255,255,255,.7)}
 ${FOOTER_STYLE}`;
 
 function buildPage(d) {
-  // Default offer price 49 for legacy branches; new branches (e.g.
-  // selbststaendig) can override via `d.offerPrice` to reflect actual
-  // entry-tier pricing (Nummern-Plan 8.99).
-  const offerPrice = d.offerPrice ?? '49';
+  // Offer price must match the public pricing floor. Older branch pages used
+  // 49 EUR in JSON-LD, while the visible copy says "ab 8,99 EUR/Monat".
+  const offerPrice = d.offerPrice ?? '8.99';
   const pageUrl = `https://phonbot.de/${d.slug}/`;
   const jsonLd = {
     '@context': 'https://schema.org',
     '@graph': [
+      {
+        '@type': 'WebPage',
+        '@id': `${pageUrl}#webpage`,
+        url: pageUrl,
+        name: d.ogTitle,
+        headline: d.serviceName,
+        description: d.description,
+        inLanguage: 'de-DE',
+        isPartOf: { '@id': 'https://phonbot.de/#website' },
+        about: { '@id': `${pageUrl}#service` },
+        breadcrumb: { '@id': `${pageUrl}#breadcrumb` },
+        primaryImageOfPage: {
+          '@type': 'ImageObject',
+          url: 'https://phonbot.de/og-image.png',
+          width: 1200,
+          height: 630,
+        },
+      },
       {
         '@type': 'Service',
         '@id': `${pageUrl}#service`,
@@ -801,6 +818,7 @@ function buildPage(d) {
 <link rel="alternate" hreflang="x-default" href="${pageUrl}" />
 <link rel="alternate" type="text/markdown" title="LLM-friendly description (concise)" href="/llms.txt" />
 <link rel="alternate" type="text/markdown" title="LLM-friendly full content" href="/llms-full.txt" />
+<link rel="alternate" type="text/plain" title="AI usage policy" href="/ai.txt" />
 <meta property="og:type" content="website" />
 <meta property="og:locale" content="de_DE" />
 <meta property="og:site_name" content="Phonbot" />
@@ -816,11 +834,8 @@ function buildPage(d) {
 <meta name="twitter:description" content="${d.ogDesc}" />
 <meta name="twitter:image" content="https://phonbot.de/og-image.png" />
 <meta name="twitter:image:alt" content="${d.ogTitle}" />
-<meta name="robots" content="index, follow, max-image-preview:large" />
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
 <link rel="icon" href="/favicon.ico" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
 <script type="application/ld+json">
 ${JSON.stringify(jsonLd)}
 </script>
