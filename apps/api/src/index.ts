@@ -20,6 +20,7 @@ import { migrate, pool, cleanupOldTranscripts, cleanupOldLeads, cleanupOldWebhoo
 import { connectRedis, redis } from './redis.js';
 import { registerAuth } from './auth.js';
 import { registerTickets } from './tickets.js';
+import { registerCustomers } from './customers.js';
 import { registerTraces } from './traces.js';
 import { registerChat } from './chat.js';
 import { registerAgentConfig } from './agent-config.js';
@@ -201,6 +202,7 @@ if (!process.env.DATABASE_URL) {
 // Register routes
 await registerAuth(app);
 await registerTickets(app);
+await registerCustomers(app);
 await registerTraces(app);
 await registerChat(app);
 await registerAgentConfig(app);

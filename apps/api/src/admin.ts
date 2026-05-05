@@ -707,6 +707,7 @@ export async function registerAdmin(app: FastifyInstance) {
       } : null,
     }));
 
+    void recordAdminRead(req, '/admin/learnings', items.length, q.data);
     return { items };
   });
 
@@ -991,8 +992,7 @@ export async function registerAdmin(app: FastifyInstance) {
         LIMIT $1`,
       [q.data.limit],
     );
-    return {
-      corrections: res.rows.map((r: Record<string, unknown>) => ({
+    const corrections = res.rows.map((r: Record<string, unknown>) => ({
         id: r.id as string,
         createdAt: (r.created_at as Date).toISOString(),
         sourceKind: r.source_kind as string,
@@ -1004,12 +1004,14 @@ export async function registerAdmin(app: FastifyInstance) {
         scopeApplied: r.scope_applied as string | null,
         appliedBy: r.applied_by as string | null,
         usedForMetaAt: r.used_for_meta_at ? (r.used_for_meta_at as Date).toISOString() : null,
-      })),
-    };
+      }));
+
+    void recordAdminRead(req, '/admin/learnings/corrections', corrections.length, q.data);
+    return { corrections };
   });
 
   // ── GET /admin/metrics ────────────────────────────────────────────────────
-  app.get('/admin/metrics', { ...auth }, async (_req: FastifyRequest, reply: FastifyReply) => {
+  app.get('/admin/metrics', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
 
     const [
@@ -1048,7 +1050,7 @@ export async function registerAdmin(app: FastifyInstance) {
       totalRevenue += (planPrices[plan] ?? 0) * count;
     }
 
-    return {
+    const metrics = {
       totalUsers: parseInt(String(usersRes.rows[0]?.cnt ?? '0'), 10),
       totalOrgs: parseInt(String(orgsRes.rows[0]?.cnt ?? '0'), 10),
       planCounts,
@@ -1058,6 +1060,8 @@ export async function registerAdmin(app: FastifyInstance) {
       phoneTotal: parseInt(String(phoneTotalRes.rows[0]?.cnt ?? '0'), 10),
       phoneAssigned: parseInt(String(phoneAssignedRes.rows[0]?.cnt ?? '0'), 10),
     };
+    void recordAdminRead(req, '/admin/metrics', 1, {});
+    return metrics;
   });
 
   // ── GET /admin/users ──────────────────────────────────────────────────────
@@ -1078,6 +1082,7 @@ export async function registerAdmin(app: FastifyInstance) {
        LIMIT $1 OFFSET $2`,
       [q.limit, q.offset],
     );
+    void recordAdminRead(req, '/admin/users', rows.length, q);
     return { items: rows };
   });
 
@@ -1113,6 +1118,7 @@ export async function registerAdmin(app: FastifyInstance) {
        LIMIT $1 OFFSET $2`,
       [q.limit, q.offset],
     );
+    void recordAdminRead(req, '/admin/orgs', rows.length, q);
     return { items: rows };
   });
 

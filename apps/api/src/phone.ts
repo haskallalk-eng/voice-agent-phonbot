@@ -170,17 +170,52 @@ export async function syncTwilioNumbersToDb() {
     // own >100 numbers the diff-step below would falsely flag the unseen
     // pages. limit:1000 is the API max for incomingPhoneNumbers.list.
     const twilioNumbers = await client.incomingPhoneNumbers.list({ limit: 1000 });
-    const twilioNumberSet = new Set(twilioNumbers.map(n => n.phoneNumber));
+    const verifierNumber = getVerifierTwilioNumber();
+    const twilioNumberSet = new Set(twilioNumbers.map(n => normalizeE164(n.phoneNumber)));
 
     // Step 1: Sync missing numbers into DB (batch check to avoid N+1 queries)
     const existingRes = await pool.query<{ number: string; org_id: string | null; created_at: Date; method: string }>(
       `SELECT number, org_id, created_at, method FROM phone_numbers WHERE provider = 'twilio'`,
     );
-    const existingNumbers = new Set(existingRes.rows.map((r) => r.number));
+    if (verifierNumber) {
+      let removedVerifierPoolRows = 0;
+      for (const row of existingRes.rows) {
+        if (row.method !== 'provisioned' || normalizeE164(row.number) !== verifierNumber) continue;
+        if (row.org_id === null) {
+          const deleted = await pool.query(
+            `DELETE FROM phone_numbers WHERE number = $1 AND org_id IS NULL AND method = 'provisioned'`,
+            [row.number],
+          );
+          removedVerifierPoolRows += deleted.rowCount ?? 0;
+        } else {
+          log.error(
+            { verifierNumber, orgId: row.org_id },
+            '[phone] VERIFIER_TWILIO_NUMBER is assigned as a Phonbot inbound; manual ops cleanup required',
+          );
+        }
+      }
+      if (removedVerifierPoolRows > 0) {
+        log.warn(
+          { verifierNumber, removedVerifierPoolRows },
+          '[phone] removed verifier number from DB pool',
+        );
+      }
+    }
+
+    const existingNumbers = new Set(
+      existingRes.rows
+        .filter((r) => !isVerifierTwilioNumber(r.number))
+        .map((r) => normalizeE164(r.number)),
+    );
 
     let synced = 0;
     for (const num of twilioNumbers) {
-      if (existingNumbers.has(num.phoneNumber)) continue;
+      const phoneNumber = normalizeE164(num.phoneNumber);
+      if (verifierNumber && phoneNumber === verifierNumber) {
+        log.info({ verifierNumber }, '[phone] skipped verifier number during Twilio DB sync');
+        continue;
+      }
+      if (existingNumbers.has(phoneNumber)) continue;
 
       const pretty = num.phoneNumber.replace(/^\+49/, '0').replace(/(\d{3})(\d{3})(\d+)/, '$1 $2 $3');
       await pool.query(
@@ -221,7 +256,8 @@ export async function syncTwilioNumbersToDb() {
     let flaggedAssigned = 0;
     for (const row of existingRes.rows) {
       if (row.method !== 'provisioned') continue; // only check the pool/assigned set
-      if (twilioNumberSet.has(row.number)) continue; // present, fine
+      if (isVerifierTwilioNumber(row.number)) continue; // verifier is not part of the customer inbound pool
+      if (twilioNumberSet.has(normalizeE164(row.number))) continue; // present, fine
 
       const ageMs = Date.now() - new Date(row.created_at).getTime();
       const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -289,10 +325,13 @@ async function trimPool(client?: ReturnType<typeof getTwilioClient>) {
 
   try {
     // Get all unassigned pool numbers, oldest first
+    const verifierNumber = getVerifierTwilioNumber();
     const poolNumbers = await pool.query(
       `SELECT id, number FROM phone_numbers
        WHERE org_id IS NULL AND method = 'provisioned'
+         AND ($1::text IS NULL OR number <> $1)
        ORDER BY created_at ASC`,
+      [verifierNumber],
     );
 
     const excess = (poolNumbers.rowCount ?? 0) - MAX_POOL_SIZE;
@@ -454,7 +493,7 @@ async function runAutoProvisionBody(
 
   // Get org's deployed Retell agent ID (may be null if customer hasn't
   // deployed yet — then number is bought + parked, gets bound on next deploy).
-  const configRes = await pool.query(
+  const configRes = await client.query(
     `SELECT data FROM agent_configs WHERE org_id = $1 LIMIT 1`,
     [orgId],
   );
@@ -466,10 +505,11 @@ async function runAutoProvisionBody(
   // (≈€3/month idle). Pool-claim with the same atomic CTE as /phone/provision
   // — FOR UPDATE SKIP LOCKED prevents two concurrent autoProvision calls
   // (e.g. Stripe webhook retry collision) from both claiming the same row.
-  const claimed = await pool.query<{ id: string; number: string; number_pretty: string | null; provider_id: string | null }>(
+  const claimed = await client.query<{ id: string; number: string; number_pretty: string | null; provider_id: string | null }>(
     `WITH free AS (
        SELECT id FROM phone_numbers
        WHERE org_id IS NULL AND method = 'provisioned'
+        AND ($3::text IS NULL OR number <> $3)
        LIMIT 1
        FOR UPDATE SKIP LOCKED
      )
@@ -482,7 +522,7 @@ async function runAutoProvisionBody(
      FROM free
      WHERE phone_numbers.id = free.id
      RETURNING phone_numbers.id, phone_numbers.number, phone_numbers.number_pretty, phone_numbers.provider_id`,
-    [orgId, agentId],
+    [orgId, agentId, getVerifierTwilioNumber()],
   );
 
   if (claimed.rowCount && claimed.rowCount > 0 && claimed.rows[0]) {
@@ -520,7 +560,7 @@ async function runAutoProvisionBody(
           const result = await retellImportPhoneNumber(free.number, agentId);
           const newId = (result.phone_number_id as string | undefined) ?? null;
           if (newId) {
-            await pool.query(`UPDATE phone_numbers SET provider_id = $1 WHERE id = $2`, [newId, free.id]);
+            await client.query(`UPDATE phone_numbers SET provider_id = $1 WHERE id = $2`, [newId, free.id]);
             retellOk = true;
           }
         } catch (err) {
@@ -534,7 +574,7 @@ async function runAutoProvisionBody(
 
     if (!retellOk) {
       // Roll the pool-claim back so the next provision attempt can re-try it.
-      await pool.query(
+      await client.query(
         `UPDATE phone_numbers SET org_id = NULL, agent_id = NULL WHERE id = $1`,
         [free.id],
       ).catch((err: Error) => log.warn({ err: err.message, poolNumberId: free.id }, '[phone] auto-provision pool rollback failed'));
@@ -604,7 +644,7 @@ async function runAutoProvisionBody(
 
   // Save to DB
   const pretty = purchasedNumber.replace(/^\+49/, '0').replace(/(\d{3})(\d{3})(\d+)/, '$1 $2 $3');
-  await pool.query(
+  await client.query(
     `INSERT INTO phone_numbers (org_id, number, number_pretty, provider, provider_id, agent_id, method, verified)
      VALUES ($1, $2, $3, 'twilio', $4, $5, 'provisioned', true)
      ON CONFLICT DO NOTHING`,
@@ -660,6 +700,40 @@ function resultVerifyKey(token: string): string {
 
 function normalizeE164(n: string): string {
   return n.replace(/[\s\-()]/g, '').trim();
+}
+
+function getVerifierTwilioNumber(): string | null {
+  const configured = process.env.VERIFIER_TWILIO_NUMBER;
+  return configured ? normalizeE164(configured) : null;
+}
+
+function isVerifierTwilioNumber(number: string): boolean {
+  const verifierNumber = getVerifierTwilioNumber();
+  return Boolean(verifierNumber && normalizeE164(number) === verifierNumber);
+}
+
+function germanLocalityForAreaCode(areaCode: string | undefined): string | null {
+  const digits = (areaCode ?? '').replace(/\D/g, '').replace(/^0+/, '');
+  const map: Record<string, string> = {
+    '30': 'Berlin',
+    '40': 'Hamburg',
+    '89': 'Munich',
+    '69': 'Frankfurt',
+    '211': 'Dusseldorf',
+    '221': 'Cologne',
+    '711': 'Stuttgart',
+    '911': 'Nuremberg',
+    '511': 'Hannover',
+    '421': 'Bremen',
+    '341': 'Leipzig',
+    '351': 'Dresden',
+  };
+  return map[digits] ?? null;
+}
+
+function germanE164PrefixForAreaCode(areaCode: string | undefined): string | null {
+  const digits = (areaCode ?? '').replace(/\D/g, '').replace(/^0+/, '');
+  return digits ? `+49${digits}` : null;
 }
 
 async function setPendingForwardingVerification(p: PendingForwardingVerification): Promise<boolean> {
@@ -773,8 +847,14 @@ export async function registerPhone(app: FastifyInstance) {
     if (planDeny) return reply.status(planDeny.status).send(planDeny.body);
 
     // Optional: specify which agent to connect (defaults to first deployed agent)
-    const parsed = z.object({ agentTenantId: z.string().optional() }).safeParse(req.body);
+    const parsed = z.object({
+      agentTenantId: z.string().optional(),
+      areaCode: z.string().regex(/^0?[1-9]\d{1,5}$/).optional(),
+    }).safeParse(req.body);
     const agentTenantId = parsed.success ? parsed.data.agentTenantId : undefined;
+    const requestedAreaCode = parsed.success ? (parsed.data.areaCode ?? '030') : '030';
+    const preferredLocality = germanLocalityForAreaCode(requestedAreaCode);
+    const preferredAreaPrefix = germanE164PrefixForAreaCode(requestedAreaCode);
     // T-24: do not echo the full request body — future schema additions could
     // accidentally include PII and end up in structured logs.
     req.log.info({ agentTenantId }, '[phone/provision] received');
@@ -804,10 +884,18 @@ export async function registerPhone(app: FastifyInstance) {
 
     // ── Number Pool System ──
     // Atomically claim a free number from the pool using CTE (race-condition safe)
+    const verifierNumber = getVerifierTwilioNumber();
     const claimed = await pool.query(
       `WITH free AS (
          SELECT id FROM phone_numbers
          WHERE org_id IS NULL AND method = 'provisioned'
+           AND ($2::text IS NULL OR number <> $2)
+         ORDER BY
+           CASE
+             WHEN $3::text IS NOT NULL AND number LIKE $3::text || '%' THEN 0
+             ELSE 1
+           END,
+           created_at
          LIMIT 1
          FOR UPDATE SKIP LOCKED
        )
@@ -816,7 +904,7 @@ export async function registerPhone(app: FastifyInstance) {
        FROM free
        WHERE phone_numbers.id = free.id
        RETURNING phone_numbers.id, phone_numbers.number, phone_numbers.number_pretty, phone_numbers.provider_id`,
-      [orgId],
+      [orgId, verifierNumber, preferredAreaPrefix],
     );
 
     let purchasedNumber: string;
@@ -848,7 +936,9 @@ export async function registerPhone(app: FastifyInstance) {
 
       try {
         const client = getTwilioClient();
-        let available = await client.availablePhoneNumbers('DE').local.list({ inLocality: 'Berlin', limit: 5 });
+        let available = preferredLocality
+          ? await client.availablePhoneNumbers('DE').local.list({ inLocality: preferredLocality, limit: 5 })
+          : [];
         if (!available.length) {
           available = await client.availablePhoneNumbers('DE').local.list({ limit: 5 });
         }
@@ -1056,7 +1146,12 @@ export async function registerPhone(app: FastifyInstance) {
       number: z.string().min(1),  // e.g. "+493075937562"
     }).safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: 'number required (E.164 format)' });
-    const { number } = parsed.data;
+    const number = normalizeE164(parsed.data.number);
+    if (isVerifierTwilioNumber(number)) {
+      return reply.status(409).send({
+        error: 'Diese Nummer ist als Server-Verifikationsnummer reserviert und kann nicht als Phonbot-Eingangsnummer importiert werden.',
+      });
+    }
 
     // Cross-Org-Schutz: refuse wenn die Nummer schon einer ANDEREN Org
     // zugewiesen ist. Ohne das könnte ein Angreifer mit Kenntnis einer
@@ -1287,9 +1382,7 @@ export async function registerPhone(app: FastifyInstance) {
     const { orgId } = req.user as JwtPayload;
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
-    const verifierNumber = process.env.VERIFIER_TWILIO_NUMBER
-      ? normalizeE164(process.env.VERIFIER_TWILIO_NUMBER)
-      : null;
+    const verifierNumber = getVerifierTwilioNumber();
     if (!verifierNumber) {
       // Honest 503: no fake verified=true fallback. Frontend should fall back
       // to the manual test instructions.
@@ -1323,7 +1416,8 @@ export async function registerPhone(app: FastifyInstance) {
         '[verify-forwarding] VERIFIER_TWILIO_NUMBER collides with a provisioned Phonbot inbound — loop test would short-circuit',
       );
       return reply.status(503).send({
-        error: 'Server-Konfigurationsfehler: Verifikations-Nummer überschneidet sich mit einer Phonbot-Eingangsnummer. Bitte Support kontaktieren.',
+        error: 'Server-Konfigurationsfehler: Die Verifikations-Nummer ist faelschlich als Phonbot-Eingangsnummer im Nummernpool eingetragen. Bitte Support kontaktieren, damit die Server-Nummernzuordnung bereinigt wird.',
+        verifierNumberConflict: true,
       });
     }
 
@@ -1506,23 +1600,29 @@ export async function registerPhone(app: FastifyInstance) {
     const results: Array<{ number: string; status: string }> = [];
 
     for (const entry of parsed.data.numbers) {
-      // Check if number already exists in DB
-      const existing = await pool.query(
-        `SELECT id FROM phone_numbers WHERE number = $1`,
-        [entry.number],
-      );
-      if (existing.rowCount && existing.rowCount > 0) {
-        results.push({ number: entry.number, status: 'already_exists' });
+      const number = normalizeE164(entry.number);
+      if (isVerifierTwilioNumber(number)) {
+        results.push({ number, status: 'reserved_verifier_number' });
         continue;
       }
 
-      const pretty = entry.number.replace(/^\+49/, '0').replace(/(\d{3})(\d{3})(\d+)/, '$1 $2 $3');
+      // Check if number already exists in DB
+      const existing = await pool.query(
+        `SELECT id FROM phone_numbers WHERE number = $1`,
+        [number],
+      );
+      if (existing.rowCount && existing.rowCount > 0) {
+        results.push({ number, status: 'already_exists' });
+        continue;
+      }
+
+      const pretty = number.replace(/^\+49/, '0').replace(/(\d{3})(\d{3})(\d+)/, '$1 $2 $3');
       await pool.query(
         `INSERT INTO phone_numbers (org_id, number, number_pretty, provider, provider_id, agent_id, method, verified)
          VALUES (NULL, $1, $2, 'twilio', $3, NULL, 'provisioned', true)`,
-        [entry.number, pretty, entry.providerId ?? null],
+        [number, pretty, entry.providerId ?? null],
       );
-      results.push({ number: entry.number, status: 'added_to_pool' });
+      results.push({ number, status: 'added_to_pool' });
     }
 
     return { ok: true, results };

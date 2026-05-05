@@ -356,6 +356,17 @@ async function runMigrationBody() {
   await pool.query(`create index if not exists users_org_idx on users(org_id);`);
   await pool.query(`create index if not exists users_email_idx on users(email);`);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS voice_clones (
+      voice_id   TEXT PRIMARY KEY,
+      org_id     UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      name       TEXT,
+      provider   TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS voice_clones_org_idx ON voice_clones(org_id);`);
+
   // Stripe billing columns on orgs (non-breaking)
   await pool.query(`alter table orgs add column if not exists stripe_customer_id text unique;`);
   // Partial unique index: makes the intent explicit that only non-null values
@@ -672,6 +683,35 @@ async function runMigrationBody() {
   // call_analyzed (jsonb concat so late-arriving analyses don't clobber
   // an already-populated metadata).
   await pool.query(`alter table tickets add column if not exists metadata jsonb not null default '{}'::jsonb;`);
+
+  // Hairdresser customer database. Opt-in per agent via customerModule.enabled;
+  // scoped by org_id so one salon never sees another salon's customers.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS customers (
+      id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+      org_id           UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      full_name        TEXT NOT NULL,
+      normalized_name  TEXT NOT NULL,
+      phone            TEXT,
+      phone_normalized TEXT,
+      email            TEXT,
+      customer_type    TEXT NOT NULL DEFAULT 'unknown',
+      status           TEXT NOT NULL DEFAULT 'active',
+      notes            TEXT,
+      details          JSONB NOT NULL DEFAULT '{}'::jsonb,
+      last_seen_at     TIMESTAMPTZ,
+      source_call_id   TEXT
+    );
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS customers_org_phone_active_uniq
+      ON customers(org_id, phone_normalized)
+      WHERE phone_normalized IS NOT NULL AND status = 'active';
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS customers_org_updated_idx ON customers(org_id, updated_at DESC);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS customers_org_name_idx ON customers(org_id, normalized_name);`);
 
   await pool.query(`
     create index if not exists tickets_tenant_created_idx

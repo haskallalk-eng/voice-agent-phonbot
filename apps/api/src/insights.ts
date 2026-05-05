@@ -1586,7 +1586,21 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [lockKey.toString()]);
+      const lockRes = await client.query<{ locked: boolean }>(
+        'SELECT pg_try_advisory_xact_lock($1::bigint) AS locked',
+        [lockKey.toString()],
+      );
+      if (!lockRes.rows[0]?.locked) {
+        await client.query('ROLLBACK');
+        return reply
+          .header('Retry-After', '5')
+          .status(423)
+          .send({
+            error: 'BACKFILL_LOCKED',
+            retryAfterSeconds: 5,
+            message: 'Another industry backfill is already running for this tenant. Retry shortly.',
+          });
+      }
 
       const cfgRes = await client.query<{ org_id: string | null; industry: string | null }>(
         `SELECT org_id, data->>'industry' AS industry
@@ -1599,12 +1613,15 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
       }
       const row = cfgRes.rows[0]!;
       if (row.industry) {
-        await client.query('ROLLBACK');
-        return reply.status(409).send({
-          error: 'ALREADY_TAGGED',
-          currentIndustry: row.industry,
-          message: 'Tenant already has industry set; refusing to overwrite. Edit via the agent-builder if intentional.',
-        });
+        if (row.industry !== industry) {
+          await client.query('ROLLBACK');
+          return reply.status(409).send({
+            error: 'ALREADY_TAGGED',
+            currentIndustry: row.industry,
+            message: 'Tenant already has a different industry set; refusing to overwrite. Edit via the agent-builder if intentional.',
+          });
+        }
+        phase1OrgId = row.org_id;
       }
 
       // How many transcripts are missing industry for this tenant's org?
@@ -1626,22 +1643,25 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
           tenantId,
           orgId: row.org_id,
           industry,
-          wouldUpdateConfig: 1,
+          wouldUpdateConfig: row.industry ? 0 : 1,
           wouldUpdateTranscripts: transcriptCandidates,
+          configAlreadyTagged: Boolean(row.industry),
         };
       }
 
       // jsonb_set wins over a full data-replace: leaves all other config fields
       // untouched, atomic, no read-modify-write race with concurrent writes.
-      const cfgUpd = await client.query<{ tenant_id: string }>(
-        `UPDATE agent_configs
-           SET data = jsonb_set(data, '{industry}', to_jsonb($1::text)),
-               updated_at = now()
-         WHERE tenant_id = $2 AND (data->>'industry' IS NULL OR data->>'industry' = '')
-         RETURNING tenant_id`,
-        [industry, tenantId],
-      );
-      configsUpdated = cfgUpd.rowCount ?? 0;
+      if (!row.industry) {
+        const cfgUpd = await client.query<{ tenant_id: string }>(
+          `UPDATE agent_configs
+             SET data = jsonb_set(data, '{industry}', to_jsonb($1::text)),
+                 updated_at = now()
+           WHERE tenant_id = $2 AND (data->>'industry' IS NULL OR data->>'industry' = '')
+           RETURNING tenant_id`,
+          [industry, tenantId],
+        );
+        configsUpdated = cfgUpd.rowCount ?? 0;
+      }
       phase1OrgId = row.org_id;
 
       // Audit-Round-16 (Codex Plan-Review HIGH C): COMMIT here, then drop
@@ -1669,15 +1689,13 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
     // Idempotency: each batch is `WHERE industry IS NULL OR industry = ''`,
     // so a crash mid-batch leaves a partial backfill that the next admin
     // call (or a re-run with the same tenantId) finishes off. The
-    // ALREADY_TAGGED gate above only checks the config row, not the
-    // transcripts — once config is tagged, transcript backfill is
-    // "best-effort, resumable" rather than "one-shot only". Re-running with
-    // the same tenantId hits the 409 above; recovery is via a separate
-    // /admin/agents/backfill-transcripts endpoint (R17 backlog) or direct
-    // SQL by ops.
+    // ALREADY_TAGGED only blocks a different industry. Re-running with the
+    // same tenantId + same industry resumes missing transcripts safely.
     const TRANSCRIPT_BATCH_SIZE = 1000;
     const MAX_BATCHES = 1000; // 1000 × 1000 = 1M transcripts hard ceiling
     let transcriptsUpdated = 0;
+    let batchesRun = 0;
+    let lastBatchCount = 0;
     if (phase1OrgId && pool) {
       for (let i = 0; i < MAX_BATCHES; i += 1) {
         const trUpd = await pool.query(
@@ -1692,13 +1710,26 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
           [industry, phase1OrgId, TRANSCRIPT_BATCH_SIZE],
         );
         const batchCount = trUpd.rowCount ?? 0;
+        batchesRun += 1;
+        lastBatchCount = batchCount;
         transcriptsUpdated += batchCount;
         if (batchCount < TRANSCRIPT_BATCH_SIZE) break;
       }
     }
+    const maxBatchesHit = batchesRun === MAX_BATCHES && lastBatchCount === TRANSCRIPT_BATCH_SIZE;
+    let transcriptsRemaining = 0;
+    if (phase1OrgId && pool && maxBatchesHit) {
+      const remainingRes = await pool.query<{ cnt: string }>(
+        `SELECT COUNT(*)::text AS cnt FROM call_transcripts
+         WHERE org_id = $1 AND (industry IS NULL OR industry = '')`,
+        [phase1OrgId],
+      );
+      transcriptsRemaining = parseInt(remainingRes.rows[0]?.cnt ?? '0', 10);
+    }
+    const truncated = transcriptsRemaining > 0;
 
     log.info(
-      { tenantId, orgId: phase1OrgId, industry, configsUpdated, transcriptsUpdated, actor: payload.email },
+      { tenantId, orgId: phase1OrgId, industry, configsUpdated, transcriptsUpdated, transcriptsRemaining, maxBatchesHit, actor: payload.email },
       'admin: industry-backfill applied',
     );
 
@@ -1709,7 +1740,10 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
       industry,
       processed: configsUpdated,
       transcriptsUpdated,
-      remaining: configsUpdated === 0 ? 1 : 0,
+      remaining: transcriptsRemaining,
+      transcriptsRemaining,
+      truncated,
+      maxBatchesHit,
     };
   });
 }

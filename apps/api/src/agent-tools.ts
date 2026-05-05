@@ -4,6 +4,7 @@ import type { readConfig } from './agent-config.js';
 import { appendTraceEvent } from './traces.js';
 import { findFreeSlots, bookSlot } from './calendar.js';
 import { sendBookingConfirmationSms, sendTicketAckSms } from './sms.js';
+import { pool } from './db.js';
 
 export const KnownToolNameSchema = z.enum(['calendar.findSlots', 'calendar.book', 'ticket.create']);
 
@@ -17,6 +18,7 @@ const FindSlotsArgsSchema = z.object({
   service: z.string().min(1).optional(),
   range: z.string().min(1).optional(),
   preferredTime: z.string().min(1).optional(),
+  preferredStylist: z.string().min(1).optional(),
 });
 
 const BookArgsSchema = z.object({
@@ -24,6 +26,7 @@ const BookArgsSchema = z.object({
   customerPhone: z.string().min(1).optional(),
   preferredTime: z.string().min(1),
   service: z.string().min(1),
+  preferredStylist: z.string().min(1).optional(),
   notes: z.string().min(1).optional(),
 });
 
@@ -57,6 +60,7 @@ export function getOpenAITools(cfg: AgentConfig) {
           service: { type: 'string', description: 'Requested service, if known.' },
           range: { type: 'string', description: 'Requested date range, e.g. next week.' },
           preferredTime: { type: 'string', description: 'Preferred time or day from the customer.' },
+          preferredStylist: { type: 'string', description: 'Requested staff member/stylist name, if the caller names one.' },
         },
         additionalProperties: false,
       },
@@ -75,6 +79,7 @@ export function getOpenAITools(cfg: AgentConfig) {
           customerPhone: { type: 'string' },
           preferredTime: { type: 'string', description: 'Confirmed slot/time.' },
           service: { type: 'string', description: 'Booked service.' },
+          preferredStylist: { type: 'string', description: 'Requested staff member/stylist name, if any.' },
           notes: { type: 'string' },
         },
         required: ['preferredTime', 'service'],
@@ -123,6 +128,34 @@ function normalizeIncomingToolName(name: string): KnownToolName | null {
   }
 }
 
+async function resolveStaffByName(orgId: string, requested: string | undefined): Promise<{ staffId: string | null; requested: string | null; matchedName: string | null }> {
+  const name = requested?.trim() ?? '';
+  if (!name || name.length < 2 || !pool) return { staffId: null, requested: name || null, matchedName: null };
+  const byName = await pool.query<{ id: string; name: string }>(
+    `SELECT id, name
+       FROM calendar_staff
+      WHERE org_id = $1
+        AND active = true
+        AND (
+          lower(name) = lower($2)
+          OR lower(name) LIKE lower($2) || '%'
+          OR lower(name) LIKE '%' || lower($2) || '%'
+          OR lower($2) LIKE '%' || lower(name) || '%'
+        )
+      ORDER BY
+        CASE
+          WHEN lower(name) = lower($2) THEN 0
+          WHEN lower(name) LIKE lower($2) || '%' THEN 1
+          ELSE 2
+        END,
+        sort_order,
+        name
+      LIMIT 1`,
+    [orgId, name],
+  );
+  return { staffId: byName.rows[0]?.id ?? null, requested: name, matchedName: byName.rows[0]?.name ?? null };
+}
+
 export async function executeKnownTool(input: {
   name: string;
   args: unknown;
@@ -134,21 +167,37 @@ export async function executeKnownTool(input: {
   switch (normalizeIncomingToolName(input.name)) {
     case 'calendar.findSlots': {
       const args = FindSlotsArgsSchema.parse(input.args ?? {});
+      const staff = await resolveStaffByName(input.tenantId, args.preferredStylist);
       const result = await findFreeSlots(input.tenantId, {
         date: args.preferredTime,
         range: args.range,
         service: args.service,
+        staffId: staff.staffId,
       });
       return {
         ok: true,
         source: result.source,
         slots: result.slots,
         service: args.service ?? null,
+        preferredStylist: staff.matchedName ?? staff.requested,
+        staffId: staff.staffId,
+        ...(staff.requested && !staff.staffId ? { instruction: 'Der Wunschfriseur wurde nicht eindeutig gefunden. Frage kurz nach einem anderen Mitarbeiter oder ob ein beliebiger verfuegbarer Mitarbeiter passt.' } : {}),
       };
     }
 
     case 'calendar.book': {
       const args = BookArgsSchema.parse(input.args ?? {});
+      const staff = await resolveStaffByName(input.tenantId, args.preferredStylist);
+      if (staff.requested && !staff.staffId) {
+        return {
+          ok: false,
+          status: 'staff_not_found',
+          error: 'STAFF_NOT_FOUND',
+          instruction: 'Buche keinen allgemeinen Salon-Termin. Frage kurz nach einem anderen Mitarbeiter oder ob ein beliebiger verfuegbarer Mitarbeiter passt.',
+          preferredStylist: staff.requested,
+          staffId: null,
+        };
+      }
       const result = await bookSlot(input.tenantId, {
         customerName: args.customerName ?? 'Unbekannt',
         customerPhone: args.customerPhone ?? '',
@@ -156,6 +205,7 @@ export async function executeKnownTool(input: {
         service: args.service,
         notes: args.notes,
         sourceCallId: input.sessionId,
+        staffId: staff.staffId,
       });
       if (!result.ok) {
         // Fallback: create ticket when calendar unavailable
@@ -184,6 +234,8 @@ export async function executeKnownTool(input: {
           partial: result.partial ?? false,
           smsSent: sms.ok,
           smsError: sms.ok ? null : sms.error,
+          preferredStylist: staff.matchedName ?? staff.requested,
+          staffId: staff.staffId,
           message: 'Terminwunsch als Ticket gespeichert.',
         };
       }
@@ -203,6 +255,8 @@ export async function executeKnownTool(input: {
         smsSent: sms.ok,
         smsError: sms.ok ? null : sms.error,
         ...args,
+        preferredStylist: staff.matchedName ?? staff.requested,
+        staffId: staff.staffId,
       };
     }
 

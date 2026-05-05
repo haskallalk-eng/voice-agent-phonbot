@@ -75,7 +75,7 @@ export const LANGUAGES = [
   { id: 'vi', label: '🇻🇳 Tiếng Việt' },
 ] as const;
 
-export const CHIPY_VOICE_ID = 'custom_voice_28bd4920fa6523c6ac8c4e527b';
+export const CHIPY_VOICE_ID = 'custom_voice_f428053d5d6100d7a2611e0cc4';
 
 export type NativeStatus = 'many' | 'few' | 'none';
 
@@ -357,6 +357,7 @@ export const DEFAULT_CONFIG_VALUES: Partial<AgentConfig> = {
   calendarIntegrations: [],
   apiIntegrations: [],
   liveWebAccess: { enabled: false, allowedDomains: [] },
+  customerModule: { enabled: false },
 };
 
 /* ── Small UI Components ── */

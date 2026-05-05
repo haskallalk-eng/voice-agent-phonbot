@@ -9,6 +9,7 @@ import {
   reassignPhoneAgent,
   verifyForwarding,
   createCheckoutSession,
+  ApiError,
   type PhoneNumber,
   type AgentConfig,
 } from '../lib/api.js';
@@ -99,9 +100,14 @@ function NumberCard({ num, agents, onVerify, onDelete, onRefresh }: {
       }
       onRefresh();
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : '';
+      const msg = e instanceof ApiError ? e.userMessage : e instanceof Error ? e.message : '';
       // 503 from server when VERIFIER_TWILIO_NUMBER is not set — fall back to manual instructions
-      if (msg.includes('Verifikations-Trunk') || msg.includes('configurationMissing')) {
+      if (
+        msg.includes('Verifikations-Trunk') ||
+        msg.includes('Server-Konfigurationsfehler') ||
+        (e instanceof ApiError && e.parsedBody?.configurationMissing === true) ||
+        (e instanceof ApiError && e.parsedBody?.verifierNumberConflict === true)
+      ) {
         setVerifyResult({ kind: 'not_configured', message: msg || 'Verifikation am Server nicht konfiguriert.' });
       } else {
         setVerifyResult({ kind: 'failed', message: msg || 'Test fehlgeschlagen.' });
@@ -309,7 +315,7 @@ function NumberCard({ num, agents, onVerify, onDelete, onRefresh }: {
               <div className="space-y-2">
                 <div className="bg-blue-500/10 border border-blue-500/25 rounded-xl p-3 text-xs text-blue-200 space-y-1">
                   <p className="font-semibold">Automatischer Test nicht verfügbar</p>
-                  <p>Der Server hat keine Verifikations-Nummer hinterlegt. Bitte manuell testen:</p>
+                  <p>{verifyResult.message || 'Der Server kann die Rufumleitung gerade nicht automatisch testen. Bitte manuell testen:'}</p>
                 </div>
                 <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] px-3 py-2 text-xs text-white/65 space-y-1">
                   <p>1. Nimm ein <strong>fremdes Telefon</strong> (nicht {testNumber}).</p>

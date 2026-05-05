@@ -10,7 +10,7 @@ import {
   getVoices,
   getRecommendedVoices,
   getInsights,
-  getAccessToken,
+  getPhoneNumbers,
   getAgentStats,
   type AgentConfig,
   type AgentPreview,
@@ -35,7 +35,7 @@ import { PreviewTab } from './PreviewTab.js';
 /*  Main Component                                                          */
 /* ══════════════════════════════════════════════════════════════════════════ */
 
-type Page = 'home' | 'agent' | 'test' | 'tickets' | 'logs' | 'billing' | 'phone' | 'calendar' | 'insights';
+type Page = 'home' | 'agent' | 'test' | 'tickets' | 'customers' | 'logs' | 'billing' | 'phone' | 'calendar' | 'insights';
 
 export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void } = {}) {
   const [config, setConfig] = useState<AgentConfig | null>(null);
@@ -114,16 +114,9 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
       setPendingSuggestions(d.suggestions.filter(s => s.status === 'pending').length);
     }).catch(() => {});
     // Check if any phone numbers exist
-    {
-      const token = getAccessToken();
-      void fetch('/api/phone', {
-        headers: token ? { authorization: `Bearer ${token}` } : {},
-        credentials: 'include',
-      })
-        .then(r => r.json())
-        .then(d => setHasPhone((d.items ?? []).length > 0))
-        .catch(() => {});
-    }
+    void getPhoneNumbers()
+      .then(d => setHasPhone((d.items ?? []).length > 0))
+      .catch(() => {});
   }, [loadVoices]);
 
   // Close voice dropdown on outside click

@@ -11,6 +11,7 @@ import { DashboardHome } from './DashboardHome.js';
 import { AgentBuilder } from './agent-builder/index.js';
 import { TestConsole } from './TestConsole.js';
 import { TicketInbox } from './TicketInbox.js';
+import { CustomersPage } from './CustomersPage.js';
 import { CallLog } from './CallLog.js';
 import { BillingPage } from './BillingPage.js';
 import { PhoneManager } from './PhoneManager.js';
@@ -77,11 +78,11 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-export type Page = 'home' | 'agent' | 'test' | 'tickets' | 'logs' | 'billing' | 'phone' | 'calendar' | 'insights';
+export type Page = 'home' | 'agent' | 'test' | 'tickets' | 'customers' | 'logs' | 'billing' | 'phone' | 'calendar' | 'insights';
 
 function Dashboard() {
   const { user, org, logout } = useAuth();
-  const VALID_PAGES: Page[] = ['home', 'agent', 'test', 'tickets', 'logs', 'billing', 'phone', 'calendar', 'insights'];
+  const VALID_PAGES: Page[] = ['home', 'agent', 'test', 'tickets', 'customers', 'logs', 'billing', 'phone', 'calendar', 'insights'];
   // Hash format: `#page` OR `#page/itemId` — the second form lets the dashboard
   // deep-link into a specific ticket/call/booking so clicking a row there
   // opens that exact row on the target page.
@@ -299,6 +300,7 @@ function Dashboard() {
           {page === 'agent' && <AgentBuilder onNavigate={setPage} />}
           {page === 'test' && <TestConsole onNavigate={setPage} />}
           {page === 'tickets' && <TicketInbox focusId={focusId} />}
+          {page === 'customers' && <CustomersPage />}
           {page === 'logs' && <CallLog focusId={focusId} />}
           {page === 'billing' && <BillingPage />}
           {page === 'phone' && <PhoneManager onNavigate={setPage as (page: string) => void} />}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Page } from './App.js';
 import type { AuthUser, AuthOrg } from '../lib/auth.js';
 import { PhonbotBrand } from './FoxLogo.js';
@@ -13,8 +13,9 @@ import {
   IconPhone,
   IconBilling,
   IconLogout,
+  IconUser,
 } from './PhonbotIcons.js';
-import { deleteAccount } from '../lib/api.js';
+import { deleteAccount, getCustomerModuleStatus } from '../lib/api.js';
 
 type NavItem = { id: Page; label: string; Icon: React.FC<{ size?: number; className?: string }> };
 
@@ -128,6 +129,28 @@ function DeleteAccountModal({ onClose, onLogout }: { onClose: () => void; onLogo
 
 export function Sidebar({ current, onNavigate, org, user, onLogout }: Props) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showCustomers, setShowCustomers] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    getCustomerModuleStatus()
+      .then((s) => { if (!cancelled) setShowCustomers(s.available); })
+      .catch(() => { if (!cancelled) setShowCustomers(user?.email?.toLowerCase() === 'info@mindrails.de'); });
+    return () => { cancelled = true; };
+  }, [user?.email]);
+
+  const navGroups = NAV_GROUPS.map((group) => {
+    if (group.label !== 'ÜBERSICHT' || !showCustomers) return group;
+    if (group.items.some((item) => item.id === 'customers')) return group;
+    return {
+      ...group,
+      items: [
+        ...group.items.slice(0, 2),
+        { id: 'customers' as Page, label: 'Kunden', Icon: IconUser },
+        ...group.items.slice(2),
+      ],
+    };
+  });
+
   return (
     <aside className="w-56 shrink-0 bg-[#0F0F18] border-r border-white/5 text-white flex flex-col h-full">
       {/* Brand */}
@@ -138,7 +161,7 @@ export function Sidebar({ current, onNavigate, org, user, onLogout }: Props) {
 
       {/* Navigation — flex-1 fills all available space, groups spread evenly */}
       <nav className="flex-1 flex flex-col justify-between py-4 overflow-hidden" aria-label="Hauptnavigation">
-        {NAV_GROUPS.map((group, gi) => (
+        {navGroups.map((group, gi) => (
           <div key={gi}>
             {group.label && (
               <p className="px-5 mb-1 text-[10px] font-semibold tracking-widest text-white/20 uppercase select-none">

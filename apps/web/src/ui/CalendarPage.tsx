@@ -5,11 +5,11 @@ import {
   getChipyCalendar, saveChipySchedule, addChipyBlock, removeChipyBlock,
   getChipyBookings, createChipyBooking, deleteChipyBooking,
   getExternalCalendarEvents,
+  getCalendarStaff, createCalendarStaff, updateCalendarStaff, deleteCalendarStaff,
+  getStaffChipyCalendar, saveStaffChipySchedule, addStaffChipyBlock, removeStaffChipyBlock,
 } from '../lib/api.js';
-import type { ChipySchedule, ChipyBlock, ChipyBooking, ExternalCalendarEvent } from '../lib/api.js';
+import type { CalendarProvider, CalendarStatus, CalendarStaff, ChipySchedule, ChipyBlock, ChipyBooking, ExternalCalendarEvent } from '../lib/api.js';
 import { FoxLogo } from './FoxLogo.js';
-
-type CalendarStatus = { connected: boolean; provider: string | null; email: string | null; expired?: boolean; expiredProvider?: string; chipy?: { configured: boolean } };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -503,12 +503,15 @@ const DEFAULT_SCHEDULE: ChipySchedule = {
 };
 
 function SettingsPanel({
-  schedule, setSchedule, blocks, setBlocks,
+  schedule, setSchedule, blocks, setBlocks, saveScheduleApi, addBlockApi, removeBlockApi,
 }: {
   schedule: ChipySchedule;
   setSchedule: React.Dispatch<React.SetStateAction<ChipySchedule>>;
   blocks: ChipyBlock[];
   setBlocks: React.Dispatch<React.SetStateAction<ChipyBlock[]>>;
+  saveScheduleApi?: (schedule: ChipySchedule) => Promise<unknown>;
+  addBlockApi?: (date: string, opts?: { start_time?: string; end_time?: string; reason?: string }) => Promise<{ ok: boolean; id: string }>;
+  removeBlockApi?: (id: string) => Promise<unknown>;
 }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -524,7 +527,7 @@ function SettingsPanel({
   async function handleSave() {
     setSaving(true); setSaved(false); setSaveError(null);
     try {
-      await saveChipySchedule(schedule);
+      await (saveScheduleApi ?? saveChipySchedule)(schedule);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (e: unknown) {
@@ -536,7 +539,7 @@ function SettingsPanel({
     if (!newBlockDate) return;
     setBlockError(null);
     try {
-      const res = await addChipyBlock(newBlockDate, { reason: newBlockReason || undefined });
+      const res = await (addBlockApi ?? addChipyBlock)(newBlockDate, { reason: newBlockReason || undefined });
       setBlocks(prev => [...prev, { id: res.id, date: newBlockDate, start_time: null, end_time: null, reason: newBlockReason || null }]);
       setNewBlockDate(''); setNewBlockReason('');
     } catch (e: unknown) {
@@ -554,7 +557,7 @@ function SettingsPanel({
       const newBlocks: ChipyBlock[] = [];
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
         const dateStr = isoDate(d);
-        const res = await addChipyBlock(dateStr, { reason: newBlockReason || undefined });
+        const res = await (addBlockApi ?? addChipyBlock)(dateStr, { reason: newBlockReason || undefined });
         newBlocks.push({ id: res.id, date: dateStr, start_time: null, end_time: null, reason: newBlockReason || null });
       }
       setBlocks(prev => [...prev, ...newBlocks]);
@@ -568,7 +571,7 @@ function SettingsPanel({
     if (!newBlockDate || !newBlockStartTime || !newBlockEndTime) return;
     setBlockError(null);
     try {
-      const res = await addChipyBlock(newBlockDate, {
+      const res = await (addBlockApi ?? addChipyBlock)(newBlockDate, {
         start_time: newBlockStartTime,
         end_time: newBlockEndTime,
         reason: newBlockReason || undefined,
@@ -581,7 +584,7 @@ function SettingsPanel({
   }
 
   async function handleRemoveBlock(id: string) {
-    try { await removeChipyBlock(id); setBlocks(prev => prev.filter(b => b.id !== id)); } catch (e: unknown) {
+    try { await (removeBlockApi ?? removeChipyBlock)(id); setBlocks(prev => prev.filter(b => b.id !== id)); } catch (e: unknown) {
       setBlockError((e instanceof Error ? e.message : null) ?? 'Sperre konnte nicht entfernt werden');
     }
   }
@@ -739,6 +742,21 @@ function SettingsPanel({
 
 // ── Calendar Connections Panel ────────────────────────────────────────────────
 
+function getProviderConnection(status: CalendarStatus | null, provider: Exclude<CalendarProvider, 'chipy'>) {
+  const fromList = status?.connections?.find((conn) => conn.provider === provider);
+  if (fromList) return fromList;
+  if (status?.provider === provider) {
+    return {
+      provider,
+      connected: status.connected,
+      email: status.email,
+      calendarId: status.calendarId ?? null,
+      expired: status.expired,
+    };
+  }
+  return null;
+}
+
 function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStatus) => void }) {
   const [status, setStatus] = useState<CalendarStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -751,7 +769,7 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
   const [disconnectLoading, setDisconnectLoading] = useState(false);
   // Inline confirm instead of browser confirm() — chipy-design prefers
   // in-card affordances over system dialogs for quiet moments.
-  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = useState<Exclude<CalendarProvider, 'chipy'> | null>(null);
 
   async function loadStatus() {
     setLoading(true); setError(null);
@@ -810,35 +828,35 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
 
   // Shared helper: runs disconnect + reloads status. Wrapped so the inline
   // confirm strip and any other trigger uses exactly one code path.
-  async function runDisconnect() {
+  async function runDisconnect(provider: Exclude<CalendarProvider, 'chipy'>) {
     setDisconnectLoading(true);
     try {
-      await disconnectCalendar();
+      await disconnectCalendar(provider);
       await loadStatus();
     } catch (e: unknown) {
       setError((e instanceof Error ? e.message : null) ?? 'Trennen fehlgeschlagen');
     } finally {
       setDisconnectLoading(false);
-      setConfirmDisconnect(false);
+      setConfirmDisconnect(null);
     }
   }
 
   // Small inline-confirm strip rendered under a connected provider row
   // instead of a modal. Same design in both CalendarPage and CapabilitiesTab
   // so the disconnect-flow feels identical everywhere.
-  function InlineConfirmStrip({ providerLabel }: { providerLabel: string }) {
-    if (!confirmDisconnect) return null;
+  function InlineConfirmStrip({ provider, providerLabel }: { provider: Exclude<CalendarProvider, 'chipy'>; providerLabel: string }) {
+    if (confirmDisconnect !== provider) return null;
     return (
       <div className="px-5 pb-4 -mt-1 border-t border-red-500/15 pt-3">
         <p className="text-xs text-white/70 mb-2.5 leading-relaxed">
           <span className="text-red-300">Sicher trennen?</span> Dein Agent kann nach dem Trennen keine Termine mehr in <span className="text-white">{providerLabel}</span> eintragen oder prüfen — bis du's wieder verbindest.
         </p>
         <div className="flex items-center gap-2">
-          <button onClick={() => setConfirmDisconnect(false)}
+          <button onClick={() => setConfirmDisconnect(null)}
             className="rounded-lg px-3 py-1.5 text-xs text-white/60 hover:text-white bg-white/5 hover:bg-white/10 transition-colors cursor-pointer">
             Abbrechen
           </button>
-          <button onClick={runDisconnect} disabled={disconnectLoading}
+          <button onClick={() => { void runDisconnect(provider); }} disabled={disconnectLoading}
             className="rounded-lg px-3 py-1.5 text-xs font-semibold text-red-200 bg-red-500/15 hover:bg-red-500/25 border border-red-500/25 transition-colors disabled:opacity-50 cursor-pointer">
             {disconnectLoading ? 'Trenne…' : 'Ja, trennen'}
           </button>
@@ -873,7 +891,8 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
         <div className="space-y-3">
           {/* Google */}
           {(() => {
-            const isConnected = status?.connected && status.provider === 'google';
+            const conn = getProviderConnection(status, 'google');
+            const isConnected = Boolean(conn?.connected);
             return (
               <div className="rounded-2xl hover:bg-white/[0.04] transition-all" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <div className="flex items-center gap-4 px-5 py-4">
@@ -882,12 +901,12 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-white">Google Calendar</p>
-                    <p className="text-[11px] text-white/30 truncate">{isConnected ? status.email ?? 'Verbunden' : 'OAuth 2.0'}</p>
+                    <p className="text-[11px] text-white/30 truncate">{isConnected ? conn?.email ?? 'Verbunden' : 'OAuth 2.0'}</p>
                   </div>
                   {isConnected ? (
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="flex items-center gap-1.5 text-[11px] text-green-400/80 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-green-400" />Verbunden</span>
-                      <button onClick={() => setConfirmDisconnect(true)} disabled={disconnectLoading || confirmDisconnect}
+                      <button onClick={() => setConfirmDisconnect('google')} disabled={disconnectLoading || Boolean(confirmDisconnect)}
                         className="text-[11px] text-white/35 hover:text-red-400 transition-colors disabled:opacity-40 cursor-pointer">
                         Trennen
                       </button>
@@ -901,26 +920,27 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
                     </button>
                   )}
                 </div>
-                {isConnected && <InlineConfirmStrip providerLabel="Google Calendar" />}
+                {isConnected && <InlineConfirmStrip provider="google" providerLabel="Google Calendar" />}
               </div>
             );
           })()}
 
           {/* Microsoft */}
           {(() => {
-            const isConnected = status?.connected && status.provider === 'microsoft';
+            const conn = getProviderConnection(status, 'microsoft');
+            const isConnected = Boolean(conn?.connected);
             return (
               <div className="rounded-2xl hover:bg-white/[0.04] transition-all" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <div className="flex items-center gap-4 px-5 py-4">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-lg" style={{ background: 'rgba(0,120,212,0.08)' }}>🪟</div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-white">Microsoft Outlook</p>
-                    <p className="text-[11px] text-white/30 truncate">{isConnected ? status.email ?? 'Verbunden' : 'Office 365 / Outlook.com'}</p>
+                    <p className="text-[11px] text-white/30 truncate">{isConnected ? conn?.email ?? 'Verbunden' : 'Office 365 / Outlook.com'}</p>
                   </div>
                   {isConnected ? (
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="flex items-center gap-1.5 text-[11px] text-green-400/80 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-green-400" />Verbunden</span>
-                      <button onClick={() => setConfirmDisconnect(true)} disabled={disconnectLoading || confirmDisconnect}
+                      <button onClick={() => setConfirmDisconnect('microsoft')} disabled={disconnectLoading || Boolean(confirmDisconnect)}
                         className="text-[11px] text-white/35 hover:text-red-400 transition-colors disabled:opacity-40 cursor-pointer">
                         Trennen
                       </button>
@@ -934,14 +954,15 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
                     </button>
                   )}
                 </div>
-                {isConnected && <InlineConfirmStrip providerLabel="Microsoft Outlook" />}
+                {isConnected && <InlineConfirmStrip provider="microsoft" providerLabel="Microsoft Outlook" />}
               </div>
             );
           })()}
 
           {/* Cal.com */}
           {(() => {
-            const isConnected = status?.connected && status.provider === 'calcom';
+            const conn = getProviderConnection(status, 'calcom');
+            const isConnected = Boolean(conn?.connected);
             return (
               <div className="rounded-2xl px-5 py-4 hover:bg-white/[0.04] transition-all" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <div className="flex items-center gap-4">
@@ -955,7 +976,7 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
                   {isConnected && (
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="flex items-center gap-1.5 text-[11px] text-green-400/80 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-green-400" />Verbunden</span>
-                      <button onClick={() => setConfirmDisconnect(true)} disabled={disconnectLoading || confirmDisconnect}
+                      <button onClick={() => setConfirmDisconnect('calcom')} disabled={disconnectLoading || Boolean(confirmDisconnect)}
                         className="text-[11px] text-white/35 hover:text-red-400 transition-colors disabled:opacity-40 cursor-pointer">
                         Trennen
                       </button>
@@ -978,7 +999,7 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
                     {calcomError && <p className="text-xs text-red-300 mt-2">{calcomError}</p>}
                   </div>
                 )}
-                {isConnected && <InlineConfirmStrip providerLabel="Cal.com" />}
+                {isConnected && <InlineConfirmStrip provider="calcom" providerLabel="Cal.com" />}
               </div>
             );
           })()}
@@ -1002,7 +1023,266 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-type Tab = 'calendar' | 'schedule' | 'connections';
+function StaffPanel() {
+  const [staff, setStaff] = useState<CalendarStaff[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [createRole, setCreateRole] = useState('Stylist');
+  const [editRole, setEditRole] = useState('');
+  const [services, setServices] = useState('Haarschnitt, Farbe, Styling');
+  const [savingStaff, setSavingStaff] = useState(false);
+  const [staffSchedule, setStaffSchedule] = useState<ChipySchedule>(DEFAULT_SCHEDULE);
+  const [staffBlocks, setStaffBlocks] = useState<ChipyBlock[]>([]);
+  const [staffStatus, setStaffStatus] = useState<CalendarStatus | null>(null);
+  const [calcomKey, setCalcomKey] = useState('');
+  const [connectionLoading, setConnectionLoading] = useState<string | null>(null);
+
+  const selected = staff.find(s => s.id === selectedId) ?? null;
+
+  const loadStaff = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const res = await getCalendarStaff();
+      setStaff(res.staff);
+      setSelectedId(current => current ?? res.staff[0]?.id ?? null);
+    } catch (e: unknown) {
+      setError((e instanceof Error ? e.message : null) ?? 'Mitarbeiter konnten nicht geladen werden');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadSelectedCalendar = useCallback(async (staffId: string) => {
+    setError(null);
+    try {
+      const [chipy, status] = await Promise.all([
+        getStaffChipyCalendar(staffId),
+        getCalendarStatus(staffId),
+      ]);
+      setStaffSchedule({ ...DEFAULT_SCHEDULE, ...chipy.schedule });
+      setStaffBlocks(chipy.blocks);
+      setStaffStatus(status);
+    } catch (e: unknown) {
+      setError((e instanceof Error ? e.message : null) ?? 'Mitarbeiter-Kalender konnte nicht geladen werden');
+    }
+  }, []);
+
+  useEffect(() => { loadStaff(); }, [loadStaff]);
+  useEffect(() => { if (selectedId) void loadSelectedCalendar(selectedId); }, [selectedId, loadSelectedCalendar]);
+  useEffect(() => { setEditRole(selected?.role ?? ''); }, [selected?.id, selected?.role]);
+
+  async function handleCreateStaff(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setSavingStaff(true); setError(null);
+    try {
+      const res = await createCalendarStaff({
+        name: name.trim(),
+        role: createRole.trim() || undefined,
+        services: services.split(',').map(s => s.trim()).filter(Boolean),
+      });
+      setStaff(prev => [...prev, res.staff]);
+      setSelectedId(res.staff.id);
+      setName('');
+    } catch (e: unknown) {
+      setError((e instanceof Error ? e.message : null) ?? 'Mitarbeiter konnte nicht angelegt werden');
+    } finally {
+      setSavingStaff(false);
+    }
+  }
+
+  async function handleDeleteSelected() {
+    if (!selected) return;
+    setSavingStaff(true); setError(null);
+    try {
+      await deleteCalendarStaff(selected.id);
+      setStaff(prev => {
+        const next = prev.filter(s => s.id !== selected.id);
+        setSelectedId(next[0]?.id ?? null);
+        return next;
+      });
+    } catch (e: unknown) {
+      setError((e instanceof Error ? e.message : null) ?? 'Mitarbeiter konnte nicht geloescht werden');
+    } finally {
+      setSavingStaff(false);
+    }
+  }
+
+  async function handleRoleBlur() {
+    if (!selected) return;
+    const nextRole = editRole.trim();
+    if ((selected.role ?? '') === nextRole) return;
+    try {
+      const res = await updateCalendarStaff(selected.id, { role: nextRole });
+      setStaff(prev => prev.map(s => s.id === selected.id ? { ...s, ...res.staff } : s));
+    } catch {
+      setEditRole(selected.role ?? '');
+    }
+  }
+
+  async function runConnect(provider: Exclude<CalendarProvider, 'chipy'>) {
+    if (!selected) return;
+    setConnectionLoading(provider); setError(null);
+    try {
+      if (provider === 'google') {
+        const { url } = await getGoogleCalendarAuthUrl(selected.id);
+        window.location.href = url;
+        return;
+      }
+      if (provider === 'microsoft') {
+        const { url } = await getMicrosoftCalendarAuthUrl(selected.id);
+        window.location.href = url;
+        return;
+      }
+      await connectCalcom(calcomKey, selected.id);
+      setCalcomKey('');
+      await loadSelectedCalendar(selected.id);
+    } catch (e: unknown) {
+      setError((e instanceof Error ? e.message : null) ?? 'Verbindung fehlgeschlagen');
+    } finally {
+      setConnectionLoading(null);
+    }
+  }
+
+  async function runDisconnect(provider: Exclude<CalendarProvider, 'chipy'>) {
+    if (!selected) return;
+    setConnectionLoading(provider); setError(null);
+    try {
+      await disconnectCalendar(provider, selected.id);
+      await loadSelectedCalendar(selected.id);
+    } catch (e: unknown) {
+      setError((e instanceof Error ? e.message : null) ?? 'Trennen fehlgeschlagen');
+    } finally {
+      setConnectionLoading(null);
+    }
+  }
+
+  const providerButton = (provider: Exclude<CalendarProvider, 'chipy'>, label: string) => {
+    const conn = getProviderConnection(staffStatus, provider);
+    const connected = Boolean(conn?.connected);
+    return (
+      <div key={provider} className="rounded-xl px-4 py-3 flex items-center gap-3" style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-white">{label}</p>
+          <p className="text-xs text-white/30 truncate">{connected ? conn?.email ?? 'Verbunden' : 'Eigene Verbindung fuer diese Person'}</p>
+        </div>
+        {connected ? (
+          <button onClick={() => { void runDisconnect(provider); }} disabled={connectionLoading === provider}
+            className="rounded-lg px-3 py-1.5 text-xs text-red-300 bg-red-500/10 border border-red-500/20 disabled:opacity-40">
+            Trennen
+          </button>
+        ) : provider === 'calcom' ? (
+          <div className="flex gap-2 min-w-0">
+            <input value={calcomKey} onChange={e => setCalcomKey(e.target.value)} placeholder="cal_live_..."
+              className="w-32 sm:w-44 rounded-lg px-3 py-1.5 text-xs text-white placeholder-white/20 focus:outline-none"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }} />
+            <button onClick={() => { void runConnect(provider); }} disabled={!calcomKey.trim() || connectionLoading === provider}
+              className="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
+              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+              Verbinden
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => { void runConnect(provider); }} disabled={connectionLoading === provider}
+            className="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
+            style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+            Verbinden
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  if (loading) return <div className="rounded-2xl border border-white/10 p-5 text-sm text-white/40">Lade Mitarbeiter...</div>;
+
+  return (
+    <div className="space-y-5">
+      {error && (
+        <div className="rounded-2xl p-4 border border-red-500/20 bg-red-500/5 text-sm text-red-300">{error}</div>
+      )}
+
+      <div className="rounded-2xl border border-white/10 p-5" style={{ background: 'rgba(255,255,255,0.02)' }}>
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <p className="text-sm font-bold text-white">Mitarbeiter</p>
+            <p className="text-xs text-white/35 mt-1">Ohne Mitarbeiter nutzt Phonbot den Salon-Kalender. Sobald du Personen anlegst, bekommt jede Person einen eigenen Chipy-Kalender und eigene externe Verbindungen.</p>
+          </div>
+          {selected && (
+            <button onClick={() => { void handleDeleteSelected(); }} disabled={savingStaff}
+              className="shrink-0 rounded-lg px-3 py-2 text-xs text-red-300 bg-red-500/10 border border-red-500/20 disabled:opacity-40">
+              Loeschen
+            </button>
+          )}
+        </div>
+
+        <form onSubmit={handleCreateStaff} className="grid grid-cols-1 sm:grid-cols-[1.2fr_1fr_1.4fr_auto] gap-2 mb-4">
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Name, z.B. Lena"
+            className="rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }} />
+          <input value={createRole} onChange={e => setCreateRole(e.target.value)} placeholder="Rolle"
+            className="rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }} />
+          <input value={services} onChange={e => setServices(e.target.value)} placeholder="Services, kommasepariert"
+            className="rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }} />
+          <button type="submit" disabled={!name.trim() || savingStaff}
+            className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+            style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+            Anlegen
+          </button>
+        </form>
+
+        {staff.length > 0 ? (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {staff.map(member => (
+              <button key={member.id} onClick={() => { setSelectedId(member.id); }}
+                className={`shrink-0 rounded-xl px-4 py-2 text-sm border transition-all ${selectedId === member.id ? 'text-white border-orange-500/40 bg-orange-500/10' : 'text-white/45 border-white/8 bg-white/[0.02]'}`}>
+                {member.name}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-white/35 py-4">Noch keine Mitarbeiter angelegt. Dann bleibt automatisch der eine Salon-Kalender aktiv.</p>
+        )}
+      </div>
+
+      {selected && (
+        <div className="rounded-2xl border border-white/10 p-5 space-y-5" style={{ background: 'rgba(255,255,255,0.02)' }}>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-bold text-white">{selected.name}</p>
+              <p className="text-xs text-white/35 mt-1">{selected.services?.length ? selected.services.join(', ') : 'Eigener Mitarbeiter-Kalender'}</p>
+            </div>
+            <input value={editRole} onChange={e => setEditRole(e.target.value)} onBlur={() => { void handleRoleBlur(); }} placeholder="Rolle"
+              className="w-36 rounded-xl px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }} />
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.15em]">Kalender-Verbindungen</p>
+            {providerButton('google', 'Google Calendar')}
+            {providerButton('microsoft', 'Microsoft Outlook')}
+            {providerButton('calcom', 'Cal.com')}
+          </div>
+
+          <div>
+            <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.15em] mb-4">Chipy-Kalender fuer {selected.name}</p>
+            <SettingsPanel
+              schedule={staffSchedule}
+              setSchedule={setStaffSchedule}
+              blocks={staffBlocks}
+              setBlocks={setStaffBlocks}
+              saveScheduleApi={(schedule) => saveStaffChipySchedule(selected.id, schedule)}
+              addBlockApi={(date, opts) => addStaffChipyBlock(selected.id, date, opts)}
+              removeBlockApi={(id) => removeStaffChipyBlock(selected.id, id)}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type Tab = 'calendar' | 'schedule' | 'connections' | 'staff';
 
 export function CalendarPage({ focusBookingId }: { focusBookingId?: string | null } = {}) {
   const [tab, setTab] = useState<Tab>('calendar');
@@ -1102,6 +1382,7 @@ export function CalendarPage({ focusBookingId }: { focusBookingId?: string | nul
     { id: 'calendar', label: 'Kalender' },
     { id: 'schedule', label: 'Verfügbarkeit' },
     { id: 'connections', label: 'Verbindungen' },
+    { id: 'staff', label: 'Mitarbeiter' },
   ];
 
   return (
@@ -1238,6 +1519,11 @@ export function CalendarPage({ focusBookingId }: { focusBookingId?: string | nul
         {/* Connections tab */}
         {tab === 'connections' && (
           <ConnectionsPanel onStatusChange={setCalendarStatus} />
+        )}
+
+        {/* Staff calendars tab */}
+        {tab === 'staff' && (
+          <StaffPanel />
         )}
       </div>
 

@@ -15,14 +15,171 @@ export function getAccessToken(): string | null { return _accessToken; }
 export function setAdminToken(t: string | null): void { _adminToken = t; }
 export function getAdminToken(): string | null { return _adminToken; }
 
+const AUTH_CHANNEL_NAME = 'phonbot-auth';
+const REFRESH_LOCK_TIMEOUT = 5_000;
+const REFRESH_CLAIM_SETTLE = 50;
+
+type RefreshClaim = { tabId: string; timestamp: number };
+export type AuthBroadcastMessage =
+  | ({ type: 'refresh-claim' } & RefreshClaim)
+  | ({ type: 'refresh-success'; token: string; expiresAt: number | null } & RefreshClaim)
+  | ({ type: 'refresh-failed' } & RefreshClaim)
+  | ({ type: 'session-cleared' } & RefreshClaim);
+
+const currentTabId = (() => {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+})();
+
+let authChannel: BroadcastChannel | null | undefined;
+let activeRefreshClaim: RefreshClaim | null = null;
+const authSubscribers = new Set<(message: AuthBroadcastMessage) => void>();
+const refreshWaiters = new Set<(token: string | null | 'timeout') => void>();
+
+function getJwtExpiresAt(token: string): number | null {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    const data = JSON.parse(atob(padded)) as { exp?: number };
+    return typeof data.exp === 'number' ? data.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+function isAuthBroadcastMessage(value: unknown): value is AuthBroadcastMessage {
+  if (!value || typeof value !== 'object') return false;
+  const msg = value as Partial<AuthBroadcastMessage>;
+  return (
+    (msg.type === 'refresh-claim' || msg.type === 'refresh-success' || msg.type === 'refresh-failed' || msg.type === 'session-cleared') &&
+    typeof msg.tabId === 'string' &&
+    typeof msg.timestamp === 'number'
+  );
+}
+
+function isPreferredClaim(next: RefreshClaim, current: RefreshClaim | null): boolean {
+  if (!current) return true;
+  if (next.timestamp !== current.timestamp) return next.timestamp < current.timestamp;
+  return next.tabId < current.tabId;
+}
+
+function isClaimFresh(claim: RefreshClaim | null): claim is RefreshClaim {
+  return Boolean(claim && Date.now() - claim.timestamp < REFRESH_LOCK_TIMEOUT);
+}
+
+function resolveRefreshWaiters(token: string | null) {
+  for (const resolve of refreshWaiters) resolve(token);
+  refreshWaiters.clear();
+}
+
+function waitForRefreshResult(timeoutMs: number): Promise<string | null | 'timeout'> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const wrapped = (token: string | null | 'timeout') => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      refreshWaiters.delete(wrapped);
+      resolve(token);
+    };
+    const timer = setTimeout(() => wrapped('timeout'), Math.max(1, timeoutMs));
+    refreshWaiters.add(wrapped);
+  });
+}
+
+function handleAuthBroadcast(message: AuthBroadcastMessage) {
+  if (message.tabId === currentTabId) return;
+
+  if (message.type === 'refresh-claim') {
+    if (!isClaimFresh(activeRefreshClaim) || isPreferredClaim(message, activeRefreshClaim)) {
+      activeRefreshClaim = { tabId: message.tabId, timestamp: message.timestamp };
+    }
+  } else if (message.type === 'refresh-success') {
+    _accessToken = message.token;
+    activeRefreshClaim = null;
+    resolveRefreshWaiters(message.token);
+  } else if (message.type === 'refresh-failed') {
+    activeRefreshClaim = null;
+    resolveRefreshWaiters(null);
+  } else if (message.type === 'session-cleared') {
+    _accessToken = null;
+    activeRefreshClaim = null;
+    resolveRefreshWaiters(null);
+  }
+
+  for (const handler of authSubscribers) handler(message);
+}
+
+function getAuthChannel(): BroadcastChannel | null {
+  if (authChannel !== undefined) return authChannel;
+  if (typeof BroadcastChannel === 'undefined') {
+    authChannel = null;
+    return authChannel;
+  }
+  authChannel = new BroadcastChannel(AUTH_CHANNEL_NAME);
+  authChannel.addEventListener('message', (event: MessageEvent<unknown>) => {
+    if (isAuthBroadcastMessage(event.data)) handleAuthBroadcast(event.data);
+  });
+  return authChannel;
+}
+
+function postAuthMessage(message: AuthBroadcastMessage) {
+  getAuthChannel()?.postMessage(message);
+  for (const handler of authSubscribers) handler(message);
+}
+
+export function subscribeAuthBroadcast(handler: (message: AuthBroadcastMessage) => void): () => void {
+  authSubscribers.add(handler);
+  getAuthChannel();
+  return () => { authSubscribers.delete(handler); };
+}
+
+export function broadcastSessionCleared(): void {
+  _accessToken = null;
+  postAuthMessage({ type: 'session-cleared', tabId: currentTabId, timestamp: Date.now() });
+}
+
+function parseApiErrorBody(body: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function apiErrorUserMessage(body: string, parsed: Record<string, unknown> | null): string {
+  const error = parsed?.error;
+  if (typeof error === 'string' && error.trim()) return error;
+  const message = parsed?.message;
+  if (typeof message === 'string' && message.trim()) return message;
+  return body;
+}
+
 export class ApiError extends Error {
-  constructor(
-    public status: number,
-    public statusText: string,
-    public body: string,
-  ) {
-    super(`API ${status}: ${body}`);
+  public status: number;
+  public statusText: string;
+  public body: string;
+  public parsedBody: Record<string, unknown> | null;
+  public userMessage: string;
+
+  constructor(status: number, statusText: string, body: string) {
+    const parsedBody = parseApiErrorBody(body);
+    const userMessage = apiErrorUserMessage(body, parsedBody);
+    super(`API ${status}: ${userMessage}`);
     this.name = 'ApiError';
+    this.status = status;
+    this.statusText = statusText;
+    this.body = body;
+    this.parsedBody = parsedBody;
+    this.userMessage = userMessage;
   }
 
   get isUnauthorized() { return this.status === 401; }
@@ -41,20 +198,76 @@ function authHeader(): Record<string, string> {
 // Coalesce concurrent /auth/refresh calls — when 5 parallel requests all 401,
 // we want ONE refresh attempt, not 5. All 5 requests then await the same promise.
 let refreshInFlight: Promise<string | null> | null = null;
-async function refreshAccessToken(): Promise<string | null> {
-  if (refreshInFlight) return refreshInFlight;
-  refreshInFlight = (async () => {
+
+async function requestFreshAccessToken(): Promise<string | null> {
+  const urls = [`${BASE}/auth/refresh`, '/auth/refresh'];
+  for (const url of urls) {
     try {
-      const res = await fetch(`${BASE}/auth/refresh`, {
+      const res = await fetch(url, {
         method: 'POST',
         credentials: 'include',
         signal: AbortSignal.timeout(REQUEST_TIMEOUT),
       });
-      if (!res.ok) return null;
+      if (!res.ok) continue;
       const data = await res.json() as { token?: string };
-      if (!data.token) return null;
+      if (!data.token) continue;
       _accessToken = data.token;
       return data.token;
+    } catch {
+      // Try the next refresh URL. The legacy /auth path supports old cookies
+      // that were scoped before the /api/auth cookie-path fix.
+    }
+  }
+  return null;
+}
+
+export async function refreshAccessToken(): Promise<string | null> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    try {
+      const channel = getAuthChannel();
+      if (!channel) return requestFreshAccessToken();
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        if (isClaimFresh(activeRefreshClaim) && activeRefreshClaim.tabId !== currentTabId) {
+          const remaining = REFRESH_LOCK_TIMEOUT - (Date.now() - activeRefreshClaim.timestamp);
+          const result = await waitForRefreshResult(remaining);
+          if (result !== 'timeout') return result;
+          activeRefreshClaim = null;
+        }
+
+        const claim = { tabId: currentTabId, timestamp: Date.now() };
+        activeRefreshClaim = claim;
+        postAuthMessage({ type: 'refresh-claim', ...claim });
+        await new Promise((resolve) => setTimeout(resolve, REFRESH_CLAIM_SETTLE));
+
+        if (isClaimFresh(activeRefreshClaim) && activeRefreshClaim.tabId !== currentTabId) {
+          const remaining = REFRESH_LOCK_TIMEOUT - (Date.now() - activeRefreshClaim.timestamp);
+          const result = await waitForRefreshResult(remaining);
+          if (result !== 'timeout') return result;
+          activeRefreshClaim = null;
+          continue;
+        }
+
+        const token = await requestFreshAccessToken();
+        if (token) {
+          postAuthMessage({ type: 'refresh-success', ...claim, token, expiresAt: getJwtExpiresAt(token) });
+        } else {
+          postAuthMessage({ type: 'refresh-failed', ...claim });
+        }
+        activeRefreshClaim = null;
+        resolveRefreshWaiters(token);
+        return token;
+      }
+
+      const token = await requestFreshAccessToken();
+      const fallbackClaim = { tabId: currentTabId, timestamp: Date.now() };
+      if (token) {
+        postAuthMessage({ type: 'refresh-success', ...fallbackClaim, token, expiresAt: getJwtExpiresAt(token) });
+      } else {
+        postAuthMessage({ type: 'refresh-failed', ...fallbackClaim });
+      }
+      return token;
     } catch {
       return null;
     } finally {
@@ -194,6 +407,10 @@ export type LiveWebAccess = {
   allowedDomains: string[];   // Which domains the agent may crawl live
 };
 
+export type CustomerModuleConfig = {
+  enabled: boolean;
+};
+
 export type AgentConfig = {
   tenantId: string;
   name: string;
@@ -258,6 +475,7 @@ export type AgentConfig = {
   calendarIntegrations?: CalendarIntegration[];
   apiIntegrations?: ApiIntegration[];
   liveWebAccess?: LiveWebAccess;
+  customerModule?: CustomerModuleConfig;
 
   // KI Insights
   autoApplyInsights?: boolean;
@@ -393,16 +611,20 @@ export type PhoneNumber = {
   number: string;
   numberPretty: string;
   status: string;
+  agent_id?: string | null;
   // Additional fields returned by the backend
   number_pretty?: string;
   method?: 'direct' | 'forwarding';
   verified?: boolean;
 };
 
-export function provisionPhoneNumber(agentTenantId?: string) {
+export function provisionPhoneNumber(agentTenantIdOrOptions?: string | { agentTenantId?: string; areaCode?: string }) {
+  const body = typeof agentTenantIdOrOptions === 'string'
+    ? { agentTenantId: agentTenantIdOrOptions }
+    : (agentTenantIdOrOptions ?? {});
   return request<{ ok: boolean; number: string; numberPretty: string }>('/phone/provision', {
     method: 'POST',
-    body: JSON.stringify(agentTenantId ? { agentTenantId } : {}),
+    body: JSON.stringify(body),
   });
 }
 
@@ -521,6 +743,68 @@ export function triggerTicketCallback(id: number) {
   });
 }
 
+// --- Customers ---
+
+export type CustomerModuleStatus = {
+  available: boolean;
+  enabled: boolean;
+  reason: 'hairdresser' | 'mindrails' | 'unavailable';
+};
+
+export type Customer = {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  full_name: string;
+  phone: string | null;
+  phone_normalized: string | null;
+  email: string | null;
+  customer_type: 'new' | 'existing' | 'unknown';
+  status: 'active' | 'deleted';
+  notes: string | null;
+  details: Record<string, unknown>;
+  last_seen_at: string | null;
+  source_call_id: string | null;
+};
+
+export type CustomerInput = {
+  fullName: string;
+  phone?: string | null;
+  email?: string | null;
+  customerType?: 'new' | 'existing' | 'unknown';
+  notes?: string | null;
+  details?: Record<string, unknown>;
+};
+
+export function getCustomerModuleStatus() {
+  return request<CustomerModuleStatus>('/customers/status');
+}
+
+export function getCustomers(search?: string) {
+  const qs = search?.trim() ? `?search=${encodeURIComponent(search.trim())}` : '';
+  return request<{ items: Customer[] }>(`/customers${qs}`);
+}
+
+export function createCustomer(input: CustomerInput) {
+  return request<Customer>('/customers', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateCustomer(id: string, input: Partial<CustomerInput>) {
+  return request<Customer>(`/customers/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteCustomer(id: string) {
+  return request<{ ok: boolean }>(`/customers/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
 // --- Retell Calls ---
 
 export type RetellCall = {
@@ -547,27 +831,102 @@ export function getCall(callId: string) {
 
 // --- Calendar ---
 
-export function getCalendarStatus() {
-  return request<{ connected: boolean; provider: string | null; email: string | null }>('/calendar/status');
+export type CalendarProvider = 'google' | 'microsoft' | 'calcom' | 'chipy';
+export type CalendarConnectionStatus = {
+  provider: CalendarProvider | string;
+  staffId?: string | null;
+  connected: boolean;
+  email: string | null;
+  calendarId?: string | null;
+  expired?: boolean;
+  username?: string | null;
+  eventTypes?: unknown[];
+};
+export type CalendarStatus = {
+  connected: boolean;
+  provider: CalendarProvider | string | null;
+  staffId?: string | null;
+  email: string | null;
+  calendarId?: string | null;
+  expired?: boolean;
+  expiredProvider?: string;
+  username?: string | null;
+  eventTypes?: unknown[];
+  connections?: CalendarConnectionStatus[];
+  chipy?: { configured: boolean; schedule?: ChipySchedule };
+};
+
+export type CalendarStaff = {
+  id: string;
+  org_id?: string;
+  name: string;
+  role: string | null;
+  services: string[];
+  color: string | null;
+  active?: boolean;
+  sort_order?: number;
+  chipy?: { configured: boolean; schedule?: ChipySchedule };
+  connections?: CalendarConnectionStatus[];
+};
+
+export type CalendarStaffInput = {
+  name: string;
+  role?: string;
+  services?: string[];
+  color?: string;
+};
+
+function staffQuery(staffId?: string | null) {
+  return staffId ? `?staffId=${encodeURIComponent(staffId)}` : '';
 }
 
-export function connectCalcom(apiKey: string) {
+export function getCalendarStatus(staffId?: string | null) {
+  return request<CalendarStatus>(`/calendar/status${staffQuery(staffId)}`);
+}
+
+export function connectCalcom(apiKey: string, staffId?: string | null) {
   return request<{ ok: boolean; email?: string; username?: string }>('/calendar/calcom/connect', {
     method: 'POST',
-    body: JSON.stringify({ apiKey }),
+    body: JSON.stringify({ apiKey, ...(staffId ? { staffId } : {}) }),
   });
 }
 
-export function disconnectCalendar() {
-  return request<{ ok: boolean }>('/calendar/disconnect', { method: 'DELETE' });
+export function disconnectCalendar(provider?: Exclude<CalendarProvider, 'chipy'>, staffId?: string | null) {
+  const params = new URLSearchParams();
+  if (provider) params.set('provider', provider);
+  if (staffId) params.set('staffId', staffId);
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  return request<{ ok: boolean; provider?: string }>(`/calendar/disconnect${qs}`, { method: 'DELETE' });
 }
 
-export function getGoogleCalendarAuthUrl() {
-  return request<{ url: string }>('/calendar/google/auth-url');
+export function getGoogleCalendarAuthUrl(staffId?: string | null) {
+  return request<{ url: string }>(`/calendar/google/auth-url${staffQuery(staffId)}`);
 }
 
-export function getMicrosoftCalendarAuthUrl() {
-  return request<{ url: string }>('/calendar/microsoft/auth-url');
+export function getMicrosoftCalendarAuthUrl(staffId?: string | null) {
+  return request<{ url: string }>(`/calendar/microsoft/auth-url${staffQuery(staffId)}`);
+}
+
+export function getCalendarStaff() {
+  return request<{ staff: CalendarStaff[] }>('/calendar/staff');
+}
+
+export function createCalendarStaff(input: CalendarStaffInput) {
+  return request<{ ok: boolean; staff: CalendarStaff }>('/calendar/staff', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateCalendarStaff(id: string, input: Partial<CalendarStaffInput>) {
+  return request<{ ok: boolean; staff: CalendarStaff }>(`/calendar/staff/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteCalendarStaff(id: string) {
+  return request<{ ok: boolean }>(`/calendar/staff/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 // --- Chipy Calendar ---
@@ -600,6 +959,30 @@ export function addChipyBlock(date: string, opts?: { start_time?: string; end_ti
 }
 export function removeChipyBlock(id: string) {
   return request<{ ok: boolean }>(`/calendar/chipy/block/${id}`, { method: 'DELETE' });
+}
+
+export function getStaffChipyCalendar(staffId: string) {
+  return request<{ schedule: ChipySchedule; blocks: ChipyBlock[]; bookings: ChipyBooking[] }>(
+    `/calendar/staff/${encodeURIComponent(staffId)}/chipy`,
+  );
+}
+export function saveStaffChipySchedule(staffId: string, schedule: ChipySchedule) {
+  return request<{ ok: boolean }>(`/calendar/staff/${encodeURIComponent(staffId)}/chipy`, {
+    method: 'PUT',
+    body: JSON.stringify({ schedule }),
+  });
+}
+export function addStaffChipyBlock(staffId: string, date: string, opts?: { start_time?: string; end_time?: string; reason?: string }) {
+  return request<{ ok: boolean; id: string }>(`/calendar/staff/${encodeURIComponent(staffId)}/chipy/block`, {
+    method: 'POST',
+    body: JSON.stringify({ date, ...opts }),
+  });
+}
+export function removeStaffChipyBlock(staffId: string, blockId: string) {
+  return request<{ ok: boolean }>(
+    `/calendar/staff/${encodeURIComponent(staffId)}/chipy/block/${encodeURIComponent(blockId)}`,
+    { method: 'DELETE' },
+  );
 }
 export function getChipyBookings(from: string, to: string) {
   return request<{ bookings: ChipyBooking[] }>(`/calendar/chipy/bookings?from=${from}&to=${to}`);

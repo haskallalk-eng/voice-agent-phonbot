@@ -1,19 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import type { AgentConfig } from '../../lib/api.js';
-import { deleteAgent, getAccessToken } from '../../lib/api.js';
+import { deleteAgent, getPhoneNumbers } from '../../lib/api.js';
 import { IconAgent } from './shared.js';
 import { PasswordInput } from '../PasswordInput.js';
 
 function usePhoneNumbers() {
   const [numbers, setNumbers] = useState<{ agent_id: string | null }[]>([]);
   useEffect(() => {
-    const token = getAccessToken();
-    fetch('/api/phone', {
-      headers: token ? { authorization: `Bearer ${token}` } : {},
-      credentials: 'include',
-    })
-      .then(r => r.json())
-      .then(d => setNumbers(d.items ?? []))
+    getPhoneNumbers()
+      .then(d => setNumbers((d.items ?? []).map(n => ({ agent_id: n.agent_id ?? null }))))
       .catch(() => {});
   }, []);
   return numbers;

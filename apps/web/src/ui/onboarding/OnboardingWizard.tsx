@@ -1,7 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { RetellWebClient } from 'retell-client-js-sdk';
 import { TEMPLATES, type Template } from './templates.js';
-import { deployAgentConfig, createWebCall, connectCalcom, getMicrosoftCalendarAuthUrl, getAccessToken, type AgentConfig } from '../../lib/api.js';
+import {
+  deployAgentConfig,
+  createWebCall,
+  connectCalcom,
+  getGoogleCalendarAuthUrl,
+  getMicrosoftCalendarAuthUrl,
+  provisionPhoneNumber,
+  type AgentConfig,
+} from '../../lib/api.js';
 import { useWebCallCleanup } from '../../lib/use-web-call-cleanup.js';
 import { FoxLogo } from '../FoxLogo.js';
 import {
@@ -248,18 +256,7 @@ export function OnboardingWizard({ onComplete }: Props) {
     setPhoneLoading(true);
     setPhoneError(null);
     try {
-      const token = getAccessToken();
-      const res = await fetch('/api/phone/provision', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          ...(token ? { authorization: `Bearer ${token}` } : {}),
-        },
-        credentials: 'include',
-        body: JSON.stringify({ areaCode }),
-      });
-      if (!res.ok) throw new Error(`Fehler ${res.status}: ${await res.text()}`);
-      const data = await res.json();
+      const data = await provisionPhoneNumber({ areaCode });
       const num = data.numberPretty ?? data.number;
       setProvisionedNumber(num);
       saveOnboardingState({ step: 'phone', templateId: template?.id, deployedAgentId: deployedAgentId ?? undefined, provisionedNumber: num });
@@ -268,6 +265,30 @@ export function OnboardingWizard({ onComplete }: Props) {
       setPhoneError((e instanceof Error ? e.message : null) ?? 'Fehler beim Aktivieren');
     } finally {
       setPhoneLoading(false);
+    }
+  }
+
+  async function handleGoogleCalendar() {
+    setCalendarLoading(true);
+    setCalendarError(null);
+    try {
+      const { url } = await getGoogleCalendarAuthUrl();
+      window.location.href = url;
+    } catch (e: unknown) {
+      setCalendarError((e instanceof Error ? e.message : null) ?? 'Fehler beim Verbinden');
+      setCalendarLoading(false);
+    }
+  }
+
+  async function handleMicrosoftCalendar() {
+    setCalendarLoading(true);
+    setCalendarError(null);
+    try {
+      const { url } = await getMicrosoftCalendarAuthUrl();
+      window.location.href = url;
+    } catch (e: unknown) {
+      setCalendarError((e instanceof Error ? e.message : null) ?? 'Fehler beim Verbinden');
+      setCalendarLoading(false);
     }
   }
 
@@ -535,8 +556,29 @@ export function OnboardingWizard({ onComplete }: Props) {
                   <IconPhone size={20} className="text-orange-400" />
                 </div>
                 <h3 className="font-semibold text-white text-sm">Eigene Telefonnummer aktivieren</h3>
-                <p className="text-xs text-white/35 mt-1">Dein Agent bekommt eine deutsche Rufnummer (030 Berlin)</p>
+                <p className="text-xs text-white/35 mt-1">
+                  Dein Agent bekommt eine deutsche Rufnummer. Wir versuchen zuerst deine Wunsch-Vorwahl.
+                </p>
               </div>
+
+              <label className="block">
+                <span className="block text-xs font-medium text-white/45 mb-2">Wunsch-Vorwahl</span>
+                <select
+                  value={areaCode}
+                  onChange={(e) => setAreaCode(e.target.value)}
+                  className="w-full rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                  style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+                >
+                  {AREA_CODES.map((item) => (
+                    <option key={item.code} value={item.code} className="bg-[#11111A] text-white">
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-white/30 mt-2">
+                  Falls gerade keine passende Nummer frei ist, nehmen wir automatisch die naechste verfuegbare deutsche Nummer.
+                </p>
+              </label>
 
               {phoneError && (
                 phoneError.includes('Starter') || phoneError.includes('upgrade') || phoneError.includes('Plan') ? (
@@ -828,7 +870,7 @@ export function OnboardingWizard({ onComplete }: Props) {
               {/* Google Calendar */}
               <div className="rounded-2xl p-5 flex items-center gap-4 transition-all hover:bg-white/[0.04] cursor-pointer"
                 style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}
-                onClick={() => { window.location.href = '/api/calendar/google/connect'; }}>
+                onClick={() => { void handleGoogleCalendar(); }}>
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(66,133,244,0.08)' }}>
                   <svg width="18" height="18" viewBox="0 0 24 24" className="fancy-star"><defs><linearGradient id="ggl" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#4285F4"/><stop offset="33%" stopColor="#34A853"/><stop offset="66%" stopColor="#FBBC05"/><stop offset="100%" stopColor="#EA4335"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill="url(#ggl)"/></svg>
                 </div>
@@ -842,7 +884,7 @@ export function OnboardingWizard({ onComplete }: Props) {
               {/* Microsoft Outlook */}
               <div className="rounded-2xl p-5 flex items-center gap-4 transition-all hover:bg-white/[0.04] cursor-pointer"
                 style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}
-                onClick={async () => { try { const { url } = await getMicrosoftCalendarAuthUrl(); window.location.href = url; } catch {} }}>
+                onClick={() => { void handleMicrosoftCalendar(); }}>
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(0,120,212,0.08)' }}>
                   <span className="text-lg">🪟</span>
                 </div>

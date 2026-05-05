@@ -104,7 +104,7 @@ describe('auth flow (TEST-01)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/auth/register',
-      payload: { orgName: 'Test Org', email: 'new@test.de', password: 'securepass123' },
+      payload: { orgName: 'Test Org', email: 'new@test.de', password: 'securepass123', isBusiness: true, termsAccepted: true },
     });
     expect(res.statusCode).toBe(201);
     const body = JSON.parse(res.body);
@@ -176,7 +176,7 @@ describe('auth flow (TEST-01)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/auth/register',
-      payload: { orgName: 'Edge Org', email: 'edge@test.de', password: 'a'.repeat(72) },
+      payload: { orgName: 'Edge Org', email: 'edge@test.de', password: 'a'.repeat(72), isBusiness: true, termsAccepted: true },
     });
     expect(res.statusCode).toBe(201);
   });

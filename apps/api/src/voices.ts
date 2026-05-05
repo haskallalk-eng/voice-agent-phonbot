@@ -8,8 +8,10 @@
 import type { FastifyInstance } from 'fastify';
 import multipart from '@fastify/multipart';
 import { z } from 'zod';
+import type { JwtPayload } from './auth.js';
 import { listVoices, createVoice, type RetellVoice } from './retell.js';
 import { VOICE_CATALOG, getDefaultVoiceForLanguage, getVoicesForLanguage, getVoiceSurcharge, isPremiumProvider, PREMIUM_VOICE_SURCHARGE_PER_MINUTE, getNativeStatus } from './voice-catalog.js';
+import { filterVoicesForOrg, recordVoiceCloneOwnership } from './voice-ownership.js';
 
 /**
  * Annotate a Retell voice with the per-minute Phonbot surcharge. Cloned
@@ -40,10 +42,12 @@ export async function registerVoices(app: FastifyInstance) {
   app.get(
     '/voices',
     { onRequest: [app.authenticate] },
-    async (_req, reply) => {
+    async (req, reply) => {
       try {
+        const { orgId } = req.user as JwtPayload;
         const voices = await listVoices();
-        return reply.send({ voices: voices.map(annotateSurcharge) });
+        const visibleVoices = await filterVoicesForOrg(orgId, voices);
+        return reply.send({ voices: visibleVoices.map(annotateSurcharge) });
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed to list voices';
         return reply.status(502).send({ error: msg });
@@ -84,6 +88,7 @@ export async function registerVoices(app: FastifyInstance) {
       config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
     },
     async (req, reply) => {
+      const { orgId } = req.user as JwtPayload;
       const data = await req.file();
       if (!data) {
         return reply.status(400).send({ error: 'No file uploaded' });
@@ -137,6 +142,12 @@ export async function registerVoices(app: FastifyInstance) {
       let voice: RetellVoice;
       try {
         voice = await createVoice(name, audioBuffer, provider, format.mime, format.ext);
+        await recordVoiceCloneOwnership({
+          orgId,
+          voiceId: voice.voice_id,
+          name: voice.voice_name ?? name,
+          provider: voice.provider ?? provider,
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Voice cloning failed';
         return reply.status(502).send({ error: msg });
