@@ -8,9 +8,10 @@ import {
   getExternalCalendarEvents,
   getCalendarStaff, createCalendarStaff, updateCalendarStaff, deleteCalendarStaff,
   getStaffChipyCalendar, saveStaffChipySchedule, addStaffChipyBlock, removeStaffChipyBlock,
+  getStaffChipyBookings, createStaffChipyBooking, deleteStaffChipyBooking,
   getCustomers,
 } from '../lib/api.js';
-import type { CalendarProvider, CalendarStatus, CalendarStaff, ChipySchedule, ChipyBlock, ChipyBooking, ExternalCalendarEvent, Customer } from '../lib/api.js';
+import type { CalendarProvider, CalendarStatus, CalendarStaff, ChipySchedule, ChipyBlock, ChipyBooking, ChipyBookingInput, ExternalCalendarEvent, Customer } from '../lib/api.js';
 import { FoxLogo } from './FoxLogo.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -79,11 +80,12 @@ const DEFAULT_PROVIDER_META: ProviderMeta = { label: 'Chipy Kalender', color: '#
 // ── Booking Modal ─────────────────────────────────────────────────────────────
 
 function BookingModal({
-  date, onClose, onSave,
+  date, onClose, onSave, createBookingApi,
 }: {
   date: Date;
   onClose: () => void;
   onSave: (booking: ChipyBooking) => void;
+  createBookingApi?: (data: ChipyBookingInput) => Promise<{ ok: boolean; booking: ChipyBooking }>;
 }) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -102,7 +104,7 @@ function BookingModal({
     setError(null);
     try {
       const slotTime = new Date(`${dateStr}T${time}:00`).toISOString();
-      const res = await createChipyBooking({ customer_name: name, customer_phone: phone, service: service || undefined, notes: notes || undefined, slot_time: slotTime });
+      const res = await (createBookingApi ?? createChipyBooking)({ customer_name: name, customer_phone: phone, service: service || undefined, notes: notes || undefined, slot_time: slotTime });
       onSave(res.booking);
     } catch (e: unknown) {
       setError((e instanceof Error ? e.message : null) ?? 'Fehler beim Speichern');
@@ -1081,7 +1083,13 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-function StaffPanel({ onStaffChange }: { onStaffChange?: (count: number) => void } = {}) {
+function StaffPanel({
+  onStaffChange,
+  onNavigate,
+}: {
+  onStaffChange?: (count: number) => void;
+  onNavigate?: (page: 'customers', focusId?: string | null) => void;
+} = {}) {
   const [staff, setStaff] = useState<CalendarStaff[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1093,6 +1101,9 @@ function StaffPanel({ onStaffChange }: { onStaffChange?: (count: number) => void
   const [savingStaff, setSavingStaff] = useState(false);
   const [staffSchedule, setStaffSchedule] = useState<ChipySchedule>(DEFAULT_SCHEDULE);
   const [staffBlocks, setStaffBlocks] = useState<ChipyBlock[]>([]);
+  const [staffBookings, setStaffBookings] = useState<ChipyBooking[]>([]);
+  const [selectedStaffDay, setSelectedStaffDay] = useState<Date | null>(null);
+  const [showStaffAddBooking, setShowStaffAddBooking] = useState(false);
   const [staffStatus, setStaffStatus] = useState<CalendarStatus | null>(null);
   const [calcomKey, setCalcomKey] = useState('');
   const [connectionLoading, setConnectionLoading] = useState<string | null>(null);
@@ -1115,13 +1126,17 @@ function StaffPanel({ onStaffChange }: { onStaffChange?: (count: number) => void
 
   const loadSelectedCalendar = useCallback(async (staffId: string) => {
     setError(null);
+    const from = isoDate(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1));
+    const to = isoDate(new Date(new Date().getFullYear(), new Date().getMonth() + 3, 0));
     try {
-      const [chipy, status] = await Promise.all([
+      const [chipy, bookings, status] = await Promise.all([
         getStaffChipyCalendar(staffId),
+        getStaffChipyBookings(staffId, from, to),
         getCalendarStatus(staffId),
       ]);
       setStaffSchedule({ ...DEFAULT_SCHEDULE, ...chipy.schedule });
       setStaffBlocks(chipy.blocks);
+      setStaffBookings(bookings.bookings);
       setStaffStatus(status);
     } catch (e: unknown) {
       setError((e instanceof Error ? e.message : null) ?? 'Mitarbeiter-Kalender konnte nicht geladen werden');
@@ -1131,6 +1146,17 @@ function StaffPanel({ onStaffChange }: { onStaffChange?: (count: number) => void
   useEffect(() => { loadStaff(); }, [loadStaff]);
   useEffect(() => { if (selectedId) void loadSelectedCalendar(selectedId); }, [selectedId, loadSelectedCalendar]);
   useEffect(() => { setEditRole(selected?.role ?? ''); }, [selected?.id, selected?.role]);
+  useEffect(() => {
+    setSelectedStaffDay(null);
+    setShowStaffAddBooking(false);
+  }, [selectedId]);
+  useEffect(() => {
+    if (selectedId) return;
+    setStaffSchedule(DEFAULT_SCHEDULE);
+    setStaffBlocks([]);
+    setStaffBookings([]);
+    setStaffStatus(null);
+  }, [selectedId]);
 
   async function handleCreateStaff(e: React.FormEvent) {
     e.preventDefault();
@@ -1222,6 +1248,64 @@ function StaffPanel({ onStaffChange }: { onStaffChange?: (count: number) => void
       setConnectionLoading(null);
     }
   }
+
+  async function handleStaffDeleteBooking(id: string) {
+    if (!selected) return;
+    try {
+      await deleteStaffChipyBooking(selected.id, id);
+      setStaffBookings(prev => prev.filter(b => b.id !== id));
+    } catch (e: unknown) {
+      setError((e instanceof Error ? e.message : null) ?? 'Termin konnte nicht gelöscht werden');
+    }
+  }
+
+  function handleStaffBookingSaved(booking: ChipyBooking) {
+    setStaffBookings(prev => [...prev, booking].sort((a, b) => a.slot_time.localeCompare(b.slot_time)));
+    setShowStaffAddBooking(false);
+    setSelectedStaffDay(null);
+  }
+
+  async function handleStaffAddBlock(date: Date, opts?: { start_time?: string; end_time?: string; reason?: string }) {
+    if (!selected) return;
+    const dateStr = isoDate(date);
+    try {
+      const res = await addStaffChipyBlock(selected.id, dateStr, opts);
+      setStaffBlocks(prev => [...prev, {
+        id: res.id,
+        date: dateStr,
+        start_time: opts?.start_time ?? null,
+        end_time: opts?.end_time ?? null,
+        reason: opts?.reason ?? null,
+      }]);
+    } catch (e: unknown) {
+      setError((e instanceof Error ? e.message : null) ?? 'Sperre konnte nicht hinzugefügt werden');
+    }
+  }
+
+  async function handleStaffOpenBookingCustomer(booking: ChipyBooking) {
+    if (!onNavigate) return;
+    const phoneQuery = normalizeLookupPhone(booking.customer_phone);
+    const queries = [phoneQuery, booking.customer_phone, booking.customer_name].map((value) => value?.trim()).filter((value): value is string => Boolean(value));
+    for (const query of queries) {
+      try {
+        const result = await getCustomers(query);
+        const customer = findBookingCustomer(booking, result.items ?? []);
+        if (customer) {
+          storeCustomerFocus(customer, query);
+          setSelectedStaffDay(null);
+          setShowStaffAddBooking(false);
+          onNavigate('customers', customer.id);
+          return;
+        }
+      } catch (e: unknown) {
+        setError((e instanceof Error ? e.message : null) ?? 'Kunde konnte nicht geöffnet werden');
+        return;
+      }
+    }
+    setError('Zu diesem Termin wurde kein passender Kunde im Kundenmodul gefunden.');
+  }
+
+  const staffActiveDays = Object.values(staffSchedule).filter(day => day.enabled).length;
 
   const providerButton = (provider: Exclude<CalendarProvider, 'chipy'>, label: string) => {
     const conn = getProviderConnection(staffStatus, provider);
@@ -1331,6 +1415,50 @@ function StaffPanel({ onStaffChange }: { onStaffChange?: (count: number) => void
               style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }} />
           </div>
 
+          <section className="-mx-5 px-5 py-5 border-y border-orange-500/10" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.09), rgba(255,255,255,0.025) 48%, rgba(6,182,212,0.07))' }}>
+            <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-[11px] font-semibold text-orange-100/60 uppercase tracking-[0.16em]">Chipy-Kalender</p>
+                <h3 className="mt-1 text-base font-bold text-white">{selected.name}</h3>
+                <p className="mt-1 text-xs text-white/45">Termine, Tagesdetails und Sperren genau für diese Person.</p>
+              </div>
+              <button
+                onClick={() => { setSelectedStaffDay(new Date()); setShowStaffAddBooking(true); }}
+                className="shrink-0 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-all hover:opacity-90"
+                style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+              >
+                + Termin
+              </button>
+            </div>
+
+            <div className="mb-4 grid grid-cols-3 gap-2">
+              <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2.5">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-white/25">Termine</p>
+                <p className="mt-1 text-lg font-bold text-white">{staffBookings.length}</p>
+              </div>
+              <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2.5">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-white/25">Sperren</p>
+                <p className="mt-1 text-lg font-bold text-white">{staffBlocks.length}</p>
+              </div>
+              <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2.5">
+                <p className="text-[10px] uppercase tracking-[0.12em] text-white/25">Tage</p>
+                <p className="mt-1 text-lg font-bold text-white">{staffActiveDays}</p>
+              </div>
+            </div>
+
+            <MonthlyCalendar
+              bookings={staffBookings}
+              blocks={staffBlocks}
+              onDayClick={(d) => { setSelectedStaffDay(d); setShowStaffAddBooking(false); }}
+            />
+
+            <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/5 flex-wrap">
+              <div className="flex items-center gap-1.5 text-xs text-white/45"><div className="w-3 h-3 rounded-sm border border-orange-500/40 bg-orange-500/10" />Termin</div>
+              <div className="flex items-center gap-1.5 text-xs text-white/45"><div className="w-3 h-3 rounded-sm border border-red-500/30 bg-red-500/10" />Ganztag gesperrt</div>
+              <div className="flex items-center gap-1.5 text-xs text-white/45"><div className="w-3 h-3 rounded-sm border border-amber-500/30 bg-amber-500/8" />Zeiten gesperrt</div>
+            </div>
+          </section>
+
           <div className="space-y-2">
             <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.15em]">Kalender-Verbindungen</p>
             {providerButton('google', 'Google Calendar')}
@@ -1351,6 +1479,36 @@ function StaffPanel({ onStaffChange }: { onStaffChange?: (count: number) => void
             />
           </div>
         </div>
+      )}
+
+      {selected && selectedStaffDay && !showStaffAddBooking && (
+        <DayDrawer
+          date={selectedStaffDay}
+          bookings={staffBookings}
+          blocks={staffBlocks}
+          externalEvents={[]}
+          onClose={() => setSelectedStaffDay(null)}
+          onAddBooking={() => setShowStaffAddBooking(true)}
+          onDeleteBooking={(id) => { void handleStaffDeleteBooking(id); }}
+          onOpenCustomer={(booking) => { void handleStaffOpenBookingCustomer(booking); }}
+          onAddBlock={(opts) => {
+            void handleStaffAddBlock(selectedStaffDay, opts);
+            if (!opts?.start_time) setSelectedStaffDay(null);
+          }}
+          onRemoveBlock={async (id) => {
+            await removeStaffChipyBlock(selected.id, id);
+            setStaffBlocks(prev => prev.filter(b => b.id !== id));
+          }}
+        />
+      )}
+
+      {selected && selectedStaffDay && showStaffAddBooking && (
+        <BookingModal
+          date={selectedStaffDay}
+          createBookingApi={(data) => createStaffChipyBooking(selected.id, data)}
+          onClose={() => setShowStaffAddBooking(false)}
+          onSave={handleStaffBookingSaved}
+        />
       )}
     </div>
   );
@@ -1644,7 +1802,7 @@ export function CalendarPage({
         )}
 
         {tab === 'staff' && (
-          <StaffPanel onStaffChange={setStaffCount} />
+          <StaffPanel onStaffChange={setStaffCount} onNavigate={onNavigate} />
         )}
       </div>
 
