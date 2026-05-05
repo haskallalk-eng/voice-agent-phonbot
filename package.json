@@ -11,6 +11,9 @@
     "check": "pnpm --filter @vas/api typecheck && pnpm --filter @vas/web typecheck",
     "seo:generate": "node scripts/gen-landing-pages.mjs && node scripts/gen-seo-cluster-pages.mjs && node scripts/gen-seo-manifests.mjs && node scripts/sync-legal-nav.mjs",
     "seo:audit": "node scripts/seo-audit.mjs",
+    "retell:sync": "node scripts/sync-retell-agent-tools.mjs",
+    "retell:cleanup:dry": "node scripts/cleanup-retell-orphans.mjs",
+    "retell:cleanup": "node scripts/cleanup-retell-orphans.mjs --execute --include-unreferenced --clean-phone-only",
     "prepare": "git config core.hooksPath .githooks || true"
   },
   "devDependencies": {
