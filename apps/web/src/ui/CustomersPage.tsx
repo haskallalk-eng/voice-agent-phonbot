@@ -178,38 +178,65 @@ function customerDetailRows(customer: Customer, questions: CustomerQuestionConfi
   return rows;
 }
 
+function customerInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || '?';
+}
+
 function CustomerDetails({ customer, questions }: { customer: Customer; questions: CustomerQuestionConfig[] }) {
   const rows = customerDetailRows(customer, questions);
   return (
-    <div className="mx-4 mb-4 rounded-2xl border border-orange-500/15 bg-gradient-to-br from-orange-500/[0.08] via-white/[0.035] to-cyan-500/[0.06] p-4">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.16em] text-white/30">Kontakt</p>
-          <p className="mt-1 text-sm text-white/80">{customer.phone_normalized ?? customer.phone ?? 'Keine Nummer gespeichert'}</p>
-          <p className="text-xs text-white/40">{customer.email ?? 'Keine E-Mail gespeichert'}</p>
+    <div className="mx-4 mb-4 overflow-hidden rounded-3xl border border-orange-500/15 bg-[#101018]/95 shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
+      <div className="relative border-b border-white/[0.06] bg-gradient-to-br from-orange-500/[0.13] via-white/[0.04] to-cyan-500/[0.09] p-5">
+        <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-orange-400/15 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-16 left-10 h-32 w-32 rounded-full bg-cyan-400/10 blur-3xl" />
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-orange-400/25 bg-black/25 text-sm font-bold text-orange-100 shadow-[0_0_28px_rgba(249,115,22,0.12)]">
+              {customerInitials(customer.full_name)}
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-100/55">Kundendetails</p>
+              <p className="mt-1 truncate text-lg font-bold text-white">{customer.full_name}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-100/80">{customerTypeLabel(customer)}</span>
+                <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] text-white/45">{rows.length} Detail{rows.length === 1 ? '' : 's'}</span>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/45">
+            <p className="text-white/30">Aktualisiert</p>
+            <p className="mt-0.5 text-white/70">{dateLabel(customer.updated_at)}</p>
+          </div>
         </div>
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.16em] text-white/30">Status</p>
-          <p className="mt-1 text-sm text-white/80">{customerTypeLabel(customer)}</p>
-          <p className="text-xs text-white/40">Aktualisiert: {dateLabel(customer.updated_at)}</p>
+      </div>
+
+      <div className="grid gap-3 p-4 sm:grid-cols-2">
+        <div className="rounded-2xl border border-white/8 bg-white/[0.035] px-4 py-3">
+          <p className="text-[10px] uppercase tracking-[0.16em] text-white/28">Telefon</p>
+          <p className="mt-1 break-all text-sm font-medium text-white/80">{customer.phone_normalized ?? customer.phone ?? 'Keine Nummer gespeichert'}</p>
+        </div>
+        <div className="rounded-2xl border border-white/8 bg-white/[0.035] px-4 py-3">
+          <p className="text-[10px] uppercase tracking-[0.16em] text-white/28">E-Mail</p>
+          <p className="mt-1 break-all text-sm font-medium text-white/80">{customer.email ?? 'Keine E-Mail gespeichert'}</p>
         </div>
       </div>
 
       {rows.length > 0 ? (
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 px-4 pb-4 sm:grid-cols-2">
           {rows.map((row) => (
-            <div key={`${row.label}:${row.value}`} className="rounded-xl border border-white/8 bg-black/15 px-3 py-2">
+            <div key={`${row.label}:${row.value}`} className="rounded-2xl border border-white/8 bg-black/20 px-4 py-3">
               <p className="text-[10px] uppercase tracking-[0.13em] text-white/28">{row.label}</p>
               <p className="mt-1 text-sm text-white/75">{row.value}</p>
             </div>
           ))}
         </div>
       ) : (
-        <p className="mt-4 rounded-xl border border-white/8 bg-black/15 px-3 py-2 text-sm text-white/35">Noch keine Zusatzdetails gespeichert.</p>
+        <p className="mx-4 mb-4 rounded-2xl border border-white/8 bg-black/20 px-4 py-3 text-sm text-white/35">Noch keine Zusatzdetails gespeichert.</p>
       )}
 
       {customer.notes && (
-        <div className="mt-3 rounded-xl border border-white/8 bg-black/15 px-3 py-2">
+        <div className="mx-4 mb-4 rounded-2xl border border-white/8 bg-black/20 px-4 py-3">
           <p className="text-[10px] uppercase tracking-[0.13em] text-white/28">Interne Notiz</p>
           <p className="mt-1 text-sm text-white/70 whitespace-pre-wrap">{customer.notes}</p>
         </div>
