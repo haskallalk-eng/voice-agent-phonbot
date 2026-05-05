@@ -1023,7 +1023,7 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-function StaffPanel() {
+function StaffPanel({ onStaffChange }: { onStaffChange?: (count: number) => void } = {}) {
   const [staff, setStaff] = useState<CalendarStaff[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1046,13 +1046,14 @@ function StaffPanel() {
     try {
       const res = await getCalendarStaff();
       setStaff(res.staff);
+      onStaffChange?.(res.staff.length);
       setSelectedId(current => current ?? res.staff[0]?.id ?? null);
     } catch (e: unknown) {
       setError((e instanceof Error ? e.message : null) ?? 'Mitarbeiter konnten nicht geladen werden');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onStaffChange]);
 
   const loadSelectedCalendar = useCallback(async (staffId: string) => {
     setError(null);
@@ -1083,7 +1084,11 @@ function StaffPanel() {
         role: createRole.trim() || undefined,
         services: services.split(',').map(s => s.trim()).filter(Boolean),
       });
-      setStaff(prev => [...prev, res.staff]);
+      setStaff(prev => {
+        const next = [...prev, res.staff];
+        onStaffChange?.(next.length);
+        return next;
+      });
       setSelectedId(res.staff.id);
       setName('');
     } catch (e: unknown) {
@@ -1100,11 +1105,12 @@ function StaffPanel() {
       await deleteCalendarStaff(selected.id);
       setStaff(prev => {
         const next = prev.filter(s => s.id !== selected.id);
+        onStaffChange?.(next.length);
         setSelectedId(next[0]?.id ?? null);
         return next;
       });
     } catch (e: unknown) {
-      setError((e instanceof Error ? e.message : null) ?? 'Mitarbeiter konnte nicht geloescht werden');
+      setError((e instanceof Error ? e.message : null) ?? 'Mitarbeiter konnte nicht gelöscht werden');
     } finally {
       setSavingStaff(false);
     }
@@ -1162,11 +1168,21 @@ function StaffPanel() {
   const providerButton = (provider: Exclude<CalendarProvider, 'chipy'>, label: string) => {
     const conn = getProviderConnection(staffStatus, provider);
     const connected = Boolean(conn?.connected);
+    const meta = PROVIDER_META[provider] ?? DEFAULT_PROVIDER_META;
     return (
-      <div key={provider} className="rounded-xl px-4 py-3 flex items-center gap-3" style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <div key={provider} className="rounded-2xl px-5 py-4 flex items-center gap-4 hover:bg-white/[0.04] transition-all" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-lg" style={{ background: meta.bg }}>
+          {provider === 'google' ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" className="fancy-star"><defs><linearGradient id={`staffGglCal-${selected?.id ?? 'x'}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#4285F4"/><stop offset="33%" stopColor="#34A853"/><stop offset="66%" stopColor="#FBBC05"/><stop offset="100%" stopColor="#EA4335"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill={`url(#staffGglCal-${selected?.id ?? 'x'})`}/></svg>
+          ) : provider === 'calcom' ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          ) : (
+            <span>{meta.icon}</span>
+          )}
+        </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-white">{label}</p>
-          <p className="text-xs text-white/30 truncate">{connected ? conn?.email ?? 'Verbunden' : 'Eigene Verbindung fuer diese Person'}</p>
+          <p className="text-xs text-white/30 truncate">{connected ? conn?.email ?? 'Verbunden' : 'Eigene Verbindung für diese Person'}</p>
         </div>
         {connected ? (
           <button onClick={() => { void runDisconnect(provider); }} disabled={connectionLoading === provider}
@@ -1185,9 +1201,9 @@ function StaffPanel() {
             </button>
           </div>
         ) : (
-          <button onClick={() => { void runConnect(provider); }} disabled={connectionLoading === provider}
-            className="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
-            style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+            <button onClick={() => { void runConnect(provider); }} disabled={connectionLoading === provider}
+              className="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
+              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
             Verbinden
           </button>
         )}
@@ -1207,12 +1223,12 @@ function StaffPanel() {
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
             <p className="text-sm font-bold text-white">Mitarbeiter</p>
-            <p className="text-xs text-white/35 mt-1">Ohne Mitarbeiter nutzt Phonbot den Salon-Kalender. Sobald du Personen anlegst, bekommt jede Person einen eigenen Chipy-Kalender und eigene externe Verbindungen.</p>
+            <p className="text-xs text-white/35 mt-1">Sobald hier mindestens eine Person angelegt ist, ist der Mitarbeiterkalender die aktive Buchungslogik. Jede Person bekommt eigene Verfügbarkeit und eigene Verbindungen.</p>
           </div>
           {selected && (
             <button onClick={() => { void handleDeleteSelected(); }} disabled={savingStaff}
               className="shrink-0 rounded-lg px-3 py-2 text-xs text-red-300 bg-red-500/10 border border-red-500/20 disabled:opacity-40">
-              Loeschen
+              Löschen
             </button>
           )}
         </div>
@@ -1265,7 +1281,7 @@ function StaffPanel() {
           </div>
 
           <div>
-            <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.15em] mb-4">Chipy-Kalender fuer {selected.name}</p>
+            <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.15em] mb-4">Chipy-Kalender für {selected.name}</p>
             <SettingsPanel
               schedule={staffSchedule}
               setSchedule={setStaffSchedule}
@@ -1282,11 +1298,12 @@ function StaffPanel() {
   );
 }
 
-type Tab = 'calendar' | 'schedule' | 'connections' | 'staff';
+type Tab = 'calendar' | 'staff';
 
 export function CalendarPage({ focusBookingId }: { focusBookingId?: string | null } = {}) {
   const [tab, setTab] = useState<Tab>('calendar');
   const [calendarStatus, setCalendarStatus] = useState<CalendarStatus | null>(null);
+  const [staffCount, setStaffCount] = useState(0);
 
   // Chipy data (shared between calendar + settings)
   const [schedule, setSchedule] = useState<ChipySchedule>(DEFAULT_SCHEDULE);
@@ -1345,6 +1362,11 @@ export function CalendarPage({ focusBookingId }: { focusBookingId?: string | nul
   }, []);
 
   useEffect(() => { loadChipy(); }, [loadChipy]);
+  useEffect(() => {
+    getCalendarStaff()
+      .then((res) => setStaffCount(res.staff.length))
+      .catch(() => setStaffCount(0));
+  }, []);
 
   async function handleDeleteBooking(id: string) {
     try {
@@ -1379,11 +1401,10 @@ export function CalendarPage({ focusBookingId }: { focusBookingId?: string | nul
   const providerMeta = PROVIDER_META[calendarStatus?.provider ?? ''] ?? DEFAULT_PROVIDER_META;
 
   const TABS: { id: Tab; label: string }[] = [
-    { id: 'calendar', label: 'Kalender' },
-    { id: 'schedule', label: 'Verfügbarkeit' },
-    { id: 'connections', label: 'Verbindungen' },
-    { id: 'staff', label: 'Mitarbeiter' },
+    { id: 'calendar', label: 'Normaler Kalender' },
+    { id: 'staff', label: 'Mitarbeiterkalender' },
   ];
+  const staffModeActive = staffCount > 0;
 
   return (
     <div className="min-h-screen bg-[#0A0A0F] text-white px-4 sm:px-6 py-8">
@@ -1408,7 +1429,7 @@ export function CalendarPage({ focusBookingId }: { focusBookingId?: string | nul
                   : 'Kein Kalender konfiguriert — richte Verfügbarkeit ein oder verbinde einen Kalender'}
             </p>
           </div>
-          {tab === 'calendar' && (
+          {tab === 'calendar' && !staffModeActive && (
             <button
               onClick={() => { setSelectedDay(new Date()); setShowAddBooking(true); }}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
@@ -1442,7 +1463,7 @@ export function CalendarPage({ focusBookingId }: { focusBookingId?: string | nul
         )}
 
         {/* Calendar integration hint */}
-        {tab === 'calendar' && (!calendarStatus?.connected || calendarStatus?.provider === 'chipy') && (
+        {tab === 'calendar' && !staffModeActive && (!calendarStatus?.connected || calendarStatus?.provider === 'chipy') && (
           <div
             className="mb-4 rounded-2xl p-4 flex items-start gap-3"
             style={{
@@ -1460,7 +1481,7 @@ export function CalendarPage({ focusBookingId }: { focusBookingId?: string | nul
                 Du kannst auch mehrere Kalender gleichzeitig verbinden — Termine werden in alle synchronisiert.
               </p>
               <button
-                onClick={() => setTab('connections')}
+                onClick={() => document.getElementById('calendar-connections')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
                 className="mt-2 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all hover:opacity-90"
                 style={{ background: 'rgba(249,115,22,0.2)', color: '#FB923C' }}
               >
@@ -1470,60 +1491,65 @@ export function CalendarPage({ focusBookingId }: { focusBookingId?: string | nul
           </div>
         )}
 
-        {/* Calendar tab */}
         {tab === 'calendar' && (
-          <div className="rounded-2xl border border-white/10 p-5" style={{ background: 'rgba(255,255,255,0.02)' }}>
-            <MonthlyCalendar
-              bookings={bookings}
-              blocks={blocks}
-              onDayClick={(d) => { setSelectedDay(d); setShowAddBooking(false); }}
-            />
+          <div className="space-y-5">
+            {staffModeActive && (
+              <div className="rounded-2xl border border-orange-500/20 bg-orange-500/10 p-4">
+                <p className="text-sm font-semibold text-orange-100">Mitarbeiterkalender ist aktiv</p>
+                <p className="text-xs text-orange-100/65 mt-1 leading-relaxed">
+                  Weil {staffCount} Mitarbeiter angelegt {staffCount === 1 ? 'ist' : 'sind'}, nutzt Phonbot für Bot-Buchungen die Mitarbeiterkalender. Der normale Salon-Kalender bleibt hier sichtbar, ist aber nicht die aktive Buchungsquelle.
+                </p>
+                <button onClick={() => setTab('staff')} className="mt-3 rounded-xl border border-orange-500/25 bg-orange-500/15 px-3 py-2 text-xs font-semibold text-orange-100 hover:bg-orange-500/20">
+                  Mitarbeiterkalender öffnen
+                </button>
+              </div>
+            )}
 
-            {/* Legend */}
-            <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/5 flex-wrap">
-              <div className="flex items-center gap-1.5 text-xs text-white/40">
-                <div className="w-3 h-3 rounded-sm border border-orange-500/40 bg-orange-500/10" />
-                Termin
+            <section className={['rounded-2xl border border-white/10 p-5', staffModeActive ? 'opacity-55' : ''].join(' ')} style={{ background: 'rgba(255,255,255,0.02)' }}>
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-white">Salon-Kalender</p>
+                  <p className="text-xs text-white/35 mt-1">{staffModeActive ? 'Durch Mitarbeiterkalender ersetzt.' : 'Allgemeine Termine, Sperren und freie Zeiten.'}</p>
+                </div>
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-white/40">
-                <div className="w-3 h-3 rounded-sm border border-red-500/30 bg-red-500/10" />
-                Ganztägig gesperrt
+              <MonthlyCalendar
+                bookings={bookings}
+                blocks={blocks}
+                onDayClick={(d) => { if (!staffModeActive) { setSelectedDay(d); setShowAddBooking(false); } }}
+              />
+
+              <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/5 flex-wrap">
+                <div className="flex items-center gap-1.5 text-xs text-white/40"><div className="w-3 h-3 rounded-sm border border-orange-500/40 bg-orange-500/10" />Termin</div>
+                <div className="flex items-center gap-1.5 text-xs text-white/40"><div className="w-3 h-3 rounded-sm border border-red-500/30 bg-red-500/10" />Ganztägig gesperrt</div>
+                <div className="flex items-center gap-1.5 text-xs text-white/40"><div className="w-3 h-3 rounded-sm border border-amber-500/30 bg-amber-500/8" />Zeiten gesperrt</div>
+                <div className="flex items-center gap-1.5 text-xs text-white/40"><div className="w-3 h-3 rounded-sm ring-2 ring-orange-500/50 border border-white/10" />Heute</div>
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-white/40">
-                <div className="w-3 h-3 rounded-sm border border-amber-500/30 bg-amber-500/8" />
-                Zeiten gesperrt
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-white/40">
-                <div className="w-3 h-3 rounded-sm ring-2 ring-orange-500/50 border border-white/10" />
-                Heute
-              </div>
-            </div>
+            </section>
+
+            <section className={['rounded-2xl border border-white/10 p-5', staffModeActive ? 'opacity-55 pointer-events-none' : ''].join(' ')} style={{ background: 'rgba(255,255,255,0.02)' }}>
+              <p className="text-sm font-semibold text-white mb-1">Verfügbarkeit</p>
+              <p className="text-xs text-white/40 mb-4">
+                {staffModeActive
+                  ? 'Nicht aktiv, solange Mitarbeiterkalender genutzt werden. Pflege die Zeiten pro Mitarbeiter.'
+                  : calendarStatus?.connected
+                    ? 'Dein externer Kalender ist aktiv. Chipy dient als Fallback.'
+                    : 'Kein externer Kalender? Trag hier deine Verfügbarkeit ein — der Agent nutzt diese automatisch.'}
+              </p>
+              <SettingsPanel schedule={schedule} setSchedule={setSchedule} blocks={blocks} setBlocks={setBlocks} />
+            </section>
+
+            <section id="calendar-connections" className={['rounded-2xl border border-white/10 p-5', staffModeActive ? 'opacity-55 pointer-events-none' : ''].join(' ')} style={{ background: 'rgba(255,255,255,0.02)' }}>
+              <p className="text-sm font-semibold text-white mb-1">Verbindungen</p>
+              <p className="text-xs text-white/40 mb-4">
+                {staffModeActive ? 'Nicht aktiv für Bot-Buchungen. Verbinde Kalender direkt bei den Mitarbeitern.' : 'Verbinde Google, Outlook oder Cal.com im gleichen Stil wie im Agent Builder.'}
+              </p>
+              <ConnectionsPanel onStatusChange={setCalendarStatus} />
+            </section>
           </div>
         )}
 
-        {/* Availability + blocks tab */}
-        {tab === 'schedule' && (
-          <div className="rounded-2xl border border-white/10 p-5" style={{ background: 'rgba(255,255,255,0.02)' }}>
-            <p className="text-xs text-white/40 mb-4">
-              {calendarStatus?.connected
-                ? 'Dein externer Kalender ist aktiv. Chipy dient als Fallback.'
-                : 'Kein externer Kalender? Trag hier deine Verfügbarkeit ein — der Agent nutzt diese automatisch.'}
-            </p>
-            <SettingsPanel
-              schedule={schedule} setSchedule={setSchedule}
-              blocks={blocks} setBlocks={setBlocks}
-            />
-          </div>
-        )}
-
-        {/* Connections tab */}
-        {tab === 'connections' && (
-          <ConnectionsPanel onStatusChange={setCalendarStatus} />
-        )}
-
-        {/* Staff calendars tab */}
         {tab === 'staff' && (
-          <StaffPanel />
+          <StaffPanel onStaffChange={setStaffCount} />
         )}
       </div>
 

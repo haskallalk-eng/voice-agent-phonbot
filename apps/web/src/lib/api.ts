@@ -407,8 +407,21 @@ export type LiveWebAccess = {
   allowedDomains: string[];   // Which domains the agent may crawl live
 };
 
+export type CustomerQuestionConfig = {
+  id: string;
+  label: string;
+  prompt?: string;
+  enabled?: boolean;
+  required?: boolean;
+  builtin?: boolean;
+  detailsKey?: string;
+  condition?: string;
+};
+
 export type CustomerModuleConfig = {
-  enabled: boolean;
+  enabled?: boolean;
+  allowBookingWithoutApproval?: boolean;
+  questions?: CustomerQuestionConfig[];
 };
 
 export type AgentConfig = {
@@ -759,7 +772,7 @@ export type Customer = {
   phone: string | null;
   phone_normalized: string | null;
   email: string | null;
-  customer_type: 'new' | 'existing' | 'unknown';
+  customer_type: 'new' | 'existing' | 'unknown' | 'pending';
   status: 'active' | 'deleted';
   notes: string | null;
   details: Record<string, unknown>;
@@ -771,7 +784,7 @@ export type CustomerInput = {
   fullName: string;
   phone?: string | null;
   email?: string | null;
-  customerType?: 'new' | 'existing' | 'unknown';
+  customerType?: 'new' | 'existing' | 'unknown' | 'pending';
   notes?: string | null;
   details?: Record<string, unknown>;
 };

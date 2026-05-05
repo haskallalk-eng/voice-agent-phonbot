@@ -1,7 +1,11 @@
 import type { readConfig } from './agent-config.js';
 import { transferToolName } from './agent-config.js';
 import { toE164 } from '@vas/shared';
-import { customerModuleActiveForAgentConfig } from './customers.js';
+import {
+  customerModuleActiveForAgentConfig,
+  getActiveCustomerQuestions,
+  normalizeCustomerModuleConfig,
+} from './customers.js';
 
 type AgentConfig = Awaited<ReturnType<typeof readConfig>>;
 
@@ -208,18 +212,30 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push('Wenn du die Nummer bestätigen willst, sage z.B. "Ich habe Ihre Nummer bereits gespeichert."');
 
   if (customerModuleActiveForAgentConfig(cfg)) {
+    const customerModule = normalizeCustomerModuleConfig(cfg.customerModule);
+    const activeQuestions = getActiveCustomerQuestions(cfg.customerModule);
+    const activeQuestionText = activeQuestions
+      .map((q) => {
+        const base = q.condition ? `${q.label} (${q.condition})` : q.label;
+        return q.prompt ? `${base}: ${q.prompt}` : base;
+      })
+      .join('; ');
     parts.push('');
     parts.push('## Friseur-Kundenmodul: Bestandskunde oder Neukunde');
     parts.push('Dieses Modul ist aktiv. Es gilt nur fuer Friseur-/Salon-Anfragen. Wenn es deaktiviert ist, darfst du diese Bestandskunden-Fragen NICHT stellen.');
     parts.push('- Direkt zu Beginn des Anrufs rufst du still das Tool "customer_lookup" mit customerPhone="{{from_number}}" auf. Sage dem Anrufer NICHT, dass du eine Datenbank pruefst.');
     parts.push('- Wenn customer_lookup status="matched" liefert: Behandle den Anrufer als Bestandskunden, frage NICHT "Sind Sie Bestandskunde oder Neukunde?", und mache normal mit Anliegen/Termin weiter.');
+    parts.push('- Wenn der gefundene Kunde customer_type="pending" hat: Er ist nur vorgemerkt, nicht bestaetigt. Sage das nicht als Datenbank-Info, frage aber nur fehlende aktive Neukunden-Details nach und behandle ihn nicht als bestaetigten Bestandskunden.');
     parts.push('- Wenn die Nummer nicht gefunden wird: Frage freundlich genau einmal: "Waren Sie schon einmal bei uns oder sind Sie neu bei uns?"');
     parts.push('- Wenn der Anrufer sagt, er war schon einmal da: Frage nach Vor- und Nachname. Bei Unsicherheit oder wichtiger Schreibweise langsam buchstabieren lassen. Rufe danach "customer_lookup" erneut mit customerName auf.');
     parts.push('- Wenn aehnliche Namen gefunden werden: Frage nur nach einer Klaerung, ohne gespeicherte Details offenzulegen. Beispiel: "Ich finde mehrere aehnliche Namen - koennen Sie den Nachnamen bitte einmal buchstabieren?"');
-    parts.push('- Wenn kein Kunde gefunden wird: Mache daraus kein Problem. Lege den Anrufer still mit "customer_upsert" neu an und fahre mit dem Neukunden-Flow fort.');
-    parts.push('- Wenn der Anrufer neu ist: Sammle nur fuer den Salon noetige Daten, immer einzeln: Name, Telefonnummer falls {{from_number}} unbekannt ist, gewuenschte Leistung, Terminwunsch, Wunschfriseur falls relevant, Haarlaenge grob, bei Farbe/Chemie fruehere Behandlung und Allergien/empfindliche Kopfhaut.');
+    parts.push('- Wenn kein Kunde gefunden wird: Mache daraus kein Problem. Lege den Anrufer still mit "customer_upsert" als pending an und fahre mit dem Neukunden-Flow fort.');
+    parts.push(`- Wenn der Anrufer neu oder pending ist: Sammle nur diese fuer diesen Tenant aktivierten Felder, immer einzeln: ${activeQuestionText || 'Name und Anliegen'}.`);
     parts.push('- Bei Bestandskunden: Frage nicht alles neu ab. Klaere nur Anliegen, Terminwunsch, ob derselbe Service wie letztes Mal gewuenscht ist, Wunschfriseur und ob sich Haarlaenge/Farbe/Zustand seit dem letzten Besuch veraendert haben.');
-    parts.push('- Nach Name plus mindestens Anliegen/Service rufst du "customer_upsert" still auf. Speichere keine ueberfluessigen Daten wie Geburtsdatum, Adresse, Fotos oder Marketing-Einwilligungen im Telefonflow.');
+    parts.push('- Nach Name plus mindestens Anliegen/Service rufst du "customer_upsert" still auf. Bot-angelegte Kunden bleiben pending, bis der Friseur sie in Phonbot bestaetigt. Speichere keine ueberfluessigen Daten wie Geburtsdatum, Adresse, Fotos oder Marketing-Einwilligungen im Telefonflow.');
+    parts.push(customerModule.allowBookingWithoutApproval !== false
+      ? '- Einstellung "Termine ohne Freigabe buchen" ist AN: Du darfst fuer neue oder pending Kunden einen Termin buchen, wenn der Anrufer den Slot bestaetigt.'
+      : '- Einstellung "Termine ohne Freigabe buchen" ist AUS: Buche fuer neue oder pending Kunden keinen festen Kalendertermin. Erstelle stattdessen ein Ticket/Rueckruf mit Terminwunsch und sage, dass der Salon den Termin bestaetigt.');
   }
 
   // ── End-of-call feedback (non-intrusive) ──────────────────────────────────

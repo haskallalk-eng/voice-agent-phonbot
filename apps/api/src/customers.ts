@@ -4,10 +4,38 @@ import { normalizePhoneLight } from '@vas/shared';
 import type { JwtPayload } from './auth.js';
 import { pool } from './db.js';
 
+export type CustomerType = 'new' | 'existing' | 'unknown' | 'pending';
+
+export type CustomerQuestionConfig = {
+  id: string;
+  label: string;
+  prompt?: string;
+  enabled?: boolean;
+  required?: boolean;
+  builtin?: boolean;
+  detailsKey?: string;
+  condition?: string;
+};
+
 export type CustomerModuleConfig = {
   enabled?: boolean;
+  allowBookingWithoutApproval?: boolean;
+  questions?: CustomerQuestionConfig[];
   mindrailsInternal?: boolean;
 };
+
+export const DEFAULT_CUSTOMER_QUESTIONS: CustomerQuestionConfig[] = [
+  { id: 'name', label: 'Name', prompt: 'Vor- und Nachname', enabled: true, required: true, builtin: true },
+  { id: 'callbackPhone', label: 'Rueckrufnummer', prompt: 'Rueckrufnummer, aber nur wenn die Anrufernummer unbekannt ist', enabled: true, builtin: true },
+  { id: 'service', label: 'Gewuenschte Leistung', prompt: 'Welche Leistung gewuenscht ist', enabled: true, builtin: true, detailsKey: 'service' },
+  { id: 'preferredTime', label: 'Terminwunsch', prompt: 'Wunschtermin oder bevorzugtes Zeitfenster', enabled: true, builtin: true, detailsKey: 'preferredTime' },
+  { id: 'preferredStylist', label: 'Wunschfriseur', prompt: 'Ob ein bestimmter Friseur gewuenscht ist oder jeder freie Mitarbeiter passt', enabled: true, builtin: true, detailsKey: 'preferredStylist' },
+  { id: 'hairLength', label: 'Haarlaenge grob', prompt: 'Grobe Haarlaenge, z.B. kurz, schulterlang oder lang', enabled: true, builtin: true, detailsKey: 'hairLength' },
+  { id: 'hairHistory', label: 'Vorbehandlung', prompt: 'Bei Farbe oder Chemie: fruehere Farbe, Blondierung, Glaettung, Dauerwelle oder andere chemische Behandlung', enabled: true, builtin: true, detailsKey: 'hairHistory', condition: 'nur bei Farbe/Chemie' },
+  { id: 'allergies', label: 'Allergien / Kopfhaut', prompt: 'Bei Farbe oder Chemie: Allergien, Unvertraeglichkeiten oder empfindliche Kopfhaut', enabled: true, builtin: true, detailsKey: 'allergies', condition: 'nur bei Farbe/Chemie' },
+];
+
+const BUILTIN_CUSTOMER_QUESTION_IDS = new Set(DEFAULT_CUSTOMER_QUESTIONS.map((q) => q.id));
 
 type AgentConfigLike = {
   industry?: string;
@@ -24,7 +52,7 @@ export type CustomerRow = {
   phone: string | null;
   phone_normalized: string | null;
   email: string | null;
-  customer_type: 'new' | 'existing' | 'unknown';
+  customer_type: CustomerType;
   status: 'active' | 'deleted';
   notes: string | null;
   details: Record<string, unknown>;
@@ -33,9 +61,73 @@ export type CustomerRow = {
 };
 
 export function customerModuleActiveForAgentConfig(config: AgentConfigLike | null | undefined): boolean {
-  const module = config?.customerModule;
-  if (module?.enabled !== true) return false;
+  const module = normalizeCustomerModuleConfig(config?.customerModule);
+  if (module.enabled === false) return false;
   return config?.industry === 'hairdresser' || module.mindrailsInternal === true;
+}
+
+function cleanQuestionText(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, 180) : fallback;
+}
+
+function normalizeQuestionId(value: unknown, fallback: string): string {
+  const raw = cleanQuestionText(value, fallback)
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 48);
+  return raw || fallback;
+}
+
+export function normalizeCustomerModuleConfig(module: CustomerModuleConfig | null | undefined): CustomerModuleConfig {
+  const incoming = Array.isArray(module?.questions) ? module.questions : [];
+  const incomingById = new Map(incoming.map((q) => [q.id, q]));
+  const questions: CustomerQuestionConfig[] = DEFAULT_CUSTOMER_QUESTIONS.map((question) => {
+    const override = incomingById.get(question.id);
+    const required = question.required === true;
+    return {
+      ...question,
+      enabled: required ? true : override?.enabled !== false,
+    };
+  });
+
+  const customQuestions: CustomerQuestionConfig[] = [];
+  for (const [index, q] of incoming.filter((item) => !BUILTIN_CUSTOMER_QUESTION_IDS.has(item.id)).entries()) {
+      const label = cleanQuestionText(q.label || q.prompt);
+      if (!label) continue;
+      const id = normalizeQuestionId(q.id, `custom_${index + 1}`);
+      customQuestions.push({
+        id,
+        label,
+        prompt: cleanQuestionText(q.prompt, label),
+        enabled: q.enabled !== false,
+        required: false,
+        builtin: false,
+        detailsKey: `custom_${id}`,
+      });
+      if (customQuestions.length >= 12) break;
+    }
+
+  return {
+    enabled: module?.enabled !== false,
+    allowBookingWithoutApproval: module?.allowBookingWithoutApproval !== false,
+    questions: [...questions, ...customQuestions],
+    ...(module?.mindrailsInternal === true ? { mindrailsInternal: true } : {}),
+  };
+}
+
+export function getActiveCustomerQuestions(module: CustomerModuleConfig | null | undefined): CustomerQuestionConfig[] {
+  return normalizeCustomerModuleConfig(module).questions?.filter((q) => q.enabled !== false) ?? [];
+}
+
+export function getActiveCustomerDetailsKeys(module: CustomerModuleConfig | null | undefined): Set<string> {
+  return new Set(getActiveCustomerQuestions(module).map((q) => q.detailsKey).filter((key): key is string => Boolean(key)));
+}
+
+export function getCustomCustomerQuestions(module: CustomerModuleConfig | null | undefined): CustomerQuestionConfig[] {
+  return getActiveCustomerQuestions(module).filter((q) => q.builtin !== true);
 }
 
 function normalizeName(input: string): string {
@@ -132,8 +224,13 @@ export async function customerModuleStatus(orgId: string, userId?: string): Prom
     const res = await pool.query<{ enabled: boolean }>(
       `SELECT EXISTS (
          SELECT 1 FROM agent_configs
-          WHERE org_id = $1
-            AND COALESCE((data->'customerModule'->>'enabled')::boolean, false) = true
+           WHERE org_id = $1
+            AND (
+              data->>'industry' = 'hairdresser'
+              OR data->>'templateId' = 'hairdresser'
+              OR COALESCE((data->'customerModule'->>'mindrailsInternal')::boolean, false) = true
+            )
+            AND COALESCE((data->'customerModule'->>'enabled')::boolean, true) = true
        ) AS enabled`,
       [orgId],
     );
@@ -150,7 +247,7 @@ const CustomerInput = z.object({
   fullName: z.string().min(1).max(200),
   phone: z.string().max(80).optional().nullable(),
   email: z.string().email().max(200).optional().nullable(),
-  customerType: z.enum(['new', 'existing', 'unknown']).optional().default('unknown'),
+  customerType: z.enum(['new', 'existing', 'unknown', 'pending']).optional().default('unknown'),
   notes: z.string().max(2000).optional().nullable(),
   sourceCallId: z.string().max(200).optional().nullable(),
   details: z.record(z.string(), z.unknown()).optional().default({}),
@@ -188,12 +285,15 @@ export async function lookupCustomer(params: {
       [params.orgId, phone],
     );
     if (res.rows[0]) {
+      const customer = res.rows[0];
       return {
         ok: true,
         status: 'matched',
         matchType: 'phone',
-        customer: res.rows[0],
-        instruction: 'Nummer erkannt. Frage nicht nach Bestandskunde oder Neukunde; fuehre den normalen Friseur-Flow fort.',
+        customer,
+        instruction: customer.customer_type === 'pending'
+          ? 'Nummer ist aus einem frueheren Anruf vorgemerkt, aber noch nicht als Bestandskunde bestaetigt. Frage nicht erneut Bestandskunde/Neukunde; sammle nur fehlende aktive Neukunden-Details.'
+          : 'Nummer erkannt. Frage nicht nach Bestandskunde oder Neukunde; fuehre den normalen Friseur-Flow fort.',
       };
     }
   }
@@ -227,13 +327,16 @@ export async function lookupCustomer(params: {
       .slice(0, 5);
 
     if (candidates[0] && candidates[0].score >= 0.86 && (!candidates[1] || candidates[0].score - candidates[1].score >= 0.08)) {
+      const customer = candidates[0];
       return {
         ok: true,
         status: 'matched',
         matchType: 'name',
-        customer: candidates[0],
+        customer,
         candidates,
-        instruction: 'Name mit hoher Sicherheit erkannt. Fahre normal fort, aber buchstabiere kritische Daten wie E-Mail oder Namen bei Unsicherheit zurueck.',
+        instruction: customer.customer_type === 'pending'
+          ? 'Name ist vorgemerkt, aber noch nicht als Bestandskunde bestaetigt. Behandle den Anrufer nicht als bestaetigten Bestandskunden und sammle nur fehlende aktive Neukunden-Details.'
+          : 'Name mit hoher Sicherheit erkannt. Fahre normal fort, aber buchstabiere kritische Daten wie E-Mail oder Namen bei Unsicherheit zurueck.',
       };
     }
 
@@ -259,7 +362,7 @@ export async function upsertCustomer(params: {
   fullName: string;
   phone?: string | null;
   email?: string | null;
-  customerType?: 'new' | 'existing' | 'unknown';
+  customerType?: CustomerType;
   notes?: string | null;
   sourceCallId?: string | null;
   details?: Record<string, unknown>;

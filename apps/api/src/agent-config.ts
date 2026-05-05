@@ -37,7 +37,24 @@ import { syncOpeningHoursToChipy } from './opening-hours-sync.js';
 import { PLANS, type PlanId } from './billing.js';
 import { invalidateInboundWebhooksCache } from './inbound-webhooks.js';
 import { isVoiceAllowedForOrg } from './voice-ownership.js';
-import { customerModuleActiveForAgentConfig, customerModuleStatus } from './customers.js';
+import {
+  customerModuleActiveForAgentConfig,
+  customerModuleStatus,
+  getActiveCustomerQuestions,
+  getCustomCustomerQuestions,
+  normalizeCustomerModuleConfig,
+} from './customers.js';
+
+const CustomerQuestionConfigSchema = z.object({
+  id: z.string().min(1).max(80),
+  label: z.string().min(1).max(180),
+  prompt: z.string().max(240).optional(),
+  enabled: z.boolean().optional(),
+  required: z.boolean().optional(),
+  builtin: z.boolean().optional(),
+  detailsKey: z.string().max(80).optional(),
+  condition: z.string().max(180).optional(),
+}).passthrough();
 
 const AgentConfigSchema = z.object({
   tenantId: z.string().min(1).default('demo'),
@@ -120,7 +137,9 @@ const AgentConfigSchema = z.object({
   // every consumer site (`!== false` checks instead of `=== true`).
   recordCalls: z.boolean().optional(),
   customerModule: z.object({
-    enabled: z.boolean().optional().default(false),
+    enabled: z.boolean().optional(),
+    allowBookingWithoutApproval: z.boolean().optional(),
+    questions: z.array(CustomerQuestionConfigSchema).max(24).optional(),
     // Server-only flag. The API sets this for info@mindrails.de so the module
     // can be tested outside a hairdresser-tagged agent without exposing it as
     // a client-controlled permission bit.
@@ -239,7 +258,7 @@ async function applyIntegrationEncryption(
 function toClientConfig(config: AgentConfig): AgentConfig {
   let out = config;
   const customerModule = (config as Record<string, unknown>).customerModule as
-    | { enabled?: boolean; mindrailsInternal?: boolean }
+    | { enabled?: boolean; mindrailsInternal?: boolean; allowBookingWithoutApproval?: boolean; questions?: unknown[] }
     | undefined;
   if (customerModule?.mindrailsInternal !== undefined) {
     const { mindrailsInternal: _mindrailsInternal, ...clientCustomerModule } = customerModule;
@@ -263,12 +282,15 @@ async function applyCustomerModuleServerFlags(raw: Record<string, unknown>, orgI
     err.statusCode = 403;
     throw err;
   }
+  const normalized = normalizeCustomerModuleConfig({
+    enabled: requested.enabled !== false,
+    allowBookingWithoutApproval: requested.allowBookingWithoutApproval !== false,
+    questions: Array.isArray(requested.questions) ? requested.questions as never : undefined,
+    mindrailsInternal: status.reason === 'mindrails',
+  });
   return {
     ...raw,
-    customerModule: {
-      enabled: requested.enabled === true,
-      mindrailsInternal: status.reason === 'mindrails',
-    },
+    customerModule: normalized,
   };
 }
 
@@ -463,6 +485,30 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
   }
 
   if (customerModuleActiveForAgentConfig(config)) {
+    const activeCustomerQuestions = getActiveCustomerQuestions(config.customerModule);
+    const activeCustomerQuestionIds = new Set(activeCustomerQuestions.map((q) => q.id));
+    const customCustomerQuestions = getCustomCustomerQuestions(config.customerModule);
+    const upsertProperties: Record<string, unknown> = {
+      customerName: { type: 'string' },
+      customerPhone: { type: 'string', description: 'Caller phone number. Optional when Retell provides from_number.' },
+      email: { type: 'string' },
+      customerType: { type: 'string', enum: ['pending'], description: 'Always pending for bot-created customers; the salon confirms existing customers later in Phonbot.' },
+      notes: { type: 'string' },
+    };
+    if (activeCustomerQuestionIds.has('service')) upsertProperties.service = { type: 'string', description: 'Requested salon service.' };
+    if (activeCustomerQuestionIds.has('preferredTime')) upsertProperties.preferredTime = { type: 'string', description: 'Requested or confirmed appointment time.' };
+    if (activeCustomerQuestionIds.has('preferredStylist')) upsertProperties.preferredStylist = { type: 'string', description: 'Requested staff member/stylist.' };
+    if (activeCustomerQuestionIds.has('hairLength')) upsertProperties.hairLength = { type: 'string', description: 'kurz, schulterlang, lang, or caller wording.' };
+    if (activeCustomerQuestionIds.has('hairHistory')) upsertProperties.hairHistory = { type: 'string', description: 'Recent color, bleaching, smoothing, perm or other chemical treatment.' };
+    if (activeCustomerQuestionIds.has('allergies')) upsertProperties.allergies = { type: 'string', description: 'Allergies, intolerances, sensitive scalp, only if relevant.' };
+    if (customCustomerQuestions.length) {
+      upsertProperties.customFields = {
+        type: 'object',
+        description: `Answers to these tenant-specific salon questions: ${customCustomerQuestions.map((q) => q.label).join('; ')}`,
+        additionalProperties: { type: 'string' },
+      };
+    }
+
     tools.push({
       type: 'custom',
       name: 'customer_lookup',
@@ -484,19 +530,7 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
       parameters: {
         type: 'object',
         required: ['customerName'],
-        properties: {
-          customerName: { type: 'string' },
-          customerPhone: { type: 'string', description: 'Caller phone number. Optional when Retell provides from_number.' },
-          email: { type: 'string' },
-          customerType: { type: 'string', enum: ['new', 'existing', 'unknown'] },
-          service: { type: 'string', description: 'Requested salon service.' },
-          preferredTime: { type: 'string', description: 'Requested or confirmed appointment time.' },
-          preferredStylist: { type: 'string' },
-          hairLength: { type: 'string', description: 'kurz, schulterlang, lang, or caller wording.' },
-          hairHistory: { type: 'string', description: 'Recent color, bleaching, smoothing, perm or other chemical treatment.' },
-          allergies: { type: 'string', description: 'Allergies, intolerances, sensitive scalp, only if relevant.' },
-          notes: { type: 'string' },
-        },
+        properties: upsertProperties,
       },
     });
   }
