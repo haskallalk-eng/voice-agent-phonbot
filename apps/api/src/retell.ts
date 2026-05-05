@@ -8,14 +8,23 @@
 const RETELL_API = 'https://api.retellai.com';
 
 // Default voices for new demo agents + fallback when an agent config has no explicit voice.
-// HQ prioritizes human quality: a native German ElevenLabs voice on multilingual_v2.
+// HQ prioritizes human quality: Susi, a native German ElevenLabs community voice on multilingual_v2.
 // Standard prioritizes robust/lower-cost phone delivery: Cartesia Sonic 3 German
 // Conversational Woman, imported into this Retell workspace as a community voice.
 export const DEFAULT_STANDARD_VOICE_ID =
   process.env.RETELL_DEFAULT_STANDARD_VOICE_ID ?? 'custom_voice_6c5fa792073cea70bc19314f26';
 
 export const DEFAULT_VOICE_ID =
-  process.env.RETELL_DEFAULT_HQ_VOICE_ID ?? process.env.RETELL_DEFAULT_VOICE_ID ?? '11labs-Carola';
+  process.env.RETELL_DEFAULT_HQ_VOICE_ID ??
+  process.env.RETELL_DEFAULT_VOICE_ID ??
+  'custom_voice_f428053d5d6100d7a2611e0cc4';
+
+const NATIVE_GERMAN_ELEVENLABS_VOICE_IDS = new Set<string>([
+  'custom_voice_f428053d5d6100d7a2611e0cc4',
+  'custom_voice_74a89687ae8c8f1ad19e239e7c',
+  'custom_voice_3426c893b24dd3173a963f232c',
+  'custom_voice_725e2277b354e8b7054d53be8c',
+]);
 
 function getApiKey(): string {
   const key = process.env.RETELL_API_KEY;
@@ -331,20 +340,28 @@ function envCsv(name: string, fallback: string[]): string[] {
   return raw.split(',').map((v) => v.trim()).filter(Boolean);
 }
 
+function defaultHqRuntime(): VoiceRuntimeConfig {
+  return {
+    voiceModel: (process.env.RETELL_DEFAULT_VOICE_MODEL as RetellVoiceModel | undefined) ?? 'eleven_multilingual_v2',
+    voiceTemperature: envNumber('RETELL_DEFAULT_VOICE_TEMPERATURE', 0.55, 0, 2),
+    fallbackVoiceIds: envCsv('RETELL_DEFAULT_FALLBACK_VOICE_IDS', [DEFAULT_STANDARD_VOICE_ID]),
+  };
+}
+
+function defaultStandardRuntime(): VoiceRuntimeConfig {
+  return {
+    voiceModel: (process.env.RETELL_DEFAULT_STANDARD_VOICE_MODEL as RetellVoiceModel | undefined) ?? 'sonic-3-latest',
+    voiceTemperature: envNumber('RETELL_DEFAULT_STANDARD_VOICE_TEMPERATURE', 0.55, 0, 2),
+    fallbackVoiceIds: envCsv('RETELL_DEFAULT_STANDARD_FALLBACK_VOICE_IDS', [DEFAULT_VOICE_ID]),
+  };
+}
+
 function defaultRuntimeForVoice(voiceId: string): VoiceRuntimeConfig | null {
-  if (voiceId === DEFAULT_VOICE_ID) {
-    return {
-      voiceModel: (process.env.RETELL_DEFAULT_VOICE_MODEL as RetellVoiceModel | undefined) ?? 'eleven_multilingual_v2',
-      voiceTemperature: envNumber('RETELL_DEFAULT_VOICE_TEMPERATURE', 0.55, 0, 2),
-      fallbackVoiceIds: envCsv('RETELL_DEFAULT_FALLBACK_VOICE_IDS', [DEFAULT_STANDARD_VOICE_ID]),
-    };
+  if (voiceId === DEFAULT_VOICE_ID || NATIVE_GERMAN_ELEVENLABS_VOICE_IDS.has(voiceId)) {
+    return defaultHqRuntime();
   }
   if (voiceId === DEFAULT_STANDARD_VOICE_ID) {
-    return {
-      voiceModel: (process.env.RETELL_DEFAULT_STANDARD_VOICE_MODEL as RetellVoiceModel | undefined) ?? 'sonic-3-latest',
-      voiceTemperature: envNumber('RETELL_DEFAULT_STANDARD_VOICE_TEMPERATURE', 0.55, 0, 2),
-      fallbackVoiceIds: envCsv('RETELL_DEFAULT_STANDARD_FALLBACK_VOICE_IDS', [DEFAULT_VOICE_ID]),
-    };
+    return defaultStandardRuntime();
   }
   return null;
 }
