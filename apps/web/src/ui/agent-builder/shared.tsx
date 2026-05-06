@@ -30,7 +30,7 @@ import {
   IconRefresh,
   IconDeploy,
 } from '../PhonbotIcons.js';
-import type { AgentConfig } from '../../lib/api.js';
+import type { AgentConfig, FallbackReasonConfig } from '../../lib/api.js';
 
 /* ── Shared Types ── */
 
@@ -335,6 +335,65 @@ export const TABS: { id: Tab; label: string; Icon: SectionIconComp }[] = [
   { id: 'preview',      label: 'Vorschau',     Icon: IconPlay },
 ];
 
+export const DEFAULT_FALLBACK_REASONS: FallbackReasonConfig[] = [
+  {
+    id: 'human_requested',
+    label: 'Mensch verlangt',
+    reason: 'Mensch angefordert',
+    enabled: true,
+    priority: 'high',
+    instruction: 'Wenn der Anrufer klar mit einem Menschen sprechen will, nicht diskutieren: Rueckruf-Ticket oder konfigurierte Weiterleitung.',
+  },
+  {
+    id: 'unresolved_question',
+    label: 'Nicht sicher loesbar',
+    reason: 'Antwort nicht sicher',
+    enabled: true,
+    priority: 'normal',
+    instruction: 'Wenn Wissen, Preise, Details oder Zustaendigkeit fehlen, ehrlich sagen und als Rueckruf aufnehmen.',
+  },
+  {
+    id: 'urgent_or_emergency',
+    label: 'Dringend / Notfall',
+    reason: 'dringendes Anliegen',
+    enabled: true,
+    priority: 'urgent',
+    instruction: 'Bei Gefahr, Schmerzen, Ausfall oder akutem Problem sofort als dringend markieren und keine langen Nachfragen stellen.',
+  },
+  {
+    id: 'complaint',
+    label: 'Beschwerde',
+    reason: 'Beschwerde / unzufrieden',
+    enabled: true,
+    priority: 'high',
+    instruction: 'Verstaendnis zeigen, keine Loesung versprechen, Sachverhalt knapp notieren.',
+  },
+  {
+    id: 'outside_scope',
+    label: 'Ausserhalb des Angebots',
+    reason: 'ausserhalb Angebot / falscher Ansprechpartner',
+    enabled: true,
+    priority: 'normal',
+    instruction: 'Wenn das Anliegen nicht zur Branche oder Leistung passt, freundlich abgrenzen und Rueckruf nur anbieten, wenn sinnvoll.',
+  },
+  {
+    id: 'privacy_legal',
+    label: 'Datenschutz / rechtlich',
+    reason: 'DSGVO / rechtlich sensibel',
+    enabled: true,
+    priority: 'high',
+    instruction: 'Bei Datenschutz, Loeschung, rechtlichen oder finanziellen Fragen nicht beraten, sondern an das Team eskalieren.',
+  },
+  {
+    id: 'audio_problem',
+    label: 'Akustik / Verbindung',
+    reason: 'akustisch nicht verstanden',
+    enabled: true,
+    priority: 'normal',
+    instruction: 'Nach wiederholtem Nichtverstehen Rueckruf anbieten, statt den Anrufer zu nerven.',
+  },
+];
+
 /* ── Default config values for merging ── */
 
 export const DEFAULT_CONFIG_VALUES: Partial<AgentConfig> = {
@@ -358,6 +417,7 @@ export const DEFAULT_CONFIG_VALUES: Partial<AgentConfig> = {
   apiIntegrations: [],
   liveWebAccess: { enabled: false, allowedDomains: [] },
   customerModule: { enabled: false },
+  fallback: { enabled: true, reason: 'handoff', reasons: DEFAULT_FALLBACK_REASONS },
 };
 
 /* ── Small UI Components ── */

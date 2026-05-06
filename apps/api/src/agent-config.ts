@@ -59,6 +59,83 @@ const CustomerQuestionConfigSchema = z.object({
   condition: z.string().max(180).optional(),
 }).passthrough();
 
+type DefaultFallbackReason = {
+  id: string;
+  label: string;
+  reason: string;
+  enabled: boolean;
+  priority: 'normal' | 'high' | 'urgent';
+  instruction: string;
+};
+
+const DEFAULT_FALLBACK_REASONS: DefaultFallbackReason[] = [
+  {
+    id: 'human_requested',
+    label: 'Mensch verlangt',
+    reason: 'Mensch angefordert',
+    enabled: true,
+    priority: 'high',
+    instruction: 'Wenn der Anrufer klar mit einem Menschen sprechen will, nicht diskutieren: Rueckruf-Ticket oder konfigurierte Weiterleitung.',
+  },
+  {
+    id: 'unresolved_question',
+    label: 'Nicht sicher loesbar',
+    reason: 'Antwort nicht sicher',
+    enabled: true,
+    priority: 'normal',
+    instruction: 'Wenn Wissen, Preise, Details oder Zustaendigkeit fehlen, ehrlich sagen und als Rueckruf aufnehmen.',
+  },
+  {
+    id: 'urgent_or_emergency',
+    label: 'Dringend / Notfall',
+    reason: 'dringendes Anliegen',
+    enabled: true,
+    priority: 'urgent',
+    instruction: 'Bei Gefahr, Schmerzen, Ausfall oder akutem Problem sofort als dringend markieren und keine langen Nachfragen stellen.',
+  },
+  {
+    id: 'complaint',
+    label: 'Beschwerde',
+    reason: 'Beschwerde / unzufrieden',
+    enabled: true,
+    priority: 'high',
+    instruction: 'Verstaendnis zeigen, keine Loesung versprechen, Sachverhalt knapp notieren.',
+  },
+  {
+    id: 'outside_scope',
+    label: 'Ausserhalb des Angebots',
+    reason: 'ausserhalb Angebot / falscher Ansprechpartner',
+    enabled: true,
+    priority: 'normal',
+    instruction: 'Wenn das Anliegen nicht zur Branche oder Leistung passt, freundlich abgrenzen und Rueckruf nur anbieten, wenn sinnvoll.',
+  },
+  {
+    id: 'privacy_legal',
+    label: 'Datenschutz / rechtlich',
+    reason: 'DSGVO / rechtlich sensibel',
+    enabled: true,
+    priority: 'high',
+    instruction: 'Bei Datenschutz, Loeschung, rechtlichen oder finanziellen Fragen nicht beraten, sondern an das Team eskalieren.',
+  },
+  {
+    id: 'audio_problem',
+    label: 'Akustik / Verbindung',
+    reason: 'akustisch nicht verstanden',
+    enabled: true,
+    priority: 'normal',
+    instruction: 'Nach wiederholtem Nichtverstehen Rueckruf anbieten, statt den Anrufer zu nerven.',
+  },
+];
+
+const FallbackReasonSchema = z.object({
+  id: z.string().min(1).max(80),
+  label: z.string().min(1).max(120),
+  reason: z.string().min(1).max(180),
+  enabled: z.boolean().optional().default(true),
+  priority: z.enum(['normal', 'high', 'urgent']).optional().default('normal'),
+  instruction: z.string().max(260).optional().default(''),
+}).passthrough();
+
 const AgentConfigSchema = z.object({
   tenantId: z.string().min(1).default('demo'),
   name: z.string().min(1).default('Demo Agent'),
@@ -109,7 +186,8 @@ const AgentConfigSchema = z.object({
   fallback: z.object({
     enabled: z.boolean().default(true),
     reason: z.string().min(1).default('handoff'),
-  }).default({ enabled: true, reason: 'handoff' }),
+    reasons: z.array(FallbackReasonSchema).max(16).default([...DEFAULT_FALLBACK_REASONS]),
+  }).passthrough().default({ enabled: true, reason: 'handoff', reasons: [...DEFAULT_FALLBACK_REASONS] }),
 
   // Industry cluster-key for cross-org pattern-pool (template-learning.ts).
   // Set when the customer applies a curated template (id of the template) or
@@ -486,6 +564,15 @@ export function transferToolName(target: string): string {
   return 'transfer_' + target.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30);
 }
 
+function fallbackReasonDescription(config: AgentConfig): string {
+  const reasons = config.fallback.reasons
+    ?.filter((item) => item.enabled !== false && item.reason.trim())
+    .map((item) => item.reason.trim())
+    .slice(0, 10) ?? [];
+  if (!reasons.length) return `Ticket reason. Default to "${config.fallback.reason}" when unsure.`;
+  return `Ticket reason. Use one configured reason exactly when it fits: ${reasons.map((reason) => `"${reason}"`).join(', ')}. Default to "${config.fallback.reason}" when unsure.`;
+}
+
 /** Map our tool names to Retell custom function definitions. */
 function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTool[] {
   const tools: RetellTool[] = [];
@@ -625,7 +712,7 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
           preferredTime: { type: 'string' },
           service: { type: 'string' },
           notes: { type: 'string' },
-          reason: { type: 'string' },
+          reason: { type: 'string', description: fallbackReasonDescription(config) },
         },
       },
     });

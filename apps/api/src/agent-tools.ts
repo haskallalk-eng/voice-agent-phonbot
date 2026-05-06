@@ -45,6 +45,15 @@ export function getEnabledKnownTools(cfg: AgentConfig): KnownToolName[] {
   return cfg.tools.filter((tool): tool is KnownToolName => KnownToolNameSchema.safeParse(tool).success);
 }
 
+function fallbackReasonDescription(cfg: AgentConfig): string {
+  const reasons = (cfg.fallback as { reasons?: Array<{ reason?: string; enabled?: boolean }> }).reasons
+    ?.filter((item) => item.enabled !== false && typeof item.reason === 'string' && item.reason.trim())
+    .map((item) => item.reason!.trim())
+    .slice(0, 10) ?? [];
+  if (!reasons.length) return `Ticket reason. Default to "${cfg.fallback.reason}" when unsure.`;
+  return `Ticket reason. Use one configured reason exactly when it fits: ${reasons.map((reason) => `"${reason}"`).join(', ')}. Default to "${cfg.fallback.reason}" when unsure.`;
+}
+
 export function getOpenAITools(cfg: AgentConfig) {
   const enabled = new Set(getEnabledKnownTools(cfg));
   const tools: any[] = [];
@@ -101,7 +110,7 @@ export function getOpenAITools(cfg: AgentConfig) {
           preferredTime: { type: 'string' },
           service: { type: 'string' },
           notes: { type: 'string' },
-          reason: { type: 'string' },
+          reason: { type: 'string', description: fallbackReasonDescription(cfg) },
         },
         required: ['customerPhone'],
         additionalProperties: false,

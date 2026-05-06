@@ -37,6 +37,19 @@ import { PreviewTab } from './PreviewTab.js';
 
 type Page = 'home' | 'agent' | 'test' | 'tickets' | 'customers' | 'logs' | 'billing' | 'phone' | 'calendar' | 'insights';
 
+function mergeAgentConfigDefaults(cfg: AgentConfig): AgentConfig {
+  const defaultFallback = DEFAULT_CONFIG_VALUES.fallback as AgentConfig['fallback'];
+  return {
+    ...DEFAULT_CONFIG_VALUES,
+    ...cfg,
+    fallback: {
+      ...defaultFallback,
+      ...cfg.fallback,
+      reasons: cfg.fallback?.reasons?.length ? cfg.fallback.reasons : defaultFallback.reasons,
+    },
+  } as AgentConfig;
+}
+
 export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void } = {}) {
   const [config, setConfig] = useState<AgentConfig | null>(null);
   const [allAgents, setAllAgents] = useState<AgentConfig[]>([]);
@@ -150,10 +163,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
       const newCfg = await createNewAgent({ name: 'Neuer Agent', businessName: 'Mein Business' });
       await loadAllAgents();
       // Load the new agent into the editor
-      const merged: AgentConfig = {
-        ...DEFAULT_CONFIG_VALUES,
-        ...newCfg,
-      } as AgentConfig;
+      const merged = mergeAgentConfigDefaults(newCfg);
       setConfig(merged);
       savedConfigRef.current = JSON.stringify(merged);
       setView('edit');
@@ -170,10 +180,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
   async function handleSelectAgent(tenantId: string) {
     try {
       const cfg = await getAgentConfig(tenantId);
-      const merged: AgentConfig = {
-        ...DEFAULT_CONFIG_VALUES,
-        ...cfg,
-      } as AgentConfig;
+      const merged = mergeAgentConfigDefaults(cfg);
       setConfig(merged);
       savedConfigRef.current = JSON.stringify(merged);
       setView('edit');
@@ -189,10 +196,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
   async function loadConfig({ resetView = true }: { resetView?: boolean } = {}) {
     try {
       const cfg = await getAgentConfig();
-      const merged: AgentConfig = {
-        ...DEFAULT_CONFIG_VALUES,
-        ...cfg,
-      } as AgentConfig;
+      const merged = mergeAgentConfigDefaults(cfg);
       setConfig(merged);
       savedConfigRef.current = JSON.stringify(merged);
       // Initial mount: jump to list if the agent is already deployed,
@@ -483,12 +487,18 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
       {/* Body: sidebar (col on desktop, top row on mobile) + scrollable content */}
       <div className="relative z-10 flex flex-col md:flex-row flex-1 min-h-0">
         {/* Tab list — horizontal scroll on mobile, vertical sidebar on desktop */}
-        <div className="w-full md:w-56 shrink-0 border-b md:border-b-0 md:border-r border-white/[0.07] bg-black/18 backdrop-blur-xl flex md:block gap-2 md:gap-0 md:space-y-1.5 px-3 md:px-4 py-3 md:py-5 overflow-x-auto md:overflow-y-auto scrollbar-thin">
+        <div
+          role="tablist"
+          aria-orientation="vertical"
+          className="w-full md:w-56 shrink-0 border-b md:border-b-0 md:border-r border-white/[0.07] bg-black/18 backdrop-blur-xl flex md:grid md:auto-rows-fr gap-2 px-3 md:px-4 py-3 md:py-4 overflow-x-auto md:overflow-hidden scrollbar-thin"
+        >
           {TABS.map((t, index) => (
             <button
+              role="tab"
+              aria-selected={tab === t.id}
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`group shrink-0 md:w-full flex items-center gap-2 md:gap-3 px-3 py-2.5 md:py-3 rounded-2xl text-xs font-semibold transition-all md:text-left cursor-pointer relative whitespace-nowrap border ${
+              className={`group shrink-0 md:w-full md:h-full md:min-h-0 flex items-center gap-2 md:gap-3 px-3 py-2.5 md:py-0 rounded-2xl text-xs font-semibold transition-all md:text-left cursor-pointer relative whitespace-nowrap border ${
                 tab === t.id
                   ? 'bg-gradient-to-br from-orange-500/16 via-white/[0.07] to-cyan-400/12 text-white border-orange-300/22 shadow-[0_0_28px_rgba(249,115,22,0.12)]'
                   : 'text-white/38 hover:text-white/75 hover:bg-white/[0.05] border-white/[0.04]'

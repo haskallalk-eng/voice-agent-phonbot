@@ -1382,11 +1382,17 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
     try {
       const preferredTime = args.preferredTime as string | undefined;
+      const configuredFallbackReason = await readConfig(tenantId, orgId)
+        .then((cfg) => cfg.fallback.reason)
+        .catch(() => 'handoff');
+      const reason = typeof args.reason === 'string' && args.reason.trim()
+        ? args.reason.trim()
+        : configuredFallbackReason;
       const row = await createTicket({
         tenantId,
         source: 'phone',
         sessionId: callId,
-        reason: (args.reason as string | undefined) ?? 'handoff',
+        reason,
         customerName: args.customerName as string | undefined,
         customerPhone: ticketPhoneOrUnknown(await resolveCallerPhone(body, args, callId)),
         preferredTime,
