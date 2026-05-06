@@ -368,21 +368,49 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
      The parent <main> has overflow-y-auto — we need to break out of that
      scroll context so the header/sidebar stay pinned. Using sticky + a
      height that fills the viewport minus the mobile topbar (48px). */
+  const activeTab = TABS.find((t) => t.id === tab) ?? TABS[0]!;
+  const ActiveIcon = activeTab.Icon;
+
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 3rem)', position: 'sticky', top: 0 }}>
+    <div
+      className="relative flex flex-col overflow-hidden bg-[#07070D]"
+      style={{ height: 'calc(100vh - 3rem)', position: 'sticky', top: 0 }}
+    >
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-36 -right-20 h-96 w-96 rounded-full bg-orange-500/14 blur-3xl" />
+        <div className="absolute top-28 left-10 h-80 w-80 rounded-full bg-cyan-400/10 blur-3xl" />
+        <div
+          className="absolute inset-0 opacity-[0.12]"
+          style={{
+            backgroundImage: 'linear-gradient(rgba(255,255,255,0.09) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)',
+            backgroundSize: '44px 44px',
+            maskImage: 'linear-gradient(to bottom, black, transparent 78%)',
+          }}
+        />
+      </div>
+
       {/* Header — fixed at top */}
-      <div className="shrink-0 z-20 px-6 py-4 flex items-center justify-between flex-wrap gap-3 border-b border-white/[0.05]" style={{ background: 'rgba(10,10,15,0.95)', backdropFilter: 'blur(12px)' }}>
+      <div className="relative shrink-0 z-20 px-5 md:px-7 py-5 flex items-center justify-between flex-wrap gap-4 border-b border-white/[0.08] bg-[#0A0A0F]/82 backdrop-blur-2xl shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => setView('list')}
-            className="shrink-0 flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer"
+            className="shrink-0 flex items-center gap-1.5 text-xs text-white/45 hover:text-white transition-colors px-3 py-2 rounded-xl border border-white/[0.07] bg-white/[0.03] hover:bg-white/[0.07] cursor-pointer"
           >
             <span className="text-base leading-none">‹</span> Agenten
           </button>
-          <div className="w-px h-4 bg-white/10" />
+          <div className="relative h-11 w-11 shrink-0 rounded-2xl border border-orange-400/25 bg-gradient-to-br from-orange-500/25 via-white/[0.05] to-cyan-400/20 shadow-[0_0_34px_rgba(249,115,22,0.18)] flex items-center justify-center">
+            <ActiveIcon size={18} className="text-orange-200" />
+            <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.9)]" />
+          </div>
           <div className="min-w-0">
-            <h2 className="text-base font-semibold text-white truncate">{config.name || 'Agent Builder'}</h2>
-            <p className="text-xs text-white/30 mt-0.5 truncate">{config.businessName || 'Konfiguration'}</p>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-100/70">
+                Chipy Studio
+              </span>
+              {isDirty && <span className="h-1.5 w-1.5 rounded-full bg-orange-300 shadow-[0_0_12px_rgba(251,146,60,0.85)]" />}
+            </div>
+            <h2 className="mt-1 text-lg font-semibold text-white truncate">{config.name || 'Agent Builder'}</h2>
+            <p className="text-xs text-white/38 truncate">{config.businessName || 'Konfiguration'} · {activeTab.label}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
@@ -408,7 +436,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
           {config.retellAgentId && (
             <button
               onClick={() => setTab('preview')}
-              className="flex items-center gap-2 rounded-xl border border-cyan-500/25 bg-cyan-500/8 px-3.5 py-2 text-xs font-medium text-cyan-400 hover:bg-cyan-500/15 hover:border-cyan-500/40 transition-all cursor-pointer"
+              className="flex items-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-3.5 py-2 text-xs font-semibold text-cyan-100 hover:bg-cyan-300/16 hover:border-cyan-300/40 transition-all cursor-pointer shadow-[0_0_24px_rgba(6,182,212,0.08)]"
             >
               <IconPlay size={13} />
               Testen
@@ -418,7 +446,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
             <button
               onClick={handleSave}
               disabled={saving || deploying || !isDirty}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 transition-all ${isDirty ? 'cursor-pointer' : 'cursor-default'}`}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 transition-all shadow-[0_0_28px_rgba(249,115,22,0.16)] ${isDirty ? 'cursor-pointer hover:scale-[1.02]' : 'cursor-default'}`}
               style={{ background: isDirty ? 'linear-gradient(135deg, #F97316, #06B6D4)' : 'rgba(255,255,255,0.08)' }}
             >
               {saving ? (
@@ -430,7 +458,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
             <button
               onClick={handleDeploy}
               disabled={deploying || saving}
-              className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 transition-all cursor-pointer"
+              className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 transition-all cursor-pointer hover:scale-[1.02] shadow-[0_0_30px_rgba(249,115,22,0.18)]"
               style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
             >
               <IconDeploy size={13} />
@@ -453,21 +481,30 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
       )}
 
       {/* Body: sidebar (col on desktop, top row on mobile) + scrollable content */}
-      <div className="flex flex-col md:flex-row flex-1 min-h-0">
+      <div className="relative z-10 flex flex-col md:flex-row flex-1 min-h-0">
         {/* Tab list — horizontal scroll on mobile, vertical sidebar on desktop */}
-        <div className="w-full md:w-40 shrink-0 border-b md:border-b-0 md:border-r border-white/[0.05] flex md:block gap-1 md:gap-0 md:space-y-0.5 px-2 md:px-3 py-2 md:py-4 overflow-x-auto md:overflow-y-auto scrollbar-thin">
-          {TABS.map((t) => (
+        <div className="w-full md:w-56 shrink-0 border-b md:border-b-0 md:border-r border-white/[0.07] bg-black/18 backdrop-blur-xl flex md:block gap-2 md:gap-0 md:space-y-1.5 px-3 md:px-4 py-3 md:py-5 overflow-x-auto md:overflow-y-auto scrollbar-thin">
+          {TABS.map((t, index) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`shrink-0 md:w-full flex items-center gap-2 md:gap-2.5 px-3 py-2 md:py-2.5 rounded-xl text-xs font-medium transition-all md:text-left cursor-pointer relative whitespace-nowrap ${
+              className={`group shrink-0 md:w-full flex items-center gap-2 md:gap-3 px-3 py-2.5 md:py-3 rounded-2xl text-xs font-semibold transition-all md:text-left cursor-pointer relative whitespace-nowrap border ${
                 tab === t.id
-                  ? 'bg-white/8 text-white border border-white/10'
-                  : 'text-white/35 hover:text-white/65 hover:bg-white/[0.04] border border-transparent'
+                  ? 'bg-gradient-to-br from-orange-500/16 via-white/[0.07] to-cyan-400/12 text-white border-orange-300/22 shadow-[0_0_28px_rgba(249,115,22,0.12)]'
+                  : 'text-white/38 hover:text-white/75 hover:bg-white/[0.05] border-white/[0.04]'
               }`}
             >
-              <t.Icon size={14} className={tab === t.id ? 'text-orange-400' : ''} />
-              {t.label}
+              <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border transition-all ${
+                tab === t.id ? 'border-cyan-300/25 bg-cyan-300/12 text-cyan-100' : 'border-white/[0.06] bg-white/[0.03] text-white/35 group-hover:text-white/65'
+              }`}>
+                <t.Icon size={14} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate">{t.label}</span>
+                <span className={`hidden md:block text-[10px] font-normal ${tab === t.id ? 'text-cyan-100/45' : 'text-white/20'}`}>
+                  Schritt {index + 1}
+                </span>
+              </span>
               {t.id === 'behavior' && pendingSuggestions > 0 && (
                 <span
                   aria-label={`${pendingSuggestions} Vorschlag${pendingSuggestions === 1 ? '' : 'e'} wartet`}
@@ -494,7 +531,29 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
         </div>
 
         {/* Content — scrollable */}
-        <div className="flex-1 min-w-0 overflow-y-auto px-4 md:px-6 py-4 md:py-5">
+        <div className="flex-1 min-w-0 overflow-y-auto px-4 md:px-7 py-5 md:py-7">
+          <div className="mb-5 overflow-hidden rounded-[1.65rem] border border-white/[0.09] bg-gradient-to-br from-white/[0.075] via-white/[0.035] to-cyan-400/[0.045] p-4 md:p-5 shadow-[0_24px_80px_rgba(0,0,0,0.25)]">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-orange-300/20 bg-orange-400/10 text-orange-100 shadow-[0_0_28px_rgba(249,115,22,0.14)]">
+                  <ActiveIcon size={19} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-100/45">Aktiver Bereich</p>
+                  <h1 className="text-xl font-semibold text-white">{activeTab.label}</h1>
+                  <p className="mt-0.5 text-sm text-white/42">Bearbeite nur diesen Layer, speichere dann direkt in die Live-Konfiguration.</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2 text-[11px]">
+                <span className="rounded-full border border-white/[0.09] bg-black/20 px-3 py-1.5 text-white/50">
+                  {config.retellAgentId ? 'Retell verbunden' : 'Noch nicht deployed'}
+                </span>
+                <span className={`rounded-full border px-3 py-1.5 ${isDirty ? 'border-orange-300/25 bg-orange-400/10 text-orange-100' : 'border-green-300/18 bg-green-400/8 text-green-100/70'}`}>
+                  {isDirty ? 'Ungespeicherte Aenderungen' : 'Alles gespeichert'}
+                </span>
+              </div>
+            </div>
+          </div>
 
       {tab === 'identity' && (
         <IdentityTab
