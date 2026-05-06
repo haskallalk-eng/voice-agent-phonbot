@@ -2485,6 +2485,63 @@ function normalizeLookupText(value: string | null | undefined): string {
     .trim();
 }
 
+function lookupPhoneticToken(input: string): string {
+  let token = normalizeLookupText(input).replace(/\s+/g, '');
+  if (!token) return '';
+  token = token
+    .replace(/tsch/g, 'ch')
+    .replace(/sch/g, 'sh')
+    .replace(/ph/g, 'f')
+    .replace(/qu/g, 'kv')
+    .replace(/(ai|ay|ei|ey)/g, 'ai')
+    .replace(/ie/g, 'i')
+    .replace(/ck/g, 'k')
+    .replace(/c([eiy])/g, 's$1')
+    .replace(/c/g, 'k')
+    .replace(/z/g, 'ts')
+    .replace(/v/g, 'f')
+    .replace(/w/g, 'v')
+    .replace(/dt\b/g, 't')
+    .replace(/(.)\1+/g, '$1');
+  return token;
+}
+
+function lookupLevenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  const cur = Array.from({ length: b.length + 1 }, () => 0);
+  for (let i = 1; i <= a.length; i += 1) {
+    cur[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      cur[j] = Math.min((cur[j - 1] ?? 0) + 1, (prev[j] ?? 0) + 1, (prev[j - 1] ?? 0) + cost);
+    }
+    for (let j = 0; j < prev.length; j += 1) prev[j] = cur[j] ?? 0;
+  }
+  return prev[b.length] ?? Math.max(a.length, b.length);
+}
+
+function lookupNameSimilarity(wanted: string, stored: string): number {
+  const needle = normalizeLookupText(wanted);
+  const hay = normalizeLookupText(stored);
+  if (!needle || !hay) return 0;
+  if (needle === hay) return 1;
+  if (hay.includes(needle) || needle.includes(hay)) return 0.88;
+
+  const needleTokens = new Set(needle.split(' ').filter((token) => token.length >= 2));
+  const hayTokens = new Set(hay.split(' ').filter((token) => token.length >= 2));
+  const shared = [...needleTokens].filter((token) => hayTokens.has(token)).length;
+  const tokenScore = shared / Math.max(needleTokens.size, hayTokens.size, 1);
+  const needlePhonetic = new Set([...needleTokens].map(lookupPhoneticToken).filter((token) => token.length >= 2));
+  const hayPhonetic = new Set([...hayTokens].map(lookupPhoneticToken).filter((token) => token.length >= 2));
+  const phoneticShared = [...needlePhonetic].filter((token) => hayPhonetic.has(token)).length;
+  const phoneticScore = phoneticShared / Math.max(needlePhonetic.size, hayPhonetic.size, 1);
+  const distanceScore = 1 - lookupLevenshtein(needle, hay) / Math.max(needle.length, hay.length, 1);
+  return Math.max(tokenScore * 0.82, phoneticScore * 0.9, distanceScore);
+}
+
 function phoneDigits(value: string | null | undefined): string {
   return (value ?? '').replace(/\D+/g, '');
 }
@@ -2536,6 +2593,16 @@ function bookingMatchesText(stored: string | null | undefined, wanted: string | 
   if (!needle) return true;
   const hay = normalizeLookupText(stored);
   return Boolean(hay) && (hay.includes(needle) || needle.includes(hay));
+}
+
+function bookingMatchesCustomerName(stored: string | null | undefined, wanted: string | undefined): boolean {
+  const needle = normalizeLookupText(wanted);
+  if (!needle) return true;
+  const hay = normalizeLookupText(stored);
+  if (!hay) return false;
+  if (hay.includes(needle) || needle.includes(hay)) return true;
+  if (needle.length < 3 || hay.length < 3) return false;
+  return lookupNameSimilarity(needle, hay) >= 0.5;
 }
 
 function hasBookingLookupSelector(opts: BookingChangeLookupOpts): boolean {
@@ -2594,7 +2661,7 @@ function filterBookingsForChange(rows: CalendarBookingRow[], opts: BookingChange
   if (opts.bookingId?.trim()) out = out.filter((row) => row.id === opts.bookingId!.trim());
   if (opts.staffId) out = out.filter((row) => row.staff_id === opts.staffId);
   if (phoneLooksUsable(opts.customerPhone)) out = out.filter((row) => phoneMatches(row.customer_phone, opts.customerPhone));
-  if (normalizeLookupText(opts.customerName).length >= 2) out = out.filter((row) => bookingMatchesText(row.customer_name, opts.customerName));
+  if (normalizeLookupText(opts.customerName).length >= 2) out = out.filter((row) => bookingMatchesCustomerName(row.customer_name, opts.customerName));
   if (opts.currentTime?.trim()) out = out.filter((row) => bookingMatchesTime(row, opts.currentTime));
   if (normalizeLookupText(opts.service)) out = out.filter((row) => bookingMatchesText(row.service, opts.service));
   return out.slice(0, opts.limit ?? 6);
@@ -2645,7 +2712,7 @@ export async function findChipyBookingsForChange(
 function mutationAllowedForBooking(row: CalendarBookingRow, opts: BookingChangeLookupOpts): boolean {
   if (opts.bookingId?.trim() && opts.bookingId.trim() === row.id) return true;
   if (phoneMatches(row.customer_phone, opts.customerPhone)) return true;
-  const hasName = normalizeLookupText(opts.customerName).length >= 2 && bookingMatchesText(row.customer_name, opts.customerName);
+  const hasName = normalizeLookupText(opts.customerName).length >= 2 && bookingMatchesCustomerName(row.customer_name, opts.customerName);
   const hasNarrowing = Boolean(opts.currentTime?.trim() || normalizeLookupText(opts.service));
   return hasName && hasNarrowing;
 }
