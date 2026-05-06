@@ -51,6 +51,45 @@ function languageLabel(language: string): string {
   return LANGUAGE_LABELS[language] ?? language;
 }
 
+type FallbackReasonConfig = {
+  id: string;
+  label: string;
+  reason: string;
+  enabled?: boolean;
+  priority?: 'normal' | 'high' | 'urgent';
+  instruction?: string;
+};
+
+function activeFallbackReasons(cfg: AgentConfig): FallbackReasonConfig[] {
+  const raw = (cfg.fallback as { reasons?: FallbackReasonConfig[] }).reasons;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((reason) => reason && reason.enabled !== false && reason.label?.trim() && reason.reason?.trim())
+    .slice(0, 12);
+}
+
+function appendFallbackInstructions(parts: string[], cfg: AgentConfig, ticketCreateEnabled: boolean) {
+  if (!cfg.fallback.enabled) return;
+
+  const reasons = activeFallbackReasons(cfg);
+  parts.push('');
+  parts.push('## Notausgang / Eskalation');
+  parts.push(
+    ticketCreateEnabled
+      ? `Wenn du ein Anliegen nicht direkt sauber loesen kannst, erstelle ein Rueckruf-/Uebergabe-Ticket. Standardgrund, wenn kein Spezialfall passt: "${cfg.fallback.reason}".`
+      : `Wenn du ein Anliegen nicht direkt sauber loesen kannst, sage ehrlich, dass das Team sich melden soll. Das Ticket-Tool ist fuer diesen Agenten deaktiviert; Standardgrund intern: "${cfg.fallback.reason}".`,
+  );
+  if (reasons.length > 0) {
+    parts.push('Waehle fuer Tickets immer den konkretesten passenden reason-Wert:');
+    for (const reason of reasons) {
+      const priority = reason.priority && reason.priority !== 'normal' ? ` Prioritaet: ${reason.priority}.` : '';
+      const instruction = reason.instruction?.trim() ? ` ${reason.instruction.trim()}` : '';
+      parts.push(`- ${reason.label}: reason="${reason.reason}".${priority}${instruction}`);
+    }
+  }
+  parts.push('Wenn eine Live-Weiterleitung konfiguriert ist und besser passt, leite zuerst weiter; wenn das scheitert oder nicht moeglich ist, nutze den passenden Eskalationsgrund.');
+}
+
 /**
  * Parse structured opening hours and determine open/closed status.
  * Expected format: "Mo-Fr 09:00-18:00, Sa 10:00-14:00" or free-text.
@@ -228,9 +267,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   }
   parts.push('Erwaehne eine SMS-Bestaetigung nur, wenn das Tool-Ergebnis smsSent=true enthaelt. Wenn smsSent=false oder fehlt, sage nicht dass eine SMS verschickt wurde.');
 
-  if (cfg.fallback.enabled) {
-    parts.push(`Wenn du die Anfrage nicht direkt lösen kannst, leite das Gespräch in Richtung Rückruf/Weiterleitung (${cfg.fallback.reason}).`);
-  }
+  appendFallbackInstructions(parts, cfg, ticketCreateEnabled);
 
   // ── Call routing / transfer rules ──────────────────────────────────────
   const routingRules = (cfg as Record<string, unknown>).callRoutingRules as

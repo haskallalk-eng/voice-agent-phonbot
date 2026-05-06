@@ -424,6 +424,15 @@ export type CustomerModuleConfig = {
   questions?: CustomerQuestionConfig[];
 };
 
+export type FallbackReasonConfig = {
+  id: string;
+  label: string;
+  reason: string;
+  enabled?: boolean;
+  priority?: 'normal' | 'high' | 'urgent';
+  instruction?: string;
+};
+
 export type AgentConfig = {
   tenantId: string;
   name: string;
@@ -443,7 +452,7 @@ export type AgentConfig = {
   roleBlockOverrides?: Record<string, string>;  // per-role edited block text
   sectionTextOverrides?: Record<string, string>; // per-section edited block text
   tools: string[];
-  fallback: { enabled: boolean; reason: string };
+  fallback: { enabled: boolean; reason: string; reasons?: FallbackReasonConfig[] };
   retellAgentId?: string;
   retellLlmId?: string;
   retellKnowledgeBaseId?: string;
@@ -497,7 +506,7 @@ export type AgentConfig = {
 export type AgentPreview = {
   instructions: string;
   tools: string[];
-  fallback: { enabled: boolean; reason: string };
+  fallback: { enabled: boolean; reason: string; reasons?: FallbackReasonConfig[] };
 };
 
 export type DeployResult = {
