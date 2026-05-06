@@ -8,11 +8,10 @@ import {
 } from '../../lib/api.js';
 import {
   SectionCard,
-  PROMPT_TEMPLATES, PROMPT_SECTIONS, KNOWN_TOOLS,
+  PROMPT_TEMPLATES, PROMPT_SECTIONS,
   assembleRolePrompt, generalAssistantBlock, roleIntro, roleTaskList,
   IconTemplate, IconMessageSquare,
 } from './shared.js';
-import { IconCalendar, IconTickets, IconPhoneForward } from '../PhonbotIcons.js';
 import { AdaptiveTextarea } from '../../components/AdaptiveTextarea.js';
 
 export interface BehaviorTabProps {
@@ -322,8 +321,6 @@ export function BehaviorTab({
           onUpdate={onUpdate}
           activeIds={activePromptSections}
         />
-
-        <ToolsBlock config={config} onUpdate={onUpdate} onNavigateTab={onNavigateTab} />
       </SectionCard>
     </>
   );
@@ -754,225 +751,6 @@ function RoleCard({
         </pre>
       )}
     </SectionCard>
-  );
-}
-
-// ── Aktive Tools — descriptive cards instead of bare checkboxes ──────────────
-
-type ToolMeta = {
-  label: string;
-  description: string;
-  Icon: React.FC<{ size?: number; className?: string }>;
-  rawName: string;
-};
-const TOOL_META: Record<typeof KNOWN_TOOLS[number], ToolMeta> = {
-  'calendar.findSlots': {
-    label: 'Freie Termine suchen',
-    description: 'Schaut nach freien Slots im verbundenen Kalender (Google, Outlook, Cal.com oder Chipy intern). Vorschlag aus Live-Verfügbarkeit statt Phantasie.',
-    Icon: IconCalendar,
-    rawName: 'calendar.findSlots',
-  },
-  'calendar.book': {
-    label: 'Termin buchen',
-    description: 'Bucht den Slot direkt im Kalender. Bei Fehler (z.B. Slot weg) → automatischer Fallback: Rückruf-Ticket + SMS-Bestätigung.',
-    Icon: IconCalendar,
-    rawName: 'calendar.book',
-  },
-  'calendar.findBookings': {
-    label: 'Bestehende Termine finden',
-    description: 'Sucht einen vorhandenen Kundentermin sicher ueber Nummer, Name oder Terminzeit, bevor abgesagt oder verschoben wird.',
-    Icon: IconCalendar,
-    rawName: 'calendar.findBookings',
-  },
-  'calendar.cancel': {
-    label: 'Termin absagen',
-    description: 'Sagt einen gefundenen Termin erst nach ausdruecklicher Bestaetigung ab und synchronisiert externe Kalender bestmoeglich.',
-    Icon: IconCalendar,
-    rawName: 'calendar.cancel',
-  },
-  'calendar.reschedule': {
-    label: 'Termin verschieben',
-    description: 'Verschiebt einen vorhandenen Termin auf einen bestaetigten neuen Slot, ohne unklare oder doppelte Aktionen.',
-    Icon: IconCalendar,
-    rawName: 'calendar.reschedule',
-  },
-  'ticket.create': {
-    label: 'Rückruf-Ticket erfassen',
-    description: 'Speichert das Anliegen mit Name, Nummer und Anlass in deiner Inbox. Anrufer bekommt SMS-Bestätigung. Empfohlen für JEDEN Agent als sicherer Fallback.',
-    Icon: IconTickets,
-    rawName: 'ticket.create',
-  },
-};
-
-// Pro Rolle: welche Tools EMPFEHLEN sich? Universal: ticket.create (Sicherheits-
-// netz, fängt jedes Anliegen ohne Datenverlust). Nur appointment braucht zusätzlich
-// die zwei Calendar-Tools (Slots suchen + buchen). Diese Map treibt den Smart-
-// Defaults-Banner — der erscheint nur wenn das aktuelle tools-Array vom Empfehl-
-// ten-Set abweicht. Ein-Klick-Übernahme, keine Auto-Mutation hinter dem Rücken.
-const ROLE_TOOL_HINTS: Record<string, ReadonlyArray<typeof KNOWN_TOOLS[number]>> = {
-  reception: ['ticket.create'],
-  appointment: ['calendar.findSlots', 'calendar.book', 'calendar.findBookings', 'calendar.cancel', 'calendar.reschedule', 'ticket.create'],
-  support: ['ticket.create'],
-  orders: ['ticket.create'],
-  emergency: ['ticket.create'],
-  info: ['ticket.create'],
-};
-
-function recommendedToolsFor(roleIds: string[]): Set<string> {
-  const out = new Set<string>();
-  for (const id of roleIds) {
-    const hints = ROLE_TOOL_HINTS[id];
-    if (hints) for (const t of hints) out.add(t);
-  }
-  return out;
-}
-
-function ToolsBlock({ config, onUpdate, onNavigateTab }: { config: AgentConfig; onUpdate: (p: Partial<AgentConfig>) => void; onNavigateTab?: (route: string) => void }) {
-  const roleIds = readSelectedRoles(config);
-  const recommended = useMemo(() => recommendedToolsFor(roleIds), [roleIds.join(',')]);
-  const active = useMemo(() => new Set(config.tools), [config.tools.join(',')]);
-  const missing = useMemo(() => {
-    const m: string[] = [];
-    recommended.forEach((t) => { if (!active.has(t)) m.push(t); });
-    return m;
-  }, [recommended, active]);
-  const extra = useMemo(() => {
-    const e: string[] = [];
-    active.forEach((t) => { if (!recommended.has(t) && (KNOWN_TOOLS as readonly string[]).includes(t)) e.push(t); });
-    return e;
-  }, [recommended, active]);
-
-  function toggle(tool: string) {
-    const next = new Set(config.tools);
-    if (next.has(tool)) next.delete(tool);
-    else next.add(tool);
-    onUpdate({ tools: Array.from(next) });
-  }
-
-  function applyRecommended() {
-    // Behalte Tools die NICHT in KNOWN_TOOLS sind (forward-compat falls
-    // Custom-Tools je hier landen). Setze nur das KNOWN_TOOLS-Subset auf
-    // recommended.
-    const preserved = config.tools.filter((t) => !(KNOWN_TOOLS as readonly string[]).includes(t));
-    onUpdate({ tools: [...preserved, ...recommended] });
-  }
-
-  return (
-    <div className="mt-5">
-      <span className="text-xs font-medium text-white/40 uppercase tracking-wider block mb-1">Aktive Tools</span>
-      <p className="text-[11px] text-white/30 mb-3">Funktionen die Chipy während des Anrufs ausführen kann. Ohne Häkchen kann er die Aktion nicht auslösen — egal was im Prompt steht.</p>
-
-      {/* Smart-Defaults-Banner: erscheint NUR wenn die gewählten Rollen Tools
-          empfehlen die nicht aktiviert sind, oder wenn Tools aktiv sind die
-          keine gewählte Rolle braucht. Ein-Klick-Korrektur. */}
-      {roleIds.length > 0 && (missing.length > 0 || extra.length > 0) && (
-        <div className="mb-3 rounded-xl border border-cyan-400/25 bg-cyan-400/[0.04] px-3 py-2.5 flex items-center gap-3 flex-wrap">
-          <div className="flex-1 min-w-0">
-            <p className="text-[11px] text-cyan-200/85 leading-snug">
-              {missing.length > 0 && (
-                <>Empfohlen für deine Rollen: {missing.map((t) => TOOL_META[t as typeof KNOWN_TOOLS[number]]?.label ?? t).join(', ')}.</>
-              )}
-              {missing.length > 0 && extra.length > 0 && ' '}
-              {extra.length > 0 && (
-                <>Aktiv ohne passende Rolle: {extra.map((t) => TOOL_META[t as typeof KNOWN_TOOLS[number]]?.label ?? t).join(', ')}.</>
-              )}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={applyRecommended}
-            className="text-[11px] px-3 py-1.5 rounded-lg bg-cyan-400/15 hover:bg-cyan-400/25 text-cyan-100 border border-cyan-400/30 transition-colors cursor-pointer whitespace-nowrap"
-          >
-            Empfehlung übernehmen
-          </button>
-        </div>
-      )}
-
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
-        {KNOWN_TOOLS.map((tool) => {
-          const meta = TOOL_META[tool];
-          const isActive = active.has(tool);
-          const isRecommended = recommended.has(tool);
-          return (
-            <button
-              key={tool}
-              type="button"
-              onClick={() => toggle(tool)}
-              className={`group relative flex items-start gap-2.5 text-left rounded-xl border px-3 py-2.5 transition-all cursor-pointer ${
-                isActive
-                  ? 'border-orange-500/45 bg-orange-500/[0.07]'
-                  : isRecommended
-                    ? 'border-cyan-400/30 bg-cyan-400/[0.03] hover:border-cyan-400/50'
-                    : 'border-white/[0.07] bg-white/[0.03] hover:border-white/15 hover:bg-white/[0.05]'
-              }`}
-            >
-              {isActive && (
-                <span aria-hidden className="absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
-                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </span>
-              )}
-              {!isActive && isRecommended && (
-                <span aria-hidden className="absolute top-2 right-2 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-cyan-200 bg-cyan-400/10 border border-cyan-400/30 rounded">
-                  empf.
-                </span>
-              )}
-              <meta.Icon size={16} className={`shrink-0 mt-0.5 transition-colors ${isActive ? 'text-orange-300' : isRecommended ? 'text-cyan-300/70' : 'text-white/35 group-hover:text-white/55'}`} />
-              <div className="min-w-0 pr-7">
-                <p className={`text-xs font-semibold leading-tight transition-colors ${isActive ? 'text-white' : isRecommended ? 'text-white/80' : 'text-white/65 group-hover:text-white/85'}`}>
-                  {meta.label}
-                </p>
-                <p className="text-[10px] text-white/35 mt-1 leading-snug">{meta.description}</p>
-                <code className="text-[9px] text-white/25 mt-1.5 block font-mono">{meta.rawName}</code>
-              </div>
-            </button>
-          );
-        })}
-        {/* 4th card — Live-Weiterleitung. Read-only, configured via the
-            CallRoutingRules section in CapabilitiesTab. We surface it here so
-            users see it next to the other tools and don't think transfer is
-            missing. */}
-        <TransferInfoCard config={config} onNavigateTab={onNavigateTab} />
-      </div>
-    </div>
-  );
-}
-
-function TransferInfoCard({ config, onNavigateTab }: { config: AgentConfig; onNavigateTab?: (route: string) => void }) {
-  const rules = (config.callRoutingRules ?? []).filter((r) => r.enabled !== false && r.action === 'transfer' && r.target);
-  const hasTransfer = rules.length > 0;
-  return (
-    <button
-      type="button"
-      onClick={() => onNavigateTab?.('capabilities')}
-      className={`group relative flex items-start gap-2.5 text-left rounded-xl border px-3 py-2.5 transition-all cursor-pointer ${
-        hasTransfer
-          ? 'border-cyan-400/40 bg-cyan-400/[0.05]'
-          : 'border-dashed border-white/[0.10] bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.04]'
-      }`}
-    >
-      {hasTransfer && (
-        <span aria-hidden className="absolute top-2 right-2 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-cyan-200 bg-cyan-400/15 border border-cyan-400/30 rounded">
-          {rules.length === 1 ? 'aktiv' : `${rules.length} Regeln`}
-        </span>
-      )}
-      {!hasTransfer && (
-        <span aria-hidden className="absolute top-2 right-2 text-[10px] text-white/30">→</span>
-      )}
-      <IconPhoneForward size={16} className={`shrink-0 mt-0.5 transition-colors ${hasTransfer ? 'text-cyan-300' : 'text-white/30 group-hover:text-white/50'}`} />
-      <div className="min-w-0 pr-12">
-        <p className={`text-xs font-semibold leading-tight transition-colors ${hasTransfer ? 'text-white' : 'text-white/55 group-hover:text-white/80'}`}>
-          Live-Weiterleitung
-        </p>
-        <p className="text-[10px] text-white/35 mt-1 leading-snug">
-          {hasTransfer
-            ? `Echte Übergabe an ${rules.length === 1 ? 'eine Nummer' : `${rules.length} Nummern`} (warm transfer). Konfiguriert in den Capabilities.`
-            : 'Live-Übergabe an einen Menschen. Konfiguration unter Capabilities → Call-Routing.'}
-        </p>
-        <code className="text-[9px] text-white/25 mt-1.5 block font-mono">transfer_call</code>
-      </div>
-    </button>
   );
 }
 
