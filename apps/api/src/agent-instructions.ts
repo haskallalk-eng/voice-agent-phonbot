@@ -61,6 +61,14 @@ type FallbackReasonConfig = {
 };
 
 const DEFAULT_FALLBACK_REASON = 'Allgemeine Übergabe';
+const LEGACY_FALLBACK_INSTRUCTIONS: Record<string, string> = {
+  human_requested: 'Wenn der Anrufer klar mit einem Menschen sprechen will, nicht diskutieren: Rueckruf-Ticket oder konfigurierte Weiterleitung.',
+  urgent_or_emergency: 'Bei Gefahr, Schmerzen, Ausfall oder akutem Problem sofort als dringend markieren und keine langen Nachfragen stellen.',
+};
+const CURRENT_FALLBACK_INSTRUCTIONS: Record<string, string> = {
+  human_requested: 'Wenn der Anrufer klar mit einem Menschen sprechen will: zuerst live weiterleiten. Wenn niemand erreichbar ist oder keine Weiterleitung konfiguriert ist, ein Rueckruf-Ticket mit diesem Grund anlegen.',
+  urgent_or_emergency: 'Bei Gefahr, Schmerzen, Ausfall oder akutem Problem: sofort live weiterleiten. Wenn niemand erreichbar ist, ein dringendes Ticket mit den noetigsten Angaben anlegen und keine langen Nachfragen stellen.',
+};
 
 function normalizeFallbackReasonValue(reason: string | null | undefined): string {
   const trimmed = reason?.trim();
@@ -73,6 +81,11 @@ function activeFallbackReasons(cfg: AgentConfig): FallbackReasonConfig[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .filter((reason) => reason && reason.enabled !== false && reason.label?.trim() && reason.reason?.trim())
+    .map((reason) => (
+      reason.instruction === LEGACY_FALLBACK_INSTRUCTIONS[reason.id]
+        ? { ...reason, instruction: CURRENT_FALLBACK_INSTRUCTIONS[reason.id] }
+        : reason
+    ))
     .slice(0, 12);
 }
 
@@ -309,6 +322,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
     }
     parts.push('');
     parts.push('WICHTIG: Bevor du weiterleitest, sage dem Anrufer Bescheid: "Ich verbinde Sie jetzt weiter. Einen Moment bitte."');
+    parts.push('Wenn keine passende Live-Weiterleitung konfiguriert ist oder niemand erreichbar ist, erstelle stattdessen ein passendes Rueckruf- oder Dringlichkeits-Ticket.');
     parts.push('Wenn das Transfer-Tool scheitert oder nicht verfügbar ist (das passiert automatisch bei Web-/Demo-Anrufen, die über den Browser laufen und keine echte Telefonleitung haben): Sage dem Anrufer wörtlich: "Im Webanruf kann ich leider nicht live weiterleiten — das funktioniert nur bei einem echten Telefonanruf." Erstelle KEIN Ticket. Frage den Anrufer, ob du ihm sonst noch helfen kannst, oder beende das Gespräch.');
     parts.push('WARNUNG: Leite NIEMALS an die Nummer weiter, von der der Anrufer bereits weitergeleitet wurde (Endlosschleife). Wenn du unsicher bist, erstelle stattdessen ein Rückruf-Ticket.');
   }

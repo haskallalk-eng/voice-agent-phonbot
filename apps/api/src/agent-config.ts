@@ -83,7 +83,7 @@ const DEFAULT_FALLBACK_REASONS: DefaultFallbackReason[] = [
     reason: 'Mensch angefordert',
     enabled: true,
     priority: 'high',
-    instruction: 'Wenn der Anrufer klar mit einem Menschen sprechen will, nicht diskutieren: Rueckruf-Ticket oder konfigurierte Weiterleitung.',
+    instruction: 'Wenn der Anrufer klar mit einem Menschen sprechen will: zuerst live weiterleiten. Wenn niemand erreichbar ist oder keine Weiterleitung konfiguriert ist, ein Rueckruf-Ticket mit diesem Grund anlegen.',
   },
   {
     id: 'unresolved_question',
@@ -99,7 +99,7 @@ const DEFAULT_FALLBACK_REASONS: DefaultFallbackReason[] = [
     reason: 'dringendes Anliegen',
     enabled: true,
     priority: 'urgent',
-    instruction: 'Bei Gefahr, Schmerzen, Ausfall oder akutem Problem sofort als dringend markieren und keine langen Nachfragen stellen.',
+    instruction: 'Bei Gefahr, Schmerzen, Ausfall oder akutem Problem: sofort live weiterleiten. Wenn niemand erreichbar ist, ein dringendes Ticket mit den noetigsten Angaben anlegen und keine langen Nachfragen stellen.',
   },
   {
     id: 'complaint',
@@ -134,6 +134,11 @@ const DEFAULT_FALLBACK_REASONS: DefaultFallbackReason[] = [
     instruction: 'Nach wiederholtem Nichtverstehen Rueckruf anbieten, statt den Anrufer zu nerven.',
   },
 ];
+
+const LEGACY_FALLBACK_INSTRUCTIONS: Record<string, string> = {
+  human_requested: 'Wenn der Anrufer klar mit einem Menschen sprechen will, nicht diskutieren: Rueckruf-Ticket oder konfigurierte Weiterleitung.',
+  urgent_or_emergency: 'Bei Gefahr, Schmerzen, Ausfall oder akutem Problem sofort als dringend markieren und keine langen Nachfragen stellen.',
+};
 
 const FallbackReasonSchema = z.object({
   id: z.string().min(1).max(80),
@@ -251,6 +256,13 @@ const KNOWLEDGE_PDF_MAX_BYTES = 50 * 1024 * 1024;
 function parseAgentConfig(input: unknown): AgentConfig {
   const parsed = AgentConfigSchema.parse(input);
   parsed.fallback.reason = normalizeFallbackReasonValue(parsed.fallback.reason);
+  parsed.fallback.reasons = parsed.fallback.reasons?.map((reason) => {
+    const base = DEFAULT_FALLBACK_REASONS.find((item) => item.id === reason.id);
+    if (base && reason.instruction === LEGACY_FALLBACK_INSTRUCTIONS[reason.id]) {
+      return { ...reason, instruction: base.instruction };
+    }
+    return reason;
+  });
   return parsed;
 }
 

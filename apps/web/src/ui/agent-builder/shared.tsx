@@ -342,7 +342,7 @@ export const DEFAULT_FALLBACK_REASONS: FallbackReasonConfig[] = [
     reason: 'Mensch angefordert',
     enabled: true,
     priority: 'high',
-    instruction: 'Wenn der Anrufer klar mit einem Menschen sprechen will, nicht diskutieren: Rueckruf-Ticket oder konfigurierte Weiterleitung.',
+    instruction: 'Wenn der Anrufer klar mit einem Menschen sprechen will: zuerst live weiterleiten. Wenn niemand erreichbar ist oder keine Weiterleitung konfiguriert ist, ein Rückruf-Ticket mit diesem Grund anlegen.',
   },
   {
     id: 'unresolved_question',
@@ -358,7 +358,7 @@ export const DEFAULT_FALLBACK_REASONS: FallbackReasonConfig[] = [
     reason: 'dringendes Anliegen',
     enabled: true,
     priority: 'urgent',
-    instruction: 'Bei Gefahr, Schmerzen, Ausfall oder akutem Problem sofort als dringend markieren und keine langen Nachfragen stellen.',
+    instruction: 'Bei Gefahr, Schmerzen, Ausfall oder akutem Problem: sofort live weiterleiten. Wenn niemand erreichbar ist, ein dringendes Ticket mit den nötigsten Angaben anlegen und keine langen Nachfragen stellen.',
   },
   {
     id: 'complaint',
