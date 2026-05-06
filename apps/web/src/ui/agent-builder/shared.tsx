@@ -373,24 +373,29 @@ export function SectionCard({ title, icon: Icon, children, collapsible = false, 
 }) {
   const [open, setOpen] = useState(true);
   return (
-    <section className={`rounded-2xl border border-white/[0.07] bg-white/[0.03] mb-5 overflow-hidden ${className}`}>
+    <section className={`group relative rounded-[1.45rem] border border-white/[0.09] bg-gradient-to-br from-white/[0.07] via-white/[0.035] to-white/[0.018] mb-5 overflow-hidden shadow-[0_18px_70px_rgba(0,0,0,0.20)] ${className}`}>
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-orange-400/0 via-orange-300/55 to-cyan-300/45" />
+      <div className="pointer-events-none absolute -right-20 -top-24 h-44 w-44 rounded-full bg-cyan-300/[0.06] blur-3xl transition-opacity group-hover:opacity-100 opacity-60" />
       <button
         type="button"
         onClick={() => collapsible && setOpen(!open)}
-        className={`flex items-center gap-3 w-full text-left px-5 py-4 ${collapsible ? 'cursor-pointer hover:bg-white/[0.03] transition-colors' : 'cursor-default'}`}
+        className={`relative flex items-center gap-3 w-full text-left px-5 py-4 ${collapsible ? 'cursor-pointer hover:bg-white/[0.035] transition-colors' : 'cursor-default'}`}
       >
         {Icon && (
-          <span className={`shrink-0 ${accent}`}>
+          <span className={`shrink-0 flex h-9 w-9 items-center justify-center rounded-2xl border border-white/[0.08] bg-black/25 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${accent}`}>
             <Icon size={17} />
           </span>
         )}
-        <h3 className="text-sm font-semibold text-white/90 flex-1 tracking-wide">{title}</h3>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-semibold text-white/90 tracking-wide">{title}</h3>
+          <div className="mt-1 h-px w-16 bg-gradient-to-r from-orange-300/45 to-cyan-300/25" />
+        </div>
         {rightSlot && <span className="shrink-0" onClick={(e) => e.stopPropagation()}>{rightSlot}</span>}
         {collapsible && (
           <IconChevronDown size={15} className={`text-white/25 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
         )}
       </button>
-      {open && <div className="px-5 pb-5">{children}</div>}
+      {open && <div className="relative px-5 pb-5">{children}</div>}
     </section>
   );
 }
