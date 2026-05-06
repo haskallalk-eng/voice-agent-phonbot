@@ -129,6 +129,7 @@ export const NAV_HTML = `<!--nav-html-begin-->
         <button type="button" id="ph-dd-btn" class="ph-dd-btn ph-nav-btn" aria-haspopup="true" aria-expanded="false" aria-controls="ph-dd-menu">Branchen ${CHEV}</button>
         <div class="ph-dd-menu" id="ph-dd-menu" role="menu">${industryLinksDesktop}</div>
       </div>
+      <a href="/blog/">Blog</a>
       <a href="/kontakt/">Kontakt</a>
     </nav>
     <div class="ph-right">
@@ -146,6 +147,7 @@ export const NAV_HTML = `<!--nav-html-begin-->
       <summary>Branchen ${CHEV}</summary>
       <div class="ph-mob-sub">${industryLinksMobile}</div>
     </details>
+    <a href="/blog/">Blog</a>
     <a href="/kontakt/">Kontakt</a>
     <div class="ph-mob-cta">
       <a href="/?page=login" class="login">Einloggen</a>

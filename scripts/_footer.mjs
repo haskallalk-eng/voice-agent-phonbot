@@ -57,6 +57,7 @@ export const FOOTER_HTML = `<!--footer-html-begin-->
           <li><a href="/#features">Features</a></li>
           <li><a href="/#demo">Demo</a></li>
           <li><a href="/#preise">Preise</a></li>
+          <li><a href="/blog/">Blog</a></li>
         </ul>
       </div>
       <div>

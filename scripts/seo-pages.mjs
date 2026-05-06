@@ -1,5 +1,5 @@
 export const SITE = 'https://phonbot.de';
-export const TODAY = '2026-05-05';
+export const TODAY = '2026-05-06';
 
 export const CORE_INDUSTRY_PAGES = [
   {

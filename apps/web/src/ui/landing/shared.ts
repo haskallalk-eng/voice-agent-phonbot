@@ -77,7 +77,7 @@ export const FAQ_ITEMS = [
   },
   {
     q: 'Gibt es eine Mindestlaufzeit?',
-    a: 'Nein. Monatliche Pläne sind monatlich kündbar. Beim Jahresplan sparst du 20%, aber es gibt keine Strafgebühren.',
+    a: 'Nein. Monatliche Pläne sind monatlich kündbar. Beim Jahresplan sparst du je nach Plan ca. 15-18%, aber es gibt keine Strafgebühren.',
   },
   {
     q: 'Was passiert wenn mein Minutenkontingent aufgebraucht ist?',
@@ -108,7 +108,8 @@ export const PLANS = [
     period: '/Monat',
     features: [
       '✦ Eigene Telefonnummer',
-      '70 Min/Monat',
+      '100 Gesamt-Freiminuten einmalig',
+      '30 Start + 70 Nummer-Bonus',
       '1 Agent',
       'Ticket-System',
       '+0,22€/Min bei Überschreitung',

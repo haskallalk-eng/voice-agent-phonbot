@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { SITE, CORE_INDUSTRY_PAGES, SEO_NICHE_PAGES, SUPPORT_PAGES, ALL_SEO_PAGE_SLUGS } from './seo-pages.mjs';
+import { BLOG_INDEX, BLOG_POSTS, blogUrl } from './blog-posts.mjs';
 
 const DIST = path.resolve('apps/web/dist');
 const BRANCHES = CORE_INDUSTRY_PAGES.map((page) => page.slug);
@@ -13,6 +14,17 @@ const INDEXABLE = [...SUPPORT, ...BRANCHES, ...NICHES, ...LEGAL];
 
 const failures = [];
 const warnings = [];
+const PRODUCT_TRUTH = {
+  legalName: 'Hans Ulrich Waier (Einzelunternehmer)',
+  nummerPlanPattern: /100\s+(Gesamt-Freiminuten|einmalig|Minuten-Gesamtguthaben)/i,
+  forbiddenAiDocPatterns: [
+    { pattern: /Stand:\s*April\s+2026/i, label: 'stale April 2026 pricing date' },
+    { pattern: /\|\s*Nummer\s*\|\s*8,99\s*€\s*\|\s*70\s*(\||\s)/i, label: 'stale Nummer 70-minute table row' },
+    { pattern: /\b70\s+(Minuten|Min)\s*\/\s*Monat\b/i, label: 'stale Nummer monthly 70-minute copy' },
+    { pattern: /haftungsbeschr/i, label: 'stale legal entity form' },
+    { pattern: /Jahresplan[^.\n]{0,100}\b20\s*%/i, label: 'overstated yearly discount copy' },
+  ],
+};
 
 function fail(msg) {
   failures.push(msg);
@@ -154,6 +166,34 @@ function checkSupportPages() {
   }
 }
 
+function checkBlogPages() {
+  const indexRel = `${BLOG_INDEX.slug}/index.html`;
+  const indexUrl = `${SITE}/${BLOG_INDEX.slug}/`;
+  checkPage(indexRel, indexUrl, { minText: 900 });
+  const indexGraph = graphItems(jsonLdBlocks(read(indexRel)));
+  if (!indexGraph.some((item) => item['@type'] === 'Blog')) fail(`${indexUrl}: Blog JSON-LD missing`);
+  if (!indexGraph.some((item) => item['@type'] === 'ItemList')) fail(`${indexUrl}: ItemList JSON-LD missing`);
+
+  const slugs = new Set();
+  for (const post of BLOG_POSTS) {
+    if (slugs.has(post.slug)) fail(`Blog: duplicate slug ${post.slug}`);
+    slugs.add(post.slug);
+    if (post.reviewedBy !== 'Phonbot SEO/Superhirn') fail(`Blog ${post.slug}: reviewedBy gate missing`);
+    if (!post.intent || post.intent.length < 40) fail(`Blog ${post.slug}: intent too weak`);
+    if (!post.primaryKeyword || post.secondaryKeywords.length < 2) fail(`Blog ${post.slug}: keyword cluster incomplete`);
+
+    const rel = `${BLOG_INDEX.slug}/${post.slug}/index.html`;
+    const url = blogUrl(post);
+    checkPage(rel, url, { minText: 2600 });
+    const html = read(rel);
+    const graph = graphItems(jsonLdBlocks(html));
+    for (const type of ['BlogPosting', 'WebPage', 'FAQPage', 'BreadcrumbList']) {
+      if (!graph.some((item) => item['@type'] === type)) fail(`${url}: JSON-LD ${type} missing`);
+    }
+    if (!html.includes('/?page=register') || !html.includes('/blog/')) fail(`${url}: blog CTA/internal links missing`);
+  }
+}
+
 function checkLegal() {
   for (const slug of LEGAL) {
     const rel = `${slug}/index.html`;
@@ -201,6 +241,50 @@ function checkSitemapAndRobots() {
   }
 }
 
+function checkProductTruthDrift() {
+  const root = read('index.html');
+  const llms = read('llms.txt');
+  const llmsFull = read('llms-full.txt');
+  const ai = read('ai.txt');
+
+  const rootGraph = graphItems(jsonLdBlocks(root));
+  const organization = rootGraph.find((item) => item['@type'] === 'Organization');
+  if (organization?.legalName !== PRODUCT_TRUTH.legalName) {
+    fail(`Root: legalName drift (${organization?.legalName ?? 'missing'})`);
+  }
+
+  const software = rootGraph.find((item) => item['@type'] === 'SoftwareApplication');
+  const offers = Array.isArray(software?.offers) ? software.offers : [];
+  const nummerOffer = offers.find((offer) => offer?.name === 'Nummer');
+  if (!PRODUCT_TRUTH.nummerPlanPattern.test(String(nummerOffer?.description ?? ''))) {
+    fail(`Root: Nummer offer description drift (${nummerOffer?.description ?? 'missing'})`);
+  }
+
+  const truthCheckedDocs = {
+    'index.html': root,
+    'llms.txt': llms,
+    'llms-full.txt': llmsFull,
+    'ai.txt': ai,
+  };
+
+  for (const [rel, content] of Object.entries(truthCheckedDocs)) {
+    for (const { pattern, label } of PRODUCT_TRUTH.forbiddenAiDocPatterns) {
+      if (pattern.test(content)) fail(`${rel}: ${label}`);
+    }
+  }
+
+  for (const [rel, content] of Object.entries({ 'llms.txt': llms, 'llms-full.txt': llmsFull, 'ai.txt': ai })) {
+    if (!content.includes(PRODUCT_TRUTH.legalName)) fail(`${rel}: legal entity truth missing`);
+  }
+
+  for (const [rel, content] of Object.entries({ 'llms.txt': llms, 'llms-full.txt': llmsFull })) {
+    if (!PRODUCT_TRUTH.nummerPlanPattern.test(content)) fail(`${rel}: Nummer 100 one-time credit truth missing`);
+    for (const required of ['Starter', '360', 'Professional', '1.000', 'Agency', '2.400']) {
+      if (!content.includes(required)) fail(`${rel}: pricing truth missing ${required}`);
+    }
+  }
+}
+
 function checkSitemapDrift() {
   const sitemap = read('sitemap.xml');
   const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
@@ -227,12 +311,16 @@ function checkCanonicalRedirectConfig() {
   const caddy = fs.existsSync('Caddyfile') ? fs.readFileSync('Caddyfile', 'utf8') : '';
   const nginx = fs.existsSync('apps/web/nginx.conf') ? fs.readFileSync('apps/web/nginx.conf', 'utf8') : '';
   if (!/redir\s+\/index\.html\s+\/\s+301/.test(caddy)) fail('Caddyfile: /index.html canonical redirect missing');
+  if (!/path\s+\/branchen\s+\/kontakt\s+\/blog/.test(caddy)) fail('Caddyfile: /blog canonical slash matcher missing');
+  if (!/path_regexp\s+\^\/blog\/\[\^\/\]\+\$/.test(caddy)) fail('Caddyfile: blog post trailing-slash redirect missing');
   if (!/redir\s+\/friseur\/index\.html\s+\/friseur\/\s+301/.test(caddy)) fail('Caddyfile: branch /index.html canonical redirects missing');
+  if (!/redir\s+\/blog\/index\.html\s+\/blog\/\s+301/.test(caddy)) fail('Caddyfile: /blog/index.html canonical redirect missing');
   if (!/path[\s\S]*\/calendar\s+\/calendar\/\*/.test(caddy)) fail('Caddyfile: /calendar noindex matcher must cover exact and nested paths');
   if (!/return\s+301\s+\/\$1/.test(nginx)) fail('nginx.conf: nested /index.html redirect missing');
   if (!/absolute_redirect\s+off;/.test(nginx)) fail('nginx.conf: nginx must not emit scheme-downgraded absolute redirects behind Caddy');
   if (/try_files\s+\$uri\s+\$uri\/\s+=404/.test(nginx)) fail('nginx.conf: directory try_files can emit http:// redirects behind Caddy');
   if (!/try_files\s+\$uri\/index\.html\s+\$uri\s+=404/.test(nginx)) fail('nginx.conf: SEO directory routes should serve index.html without nginx redirects');
+  if (!/\(branchen\|kontakt\|blog\|friseur/.test(nginx)) fail('nginx.conf: /blog static route missing');
   if (/Cache-Control\s+"no-cache,\s*no-store,\s*must-revalidate"[\s\S]{0,160}try_files\s+\$uri\s+\$uri\/\s+=404/.test(nginx)) {
     fail('nginx.conf: public SEO routes still use no-store');
   }
@@ -266,10 +354,12 @@ if (!fs.existsSync(DIST)) {
 } else {
   checkRoot();
   checkSupportPages();
+  checkBlogPages();
   checkBranches();
   checkNiches();
 checkLegal();
 checkSitemapAndRobots();
+checkProductTruthDrift();
 checkSitemapDrift();
 checkCanonicalRedirectConfig();
   checkServerConfig();

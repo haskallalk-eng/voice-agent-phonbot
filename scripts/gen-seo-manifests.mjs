@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { SITE, TODAY, CORE_INDUSTRY_PAGES, SEO_NICHE_PAGES, SUPPORT_PAGES } from './seo-pages.mjs';
+import { BLOG_INDEX, BLOG_POSTS, blogUrl } from './blog-posts.mjs';
 
 const OUT = path.resolve('apps/web/public/sitemap.xml');
 
@@ -19,6 +20,19 @@ const urls = [
     lastmod: TODAY,
     changefreq: 'weekly',
     priority: page.slug === 'branchen' ? '0.95' : '0.7',
+  })),
+  {
+    loc: `${SITE}/${BLOG_INDEX.slug}/`,
+    lastmod: TODAY,
+    changefreq: 'weekly',
+    priority: '0.78',
+  },
+  ...BLOG_POSTS.map((post) => ({
+    loc: blogUrl(post),
+    lastmod: post.dateModified,
+    changefreq: 'monthly',
+    priority: '0.72',
+    imageTitle: post.title,
   })),
   ...CORE_INDUSTRY_PAGES.map((page) => ({
     loc: `${SITE}/${page.slug}/`,
