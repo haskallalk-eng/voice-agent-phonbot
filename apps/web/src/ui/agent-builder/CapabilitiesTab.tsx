@@ -66,10 +66,10 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
           <div className="mb-4 flex items-start gap-3 flex-wrap">
             <div className="flex-1 min-w-[16rem]">
               <p className="text-sm text-white/60">
-                Alles, was Chipy nicht selbst lösen soll: zuerst einen Menschen erreichen, danach Ticket als Sicherheitsnetz.
+                Baue Live-Regeln nach dem Muster: <span className="text-white/78">Wenn der Anrufer ... → leite weiter an Nummer/Abteilung</span>.
               </p>
               <p className="mt-1 text-xs text-white/35">
-                Rufweiterleitung und Ticket-Fallback sind ein gemeinsamer Ablauf im Agent-Prompt.
+                Wenn niemand rangeht oder keine Live-Regel passt, greift automatisch der Ticket-Fallback.
               </p>
             </div>
             <ForwardingHint />
@@ -542,11 +542,11 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
       <div className="rounded-[1.4rem] border border-white/[0.09] bg-gradient-to-br from-white/[0.07] via-white/[0.03] to-cyan-400/[0.045] p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-sm font-semibold text-white">Übergabe an Menschen</p>
+            <p className="text-sm font-semibold text-white">Live-Regeln & Ticket-Fallback</p>
             <p className="mt-1 max-w-2xl text-xs leading-relaxed text-white/45">
               {activeTransferCount > 0
-                ? 'Reihenfolge: zuerst live anrufen. Wenn niemand erreichbar ist, die Weiterleitung scheitert oder keine Regel passt, legt Chipy ein passendes Ticket an.'
-                : 'Aktuell ist keine Live-Übergabe mit Zielnummer aktiv. Chipy legt Tickets an, bis du eine Übergabe-Regel mit Zielnummer hinzufügst.'}
+                ? 'Live-Ziele sind aktiv. Die Regeln unten entscheiden, wann Chipy weiterleitet.'
+                : 'Noch kein Live-Ziel aktiv. Klicke auf Übergabe-Regel hinzufügen und trage eine Zielnummer ein.'}
             </p>
           </div>
           <div className="flex flex-wrap gap-2 text-[10px] font-semibold">
@@ -563,13 +563,6 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
           </div>
         </div>
 
-        <div className="mt-4 rounded-2xl border border-orange-300/16 bg-orange-400/[0.055] px-3 py-2.5">
-          <p className="text-xs font-semibold text-orange-100/85">Live-Regel Vorlage</p>
-          <p className="mt-1 text-xs leading-relaxed text-white/45">
-            Baue hier Regeln nach dem Muster: <span className="text-white/70">Wenn der Anrufer ...</span> → <span className="text-white/70">leite weiter an Nummer/Abteilung</span>. Wenn niemand rangeht oder die Weiterleitung scheitert, nutzt Chipy automatisch den passenden Ticket-Fallback.
-          </p>
-        </div>
-
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <button
             type="button"
@@ -581,7 +574,7 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
               + Übergabe-Regel hinzufügen
             </span>
             <span className="mt-1.5 block text-xs leading-relaxed text-white/45 group-hover:text-white/58">
-              Wenn der Anrufer ... → weiterleiten an Nummer. Danach greift automatisch der Ticket-Fallback.
+              Wenn der Anrufer ... → Nummer oder Abteilung live anrufen.
             </span>
           </button>
           <button
@@ -594,7 +587,7 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
               + Fallback-Regel hinzufügen
             </span>
             <span className="mt-1.5 block text-xs leading-relaxed text-white/45 group-hover:text-white/58">
-              Wenn kein Mensch übernimmt oder kein Live-Ziel passt → Ticket mit passendem Grund anlegen.
+              Falls niemand übernimmt oder kein Live-Ziel passt → Ticket mit passendem Grund.
             </span>
           </button>
         </div>
