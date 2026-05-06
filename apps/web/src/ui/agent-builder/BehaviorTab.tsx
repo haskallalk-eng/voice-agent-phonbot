@@ -7,14 +7,13 @@ import {
   type PromptSuggestion,
 } from '../../lib/api.js';
 import {
-  SectionCard, Input, TextArea, Toggle,
-  PROMPT_TEMPLATES, PROMPT_SECTIONS, KNOWN_TOOLS, DEFAULT_FALLBACK_REASONS,
+  SectionCard,
+  PROMPT_TEMPLATES, PROMPT_SECTIONS, KNOWN_TOOLS,
   assembleRolePrompt, generalAssistantBlock, roleIntro, roleTaskList,
   IconTemplate, IconMessageSquare,
 } from './shared.js';
 import { IconCalendar, IconTickets, IconPhoneForward } from '../PhonbotIcons.js';
 import { AdaptiveTextarea } from '../../components/AdaptiveTextarea.js';
-import type { FallbackReasonConfig } from '../../lib/api.js';
 
 export interface BehaviorTabProps {
   config: AgentConfig;
@@ -167,11 +166,11 @@ function SuggestionBanner({
                   {kind.instruction}
                 </p>
               ) : (
-                <textarea
+                <AdaptiveTextarea
                   value={displayText}
                   onChange={(e) => setEditedText(e.target.value)}
-                  rows={Math.max(3, Math.min(10, displayText.split('\n').length + 1))}
-                  className="w-full resize-y rounded-lg bg-black/40 border border-white/[0.08] focus:border-orange-500/40 focus:ring-1 focus:ring-orange-500/30 outline-none text-xs text-white/80 font-mono leading-relaxed p-2.5"
+                  minRows={Math.max(3, Math.min(10, displayText.split('\n').length + 1))}
+                  className="w-full rounded-lg bg-black/40 border border-white/[0.08] focus:border-orange-500/40 focus:ring-1 focus:ring-orange-500/30 outline-none text-xs text-white/80 font-mono leading-relaxed p-2.5"
                   spellCheck={false}
                 />
               )}
@@ -325,8 +324,6 @@ export function BehaviorTab({
         />
 
         <ToolsBlock config={config} onUpdate={onUpdate} onNavigateTab={onNavigateTab} />
-
-        <FallbackMatrixBlock config={config} onUpdate={onUpdate} />
       </SectionCard>
     </>
   );
@@ -961,201 +958,3 @@ function TransferInfoCard({ config, onNavigateTab }: { config: AgentConfig; onNa
   );
 }
 
-type FallbackPatch = AgentConfig['fallback'];
-
-const PRIORITY_LABELS: Record<NonNullable<FallbackReasonConfig['priority']>, string> = {
-  normal: 'Normal',
-  high: 'Hoch',
-  urgent: 'Dringend',
-};
-
-function normalizeFallbackReason(reason: FallbackReasonConfig): FallbackReasonConfig {
-  return {
-    ...reason,
-    enabled: reason.enabled !== false,
-    priority: reason.priority ?? 'normal',
-    instruction: reason.instruction ?? '',
-  };
-}
-
-function mergeFallbackReasons(reasons: FallbackReasonConfig[] | undefined): FallbackReasonConfig[] {
-  const merged = new Map(DEFAULT_FALLBACK_REASONS.map((reason) => [reason.id, normalizeFallbackReason(reason)]));
-  for (const reason of reasons ?? []) {
-    if (!reason?.id) continue;
-    const base = merged.get(reason.id);
-    merged.set(reason.id, normalizeFallbackReason(base ? { ...base, ...reason } : reason));
-  }
-  return [...merged.values()];
-}
-
-function FallbackMatrixBlock({ config, onUpdate }: { config: AgentConfig; onUpdate: (p: Partial<AgentConfig>) => void }) {
-  const fallback: FallbackPatch = config.fallback ?? { enabled: true, reason: 'handoff', reasons: DEFAULT_FALLBACK_REASONS };
-  const reasons = mergeFallbackReasons(fallback.reasons);
-  const activeCount = reasons.filter((reason) => reason.enabled !== false).length;
-  const ticketToolActive = config.tools.includes('ticket.create');
-
-  function updateFallback(patch: Partial<FallbackPatch>) {
-    onUpdate({ fallback: { ...fallback, ...patch } });
-  }
-
-  function updateReason(id: string, patch: Partial<FallbackReasonConfig>) {
-    updateFallback({
-      reasons: reasons.map((reason) => reason.id === id ? { ...reason, ...patch } : reason),
-    });
-  }
-
-  function addCustomReason() {
-    updateFallback({
-      reasons: [
-        ...reasons,
-        {
-          id: `custom_${Date.now()}`,
-          label: 'Eigener Fall',
-          reason: fallback.reason || 'handoff',
-          enabled: true,
-          priority: 'normal',
-          instruction: '',
-        },
-      ],
-    });
-  }
-
-  return (
-    <div className="mt-5">
-      <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-        <div>
-          <span className="text-xs font-medium text-white/40 uppercase tracking-wider block mb-1">Notausgang / Eskalation</span>
-          <p className="text-[11px] text-white/35 leading-relaxed max-w-3xl">
-            Die Grundregel steht bereits im Agent-Prompt. Diese Matrix macht daraus konkrete Ticket-Marker, damit dein Team im Posteingang sofort sieht, warum Chipy uebergibt.
-          </p>
-        </div>
-        <span className={`w-fit rounded-full border px-2.5 py-1 text-[10px] font-semibold ${
-          ticketToolActive ? 'border-cyan-300/25 bg-cyan-300/10 text-cyan-100/75' : 'border-orange-300/25 bg-orange-400/10 text-orange-100/80'
-        }`}>
-          {ticketToolActive ? 'Ticket-Tool aktiv' : 'Ticket-Tool aus'}
-        </span>
-      </div>
-
-      <div className={`rounded-2xl border px-4 py-4 transition-all ${
-        fallback.enabled
-          ? 'border-cyan-400/30 bg-cyan-400/[0.04]'
-          : 'border-white/[0.07] bg-white/[0.03]'
-      }`}>
-        <div className="flex items-center gap-3 flex-wrap">
-          <Toggle
-            checked={fallback.enabled}
-            onChange={(enabled) => updateFallback({ enabled })}
-            label={fallback.enabled ? `Eskalation aktiv (${activeCount} Gruende)` : 'Eskalation deaktiviert'}
-          />
-        </div>
-
-        {fallback.enabled && (
-          <>
-            <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(14rem,0.75fr)]">
-              <label className="block">
-                <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Allgemeiner Standardgrund</span>
-                <Input
-                  value={fallback.reason}
-                  onChange={(event) => updateFallback({ reason: event.target.value })}
-                  placeholder="z.B. technische Beratung erforderlich"
-                  className="mt-1"
-                />
-              </label>
-              <div className="rounded-xl border border-white/[0.08] bg-black/20 p-3 text-[10px] leading-relaxed text-white/42">
-                Wenn kein spezieller Fall passt, nutzt Chipy diesen Grund. Aktive Faelle darunter sind praeziser und werden im Runtime-Prompt einzeln erklaert.
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-3 lg:grid-cols-2">
-              {reasons.map((reason) => {
-                const active = reason.enabled !== false;
-                const isCustom = reason.id.startsWith('custom_');
-                const priority = reason.priority ?? 'normal';
-                return (
-                  <div
-                    key={reason.id}
-                    className={`rounded-xl border p-3 transition-all ${
-                      active
-                        ? 'border-white/[0.10] bg-white/[0.045]'
-                        : 'border-white/[0.06] bg-black/15 opacity-60'
-                    }`}
-                  >
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => updateReason(reason.id, { enabled: !active })}
-                        className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-colors ${
-                          active
-                            ? 'border-cyan-300/30 bg-cyan-300/10 text-cyan-100'
-                            : 'border-white/[0.10] bg-white/[0.03] text-white/35'
-                        }`}
-                      >
-                        {active ? 'Aktiv' : 'Aus'}
-                      </button>
-                      <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${
-                        priority === 'urgent'
-                          ? 'border-red-300/30 bg-red-400/10 text-red-100/80'
-                          : priority === 'high'
-                            ? 'border-orange-300/30 bg-orange-400/10 text-orange-100/80'
-                            : 'border-white/[0.10] bg-white/[0.04] text-white/45'
-                      }`}>
-                        {PRIORITY_LABELS[priority]}
-                      </span>
-                    </div>
-
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <label className="block">
-                        <span className="text-[10px] uppercase tracking-[0.14em] text-white/30">Fall</span>
-                        <Input
-                          value={reason.label}
-                          onChange={(event) => updateReason(reason.id, { label: event.target.value })}
-                          className="mt-1 !text-xs"
-                        />
-                      </label>
-                      <label className="block">
-                        <span className="text-[10px] uppercase tracking-[0.14em] text-white/30">Ticket-Grund</span>
-                        <Input
-                          value={reason.reason}
-                          onChange={(event) => updateReason(reason.id, { reason: event.target.value })}
-                          className="mt-1 !text-xs"
-                        />
-                      </label>
-                    </div>
-
-                    <label className="mt-2 block">
-                      <span className="text-[10px] uppercase tracking-[0.14em] text-white/30">Agent-Regel</span>
-                      <TextArea
-                        value={reason.instruction ?? ''}
-                        onChange={(event) => updateReason(reason.id, { instruction: event.target.value })}
-                        rows={2}
-                        className="mt-1 !text-xs !leading-relaxed resize-none"
-                      />
-                    </label>
-
-                    {isCustom && (
-                      <button
-                        type="button"
-                        onClick={() => updateFallback({ reasons: reasons.filter((item) => item.id !== reason.id) })}
-                        className="mt-2 text-[10px] font-semibold text-red-300/70 hover:text-red-200"
-                      >
-                        Entfernen
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            <button
-              type="button"
-              onClick={addCustomReason}
-              className="mt-3 rounded-xl border border-dashed border-white/[0.12] bg-white/[0.025] px-3 py-2 text-xs font-semibold text-white/55 transition-colors hover:border-cyan-300/30 hover:text-cyan-100"
-            >
-              + Eigener Eskalationsfall
-            </button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}

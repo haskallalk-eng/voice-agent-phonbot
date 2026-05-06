@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { AgentConfig, CalendarStatus, CallRoutingRule, LiveWebAccess } from '../../lib/api.js';
+import type { AgentConfig, CalendarStatus, CallRoutingRule, FallbackReasonConfig, LiveWebAccess } from '../../lib/api.js';
 import { ForwardingHint } from '../ForwardingHint.js';
 import { PasswordInput } from '../PasswordInput.js';
+import { AdaptiveTextarea } from '../../components/AdaptiveTextarea.js';
 import {
   getCalendarStatus,
   getGoogleCalendarAuthUrl,
@@ -11,9 +12,10 @@ import {
   getPhoneNumbers,
 } from '../../lib/api.js';
 import {
-  SectionCard, Toggle,
+  SectionCard, Input, Toggle,
   IconPhoneOut, IconPhoneOff, IconMicUpload, IconTicket, IconCalendar,
   IconBookOpen, IconCheckCircle, IconWebhook, IconGlobe,
+  DEFAULT_FALLBACK_REASONS,
   type SectionIconComp,
 } from './shared.js';
 
@@ -54,19 +56,37 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
 
   return (
     <>
-      {/* Call Routing Rules */}
-      <SectionCard title="Rufweiterleitung & Gesprächslogik" icon={IconPhoneOut}>
-        <div className="flex items-start gap-2 mb-4 flex-wrap">
-          <p className="text-sm text-white/50 flex-1 min-w-[16rem]">
-            Definiere Regeln in natürlicher Sprache — der Agent erkennt die Situation und handelt automatisch.
-          </p>
+      <SectionCard title="Übergabe & Eskalation" icon={IconPhoneOut}>
+        <div className="mb-4 flex items-start gap-3 flex-wrap">
+          <div className="flex-1 min-w-[16rem]">
+            <p className="text-sm text-white/60">
+              Alles, was Chipy nicht selbst lösen soll: live weiterleiten, Ticket anlegen oder sauber beenden.
+            </p>
+            <p className="mt-1 text-xs text-white/35">
+              Rufweiterleitung und Notausgang sind ein gemeinsamer Entscheidungsbaum im Agent-Prompt.
+            </p>
+          </div>
           <ForwardingHint />
         </div>
-        <CallRoutingEditor
-          phoneInfo={phoneInfo}
-          items={config.callRoutingRules ?? []}
-          onChange={(items) => onUpdate({ callRoutingRules: items })}
-        />
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.02fr)_minmax(0,0.98fr)]">
+          <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold text-white/75">Live-Rufweiterleitung</p>
+                <p className="mt-0.5 text-[11px] text-white/35">Regeln für echte Übergabe, Ticket oder Auflegen.</p>
+              </div>
+              <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[10px] font-semibold text-cyan-100/70">
+                {config.callRoutingRules?.filter((rule) => rule.enabled !== false).length ?? 0} aktiv
+              </span>
+            </div>
+            <CallRoutingEditor
+              phoneInfo={phoneInfo}
+              items={config.callRoutingRules ?? []}
+              onChange={(items) => onUpdate({ callRoutingRules: items })}
+            />
+          </div>
+          <FallbackMatrixBlock config={config} onUpdate={onUpdate} />
+        </div>
       </SectionCard>
 
       {/* Calendar Integrations */}
@@ -211,12 +231,12 @@ function CallRoutingEditor({ items, onChange, phoneInfo = [] }: { items: CallRou
           <div className="flex items-start gap-3">
             <Toggle checked={rule.enabled} onChange={(v) => patch(i, { enabled: v })} label="" />
             <div className="flex-1 space-y-3">
-              <textarea
+              <AdaptiveTextarea
                 value={rule.description}
                 onChange={(e) => patch(i, { description: e.target.value })}
                 placeholder="Beschreibe die Situation in natürlicher Sprache… z.B. 'Wenn der Kunde nach dem Geschäftsführer fragt'"
-                rows={2}
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 outline-none resize-y"
+                minRows={2}
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 outline-none"
               />
               <div className="flex gap-3 items-center">
                 <span className="text-xs text-white/50 shrink-0">Dann →</span>
@@ -293,6 +313,198 @@ function CallRoutingEditor({ items, onChange, phoneInfo = [] }: { items: CallRou
         className="w-full border-2 border-dashed border-white/10 hover:border-orange-500/30 rounded-xl py-3 text-sm text-white/40 hover:text-orange-400 transition-all">
         + Neue Regel hinzufügen
       </button>
+    </div>
+  );
+}
+
+type FallbackPatch = AgentConfig['fallback'];
+
+const PRIORITY_LABELS: Record<NonNullable<FallbackReasonConfig['priority']>, string> = {
+  normal: 'Normal',
+  high: 'Hoch',
+  urgent: 'Dringend',
+};
+
+function normalizeFallbackReason(reason: FallbackReasonConfig): FallbackReasonConfig {
+  return {
+    ...reason,
+    enabled: reason.enabled !== false,
+    priority: reason.priority ?? 'normal',
+    instruction: reason.instruction ?? '',
+  };
+}
+
+function mergeFallbackReasons(reasons: FallbackReasonConfig[] | undefined): FallbackReasonConfig[] {
+  const merged = new Map(DEFAULT_FALLBACK_REASONS.map((reason) => [reason.id, normalizeFallbackReason(reason)]));
+  for (const reason of reasons ?? []) {
+    if (!reason?.id) continue;
+    const base = merged.get(reason.id);
+    merged.set(reason.id, normalizeFallbackReason(base ? { ...base, ...reason } : reason));
+  }
+  return [...merged.values()];
+}
+
+function FallbackMatrixBlock({ config, onUpdate }: { config: AgentConfig; onUpdate: (p: Partial<AgentConfig>) => void }) {
+  const fallback: FallbackPatch = config.fallback ?? { enabled: true, reason: 'handoff', reasons: DEFAULT_FALLBACK_REASONS };
+  const reasons = mergeFallbackReasons(fallback.reasons);
+  const activeCount = reasons.filter((reason) => reason.enabled !== false).length;
+  const ticketToolActive = config.tools.includes('ticket.create');
+
+  function updateFallback(patch: Partial<FallbackPatch>) {
+    onUpdate({ fallback: { ...fallback, ...patch } });
+  }
+
+  function updateReason(id: string, patch: Partial<FallbackReasonConfig>) {
+    updateFallback({
+      reasons: reasons.map((reason) => reason.id === id ? { ...reason, ...patch } : reason),
+    });
+  }
+
+  function addCustomReason() {
+    updateFallback({
+      reasons: [
+        ...reasons,
+        {
+          id: `custom_${Date.now()}`,
+          label: 'Eigener Fall',
+          reason: fallback.reason || 'handoff',
+          enabled: true,
+          priority: 'normal',
+          instruction: '',
+        },
+      ],
+    });
+  }
+
+  return (
+    <div className={`rounded-2xl border p-4 transition-all ${
+      fallback.enabled
+        ? 'border-cyan-400/25 bg-cyan-400/[0.035]'
+        : 'border-white/[0.08] bg-black/20'
+    }`}>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-white/75">Notausgang / Ticket-Eskalation</p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-white/35">
+            Wenn keine Live-Übergabe passt, wählt Chipy den konkretesten Ticket-Grund.
+          </p>
+        </div>
+        <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold ${
+          ticketToolActive ? 'border-cyan-300/25 bg-cyan-300/10 text-cyan-100/75' : 'border-orange-300/25 bg-orange-400/10 text-orange-100/80'
+        }`}>
+          {ticketToolActive ? `${activeCount} aktiv` : 'Ticket-Tool aus'}
+        </span>
+      </div>
+
+      <div className="mb-3 flex items-center gap-3 flex-wrap">
+        <Toggle
+          checked={fallback.enabled}
+          onChange={(enabled) => updateFallback({ enabled })}
+          label={fallback.enabled ? 'Automatischer Notausgang aktiv' : 'Automatischer Notausgang aus'}
+        />
+      </div>
+
+      {fallback.enabled && (
+        <div className="space-y-3">
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Allgemeiner Grund, wenn kein Fall passt</span>
+            <Input
+              value={fallback.reason}
+              onChange={(event) => updateFallback({ reason: event.target.value })}
+              placeholder="z.B. technische Beratung erforderlich"
+              className="mt-1"
+            />
+          </label>
+
+          <div className="grid gap-2">
+            {reasons.map((reason) => {
+              const active = reason.enabled !== false;
+              const isCustom = reason.id.startsWith('custom_');
+              const priority = reason.priority ?? 'normal';
+              return (
+                <div
+                  key={reason.id}
+                  className={`rounded-xl border p-3 transition-all ${
+                    active
+                      ? 'border-white/[0.10] bg-white/[0.045]'
+                      : 'border-white/[0.06] bg-black/15 opacity-60'
+                  }`}
+                >
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updateReason(reason.id, { enabled: !active })}
+                      className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-colors ${
+                        active
+                          ? 'border-cyan-300/30 bg-cyan-300/10 text-cyan-100'
+                          : 'border-white/[0.10] bg-white/[0.03] text-white/35'
+                      }`}
+                    >
+                      {active ? 'Aktiv' : 'Aus'}
+                    </button>
+                    <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${
+                      priority === 'urgent'
+                        ? 'border-red-300/30 bg-red-400/10 text-red-100/80'
+                        : priority === 'high'
+                          ? 'border-orange-300/30 bg-orange-400/10 text-orange-100/80'
+                          : 'border-white/[0.10] bg-white/[0.04] text-white/45'
+                    }`}>
+                      {PRIORITY_LABELS[priority]}
+                    </span>
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-[10px] uppercase tracking-[0.14em] text-white/30">Fall</span>
+                      <Input
+                        value={reason.label}
+                        onChange={(event) => updateReason(reason.id, { label: event.target.value })}
+                        className="mt-1 !text-xs"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-[10px] uppercase tracking-[0.14em] text-white/30">Ticket-Grund</span>
+                      <Input
+                        value={reason.reason}
+                        onChange={(event) => updateReason(reason.id, { reason: event.target.value })}
+                        className="mt-1 !text-xs"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="mt-2 block">
+                    <span className="text-[10px] uppercase tracking-[0.14em] text-white/30">Agent-Regel</span>
+                    <AdaptiveTextarea
+                      value={reason.instruction ?? ''}
+                      onChange={(event) => updateReason(reason.id, { instruction: event.target.value })}
+                      minRows={2}
+                      className="mt-1 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs leading-relaxed text-white placeholder:text-white/30 focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 outline-none"
+                    />
+                  </label>
+
+                  {isCustom && (
+                    <button
+                      type="button"
+                      onClick={() => updateFallback({ reasons: reasons.filter((item) => item.id !== reason.id) })}
+                      className="mt-2 text-[10px] font-semibold text-red-300/70 hover:text-red-200"
+                    >
+                      Entfernen
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={addCustomReason}
+            className="w-full rounded-xl border border-dashed border-white/[0.12] bg-white/[0.025] px-3 py-2 text-xs font-semibold text-white/55 transition-colors hover:border-cyan-300/30 hover:text-cyan-100"
+          >
+            + Eigener Eskalationsfall
+          </button>
+        </div>
+      )}
     </div>
   );
 }
