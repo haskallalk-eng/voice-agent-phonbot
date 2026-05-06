@@ -301,12 +301,21 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   const routingRules = (cfg as Record<string, unknown>).callRoutingRules as
     | Array<{ description: string; action: string; target?: string; enabled?: boolean }> | undefined;
   const activeRules = routingRules?.filter(r => r.enabled !== false) ?? [];
+  const usableRules = activeRules.filter((rule) => {
+    if (rule.action === 'transfer') return Boolean(rule.target && toE164(rule.target));
+    return rule.action === 'ticket' || rule.action === 'hangup';
+  });
 
-  if (activeRules.length > 0) {
+  if (usableRules.length > 0) {
+    const hasLiveTransfer = usableRules.some((rule) => rule.action === 'transfer');
     parts.push('');
-    parts.push('## Menschliche Uebergabe mit Ticket-Fallback');
-    parts.push('Du hast Tools zur Verfügung, die Anrufe live an eine echte Person weiterleiten. Wenn eine der folgenden Situationen eintritt, versuche zuerst die Live-Weiterleitung:');
-    for (const rule of activeRules) {
+    parts.push(hasLiveTransfer ? '## Menschliche Uebergabe mit Ticket-Fallback' : '## Konfigurierte Uebergabe-Regeln');
+    parts.push(
+      hasLiveTransfer
+        ? 'Du hast Tools zur Verfügung, die Anrufe live an eine echte Person weiterleiten. Wenn eine der folgenden Situationen eintritt, versuche zuerst die Live-Weiterleitung:'
+        : 'Wenn eine der folgenden Situationen eintritt, folge der konfigurierten Uebergabe-Regel:',
+    );
+    for (const rule of usableRules) {
       if (rule.action === 'transfer' && rule.target) {
         // Normalise the target the same way buildRetellTools does so the
         // tool name in the prompt matches the tool name registered with

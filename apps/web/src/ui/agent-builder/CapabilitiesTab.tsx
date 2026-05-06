@@ -116,7 +116,7 @@ const GENERIC_ROUTING_EXAMPLES: RoutingExample[] = [
 ];
 
 const ROUTING_EXAMPLES = GENERIC_ROUTING_EXAMPLES.map((example) => (
-  `${example.description} → ${example.action === 'transfer' ? 'Mensch anrufen, sonst Ticket' : example.action === 'ticket' ? 'Ticket erstellen' : 'Höflich auflegen'}`
+  `${example.description} → ${example.action === 'transfer' ? 'Weiterleiten + Ticket-Fallback' : example.action === 'ticket' ? 'Ticket erstellen' : 'Höflich auflegen'}`
 ));
 
 const INDUSTRY_ROUTING_EXAMPLES: Record<string, RoutingExample[]> = {
@@ -189,13 +189,15 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
   };
   const reasons = mergeFallbackReasons(fallback.reasons);
   const ticketToolActive = config.tools.includes('ticket.create');
-  const activeRoutingCount = routingRules.filter((rule) => rule.enabled !== false).length;
+  const activeTransferCount = routingRules.filter((rule) => (
+    rule.enabled !== false && rule.action === 'transfer' && Boolean(rule.target?.trim())
+  )).length;
   const activeTicketCount = fallback.enabled ? reasons.filter((reason) => reason.enabled !== false).length : 0;
   const routingExamples = routingExamplesForConfig(config);
   const routingTemplateLabel = routingExamplesLabel(config);
 
   const ACTION_OPTIONS: { id: Exclude<CallRoutingRule['action'], 'voicemail'>; label: string; Icon: SectionIconComp; hint: string }[] = [
-    { id: 'transfer',  label: 'Mensch anrufen, sonst Ticket', Icon: IconPhoneOut, hint: 'Ruft zuerst eine echte Nummer oder Abteilung an; wenn niemand übernimmt, nutzt Chipy den Ticket-Fall.' },
+    { id: 'transfer',  label: 'Weiterleiten + Ticket-Fallback', Icon: IconPhoneOut, hint: 'Ruft zuerst eine echte Nummer oder Abteilung an; wenn niemand übernimmt, nutzt Chipy die passende Fallback-Regel.' },
     { id: 'ticket',    label: 'Ticket anlegen',    Icon: IconTicket, hint: 'Sammelt Daten und markiert den Grund.' },
     { id: 'hangup',    label: 'Beenden',           Icon: IconPhoneOff, hint: 'Verabschiedet sich und legt auf.' },
   ];
@@ -288,19 +290,21 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
           <div>
             <p className="text-sm font-semibold text-white">Übergabe an Menschen</p>
             <p className="mt-1 max-w-2xl text-xs leading-relaxed text-white/45">
-              Reihenfolge: zuerst live anrufen. Wenn niemand erreichbar ist, die Weiterleitung scheitert oder keine Regel passt, legt Chipy ein passendes Ticket an.
+              {activeTransferCount > 0
+                ? 'Reihenfolge: zuerst live anrufen. Wenn niemand erreichbar ist, die Weiterleitung scheitert oder keine Regel passt, legt Chipy ein passendes Ticket an.'
+                : 'Aktuell ist keine Live-Übergabe mit Zielnummer aktiv. Chipy legt Tickets an, bis du eine Übergabe-Regel mit Zielnummer hinzufügst.'}
             </p>
           </div>
           <div className="flex flex-wrap gap-2 text-[10px] font-semibold">
             <span className="rounded-full border border-orange-300/25 bg-orange-400/10 px-2.5 py-1 text-orange-100/80">
-              {activeRoutingCount} Übergabe-Regeln aktiv
+              {activeTransferCount > 0 ? `${activeTransferCount} Live-Ziele aktiv` : 'Keine Live-Übergabe'}
             </span>
             <span className={`rounded-full border px-2.5 py-1 ${
               fallback.enabled
                 ? 'border-cyan-300/25 bg-cyan-300/10 text-cyan-100/80'
                 : 'border-white/[0.10] bg-white/[0.03] text-white/40'
             }`}>
-              {fallback.enabled ? `${activeTicketCount} Ticket-Fälle aktiv` : 'Ticket-Fallback aus'}
+              {fallback.enabled ? `${activeTicketCount} Fallback-Regeln aktiv` : 'Ticket-Fallback aus'}
             </span>
           </div>
         </div>
@@ -315,7 +319,7 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
               className="mt-1"
             />
             <span className="mt-1 block text-[11px] leading-relaxed text-white/35">
-              Wird im Posteingang angezeigt, wenn kein genauer Ticket-Fall unten passt.
+              Wird im Posteingang angezeigt, wenn keine genauere Fallback-Regel unten passt.
             </span>
           </label>
           <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-3">
@@ -332,21 +336,21 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
 
         {!ticketToolActive && fallback.enabled && (
           <div className="mt-3 rounded-xl border border-orange-300/20 bg-orange-400/10 px-3 py-2 text-xs text-orange-100/80">
-            Ticket-Fälle sind vorbereitet, aber das Ticket-Tool ist noch aus. Aktiviere es bei den Fähigkeiten, wenn Chipy wirklich Tickets anlegen soll.
+            Fallback-Regeln sind vorbereitet, aber das Ticket-Tool ist noch aus. Aktiviere es bei den Fähigkeiten, wenn Chipy wirklich Tickets anlegen soll.
           </div>
         )}
       </div>
 
       {routingRules.length === 0 && reasons.length === 0 && (
         <div className="rounded-2xl border border-dashed border-white/[0.12] bg-white/[0.03] p-4 text-sm text-white/45">
-          Noch keine Übergabe-Situationen. Lege unten eine Übergabe-Regel oder einen Ticket-Fall an.
+          Noch keine Übergabe-Situationen. Lege unten eine Übergabe-Regel oder Fallback-Regel an.
         </div>
       )}
 
       <div className="rounded-2xl border border-white/[0.08] bg-white/[0.035] p-3">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/35">{routingTemplateLabel}</p>
-            <p className="text-[11px] text-white/32">Mensch zuerst, Ticket als Sicherheitsnetz</p>
+            <p className="text-[11px] text-white/32">Weiterleiten + Ticket-Fallback</p>
           </div>
           <div className="grid gap-2 md:grid-cols-3">
             {routingExamples.slice(0, 3).map((example) => {
@@ -362,7 +366,7 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
                   className="rounded-xl border border-white/[0.08] bg-black/15 px-3 py-2 text-left text-xs leading-relaxed text-white/45 transition-colors hover:border-orange-300/25 hover:text-orange-100/80"
                 >
                   <span className="block font-semibold text-white/65">{example.label}</span>
-                  <span className="mt-1 block">{example.description} → {example.action === 'transfer' ? 'Mensch anrufen, sonst Ticket' : example.action === 'ticket' ? 'Ticket anlegen' : 'Beenden'}</span>
+                  <span className="mt-1 block">{example.description} → {example.action === 'transfer' ? 'Weiterleiten + Ticket-Fallback' : example.action === 'ticket' ? 'Ticket anlegen' : 'Beenden'}</span>
                 </button>
               );
             })}
@@ -380,9 +384,9 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
               }
             : ACTION_OPTIONS.find((item) => item.id === rule.action) ?? {
                 id: 'transfer' as const,
-                label: 'Mensch anrufen, sonst Ticket',
+                label: 'Weiterleiten + Ticket-Fallback',
                 Icon: IconPhoneOut,
-                hint: 'Ruft zuerst eine echte Nummer oder Abteilung an; wenn niemand übernimmt, nutzt Chipy den Ticket-Fall.',
+                hint: 'Ruft zuerst eine echte Nummer oder Abteilung an; wenn niemand übernimmt, nutzt Chipy die passende Fallback-Regel.',
               };
           const warn = rule.action === 'transfer' && rule.target ? getLoopWarning(rule.target) : { type: null };
           return (
@@ -460,7 +464,7 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
                     />
                   </label>
                   <div className="rounded-xl border border-cyan-300/16 bg-cyan-400/[0.07] px-3 py-2 text-xs leading-relaxed text-cyan-100/78">
-                    Wenn niemand rangeht oder die Weiterleitung nicht klappt, nutzt Chipy danach den passendsten Ticket-Fall unten.
+                    Wenn niemand rangeht oder die Weiterleitung nicht klappt, nutzt Chipy danach die passendste Fallback-Regel unten.
                   </div>
                   {warn.type === 'loop' && (
                     <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-200/90">
@@ -491,7 +495,7 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
 
               {rule.action === 'ticket' && (
                 <div className="mt-3 rounded-xl border border-cyan-300/16 bg-cyan-400/[0.07] px-3 py-2 text-xs leading-relaxed text-cyan-100/78">
-                  Für reine Rückruf-Fälle nutzt Chipy die Ticket-Fälle unten direkt, ohne vorher einen Menschen anzurufen.
+                  Für reine Rückruf-Fälle nutzt Chipy die Fallback-Regeln unten direkt, ohne vorher einen Menschen anzurufen.
                 </div>
               )}
 
@@ -523,8 +527,8 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
                     <IconTicket size={14} />
                   </span>
                   <div>
-                    <p className="text-xs font-semibold text-white/80">Ticket-Fall</p>
-                    <p className="text-[11px] text-white/35">Greift, wenn Live-Weiterleitung nicht passt oder niemand übernimmt.</p>
+                    <p className="text-xs font-semibold text-white/80">Fallback-Regel</p>
+                    <p className="text-[11px] text-white/35">Greift als Ticket, wenn kein Mensch übernimmt oder keine Weiterleitung passt.</p>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -563,12 +567,12 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
               </label>
 
               <label className="mt-3 block">
-                <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Wann soll Chipy diesen Fall nutzen?</span>
+                <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Wann soll Chipy diese Regel nutzen?</span>
                 <AdaptiveTextarea
                   value={reason.instruction ?? ''}
                   onChange={(event) => updateReason(reason.id, { instruction: event.target.value })}
                   minRows={2}
-                  placeholder="Beschreibe klare Signale, Beispiele oder Grenzen für diesen Ticket-Fall."
+                  placeholder="Beschreibe klare Signale, Beispiele oder Grenzen für diese Fallback-Regel."
                   className="mt-1 w-full rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2 text-sm leading-relaxed text-white placeholder:text-white/30 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 outline-none"
                 />
               </label>
@@ -590,7 +594,7 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
           onClick={addCustomReason}
           className="rounded-[1.1rem] border border-dashed border-cyan-300/22 bg-cyan-400/[0.045] px-4 py-3 text-sm font-semibold text-cyan-100/80 transition-colors hover:border-cyan-300/42 hover:bg-cyan-400/[0.08]"
         >
-          + Ticket-Fall hinzufügen
+          + Fallback-Regel hinzufügen
         </button>
       </div>
     </div>
