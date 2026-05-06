@@ -32,7 +32,7 @@ export function TechnicalTab({ config, onUpdate }: TechnicalTabProps) {
   return (
     <>
       <div className="mb-5 rounded-2xl border border-cyan-500/15 bg-cyan-500/8 px-4 py-3 text-sm text-cyan-100/85">
-        Die Vorschau zeigt die aktive Laufzeit-Konfiguration. Speichern synchronisiert Änderungen bei bereits deployten Agenten direkt zu Retell; neue Agenten übernehmen sie beim ersten Deploy.
+        Die Vorschau zeigt die aktive Laufzeit-Konfiguration. Speichern synchronisiert Änderungen bei bereits aktivierten Agenten direkt mit der Live-Telefonie; neue Agenten übernehmen sie beim ersten Aktivieren.
       </div>
 
       <SectionCard title="Stimme & Modell" icon={IconMic}>

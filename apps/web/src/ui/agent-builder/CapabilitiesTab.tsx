@@ -68,25 +68,7 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
           </div>
           <ForwardingHint />
         </div>
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.02fr)_minmax(0,0.98fr)]">
-          <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold text-white/75">Live-Rufweiterleitung</p>
-                <p className="mt-0.5 text-[11px] text-white/35">Regeln für echte Übergabe, Ticket oder Auflegen.</p>
-              </div>
-              <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[10px] font-semibold text-cyan-100/70">
-                {config.callRoutingRules?.filter((rule) => rule.enabled !== false).length ?? 0} aktiv
-              </span>
-            </div>
-            <CallRoutingEditor
-              phoneInfo={phoneInfo}
-              items={config.callRoutingRules ?? []}
-              onChange={(items) => onUpdate({ callRoutingRules: items })}
-            />
-          </div>
-          <FallbackMatrixBlock config={config} onUpdate={onUpdate} />
-        </div>
+        <HandoffDecisionEditor config={config} phoneInfo={phoneInfo} onUpdate={onUpdate} />
       </SectionCard>
 
       {/* Calendar Integrations */}
@@ -127,6 +109,413 @@ const ROUTING_EXAMPLES = [
 ];
 
 type PhoneInfoItem = { number: string; customerNumber?: string; forwardingType?: 'always' | 'no_answer'; verified?: boolean };
+
+function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: AgentConfig; onUpdate: (p: Partial<AgentConfig>) => void; phoneInfo?: PhoneInfoItem[] }) {
+  const routingRules = config.callRoutingRules ?? [];
+  const fallback: FallbackPatch = config.fallback ?? { enabled: true, reason: 'handoff', reasons: DEFAULT_FALLBACK_REASONS };
+  const reasons = mergeFallbackReasons(fallback.reasons);
+  const ticketToolActive = config.tools.includes('ticket.create');
+  const activeRoutingCount = routingRules.filter((rule) => rule.enabled !== false).length;
+  const activeTicketCount = fallback.enabled ? reasons.filter((reason) => reason.enabled !== false).length : 0;
+
+  const ACTION_OPTIONS: { id: Exclude<CallRoutingRule['action'], 'voicemail'>; label: string; Icon: SectionIconComp; hint: string }[] = [
+    { id: 'transfer',  label: 'Live weiterleiten', Icon: IconPhoneOut, hint: 'Ruft eine echte Nummer oder Abteilung an.' },
+    { id: 'ticket',    label: 'Ticket anlegen',    Icon: IconTicket, hint: 'Sammelt Daten und markiert den Grund.' },
+    { id: 'hangup',    label: 'Beenden',           Icon: IconPhoneOff, hint: 'Verabschiedet sich und legt auf.' },
+  ];
+
+  const normalize = (n: string) => n.replace(/[\s\-()]/g, '');
+
+  function getLoopWarning(target: string): { type: 'loop' | 'maybe_loop' | null; forwardingType?: 'always' | 'no_answer' } {
+    const t = normalize(target);
+    if (t.length < 5) return { type: null };
+
+    if (phoneInfo.some(p => normalize(p.number) === t)) {
+      return { type: 'loop' };
+    }
+
+    const matchedPhone = phoneInfo.find(p => p.customerNumber && normalize(p.customerNumber) === t);
+    if (matchedPhone) {
+      if (matchedPhone.verified && matchedPhone.forwardingType === 'always') {
+        return { type: 'loop', forwardingType: 'always' };
+      }
+      if (matchedPhone.verified && matchedPhone.forwardingType === 'no_answer') {
+        return { type: null, forwardingType: 'no_answer' };
+      }
+      return { type: 'maybe_loop' };
+    }
+
+    return { type: null };
+  }
+
+  function setRoutingRules(items: CallRoutingRule[]) {
+    onUpdate({ callRoutingRules: items });
+  }
+
+  function patchRouting(index: number, patch: Partial<CallRoutingRule>) {
+    const next = [...routingRules];
+    next[index] = { ...next[index], ...patch } as CallRoutingRule;
+    setRoutingRules(next);
+  }
+
+  function addRoutingRule(seed?: Partial<CallRoutingRule>) {
+    setRoutingRules([
+      ...routingRules,
+      {
+        id: crypto.randomUUID(),
+        description: seed?.description ?? '',
+        action: seed?.action ?? 'transfer',
+        target: seed?.target ?? '',
+        enabled: seed?.enabled ?? true,
+      },
+    ]);
+  }
+
+  function removeRoutingRule(index: number) {
+    setRoutingRules(routingRules.filter((_, currentIndex) => currentIndex !== index));
+  }
+
+  function updateFallback(patch: Partial<FallbackPatch>) {
+    onUpdate({ fallback: { ...fallback, ...patch } });
+  }
+
+  function updateReason(id: string, patch: Partial<FallbackReasonConfig>) {
+    updateFallback({
+      reasons: reasons.map((reason) => reason.id === id ? { ...reason, ...patch } : reason),
+    });
+  }
+
+  function addCustomReason() {
+    updateFallback({
+      reasons: [
+        ...reasons,
+        {
+          id: `custom_${crypto.randomUUID()}`,
+          label: 'Eigener Übergabefall',
+          reason: fallback.reason || 'handoff',
+          enabled: true,
+          priority: 'normal',
+          instruction: '',
+        },
+      ],
+    });
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-[1.4rem] border border-white/[0.09] bg-gradient-to-br from-white/[0.07] via-white/[0.03] to-cyan-400/[0.045] p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-white">Ein Übergabe-Plan für alle Sonderfälle</p>
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-white/45">
+              Chipy prüft zuerst Live-Regeln. Wenn keine passt, greift der Ticket-Notausgang mit dem konkretesten Fall.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[10px] font-semibold">
+            <span className="rounded-full border border-orange-300/25 bg-orange-400/10 px-2.5 py-1 text-orange-100/80">
+              {activeRoutingCount} Live-Regeln aktiv
+            </span>
+            <span className={`rounded-full border px-2.5 py-1 ${
+              fallback.enabled
+                ? 'border-cyan-300/25 bg-cyan-300/10 text-cyan-100/80'
+                : 'border-white/[0.10] bg-white/[0.03] text-white/40'
+            }`}>
+              {fallback.enabled ? `${activeTicketCount} Ticket-Fälle aktiv` : 'Ticket-Notausgang aus'}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(15rem,0.55fr)]">
+          <label className="block">
+            <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Standardgrund, wenn kein spezieller Fall passt</span>
+            <Input
+              value={fallback.reason}
+              onChange={(event) => updateFallback({ reason: event.target.value })}
+              placeholder="z.B. Rückruf gewünscht"
+              className="mt-1"
+            />
+          </label>
+          <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-3">
+            <Toggle
+              checked={fallback.enabled}
+              onChange={(enabled) => updateFallback({ enabled })}
+              label={fallback.enabled ? 'Ticket-Notausgang aktiv' : 'Ticket-Notausgang aus'}
+            />
+            <p className="mt-2 text-[11px] leading-relaxed text-white/38">
+              Damit landet jedes ungelöste Anliegen strukturiert im Posteingang statt in einer Sackgasse.
+            </p>
+          </div>
+        </div>
+
+        {!ticketToolActive && fallback.enabled && (
+          <div className="mt-3 rounded-xl border border-orange-300/20 bg-orange-400/10 px-3 py-2 text-xs text-orange-100/80">
+            Ticket-Fälle sind vorbereitet, aber das Ticket-Tool ist noch aus. Aktiviere es bei den Fähigkeiten, wenn Chipy wirklich Tickets anlegen soll.
+          </div>
+        )}
+      </div>
+
+      {routingRules.length === 0 && reasons.length === 0 && (
+        <div className="rounded-2xl border border-dashed border-white/[0.12] bg-white/[0.03] p-4 text-sm text-white/45">
+          Noch keine Übergabe-Situationen. Lege unten eine Live-Regel oder einen Ticket-Fall an.
+        </div>
+      )}
+
+      {routingRules.length === 0 && (
+        <div className="rounded-2xl border border-white/[0.08] bg-white/[0.035] p-3">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/35">Schnellstart</p>
+          <div className="grid gap-2 md:grid-cols-3">
+            {ROUTING_EXAMPLES.slice(0, 3).map((example) => {
+              const parts = example.split(' → ');
+              return (
+                <button
+                  key={example}
+                  type="button"
+                  onClick={() => addRoutingRule({
+                    description: parts[0] ?? '',
+                    action: example.includes('auflegen') ? 'hangup' : example.includes('Ticket') ? 'ticket' : 'transfer',
+                    target: parts[1] ?? '',
+                  })}
+                  className="rounded-xl border border-white/[0.08] bg-black/15 px-3 py-2 text-left text-xs leading-relaxed text-white/45 transition-colors hover:border-orange-300/25 hover:text-orange-100/80"
+                >
+                  {example}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {routingRules.map((rule, index) => {
+          const action = rule.action === 'voicemail'
+            ? {
+                id: 'voicemail' as const,
+                label: 'Mailbox nicht aktiv',
+                Icon: IconMicUpload,
+                hint: 'Diese alte Regel ist nicht mit einem Tool verbunden. Wähle Ticket oder Beenden.',
+              }
+            : ACTION_OPTIONS.find((item) => item.id === rule.action) ?? {
+                id: 'transfer' as const,
+                label: 'Live weiterleiten',
+                Icon: IconPhoneOut,
+                hint: 'Ruft eine echte Nummer oder Abteilung an.',
+              };
+          const warn = rule.action === 'transfer' && rule.target ? getLoopWarning(rule.target) : { type: null };
+          return (
+            <div
+              key={rule.id}
+              className={`rounded-[1.35rem] border p-4 transition-all ${
+                rule.enabled
+                  ? 'border-orange-300/18 bg-orange-400/[0.045]'
+                  : 'border-white/[0.07] bg-black/15 opacity-65'
+              }`}
+            >
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-orange-300/20 bg-orange-400/10 text-orange-100">
+                    <action.Icon size={14} />
+                  </span>
+                  <div>
+                    <p className="text-xs font-semibold text-white/80">Live-Regel</p>
+                    <p className="text-[11px] text-white/35">{action.hint}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Toggle checked={rule.enabled} onChange={(enabled) => patchRouting(index, { enabled })} label={rule.enabled ? 'Aktiv' : 'Aus'} />
+                  <button
+                    type="button"
+                    onClick={() => removeRoutingRule(index)}
+                    className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] font-semibold text-white/35 transition-colors hover:border-red-300/25 hover:text-red-200"
+                  >
+                    Entfernen
+                  </button>
+                </div>
+              </div>
+
+              <label className="block">
+                <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Wenn der Anrufer...</span>
+                <AdaptiveTextarea
+                  value={rule.description}
+                  onChange={(event) => patchRouting(index, { description: event.target.value })}
+                  placeholder="z.B. nach einem Menschen fragt, wütend ist oder einen echten Notfall meldet"
+                  minRows={2}
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2 text-sm leading-relaxed text-white placeholder:text-white/30 focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50 outline-none"
+                />
+              </label>
+
+              <div className="mt-3">
+                <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Dann macht Chipy...</span>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {ACTION_OPTIONS.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => patchRouting(index, { action: item.id })}
+                      className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-all ${
+                        rule.action === item.id
+                          ? 'border-orange-300/35 bg-orange-400/15 text-orange-100'
+                          : 'border-white/[0.08] bg-white/[0.03] text-white/45 hover:border-white/[0.16] hover:text-white/70'
+                      }`}
+                    >
+                      <item.Icon size={13} />
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {rule.action === 'transfer' && (
+                <div className="mt-3 space-y-2">
+                  <label className="block">
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Ziel der Live-Übergabe</span>
+                    <Input
+                      value={rule.target ?? ''}
+                      onChange={(event) => patchRouting(index, { target: event.target.value })}
+                      placeholder="+49 170 1234567 oder Abteilung"
+                      className={`mt-1 ${warn.type ? '!border-amber-500/50' : ''}`}
+                    />
+                  </label>
+                  {warn.type === 'loop' && (
+                    <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-200/90">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <strong>Endlosschleife erkannt.</strong>
+                        <ForwardingHint />
+                      </div>
+                      <p className="mt-1">
+                        {warn.forwardingType === 'always'
+                          ? 'Diese Nummer leitet immer zu Phonbot weiter. Ein Transfer hierhin ruft den Agenten wieder selbst an.'
+                          : 'Diese Nummer ist eine Phonbot-Eingangsnummer. Ein Transfer hierhin ruft den Agenten wieder selbst an.'}
+                      </p>
+                    </div>
+                  )}
+                  {warn.type === 'maybe_loop' && (
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-100/85">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <strong>Mögliche Schleife.</strong>
+                        <ForwardingHint />
+                      </div>
+                      <p className="mt-1">
+                        Diese Nummer wurde noch nicht als sichere Weiterleitung geprüft. Teste sie im Telefon-Tab, bevor du sie als Transferziel nutzt.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {rule.action === 'ticket' && (
+                <div className="mt-3 rounded-xl border border-cyan-300/16 bg-cyan-400/[0.07] px-3 py-2 text-xs leading-relaxed text-cyan-100/78">
+                  Für genaue Ticket-Gründe nutzt Chipy die Ticket-Fälle unten. Die Live-Regel kann einen Anrufer direkt in diesen Ticket-Pfad schicken.
+                </div>
+              )}
+
+              {rule.action === 'voicemail' && (
+                <div className="mt-3 rounded-xl border border-amber-300/18 bg-amber-400/[0.08] px-3 py-2 text-xs leading-relaxed text-amber-100/85">
+                  Mailbox war eine alte Auswahl, ist aber nicht als zuverlässige Agent-Funktion verdrahtet. Bitte stelle diese Regel auf Ticket anlegen oder Beenden um.
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {reasons.map((reason) => {
+          const active = reason.enabled !== false;
+          const priority = reason.priority ?? 'normal';
+          const isCustom = reason.id.startsWith('custom_');
+          return (
+            <div
+              key={reason.id}
+              className={`rounded-[1.35rem] border p-4 transition-all ${
+                fallback.enabled && active
+                  ? 'border-cyan-300/18 bg-cyan-400/[0.045]'
+                  : 'border-white/[0.07] bg-black/15 opacity-65'
+              }`}
+            >
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-xl border border-cyan-300/20 bg-cyan-400/10 text-cyan-100">
+                    <IconTicket size={14} />
+                  </span>
+                  <div>
+                    <p className="text-xs font-semibold text-white/80">Ticket-Fall</p>
+                    <p className="text-[11px] text-white/35">Greift, wenn keine Live-Regel besser passt.</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${
+                    priority === 'urgent'
+                      ? 'border-red-300/30 bg-red-400/10 text-red-100/80'
+                      : priority === 'high'
+                        ? 'border-orange-300/30 bg-orange-400/10 text-orange-100/80'
+                        : 'border-white/[0.10] bg-white/[0.04] text-white/45'
+                  }`}>
+                    {PRIORITY_LABELS[priority]}
+                  </span>
+                  <Toggle checked={active} onChange={(enabled) => updateReason(reason.id, { enabled })} label={active ? 'Aktiv' : 'Aus'} />
+                  {isCustom && (
+                    <button
+                      type="button"
+                      onClick={() => updateFallback({ reasons: reasons.filter((item) => item.id !== reason.id) })}
+                      className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] font-semibold text-white/35 transition-colors hover:border-red-300/25 hover:text-red-200"
+                    >
+                      Entfernen
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Fallname</span>
+                  <Input
+                    value={reason.label}
+                    onChange={(event) => updateReason(reason.id, { label: event.target.value })}
+                    className="mt-1"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Ticket-Grund im Posteingang</span>
+                  <Input
+                    value={reason.reason}
+                    onChange={(event) => updateReason(reason.id, { reason: event.target.value })}
+                    className="mt-1"
+                  />
+                </label>
+              </div>
+
+              <label className="mt-3 block">
+                <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Wann soll Chipy diesen Fall nutzen?</span>
+                <AdaptiveTextarea
+                  value={reason.instruction ?? ''}
+                  onChange={(event) => updateReason(reason.id, { instruction: event.target.value })}
+                  minRows={2}
+                  placeholder="Beschreibe klare Signale, Beispiele oder Grenzen für diesen Ticket-Fall."
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2 text-sm leading-relaxed text-white placeholder:text-white/30 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 outline-none"
+                />
+              </label>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => addRoutingRule()}
+          className="rounded-[1.1rem] border border-dashed border-orange-300/22 bg-orange-400/[0.045] px-4 py-3 text-sm font-semibold text-orange-100/80 transition-colors hover:border-orange-300/42 hover:bg-orange-400/[0.08]"
+        >
+          + Live-Regel hinzufügen
+        </button>
+        <button
+          type="button"
+          onClick={addCustomReason}
+          className="rounded-[1.1rem] border border-dashed border-cyan-300/22 bg-cyan-400/[0.045] px-4 py-3 text-sm font-semibold text-cyan-100/80 transition-colors hover:border-cyan-300/42 hover:bg-cyan-400/[0.08]"
+        >
+          + Ticket-Fall hinzufügen
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function CallRoutingEditor({ items, onChange, phoneInfo = [] }: { items: CallRoutingRule[]; onChange: (v: CallRoutingRule[]) => void; phoneInfo?: PhoneInfoItem[] }) {
   const normalize = (n: string) => n.replace(/[\s\-()]/g, '');
