@@ -62,10 +62,10 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
         <div className="mb-4 flex items-start gap-3 flex-wrap">
           <div className="flex-1 min-w-[16rem]">
             <p className="text-sm text-white/60">
-              Alles, was Chipy nicht selbst lösen soll: live weiterleiten, Ticket anlegen oder sauber beenden.
+              Alles, was Chipy nicht selbst lösen soll: zuerst einen Menschen erreichen, danach Ticket als Sicherheitsnetz.
             </p>
             <p className="mt-1 text-xs text-white/35">
-              Rufweiterleitung und Notausgang sind ein gemeinsamer Entscheidungsbaum im Agent-Prompt.
+              Rufweiterleitung und Ticket-Fallback sind ein gemeinsamer Ablauf im Agent-Prompt.
             </p>
           </div>
           <ForwardingHint />
@@ -116,7 +116,7 @@ const GENERIC_ROUTING_EXAMPLES: RoutingExample[] = [
 ];
 
 const ROUTING_EXAMPLES = GENERIC_ROUTING_EXAMPLES.map((example) => (
-  `${example.description} → ${example.action === 'transfer' ? 'Live weiterleiten' : example.action === 'ticket' ? 'Ticket erstellen' : 'Höflich auflegen'}`
+  `${example.description} → ${example.action === 'transfer' ? 'Mensch anrufen, sonst Ticket' : example.action === 'ticket' ? 'Ticket erstellen' : 'Höflich auflegen'}`
 ));
 
 const INDUSTRY_ROUTING_EXAMPLES: Record<string, RoutingExample[]> = {
@@ -195,7 +195,7 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
   const routingTemplateLabel = routingExamplesLabel(config);
 
   const ACTION_OPTIONS: { id: Exclude<CallRoutingRule['action'], 'voicemail'>; label: string; Icon: SectionIconComp; hint: string }[] = [
-    { id: 'transfer',  label: 'Live weiterleiten', Icon: IconPhoneOut, hint: 'Ruft eine echte Nummer oder Abteilung an.' },
+    { id: 'transfer',  label: 'Mensch anrufen, sonst Ticket', Icon: IconPhoneOut, hint: 'Ruft zuerst eine echte Nummer oder Abteilung an; wenn niemand übernimmt, nutzt Chipy den Ticket-Fall.' },
     { id: 'ticket',    label: 'Ticket anlegen',    Icon: IconTicket, hint: 'Sammelt Daten und markiert den Grund.' },
     { id: 'hangup',    label: 'Beenden',           Icon: IconPhoneOff, hint: 'Verabschiedet sich und legt auf.' },
   ];
@@ -288,12 +288,12 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
           <div>
             <p className="text-sm font-semibold text-white">Übergabe an Menschen</p>
             <p className="mt-1 max-w-2xl text-xs leading-relaxed text-white/45">
-              Reihenfolge: erst live weiterleiten. Wenn niemand erreichbar ist oder keine Live-Regel passt, legt Chipy ein passendes Ticket an.
+              Reihenfolge: zuerst live anrufen. Wenn niemand erreichbar ist, die Weiterleitung scheitert oder keine Regel passt, legt Chipy ein passendes Ticket an.
             </p>
           </div>
           <div className="flex flex-wrap gap-2 text-[10px] font-semibold">
             <span className="rounded-full border border-orange-300/25 bg-orange-400/10 px-2.5 py-1 text-orange-100/80">
-              {activeRoutingCount} Live-Regeln aktiv
+              {activeRoutingCount} Übergabe-Regeln aktiv
             </span>
             <span className={`rounded-full border px-2.5 py-1 ${
               fallback.enabled
@@ -325,7 +325,7 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
               label={fallback.enabled ? 'Ticket anlegen, wenn niemand übernimmt' : 'Keine Fallback-Tickets'}
             />
             <p className="mt-2 text-[11px] leading-relaxed text-white/38">
-              So endet ein Anruf nicht in einer Sackgasse, wenn Live-Übergabe nicht möglich ist.
+              So endet ein Anruf nicht in einer Sackgasse, wenn der Mensch nicht rangeht oder die Übergabe nicht möglich ist.
             </p>
           </div>
         </div>
@@ -339,14 +339,14 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
 
       {routingRules.length === 0 && reasons.length === 0 && (
         <div className="rounded-2xl border border-dashed border-white/[0.12] bg-white/[0.03] p-4 text-sm text-white/45">
-          Noch keine Übergabe-Situationen. Lege unten eine Live-Regel oder einen Ticket-Fall an.
+          Noch keine Übergabe-Situationen. Lege unten eine Übergabe-Regel oder einen Ticket-Fall an.
         </div>
       )}
 
       <div className="rounded-2xl border border-white/[0.08] bg-white/[0.035] p-3">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/35">{routingTemplateLabel}</p>
-            <p className="text-[11px] text-white/32">Als zusätzliche Übergabe-Regel hinzufügen</p>
+            <p className="text-[11px] text-white/32">Mensch zuerst, Ticket als Sicherheitsnetz</p>
           </div>
           <div className="grid gap-2 md:grid-cols-3">
             {routingExamples.slice(0, 3).map((example) => {
@@ -362,7 +362,7 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
                   className="rounded-xl border border-white/[0.08] bg-black/15 px-3 py-2 text-left text-xs leading-relaxed text-white/45 transition-colors hover:border-orange-300/25 hover:text-orange-100/80"
                 >
                   <span className="block font-semibold text-white/65">{example.label}</span>
-                  <span className="mt-1 block">{example.description} → {example.action === 'transfer' ? 'Live weiterleiten' : example.action === 'ticket' ? 'Ticket anlegen' : 'Beenden'}</span>
+                  <span className="mt-1 block">{example.description} → {example.action === 'transfer' ? 'Mensch anrufen, sonst Ticket' : example.action === 'ticket' ? 'Ticket anlegen' : 'Beenden'}</span>
                 </button>
               );
             })}
@@ -380,9 +380,9 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
               }
             : ACTION_OPTIONS.find((item) => item.id === rule.action) ?? {
                 id: 'transfer' as const,
-                label: 'Live weiterleiten',
+                label: 'Mensch anrufen, sonst Ticket',
                 Icon: IconPhoneOut,
-                hint: 'Ruft eine echte Nummer oder Abteilung an.',
+                hint: 'Ruft zuerst eine echte Nummer oder Abteilung an; wenn niemand übernimmt, nutzt Chipy den Ticket-Fall.',
               };
           const warn = rule.action === 'transfer' && rule.target ? getLoopWarning(rule.target) : { type: null };
           return (
@@ -400,7 +400,7 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
                     <action.Icon size={14} />
                   </span>
                   <div>
-                    <p className="text-xs font-semibold text-white/80">Live-Regel</p>
+                    <p className="text-xs font-semibold text-white/80">Übergabe-Regel</p>
                     <p className="text-[11px] text-white/35">{action.hint}</p>
                   </div>
                 </div>
@@ -451,7 +451,7 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
               {rule.action === 'transfer' && (
                 <div className="mt-3 space-y-2">
                   <label className="block">
-                    <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Ziel der Live-Übergabe</span>
+                    <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Wen soll Chipy zuerst anrufen?</span>
                     <Input
                       value={rule.target ?? ''}
                       onChange={(event) => patchRouting(index, { target: event.target.value })}
@@ -459,6 +459,9 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
                       className={`mt-1 ${warn.type ? '!border-amber-500/50' : ''}`}
                     />
                   </label>
+                  <div className="rounded-xl border border-cyan-300/16 bg-cyan-400/[0.07] px-3 py-2 text-xs leading-relaxed text-cyan-100/78">
+                    Wenn niemand rangeht oder die Weiterleitung nicht klappt, nutzt Chipy danach den passendsten Ticket-Fall unten.
+                  </div>
                   {warn.type === 'loop' && (
                     <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-200/90">
                       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -488,7 +491,7 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
 
               {rule.action === 'ticket' && (
                 <div className="mt-3 rounded-xl border border-cyan-300/16 bg-cyan-400/[0.07] px-3 py-2 text-xs leading-relaxed text-cyan-100/78">
-                  Für genaue Ticket-Gründe nutzt Chipy die Ticket-Fälle unten. Die Live-Regel kann einen Anrufer direkt in diesen Ticket-Pfad schicken.
+                  Für reine Rückruf-Fälle nutzt Chipy die Ticket-Fälle unten direkt, ohne vorher einen Menschen anzurufen.
                 </div>
               )}
 
@@ -580,7 +583,7 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
           onClick={() => addRoutingRule()}
           className="rounded-[1.1rem] border border-dashed border-orange-300/22 bg-orange-400/[0.045] px-4 py-3 text-sm font-semibold text-orange-100/80 transition-colors hover:border-orange-300/42 hover:bg-orange-400/[0.08]"
         >
-          + Live-Regel hinzufügen
+          + Übergabe-Regel hinzufügen
         </button>
         <button
           type="button"
@@ -864,7 +867,7 @@ function FallbackMatrixBlock({ config, onUpdate }: { config: AgentConfig; onUpda
         <div>
           <p className="text-xs font-semibold text-white/75">Notausgang / Ticket-Eskalation</p>
           <p className="mt-0.5 text-[11px] leading-relaxed text-white/35">
-            Wenn keine Live-Übergabe passt, wählt Chipy den konkretesten Ticket-Grund.
+            Wenn kein Mensch übernimmt oder keine Übergabe passt, wählt Chipy den konkretesten Ticket-Grund.
           </p>
         </div>
         <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold ${

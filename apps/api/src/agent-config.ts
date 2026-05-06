@@ -806,7 +806,7 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
     tools.push({
       type: 'custom',
       name: 'ticket_create',
-      description: 'Create a callback or handoff ticket when the user wants human follow-up. Mention SMS only when the result returns smsSent=true.',
+      description: 'Create a callback or transfer-fallback ticket when the user needs human follow-up. Mention SMS only when the result returns smsSent=true.',
       url: `${webhookBaseUrl}/retell/tools/ticket.create?${signedQuery}`,
       execution_message_description: 'Creating your callback request…',
       parameters: {
@@ -860,7 +860,7 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
       tools.push({
         type: 'transfer_call',
         name: safeName,
-        description: `Transfer call to ${e164}. ${rule.description ?? ''}`.trim(),
+        description: `Transfer call to ${e164}. If the transfer is unavailable or nobody answers, continue with the configured ticket fallback. ${rule.description ?? ''}`.trim(),
         transfer_destination: {
           type: 'predefined',
           number: e164,
