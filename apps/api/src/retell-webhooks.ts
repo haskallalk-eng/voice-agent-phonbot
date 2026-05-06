@@ -93,19 +93,35 @@ function verifyRetellSignature(req: RawBodyRequest): boolean {
     return false;
   }
 
-  // Validate hex string before creating buffer (prevents Buffer allocation errors)
-  if (!/^[0-9a-f]*$/.test(signature)) return false;
-  if (signature.length === 0) return false;
+  const signed = signature.match(/^v=(\d+),d=([0-9a-f]+)$/i);
+  if (signed) {
+    const timestampRaw = signed[1];
+    const digest = signed[2];
+    if (!timestampRaw || !digest) return false;
+    const timestamp = Number(timestampRaw);
+    if (!Number.isFinite(timestamp)) return false;
+    if (Math.abs(Date.now() - timestamp) > 5 * 60 * 1000) return false;
 
-  const expected = crypto
-    .createHmac('sha256', RETELL_API_KEY)
-    .update(rawBody)
-    .digest('hex');
+    const expected = crypto
+      .createHmac('sha256', RETELL_API_KEY)
+      .update(rawBody + timestampRaw)
+      .digest('hex');
+    return timingSafeHexEqual(digest, expected);
+  }
 
-  // Ensure same byte length before timingSafeEqual
-  if (signature.length !== expected.length) return false;
+  // Legacy fallback kept for older Retell deliveries/tests that carried only
+  // HMAC(rawBody) as hex. Current Retell sends v=<timestamp>,d=<digest>.
+  if (!/^[0-9a-f]+$/i.test(signature)) return false;
+  const expected = crypto.createHmac('sha256', RETELL_API_KEY).update(rawBody).digest('hex');
+  return timingSafeHexEqual(signature, expected);
+}
 
-  return crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'));
+function timingSafeHexEqual(a: string, b: string): boolean {
+  if (!/^[0-9a-f]+$/i.test(a) || !/^[0-9a-f]+$/i.test(b)) return false;
+  const left = Buffer.from(a, 'hex');
+  const right = Buffer.from(b, 'hex');
+  if (left.length !== right.length) return false;
+  return crypto.timingSafeEqual(left, right);
 }
 
 /**

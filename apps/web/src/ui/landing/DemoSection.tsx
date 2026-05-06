@@ -137,9 +137,9 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
   async function handleTemplateClick(templateId: string) {
     if (callState === 'active' || callState === 'connecting') return;
     if (!demoConsent) {
-      setActiveTemplate(null);
+      setActiveTemplate(templateId);
       setError('Bitte bestätige zuerst den Demo-Datenschutzhinweis.');
-      setCallState('error');
+      setCallState('idle');
       return;
     }
     setActiveTemplate(templateId);
@@ -323,13 +323,26 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
               <input
                 type="checkbox"
                 checked={demoConsent}
-                onChange={(e) => setDemoConsent(e.target.checked)}
+                onChange={(e) => {
+                  setDemoConsent(e.target.checked);
+                  if (e.target.checked && error?.startsWith('Bitte best')) setError(null);
+                }}
                 className="mt-0.5 accent-orange-500"
               />
               <span>
                 Ich bin einverstanden, dass diese Demo als Audio/Transkript verarbeitet und bis zu 90 Tage zur Demo-Qualität und Lead-Bearbeitung gespeichert wird. Der Agent weist zu Beginn zusätzlich auf KI und Aufzeichnung hin.
               </span>
             </label>
+            {error && (
+              <div className="mx-auto mb-8 max-w-2xl rounded-xl border border-orange-400/25 bg-orange-400/[0.08] px-4 py-3 text-left text-sm text-orange-100">
+                {error}
+                {activeTemplate && (
+                  <span className="mt-1 block text-xs text-orange-100/70">
+                    Danach einfach nochmal auf die gewünschte Demo-Karte klicken.
+                  </span>
+                )}
+              </div>
+            )}
             <div className="flex flex-col items-center gap-4 sm:gap-5 lg:gap-6 pb-10" style={{ overflow: 'visible' }}>
               <div className="grid w-full max-w-5xl grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-16 justify-items-center" style={{ overflow: 'visible' }}>
                 {allTemplates.map((t) => (
