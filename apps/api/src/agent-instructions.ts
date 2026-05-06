@@ -95,11 +95,11 @@ function appendFallbackInstructions(parts: string[], cfg: AgentConfig, ticketCre
   const fallbackReason = normalizeFallbackReasonValue(cfg.fallback.reason);
   const reasons = activeFallbackReasons(cfg);
   parts.push('');
-  parts.push('## Notausgang / Eskalation');
+  parts.push('## Menschliche Uebergabe / Eskalation');
   parts.push(
     ticketCreateEnabled
-      ? `Wenn du ein Anliegen nicht direkt sauber loesen kannst, erstelle ein Rueckruf-/Uebergabe-Ticket. Standardgrund, wenn kein Spezialfall passt: "${fallbackReason}".`
-      : `Wenn du ein Anliegen nicht direkt sauber loesen kannst, sage ehrlich, dass das Team sich melden soll. Das Ticket-Tool ist fuer diesen Agenten deaktiviert; Standardgrund intern: "${fallbackReason}".`,
+      ? `Wenn du ein Anliegen nicht direkt sauber loesen kannst, versuche bei passenden Regeln zuerst eine Live-Weiterleitung und erstelle danach ein Rueckruf-/Uebergabe-Ticket, falls niemand uebernimmt oder keine passende Weiterleitung konfiguriert ist. Standardgrund, wenn kein Spezialfall passt: "${fallbackReason}".`
+      : `Wenn du ein Anliegen nicht direkt sauber loesen kannst, versuche bei passenden Regeln zuerst eine Live-Weiterleitung. Wenn niemand uebernimmt, sage ehrlich, dass das Team sich melden soll. Das Ticket-Tool ist fuer diesen Agenten deaktiviert; Standardgrund intern: "${fallbackReason}".`,
   );
   if (reasons.length > 0) {
     parts.push('Waehle fuer Tickets immer den konkretesten passenden reason-Wert:');
@@ -109,7 +109,7 @@ function appendFallbackInstructions(parts: string[], cfg: AgentConfig, ticketCre
       parts.push(`- ${reason.label}: reason="${reason.reason}".${priority}${instruction}`);
     }
   }
-  parts.push('Wenn eine Live-Weiterleitung konfiguriert ist und besser passt, leite zuerst weiter; wenn das scheitert oder nicht moeglich ist, nutze den passenden Eskalationsgrund.');
+  parts.push('Bei Eskalationen gilt: zuerst die konfigurierte Live-Weiterleitung probieren; wenn der Mensch nicht uebernimmt, die Weiterleitung scheitert oder keine passende Weiterleitung existiert, nutze den passendsten Eskalationsgrund.');
 }
 
 /**
@@ -304,8 +304,8 @@ export function buildAgentInstructions(cfg: AgentConfig) {
 
   if (activeRules.length > 0) {
     parts.push('');
-    parts.push('## Anruf-Weiterleitung');
-    parts.push('Du hast Tools zur Verfügung, die Anrufe live an eine echte Person weiterleiten. Wenn eine der folgenden Situationen eintritt, rufe das genannte Tool auf:');
+    parts.push('## Menschliche Uebergabe mit Ticket-Fallback');
+    parts.push('Du hast Tools zur Verfügung, die Anrufe live an eine echte Person weiterleiten. Wenn eine der folgenden Situationen eintritt, versuche zuerst die Live-Weiterleitung:');
     for (const rule of activeRules) {
       if (rule.action === 'transfer' && rule.target) {
         // Normalise the target the same way buildRetellTools does so the
@@ -315,7 +315,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
         const e164 = toE164(rule.target);
         if (!e164) continue;
         const toolName = transferToolName(e164);
-        parts.push(`- ${rule.description} → rufe das Tool "${toolName}" auf (leitet weiter an ${e164})`);
+        parts.push(`- ${rule.description} → rufe zuerst das Tool "${toolName}" auf (leitet weiter an ${e164}). Wenn niemand übernimmt oder die Weiterleitung scheitert, erstelle danach ein passendes Rückruf- oder Dringlichkeits-Ticket.`);
       } else if (rule.action === 'ticket') {
         if (ticketCreateEnabled) {
           parts.push(`- ${rule.description} → Rückruf-Ticket erstellen (Tool "ticket_create")`);
@@ -328,8 +328,8 @@ export function buildAgentInstructions(cfg: AgentConfig) {
     }
     parts.push('');
     parts.push('WICHTIG: Bevor du weiterleitest, sage dem Anrufer Bescheid: "Ich verbinde Sie jetzt weiter. Einen Moment bitte."');
-    parts.push('Wenn keine passende Live-Weiterleitung konfiguriert ist oder niemand erreichbar ist, erstelle stattdessen ein passendes Rueckruf- oder Dringlichkeits-Ticket.');
-    parts.push('Wenn das Transfer-Tool scheitert oder nicht verfügbar ist (das passiert automatisch bei Web-/Demo-Anrufen, die über den Browser laufen und keine echte Telefonleitung haben): Sage dem Anrufer wörtlich: "Im Webanruf kann ich leider nicht live weiterleiten — das funktioniert nur bei einem echten Telefonanruf." Erstelle KEIN Ticket. Frage den Anrufer, ob du ihm sonst noch helfen kannst, oder beende das Gespräch.');
+    parts.push('Wenn keine passende Live-Weiterleitung konfiguriert ist, niemand erreichbar ist oder die Weiterleitung technisch scheitert, erstelle danach ein passendes Rueckruf- oder Dringlichkeits-Ticket.');
+    parts.push('Wenn das Transfer-Tool nicht verfügbar ist (das passiert automatisch bei Web-/Demo-Anrufen, die über den Browser laufen und keine echte Telefonleitung haben): Sage dem Anrufer wörtlich: "Im Webanruf kann ich leider nicht live weiterleiten — das funktioniert nur bei einem echten Telefonanruf." Biete danach an, stattdessen ein Rückruf-Ticket aufzunehmen, wenn es ein echtes Anliegen gibt.');
     parts.push('WARNUNG: Leite NIEMALS an die Nummer weiter, von der der Anrufer bereits weitergeleitet wurde (Endlosschleife). Wenn du unsicher bist, erstelle stattdessen ein Rückruf-Ticket.');
   }
 
