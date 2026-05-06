@@ -128,7 +128,7 @@ export const LANGUAGE_VOICE_RECOMMENDATIONS: Record<string, { voiceId: string; n
   vi: { voiceId: '11labs-Marissa',  nativeStatus: 'none' },
 };
 
-export const KNOWN_TOOLS = ['calendar.findSlots', 'calendar.book', 'ticket.create'] as const;
+export const KNOWN_TOOLS = ['calendar.findSlots', 'calendar.book', 'calendar.findBookings', 'calendar.cancel', 'calendar.reschedule', 'ticket.create'] as const;
 
 /**
  * Role templates — each role is a composable identity the user can

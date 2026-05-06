@@ -195,7 +195,7 @@ const AgentConfigSchema = z.object({
   // Editable section blocks (PROMPT_SECTIONS) — saved per section id so a
   // toggle-off + toggle-on preserves the customer's edited text.
   sectionTextOverrides: z.record(z.string(), z.string()).optional().default({}),
-  tools: z.array(z.string().min(1)).default(['calendar.findSlots', 'calendar.book', 'ticket.create']),
+  tools: z.array(z.string().min(1)).default(['calendar.findSlots', 'calendar.book', 'calendar.findBookings', 'calendar.cancel', 'calendar.reschedule', 'ticket.create']),
   fallback: z.object({
     enabled: z.boolean().default(true),
     reason: z.string().min(1).default(DEFAULT_FALLBACK_REASON),
@@ -596,10 +596,20 @@ function fallbackReasonDescription(config: AgentConfig): string {
   return `Ticket reason. Use one configured reason exactly when it fits: ${reasons.map((reason) => `"${reason}"`).join(', ')}. Default to "${fallbackReason}" when unsure.`;
 }
 
+function expandCalendarToolSet(rawTools: string[] | undefined): Set<string> {
+  const enabled = new Set(rawTools ?? []);
+  if (enabled.has('calendar.book')) {
+    enabled.add('calendar.findBookings');
+    enabled.add('calendar.cancel');
+    enabled.add('calendar.reschedule');
+  }
+  return enabled;
+}
+
 /** Map our tool names to Retell custom function definitions. */
 function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTool[] {
   const tools: RetellTool[] = [];
-  const enabled = new Set(config.tools ?? []);
+  const enabled = expandCalendarToolSet(config.tools);
   const signedQuery = buildToolAuthQuery(config.tenantId);
 
   // Retell's built-in end_call tool — must be explicitly registered
@@ -608,7 +618,7 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
   tools.push({
     type: 'end_call',
     name: 'end_call',
-    description: 'End the call. Use when the conversation is naturally over or the caller declined recording.',
+    description: 'End the call only when the conversation is naturally over, the caller asks to hang up, spam/abuse policy requires it, or a configured hangup rule applies. Do not use only because recording was declined.',
   });
 
   // Custom tool: caller refused recording. Webhook flags the call for
@@ -621,7 +631,7 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
     tools.push({
       type: 'custom',
       name: 'recording_declined',
-      description: 'Call this BEFORE end_call when the caller refuses consent to recording. Deletes the call transcript and audio after the call ends.',
+      description: 'Call this once when the caller refuses consent to audio/transcript storage. Then continue helping normally; do not end the call just because recording was declined.',
       url: `${webhookBaseUrl}/retell/tools/recording.declined?${signedQuery}`,
       execution_message_description: 'Markiere für Löschung.',
       parameters: { type: 'object', properties: {} },
@@ -715,6 +725,78 @@ function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTo
           service: { type: 'string', description: 'Booked service.' },
           preferredStylist: { type: 'string', description: 'Requested staff member/stylist name. Use "beliebig" when the caller has no staff preference.' },
           notes: { type: 'string' },
+        },
+      },
+    });
+  }
+
+  if (enabled.has('calendar.findBookings')) {
+    tools.push({
+      type: 'custom',
+      name: 'calendar_find_bookings',
+      description: 'Find an existing future appointment before cancellation or rescheduling. Use caller phone, name, current appointment time, or bookingId to narrow the match. Do not reveal unrelated customer data.',
+      url: `${webhookBaseUrl}/retell/tools/calendar.findBookings?${signedQuery}`,
+      execution_message_description: 'Suche den bestehenden Termin...',
+      parameters: {
+        type: 'object',
+        properties: {
+          bookingId: { type: 'string', description: 'Booking id returned by a previous findBookings call.' },
+          customerName: { type: 'string' },
+          customerPhone: { type: 'string', description: 'Caller phone number. Optional when Retell provides from_number.' },
+          currentTime: { type: 'string', description: 'Current appointment date/time as stated by the caller.' },
+          service: { type: 'string' },
+          preferredStylist: { type: 'string', description: 'Current staff member/stylist if known.' },
+        },
+      },
+    });
+  }
+
+  if (enabled.has('calendar.cancel')) {
+    tools.push({
+      type: 'custom',
+      name: 'calendar_cancel',
+      description: 'Cancel an existing appointment only after calendar_find_bookings identified the appointment and the caller explicitly confirmed the exact cancellation.',
+      url: `${webhookBaseUrl}/retell/tools/calendar.cancel?${signedQuery}`,
+      execution_message_description: 'Sage den Termin ab...',
+      parameters: {
+        type: 'object',
+        required: ['confirmed'],
+        properties: {
+          bookingId: { type: 'string', description: 'Booking id returned by calendar_find_bookings.' },
+          customerName: { type: 'string' },
+          customerPhone: { type: 'string', description: 'Caller phone number. Optional when Retell provides from_number.' },
+          currentTime: { type: 'string' },
+          service: { type: 'string' },
+          preferredStylist: { type: 'string' },
+          confirmed: { type: 'boolean', description: 'True only after the caller explicitly confirmed the exact appointment cancellation.' },
+          reason: { type: 'string' },
+        },
+      },
+    });
+  }
+
+  if (enabled.has('calendar.reschedule')) {
+    tools.push({
+      type: 'custom',
+      name: 'calendar_reschedule',
+      description: 'Move an existing appointment to a new slot only after old appointment and new slot were both explicitly confirmed.',
+      url: `${webhookBaseUrl}/retell/tools/calendar.reschedule?${signedQuery}`,
+      execution_message_description: 'Verschiebe den Termin...',
+      parameters: {
+        type: 'object',
+        required: ['newTime', 'confirmed'],
+        properties: {
+          bookingId: { type: 'string', description: 'Booking id returned by calendar_find_bookings.' },
+          customerName: { type: 'string' },
+          customerPhone: { type: 'string', description: 'Caller phone number. Optional when Retell provides from_number.' },
+          currentTime: { type: 'string', description: 'Current appointment date/time.' },
+          service: { type: 'string' },
+          preferredStylist: { type: 'string', description: 'Current staff member/stylist if known.' },
+          newTime: { type: 'string', description: 'New confirmed appointment slot.' },
+          newService: { type: 'string' },
+          newPreferredStylist: { type: 'string', description: 'New requested staff member/stylist, or "beliebig".' },
+          confirmed: { type: 'boolean', description: 'True only after the caller explicitly confirmed old and new appointment details.' },
+          reason: { type: 'string' },
         },
       },
     });

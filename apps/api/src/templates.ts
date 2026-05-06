@@ -47,7 +47,7 @@ Bei Preisfragen: "Die genauen Preise hängen von Länge und Aufwand ab — dein 
 Services: Herrenschnitt, Damenschnitt, Färben, Strähnen, Bartpflege.
 Öffnungszeiten: Mo-Fr 09:00-18:00, Sa 09:00-14:00.
 TONFALL: Locker, freundlich, kurze Sätze.`,
-    tools: ['calendar.findSlots', 'calendar.book', 'ticket.create'],
+    tools: ['calendar.findSlots', 'calendar.book', 'calendar.findBookings', 'calendar.cancel', 'calendar.reschedule', 'ticket.create'],
   },
   {
     id: 'tradesperson',
@@ -69,7 +69,7 @@ Bei Notfällen: "Das klingt dringend, ich erstelle sofort einen Notfall-Auftrag.
 Services: Heizung, Sanitär, Elektro, Renovierung, Notdienst.
 Öffnungszeiten: Mo-Fr 07:00-17:00.
 TONFALL: Sachlich, beruhigend, effizient.`,
-    tools: ['calendar.findSlots', 'calendar.book', 'ticket.create'],
+    tools: ['calendar.findSlots', 'calendar.book', 'calendar.findBookings', 'calendar.cancel', 'calendar.reschedule', 'ticket.create'],
   },
   {
     id: 'cleaning',
@@ -112,7 +112,7 @@ Bei Reservierung frage nach: 1. Personenzahl 2. Datum und Uhrzeit 3. Besondere W
 Bei Gruppen ab 8: "Ab 8 Personen bieten wir auch ein Menü an — soll ich das als Anfrage weiterleiten?"
 Öffnungszeiten: Di-Sa 11:30-14:30 und 17:30-22:00, So 11:30-15:00, Mo Ruhetag.
 TONFALL: Warm, gastfreundlich. "Sehr gerne!" statt "Ja."`,
-    tools: ['calendar.book', 'ticket.create'],
+    tools: ['calendar.book', 'calendar.findBookings', 'calendar.cancel', 'calendar.reschedule', 'ticket.create'],
   },
   {
     id: 'auto',
@@ -134,7 +134,7 @@ Bei Kostenvoranschlag: "Ein Meister meldet sich mit einer Einschätzung."
 Services: Inspektion, Ölwechsel, Reifenwechsel, TÜV/HU, Unfallreparatur, Kostenvoranschläge.
 Öffnungszeiten: Mo-Fr 07:30-17:30, Sa 08:00-13:00.
 TONFALL: Kompetent, nüchtern, effizient.`,
-    tools: ['calendar.findSlots', 'calendar.book', 'ticket.create'],
+    tools: ['calendar.findSlots', 'calendar.book', 'calendar.findBookings', 'calendar.cancel', 'calendar.reschedule', 'ticket.create'],
   },
   {
     // Solopreneur / Freelancer / Coach / Berater / Fotograf / Webdesigner /
@@ -189,7 +189,7 @@ Test-Caller ("Test, Test 1 2 3"): "Ha, hör dich gut. Was willst du ausprobieren
 
 # Soft-CTA am Gesprächsende
 Wenn der Anrufer sich verabschiedet, sag einmal beiläufig: "Falls du selbst sowas für dein Business willst — Sandra hat das übrigens über Phonbot eingerichtet."`,
-    tools: ['calendar.findSlots', 'calendar.book', 'ticket.create'],
+    tools: ['calendar.findSlots', 'calendar.book', 'calendar.findBookings', 'calendar.cancel', 'calendar.reschedule', 'ticket.create'],
   },
 ];
 

@@ -264,6 +264,9 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   const enabledTools = new Set(cfg.tools ?? []);
   const calendarFindSlotsEnabled = enabledTools.has('calendar.findSlots');
   const calendarBookEnabled = enabledTools.has('calendar.book');
+  const calendarFindBookingsEnabled = calendarBookEnabled || enabledTools.has('calendar.findBookings');
+  const calendarCancelEnabled = calendarBookEnabled || enabledTools.has('calendar.cancel');
+  const calendarRescheduleEnabled = calendarBookEnabled || enabledTools.has('calendar.reschedule');
   const ticketCreateEnabled = enabledTools.has('ticket.create');
 
   parts.push(`Hauptsprache: ${languageLabel(cfg.language)}`);
@@ -277,6 +280,9 @@ export function buildAgentInstructions(cfg: AgentConfig) {
     const enabledCalendarTools = [
       calendarFindSlotsEnabled ? 'calendar.findSlots' : null,
       calendarBookEnabled ? 'calendar.book' : null,
+      calendarFindBookingsEnabled ? 'calendar.findBookings' : null,
+      calendarCancelEnabled ? 'calendar.cancel' : null,
+      calendarRescheduleEnabled ? 'calendar.reschedule' : null,
     ].filter(Boolean).join(' und ');
     parts.push(`Wenn der Anrufer einen Wunschfriseur oder Mitarbeiter nennt, gib diesen Namen bei ${enabledCalendarTools} als preferredStylist weiter.`);
     parts.push('Wenn Mitarbeiterkalender aktiv sind und der Anrufer keinen Wunsch hat ("egal", "beliebig", "wer frei ist"), gib preferredStylist="beliebig" weiter. Rate nicht selbst, welcher Mitarbeiter passt; das Kalender-Tool weist deterministisch einen freien Mitarbeiter zu.');
@@ -380,6 +386,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   // ── Conversation quality & data quality ───────────────────────────────────
   parts.push('');
   parts.push('## Gesprächsqualität');
+  parts.push('- Wenn der Anrufer zuerst spricht oder in deine Begruessung hineinredet: sofort stoppen, kurz bestaetigen, auf sein Anliegen eingehen. Begruessung nicht stur neu starten.');
   parts.push('- Wenn du den Namen des Anrufers erfährst, nutze ihn im Gespräch (maximal 2-3x, nicht übertreiben)');
   parts.push('- Wiederhole wichtige Details zur Bestätigung: "Also Donnerstag um 14 Uhr, richtig?"');
   parts.push('- Wenn du etwas nicht verstanden hast, frage konkret nach statt zu raten');
@@ -447,8 +454,22 @@ export function buildAgentInstructions(cfg: AgentConfig) {
 
   parts.push('');
   parts.push('## Stornierung & Änderung');
-  parts.push('Wenn der Anrufer einen bestehenden Termin absagen oder ändern möchte: Erstelle ein Ticket mit Betreff "Terminänderung" oder "Stornierung" und den Details.');
-  parts.push('Sage: "Ich kann den Termin nicht direkt ändern, aber ich leite das sofort weiter."');
+  if (calendarFindBookingsEnabled && (calendarCancelEnabled || calendarRescheduleEnabled)) {
+    parts.push('Wenn der Anrufer einen bestehenden Termin absagen oder verschieben moechte, gehe streng in dieser Reihenfolge vor:');
+    parts.push('1. Sammle nur die noetigen Suchdaten: Anrufernummer {{from_number}} nutzen, plus Name oder bisheriger Termin/Service. Frage nicht nach fremden Daten und gib keine fremden Termine preis.');
+    parts.push('2. Rufe calendar.findBookings auf. Bei keinem Treffer: nach genauerem Datum/Uhrzeit fragen oder Rueckruf-Ticket anbieten. Bei mehreren Treffern: maximal drei Optionen nennen und klaeren, welcher gemeint ist.');
+    if (calendarCancelEnabled) {
+      parts.push('3. Absage: Wiederhole den exakt gefundenen Termin mit Datum, Uhrzeit und Service. Rufe calendar.cancel NUR auf, wenn der Anrufer ausdruecklich bestaetigt ("ja, absagen", "genau den"). Setze confirmed=true nur bei dieser ausdruecklichen Bestaetigung.');
+    }
+    if (calendarRescheduleEnabled) {
+      parts.push('4. Verschieben: Erst alten Termin eindeutig finden, dann mit calendar.findSlots neue Zeiten suchen, neue Zeit bestaetigen lassen, danach alten und neuen Termin zusammen wiederholen. Rufe calendar.reschedule NUR mit confirmed=true auf, wenn der Anrufer beide Details ausdruecklich bestaetigt.');
+    }
+    parts.push('5. Behaupte niemals, ein Termin sei abgesagt oder verschoben, wenn das Tool nicht ok=true geliefert hat. Bei partial=true: kurz sagen, dass die Aenderung aufgenommen ist und das Team intern noch einmal nachfasst.');
+    parts.push('6. Wenn ein Tool Fehler, Timeout, mehrere Treffer oder ein unerwartetes Ergebnis liefert: nicht technisch erklaeren, keine Aktion erfinden, sondern konkret nachfragen oder ein Rueckruf-Ticket erstellen.');
+  } else {
+    parts.push('Wenn der Anrufer einen bestehenden Termin absagen oder ändern möchte: Erstelle ein Ticket mit Betreff "Terminänderung" oder "Stornierung" und den Details.');
+    parts.push('Sage: "Ich kann den Termin nicht direkt ändern, aber ich leite das sofort weiter."');
+  }
 
   parts.push('');
   parts.push('## Preise');

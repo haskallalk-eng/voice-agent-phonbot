@@ -25,7 +25,15 @@ import { createTicket, mergeTicketMetadata } from './tickets.js';
 import { appendTraceEvent } from './traces.js';
 import { reconcileMinutes, DEFAULT_CALL_RESERVE_MINUTES } from './usage.js';
 import { pool } from './db.js';
-import { findFreeSlots, findFreeSlotsForAnyStaff, bookSlot, bookSlotForAnyStaff } from './calendar.js';
+import {
+  findFreeSlots,
+  findFreeSlotsForAnyStaff,
+  bookSlot,
+  bookSlotForAnyStaff,
+  findChipyBookingsForChange,
+  cancelChipyBookingForChange,
+  rescheduleChipyBookingForChange,
+} from './calendar.js';
 import { triggerCallback, readConfig } from './agent-config.js';
 import { executeIntegrationCall, type ApiIntegration } from './api-integrations.js';
 import { analyzeCall } from './insights.js';
@@ -346,6 +354,13 @@ function stringArg(args: Record<string, unknown>, ...keys: string[]): string | u
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
   return undefined;
+}
+
+function booleanArg(args: Record<string, unknown>, key: string): boolean {
+  const value = args[key];
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return /^(true|ja|yes|1)$/i.test(value.trim());
+  return false;
 }
 
 async function resolveCalendarStaffForTool(
@@ -1349,6 +1364,201 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       tenantId: orgIdForBook ?? undefined,
       agentId: agentIdForBook ?? undefined,
       tool: 'calendar.book',
+      output: result,
+      at: now(),
+    } as Parameters<typeof appendTraceEvent>[0]);
+
+    return result;
+  });
+
+  // --- calendar.findBookings ---
+  app.post('/retell/tools/calendar.findBookings', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!verifyRetellToolRequest(req as RawBodyRequest)) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const body = req.body as RetellEventBody;
+    const args = retellArgs(body);
+    const ctx = await getToolOrgContext(req, body, args);
+    if (!ctx.orgId) {
+      req.log.warn({ agentId: ctx.agentId }, 'retell calendar.findBookings: unknown agent_id, refusing');
+      return reply.status(403).send({ error: 'unknown agent' });
+    }
+
+    await appendTraceEvent({
+      type: 'tool_call',
+      sessionId: ctx.callId,
+      tenantId: ctx.orgId,
+      agentId: ctx.agentId,
+      tool: 'calendar.findBookings',
+      input: args,
+      at: now(),
+    } as Parameters<typeof appendTraceEvent>[0]);
+
+    const staff = await resolveCalendarStaffForTool(ctx.orgId, args);
+    const result = await findChipyBookingsForChange(ctx.orgId, {
+      bookingId: stringArg(args, 'bookingId', 'booking_id'),
+      staffId: staff.staffId,
+      customerName: stringArg(args, 'customerName', 'customer_name'),
+      customerPhone: await resolveCallerPhone(body, args, ctx.callId),
+      currentTime: stringArg(args, 'currentTime', 'current_time', 'preferredTime', 'preferred_time', 'time'),
+      service: stringArg(args, 'service'),
+    });
+
+    await appendTraceEvent({
+      type: 'tool_result',
+      sessionId: ctx.callId,
+      tenantId: ctx.orgId,
+      agentId: ctx.agentId,
+      tool: 'calendar.findBookings',
+      output: result,
+      at: now(),
+    } as Parameters<typeof appendTraceEvent>[0]);
+
+    return result;
+  });
+
+  // --- calendar.cancel ---
+  app.post('/retell/tools/calendar.cancel', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!verifyRetellToolRequest(req as RawBodyRequest)) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const body = req.body as RetellEventBody;
+    const args = retellArgs(body);
+    const ctx = await getToolOrgContext(req, body, args);
+    if (!ctx.orgId) {
+      req.log.warn({ agentId: ctx.agentId }, 'retell calendar.cancel: unknown agent_id, refusing');
+      return reply.status(403).send({ error: 'unknown agent' });
+    }
+
+    await appendTraceEvent({
+      type: 'tool_call',
+      sessionId: ctx.callId,
+      tenantId: ctx.orgId,
+      agentId: ctx.agentId,
+      tool: 'calendar.cancel',
+      input: args,
+      at: now(),
+    } as Parameters<typeof appendTraceEvent>[0]);
+
+    let result: Record<string, unknown>;
+    if (!booleanArg(args, 'confirmed')) {
+      result = {
+        ok: false,
+        status: 'confirmation_required',
+        error: 'CONFIRMATION_REQUIRED',
+        instruction: 'Wiederhole den gefundenen Termin kurz und frage ausdruecklich, ob er wirklich abgesagt werden soll. Rufe danach erst calendar.cancel mit confirmed=true auf.',
+      };
+    } else {
+      const staff = await resolveCalendarStaffForTool(ctx.orgId, args);
+      result = await cancelChipyBookingForChange(ctx.orgId, {
+        bookingId: stringArg(args, 'bookingId', 'booking_id'),
+        staffId: staff.staffId,
+        customerName: stringArg(args, 'customerName', 'customer_name'),
+        customerPhone: await resolveCallerPhone(body, args, ctx.callId),
+        currentTime: stringArg(args, 'currentTime', 'current_time', 'preferredTime', 'preferred_time', 'time'),
+        service: stringArg(args, 'service'),
+        reason: stringArg(args, 'reason', 'notes'),
+        sourceCallId: ctx.callId,
+      });
+      result.instruction = result.ok
+        ? 'Sage kurz, dass der Termin abgesagt wurde. Bei partial=true: sage, dass das Team intern noch einmal nachfasst.'
+        : 'Behaupte nicht, dass der Termin abgesagt wurde. Frage nach weiteren Details oder erstelle ein Rueckruf-Ticket.';
+    }
+
+    await appendTraceEvent({
+      type: 'tool_result',
+      sessionId: ctx.callId,
+      tenantId: ctx.orgId,
+      agentId: ctx.agentId,
+      tool: 'calendar.cancel',
+      output: result,
+      at: now(),
+    } as Parameters<typeof appendTraceEvent>[0]);
+
+    return result;
+  });
+
+  // --- calendar.reschedule ---
+  app.post('/retell/tools/calendar.reschedule', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!verifyRetellToolRequest(req as RawBodyRequest)) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const body = req.body as RetellEventBody;
+    const args = retellArgs(body);
+    const ctx = await getToolOrgContext(req, body, args);
+    if (!ctx.orgId) {
+      req.log.warn({ agentId: ctx.agentId }, 'retell calendar.reschedule: unknown agent_id, refusing');
+      return reply.status(403).send({ error: 'unknown agent' });
+    }
+
+    await appendTraceEvent({
+      type: 'tool_call',
+      sessionId: ctx.callId,
+      tenantId: ctx.orgId,
+      agentId: ctx.agentId,
+      tool: 'calendar.reschedule',
+      input: args,
+      at: now(),
+    } as Parameters<typeof appendTraceEvent>[0]);
+
+    let result: Record<string, unknown>;
+    const newTime = stringArg(args, 'newTime', 'new_time', 'newPreferredTime', 'new_preferred_time');
+    if (!booleanArg(args, 'confirmed')) {
+      result = {
+        ok: false,
+        status: 'confirmation_required',
+        error: 'CONFIRMATION_REQUIRED',
+        instruction: 'Bestaetige alten Termin und neue Uhrzeit in einem Satz und frage ausdruecklich nach Ja. Rufe danach erst calendar.reschedule mit confirmed=true auf.',
+      };
+    } else if (!newTime) {
+      result = {
+        ok: false,
+        status: 'new_time_required',
+        error: 'NEW_TIME_REQUIRED',
+        instruction: 'Frage nach der neuen Wunschzeit und pruefe sie mit calendar.findSlots, bevor du verschiebst.',
+      };
+    } else {
+      const currentStaff = await resolveCalendarStaffForTool(ctx.orgId, args);
+      const newStaff = await resolveCalendarStaffForTool(ctx.orgId, {
+        preferredStylist: stringArg(args, 'newPreferredStylist', 'new_preferred_stylist', 'newStaffName', 'new_staff_name'),
+      });
+      if (newStaff.staffModeActive && !newStaff.staffId && newStaff.requested && !newStaff.anyStaff) {
+        result = {
+          ok: false,
+          status: 'staff_not_found',
+          error: 'STAFF_NOT_FOUND',
+          instruction: 'Der neue Wunschmitarbeiter wurde nicht gefunden. Frage nach einem anderen Mitarbeiter oder ob ein beliebiger freier Mitarbeiter passt.',
+        };
+      } else {
+        result = await rescheduleChipyBookingForChange(ctx.orgId, {
+          bookingId: stringArg(args, 'bookingId', 'booking_id'),
+          staffId: currentStaff.staffId,
+          customerName: stringArg(args, 'customerName', 'customer_name'),
+          customerPhone: await resolveCallerPhone(body, args, ctx.callId),
+          currentTime: stringArg(args, 'currentTime', 'current_time', 'preferredTime', 'preferred_time', 'time'),
+          service: stringArg(args, 'service'),
+          newTime,
+          newService: stringArg(args, 'newService', 'new_service'),
+          newStaffId: newStaff.staffModeActive && newStaff.requested ? newStaff.staffId : undefined,
+          newAnyStaff: newStaff.staffModeActive && newStaff.anyStaff,
+          reason: stringArg(args, 'reason', 'notes'),
+          sourceCallId: ctx.callId,
+        });
+        result.instruction = result.ok
+          ? 'Sage kurz, dass der Termin verschoben wurde. Bei partial=true: sage, dass das Team intern noch einmal nachfasst.'
+          : 'Behaupte nicht, dass der Termin verschoben wurde. Biete alternative Zeiten oder Rueckruf an.';
+      }
+    }
+
+    await appendTraceEvent({
+      type: 'tool_result',
+      sessionId: ctx.callId,
+      tenantId: ctx.orgId,
+      agentId: ctx.agentId,
+      tool: 'calendar.reschedule',
       output: result,
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);

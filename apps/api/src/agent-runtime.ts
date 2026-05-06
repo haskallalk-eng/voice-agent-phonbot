@@ -60,6 +60,8 @@ function toolGuidance() {
     'Tool usage rules:',
     '- Use calendar.findSlots before proposing specific appointment times.',
     '- Use calendar.book only after the user confirms a slot + service.',
+    '- Use calendar.findBookings before canceling or rescheduling an existing appointment.',
+    '- Use calendar.cancel/calendar.reschedule only after the exact existing appointment and requested change were explicitly confirmed.',
     '- If user wants a callback or handoff, use ticket.create and confirm the phone number.',
     '- Do not claim a booking unless calendar.book succeeded.',
     '- Mention SMS confirmation only when the tool result contains smsSent=true.',

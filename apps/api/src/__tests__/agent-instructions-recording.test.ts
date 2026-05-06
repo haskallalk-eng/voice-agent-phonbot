@@ -83,4 +83,13 @@ describe('buildAgentInstructions: agent-builder toggles', () => {
     expect(out).toContain('Hauptsprache: Franzoesisch');
     expect(out).not.toContain('Hauptsprache: Englisch');
   });
+
+  it('describes direct cancel and reschedule flow when booking tools are enabled', () => {
+    const out = buildAgentInstructions(baseCfg({ tools: ['calendar.findSlots', 'calendar.book', 'ticket.create'] }));
+    expect(out).toContain('calendar.findBookings');
+    expect(out).toContain('calendar.cancel');
+    expect(out).toContain('calendar.reschedule');
+    expect(out).toContain('confirmed=true');
+    expect(out).not.toContain('Ich kann den Termin nicht direkt');
+  });
 });
