@@ -154,6 +154,7 @@ const INDUSTRY_ROUTING_EXAMPLES: Record<string, RoutingExample[]> = {
 
 function routingExamplesForConfig(config: AgentConfig): RoutingExample[] {
   const industry = (config.industry ?? '').toLowerCase();
+  if (config.customerModule?.enabled) return INDUSTRY_ROUTING_EXAMPLES.hairdresser ?? GENERIC_ROUTING_EXAMPLES;
   const configured = INDUSTRY_ROUTING_EXAMPLES[industry];
   if (configured) return configured;
 
@@ -164,6 +165,18 @@ function routingExamplesForConfig(config: AgentConfig): RoutingExample[] {
   if (/restaurant|reservierung|küche|kueche|tisch|speisekarte/.test(haystack)) return INDUSTRY_ROUTING_EXAMPLES.restaurant ?? GENERIC_ROUTING_EXAMPLES;
   if (/werkstatt|auto|kfz|reifen|inspektion|tüv|tuev/.test(haystack)) return INDUSTRY_ROUTING_EXAMPLES.auto ?? GENERIC_ROUTING_EXAMPLES;
   return GENERIC_ROUTING_EXAMPLES;
+}
+
+function routingExamplesLabel(config: AgentConfig): string {
+  const industry = (config.industry ?? '').toLowerCase();
+  const haystack = `${config.businessDescription ?? ''} ${config.servicesText ?? ''}`.toLowerCase();
+  if (industry === 'hairdresser' || config.customerModule?.enabled || /friseur|salon|haar|farbe|kopfhaut/.test(haystack)) return 'Friseur-Vorlagen';
+  if (industry === 'tradesperson' || /handwerk|sanitär|sanitaer|heizung|elektro|notdienst|wasserschaden/.test(haystack)) return 'Handwerker-Vorlagen';
+  if (industry === 'cleaning' || /reinigung|gebäude|gebaeude|umzug|fensterreinigung/.test(haystack)) return 'Reinigungs-Vorlagen';
+  if (industry === 'restaurant' || /restaurant|reservierung|küche|kueche|tisch|speisekarte/.test(haystack)) return 'Restaurant-Vorlagen';
+  if (industry === 'auto' || /werkstatt|auto|kfz|reifen|inspektion|tüv|tuev/.test(haystack)) return 'Werkstatt-Vorlagen';
+  if (industry === 'solo') return 'Business-Vorlagen';
+  return 'Vorlagen';
 }
 
 type PhoneInfoItem = { number: string; customerNumber?: string; forwardingType?: 'always' | 'no_answer'; verified?: boolean };
@@ -179,6 +192,7 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
   const activeRoutingCount = routingRules.filter((rule) => rule.enabled !== false).length;
   const activeTicketCount = fallback.enabled ? reasons.filter((reason) => reason.enabled !== false).length : 0;
   const routingExamples = routingExamplesForConfig(config);
+  const routingTemplateLabel = routingExamplesLabel(config);
 
   const ACTION_OPTIONS: { id: Exclude<CallRoutingRule['action'], 'voicemail'>; label: string; Icon: SectionIconComp; hint: string }[] = [
     { id: 'transfer',  label: 'Live weiterleiten', Icon: IconPhoneOut, hint: 'Ruft eine echte Nummer oder Abteilung an.' },
@@ -329,9 +343,11 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
         </div>
       )}
 
-      {routingRules.length === 0 && (
-        <div className="rounded-2xl border border-white/[0.08] bg-white/[0.035] p-3">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/35">Schnellstart</p>
+      <div className="rounded-2xl border border-white/[0.08] bg-white/[0.035] p-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/35">{routingTemplateLabel}</p>
+            <p className="text-[11px] text-white/32">Als zusätzliche Übergabe-Regel hinzufügen</p>
+          </div>
           <div className="grid gap-2 md:grid-cols-3">
             {routingExamples.slice(0, 3).map((example) => {
               return (
@@ -352,7 +368,6 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
             })}
           </div>
         </div>
-      )}
 
       <div className="space-y-3">
         {routingRules.map((rule, index) => {
