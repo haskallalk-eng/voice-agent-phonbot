@@ -102,13 +102,69 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
 
 /* ── Call Routing Rules ── */
 
-const ROUTING_EXAMPLES = [
-  'Wenn der Kunde nach einer Reklamation fragt → Weiterleiten an Reklamationsabteilung',
-  'Wenn der Anrufer "Notfall" sagt → Sofort weiterleiten an +49 170 1234567',
-  'Wenn der Kunde 3x nach einem Mitarbeiter fragt → Weiterleiten an Zentrale',
-  'Wenn der Anrufer nichts sagt nach 10 Sekunden → Höflich auflegen',
-  'Wenn die Anfrage medizinisch dringend ist → Ticket erstellen mit Priorität Hoch',
+type RoutingExample = {
+  description: string;
+  action: Exclude<CallRoutingRule['action'], 'voicemail'>;
+  target?: string;
+  label: string;
+};
+
+const GENERIC_ROUTING_EXAMPLES: RoutingExample[] = [
+  { label: 'Mensch verlangt', description: 'Wenn der Anrufer ausdrücklich mit einem Menschen sprechen will', action: 'transfer' },
+  { label: 'Dringend', description: 'Wenn der Anrufer ein dringendes Anliegen meldet, das sofort jemand prüfen muss', action: 'transfer' },
+  { label: 'Nicht lösbar', description: 'Wenn Chipy das Anliegen nicht sicher klären kann und ein Rückruf nötig ist', action: 'ticket' },
 ];
+
+const ROUTING_EXAMPLES = GENERIC_ROUTING_EXAMPLES.map((example) => (
+  `${example.description} → ${example.action === 'transfer' ? 'Live weiterleiten' : example.action === 'ticket' ? 'Ticket erstellen' : 'Höflich auflegen'}`
+));
+
+const INDUSTRY_ROUTING_EXAMPLES: Record<string, RoutingExample[]> = {
+  hairdresser: [
+    { label: 'Wunschfriseur / Mensch', description: 'Wenn der Kunde ausdrücklich mit einem Friseur oder dem Salon sprechen will', action: 'transfer' },
+    { label: 'Farbe, Allergie, Kopfhaut', description: 'Wenn der Kunde nach Farbe, Chemie, Allergie oder starken Kopfhaut-Beschwerden dringend Hilfe braucht', action: 'transfer' },
+    { label: 'Kurzfristige Terminänderung', description: 'Wenn ein Termin heute sehr kurzfristig geändert oder abgesagt werden muss und das Team entscheiden soll', action: 'ticket' },
+  ],
+  tradesperson: [
+    { label: 'Notdienst', description: 'Wenn der Anrufer Wasserschaden, Gasgeruch, Stromausfall oder einen akuten Schaden meldet', action: 'transfer' },
+    { label: 'Mensch verlangt', description: 'Wenn der Kunde sofort mit Monteur, Meister oder Büro sprechen will', action: 'transfer' },
+    { label: 'Unklarer Auftrag', description: 'Wenn Chipy den Schaden nicht sicher einordnen kann und ein Rückruf nötig ist', action: 'ticket' },
+  ],
+  cleaning: [
+    { label: 'Schlüssel / Zugang', description: 'Wenn es um Schlüsselübergabe, Zugang zum Objekt oder akute Probleme vor Ort geht', action: 'transfer' },
+    { label: 'Großer Auftrag', description: 'Wenn der Kunde eine Sonderreinigung, Bauendreinigung oder gewerbliches Angebot besprechen will', action: 'ticket' },
+    { label: 'Beschwerde', description: 'Wenn der Kunde mit einer Reinigung unzufrieden ist und Rücksprache möchte', action: 'transfer' },
+  ],
+  restaurant: [
+    { label: 'Große Gruppe', description: 'Wenn der Gast für eine größere Gruppe, Feier oder Veranstaltung anfragt', action: 'ticket' },
+    { label: 'Allergie / Sonderfall', description: 'Wenn es um starke Allergien, Unverträglichkeiten oder eine kritische Rückfrage zur Küche geht', action: 'transfer' },
+    { label: 'Reservierung heute', description: 'Wenn eine Reservierung sehr kurzfristig geändert werden muss', action: 'transfer' },
+  ],
+  auto: [
+    { label: 'Panne / Sicherheit', description: 'Wenn der Kunde eine Panne, Warnleuchte, Bremsproblem oder ein Sicherheitsproblem meldet', action: 'transfer' },
+    { label: 'Meister sprechen', description: 'Wenn der Kunde ausdrücklich Werkstattmeister oder Serviceberater sprechen will', action: 'transfer' },
+    { label: 'Kostenvoranschlag', description: 'Wenn eine fachliche Einschätzung oder ein Kostenvoranschlag gebraucht wird', action: 'ticket' },
+  ],
+  solo: [
+    { label: 'Akut / sensibel', description: 'Wenn der Anrufer ein sensibles oder sehr dringendes Anliegen direkt besprechen muss', action: 'transfer' },
+    { label: 'Fachliche Grenze', description: 'Wenn es um medizinische, rechtliche, steuerliche oder therapeutische Beratung geht', action: 'ticket' },
+    { label: 'Persönlicher Rückruf', description: 'Wenn der Anrufer ausdrücklich einen persönlichen Rückruf möchte', action: 'ticket' },
+  ],
+};
+
+function routingExamplesForConfig(config: AgentConfig): RoutingExample[] {
+  const industry = (config.industry ?? '').toLowerCase();
+  const configured = INDUSTRY_ROUTING_EXAMPLES[industry];
+  if (configured) return configured;
+
+  const haystack = `${config.businessDescription ?? ''} ${config.servicesText ?? ''}`.toLowerCase();
+  if (/friseur|salon|haar|farbe|kopfhaut/.test(haystack)) return INDUSTRY_ROUTING_EXAMPLES.hairdresser ?? GENERIC_ROUTING_EXAMPLES;
+  if (/handwerk|sanitär|sanitaer|heizung|elektro|notdienst|wasserschaden/.test(haystack)) return INDUSTRY_ROUTING_EXAMPLES.tradesperson ?? GENERIC_ROUTING_EXAMPLES;
+  if (/reinigung|gebäude|gebaeude|umzug|fensterreinigung/.test(haystack)) return INDUSTRY_ROUTING_EXAMPLES.cleaning ?? GENERIC_ROUTING_EXAMPLES;
+  if (/restaurant|reservierung|küche|kueche|tisch|speisekarte/.test(haystack)) return INDUSTRY_ROUTING_EXAMPLES.restaurant ?? GENERIC_ROUTING_EXAMPLES;
+  if (/werkstatt|auto|kfz|reifen|inspektion|tüv|tuev/.test(haystack)) return INDUSTRY_ROUTING_EXAMPLES.auto ?? GENERIC_ROUTING_EXAMPLES;
+  return GENERIC_ROUTING_EXAMPLES;
+}
 
 type PhoneInfoItem = { number: string; customerNumber?: string; forwardingType?: 'always' | 'no_answer'; verified?: boolean };
 
@@ -122,6 +178,7 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
   const ticketToolActive = config.tools.includes('ticket.create');
   const activeRoutingCount = routingRules.filter((rule) => rule.enabled !== false).length;
   const activeTicketCount = fallback.enabled ? reasons.filter((reason) => reason.enabled !== false).length : 0;
+  const routingExamples = routingExamplesForConfig(config);
 
   const ACTION_OPTIONS: { id: Exclude<CallRoutingRule['action'], 'voicemail'>; label: string; Icon: SectionIconComp; hint: string }[] = [
     { id: 'transfer',  label: 'Live weiterleiten', Icon: IconPhoneOut, hint: 'Ruft eine echte Nummer oder Abteilung an.' },
@@ -190,6 +247,10 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
     });
   }
 
+  function updateReasonName(id: string, value: string) {
+    updateReason(id, { label: value, reason: value });
+  }
+
   function addCustomReason() {
     updateFallback({
       reasons: [
@@ -211,9 +272,9 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
       <div className="rounded-[1.4rem] border border-white/[0.09] bg-gradient-to-br from-white/[0.07] via-white/[0.03] to-cyan-400/[0.045] p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-sm font-semibold text-white">Ein Übergabe-Plan für alle Sonderfälle</p>
+            <p className="text-sm font-semibold text-white">Übergabe an Menschen</p>
             <p className="mt-1 max-w-2xl text-xs leading-relaxed text-white/45">
-              Chipy prüft zuerst Live-Regeln. Wenn keine passt, greift der Ticket-Notausgang mit dem konkretesten Fall.
+              Reihenfolge: erst live weiterleiten. Wenn niemand erreichbar ist oder keine Live-Regel passt, legt Chipy ein passendes Ticket an.
             </p>
           </div>
           <div className="flex flex-wrap gap-2 text-[10px] font-semibold">
@@ -225,29 +286,32 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
                 ? 'border-cyan-300/25 bg-cyan-300/10 text-cyan-100/80'
                 : 'border-white/[0.10] bg-white/[0.03] text-white/40'
             }`}>
-              {fallback.enabled ? `${activeTicketCount} Ticket-Fälle aktiv` : 'Ticket-Notausgang aus'}
+              {fallback.enabled ? `${activeTicketCount} Ticket-Fälle aktiv` : 'Ticket-Fallback aus'}
             </span>
           </div>
         </div>
 
         <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(15rem,0.55fr)]">
           <label className="block">
-            <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Standardgrund, wenn kein spezieller Fall passt</span>
+            <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Ticketname für Restfälle</span>
             <Input
               value={fallback.reason}
               onChange={(event) => updateFallback({ reason: event.target.value })}
-              placeholder="z.B. Rückruf gewünscht"
+              placeholder="z.B. Allgemeine Übergabe"
               className="mt-1"
             />
+            <span className="mt-1 block text-[11px] leading-relaxed text-white/35">
+              Wird im Posteingang angezeigt, wenn kein genauer Ticket-Fall unten passt.
+            </span>
           </label>
           <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-3">
             <Toggle
               checked={fallback.enabled}
               onChange={(enabled) => updateFallback({ enabled })}
-              label={fallback.enabled ? 'Ticket-Notausgang aktiv' : 'Ticket-Notausgang aus'}
+              label={fallback.enabled ? 'Ticket anlegen, wenn niemand übernimmt' : 'Keine Fallback-Tickets'}
             />
             <p className="mt-2 text-[11px] leading-relaxed text-white/38">
-              Damit landet jedes ungelöste Anliegen strukturiert im Posteingang statt in einer Sackgasse.
+              So endet ein Anruf nicht in einer Sackgasse, wenn Live-Übergabe nicht möglich ist.
             </p>
           </div>
         </div>
@@ -269,20 +333,20 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
         <div className="rounded-2xl border border-white/[0.08] bg-white/[0.035] p-3">
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/35">Schnellstart</p>
           <div className="grid gap-2 md:grid-cols-3">
-            {ROUTING_EXAMPLES.slice(0, 3).map((example) => {
-              const parts = example.split(' → ');
+            {routingExamples.slice(0, 3).map((example) => {
               return (
                 <button
-                  key={example}
+                  key={`${example.label}-${example.description}`}
                   type="button"
                   onClick={() => addRoutingRule({
-                    description: parts[0] ?? '',
-                    action: example.includes('auflegen') ? 'hangup' : example.includes('Ticket') ? 'ticket' : 'transfer',
-                    target: parts[1] ?? '',
+                    description: example.description,
+                    action: example.action,
+                    target: example.target ?? '',
                   })}
                   className="rounded-xl border border-white/[0.08] bg-black/15 px-3 py-2 text-left text-xs leading-relaxed text-white/45 transition-colors hover:border-orange-300/25 hover:text-orange-100/80"
                 >
-                  {example}
+                  <span className="block font-semibold text-white/65">{example.label}</span>
+                  <span className="mt-1 block">{example.description} → {example.action === 'transfer' ? 'Live weiterleiten' : example.action === 'ticket' ? 'Ticket anlegen' : 'Beenden'}</span>
                 </button>
               );
             })}
@@ -442,7 +506,7 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
                   </span>
                   <div>
                     <p className="text-xs font-semibold text-white/80">Ticket-Fall</p>
-                    <p className="text-[11px] text-white/35">Greift, wenn keine Live-Regel besser passt.</p>
+                    <p className="text-[11px] text-white/35">Greift, wenn Live-Weiterleitung nicht passt oder niemand übernimmt.</p>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -468,24 +532,17 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
                 </div>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-2">
-                <label className="block">
-                  <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Fallname</span>
-                  <Input
-                    value={reason.label}
-                    onChange={(event) => updateReason(reason.id, { label: event.target.value })}
-                    className="mt-1"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Ticket-Grund im Posteingang</span>
-                  <Input
-                    value={reason.reason}
-                    onChange={(event) => updateReason(reason.id, { reason: event.target.value })}
-                    className="mt-1"
-                  />
-                </label>
-              </div>
+              <label className="block">
+                <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Ticketname</span>
+                <Input
+                  value={reason.reason || reason.label}
+                  onChange={(event) => updateReasonName(reason.id, event.target.value)}
+                  className="mt-1"
+                />
+                <span className="mt-1 block text-[11px] leading-relaxed text-white/35">
+                  Dieser Name erscheint genau so im Posteingang.
+                </span>
+              </label>
 
               <label className="mt-3 block">
                 <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Wann soll Chipy diesen Fall nutzen?</span>
@@ -719,6 +776,11 @@ const PRIORITY_LABELS: Record<NonNullable<FallbackReasonConfig['priority']>, str
   urgent: 'Dringend',
 };
 
+const LEGACY_FALLBACK_INSTRUCTIONS: Record<string, string> = {
+  human_requested: 'Wenn der Anrufer klar mit einem Menschen sprechen will, nicht diskutieren: Rueckruf-Ticket oder konfigurierte Weiterleitung.',
+  urgent_or_emergency: 'Bei Gefahr, Schmerzen, Ausfall oder akutem Problem sofort als dringend markieren und keine langen Nachfragen stellen.',
+};
+
 function normalizeFallbackReason(reason: FallbackReasonConfig): FallbackReasonConfig {
   return {
     ...reason,
@@ -733,7 +795,11 @@ function mergeFallbackReasons(reasons: FallbackReasonConfig[] | undefined): Fall
   for (const reason of reasons ?? []) {
     if (!reason?.id) continue;
     const base = merged.get(reason.id);
-    merged.set(reason.id, normalizeFallbackReason(base ? { ...base, ...reason } : reason));
+    const next = base ? { ...base, ...reason } : reason;
+    if (base && reason.instruction === LEGACY_FALLBACK_INSTRUCTIONS[reason.id]) {
+      next.instruction = base.instruction;
+    }
+    merged.set(reason.id, normalizeFallbackReason(next));
   }
   return [...merged.values()];
 }
