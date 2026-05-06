@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { AgentConfig, CalendarStatus, CallRoutingRule, FallbackReasonConfig, LiveWebAccess } from '../../lib/api.js';
 import { ForwardingHint } from '../ForwardingHint.js';
 import { PasswordInput } from '../PasswordInput.js';
@@ -15,6 +15,7 @@ import {
   SectionCard, Input, Toggle,
   IconPhoneOut, IconPhoneOff, IconMicUpload, IconTicket, IconCalendar,
   IconBookOpen, IconCheckCircle, IconWebhook, IconGlobe,
+  KNOWN_TOOLS,
   DEFAULT_FALLBACK_REASONS,
   DEFAULT_FALLBACK_REASON,
   normalizeFallbackReasonValue,
@@ -58,20 +59,24 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
 
   return (
     <>
-      <SectionCard title="Übergabe & Eskalation" icon={IconPhoneOut}>
-        <div className="mb-4 flex items-start gap-3 flex-wrap">
-          <div className="flex-1 min-w-[16rem]">
-            <p className="text-sm text-white/60">
-              Alles, was Chipy nicht selbst lösen soll: zuerst einen Menschen erreichen, danach Ticket als Sicherheitsnetz.
-            </p>
-            <p className="mt-1 text-xs text-white/35">
-              Rufweiterleitung und Ticket-Fallback sind ein gemeinsamer Ablauf im Agent-Prompt.
-            </p>
+      <ActiveToolsPanel config={config} onUpdate={onUpdate} />
+
+      <div id="handoff-routing">
+        <SectionCard title="Übergabe & Eskalation" icon={IconPhoneOut}>
+          <div className="mb-4 flex items-start gap-3 flex-wrap">
+            <div className="flex-1 min-w-[16rem]">
+              <p className="text-sm text-white/60">
+                Alles, was Chipy nicht selbst lösen soll: zuerst einen Menschen erreichen, danach Ticket als Sicherheitsnetz.
+              </p>
+              <p className="mt-1 text-xs text-white/35">
+                Rufweiterleitung und Ticket-Fallback sind ein gemeinsamer Ablauf im Agent-Prompt.
+              </p>
+            </div>
+            <ForwardingHint />
           </div>
-          <ForwardingHint />
-        </div>
-        <HandoffDecisionEditor config={config} phoneInfo={phoneInfo} onUpdate={onUpdate} />
-      </SectionCard>
+          <HandoffDecisionEditor config={config} phoneInfo={phoneInfo} onUpdate={onUpdate} />
+        </SectionCard>
+      </div>
 
       {/* Calendar Integrations */}
       <SectionCard title="Kalender-Anbindung" icon={IconCalendar}>
@@ -97,6 +102,255 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
         />
       </SectionCard>
     </>
+  );
+}
+
+// ── Runtime tools ────────────────────────────────────────────────────────────
+
+type ToolMeta = {
+  label: string;
+  description: string;
+  Icon: SectionIconComp;
+  rawName: string;
+};
+
+const TOOL_META: Record<typeof KNOWN_TOOLS[number], ToolMeta> = {
+  'calendar.findSlots': {
+    label: 'Freie Termine suchen',
+    description: 'Prüft echte freie Slots im verbundenen Kalender statt Zeiten zu erfinden.',
+    Icon: IconCalendar,
+    rawName: 'calendar.findSlots',
+  },
+  'calendar.book': {
+    label: 'Termin buchen',
+    description: 'Bucht einen bestätigten Slot direkt. Wenn der Slot weg ist, greift der Ticket-Fallback.',
+    Icon: IconCalendar,
+    rawName: 'calendar.book',
+  },
+  'calendar.findBookings': {
+    label: 'Bestehende Termine finden',
+    description: 'Findet Kundentermine sicher über Nummer, Name oder Zeitraum, bevor etwas geändert wird.',
+    Icon: IconCalendar,
+    rawName: 'calendar.findBookings',
+  },
+  'calendar.cancel': {
+    label: 'Termin absagen',
+    description: 'Sagt gefundene Termine erst nach ausdrücklicher Bestätigung ab.',
+    Icon: IconCalendar,
+    rawName: 'calendar.cancel',
+  },
+  'calendar.reschedule': {
+    label: 'Termin verschieben',
+    description: 'Verschiebt einen bestehenden Termin auf einen bestätigten neuen Slot.',
+    Icon: IconCalendar,
+    rawName: 'calendar.reschedule',
+  },
+  'ticket.create': {
+    label: 'Rückruf-Ticket erfassen',
+    description: 'Speichert Anliegen mit Name, Nummer und Anlass in der Inbox. Wichtig als Sicherheitsnetz.',
+    Icon: IconTicket,
+    rawName: 'ticket.create',
+  },
+};
+
+const ROLE_TOOL_HINTS: Record<string, ReadonlyArray<typeof KNOWN_TOOLS[number]>> = {
+  reception: ['ticket.create'],
+  appointment: ['calendar.findSlots', 'calendar.book', 'calendar.findBookings', 'calendar.cancel', 'calendar.reschedule', 'ticket.create'],
+  support: ['ticket.create'],
+  orders: ['ticket.create'],
+  emergency: ['ticket.create'],
+  info: ['ticket.create'],
+};
+
+function selectedRoles(config: AgentConfig): string[] {
+  return Array.isArray(config.selectedRoles) ? config.selectedRoles : [];
+}
+
+function recommendedToolsFor(roleIds: string[]): Set<string> {
+  const out = new Set<string>();
+  for (const id of roleIds) {
+    const hints = ROLE_TOOL_HINTS[id];
+    if (hints) for (const tool of hints) out.add(tool);
+  }
+  return out;
+}
+
+function ActiveToolsPanel({ config, onUpdate }: { config: AgentConfig; onUpdate: (p: Partial<AgentConfig>) => void }) {
+  const roleIds = selectedRoles(config);
+  const recommended = useMemo(() => recommendedToolsFor(roleIds), [roleIds.join(',')]);
+  const active = useMemo(() => new Set(config.tools), [config.tools.join(',')]);
+  const missing = useMemo(() => {
+    const items: string[] = [];
+    recommended.forEach((tool) => { if (!active.has(tool)) items.push(tool); });
+    return items;
+  }, [recommended, active]);
+  const extra = useMemo(() => {
+    const items: string[] = [];
+    active.forEach((tool) => {
+      if (!recommended.has(tool) && (KNOWN_TOOLS as readonly string[]).includes(tool)) items.push(tool);
+    });
+    return items;
+  }, [recommended, active]);
+
+  function toggle(tool: string) {
+    const next = new Set(config.tools);
+    if (next.has(tool)) next.delete(tool);
+    else next.add(tool);
+    onUpdate({ tools: Array.from(next) });
+  }
+
+  function applyRecommended() {
+    const preserved = config.tools.filter((tool) => !(KNOWN_TOOLS as readonly string[]).includes(tool));
+    onUpdate({ tools: [...preserved, ...recommended] });
+  }
+
+  return (
+    <SectionCard title="Aktive Tools" icon={IconCheckCircle}>
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-3xl">
+          <p className="text-sm text-white/60">
+            Funktionen, die Chipy während des Anrufs wirklich ausführen kann. Ohne Häkchen kann er die Aktion nicht auslösen, egal was im Prompt steht.
+          </p>
+          <p className="mt-1 text-xs text-white/35">
+            Die Live-Weiterleitung wird direkt im nächsten Abschnitt über Übergabe-Regeln aktiviert, weil sie immer eine echte Zielnummer braucht.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-[10px] font-semibold">
+          <span className="rounded-full border border-orange-300/25 bg-orange-400/10 px-2.5 py-1 text-orange-100/80">
+            {KNOWN_TOOLS.filter((tool) => active.has(tool)).length} aktiv
+          </span>
+          <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-cyan-100/75">
+            Prompt-sicher
+          </span>
+        </div>
+      </div>
+
+      {roleIds.length > 0 && (missing.length > 0 || extra.length > 0) && (
+        <div className="mb-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.055] px-3 py-2.5 flex items-center gap-3 flex-wrap">
+          <p className="flex-1 min-w-[14rem] text-xs leading-relaxed text-cyan-100/78">
+            {missing.length > 0 && (
+              <>Empfohlen für deine Rollen: {missing.map((tool) => TOOL_META[tool as typeof KNOWN_TOOLS[number]]?.label ?? tool).join(', ')}.</>
+            )}
+            {missing.length > 0 && extra.length > 0 && ' '}
+            {extra.length > 0 && (
+              <>Aktiv ohne passende Rolle: {extra.map((tool) => TOOL_META[tool as typeof KNOWN_TOOLS[number]]?.label ?? tool).join(', ')}.</>
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={applyRecommended}
+            className="rounded-xl border border-cyan-300/30 bg-cyan-400/12 px-3 py-2 text-xs font-semibold text-cyan-100 transition-colors hover:bg-cyan-400/20"
+          >
+            Empfehlung übernehmen
+          </button>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {KNOWN_TOOLS.map((tool) => (
+          <ToolRow
+            key={tool}
+            meta={TOOL_META[tool]}
+            active={active.has(tool)}
+            recommended={recommended.has(tool)}
+            onToggle={() => toggle(tool)}
+          />
+        ))}
+        <TransferToolRow config={config} />
+      </div>
+    </SectionCard>
+  );
+}
+
+function ToolRow({ meta, active, recommended, onToggle }: { meta: ToolMeta; active: boolean; recommended: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={`group flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-all ${
+        active
+          ? 'border-orange-300/28 bg-orange-400/[0.075]'
+          : recommended
+            ? 'border-cyan-300/22 bg-cyan-400/[0.045] hover:border-cyan-300/38'
+            : 'border-white/[0.08] bg-white/[0.03] hover:border-white/[0.16] hover:bg-white/[0.045]'
+      }`}
+    >
+      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${
+        active
+          ? 'border-orange-300/25 bg-orange-400/12 text-orange-100'
+          : 'border-white/[0.08] bg-black/20 text-white/38 group-hover:text-white/60'
+      }`}>
+        <meta.Icon size={15} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-wrap items-center gap-2">
+          <span className={`text-sm font-semibold ${active ? 'text-white' : 'text-white/70 group-hover:text-white/88'}`}>{meta.label}</span>
+          {recommended && !active && (
+            <span className="rounded-full border border-cyan-300/25 bg-cyan-400/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-cyan-100/75">
+              empfohlen
+            </span>
+          )}
+        </span>
+        <span className="mt-0.5 block text-xs leading-relaxed text-white/38">{meta.description}</span>
+        <code className="mt-1 block text-[10px] text-white/24">{meta.rawName}</code>
+      </span>
+      <span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] font-semibold ${
+        active
+          ? 'border-orange-300/35 bg-orange-400/14 text-orange-100'
+          : 'border-white/[0.10] bg-white/[0.03] text-white/38'
+      }`}>
+        {active ? 'Aktiv' : 'Aus'}
+      </span>
+    </button>
+  );
+}
+
+function TransferToolRow({ config }: { config: AgentConfig }) {
+  const rules = (config.callRoutingRules ?? []).filter((rule) => (
+    rule.enabled !== false && rule.action === 'transfer' && Boolean(rule.target?.trim())
+  ));
+  const hasTransfer = rules.length > 0;
+
+  function scrollToRouting() {
+    document.getElementById('handoff-routing')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={scrollToRouting}
+      className={`group flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-all ${
+        hasTransfer
+          ? 'border-cyan-300/28 bg-cyan-400/[0.06]'
+          : 'border-dashed border-white/[0.10] bg-black/15 hover:border-orange-300/26 hover:bg-orange-400/[0.035]'
+      }`}
+    >
+      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${
+        hasTransfer
+          ? 'border-cyan-300/25 bg-cyan-400/12 text-cyan-100'
+          : 'border-white/[0.08] bg-black/20 text-white/35 group-hover:text-orange-100/70'
+      }`}>
+        <IconPhoneOut size={15} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className={`text-sm font-semibold ${hasTransfer ? 'text-white' : 'text-white/70 group-hover:text-white/88'}`}>
+          Live-Weiterleitung
+        </span>
+        <span className="mt-0.5 block text-xs leading-relaxed text-white/38">
+          {hasTransfer
+            ? `Weiterleitung an ${rules.length === 1 ? 'eine Zielnummer' : `${rules.length} Zielnummern`} aktiv. Wenn niemand übernimmt, greift der Ticket-Fallback.`
+            : 'Noch kein Live-Ziel aktiv. Füge unten eine Übergabe-Regel mit Zielnummer hinzu.'}
+        </span>
+        <code className="mt-1 block text-[10px] text-white/24">transfer_call</code>
+      </span>
+      <span className={`shrink-0 rounded-full border px-3 py-1 text-[10px] font-semibold ${
+        hasTransfer
+          ? 'border-cyan-300/30 bg-cyan-400/12 text-cyan-100'
+          : 'border-white/[0.10] bg-white/[0.03] text-white/38'
+      }`}>
+        {hasTransfer ? `${rules.length} Ziel${rules.length === 1 ? '' : 'e'}` : 'Unten einrichten'}
+      </span>
+    </button>
   );
 }
 
