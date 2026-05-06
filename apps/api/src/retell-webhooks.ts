@@ -48,6 +48,7 @@ import {
 } from './customers.js';
 
 const RETELL_API_KEY = process.env.RETELL_API_KEY ?? '';
+const DEFAULT_TICKET_REASON = 'Allgemeine Übergabe';
 
 function now() {
   return Date.now();
@@ -1400,10 +1401,10 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       const preferredTime = args.preferredTime as string | undefined;
       const configuredFallbackReason = await readConfig(tenantId, orgId)
         .then((cfg) => cfg.fallback.reason)
-        .catch(() => 'handoff');
+        .catch(() => DEFAULT_TICKET_REASON);
       const reason = typeof args.reason === 'string' && args.reason.trim()
         ? args.reason.trim()
-        : configuredFallbackReason;
+        : (configuredFallbackReason === 'handoff' ? DEFAULT_TICKET_REASON : configuredFallbackReason);
       const row = await createTicket({
         tenantId,
         source: 'phone',

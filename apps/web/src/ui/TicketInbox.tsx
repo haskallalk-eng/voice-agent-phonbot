@@ -105,7 +105,7 @@ export function TicketInbox({ focusId }: { focusId?: string | null } = {}) {
       <div className="flex items-end justify-between gap-4 mb-6">
         <div>
           <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">Ticket-Eingang</h2>
-          <p className="text-sm text-white/50 mt-1">Rückrufe und Handoffs deiner Kunden.</p>
+          <p className="text-sm text-white/50 mt-1">Rückrufe und Übergaben deiner Kunden.</p>
         </div>
         <button
           onClick={load}

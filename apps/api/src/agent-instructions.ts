@@ -60,6 +60,14 @@ type FallbackReasonConfig = {
   instruction?: string;
 };
 
+const DEFAULT_FALLBACK_REASON = 'Allgemeine Übergabe';
+
+function normalizeFallbackReasonValue(reason: string | null | undefined): string {
+  const trimmed = reason?.trim();
+  if (!trimmed || trimmed === 'handoff') return DEFAULT_FALLBACK_REASON;
+  return trimmed;
+}
+
 function activeFallbackReasons(cfg: AgentConfig): FallbackReasonConfig[] {
   const raw = (cfg.fallback as { reasons?: FallbackReasonConfig[] }).reasons;
   if (!Array.isArray(raw)) return [];
@@ -71,13 +79,14 @@ function activeFallbackReasons(cfg: AgentConfig): FallbackReasonConfig[] {
 function appendFallbackInstructions(parts: string[], cfg: AgentConfig, ticketCreateEnabled: boolean) {
   if (!cfg.fallback.enabled) return;
 
+  const fallbackReason = normalizeFallbackReasonValue(cfg.fallback.reason);
   const reasons = activeFallbackReasons(cfg);
   parts.push('');
   parts.push('## Notausgang / Eskalation');
   parts.push(
     ticketCreateEnabled
-      ? `Wenn du ein Anliegen nicht direkt sauber loesen kannst, erstelle ein Rueckruf-/Uebergabe-Ticket. Standardgrund, wenn kein Spezialfall passt: "${cfg.fallback.reason}".`
-      : `Wenn du ein Anliegen nicht direkt sauber loesen kannst, sage ehrlich, dass das Team sich melden soll. Das Ticket-Tool ist fuer diesen Agenten deaktiviert; Standardgrund intern: "${cfg.fallback.reason}".`,
+      ? `Wenn du ein Anliegen nicht direkt sauber loesen kannst, erstelle ein Rueckruf-/Uebergabe-Ticket. Standardgrund, wenn kein Spezialfall passt: "${fallbackReason}".`
+      : `Wenn du ein Anliegen nicht direkt sauber loesen kannst, sage ehrlich, dass das Team sich melden soll. Das Ticket-Tool ist fuer diesen Agenten deaktiviert; Standardgrund intern: "${fallbackReason}".`,
   );
   if (reasons.length > 0) {
     parts.push('Waehle fuer Tickets immer den konkretesten passenden reason-Wert:');

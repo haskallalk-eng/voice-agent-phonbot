@@ -394,6 +394,14 @@ export const DEFAULT_FALLBACK_REASONS: FallbackReasonConfig[] = [
   },
 ];
 
+export const DEFAULT_FALLBACK_REASON = 'Allgemeine Übergabe';
+
+export function normalizeFallbackReasonValue(reason: string | null | undefined): string {
+  const trimmed = reason?.trim();
+  if (!trimmed || trimmed === 'handoff') return DEFAULT_FALLBACK_REASON;
+  return trimmed;
+}
+
 /* ── Default config values for merging ── */
 
 export const DEFAULT_CONFIG_VALUES: Partial<AgentConfig> = {
@@ -417,7 +425,7 @@ export const DEFAULT_CONFIG_VALUES: Partial<AgentConfig> = {
   apiIntegrations: [],
   liveWebAccess: { enabled: false, allowedDomains: [] },
   customerModule: { enabled: false },
-  fallback: { enabled: true, reason: 'handoff', reasons: DEFAULT_FALLBACK_REASONS },
+  fallback: { enabled: true, reason: DEFAULT_FALLBACK_REASON, reasons: DEFAULT_FALLBACK_REASONS },
 };
 
 /* ── Small UI Components ── */
