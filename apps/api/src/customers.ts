@@ -141,6 +141,36 @@ function normalizeName(input: string): string {
     .trim();
 }
 
+function phoneticToken(input: string): string {
+  let token = normalizeName(input).replace(/\s+/g, '');
+  if (!token) return '';
+  token = token
+    .replace(/tsch/g, 'ch')
+    .replace(/sch/g, 'sh')
+    .replace(/ph/g, 'f')
+    .replace(/qu/g, 'kv')
+    .replace(/(ai|ay|ei|ey)/g, 'ai')
+    .replace(/ie/g, 'i')
+    .replace(/ck/g, 'k')
+    .replace(/c([eiy])/g, 's$1')
+    .replace(/c/g, 'k')
+    .replace(/z/g, 'ts')
+    .replace(/v/g, 'f')
+    .replace(/w/g, 'v')
+    .replace(/dt\b/g, 't')
+    .replace(/(.)\1+/g, '$1');
+  return token;
+}
+
+function phoneticTokenSet(input: string): Set<string> {
+  return new Set(
+    normalizeName(input)
+      .split(' ')
+      .map(phoneticToken)
+      .filter((token) => token.length >= 2),
+  );
+}
+
 function normalizeCustomerPhone(input: string | null | undefined): string | null {
   if (!input) return null;
   const { digits, normalized } = normalizePhoneLight(input);
@@ -180,8 +210,12 @@ function nameSimilarity(query: string, candidate: string): number {
   const cTokens = new Set(c.split(' ').filter(Boolean));
   const shared = [...qTokens].filter((token) => cTokens.has(token)).length;
   const tokenScore = shared / Math.max(qTokens.size, cTokens.size, 1);
+  const qPhonetic = phoneticTokenSet(q);
+  const cPhonetic = phoneticTokenSet(c);
+  const phoneticShared = [...qPhonetic].filter((token) => cPhonetic.has(token)).length;
+  const phoneticScore = phoneticShared / Math.max(qPhonetic.size, cPhonetic.size, 1);
   const distanceScore = 1 - levenshtein(q, c) / Math.max(q.length, c.length, 1);
-  return Math.max(tokenScore * 0.82, distanceScore);
+  return Math.max(tokenScore * 0.82, phoneticScore * 0.9, distanceScore);
 }
 
 async function isMindrailsUser(userId: string): Promise<boolean> {
@@ -334,7 +368,30 @@ export async function lookupCustomer(params: {
         LIMIT 1000`,
       [params.orgId, normalized, patterns],
     );
-    const candidates = res.rows
+
+    let rows = res.rows;
+    if (rows.length < 20) {
+      const broad = await pool.query<CustomerRow>(
+        `SELECT id, created_at, updated_at, org_id, full_name, normalized_name,
+                phone, phone_normalized, email, customer_type, status, notes,
+                details, last_seen_at, source_call_id
+           FROM customers
+          WHERE org_id = $1
+            AND status = 'active'
+            AND normalized_name <> ''
+          ORDER BY updated_at DESC
+          LIMIT 1000`,
+        [params.orgId],
+      );
+      const seen = new Set(rows.map((row) => row.id));
+      rows = [...rows, ...broad.rows.filter((row) => {
+        if (seen.has(row.id)) return false;
+        seen.add(row.id);
+        return true;
+      })];
+    }
+
+    const candidates = rows
       .map((row) => ({ ...row, score: nameSimilarity(name, row.full_name) }))
       .filter((row) => row.score >= 0.5)
       .sort((a, b) => b.score - a.score)
