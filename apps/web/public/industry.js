@@ -42,6 +42,14 @@ async function startDemo(templateId) {
   }
 
   try {
+    const consentBox = $('#demo-consent');
+    if (consentBox && !consentBox.checked) {
+      throw new Error('Bitte bestätige zuerst den Demo-Datenschutzhinweis.');
+    }
+    if (!consentBox && !window.confirm('Diese Demo wird als Audio/Transkript verarbeitet und bis zu 90 Tage zur Demo-Qualität gespeichert. Einverstanden?')) {
+      throw new Error('Demo-Datenschutzhinweis nicht bestätigt.');
+    }
+
     // Request mic permission early (iOS Safari user-gesture requirement)
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       try {
@@ -63,7 +71,7 @@ async function startDemo(templateId) {
     const res = await fetch('/api/demo/call', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ templateId }),
+      body: JSON.stringify({ templateId, privacyConsent: true }),
       signal: AbortSignal.timeout(15000),
     });
 

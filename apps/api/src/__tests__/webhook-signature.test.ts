@@ -19,6 +19,21 @@ describe('Retell webhook HMAC verification logic', () => {
     return crypto.createHmac('sha256', key).update(body).digest('hex');
   }
 
+  function computeCurrentRetellSignature(body: string, key: string, timestamp: string): string {
+    const digest = crypto.createHmac('sha256', key).update(body + timestamp).digest('hex');
+    return `v=${timestamp},d=${digest}`;
+  }
+
+  it('current Retell signature format is v=timestamp,d=digest over body plus timestamp', () => {
+    const body = JSON.stringify({ event: 'call_ended', call: { call_id: 'test' } });
+    const timestamp = '1778087000000';
+    const signature = computeCurrentRetellSignature(body, TEST_API_KEY, timestamp);
+    const match = signature.match(/^v=(\d+),d=([0-9a-f]+)$/);
+
+    expect(match?.[1]).toBe(timestamp);
+    expect(match?.[2]).toBe(crypto.createHmac('sha256', TEST_API_KEY).update(body + timestamp).digest('hex'));
+  });
+
   it('correct HMAC matches via timingSafeEqual', () => {
     const body = JSON.stringify({ event: 'call_ended', call: { call_id: 'test' } });
     const signature = computeHmac(body, TEST_API_KEY);
