@@ -570,6 +570,35 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
           </p>
         </div>
 
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => addRoutingRule()}
+            className="group rounded-2xl border border-orange-300/24 bg-orange-400/[0.075] px-4 py-3 text-left transition-all hover:border-orange-300/42 hover:bg-orange-400/[0.11]"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold text-orange-100">
+              <IconPhoneOut size={15} />
+              + Übergabe-Regel hinzufügen
+            </span>
+            <span className="mt-1.5 block text-xs leading-relaxed text-white/45 group-hover:text-white/58">
+              Wenn der Anrufer ... → weiterleiten an Nummer. Danach greift automatisch der Ticket-Fallback.
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={addCustomReason}
+            className="group rounded-2xl border border-cyan-300/24 bg-cyan-400/[0.075] px-4 py-3 text-left transition-all hover:border-cyan-300/42 hover:bg-cyan-400/[0.11]"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold text-cyan-100">
+              <IconTicket size={15} />
+              + Fallback-Regel hinzufügen
+            </span>
+            <span className="mt-1.5 block text-xs leading-relaxed text-white/45 group-hover:text-white/58">
+              Wenn kein Mensch übernimmt oder kein Live-Ziel passt → Ticket mit passendem Grund anlegen.
+            </span>
+          </button>
+        </div>
+
         <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(15rem,0.55fr)]">
           <label className="block">
             <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Ticketname für Restfälle</span>
@@ -862,22 +891,6 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
         })}
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <button
-          type="button"
-          onClick={() => addRoutingRule()}
-          className="rounded-[1.1rem] border border-dashed border-orange-300/22 bg-orange-400/[0.045] px-4 py-3 text-sm font-semibold text-orange-100/80 transition-colors hover:border-orange-300/42 hover:bg-orange-400/[0.08]"
-        >
-          + Übergabe-Regel hinzufügen
-        </button>
-        <button
-          type="button"
-          onClick={addCustomReason}
-          className="rounded-[1.1rem] border border-dashed border-cyan-300/22 bg-cyan-400/[0.045] px-4 py-3 text-sm font-semibold text-cyan-100/80 transition-colors hover:border-cyan-300/42 hover:bg-cyan-400/[0.08]"
-        >
-          + Fallback-Regel hinzufügen
-        </button>
-      </div>
     </div>
   );
 }
