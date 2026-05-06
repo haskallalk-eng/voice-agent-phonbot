@@ -607,7 +607,7 @@ function expandCalendarToolSet(rawTools: string[] | undefined): Set<string> {
 }
 
 /** Map our tool names to Retell custom function definitions. */
-function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTool[] {
+export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTool[] {
   const tools: RetellTool[] = [];
   const enabled = expandCalendarToolSet(config.tools);
   const signedQuery = buildToolAuthQuery(config.tenantId);

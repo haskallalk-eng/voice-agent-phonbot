@@ -9,6 +9,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { buildRetellTools } from '../agent-config.js';
 import { buildAgentInstructions } from '../agent-instructions.js';
 
 type ConfigArg = Parameters<typeof buildAgentInstructions>[0];
@@ -91,5 +92,54 @@ describe('buildAgentInstructions: agent-builder toggles', () => {
     expect(out).toContain('calendar.reschedule');
     expect(out).toContain('confirmed=true');
     expect(out).not.toContain('Ich kann den Termin nicht direkt');
+  });
+});
+
+describe('buildAgentInstructions: handoff transfer fallback', () => {
+  it('does not create a live-transfer prompt section when no live rules are configured', () => {
+    const out = buildAgentInstructions(baseCfg({ tools: ['ticket.create'], callRoutingRules: [] } as Partial<ConfigArg>));
+
+    expect(out).toContain('Menschliche Uebergabe / Eskalation');
+    expect(out).toContain('keine passende Weiterleitung konfiguriert ist');
+    expect(out).not.toContain('Menschliche Uebergabe mit Ticket-Fallback');
+    expect(out).not.toContain('transfer__491701234567');
+  });
+
+  it('skips unusable transfer rules without a target instead of prompting a phantom transfer tool', () => {
+    const out = buildAgentInstructions(baseCfg({
+      tools: ['ticket.create'],
+      callRoutingRules: [
+        { id: 'empty-transfer', description: 'Wenn ein Mensch verlangt wird', action: 'transfer', target: '', enabled: true },
+      ],
+    } as Partial<ConfigArg>));
+
+    expect(out).toContain('Menschliche Uebergabe / Eskalation');
+    expect(out).not.toContain('Menschliche Uebergabe mit Ticket-Fallback');
+    expect(out).not.toContain('rufe zuerst das Tool "transfer_');
+  });
+
+  it('registers a Retell transfer tool and tells the agent to ticket after failed transfer', () => {
+    const cfg = baseCfg({
+      tools: ['ticket.create'],
+      callRoutingRules: [
+        {
+          id: 'human-transfer',
+          description: 'Wenn der Anrufer mit einem Menschen sprechen will',
+          action: 'transfer',
+          target: '+49 170 1234567',
+          enabled: true,
+        },
+      ],
+    } as Partial<ConfigArg>);
+
+    const out = buildAgentInstructions(cfg);
+    const tools = buildRetellTools(cfg, 'https://example.test');
+    const toolNames = tools.map((tool) => tool.name);
+
+    expect(out).toContain('Menschliche Uebergabe mit Ticket-Fallback');
+    expect(out).toContain('rufe zuerst das Tool "transfer__491701234567"');
+    expect(out).toContain('erstelle danach ein passendes');
+    expect(toolNames).toContain('ticket_create');
+    expect(tools.some((tool) => tool.type === 'transfer_call' && tool.name === 'transfer__491701234567')).toBe(true);
   });
 });
