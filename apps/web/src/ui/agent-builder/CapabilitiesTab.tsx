@@ -583,14 +583,34 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
               Wird im Posteingang angezeigt, wenn keine genauere Fallback-Regel unten passt.
             </span>
           </label>
-          <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-3">
-            <Toggle
-              checked={fallback.enabled}
-              onChange={(enabled) => updateFallback({ enabled })}
-              label={fallback.enabled ? 'Ticket anlegen, wenn niemand übernimmt' : 'Keine Fallback-Tickets'}
-            />
-            <p className="mt-2 text-[11px] leading-relaxed text-white/38">
-              So endet ein Anruf nicht in einer Sackgasse, wenn der Mensch nicht rangeht oder die Übergabe nicht möglich ist.
+          <div className={`rounded-2xl border p-3 transition-all ${
+            fallback.enabled
+              ? 'border-cyan-300/20 bg-cyan-400/[0.07]'
+              : 'border-white/[0.08] bg-black/20'
+          }`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className={`text-xs font-semibold ${fallback.enabled ? 'text-cyan-100/90' : 'text-white/58'}`}>
+                  {fallback.enabled ? 'Ticket-Fallback aktiv' : 'Ticket-Fallback aus'}
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-white/38">
+                  Wenn kein Mensch übernimmt, speichert Chipy das Anliegen als Ticket.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => updateFallback({ enabled: !fallback.enabled })}
+                className={`shrink-0 rounded-full border px-3 py-1 text-[10px] font-semibold transition-colors ${
+                  fallback.enabled
+                    ? 'border-cyan-300/30 bg-cyan-400/14 text-cyan-100 hover:bg-cyan-400/22'
+                    : 'border-white/[0.10] bg-white/[0.03] text-white/42 hover:border-white/[0.18] hover:text-white/70'
+                }`}
+              >
+                {fallback.enabled ? 'Aktiv' : 'Aus'}
+              </button>
+            </div>
+            <p className="mt-2 rounded-xl border border-white/[0.07] bg-black/16 px-3 py-2 text-[11px] leading-relaxed text-white/36">
+              Sicherheitsnetz: Weiterleiten versuchen → falls niemand rangeht oder keine Live-Regel passt → Ticket anlegen.
             </p>
           </div>
         </div>
