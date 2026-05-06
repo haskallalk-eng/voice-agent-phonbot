@@ -107,13 +107,19 @@ www.{$DOMAIN:phonbot.de} {
     # SEO canonical URLs use trailing slashes. Caddy owns these redirects so
     # nginx never emits scheme-downgraded http:// slash redirects behind TLS.
     @canonical_no_slash {
-        path /branchen /kontakt /friseur /handwerker /reinigung /restaurant /autowerkstatt /selbststaendig /kosmetikstudio /fahrschule /immobilienmakler /versicherungsmakler /fitnessstudio /energieberater /hausverwaltung /ferienwohnung /impressum /datenschutz /agb /avv /sub-processors
+        path /branchen /kontakt /blog /friseur /handwerker /reinigung /restaurant /autowerkstatt /selbststaendig /kosmetikstudio /fahrschule /immobilienmakler /versicherungsmakler /fitnessstudio /energieberater /hausverwaltung /ferienwohnung /impressum /datenschutz /agb /avv /sub-processors
     }
     redir @canonical_no_slash {path}/ 301
+
+    @blog_post_no_slash {
+        path_regexp ^/blog/[^/]+$
+    }
+    redir @blog_post_no_slash {path}/ 301
 
     redir /index.html / 301
     redir /branchen/index.html /branchen/ 301
     redir /kontakt/index.html /kontakt/ 301
+    redir /blog/index.html /blog/ 301
     redir /friseur/index.html /friseur/ 301
     redir /handwerker/index.html /handwerker/ 301
     redir /reinigung/index.html /reinigung/ 301
