@@ -32,7 +32,7 @@ export function TechnicalTab({ config, onUpdate }: TechnicalTabProps) {
   return (
     <>
       <div className="mb-5 rounded-2xl border border-cyan-500/15 bg-cyan-500/8 px-4 py-3 text-sm text-cyan-100/85">
-        Diese Werte greifen beim naechsten Deploy wirklich in Retell. Die Vorschau unten zeigt dir die aktive Laufzeit-Konfiguration.
+        Die Vorschau zeigt die aktive Laufzeit-Konfiguration. Speichern synchronisiert Änderungen bei bereits deployten Agenten direkt zu Retell; neue Agenten übernehmen sie beim ersten Deploy.
       </div>
 
       <SectionCard title="Stimme & Modell" icon={IconMic}>
