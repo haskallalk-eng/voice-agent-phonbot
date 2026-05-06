@@ -563,6 +563,13 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
           </div>
         </div>
 
+        <div className="mt-4 rounded-2xl border border-orange-300/16 bg-orange-400/[0.055] px-3 py-2.5">
+          <p className="text-xs font-semibold text-orange-100/85">Live-Regel Vorlage</p>
+          <p className="mt-1 text-xs leading-relaxed text-white/45">
+            Baue hier Regeln nach dem Muster: <span className="text-white/70">Wenn der Anrufer ...</span> → <span className="text-white/70">leite weiter an Nummer/Abteilung</span>. Wenn niemand rangeht oder die Weiterleitung scheitert, nutzt Chipy automatisch den passenden Ticket-Fallback.
+          </p>
+        </div>
+
         <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(15rem,0.55fr)]">
           <label className="block">
             <span className="text-[10px] uppercase tracking-[0.16em] text-white/35">Ticketname für Restfälle</span>
