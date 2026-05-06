@@ -194,7 +194,7 @@ export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
         <h3 className="text-lg font-semibold text-white">Eigene Stimme klonen</h3>
       </div>
       <p className="text-sm text-white/50 mb-4">
-        Lade eine Aufnahme hoch oder nimm direkt auf — Phonbot klont deine Stimme via Retell Voice Cloning.
+        Lade eine Aufnahme hoch oder nimm direkt auf — Phonbot erstellt daraus deine KI-Stimme.
         Mindestlänge: 30 Sekunden.
       </p>
 

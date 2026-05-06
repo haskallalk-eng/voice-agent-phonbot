@@ -60,7 +60,7 @@ export function PrivacyTab({ config, onUpdate }: PrivacyTabProps) {
           </div>
         )}
         <div className="ml-14 text-xs text-white/40">
-          Bei bereits deployten Agents wird diese Einstellung beim <strong>Speichern</strong> direkt zu Retell synchronisiert. Neue Agents übernehmen sie beim ersten Deploy.
+          Bei bereits aktivierten Agents wird diese Einstellung beim <strong>Speichern</strong> direkt mit der Live-Telefonie synchronisiert. Neue Agents übernehmen sie beim ersten Aktivieren.
         </div>
 
         <Field label="Audio & Transkript aufbewahren">

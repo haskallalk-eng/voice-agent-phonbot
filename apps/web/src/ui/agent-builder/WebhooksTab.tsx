@@ -146,7 +146,7 @@ function ApiIntegrationEditor({ items, onChange }: { items: ApiIntegration[]; on
                 }}
               />
               <p className="text-[11px] text-white/35 mt-1">
-                Schlüssel werden AES-256-verschlüsselt gespeichert und nur server-seitig entschlüsselt — Retell sieht sie nie.
+                Schlüssel werden AES-256-verschlüsselt gespeichert und nur server-seitig entschlüsselt — externe Systeme sehen sie nie.
               </p>
             </div>
           )}

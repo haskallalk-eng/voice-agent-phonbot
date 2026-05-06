@@ -349,7 +349,7 @@ export function VoiceDropdown({
           {/* Fallback: no voices loaded yet */}
           {voices.length === 0 && !loading && !search && (
             <div className="px-4 py-4 text-sm text-white/40 text-center">
-              Keine Stimmen geladen. Prüfe deine Retell API-Verbindung.
+              Keine Stimmen geladen. Prüfe die Stimmen-Verbindung.
             </div>
           )}
           {loading && (

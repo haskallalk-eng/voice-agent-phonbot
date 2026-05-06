@@ -48,7 +48,7 @@ export function IdentityTab({
         title="Identität"
         icon={IconAgent}
         className={voiceDropdownOpen ? 'relative z-10 overflow-visible' : ''}
-        rightSlot={config.retellAgentId ? <Badge color="green">Deployed</Badge> : undefined}
+        rightSlot={config.retellAgentId ? <Badge color="green">Aktiv</Badge> : undefined}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="Agent-Name">

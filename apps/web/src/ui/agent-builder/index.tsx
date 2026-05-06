@@ -281,7 +281,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
         if (c) savedConfigRef.current = JSON.stringify(c);
         return c;
       });
-      setStatus({ type: 'ok', text: `Deployed — Agent: ${result.retellAgentId ?? '–'}` });
+      setStatus({ type: 'ok', text: 'Agent aktiviert.' });
       // Fresh deploy = new agent config live at Retell → pull stats so
       // the chip starts showing the new agent's measurements.
       void refreshAgentStats(nextConfig.tenantId);
@@ -290,7 +290,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
       // shouldn't surface to the customer-facing UI. Console-log for ops,
       // generic message for the user.
       if (typeof console !== 'undefined') console.warn('agent deploy failed', e);
-      setStatus({ type: 'error', text: 'Deploy fehlgeschlagen — bitte erneut versuchen oder Support kontaktieren.' });
+      setStatus({ type: 'error', text: 'Aktivieren fehlgeschlagen — bitte erneut versuchen oder Support kontaktieren.' });
     } finally {
       setDeploying(false);
     }
@@ -466,7 +466,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
               style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
             >
               <IconDeploy size={13} />
-              {deploying ? 'Deploying…' : 'Deploy'}
+              {deploying ? 'Aktiviere…' : 'Aktivieren'}
             </button>
           )}
         </div>
@@ -556,7 +556,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
               </div>
               <div className="flex flex-wrap gap-2 text-[11px]">
                 <span className="rounded-full border border-white/[0.09] bg-black/20 px-3 py-1.5 text-white/50">
-                  {config.retellAgentId ? 'Retell verbunden' : 'Noch nicht deployed'}
+                  {config.retellAgentId ? 'Agent aktiv' : 'Noch nicht aktiviert'}
                 </span>
                 <span className={`rounded-full border px-3 py-1.5 ${isDirty ? 'border-orange-300/25 bg-orange-400/10 text-orange-100' : 'border-green-300/18 bg-green-400/8 text-green-100/70'}`}>
                   {isDirty ? 'Ungespeicherte Aenderungen' : 'Alles gespeichert'}
@@ -762,7 +762,7 @@ function AgentStatsRow({
     ? `Gemessen letzter Call: ${measured} ms (LLM p50)`
     : 'Gemessen letzter Call: — (noch kein Call)';
   const latencyTip = hasData
-    ? `Retell-Baseline für dieses Modell
+    ? `Modell-Baseline für dieses Modell
 ${modelLine}
 ${measuredLine}
 Call ${callAgo} · live ${ageStr}`
@@ -778,12 +778,12 @@ Call ${callAgo} · live ${ageStr}`
 
   // Outer tooltip: short. Everything else lives on each chip.
   const outerTip = hasData
-    ? `Live von Retell · ${ageStr} · klick zum Aktualisieren`
+    ? `Live-System · ${ageStr} · klick zum Aktualisieren`
     : stats?.error === 'not_deployed'
-      ? 'Agent noch nicht deployt — Zahl erscheint sobald der erste Call über Retell lief.'
+      ? 'Agent noch nicht aktiviert — Zahl erscheint sobald der erste echte Call lief.'
       : stats?.error === 'retell_unreachable'
-        ? 'Retell gerade nicht erreichbar — wird automatisch weiter versucht, klick für sofortigen Retry.'
-        : 'Noch keine Latenz-Daten von Retell — erscheint sobald der erste Call ausgewertet ist.';
+        ? 'Live-System gerade nicht erreichbar — wird automatisch weiter versucht, klick für sofortigen Retry.'
+        : 'Noch keine Latenz-Daten — erscheint sobald der erste Call ausgewertet ist.';
 
   return (
     <div

@@ -16,7 +16,7 @@ export function KnowledgeTab({ config, onUpdate }: KnowledgeTabProps) {
     <>
     <SectionCard title="Wissensquellen" icon={IconKnowledge}>
       <p className="text-sm text-white/50 mb-4">
-        Eigene Texte und Website-URLs werden beim Speichern/Deploy als Retell Knowledge Base mit dem Agenten verbunden.
+        Eigene Texte und Website-URLs werden beim Speichern/Aktivieren als Wissensbasis mit dem Agenten verbunden.
       </p>
 
       {sources.length > 0 && (

@@ -44,7 +44,7 @@ export function PreviewTab({ config, preview, voices, deploying, onDeploy, onPre
         </div>
         <h3 className="relative mt-5 text-xl font-semibold text-white">Agent noch nicht live testbar</h3>
         <p className="relative mx-auto mt-2 max-w-md text-sm leading-relaxed text-white/45">
-          Deploye den Agent einmal zu Retell. Danach siehst du hier Web-Call, aktive Stimme, Tools und den echten Laufzeit-Prompt.
+          Aktiviere den Agent einmal. Danach siehst du hier Web-Call, aktive Stimme, Tools und den echten Laufzeit-Prompt.
         </p>
         <button
           onClick={onDeploy}
@@ -52,7 +52,7 @@ export function PreviewTab({ config, preview, voices, deploying, onDeploy, onPre
           className="relative mt-6 inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-xs font-semibold text-white disabled:opacity-50 transition-all cursor-pointer hover:scale-[1.02]"
           style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
         >
-          {deploying ? 'Deploying...' : <><IconDeploy size={13} />Jetzt deployen</>}
+          {deploying ? 'Aktiviere...' : <><IconDeploy size={13} />Jetzt aktivieren</>}
         </button>
       </div>
     );
@@ -86,7 +86,7 @@ export function PreviewTab({ config, preview, voices, deploying, onDeploy, onPre
                 </span>
               </div>
               <h2 className="truncate text-xl font-semibold text-white">{config.name || 'Agent'}</h2>
-              <p className="mt-1 truncate text-sm text-white/42">{config.businessName || 'Konfiguration'} wird gegen die aktive Retell-Version getestet.</p>
+              <p className="mt-1 truncate text-sm text-white/42">{config.businessName || 'Konfiguration'} wird gegen die aktive Live-Version getestet.</p>
             </div>
           </div>
           <button
@@ -149,7 +149,7 @@ export function PreviewTab({ config, preview, voices, deploying, onDeploy, onPre
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-100/45">Technische Vorschau</p>
-              <h3 className="mt-1 text-base font-semibold text-white">Prompt und Tools, die Retell bekommt</h3>
+              <h3 className="mt-1 text-base font-semibold text-white">Prompt und Tools der aktiven Version</h3>
               <p className="mt-1 text-xs leading-relaxed text-white/38">
                 Wenn eine Einstellung im Builder korrekt greift, muss sie hier im Laufzeit-Prompt auftauchen.
               </p>
@@ -181,7 +181,7 @@ export function PreviewTab({ config, preview, voices, deploying, onDeploy, onPre
             <div className="rounded-2xl border border-dashed border-white/[0.10] bg-black/20 p-8 text-center">
               <IconRefresh size={20} className="mx-auto mb-3 text-white/25" />
               <p className="text-sm font-semibold text-white/65">Noch keine Vorschau geladen</p>
-              <p className="mt-1 text-xs text-white/35">Lade die aktuelle Retell-Konfiguration, bevor du testest.</p>
+              <p className="mt-1 text-xs text-white/35">Lade die aktuelle Laufzeit-Konfiguration, bevor du testest.</p>
             </div>
           )}
         </section>
