@@ -19,7 +19,7 @@ import {
   type AgentStats,
 } from '../../lib/api.js';
 import { isPremiumVoice, voiceSurcharge } from './VoiceDropdown.js';
-import { TABS, PROMPT_SECTIONS, DEFAULT_CONFIG_VALUES, IconDeploy, IconPlay, type Tab } from './shared.js';
+import { TABS, PROMPT_SECTIONS, DEFAULT_CONFIG_VALUES, IconDeploy, IconPlay, normalizeFallbackReasonValue, type Tab } from './shared.js';
 import { IconBolt, IconRefresh } from '../PhonbotIcons.js';
 import { AgentListView } from './AgentListView.js';
 import { IdentityTab } from './IdentityTab.js';
@@ -45,6 +45,7 @@ function mergeAgentConfigDefaults(cfg: AgentConfig): AgentConfig {
     fallback: {
       ...defaultFallback,
       ...cfg.fallback,
+      reason: normalizeFallbackReasonValue(cfg.fallback?.reason ?? defaultFallback.reason),
       reasons: cfg.fallback?.reasons?.length ? cfg.fallback.reasons : defaultFallback.reasons,
     },
   } as AgentConfig;

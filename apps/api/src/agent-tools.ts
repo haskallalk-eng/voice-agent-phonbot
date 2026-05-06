@@ -41,17 +41,26 @@ const TicketCreateArgsSchema = z.object({
 
 type AgentConfig = Awaited<ReturnType<typeof readConfig>>;
 
+const DEFAULT_FALLBACK_REASON = 'Allgemeine Übergabe';
+
+function normalizeFallbackReasonValue(reason: string | null | undefined): string {
+  const trimmed = reason?.trim();
+  if (!trimmed || trimmed === 'handoff') return DEFAULT_FALLBACK_REASON;
+  return trimmed;
+}
+
 export function getEnabledKnownTools(cfg: AgentConfig): KnownToolName[] {
   return cfg.tools.filter((tool): tool is KnownToolName => KnownToolNameSchema.safeParse(tool).success);
 }
 
 function fallbackReasonDescription(cfg: AgentConfig): string {
+  const fallbackReason = normalizeFallbackReasonValue(cfg.fallback.reason);
   const reasons = (cfg.fallback as { reasons?: Array<{ reason?: string; enabled?: boolean }> }).reasons
     ?.filter((item) => item.enabled !== false && typeof item.reason === 'string' && item.reason.trim())
     .map((item) => item.reason!.trim())
     .slice(0, 10) ?? [];
-  if (!reasons.length) return `Ticket reason. Default to "${cfg.fallback.reason}" when unsure.`;
-  return `Ticket reason. Use one configured reason exactly when it fits: ${reasons.map((reason) => `"${reason}"`).join(', ')}. Default to "${cfg.fallback.reason}" when unsure.`;
+  if (!reasons.length) return `Ticket reason. Default to "${fallbackReason}" when unsure.`;
+  return `Ticket reason. Use one configured reason exactly when it fits: ${reasons.map((reason) => `"${reason}"`).join(', ')}. Default to "${fallbackReason}" when unsure.`;
 }
 
 export function getOpenAITools(cfg: AgentConfig) {
@@ -321,7 +330,7 @@ export async function executeKnownTool(input: {
         tenantId: input.tenantId,
         source: input.source,
         sessionId: input.sessionId,
-        reason: args.reason ?? input.cfg.fallback.reason,
+        reason: args.reason ?? normalizeFallbackReasonValue(input.cfg.fallback.reason),
         customerName: args.customerName,
         customerPhone: args.customerPhone,
         preferredTime: args.preferredTime,

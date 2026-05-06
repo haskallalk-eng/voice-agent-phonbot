@@ -228,7 +228,7 @@ export function OnboardingWizard({ onComplete }: Props) {
         servicesText: form.servicesText,
         systemPrompt: template.defaults.systemPrompt,
         tools: template.defaults.tools,
-        fallback: { enabled: true, reason: 'handoff' },
+        fallback: { enabled: true, reason: 'Allgemeine Übergabe' },
         // Round-12 Pattern-Pool fix: tag the new agent with its source-template
         // industry so cross-org-learning kicks in once enough peer-orgs in the
         // same industry have deployed. Without this, processTemplateLearning

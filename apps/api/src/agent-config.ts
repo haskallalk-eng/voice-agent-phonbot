@@ -68,6 +68,14 @@ type DefaultFallbackReason = {
   instruction: string;
 };
 
+const DEFAULT_FALLBACK_REASON = 'Allgemeine Übergabe';
+
+function normalizeFallbackReasonValue(reason: string | null | undefined): string {
+  const trimmed = reason?.trim();
+  if (!trimmed || trimmed === 'handoff') return DEFAULT_FALLBACK_REASON;
+  return trimmed;
+}
+
 const DEFAULT_FALLBACK_REASONS: DefaultFallbackReason[] = [
   {
     id: 'human_requested',
@@ -185,9 +193,9 @@ const AgentConfigSchema = z.object({
   tools: z.array(z.string().min(1)).default(['calendar.findSlots', 'calendar.book', 'ticket.create']),
   fallback: z.object({
     enabled: z.boolean().default(true),
-    reason: z.string().min(1).default('handoff'),
+    reason: z.string().min(1).default(DEFAULT_FALLBACK_REASON),
     reasons: z.array(FallbackReasonSchema).max(16).default([...DEFAULT_FALLBACK_REASONS]),
-  }).passthrough().default({ enabled: true, reason: 'handoff', reasons: [...DEFAULT_FALLBACK_REASONS] }),
+  }).passthrough().default({ enabled: true, reason: DEFAULT_FALLBACK_REASON, reasons: [...DEFAULT_FALLBACK_REASONS] }),
 
   // Industry cluster-key for cross-org pattern-pool (template-learning.ts).
   // Set when the customer applies a curated template (id of the template) or
@@ -241,7 +249,9 @@ type AgentConfig = z.infer<typeof AgentConfigSchema>;
 const KNOWLEDGE_PDF_MAX_BYTES = 50 * 1024 * 1024;
 
 function parseAgentConfig(input: unknown): AgentConfig {
-  return AgentConfigSchema.parse(input);
+  const parsed = AgentConfigSchema.parse(input);
+  parsed.fallback.reason = normalizeFallbackReasonValue(parsed.fallback.reason);
+  return parsed;
 }
 
 const CALLBACK_LANGUAGE_LABELS: Record<string, string> = {
@@ -565,12 +575,13 @@ export function transferToolName(target: string): string {
 }
 
 function fallbackReasonDescription(config: AgentConfig): string {
+  const fallbackReason = normalizeFallbackReasonValue(config.fallback.reason);
   const reasons = config.fallback.reasons
     ?.filter((item) => item.enabled !== false && item.reason.trim())
     .map((item) => item.reason.trim())
     .slice(0, 10) ?? [];
-  if (!reasons.length) return `Ticket reason. Default to "${config.fallback.reason}" when unsure.`;
-  return `Ticket reason. Use one configured reason exactly when it fits: ${reasons.map((reason) => `"${reason}"`).join(', ')}. Default to "${config.fallback.reason}" when unsure.`;
+  if (!reasons.length) return `Ticket reason. Default to "${fallbackReason}" when unsure.`;
+  return `Ticket reason. Use one configured reason exactly when it fits: ${reasons.map((reason) => `"${reason}"`).join(', ')}. Default to "${fallbackReason}" when unsure.`;
 }
 
 /** Map our tool names to Retell custom function definitions. */

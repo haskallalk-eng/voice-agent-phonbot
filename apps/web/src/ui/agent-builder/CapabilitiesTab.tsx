@@ -16,6 +16,8 @@ import {
   IconPhoneOut, IconPhoneOff, IconMicUpload, IconTicket, IconCalendar,
   IconBookOpen, IconCheckCircle, IconWebhook, IconGlobe,
   DEFAULT_FALLBACK_REASONS,
+  DEFAULT_FALLBACK_REASON,
+  normalizeFallbackReasonValue,
   type SectionIconComp,
 } from './shared.js';
 
@@ -112,7 +114,10 @@ type PhoneInfoItem = { number: string; customerNumber?: string; forwardingType?:
 
 function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: AgentConfig; onUpdate: (p: Partial<AgentConfig>) => void; phoneInfo?: PhoneInfoItem[] }) {
   const routingRules = config.callRoutingRules ?? [];
-  const fallback: FallbackPatch = config.fallback ?? { enabled: true, reason: 'handoff', reasons: DEFAULT_FALLBACK_REASONS };
+  const fallback: FallbackPatch = {
+    ...(config.fallback ?? { enabled: true, reason: DEFAULT_FALLBACK_REASON, reasons: DEFAULT_FALLBACK_REASONS }),
+    reason: normalizeFallbackReasonValue(config.fallback?.reason),
+  };
   const reasons = mergeFallbackReasons(fallback.reasons);
   const ticketToolActive = config.tools.includes('ticket.create');
   const activeRoutingCount = routingRules.filter((rule) => rule.enabled !== false).length;
@@ -192,7 +197,7 @@ function HandoffDecisionEditor({ config, onUpdate, phoneInfo = [] }: { config: A
         {
           id: `custom_${crypto.randomUUID()}`,
           label: 'Eigener Übergabefall',
-          reason: fallback.reason || 'handoff',
+          reason: fallback.reason || DEFAULT_FALLBACK_REASON,
           enabled: true,
           priority: 'normal',
           instruction: '',
@@ -734,7 +739,10 @@ function mergeFallbackReasons(reasons: FallbackReasonConfig[] | undefined): Fall
 }
 
 function FallbackMatrixBlock({ config, onUpdate }: { config: AgentConfig; onUpdate: (p: Partial<AgentConfig>) => void }) {
-  const fallback: FallbackPatch = config.fallback ?? { enabled: true, reason: 'handoff', reasons: DEFAULT_FALLBACK_REASONS };
+  const fallback: FallbackPatch = {
+    ...(config.fallback ?? { enabled: true, reason: DEFAULT_FALLBACK_REASON, reasons: DEFAULT_FALLBACK_REASONS }),
+    reason: normalizeFallbackReasonValue(config.fallback?.reason),
+  };
   const reasons = mergeFallbackReasons(fallback.reasons);
   const activeCount = reasons.filter((reason) => reason.enabled !== false).length;
   const ticketToolActive = config.tools.includes('ticket.create');
@@ -756,7 +764,7 @@ function FallbackMatrixBlock({ config, onUpdate }: { config: AgentConfig; onUpda
         {
           id: `custom_${Date.now()}`,
           label: 'Eigener Fall',
-          reason: fallback.reason || 'handoff',
+          reason: fallback.reason || DEFAULT_FALLBACK_REASON,
           enabled: true,
           priority: 'normal',
           instruction: '',
