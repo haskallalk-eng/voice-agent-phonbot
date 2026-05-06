@@ -48,7 +48,7 @@ Bei Färbungen: Frage "Haben Sie bekannte Allergien gegen Haarfärbemittel?" und
 ABSCHLUSS: Fasse zusammen: "Perfekt, ich hab dir [Service] am [Tag] um [Uhrzeit] eingetragen. Bis dann!"
 
 TONFALL: Locker, freundlich, unkompliziert. Kurze Sätze, maximal 2 pro Antwort. Du darfst auch mal "Super!" oder "Alles klar!" sagen.`,
-      tools: ['calendar.findSlots', 'calendar.book', 'ticket.create'],
+      tools: ['calendar.findSlots', 'calendar.book', 'calendar.findBookings', 'calendar.cancel', 'calendar.reschedule', 'ticket.create'],
     },
   },
   {
@@ -81,7 +81,7 @@ Bei Versicherungsschaden: Notiere "Versicherungsfall" und Schadennummer falls vo
 ABSCHLUSS: "Ich habe alles notiert — [Problem] in [Adresse]. Wir melden uns [Zeitraum]. Kann ich sonst noch etwas tun?"
 
 TONFALL: Sachlich, beruhigend, effizient. Kurze Sätze. Zeige Verständnis: "Das ist ärgerlich" / "Verstehe, das muss schnell gehen."`,
-      tools: ['calendar.findSlots', 'calendar.book', 'ticket.create'],
+      tools: ['calendar.findSlots', 'calendar.book', 'calendar.findBookings', 'calendar.cancel', 'calendar.reschedule', 'ticket.create'],
     },
   },
   {
@@ -114,7 +114,7 @@ Bei Speisekarten-Fragen: Nenne die Richtung der Küche, aber keine Einzelpreise.
 ABSCHLUSS: "Wunderbar, ein Tisch für [Anzahl] Personen am [Tag] um [Uhrzeit] auf den Namen [Name]. Wir freuen uns auf Sie!"
 
 TONFALL: Warm, gastfreundlich, enthusiastisch aber nicht übertrieben. "Sehr gerne!" statt "Ja."`,
-      tools: ['calendar.findSlots', 'calendar.book', 'ticket.create'],
+      tools: ['calendar.findSlots', 'calendar.book', 'calendar.findBookings', 'calendar.cancel', 'calendar.reschedule', 'ticket.create'],
     },
   },
   {
@@ -149,7 +149,7 @@ Bei Ersatzwagen: "Ob ein Ersatzwagen verfügbar ist, vermerke ich im Ticket."
 ABSCHLUSS: "Alles klar — [Service] für Ihren [Fahrzeug], [Tag] um [Uhrzeit]. Bringen Sie den Fahrzeugschein mit. Bis dann!"
 
 TONFALL: Kompetent, nüchtern, effizient. Kurze Sätze, kein Upselling.`,
-      tools: ['calendar.findSlots', 'calendar.book', 'ticket.create'],
+      tools: ['calendar.findSlots', 'calendar.book', 'calendar.findBookings', 'calendar.cancel', 'calendar.reschedule', 'ticket.create'],
     },
   },
   {
@@ -205,7 +205,7 @@ TONFALL: Freundlich, strukturiert, verbindlich. Vermittle Zuverlässigkeit.`,
 BEGRÜSSUNG: "{{businessName}}, guten Tag. Wie kann ich Ihnen helfen?"
 
 Hilf Anrufern mit ihren Anliegen, beantworte Fragen und nimm Rückrufwünsche entgegen. Sprich kurz und natürlich. Maximal 2 Sätze pro Antwort.`,
-      tools: ['calendar.findSlots', 'calendar.book', 'ticket.create'],
+      tools: ['calendar.findSlots', 'calendar.book', 'calendar.findBookings', 'calendar.cancel', 'calendar.reschedule', 'ticket.create'],
     },
   },
 ];

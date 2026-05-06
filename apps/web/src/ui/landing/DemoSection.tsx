@@ -432,9 +432,15 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
                   >
                     Jetzt eigenen Agenten erstellen →
                   </button>
+                  <a
+                    href="/kontakt/"
+                    className="mt-3 flex w-full items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-6 py-3 text-sm font-semibold text-white/80 transition-colors hover:bg-white/[0.08] hover:text-white"
+                  >
+                    Mit Phonbot-Team sprechen
+                  </a>
                   <button
                     onClick={resetCall}
-                    className="mt-4 text-sm text-white/40 hover:text-white/60 transition-colors"
+                    className="mt-3 text-sm text-white/40 hover:text-white/60 transition-colors"
                   >
                     Nochmal testen
                   </button>

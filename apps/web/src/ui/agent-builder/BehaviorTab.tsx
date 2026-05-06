@@ -778,6 +778,24 @@ const TOOL_META: Record<typeof KNOWN_TOOLS[number], ToolMeta> = {
     Icon: IconCalendar,
     rawName: 'calendar.book',
   },
+  'calendar.findBookings': {
+    label: 'Bestehende Termine finden',
+    description: 'Sucht einen vorhandenen Kundentermin sicher ueber Nummer, Name oder Terminzeit, bevor abgesagt oder verschoben wird.',
+    Icon: IconCalendar,
+    rawName: 'calendar.findBookings',
+  },
+  'calendar.cancel': {
+    label: 'Termin absagen',
+    description: 'Sagt einen gefundenen Termin erst nach ausdruecklicher Bestaetigung ab und synchronisiert externe Kalender bestmoeglich.',
+    Icon: IconCalendar,
+    rawName: 'calendar.cancel',
+  },
+  'calendar.reschedule': {
+    label: 'Termin verschieben',
+    description: 'Verschiebt einen vorhandenen Termin auf einen bestaetigten neuen Slot, ohne unklare oder doppelte Aktionen.',
+    Icon: IconCalendar,
+    rawName: 'calendar.reschedule',
+  },
   'ticket.create': {
     label: 'Rückruf-Ticket erfassen',
     description: 'Speichert das Anliegen mit Name, Nummer und Anlass in deiner Inbox. Anrufer bekommt SMS-Bestätigung. Empfohlen für JEDEN Agent als sicherer Fallback.',
@@ -793,7 +811,7 @@ const TOOL_META: Record<typeof KNOWN_TOOLS[number], ToolMeta> = {
 // ten-Set abweicht. Ein-Klick-Übernahme, keine Auto-Mutation hinter dem Rücken.
 const ROLE_TOOL_HINTS: Record<string, ReadonlyArray<typeof KNOWN_TOOLS[number]>> = {
   reception: ['ticket.create'],
-  appointment: ['calendar.findSlots', 'calendar.book', 'ticket.create'],
+  appointment: ['calendar.findSlots', 'calendar.book', 'calendar.findBookings', 'calendar.cancel', 'calendar.reschedule', 'ticket.create'],
   support: ['ticket.create'],
   orders: ['ticket.create'],
   emergency: ['ticket.create'],

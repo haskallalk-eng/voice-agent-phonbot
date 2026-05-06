@@ -106,16 +106,22 @@ export function signupLinkUrl(): string {
   return `${APP_URL}/login`;
 }
 
+export function humanMeetingUrl(): string {
+  const configured = process.env.PHONBOT_MEETING_URL?.trim()
+    || process.env.SALES_MEETING_URL?.trim()
+    || '';
+  return configured || `${APP_URL}/kontakt/`;
+}
+
 export async function sendSignupLinkSms(opts: {
   to: string | null | undefined;
   name?: string | null;
   logger?: SmsLogger;
 }): Promise<SmsSendResult> {
-  const greeting = compact(opts.name) ? `Hi ${compact(opts.name)}, ` : '';
   return sendSms({
     to: opts.to,
     kind: 'signup_link',
-    body: `${greeting}dein Phonbot-Testlink: ${signupLinkUrl()}`,
+    body: `Hi, hier ist Chipy von Phonbot nochmal. Hier ist dein Testlink: ${signupLinkUrl()} Wenn du mit einem Menschen von Phonbot sprechen willst: ${humanMeetingUrl()}`,
     logger: opts.logger,
   });
 }

@@ -2,11 +2,26 @@ import { z } from 'zod';
 import { createTicket } from './tickets.js';
 import type { readConfig } from './agent-config.js';
 import { appendTraceEvent } from './traces.js';
-import { findFreeSlots, findFreeSlotsForAnyStaff, bookSlot, bookSlotForAnyStaff } from './calendar.js';
+import {
+  findFreeSlots,
+  findFreeSlotsForAnyStaff,
+  bookSlot,
+  bookSlotForAnyStaff,
+  findChipyBookingsForChange,
+  cancelChipyBookingForChange,
+  rescheduleChipyBookingForChange,
+} from './calendar.js';
 import { sendBookingConfirmationSms, sendTicketAckSms } from './sms.js';
 import { pool } from './db.js';
 
-export const KnownToolNameSchema = z.enum(['calendar.findSlots', 'calendar.book', 'ticket.create']);
+export const KnownToolNameSchema = z.enum([
+  'calendar.findSlots',
+  'calendar.book',
+  'calendar.findBookings',
+  'calendar.cancel',
+  'calendar.reschedule',
+  'ticket.create',
+]);
 
 /** OpenAI requires tool names to match ^[a-zA-Z0-9_-]+$ */
 function sanitizeToolName(name: string): string {
@@ -30,6 +45,28 @@ const BookArgsSchema = z.object({
   notes: z.string().min(1).optional(),
 });
 
+const FindBookingsArgsSchema = z.object({
+  bookingId: z.string().min(1).optional(),
+  customerName: z.string().min(1).optional(),
+  customerPhone: z.string().min(1).optional(),
+  currentTime: z.string().min(1).optional(),
+  service: z.string().min(1).optional(),
+  preferredStylist: z.string().min(1).optional(),
+});
+
+const CancelBookingArgsSchema = FindBookingsArgsSchema.extend({
+  confirmed: z.boolean().optional().default(false),
+  reason: z.string().min(1).optional(),
+});
+
+const RescheduleBookingArgsSchema = FindBookingsArgsSchema.extend({
+  newTime: z.string().min(1),
+  newService: z.string().min(1).optional(),
+  newPreferredStylist: z.string().min(1).optional(),
+  confirmed: z.boolean().optional().default(false),
+  reason: z.string().min(1).optional(),
+});
+
 const TicketCreateArgsSchema = z.object({
   customerName: z.string().min(1).optional(),
   customerPhone: z.string().min(1),
@@ -50,7 +87,13 @@ function normalizeFallbackReasonValue(reason: string | null | undefined): string
 }
 
 export function getEnabledKnownTools(cfg: AgentConfig): KnownToolName[] {
-  return cfg.tools.filter((tool): tool is KnownToolName => KnownToolNameSchema.safeParse(tool).success);
+  const enabled = cfg.tools.filter((tool): tool is KnownToolName => KnownToolNameSchema.safeParse(tool).success);
+  if (enabled.includes('calendar.book')) {
+    for (const tool of ['calendar.findBookings', 'calendar.cancel', 'calendar.reschedule'] as const) {
+      if (!enabled.includes(tool)) enabled.push(tool);
+    }
+  }
+  return enabled;
 }
 
 function fallbackReasonDescription(cfg: AgentConfig): string {
@@ -106,6 +149,75 @@ export function getOpenAITools(cfg: AgentConfig) {
     });
   }
 
+  if (enabled.has('calendar.findBookings')) {
+    tools.push({
+      type: 'function',
+      name: sanitizeToolName('calendar.findBookings'),
+      description: 'Find an existing future appointment before cancellation or rescheduling. Do not reveal other customer data; use caller phone, name, current appointment time, or bookingId to narrow the match.',
+      parameters: {
+        type: 'object',
+        properties: {
+          bookingId: { type: 'string', description: 'Booking id returned by a previous findBookings call.' },
+          customerName: { type: 'string' },
+          customerPhone: { type: 'string' },
+          currentTime: { type: 'string', description: 'Current appointment date/time as stated by the caller.' },
+          service: { type: 'string' },
+          preferredStylist: { type: 'string', description: 'Current staff member/stylist if known.' },
+        },
+        additionalProperties: false,
+      },
+    });
+  }
+
+  if (enabled.has('calendar.cancel')) {
+    tools.push({
+      type: 'function',
+      name: sanitizeToolName('calendar.cancel'),
+      description: 'Cancel an existing appointment only after findBookings identified the appointment and the caller explicitly confirmed the cancellation.',
+      parameters: {
+        type: 'object',
+        required: ['confirmed'],
+        properties: {
+          bookingId: { type: 'string', description: 'Booking id returned by findBookings.' },
+          customerName: { type: 'string' },
+          customerPhone: { type: 'string' },
+          currentTime: { type: 'string' },
+          service: { type: 'string' },
+          preferredStylist: { type: 'string' },
+          confirmed: { type: 'boolean', description: 'True only after the caller explicitly confirmed the exact appointment cancellation.' },
+          reason: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+    });
+  }
+
+  if (enabled.has('calendar.reschedule')) {
+    tools.push({
+      type: 'function',
+      name: sanitizeToolName('calendar.reschedule'),
+      description: 'Move an existing appointment to a new slot only after old appointment and new slot were both explicitly confirmed.',
+      parameters: {
+        type: 'object',
+        required: ['newTime', 'confirmed'],
+        properties: {
+          bookingId: { type: 'string', description: 'Booking id returned by findBookings.' },
+          customerName: { type: 'string' },
+          customerPhone: { type: 'string' },
+          currentTime: { type: 'string', description: 'Current appointment date/time.' },
+          service: { type: 'string', description: 'Current service if known.' },
+          preferredStylist: { type: 'string', description: 'Current staff member/stylist if known.' },
+          newTime: { type: 'string', description: 'New confirmed appointment slot.' },
+          newService: { type: 'string' },
+          newPreferredStylist: { type: 'string', description: 'New requested staff member/stylist, or "beliebig".' },
+          confirmed: { type: 'boolean', description: 'True only after the caller explicitly confirmed both old and new appointment details.' },
+          reason: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+    });
+  }
+
   if (enabled.has('ticket.create')) {
     tools.push({
       type: 'function',
@@ -138,6 +250,16 @@ function normalizeIncomingToolName(name: string): KnownToolName | null {
     case 'calendar.book':
     case 'calendar_book':
       return 'calendar.book';
+    case 'calendar.findBookings':
+    case 'calendar_findBookings':
+    case 'calendar_find_bookings':
+      return 'calendar.findBookings';
+    case 'calendar.cancel':
+    case 'calendar_cancel':
+      return 'calendar.cancel';
+    case 'calendar.reschedule':
+    case 'calendar_reschedule':
+      return 'calendar.reschedule';
     case 'ticket.create':
     case 'ticket_create':
       return 'ticket.create';
@@ -321,6 +443,99 @@ export async function executeKnownTool(input: {
         ...args,
         preferredStylist: resultStylist,
         staffId: assignedStaffId,
+      };
+    }
+
+    case 'calendar.findBookings': {
+      const args = FindBookingsArgsSchema.parse(input.args ?? {});
+      const staff = await resolveStaffByName(input.tenantId, args.preferredStylist);
+      if (staff.staffModeActive && !staff.staffId && staff.requested && !staff.anyStaff) {
+        return {
+          ok: false,
+          status: 'staff_not_found',
+          error: 'STAFF_NOT_FOUND',
+          instruction: 'Frage nach dem genauen Mitarbeiter oder nutze Name plus Terminzeit, ohne fremde Termine preiszugeben.',
+          preferredStylist: staff.requested,
+        };
+      }
+      return findChipyBookingsForChange(input.tenantId, {
+        bookingId: args.bookingId,
+        staffId: staff.staffId,
+        customerName: args.customerName,
+        customerPhone: args.customerPhone,
+        currentTime: args.currentTime,
+        service: args.service,
+      });
+    }
+
+    case 'calendar.cancel': {
+      const args = CancelBookingArgsSchema.parse(input.args ?? {});
+      if (!args.confirmed) {
+        return {
+          ok: false,
+          status: 'confirmation_required',
+          error: 'CONFIRMATION_REQUIRED',
+          instruction: 'Wiederhole den gefundenen Termin kurz und frage ausdruecklich, ob er wirklich abgesagt werden soll. Rufe danach erst calendar.cancel mit confirmed=true auf.',
+        };
+      }
+      const staff = await resolveStaffByName(input.tenantId, args.preferredStylist);
+      const result = await cancelChipyBookingForChange(input.tenantId, {
+        bookingId: args.bookingId,
+        staffId: staff.staffId,
+        customerName: args.customerName,
+        customerPhone: args.customerPhone,
+        currentTime: args.currentTime,
+        service: args.service,
+        reason: args.reason,
+        sourceCallId: input.sessionId,
+      });
+      return {
+        ...result,
+        instruction: result.ok
+          ? 'Sage kurz, dass der Termin abgesagt wurde. Erwaehne externe Kalender nur bei partial=true als internen Nachfasspunkt.'
+          : 'Behaupte nicht, dass der Termin abgesagt wurde. Frage nach weiteren Details oder erstelle ein Rueckruf-Ticket.',
+      };
+    }
+
+    case 'calendar.reschedule': {
+      const args = RescheduleBookingArgsSchema.parse(input.args ?? {});
+      if (!args.confirmed) {
+        return {
+          ok: false,
+          status: 'confirmation_required',
+          error: 'CONFIRMATION_REQUIRED',
+          instruction: 'Bestaetige alten Termin und neue Uhrzeit in einem Satz und frage ausdruecklich nach Ja. Rufe danach erst calendar.reschedule mit confirmed=true auf.',
+        };
+      }
+      const currentStaff = await resolveStaffByName(input.tenantId, args.preferredStylist);
+      const newStaff = await resolveStaffByName(input.tenantId, args.newPreferredStylist);
+      if (newStaff.staffModeActive && !newStaff.staffId && newStaff.requested && !newStaff.anyStaff) {
+        return {
+          ok: false,
+          status: 'staff_not_found',
+          error: 'STAFF_NOT_FOUND',
+          instruction: 'Der neue Wunschmitarbeiter wurde nicht gefunden. Frage nach einem anderen Mitarbeiter oder ob ein beliebiger freier Mitarbeiter passt.',
+        };
+      }
+      const result = await rescheduleChipyBookingForChange(input.tenantId, {
+        bookingId: args.bookingId,
+        staffId: currentStaff.staffId,
+        customerName: args.customerName,
+        customerPhone: args.customerPhone,
+        currentTime: args.currentTime,
+        service: args.service,
+        newTime: args.newTime,
+        newService: args.newService,
+        newStaffId: newStaff.staffModeActive && args.newPreferredStylist ? newStaff.staffId : undefined,
+        newAnyStaff: newStaff.staffModeActive && newStaff.anyStaff,
+        reason: args.reason,
+        sourceCallId: input.sessionId,
+      });
+      return {
+        ...result,
+        instruction: result.ok
+          ? 'Sage kurz, dass der Termin verschoben wurde. Wenn partial=true, sage dass das Team intern noch einmal nachfasst.'
+          : 'Behaupte nicht, dass der Termin verschoben wurde. Biete alternative Zeiten oder Rueckruf an.',
       };
     }
 

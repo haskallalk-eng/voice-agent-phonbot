@@ -63,12 +63,16 @@ Du bist Chipy — der KI-Telefonassistent von Phonbot. In dieser Demo übernimms
 
 **Regel:** Maximal 1–2 Meta-Antworten pro Anruf, dann sanft zurück zur Demo-Aufgabe. Wenn der Anrufer ausschließlich Meta-Fragen stellt und die Demo nicht ausprobieren will, sag nach der zweiten: "Cool dass dich das interessiert — alle Details auf phonbot.de. Ich bin gleich wieder im Service-Modus, falls du die Demo ausprobieren willst." und ruf bei klarer Verabschiedung \`end_call\` auf.
 
-## Demo-Hoeren: Stille und Korrekturen freundlich abfangen
+## Demo-Hoeren: Stille, erster Sprecher und Korrekturen freundlich abfangen
 Gerade Demo-Anrufer testen oft Mikrofon, Lautstaerke, E-Mail-Buchstabieren und Unterbrechungen. Wenn du eine Frage gestellt hast und nach ca. 3 Sekunden nichts Verwertbares hoerst, sage nicht direkt "Sind Sie noch da?", sondern: "Ich hab dich gerade akustisch nicht verstanden - kannst du das nochmal sagen?"
+
+Wenn der Anrufer zuerst spricht oder direkt in deine Begruessung reinredet, erkenne das als normales Barge-in: hoere sofort auf, bestaetige sein Anliegen kurz und antworte darauf. Starte nicht nochmal stur deine Begruessung von vorne.
 
 Wenn du nur einen Teil gehoert hast, sag genau das: "Den Nachnamen hab ich, aber die E-Mail nicht sicher." Dann frage nur nach dem fehlenden Teil.
 
-Wenn der Anrufer "stop", "warte", "nein", "ne", "falsch", "moment", "nochmal", "zurueck", "punkt", "at", "bindestrich", "gross", "klein" oder "doppel" sagt, stoppst du sofort und laesst korrigieren. Nicht weiterreden, nicht genervt wirken. Kurz: "Alles klar, ich stoppe - ab welcher Stelle korrigieren wir?"
+Wenn der Anrufer "stop", "stopp", "halt", "warte", "nein", "nee", "ne", "hallo", "falsch", "moment", "sekunde", "nochmal", "zurueck", "punkt", "at", "bindestrich", "unterstrich", "gross", "klein" oder "doppel" sagt, stoppst du SOFORT mitten im Satz. Sprich keine restlichen Buchstaben/Nummern weiter. Kurz: "Alles klar, ich stoppe." Dann hoere zu oder frage nur: "Ab welcher Stelle korrigieren wir?"
+
+Bei E-Mail-Adressen: Nutze NICHT automatisch das ganze deutsche Buchstabieralphabet. Frage in kurzen Teilen: erst Teil vor dem @, dann Domain. Wiederhole plain und kurz, z.B. "h-a-s Punkt l-k at gmail Punkt com", nicht "H wie Hamburg..." fuer jeden Buchstaben. Wenn der Anrufer zweimal korrigiert, genervt wirkt oder "schick per SMS" sagt, brich die E-Mail-Erfassung ab und nutze die bestaetigte Telefonnummer/SMS. Sage nie, dass eine E-Mail stimmt, wenn sie gerade bestritten wurde.
 
 ## Kontakt-Daten in dieser Demo erheben (flexibel, NICHT zwingend alle drei)
 Wenn das Gespräch zu einem Termin, Rückruf, Angebot oder Ticket führt, frag in dieser Reihenfolge: 1) Name, 2) Mobil- oder Festnetznummer, 3) E-Mail-Adresse. Wiederhole die Telefonnummer in Zweier- oder Dreier-Blöcken zur Kontrolle.
@@ -108,7 +112,7 @@ Erst wenn der konkrete Slot eindeutig bestätigt ist, weiterführen. "Eindeutig"
 // then persisted on the demo_calls row so admins can scan + promote leads.
 const DEMO_POST_CALL_FIELDS: PostCallAnalysisField[] = [
   { type: 'string', name: 'caller_name', description: 'Vollständiger Name des Anrufers, falls genannt. Nur Vorname OK. Leer lassen wenn nicht erwähnt.' },
-  { type: 'string', name: 'caller_email', description: 'E-Mail-Adresse des Anrufers in lowercase und voll validiert (max@gmx.de). Leer wenn nicht genannt.' },
+  { type: 'string', name: 'caller_email', description: 'E-Mail-Adresse des Anrufers in lowercase und voll validiert (max@gmx.de). Nur ausfuellen, wenn sie am Ende eindeutig bestaetigt wurde. Leer lassen, wenn der Anrufer sie korrigiert, bestreitet, abbricht oder SMS statt E-Mail verlangt.' },
   { type: 'string', name: 'caller_phone', description: 'Telefonnummer des Anrufers in E.164-Format (+49…). Leer wenn nicht genannt.' },
   { type: 'string', name: 'intent_summary', description: 'Ein-Satz-Zusammenfassung des Anliegens auf Deutsch (max. 140 Zeichen). Was wollte der Anrufer?' },
   // wants_signup_link drives post-call email/SMS in retell-webhooks.ts
@@ -128,12 +132,21 @@ import { sendSignupLinkSms, signupLinkUrl } from './sms.js';
 // doesn't create duplicate Retell agents. Falls back to in-memory Map when Redis down.
 // H6: Cap in-memory maps to prevent OOM when Redis is unavailable.
 const CACHE_TTL_SEC = 24 * 60 * 60;
+const DEMO_AGENT_CACHE_VERSION = 'v11';
 const MAX_DEMO_AGENTS = 1000;
 const inMemDemoAgents = new Map<string, { agentId: string; createdAt: number }>();
 
+function demoAgentKey(templateId: string): string {
+  return `demo_agent:${DEMO_AGENT_CACHE_VERSION}:${templateId}`;
+}
+
+function demoAgentMetaKey(agentId: string): string {
+  return `demo_agent_meta:${DEMO_AGENT_CACHE_VERSION}:${agentId}`;
+}
+
 async function readDemoAgent(templateId: string): Promise<string | null> {
   if (redis?.isOpen) {
-    const v = await redis.get(`demo_agent:v10:${templateId}`).catch(() => null);
+    const v = await redis.get(demoAgentKey(templateId)).catch(() => null);
     return v ?? null;
     // Audit-Round-9 H1: when Redis is online but the key is absent (legit
     // flush, scaled-out container B that never wrote it), DO NOT fall back
@@ -167,9 +180,9 @@ async function writeDemoAgent(templateId: string, agentId: string): Promise<void
   inMemDemoAgentMeta.set(agentId, { templateId, createdAt: Date.now() });
   if (redis?.isOpen) {
     await Promise.all([
-      redis.set(`demo_agent:v10:${templateId}`, agentId, { EX: CACHE_TTL_SEC }).catch(() => {}),
+      redis.set(demoAgentKey(templateId), agentId, { EX: CACHE_TTL_SEC }).catch(() => {}),
       // Reverse direction: webhook sees agent_id, needs templateId. Same TTL.
-      redis.set(`demo_agent_meta:v10:${agentId}`, templateId, { EX: CACHE_TTL_SEC }).catch(() => {}),
+      redis.set(demoAgentMetaKey(agentId), templateId, { EX: CACHE_TTL_SEC }).catch(() => {}),
     ]);
   }
   // Audit-Round-9 H3: durable DB mirror of the reverse-lookup. Redis is the
@@ -286,7 +299,7 @@ export async function maybeSendDemoSignupLink(
  */
 export async function readDemoCallTemplate(agentId: string): Promise<string | null> {
   if (redis?.isOpen) {
-    const v = await redis.get(`demo_agent_meta:v10:${agentId}`).catch(() => null);
+    const v = await redis.get(demoAgentMetaKey(agentId)).catch(() => null);
     if (v) return v;
     // Skip in-mem when Redis is online (H1): in-mem could be stale across
     // containers and we now have a durable DB layer below.
@@ -362,6 +375,7 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
     // Local `r` capture so the closure's type-narrowing survives.
     const r = redis;
     for (const pattern of [
+      'demo_agent:v11:*', 'demo_agent_meta:v11:*',
       'demo_agent:v10:*', 'demo_agent_meta:v10:*',
       'demo_agent:v9:*', 'demo_agent_meta:v9:*',
       'demo_agent:v8:*', 'demo_agent_meta:v8:*',
@@ -464,13 +478,10 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
       llmId: llm.llm_id,
       voiceId: template.voice,
       language: template.language === 'de' ? 'de-DE' : 'en-US',
-      // Demo-only: Sensitivity runter von 1.0 (default) auf 0.5. Web-Demos
-      // laufen auf wechselnder Audio-Qualität (Laptop-Mics, Hintergrund), wo
-      // 1.0 zu Fehl-Interruptions führte — Anrufer fängt zu sprechen an, Agent
-      // hält kurz für ein Räuspern oder Tipp-Geräusch und wirkt zappelig.
-      // Paid-Customers behalten ihre eigene Tuning-Konfig (updateAgent setzt
-      // sensitivity nur explizit, nie als Side-Effect).
-      interruptionSensitivity: 0.5,
+      // Demo callers explicitly test barge-in ("stopp", "nein", "hallo")
+      // while the agent repeats email/phone details. Keep paid-customer tuning
+      // independent, but make web demos maximally responsive.
+      interruptionSensitivity: 1.0,
       webhookUrl: webhookBase ? `${webhookBase}/retell/webhook` : undefined,
       postCallAnalysisData: DEMO_POST_CALL_FIELDS,
     });

@@ -1137,8 +1137,6 @@ function generateFreeSlots(
     day.setDate(now.getDate() + d);
     day.setHours(0, 0, 0, 0);
 
-    const dayLabel = DAY_LABELS[day.getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6];
-
     for (let h = 8; h < 18; h++) {
       for (const m of [0, 30] as const) {
         const slotStart = new Date(day);
@@ -1158,9 +1156,7 @@ function generateFreeSlots(
         });
 
         if (!isBusy) {
-          const hStr = h.toString().padStart(2, '0');
-          const mStr = m.toString().padStart(2, '0');
-          slots.push(`${dayLabel} ${hStr}:${mStr}`);
+          slots.push(formatSlotLabel(slotStart));
         }
       }
     }
@@ -1433,7 +1429,6 @@ function generateChipySlots(
     if (onlyDate && dateStr !== onlyDate) continue;
     if (blockedSet.has(dateStr)) continue;
 
-    const dayLabel = DAY_LABELS[day.getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6];
     const [startH] = dayConfig.start.split(':').map(Number);
     const [endH] = dayConfig.end.split(':').map(Number);
 
@@ -1453,9 +1448,7 @@ function generateChipySlots(
         );
         if (isTimeBlocked) continue;
 
-        const hStr = h.toString().padStart(2, '0');
-        const mStr = m.toString().padStart(2, '0');
-        slots.push(`${dayLabel} ${hStr}:${mStr}`);
+        slots.push(formatSlotLabel(slotStart));
       }
     }
   }
@@ -1498,6 +1491,17 @@ function localDateKey(date: Date): string {
 function localTimeKey(date: Date): string {
   const parts = berlinParts(date);
   return `${parts.hour.toString().padStart(2, '0')}:${parts.minute.toString().padStart(2, '0')}`;
+}
+
+function formatSlotLabel(date: Date): string {
+  const parts = berlinParts(date);
+  const dow = new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6;
+  const dd = parts.day.toString().padStart(2, '0');
+  const mm = parts.month.toString().padStart(2, '0');
+  const yyyy = parts.year.toString();
+  const hh = parts.hour.toString().padStart(2, '0');
+  const min = parts.minute.toString().padStart(2, '0');
+  return `${DAY_LABELS[dow]} ${dd}.${mm}.${yyyy} ${hh}:${min}`;
 }
 
 async function isChipySlotAvailable(orgId: string, slotTime: Date, staffId?: string | null): Promise<boolean> {
@@ -1704,29 +1708,45 @@ async function withChipyBookingLock<T>(
   return fn();
 }
 
-async function deleteChipyBooking(orgId: string, bookingId: string | undefined, staffId?: string | null): Promise<void> {
-  if (!pool || !bookingId) return;
+async function deleteChipyBooking(orgId: string, bookingId: string | undefined, staffId?: string | null): Promise<boolean> {
+  if (!pool || !bookingId) return false;
   if (staffId) {
-    await pool.query(`DELETE FROM staff_chipy_bookings WHERE id = $1 AND org_id = $2 AND staff_id = $3`, [bookingId, orgId, staffId]).catch(() => {});
-    return;
+    const res = await pool.query(`DELETE FROM staff_chipy_bookings WHERE id = $1 AND org_id = $2 AND staff_id = $3`, [bookingId, orgId, staffId]);
+    return (res.rowCount ?? 0) > 0;
   }
-  await pool.query(`DELETE FROM chipy_bookings WHERE id = $1 AND org_id = $2`, [bookingId, orgId]).catch(() => {});
+  const res = await pool.query(`DELETE FROM chipy_bookings WHERE id = $1 AND org_id = $2`, [bookingId, orgId]);
+  return (res.rowCount ?? 0) > 0;
 }
 
 // ── Cal.com helpers ───────────────────────────────────────────────────────────
 
+const CALCOM_API_VERSION = '2026-02-25';
+const CALCOM_SLOTS_API_VERSION = '2024-09-04';
+const CALCOM_EVENT_TYPES_API_VERSION = '2024-06-14';
+
+function calcomHeaders(apiKey: string, apiVersion = CALCOM_API_VERSION): Record<string, string> {
+  return {
+    Authorization: `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+    'cal-api-version': apiVersion,
+  };
+}
+
 interface CalcomAvailabilitySlot {
-  time: string; // ISO datetime
+  start?: string; // v2
+  time?: string; // legacy/self-hosted v1 compatibility
 }
 
 interface CalcomAvailabilityResponse {
+  status?: string;
+  data?: Record<string, CalcomAvailabilitySlot[]>;
   slots?: Record<string, CalcomAvailabilitySlot[]>;
   busy?: { start: string; end: string }[];
 }
 
 async function calcomFindSlots(
   apiKey: string,
-  opts: { dateFrom?: string; dateTo?: string },
+  opts: { eventTypeId: number; dateFrom?: string; dateTo?: string },
 ): Promise<string[]> {
   const now = new Date();
   const dateFrom =
@@ -1736,26 +1756,30 @@ async function calcomFindSlots(
     new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   try {
-    const params = new URLSearchParams({ apiKey, dateFrom, dateTo });
-    const resp = await calFetch(`https://api.cal.com/v1/availability?${params}`, {
-      headers: { 'Content-Type': 'application/json' },
+    const params = new URLSearchParams({
+      eventTypeId: String(opts.eventTypeId),
+      start: dateFrom,
+      end: dateTo,
+      timeZone: 'Europe/Berlin',
+    });
+    const resp = await calFetch(`https://api.cal.com/v2/slots?${params.toString()}`, {
+      headers: calcomHeaders(apiKey, CALCOM_SLOTS_API_VERSION),
     });
 
     if (!resp.ok) return [];
 
     const data = (await resp.json()) as CalcomAvailabilityResponse;
 
-    // If the API returns a slots map (some event-type endpoints do)
-    if (data.slots && typeof data.slots === 'object') {
+    // Cal.com v2 returns { status, data: { "YYYY-MM-DD": [{ start }] } }.
+    // Self-hosted older installs may still return { slots: ... }.
+    const slotMap = data.data ?? data.slots;
+    if (slotMap && typeof slotMap === 'object') {
       const slots: string[] = [];
-      for (const daySlots of Object.values(data.slots)) {
+      for (const daySlots of Object.values(slotMap)) {
         for (const slot of daySlots) {
-          const d = new Date(slot.time);
+          const d = new Date(slot.start ?? slot.time ?? '');
           if (isNaN(d.getTime()) || d <= now) continue;
-          const dayLabel = DAY_LABELS[d.getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6];
-          const hStr = d.getHours().toString().padStart(2, '0');
-          const mStr = d.getMinutes().toString().padStart(2, '0');
-          slots.push(`${dayLabel} ${hStr}:${mStr}`);
+          slots.push(formatSlotLabel(d));
         }
       }
       return slots;
@@ -1782,6 +1806,8 @@ interface CalcomBookingOpts {
 }
 
 interface CalcomBookingResponse {
+  status?: string;
+  data?: { id?: number; uid?: string };
   id?: number;
   uid?: string;
   message?: string;
@@ -1791,23 +1817,23 @@ interface CalcomBookingResponse {
 async function calcomBookSlot(
   apiKey: string,
   opts: CalcomBookingOpts,
-): Promise<{ ok: boolean; bookingId?: number; error?: string }> {
+): Promise<{ ok: boolean; bookingId?: number | string; error?: string }> {
   try {
-    const resp = await calFetch(`https://api.cal.com/v1/bookings?apiKey=${encodeURIComponent(apiKey)}`, {
+    const resp = await calFetch('https://api.cal.com/v2/bookings', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: calcomHeaders(apiKey),
       body: JSON.stringify({
         eventTypeId: opts.eventTypeId,
         start: opts.start,
-        responses: {
+        attendee: {
           name: opts.name,
-          email: opts.email ?? '',
-          phone: opts.phone ?? '',
-          notes: opts.notes ?? '',
+          email: opts.email || undefined,
+          phoneNumber: opts.phone || undefined,
+          timeZone: 'Europe/Berlin',
+          language: 'de',
         },
-        timeZone: 'Europe/Berlin',
-        language: 'de',
-        metadata: {},
+        bookingFieldsResponses: opts.notes ? { notes: opts.notes } : {},
+        metadata: { source: 'phonbot' },
       }),
     });
 
@@ -1817,20 +1843,45 @@ async function calcomBookSlot(
       return { ok: false, error: data.message ?? data.error ?? `Cal.com API ${resp.status}` };
     }
 
-    return { ok: true, bookingId: data.id };
+    return { ok: true, bookingId: data.data?.uid ?? data.uid ?? data.data?.id ?? data.id };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Unknown error';
     return { ok: false, error: msg };
   }
 }
 
+async function calcomCancelBooking(
+  apiKey: string,
+  bookingUid: string | number,
+  reason: string,
+): Promise<{ ok: boolean; error?: string }> {
+  if (typeof bookingUid !== 'string' || /^\d+$/.test(bookingUid)) {
+    return { ok: false, error: 'Cal.com v2 cancellation requires booking uid; old numeric v1 id cannot be cancelled safely by API' };
+  }
+  try {
+    const resp = await calFetch(`https://api.cal.com/v2/bookings/${encodeURIComponent(bookingUid)}/cancel`, {
+      method: 'POST',
+      headers: calcomHeaders(apiKey),
+      body: JSON.stringify({ cancellationReason: reason, cancelSubsequentBookings: false }),
+    });
+    if (resp.ok || resp.status === 404) return { ok: true };
+    const data = await resp.json().catch(() => ({})) as { message?: string; error?: string };
+    return { ok: false, error: data.message ?? data.error ?? `Cal.com API ${resp.status}` };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Unknown error' };
+  }
+}
+
 interface CalcomEventType {
   id: number;
   title: string;
-  length: number;
+  length?: number;
+  lengthInMinutes?: number;
 }
 
 interface CalcomEventTypesResponse {
+  status?: string;
+  data?: CalcomEventType[];
   event_types?: CalcomEventType[];
   eventTypes?: CalcomEventType[];
 }
@@ -1838,16 +1889,20 @@ interface CalcomEventTypesResponse {
 async function calcomGetEventTypes(apiKey: string): Promise<CalcomEventType[]> {
   try {
     const resp = await calFetch(
-      `https://api.cal.com/v1/event-types?apiKey=${encodeURIComponent(apiKey)}`,
-      { headers: { 'Content-Type': 'application/json' } },
+      'https://api.cal.com/v2/event-types',
+      { headers: calcomHeaders(apiKey, CALCOM_EVENT_TYPES_API_VERSION) },
     );
 
     if (!resp.ok) return [];
 
     const data = (await resp.json()) as CalcomEventTypesResponse;
-    // Cal.com v1 returns { event_types: [...] }
-    const list = data.event_types ?? data.eventTypes ?? [];
-    return list.map((et) => ({ id: et.id, title: et.title, length: et.length }));
+    const list = data.data ?? data.event_types ?? data.eventTypes ?? [];
+    return list.map((et) => ({
+      id: et.id,
+      title: et.title,
+      length: et.length ?? et.lengthInMinutes ?? 30,
+      lengthInMinutes: et.lengthInMinutes ?? et.length ?? 30,
+    }));
   } catch {
     return [];
   }
@@ -2051,7 +2106,11 @@ async function findSlotsForConnection(
       .toISOString()
       .slice(0, 10);
 
-    const slots = await calcomFindSlots(apiKey, { dateFrom, dateTo });
+    const eventTypes = await calcomGetEventTypes(apiKey);
+    const eventType = eventTypes[0];
+    if (!eventType) return null;
+
+    const slots = await calcomFindSlots(apiKey, { eventTypeId: eventType.id, dateFrom, dateTo });
     return slots;
   }
 
@@ -2371,6 +2430,414 @@ async function bookSlotForConnection(
     const msg = e instanceof Error ? e.message : 'Unknown error';
     return { ok: false, error: msg };
   }
+}
+
+// ── Booking-change helpers ────────────────────────────────────────────────────
+
+type CalendarBookingRow = {
+  id: string;
+  staff_id: string | null;
+  staff_name: string | null;
+  customer_name: string;
+  customer_phone: string;
+  service: string | null;
+  notes: string | null;
+  slot_time: Date | string;
+  source_call_id: string | null;
+  external_refs: unknown;
+};
+
+export type CalendarBookingSummary = {
+  bookingId: string;
+  staffId: string | null;
+  staffName: string | null;
+  customerName: string;
+  customerPhoneMasked: string;
+  service: string | null;
+  startAt: string;
+  label: string;
+};
+
+type BookingChangeLookupOpts = {
+  bookingId?: string;
+  staffId?: string | null;
+  customerPhone?: string;
+  customerName?: string;
+  currentTime?: string;
+  service?: string;
+  limit?: number;
+};
+
+type ExternalCancellationResult = {
+  provider: string;
+  connectionId: string;
+  ok: boolean;
+  eventId?: string | null;
+  bookingId?: number | string | null;
+  error?: string;
+};
+
+function normalizeLookupText(value: string | null | undefined): string {
+  return normalizeSlotText(value ?? '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function phoneDigits(value: string | null | undefined): string {
+  return (value ?? '').replace(/\D+/g, '');
+}
+
+function phoneLooksUsable(value: string | null | undefined): boolean {
+  return phoneDigits(value).length >= 6;
+}
+
+function phoneMatches(stored: string | null | undefined, input: string | null | undefined): boolean {
+  const a = phoneDigits(stored);
+  const b = phoneDigits(input);
+  if (a.length < 6 || b.length < 6) return false;
+  const take = Math.min(10, a.length, b.length);
+  return a.endsWith(b.slice(-take)) || b.endsWith(a.slice(-take));
+}
+
+function maskPhone(value: string | null | undefined): string {
+  const digits = phoneDigits(value);
+  return digits.length <= 4 ? 'unbekannt' : `***${digits.slice(-4)}`;
+}
+
+function bookingStart(row: CalendarBookingRow): Date {
+  return row.slot_time instanceof Date ? row.slot_time : new Date(row.slot_time);
+}
+
+function bookingSummary(row: CalendarBookingRow): CalendarBookingSummary {
+  const start = bookingStart(row);
+  return {
+    bookingId: row.id,
+    staffId: row.staff_id,
+    staffName: row.staff_name,
+    customerName: row.customer_name,
+    customerPhoneMasked: maskPhone(row.customer_phone),
+    service: row.service,
+    startAt: start.toISOString(),
+    label: formatSlotLabel(start),
+  };
+}
+
+function bookingMatchesTime(row: CalendarBookingRow, wanted: string | undefined): boolean {
+  if (!wanted?.trim()) return true;
+  const parsed = parseSlotTime(wanted);
+  if (!parsed) return true;
+  return Math.abs(bookingStart(row).getTime() - parsed.getTime()) <= 2 * 60 * 60 * 1000;
+}
+
+function bookingMatchesText(stored: string | null | undefined, wanted: string | undefined): boolean {
+  const needle = normalizeLookupText(wanted);
+  if (!needle) return true;
+  const hay = normalizeLookupText(stored);
+  return Boolean(hay) && (hay.includes(needle) || needle.includes(hay));
+}
+
+function hasBookingLookupSelector(opts: BookingChangeLookupOpts): boolean {
+  const hasName = normalizeLookupText(opts.customerName).length >= 2;
+  const hasNarrowing = Boolean(opts.currentTime?.trim() || normalizeLookupText(opts.service));
+  return Boolean(
+    opts.bookingId?.trim()
+    || phoneLooksUsable(opts.customerPhone)
+    || (hasName && hasNarrowing)
+  );
+}
+
+async function listFutureChipyBookings(orgId: string): Promise<CalendarBookingRow[]> {
+  if (!pool) return [];
+  const res = await pool.query<CalendarBookingRow>(
+    `SELECT *
+       FROM (
+         SELECT b.id::text AS id,
+                NULL::text AS staff_id,
+                NULL::text AS staff_name,
+                b.customer_name,
+                b.customer_phone,
+                b.service,
+                b.notes,
+                b.slot_time,
+                b.source_call_id,
+                b.external_refs
+           FROM chipy_bookings b
+          WHERE b.org_id = $1
+            AND b.slot_time >= now() - interval '15 minutes'
+         UNION ALL
+         SELECT sb.id::text AS id,
+                sb.staff_id::text AS staff_id,
+                cs.name AS staff_name,
+                sb.customer_name,
+                sb.customer_phone,
+                sb.service,
+                sb.notes,
+                sb.slot_time,
+                sb.source_call_id,
+                sb.external_refs
+           FROM staff_chipy_bookings sb
+           JOIN calendar_staff cs ON cs.id = sb.staff_id AND cs.org_id = sb.org_id
+          WHERE sb.org_id = $1
+            AND sb.slot_time >= now() - interval '15 minutes'
+       ) x
+      ORDER BY slot_time ASC
+      LIMIT 200`,
+    [orgId],
+  );
+  return res.rows;
+}
+
+function filterBookingsForChange(rows: CalendarBookingRow[], opts: BookingChangeLookupOpts): CalendarBookingRow[] {
+  let out = rows;
+  if (opts.bookingId?.trim()) out = out.filter((row) => row.id === opts.bookingId!.trim());
+  if (opts.staffId) out = out.filter((row) => row.staff_id === opts.staffId);
+  if (phoneLooksUsable(opts.customerPhone)) out = out.filter((row) => phoneMatches(row.customer_phone, opts.customerPhone));
+  if (normalizeLookupText(opts.customerName).length >= 2) out = out.filter((row) => bookingMatchesText(row.customer_name, opts.customerName));
+  if (opts.currentTime?.trim()) out = out.filter((row) => bookingMatchesTime(row, opts.currentTime));
+  if (normalizeLookupText(opts.service)) out = out.filter((row) => bookingMatchesText(row.service, opts.service));
+  return out.slice(0, opts.limit ?? 6);
+}
+
+export async function findChipyBookingsForChange(
+  orgId: string,
+  opts: BookingChangeLookupOpts,
+): Promise<{
+  ok: true;
+  status: 'needs_more_data' | 'not_found' | 'found' | 'multiple';
+  matches: CalendarBookingSummary[];
+  instruction: string;
+}> {
+  if (!hasBookingLookupSelector(opts)) {
+    return {
+      ok: true,
+      status: 'needs_more_data',
+      matches: [],
+      instruction: 'Frage nach Name und Terminzeit oder nutze die Anrufernummer. Gib keine fremden Terminlisten preis.',
+    };
+  }
+  const matches = filterBookingsForChange(await listFutureChipyBookings(orgId), opts).map(bookingSummary);
+  if (matches.length === 0) {
+    return {
+      ok: true,
+      status: 'not_found',
+      matches: [],
+      instruction: 'Kein passender Termin gefunden. Frage nach einer genaueren Terminzeit oder erstelle ein Rueckruf-Ticket.',
+    };
+  }
+  if (matches.length === 1) {
+    return {
+      ok: true,
+      status: 'found',
+      matches,
+      instruction: 'Wiederhole Datum, Uhrzeit und Service kurz und frage nach ausdruecklicher Bestaetigung, bevor du absagst oder verschiebst.',
+    };
+  }
+  return {
+    ok: true,
+    status: 'multiple',
+    matches,
+    instruction: 'Nenne maximal drei passende Termine und frage, welcher gemeint ist. Fuehre noch keine Aenderung aus.',
+  };
+}
+
+function mutationAllowedForBooking(row: CalendarBookingRow, opts: BookingChangeLookupOpts): boolean {
+  if (opts.bookingId?.trim() && opts.bookingId.trim() === row.id) return true;
+  if (phoneMatches(row.customer_phone, opts.customerPhone)) return true;
+  const hasName = normalizeLookupText(opts.customerName).length >= 2 && bookingMatchesText(row.customer_name, opts.customerName);
+  const hasNarrowing = Boolean(opts.currentTime?.trim() || normalizeLookupText(opts.service));
+  return hasName && hasNarrowing;
+}
+
+async function resolveSingleBookingForMutation(
+  orgId: string,
+  opts: BookingChangeLookupOpts,
+): Promise<{ ok: true; row: CalendarBookingRow } | { ok: false; status: string; matches?: CalendarBookingSummary[]; error: string }> {
+  const matches = filterBookingsForChange(await listFutureChipyBookings(orgId), { ...opts, limit: 8 });
+  if (matches.length === 0) return { ok: false, status: 'not_found', error: 'BOOKING_NOT_FOUND' };
+  if (matches.length > 1) return { ok: false, status: 'multiple_matches', matches: matches.map(bookingSummary), error: 'MULTIPLE_BOOKINGS_MATCH' };
+  const row = matches[0]!;
+  if (!mutationAllowedForBooking(row, opts)) return { ok: false, status: 'verification_required', error: 'BOOKING_VERIFICATION_REQUIRED' };
+  return { ok: true, row };
+}
+
+async function cancelExternalRefs(
+  orgId: string,
+  staffId: string | null,
+  refs: ExternalBookingRefs,
+  reason: string,
+): Promise<ExternalCancellationResult[]> {
+  const connections = await getAllConnections(orgId, staffId);
+  const byId = new Map(connections.map((conn) => [conn.id, conn]));
+  const results: ExternalCancellationResult[] = [];
+
+  for (const ref of Object.values(refs)) {
+    if (!ref.ok || (!ref.eventId && !ref.bookingId)) continue;
+    const conn = byId.get(ref.connectionId) ?? connections.find((item) => item.provider === ref.provider);
+    if (!conn) {
+      results.push({ provider: ref.provider, connectionId: ref.connectionId, ok: false, eventId: ref.eventId ?? null, bookingId: ref.bookingId ?? null, error: 'CALENDAR_CONNECTION_NOT_FOUND' });
+      continue;
+    }
+    try {
+      if (conn.provider === 'google') {
+        const token = await getValidTokenForConnection(conn);
+        if (!token || !ref.eventId) throw new Error('GOOGLE_EVENT_NOT_CONNECTED');
+        const resp = await calFetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(conn.calendar_id || 'primary')}/events/${encodeURIComponent(ref.eventId)}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!resp.ok && resp.status !== 404) throw new Error(`Google API ${resp.status}`);
+        results.push({ provider: conn.provider, connectionId: conn.id, ok: true, eventId: ref.eventId });
+      } else if (conn.provider === 'microsoft') {
+        const token = await getValidMsTokenForConnection(conn);
+        if (!token || !ref.eventId) throw new Error('MICROSOFT_EVENT_NOT_CONNECTED');
+        const resp = await calFetch(`https://graph.microsoft.com/v1.0/me/events/${encodeURIComponent(ref.eventId)}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!resp.ok && resp.status !== 404) throw new Error(`Microsoft Graph ${resp.status}`);
+        results.push({ provider: conn.provider, connectionId: conn.id, ok: true, eventId: ref.eventId });
+      } else if (conn.provider === 'calcom') {
+        if (!conn.api_key || ref.bookingId === undefined) throw new Error('CALCOM_BOOKING_NOT_CONNECTED');
+        const cancelled = await calcomCancelBooking(conn.api_key, ref.bookingId, reason);
+        if (!cancelled.ok) throw new Error(cancelled.error ?? 'Cal.com cancellation failed');
+        results.push({ provider: conn.provider, connectionId: conn.id, ok: true, bookingId: ref.bookingId });
+      }
+    } catch (e: unknown) {
+      results.push({
+        provider: conn.provider,
+        connectionId: conn.id,
+        ok: false,
+        eventId: ref.eventId ?? null,
+        bookingId: ref.bookingId ?? null,
+        error: e instanceof Error ? e.message : 'UNKNOWN_EXTERNAL_CANCEL_ERROR',
+      });
+    }
+  }
+
+  return results;
+}
+
+export async function cancelChipyBookingForChange(
+  orgId: string,
+  opts: BookingChangeLookupOpts & { reason?: string; sourceCallId?: string },
+): Promise<{
+  ok: boolean;
+  status: 'cancelled' | 'cancelled_partial' | 'not_found' | 'multiple_matches' | 'verification_required' | 'failed';
+  booking?: CalendarBookingSummary;
+  matches?: CalendarBookingSummary[];
+  externalResults?: ExternalCancellationResult[];
+  partial?: boolean;
+  error?: string;
+}> {
+  const resolved = await resolveSingleBookingForMutation(orgId, opts);
+  if (!resolved.ok) {
+    return {
+      ok: false,
+      status: resolved.status as 'not_found' | 'multiple_matches' | 'verification_required',
+      matches: resolved.matches,
+      error: resolved.error,
+    };
+  }
+
+  const row = resolved.row;
+  return withChipyBookingLock(orgId, row.id, async () => {
+    try {
+      const refs = parseExternalBookingRefs(row.external_refs);
+      const externalResults = await cancelExternalRefs(orgId, row.staff_id, refs, opts.reason ?? 'Customer requested cancellation by phone');
+      const deleted = await deleteChipyBooking(orgId, row.id, row.staff_id);
+      if (!deleted) {
+        return { ok: false, status: 'failed', booking: bookingSummary(row), externalResults, partial: true, error: 'CHIPY_DELETE_FAILED' };
+      }
+      const partial = externalResults.some((item) => !item.ok);
+      return {
+        ok: true,
+        status: partial ? 'cancelled_partial' : 'cancelled',
+        booking: bookingSummary(row),
+        externalResults,
+        partial,
+      };
+    } catch (e: unknown) {
+      return {
+        ok: false,
+        status: 'failed',
+        booking: bookingSummary(row),
+        externalResults: [],
+        partial: true,
+        error: e instanceof Error ? e.message : 'CHIPY_CANCEL_FAILED',
+      };
+    }
+  }, row.staff_id);
+}
+
+export async function rescheduleChipyBookingForChange(
+  orgId: string,
+  opts: BookingChangeLookupOpts & {
+    newTime: string;
+    newService?: string;
+    newStaffId?: string | null;
+    newAnyStaff?: boolean;
+    reason?: string;
+    sourceCallId?: string;
+  },
+): Promise<{
+  ok: boolean;
+  status: 'rescheduled' | 'rescheduled_partial' | 'book_failed' | 'not_found' | 'multiple_matches' | 'verification_required';
+  oldBooking?: CalendarBookingSummary;
+  newBookingId?: number | string;
+  newChipyBookingId?: string;
+  matches?: CalendarBookingSummary[];
+  externalResults?: ExternalCancellationResult[];
+  partial?: boolean;
+  error?: string;
+}> {
+  const resolved = await resolveSingleBookingForMutation(orgId, opts);
+  if (!resolved.ok) {
+    return {
+      ok: false,
+      status: resolved.status as 'not_found' | 'multiple_matches' | 'verification_required',
+      matches: resolved.matches,
+      error: resolved.error,
+    };
+  }
+
+  const old = resolved.row;
+  const targetStaffId = opts.newStaffId === undefined ? old.staff_id : opts.newStaffId;
+  const bookingOpts = {
+    customerName: old.customer_name,
+    customerPhone: old.customer_phone,
+    time: opts.newTime,
+    service: opts.newService ?? old.service ?? opts.service ?? 'Termin',
+    notes: [old.notes, opts.reason ? `Verschoben per Telefon: ${opts.reason}` : 'Verschoben per Telefon'].filter(Boolean).join('\n'),
+    sourceCallId: opts.sourceCallId,
+  };
+  const booked = opts.newAnyStaff
+    ? await bookSlotForAnyStaff(orgId, bookingOpts)
+    : await bookSlot(orgId, {
+        ...bookingOpts,
+        staffId: targetStaffId,
+      });
+  if (!booked.ok) {
+    return { ok: false, status: 'book_failed', oldBooking: bookingSummary(old), error: booked.error ?? 'BOOK_NEW_SLOT_FAILED' };
+  }
+
+  const cancelled = await cancelChipyBookingForChange(orgId, {
+    bookingId: old.id,
+    customerPhone: old.customer_phone,
+    reason: opts.reason ?? 'Customer requested reschedule by phone',
+  });
+  const partial = booked.partial || !cancelled.ok || cancelled.partial;
+  return {
+    ok: true,
+    status: partial ? 'rescheduled_partial' : 'rescheduled',
+    oldBooking: bookingSummary(old),
+    newBookingId: booked.bookingId,
+    newChipyBookingId: booked.chipyBookingId,
+    externalResults: cancelled.externalResults,
+    partial,
+    error: cancelled.ok ? booked.error : cancelled.error,
+  };
 }
 
 // ── Route Registration ────────────────────────────────────────────────────────
