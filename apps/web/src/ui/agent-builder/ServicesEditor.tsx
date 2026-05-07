@@ -77,6 +77,10 @@ export function ServicesEditor({
   onConsumeLegacy: () => void;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const missingPresetCount = presetItems?.filter((item) => {
+    const name = item.name.trim().toLowerCase();
+    return name && !value.some((service) => service.name.trim().toLowerCase() === name);
+  }).length ?? 0;
 
   // Ref tracks the latest array so two patch() calls inside the same React
   // batch (e.g. the user clicks "ab X" + "BELIEBT" in quick succession on a
@@ -181,14 +185,16 @@ export function ServicesEditor({
               {presetDescription ?? 'Fügt typische Leistungen mit Dauer hinzu. Bestehende Services bleiben erhalten.'}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={addPreset}
-            className="shrink-0 rounded-full px-4 py-2 text-xs font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_22px_rgba(249,115,22,0.35)] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60"
-            style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
-          >
-            {value.length > 0 ? 'Fehlende ergänzen' : 'Preset übernehmen'}
-          </button>
+          {missingPresetCount > 0 && (
+            <button
+              type="button"
+              onClick={addPreset}
+              className="shrink-0 rounded-full px-4 py-2 text-xs font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_22px_rgba(249,115,22,0.35)] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60"
+              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+            >
+              {value.length > 0 ? 'Standards übernehmen' : 'Preset übernehmen'}
+            </button>
+          )}
         </div>
       ) : null}
 
