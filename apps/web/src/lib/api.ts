@@ -1156,6 +1156,7 @@ export function createCheckoutSession(planId: string, interval: 'month' | 'year'
 export function startCheckoutSignup(input: {
   orgName: string;
   email: string;
+  phone: string;
   password: string;
   planId: 'nummer' | 'starter' | 'pro' | 'agency';
   interval: 'month' | 'year';
@@ -1174,7 +1175,7 @@ export function startCheckoutSignup(input: {
 // Server verifies the session with Stripe, creates the user + org if the
 // webhook hasn't already, and returns a fresh token pair.
 export function finalizeCheckoutSignup(sessionId: string) {
-  return request<{ token: string; user: { id: string; email: string; role: string }; org: { id: string; name: string; slug: string } }>(
+  return request<{ token: string; user: { id: string; email: string; phone?: string | null; role: string }; org: { id: string; name: string; slug: string } }>(
     '/auth/finalize-checkout',
     { method: 'POST', body: JSON.stringify({ sessionId }) },
   );

@@ -6,6 +6,7 @@ import { FoxLogo } from './FoxLogo.js';
 import { PasswordInput } from './PasswordInput.js';
 
 type Mode = 'login' | 'register';
+type AuthFormValues = { orgName: string; email: string; phone: string; password: string };
 
 type Props = {
   onGoToLanding?: () => void;
@@ -41,7 +42,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
     handleSubmit: handleFormSubmit,
     formState: { errors, isSubmitting },
     reset: resetMainForm,
-  } = useForm<{ orgName: string; email: string; password: string }>({ mode: 'onBlur' });
+  } = useForm<AuthFormValues>({ mode: 'onBlur' });
 
   // Forgot password form
   const {
@@ -51,7 +52,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
     reset: resetForgotForm,
   } = useForm<{ forgotEmail: string }>();
 
-  async function onMainSubmit(data: { orgName: string; email: string; password: string }) {
+  async function onMainSubmit(data: AuthFormValues) {
     setError(null);
 
     // Check for pricing-card preselection BEFORE hitting any backend. If
@@ -81,6 +82,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
         const { url } = await startCheckoutSignup({
           orgName: data.orgName,
           email: data.email,
+          phone: data.phone,
           password: data.password,
           planId: plan as 'nummer' | 'starter' | 'pro' | 'agency',
           interval,
@@ -93,7 +95,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
       if (mode === 'login') {
         await login(data.email, data.password);
       } else {
-        await authRegister(data.orgName, data.email, data.password, {
+        await authRegister(data.orgName, data.email, data.phone, data.password, {
           ...LEGAL_CONFIRMATION,
         });
       }
@@ -127,7 +129,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0A0F] flex flex-col items-center justify-center px-4 relative overflow-hidden">
+    <div className="min-h-screen bg-[#0A0A0F] flex flex-col items-center justify-center px-4 py-8 relative overflow-x-hidden overflow-y-auto">
       {/* Background glow */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div
@@ -255,24 +257,44 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
 
               <div>
                 <label className="block text-xs font-medium text-white/60 mb-1.5 uppercase tracking-wide">
-                  E-Mail
+                  {mode === 'login' ? 'E-Mail oder Telefonnummer' : 'E-Mail'}
                 </label>
                 <input
-                  type="email"
-                  placeholder="du@beispiel.de"
-                  autoComplete="email"
+                  type={mode === 'login' ? 'text' : 'email'}
+                  placeholder={mode === 'login' ? 'du@beispiel.de oder 0176 12345678' : 'du@beispiel.de'}
+                  autoComplete={mode === 'login' ? 'username' : 'email'}
                   className={`w-full rounded-xl bg-white/5 border px-4 py-2.5 text-sm text-white placeholder-white/30
                     focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${errors.email ? 'border-red-500/60' : 'border-white/10'}`}
                   {...register('email', {
-                    required: 'E-Mail ist erforderlich',
-                    pattern: {
-                      value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-                      message: 'Bitte gib eine gültige E-Mail-Adresse ein.',
+                    required: mode === 'login' ? 'E-Mail oder Telefonnummer ist erforderlich' : 'E-Mail ist erforderlich',
+                    validate: (value) => {
+                      if (mode === 'login') return value.trim().length >= 3 || 'Bitte gib E-Mail oder Telefonnummer ein.';
+                      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()) || 'Bitte gib eine gueltige E-Mail-Adresse ein.';
                     },
                   })}
                 />
                 {errors.email && <p className="mt-1 text-xs text-red-400">{errors.email.message}</p>}
               </div>
+
+              {mode === 'register' && (
+                <div>
+                  <label className="block text-xs font-medium text-white/60 mb-1.5 uppercase tracking-wide">
+                    Telefonnummer
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="+49 176 12345678"
+                    autoComplete="tel"
+                    className={`w-full rounded-xl bg-white/5 border px-4 py-2.5 text-sm text-white placeholder-white/30
+                      focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${errors.phone ? 'border-red-500/60' : 'border-white/10'}`}
+                    {...register('phone', {
+                      required: mode === 'register' ? 'Telefonnummer ist erforderlich' : false,
+                      minLength: { value: 7, message: 'Bitte gib eine gueltige Telefonnummer ein.' },
+                    })}
+                  />
+                  {errors.phone && <p className="mt-1 text-xs text-red-400">{errors.phone.message}</p>}
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-medium text-white/60 mb-1.5 uppercase tracking-wide">

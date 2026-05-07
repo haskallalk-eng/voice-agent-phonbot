@@ -400,6 +400,9 @@ async function runMigrationBody() {
 
   await pool.query(`create index if not exists users_org_idx on users(org_id);`);
   await pool.query(`create index if not exists users_email_idx on users(email);`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_normalized TEXT;`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS users_phone_normalized_uniq ON users(phone_normalized);`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS voice_clones (
@@ -633,6 +636,8 @@ async function runMigrationBody() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS pending_registrations_email_idx ON pending_registrations(email);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS pending_registrations_session_idx ON pending_registrations(stripe_session_id);`);
+  await pool.query(`ALTER TABLE pending_registrations ADD COLUMN IF NOT EXISTS phone TEXT;`);
+  await pool.query(`ALTER TABLE pending_registrations ADD COLUMN IF NOT EXISTS phone_normalized TEXT;`);
 
   // Click-wrap / legal proof trail. This is intentionally append-only: when a
   // customer accepts AGB, Datenschutz, AVV and B2B status during register or

@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { sendPasswordResetEmail, sendVerificationEmail, sendWelcomeEmail } from './email.js';
 import { stripe, PLANS, type PlanId } from './billing.js';
 import { insertLegalAcceptance } from './legal.js';
+import { isPlausiblePhone, toE164 } from '@vas/shared';
 
 // Per-user brute-force counter. The route-level rate-limit is per-IP (5–10/min);
 // a botnet of 100 IPs against one email easily slips through. We add a Redis-
@@ -170,6 +171,7 @@ const PASSWORD_MAX = 72;
 const RegisterBody = z.object({
   orgName: z.string().min(2).max(100),
   email: z.string().email(),
+  phone: z.string().min(5).max(40),
   password: z.string().min(PASSWORD_MIN).max(PASSWORD_MAX),
   isBusiness: z.literal(true),
   termsAccepted: z.literal(true),
@@ -180,6 +182,7 @@ const RegisterBody = z.object({
 const CheckoutStartBody = z.object({
   orgName: z.string().min(2).max(100),
   email: z.string().email(),
+  phone: z.string().min(5).max(40),
   password: z.string().min(PASSWORD_MIN).max(PASSWORD_MAX),
   planId: z.enum(['nummer', 'starter', 'pro', 'agency']),
   interval: z.enum(['month', 'year']).default('month'),
@@ -194,9 +197,44 @@ const FinalizeCheckoutBody = z.object({
 });
 
 const LoginBody = z.object({
-  email: z.string().email(),
+  email: z.string().min(3).max(200),
   password: z.string().min(1).max(PASSWORD_MAX),
 });
+
+function normalizeEmail(input: string): string {
+  return input.trim().toLowerCase();
+}
+
+function normalizeSignupPhone(input: string): { phone: string; phoneNormalized: string } | null {
+  const phone = input.trim().replace(/\s+/g, ' ').slice(0, 40);
+  const e164 = toE164(phone);
+  if (!e164 || !isPlausiblePhone(e164)) return null;
+  return { phone, phoneNormalized: e164 };
+}
+
+type LoginIdentifier =
+  | { kind: 'email'; email: string; phoneNormalized: null; lockKey: string }
+  | { kind: 'phone'; email: null; phoneNormalized: string; lockKey: string }
+  | { kind: 'invalid'; email: null; phoneNormalized: null; lockKey: string };
+
+function normalizeLoginIdentifier(input: string): LoginIdentifier {
+  const raw = input.trim();
+  const lower = raw.toLowerCase();
+  if (raw.includes('@')) {
+    const parsed = z.string().email().safeParse(lower);
+    if (parsed.success) {
+      return { kind: 'email', email: parsed.data, phoneNormalized: null, lockKey: `email:${parsed.data}` };
+    }
+    return { kind: 'invalid', email: null, phoneNormalized: null, lockKey: `invalid:${lower.slice(0, 120)}` };
+  }
+
+  const e164 = toE164(raw);
+  if (e164 && isPlausiblePhone(e164)) {
+    return { kind: 'phone', email: null, phoneNormalized: e164, lockKey: `phone:${e164}` };
+  }
+
+  return { kind: 'invalid', email: null, phoneNormalized: null, lockKey: `invalid:${lower.slice(0, 120)}` };
+}
 
 /**
  * Shared materialize step: given a Stripe Checkout session that's paid, turn
@@ -227,7 +265,7 @@ async function materializePendingRegistration(opts: {
     await client.query('BEGIN');
     // Lock the pending row so a concurrent webhook + finalize can't double-insert.
     const pending = await client.query(
-      `SELECT id, email, org_name, password_hash, plan_id, billing_interval
+      `SELECT id, email, phone, phone_normalized, org_name, password_hash, plan_id, billing_interval
          FROM pending_registrations
         WHERE ${opts.sessionId ? 'stripe_session_id = $1' : 'id = $1'}
         FOR UPDATE`,
@@ -238,13 +276,26 @@ async function materializePendingRegistration(opts: {
       return null; // already materialized (or never existed)
     }
     const p = pending.rows[0] as {
-      id: string; email: string; org_name: string; password_hash: string; plan_id: PlanId; billing_interval: 'month' | 'year' | null;
+      id: string;
+      email: string;
+      phone: string | null;
+      phone_normalized: string | null;
+      org_name: string;
+      password_hash: string;
+      plan_id: PlanId;
+      billing_interval: 'month' | 'year' | null;
     };
     const plan = PLANS[p.plan_id] ?? PLANS.free;
 
-    // Double-check: if the email was registered elsewhere in the meantime,
+    // Double-check: if the login identifiers were claimed in the meantime,
     // bail. Safer than overwriting.
-    const dup = await client.query('SELECT id FROM users WHERE email = $1', [p.email]);
+    const dup = await client.query(
+      `SELECT id FROM users
+        WHERE email = $1
+           OR ($2::text IS NOT NULL AND phone_normalized = $2)
+        LIMIT 1`,
+      [p.email, p.phone_normalized],
+    );
     if (dup.rowCount) {
       await client.query('DELETE FROM pending_registrations WHERE id = $1', [p.id]);
       await client.query('COMMIT');
@@ -263,11 +314,17 @@ async function materializePendingRegistration(opts: {
     // email_verified=true here: payment implies ownership of that email via
     // Stripe's receipt flow, so the extra click-to-verify is redundant.
     const userRes = await client.query(
-      `INSERT INTO users (org_id, email, password_hash, role, email_verified)
-       VALUES ($1, $2, $3, 'owner', true)
+      `INSERT INTO users (org_id, email, phone, phone_normalized, password_hash, role, email_verified)
+       VALUES ($1, $2, $3, $4, $5, 'owner', true)
+       ON CONFLICT DO NOTHING
        RETURNING id, role`,
-      [orgId, p.email, p.password_hash],
+      [orgId, p.email, p.phone, p.phone_normalized, p.password_hash],
     );
+    if (!userRes.rowCount) {
+      await client.query('DELETE FROM pending_registrations WHERE id = $1', [p.id]);
+      await client.query('COMMIT');
+      return null;
+    }
     const user = userRes.rows[0] as { id: string; role: 'owner' | 'admin' | 'member' };
 
     await client.query(
@@ -303,18 +360,32 @@ export async function registerAuth(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'Invalid input', details: parsed.error.flatten() });
     }
-    const { orgName, email, password, isBusiness, termsAccepted, privacyAccepted, avvAccepted } = parsed.data;
+    const { orgName, password, isBusiness, termsAccepted, privacyAccepted, avvAccepted } = parsed.data;
+    const email = normalizeEmail(parsed.data.email);
+    const phone = normalizeSignupPhone(parsed.data.phone);
+    if (!phone) {
+      return reply.status(400).send({ error: 'Bitte gib eine gültige Telefonnummer ein.' });
+    }
 
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
-    // Performance pre-check: bail early on known-duplicate emails (avoids
+    // Performance pre-check: bail early on known-duplicate identifiers (avoids
     // ~200ms bcrypt + org-INSERT + ROLLBACK overhead for a common error case).
     // NOT the primary dedup gate — the INSERT...ON CONFLICT below is (D4).
     // This SELECT is race-prone by design (two concurrent registers can both
     // pass it); ON CONFLICT catches the second one atomically.
-    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    const existing = await pool.query(
+      `SELECT email, phone_normalized FROM users
+        WHERE email = $1 OR phone_normalized = $2
+        LIMIT 1`,
+      [email, phone.phoneNormalized],
+    );
     if (existing.rowCount && existing.rowCount > 0) {
-      return reply.status(409).send({ error: 'Email already registered' });
+      const row = existing.rows[0] as { email?: string | null; phone_normalized?: string | null };
+      const error = row.phone_normalized === phone.phoneNormalized
+        ? 'Telefonnummer ist bereits registriert'
+        : 'E-Mail ist bereits registriert';
+      return reply.status(409).send({ error });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
@@ -348,15 +419,24 @@ export async function registerAuth(app: FastifyInstance) {
         ? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
         : null;
       const userResult = await client.query(
-        `INSERT INTO users (org_id, email, password_hash, role, email_verify_token, email_verify_token_expires_at, email_verified)
-         VALUES ($1, $2, $3, 'owner', $4, $5, $6)
-         ON CONFLICT (email) DO NOTHING
-         RETURNING id, email, role`,
-        [org.id, email, passwordHash, emailServiceConfigured ? verifyTokenHash : null, verifyExpiresAt, !emailServiceConfigured],
+        `INSERT INTO users (org_id, email, phone, phone_normalized, password_hash, role, email_verify_token, email_verify_token_expires_at, email_verified)
+         VALUES ($1, $2, $3, $4, $5, 'owner', $6, $7, $8)
+         ON CONFLICT DO NOTHING
+         RETURNING id, email, phone, role`,
+        [
+          org.id,
+          email,
+          phone.phone,
+          phone.phoneNormalized,
+          passwordHash,
+          emailServiceConfigured ? verifyTokenHash : null,
+          verifyExpiresAt,
+          !emailServiceConfigured,
+        ],
       );
       if (!userResult.rowCount) {
         await client.query('ROLLBACK');
-        return reply.status(409).send({ error: 'Email already registered' });
+        return reply.status(409).send({ error: 'E-Mail oder Telefonnummer ist bereits registriert' });
       }
       const user = userResult.rows[0];
 
@@ -388,7 +468,7 @@ export async function registerAuth(app: FastifyInstance) {
 
       const { token } = await issueTokenPair(app, { id: user.id, role: user.role, org_id: org.id }, req, reply);
 
-      return reply.status(201).send({ token, org, user: { id: user.id, email: user.email, role: user.role } });
+      return reply.status(201).send({ token, org, user: { id: user.id, email: user.email, phone: user.phone, role: user.role } });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -411,7 +491,12 @@ export async function registerAuth(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'Invalid input', details: parsed.error.flatten() });
     }
-    const { orgName, email, password, planId, interval, isBusiness, termsAccepted, privacyAccepted, avvAccepted } = parsed.data;
+    const { orgName, password, planId, interval, isBusiness, termsAccepted, privacyAccepted, avvAccepted } = parsed.data;
+    const email = normalizeEmail(parsed.data.email);
+    const phone = normalizeSignupPhone(parsed.data.phone);
+    if (!phone) {
+      return reply.status(400).send({ error: 'Bitte gib eine gültige Telefonnummer ein.' });
+    }
 
     const plan = PLANS[planId as PlanId];
     const priceId = interval === 'year' ? plan.stripePriceIdYearly : plan.stripePriceId;
@@ -419,26 +504,35 @@ export async function registerAuth(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Plan price not configured' });
     }
 
-    // Reject immediately if email is already claimed by a real user. Pending
+    // Reject immediately if email/phone is already claimed by a real user. Pending
     // rows are allowed to coexist — a second click while Stripe was open
     // shouldn't 409 the user, it should just start a fresh session.
-    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    const existing = await pool.query(
+      `SELECT email, phone_normalized FROM users
+        WHERE email = $1 OR phone_normalized = $2
+        LIMIT 1`,
+      [email, phone.phoneNormalized],
+    );
     if (existing.rowCount) {
-      return reply.status(409).send({ error: 'Email already registered' });
+      const row = existing.rows[0] as { email?: string | null; phone_normalized?: string | null };
+      const error = row.phone_normalized === phone.phoneNormalized
+        ? 'Telefonnummer ist bereits registriert'
+        : 'E-Mail ist bereits registriert';
+      return reply.status(409).send({ error });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
 
     // Create a Stripe Customer up front so the metadata on the subscription
     // has a stable id and the portal/receipt emails go to the right inbox.
-    const customer = await stripe.customers.create({ email, name: orgName });
+    const customer = await stripe.customers.create({ email, name: orgName, phone: phone.phoneNormalized });
 
     // Insert pending first — if Stripe call fails below we roll back here.
     const pendingRes = await pool.query(
-      `INSERT INTO pending_registrations (email, org_name, password_hash, plan_id, billing_interval, stripe_customer_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO pending_registrations (email, phone, phone_normalized, org_name, password_hash, plan_id, billing_interval, stripe_customer_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id`,
-      [email, orgName, passwordHash, planId, interval, customer.id],
+      [email, phone.phone, phone.phoneNormalized, orgName, passwordHash, planId, interval, customer.id],
     );
     const pendingId = pendingRes.rows[0].id as string;
 
@@ -533,10 +627,10 @@ export async function registerAuth(app: FastifyInstance) {
 
     // Look up the (now-existing) user/org either way. Webhook may have already
     // materialized before the browser got here; both paths land on the same row.
-    let lookup: { id: string; org_id: string; role: 'owner' | 'admin' | 'member'; email: string; org_name: string; org_slug: string } | null = null;
+    let lookup: { id: string; org_id: string; role: 'owner' | 'admin' | 'member'; email: string; phone: string | null; org_name: string; org_slug: string } | null = null;
     if (materialized) {
       const r = await pool.query(
-        `SELECT u.id, u.org_id, u.role, u.email, o.name as org_name, o.slug as org_slug
+        `SELECT u.id, u.org_id, u.role, u.email, u.phone, o.name as org_name, o.slug as org_slug
            FROM users u JOIN orgs o ON o.id = u.org_id
           WHERE u.id = $1`,
         [materialized.userId],
@@ -544,7 +638,7 @@ export async function registerAuth(app: FastifyInstance) {
       lookup = r.rows[0] ?? null;
     } else if (customerId) {
       const r = await pool.query(
-        `SELECT u.id, u.org_id, u.role, u.email, o.name as org_name, o.slug as org_slug
+        `SELECT u.id, u.org_id, u.role, u.email, u.phone, o.name as org_name, o.slug as org_slug
            FROM users u JOIN orgs o ON o.id = u.org_id
           WHERE o.stripe_customer_id = $1 AND u.role = 'owner'
           ORDER BY u.created_at
@@ -573,7 +667,7 @@ export async function registerAuth(app: FastifyInstance) {
     return reply.send({
       token,
       org: { id: lookup.org_id, name: lookup.org_name, slug: lookup.org_slug },
-      user: { id: lookup.id, email: lookup.email, role: lookup.role },
+      user: { id: lookup.id, email: lookup.email, phone: lookup.phone, role: lookup.role },
     });
   });
 
@@ -585,48 +679,59 @@ export async function registerAuth(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: 'Invalid input' });
     }
-    const { email, password } = parsed.data;
+    const { password } = parsed.data;
+    const loginIdentifier = normalizeLoginIdentifier(parsed.data.email);
 
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
     // Per-user soft-lock: stops a distributed-IP brute-force where the per-IP
     // rate-limit at the route level can't see the pattern. We check BEFORE
     // hitting the DB so a locked account doesn't cause bcrypt CPU burn either.
-    if (await isLoginLocked(email)) {
+    if (await isLoginLocked(loginIdentifier.lockKey)) {
       return reply.status(429).send({
         error: 'Account temporarily locked due to repeated failed logins. Try again in 30 minutes.',
       });
     }
 
+    if (loginIdentifier.kind === 'invalid') {
+      await recordLoginFailure(loginIdentifier.lockKey);
+      return reply.status(401).send({ error: 'Invalid credentials' });
+    }
+
     const result = await pool.query(
-      `SELECT u.id, u.email, u.role, u.password_hash, u.org_id, u.email_verified,
+      `SELECT u.id, u.email, u.phone, u.role, u.password_hash, u.org_id, u.email_verified,
               o.name as org_name, o.slug as org_slug
        FROM users u
        JOIN orgs o ON o.id = u.org_id
-       WHERE u.email = $1 AND u.is_active = true`,
-      [email],
+       WHERE u.is_active = true
+         AND (
+           ($1::text IS NOT NULL AND u.email = $1)
+           OR ($2::text IS NOT NULL AND u.phone_normalized = $2)
+         )
+       LIMIT 1`,
+      [loginIdentifier.email, loginIdentifier.phoneNormalized],
     );
 
     if (result.rowCount === 0) {
-      // Still record under the supplied email so a probe of unknown emails
+      // Still record under the supplied identifier so a probe of unknown users
       // can't bypass the counter by varying user-base.
-      await recordLoginFailure(email);
+      await recordLoginFailure(loginIdentifier.lockKey);
       return reply.status(401).send({ error: 'Invalid credentials' });
     }
 
     const user = result.rows[0];
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
-      const count = await recordLoginFailure(email);
+      const count = await recordLoginFailure(loginIdentifier.lockKey);
       if (count >= LOGIN_LOCK_AFTER) {
-        req.log.warn({ email, count }, 'login: per-user lock triggered');
+        req.log.warn({ identifierKind: loginIdentifier.kind, count }, 'login: per-user lock triggered');
       }
       return reply.status(401).send({ error: 'Invalid credentials' });
     }
 
     // Successful login → reset the failure counter so a long-lived legit
     // account doesn't accumulate stale fails over months.
-    await clearLoginFailures(email);
+    await clearLoginFailures(loginIdentifier.lockKey);
 
     // Email verification is informational only — never block login
 
@@ -640,7 +745,7 @@ export async function registerAuth(app: FastifyInstance) {
     return reply.send({
       token,
       org: { id: user.org_id, name: user.org_name, slug: user.org_slug },
-      user: { id: user.id, email: user.email, role: user.role },
+      user: { id: user.id, email: user.email, phone: user.phone ?? null, role: user.role },
     });
   });
 
@@ -650,7 +755,7 @@ export async function registerAuth(app: FastifyInstance) {
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
     const result = await pool.query(
-      `SELECT u.id, u.email, u.role, u.email_verified, o.id as org_id, o.name as org_name, o.slug as org_slug
+      `SELECT u.id, u.email, u.phone, u.role, u.email_verified, o.id as org_id, o.name as org_name, o.slug as org_slug
        FROM users u JOIN orgs o ON o.id = u.org_id
        WHERE u.id = $1`,
       [userId],
