@@ -1072,8 +1072,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           preferredStylist: null,
           staffId: null,
           instruction: staff.requested
-            ? 'Mitarbeiterkalender ist aktiv, aber der genannte Wunschfriseur wurde nicht gefunden. Frage nach einem anderen Mitarbeiter oder ob ein beliebiger freier Mitarbeiter passt.'
-            : 'Mitarbeiterkalender ist aktiv. Frage nach einem Wunschfriseur oder ob ein beliebiger freier Mitarbeiter passt, bevor du Termine suchst.',
+            ? 'Es gibt Personen-Kalender, aber der genannte Wunschfriseur wurde nicht gefunden. Frage nach einem anderen Mitarbeiter oder ob eine beliebige freie Person passt.'
+            : 'Es gibt Personen-Kalender. Frage nach einem Wunschfriseur oder ob eine beliebige freie Person passt, bevor du Termine suchst.',
         };
       } else {
         const teamMode = staff.staffModeActive && !staff.staffId;
@@ -1191,10 +1191,10 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           ok: false,
           status: staff.requested ? 'staff_not_found' : 'staff_required',
           error: staff.requested ? 'STAFF_NOT_FOUND' : 'STAFF_REQUIRED',
-          message: staff.requested ? 'Der Wunschfriseur wurde nicht eindeutig gefunden.' : 'Mitarbeiterkalender ist aktiv, aber kein Mitarbeiter wurde ausgewählt.',
+          message: staff.requested ? 'Der Wunschfriseur wurde nicht eindeutig gefunden.' : 'Es gibt Personen-Kalender, aber keine Person wurde ausgewählt.',
           instruction: staff.requested
-            ? 'Buche keinen allgemeinen Salon-Termin. Frage kurz nach einem anderen Mitarbeiter oder ob ein beliebiger verfuegbarer Mitarbeiter passt.'
-            : 'Buche keinen allgemeinen Salon-Termin. Frage nach Wunschfriseur oder ob ein beliebiger verfuegbarer Mitarbeiter passt.',
+            ? 'Buche nicht ohne Person. Frage kurz nach einem anderen Mitarbeiter oder ob eine beliebige verfuegbare Person passt.'
+            : 'Buche nicht ohne Person. Frage nach Wunschfriseur oder ob eine beliebige verfuegbare Person passt.',
           customerName,
           customerPhone,
           preferredTime,
