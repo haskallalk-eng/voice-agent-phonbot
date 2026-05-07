@@ -35,7 +35,7 @@ const DAY_SHORT = ['Mo','Di','Mi','Do','Fr','Sa','So'];
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 }
-function formatDateTime(iso: string) {
+function _formatDateTime(iso: string) {
   return new Date(iso).toLocaleString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
@@ -173,6 +173,35 @@ function minutesLabel(value: number): string {
   const hour = Math.floor(value / 60);
   const minute = value % 60;
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+type CalendarViewMode = 'week' | 'month';
+
+function startOfWeek(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d;
+}
+
+function addDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function formatWeekRange(start: Date): string {
+  const end = addDays(start, 6);
+  const startLabel = start.toLocaleDateString('de-DE', { day: '2-digit', month: 'short' });
+  const endLabel = end.toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' });
+  return `${startLabel} - ${endLabel}`;
+}
+
+function dayBounds(dateStr: string) {
+  return {
+    start: new Date(`${dateStr}T00:00:00`),
+    end: new Date(`${dateStr}T23:59:59.999`),
+  };
 }
 
 // ── Provider badge ────────────────────────────────────────────────────────────
@@ -320,7 +349,7 @@ function BookingModal({
 
 // ── Day Detail Drawer ─────────────────────────────────────────────────────────
 
-function DayDrawer({
+function _DayDrawer({
   date, bookings, blocks, externalEvents, schedule, onClose, onAddBooking, onDeleteBooking, onOpenCustomer, onAddBlock, onRemoveBlock,
 }: {
   date: Date;
@@ -662,6 +691,267 @@ function DayDrawer({
 }
 
 // ── Monthly Calendar Grid ─────────────────────────────────────────────────────
+
+function CalendarViewSwitch({ value, onChange }: { value: CalendarViewMode; onChange: (value: CalendarViewMode) => void }) {
+  return (
+    <div className="flex shrink-0 gap-1 rounded-2xl border border-white/8 bg-black/20 p-1">
+      {(['week', 'month'] as const).map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          onClick={() => onChange(mode)}
+          className={[
+            'rounded-xl px-3 py-2 text-xs font-semibold transition-all',
+            value === mode ? 'text-white shadow-[0_10px_30px_rgba(249,115,22,0.16)]' : 'text-white/35 hover:text-white/65',
+          ].join(' ')}
+          style={value === mode ? { background: 'linear-gradient(135deg, rgba(249,115,22,0.28), rgba(6,182,212,0.22))' } : undefined}
+        >
+          {mode === 'week' ? 'Woche' : 'Monat'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function WeeklyCalendar({
+  bookings, blocks, externalEvents, schedule, weekStart, onWeekStartChange, onBookingClick, onDeleteBooking, onAddBookingForDay,
+}: {
+  bookings: ChipyBooking[];
+  blocks: ChipyBlock[];
+  externalEvents: ExternalCalendarEvent[];
+  schedule?: ChipySchedule;
+  weekStart: Date;
+  onWeekStartChange: (date: Date) => void;
+  onBookingClick: (booking: ChipyBooking) => void;
+  onDeleteBooking?: (id: string) => void;
+  onAddBookingForDay?: (date: Date) => void;
+}) {
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart]);
+  const dayKeys = useMemo(() => new Set(weekDays.map(isoDate)), [weekDays]);
+
+  const bookingsByDay = useMemo(() => {
+    const map = new Map<string, ChipyBooking[]>();
+    for (const booking of bookings) {
+      const key = bookingDateKey(booking);
+      if (!dayKeys.has(key)) continue;
+      const arr = map.get(key);
+      if (arr) arr.push(booking);
+      else map.set(key, [booking]);
+    }
+    for (const arr of map.values()) arr.sort((a, b) => a.slot_time.localeCompare(b.slot_time));
+    return map;
+  }, [bookings, dayKeys]);
+
+  const blocksByDay = useMemo(() => {
+    const map = new Map<string, ChipyBlock[]>();
+    for (const block of blocks) {
+      if (!dayKeys.has(block.date)) continue;
+      const arr = map.get(block.date);
+      if (arr) arr.push(block);
+      else map.set(block.date, [block]);
+    }
+    return map;
+  }, [blocks, dayKeys]);
+
+  const externalByDay = useMemo(() => {
+    const map = new Map<string, ExternalCalendarEvent[]>();
+    for (const day of weekDays) {
+      const key = isoDate(day);
+      const bounds = dayBounds(key);
+      const dayEvents = externalEvents.filter((event) => {
+        const start = new Date(event.slot_start);
+        const end = new Date(event.slot_end);
+        return end > bounds.start && start < bounds.end;
+      });
+      if (dayEvents.length) map.set(key, dayEvents);
+    }
+    return map;
+  }, [externalEvents, weekDays]);
+
+  const getExternalRange = (event: ExternalCalendarEvent, dateStr: string) => {
+    const startKey = isoDate(new Date(event.slot_start));
+    const endKey = isoDate(new Date(event.slot_end));
+    const start = startKey < dateStr ? 0 : dateToLocalMinutes(event.slot_start);
+    const rawEnd = endKey > dateStr ? 24 * 60 : dateToLocalMinutes(event.slot_end);
+    return {
+      start: Math.max(0, start),
+      end: Math.min(24 * 60, Math.max(start + 15, rawEnd)),
+    };
+  };
+
+  const timelineBounds = useMemo(() => {
+    const starts = [8 * 60];
+    const ends = [18 * 60];
+    for (const day of weekDays) {
+      const key = isoDate(day);
+      const daySchedule = schedule?.[day.getDay().toString()];
+      if (daySchedule?.enabled) {
+        const start = clockToMinutes(daySchedule.start);
+        const end = clockToMinutes(daySchedule.end);
+        if (start !== null) starts.push(start);
+        if (end !== null) ends.push(end);
+      }
+      for (const booking of bookingsByDay.get(key) ?? []) {
+        const start = dateToLocalMinutes(booking.slot_time);
+        starts.push(start);
+        ends.push(start + bookingDuration(booking) + bookingBuffer(booking));
+      }
+      for (const block of blocksByDay.get(key) ?? []) {
+        if (!block.start_time || !block.end_time) continue;
+        const start = clockToMinutes(block.start_time);
+        const end = clockToMinutes(block.end_time);
+        if (start !== null) starts.push(start);
+        if (end !== null) ends.push(end);
+      }
+      for (const event of externalByDay.get(key) ?? []) {
+        if (event.all_day) continue;
+        const range = getExternalRange(event, key);
+        starts.push(range.start);
+        ends.push(range.end);
+      }
+    }
+    const start = Math.max(0, Math.floor(Math.min(...starts) / 60) * 60);
+    const end = Math.min(24 * 60, Math.ceil(Math.max(start + 60, ...ends) / 60) * 60);
+    return { start, end };
+  }, [blocksByDay, bookingsByDay, externalByDay, schedule, weekDays]);
+
+  const timelineStart = timelineBounds.start;
+  const timelineEnd = timelineBounds.end;
+  const timelineSpan = Math.max(60, timelineEnd - timelineStart);
+  const timelineHeight = Math.max(660, Math.ceil(timelineSpan * 1.45));
+  const hours = Array.from({ length: Math.floor(timelineSpan / 60) + 1 }, (_, index) => timelineStart + index * 60).filter((minutes) => minutes <= timelineEnd);
+  const topFor = (minutes: number) => `${((minutes - timelineStart) / timelineSpan) * 100}%`;
+  const heightFor = (start: number, end: number, min = 38) => Math.max(min, ((end - start) / timelineSpan) * timelineHeight);
+
+  return (
+    <div className="rounded-3xl border border-white/10 bg-black/18 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/28">Wochenansicht</p>
+          <h3 className="mt-1 text-sm font-bold text-white">{formatWeekRange(weekStart)}</h3>
+          <p className="mt-0.5 text-xs text-white/35">Termine werden mit echter Dauer und Puffer dargestellt.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => onWeekStartChange(addDays(weekStart, -7))} className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/55 hover:text-white">Vorherige</button>
+          <button type="button" onClick={() => onWeekStartChange(startOfWeek(new Date()))} className="rounded-xl border border-orange-400/20 bg-orange-500/10 px-3 py-2 text-xs font-semibold text-orange-100/75 hover:text-orange-50">Diese Woche</button>
+          <button type="button" onClick={() => onWeekStartChange(addDays(weekStart, 7))} className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/55 hover:text-white">Naechste</button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-2xl border border-white/8 bg-white/[0.025]">
+        <div className="min-w-[860px]">
+          <div className="grid border-b border-white/8" style={{ gridTemplateColumns: '64px repeat(7, minmax(108px, 1fr))' }}>
+            <div className="border-r border-white/8 bg-black/16" />
+            {weekDays.map((day, index) => {
+              const key = isoDate(day);
+              const isToday = key === todayISO();
+              const daySchedule = schedule?.[day.getDay().toString()];
+              const enabled = daySchedule?.enabled ?? true;
+              const fullDayBlock = (blocksByDay.get(key) ?? []).find((block) => !block.start_time);
+              const allDayExternal = (externalByDay.get(key) ?? []).filter((event) => event.all_day);
+              const canAdd = Boolean(onAddBookingForDay && enabled && !fullDayBlock);
+              return (
+                <div key={key} className={['min-h-[92px] border-r border-white/8 p-3 last:border-r-0', isToday ? 'bg-orange-500/[0.07]' : 'bg-black/10'].join(' ')}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/28">{DAY_SHORT[index]}</p>
+                      <p className={['mt-1 text-sm font-bold', isToday ? 'text-orange-200' : 'text-white'].join(' ')}>{day.getDate()}. {MONTH_NAMES[day.getMonth()]}</p>
+                    </div>
+                    {canAdd && (
+                      <button type="button" onClick={() => onAddBookingForDay?.(day)} className="rounded-lg border border-orange-400/20 bg-orange-500/10 px-2 py-1 text-xs font-bold text-orange-100/75 hover:text-orange-50" aria-label="Termin anlegen">+</button>
+                    )}
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    {!enabled && <p className="rounded-lg border border-red-400/20 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-200/75">Geschlossen</p>}
+                    {fullDayBlock && <p className="rounded-lg border border-red-400/20 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-200/75">Ganztag gesperrt</p>}
+                    {allDayExternal.slice(0, 2).map((event) => (
+                      <p key={`${event.provider}:${event.external_id}:all-day`} className="truncate rounded-lg border border-white/10 bg-white/[0.06] px-2 py-1 text-[10px] text-white/45">{event.summary || 'Externer Termin'}</p>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="grid" style={{ gridTemplateColumns: '64px repeat(7, minmax(108px, 1fr))' }}>
+            <div className="relative border-r border-white/8 bg-black/20" style={{ height: timelineHeight }}>
+              {hours.map((minutes) => (
+                <div key={minutes} className="absolute left-0 right-0 border-t border-white/[0.055]" style={{ top: topFor(minutes) }}>
+                  <span className="absolute right-2 -translate-y-1/2 font-mono text-[10px] text-white/32">{minutesLabel(minutes)}</span>
+                </div>
+              ))}
+            </div>
+
+            {weekDays.map((day) => {
+              const key = isoDate(day);
+              const timedBlocks = (blocksByDay.get(key) ?? []).filter((block) => block.start_time && block.end_time);
+              const dayBookings = bookingsByDay.get(key) ?? [];
+              const dayExternal = externalByDay.get(key) ?? [];
+              const isToday = key === todayISO();
+              return (
+                <div key={`${key}:body`} className={['relative border-r border-white/8 last:border-r-0', isToday ? 'bg-orange-500/[0.035]' : 'bg-transparent'].join(' ')} style={{ height: timelineHeight }}>
+                  {hours.map((minutes) => (
+                    <div key={`${key}:${minutes}`} className="absolute left-0 right-0 border-t border-white/[0.045]" style={{ top: topFor(minutes) }} />
+                  ))}
+
+                  {timedBlocks.map((block) => {
+                    const start = clockToMinutes(block.start_time) ?? timelineStart;
+                    const end = clockToMinutes(block.end_time) ?? timelineEnd;
+                    return (
+                      <div key={block.id} className="absolute left-1.5 right-1.5 overflow-hidden rounded-xl border border-red-400/25 bg-red-500/10 px-2 py-1.5 text-left" style={{ top: topFor(start), height: heightFor(start, end, 30) }}>
+                        <p className="truncate text-[10px] font-semibold text-red-100/80">{minutesLabel(start)}-{minutesLabel(end)}</p>
+                        <p className="truncate text-[10px] text-red-100/45">{block.reason || 'Gesperrt'}</p>
+                      </div>
+                    );
+                  })}
+
+                  {dayExternal.filter((event) => !event.all_day).map((event) => {
+                    const range = getExternalRange(event, key);
+                    return (
+                      <div key={`${event.provider}:${event.external_id}:${key}`} className="absolute left-1.5 right-1.5 overflow-hidden rounded-xl border border-white/10 bg-white/[0.07] px-2 py-1.5 text-left" style={{ top: topFor(range.start), height: heightFor(range.start, range.end, 30) }}>
+                        <p className="truncate text-[10px] font-semibold text-white/60">{event.summary || 'Externer Termin'}</p>
+                        <p className="truncate text-[10px] text-white/28">{minutesLabel(range.start)}-{minutesLabel(range.end)} · {event.provider}</p>
+                      </div>
+                    );
+                  })}
+
+                  {dayBookings.map((booking) => {
+                    const start = dateToLocalMinutes(booking.slot_time);
+                    const duration = bookingDuration(booking);
+                    const buffer = bookingBuffer(booking);
+                    const end = start + duration;
+                    const bufferEnd = end + buffer;
+                    return (
+                      <button key={booking.id} type="button" data-booking-id={booking.id} onClick={() => onBookingClick(booking)} className="absolute left-1.5 right-1.5 overflow-hidden rounded-2xl border border-orange-400/25 bg-gradient-to-br from-orange-500/[0.24] via-orange-500/[0.12] to-cyan-500/[0.16] px-2.5 py-2 text-left shadow-[0_14px_36px_rgba(0,0,0,0.28)] transition-transform hover:-translate-y-0.5" style={{ top: topFor(start), height: heightFor(start, bufferEnd, 44) }} title="Kundendetails oeffnen">
+                        <div className="relative z-10 pr-5">
+                          <p className="truncate text-xs font-bold text-white">{booking.customer_name}</p>
+                          <p className="mt-0.5 truncate text-[10px] text-orange-50/70">{minutesLabel(start)}-{minutesLabel(end)} · {duration} min</p>
+                          <p className="mt-0.5 truncate text-[10px] text-white/45">{booking.service || 'Termin'}</p>
+                          {buffer > 0 && <p className="mt-1 truncate text-[10px] text-cyan-100/55">Puffer bis {minutesLabel(bufferEnd)}</p>}
+                        </div>
+                        {buffer > 0 && <div className="absolute bottom-0 left-0 right-0 border-t border-dashed border-cyan-200/35 bg-cyan-300/[0.07]" style={{ height: `${Math.max(12, (buffer / Math.max(duration + buffer, 1)) * 100)}%` }} />}
+                        {onDeleteBooking && (
+                          <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); onDeleteBooking(booking.id); }} onKeyDown={(event) => {
+                            if (event.key !== 'Enter' && event.key !== ' ') return;
+                            event.preventDefault();
+                            event.stopPropagation();
+                            onDeleteBooking(booking.id);
+                          }} className="absolute right-1.5 top-1.5 z-20 rounded-lg px-1.5 py-0.5 text-[10px] text-red-100/40 hover:bg-red-500/15 hover:text-red-100" aria-label="Termin loeschen">
+                            x
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function MonthlyCalendar({
   bookings, blocks, onDayClick,
@@ -1494,6 +1784,8 @@ function StaffPanel({
   const [staffExternalEvents, setStaffExternalEvents] = useState<ExternalCalendarEvent[]>([]);
   const [selectedStaffDay, setSelectedStaffDay] = useState<Date | null>(null);
   const [showStaffAddBooking, setShowStaffAddBooking] = useState(false);
+  const [staffCalendarView, setStaffCalendarView] = useState<CalendarViewMode>('week');
+  const [staffWeekStart, setStaffWeekStart] = useState(startOfWeek(new Date()));
   const [staffStatus, setStaffStatus] = useState<CalendarStatus | null>(null);
   const [calcomKey, setCalcomKey] = useState('');
   const [connectionLoading, setConnectionLoading] = useState<string | null>(null);
@@ -1684,7 +1976,7 @@ function StaffPanel({
     setSelectedStaffDay(null);
   }
 
-  async function handleStaffAddBlock(date: Date, opts?: { start_time?: string; end_time?: string; reason?: string }) {
+  async function _handleStaffAddBlock(date: Date, opts?: { start_time?: string; end_time?: string; reason?: string }) {
     if (!selected) return;
     const dateStr = isoDate(date);
     try {
@@ -1877,11 +2169,40 @@ function StaffPanel({
               </div>
             </div>
 
-            <MonthlyCalendar
-              bookings={staffBookings}
-              blocks={staffBlocks}
-              onDayClick={(d) => { setSelectedStaffDay(d); setShowStaffAddBooking(false); }}
-            />
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-white/35">
+                {staffCalendarView === 'week'
+                  ? 'Exakte Wochenplanung mit Terminlaenge, Puffer und externen Belegungen.'
+                  : 'Monatsueberblick. Ein Tag springt direkt in die passende Woche.'}
+              </p>
+              <CalendarViewSwitch value={staffCalendarView} onChange={setStaffCalendarView} />
+            </div>
+
+            {staffCalendarView === 'month' ? (
+              <MonthlyCalendar
+                bookings={staffBookings}
+                blocks={staffBlocks}
+                onDayClick={(d) => {
+                  setStaffWeekStart(startOfWeek(d));
+                  setStaffCalendarView('week');
+                }}
+              />
+            ) : (
+              <WeeklyCalendar
+                bookings={staffBookings}
+                blocks={staffBlocks}
+                externalEvents={staffExternalEvents}
+                schedule={staffSchedule}
+                weekStart={staffWeekStart}
+                onWeekStartChange={setStaffWeekStart}
+                onBookingClick={(booking) => { void handleStaffOpenBookingCustomer(booking); }}
+                onDeleteBooking={(id) => { void handleStaffDeleteBooking(id); }}
+                onAddBookingForDay={(date) => {
+                  setSelectedStaffDay(date);
+                  setShowStaffAddBooking(true);
+                }}
+              />
+            )}
 
             <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/5 flex-wrap">
               <div className="flex items-center gap-1.5 text-xs text-white/45"><div className="w-3 h-3 rounded-sm border border-orange-500/40 bg-orange-500/10" />Termin</div>
@@ -1910,28 +2231,6 @@ function StaffPanel({
             />
           </div>
         </div>
-      )}
-
-      {selected && selectedStaffDay && !showStaffAddBooking && (
-        <DayDrawer
-          date={selectedStaffDay}
-          bookings={staffBookings}
-          blocks={staffBlocks}
-          externalEvents={staffExternalEvents}
-          schedule={staffSchedule}
-          onClose={() => setSelectedStaffDay(null)}
-          onAddBooking={() => setShowStaffAddBooking(true)}
-          onDeleteBooking={(id) => { void handleStaffDeleteBooking(id); }}
-          onOpenCustomer={(booking) => { void handleStaffOpenBookingCustomer(booking); }}
-          onAddBlock={(opts) => {
-            void handleStaffAddBlock(selectedStaffDay, opts);
-            if (!opts?.start_time) setSelectedStaffDay(null);
-          }}
-          onRemoveBlock={async (id) => {
-            await removeStaffChipyBlock(selected.id, id);
-            setStaffBlocks(prev => prev.filter(b => b.id !== id));
-          }}
-        />
       )}
 
       {selected && selectedStaffDay && showStaffAddBooking && (
@@ -1974,6 +2273,8 @@ export function CalendarPage({
   // Modal state
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [showAddBooking, setShowAddBooking] = useState(false);
+  const [calendarView, setCalendarView] = useState<CalendarViewMode>('week');
+  const [calendarWeekStart, setCalendarWeekStart] = useState(startOfWeek(new Date()));
 
   // Deep-link from dashboard click: arrive with ?focusBookingId → switch to
   // the calendar tab, open the day panel for that booking's date, and pulse
@@ -1983,7 +2284,8 @@ export function CalendarPage({
     const b = bookings.find((x) => x.id === focusBookingId);
     if (!b) return;
     setTab('calendar');
-    setSelectedDay(new Date(b.slot_time));
+    setCalendarView('week');
+    setCalendarWeekStart(startOfWeek(new Date(b.slot_time)));
     const t = window.setTimeout(() => {
       const el = document.querySelector<HTMLElement>(`[data-booking-id="${CSS.escape(b.id)}"]`);
       if (!el) return;
@@ -2060,7 +2362,7 @@ export function CalendarPage({
     setCalendarError('Zu diesem Termin wurde kein passender Kunde im Kundenmodul gefunden.');
   }
 
-  async function handleAddBlock(date: Date, opts?: { start_time?: string; end_time?: string; reason?: string }) {
+  async function _handleAddBlock(date: Date, opts?: { start_time?: string; end_time?: string; reason?: string }) {
     const dateStr = isoDate(date);
     try {
       const res = await addChipyBlock(dateStr, opts);
@@ -2204,11 +2506,42 @@ export function CalendarPage({
                   <p className="text-xs text-white/35 mt-1">{staffModeActive ? 'Für Bot-Buchungen durch Mitarbeiterkalender ersetzt.' : 'Allgemeine Termine, Sperren und freie Zeiten.'}</p>
                 </div>
               </div>
-              <MonthlyCalendar
-                bookings={bookings}
-                blocks={blocks}
-                onDayClick={(d) => { if (!staffModeActive) { setSelectedDay(d); setShowAddBooking(false); } }}
-              />
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-white/35">
+                  {calendarView === 'week'
+                    ? 'Google-aehnliche Wochenansicht mit echten Terminlaengen und Pufferzeiten.'
+                    : 'Monatsueberblick. Ein Tag oeffnet direkt die passende Woche.'}
+                </p>
+                <CalendarViewSwitch value={calendarView} onChange={setCalendarView} />
+              </div>
+
+              {calendarView === 'month' ? (
+                <MonthlyCalendar
+                  bookings={bookings}
+                  blocks={blocks}
+                  onDayClick={(d) => {
+                    if (!staffModeActive) {
+                      setCalendarWeekStart(startOfWeek(d));
+                      setCalendarView('week');
+                    }
+                  }}
+                />
+              ) : (
+                <WeeklyCalendar
+                  bookings={bookings}
+                  blocks={blocks}
+                  externalEvents={externalEvents}
+                  schedule={schedule}
+                  weekStart={calendarWeekStart}
+                  onWeekStartChange={setCalendarWeekStart}
+                  onBookingClick={(booking) => { void handleOpenBookingCustomer(booking); }}
+                  onDeleteBooking={(id) => { void handleDeleteBooking(id); }}
+                  onAddBookingForDay={staffModeActive ? undefined : (date) => {
+                    setSelectedDay(date);
+                    setShowAddBooking(true);
+                  }}
+                />
+              )}
 
               <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/5 flex-wrap">
                 <div className="flex items-center gap-1.5 text-xs text-white/40"><div className="w-3 h-3 rounded-sm border border-orange-500/40 bg-orange-500/10" />Termin</div>
@@ -2244,23 +2577,6 @@ export function CalendarPage({
           <StaffPanel onStaffChange={setStaffCount} onNavigate={onNavigate} />
         )}
       </div>
-
-      {/* Day detail drawer */}
-      {selectedDay && !showAddBooking && (
-        <DayDrawer
-          date={selectedDay}
-          bookings={bookings}
-          blocks={blocks}
-          externalEvents={externalEvents}
-          schedule={schedule}
-          onClose={() => setSelectedDay(null)}
-          onAddBooking={() => setShowAddBooking(true)}
-          onDeleteBooking={handleDeleteBooking}
-          onOpenCustomer={(booking) => { void handleOpenBookingCustomer(booking); }}
-          onAddBlock={(opts) => { handleAddBlock(selectedDay, opts); if (!opts?.start_time) setSelectedDay(null); }}
-          onRemoveBlock={async (id) => { await removeChipyBlock(id); setBlocks(prev => prev.filter(b => b.id !== id)); }}
-        />
-      )}
 
       {/* Booking create modal */}
       {showAddBooking && selectedDay && (
