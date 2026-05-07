@@ -255,6 +255,16 @@ export function ServicesEditor({
                 aria-label="Dauer"
                 className={`min-w-0 flex-1 sm:w-24 sm:flex-none ${inputBase}`}
               />
+              <input
+                type="number"
+                min={0}
+                max={180}
+                value={s.bufferMinutes ?? ''}
+                onChange={(e) => patch(s.id, { bufferMinutes: e.target.value === '' ? undefined : Number(e.target.value) })}
+                placeholder="Puffer"
+                aria-label="Puffer nach Termin in Minuten"
+                className={`w-20 shrink-0 ${inputBase}`}
+              />
               {tagStyle && (
                 <span
                   className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border shrink-0"
@@ -406,6 +416,7 @@ export function ServicesEditor({
       bits[0] = `${s.name}: ${price}`;
     }
     if (s.duration) bits[0] += ` (${s.duration})`;
+    if (typeof s.bufferMinutes === 'number' && s.bufferMinutes > 0) bits.push(`— ${s.bufferMinutes} min Puffer intern`);
     if (s.description?.trim()) bits.push(`— ${s.description.trim()}`);
     if (s.tag) bits.push(`· ${s.tag}`);
     return `- ${bits.join(' ')}`;

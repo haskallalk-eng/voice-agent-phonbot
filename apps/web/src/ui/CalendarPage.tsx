@@ -13,7 +13,7 @@ import {
 } from '../lib/api.js';
 import type { CalendarProvider, CalendarStatus, CalendarStaff, ChipySchedule, ChipyBlock, ChipyBooking, ChipyBookingInput, ExternalCalendarEvent, Customer, ServiceItem } from '../lib/api.js';
 import { FoxLogo } from './FoxLogo.js';
-import { HAIRDRESSER_SERVICE_PRESET, serviceItemsToStaffLabels } from '../lib/service-presets.js';
+import { HAIRDRESSER_SERVICE_PRESET, serviceItemToStaffLabel, serviceItemsToStaffLabels } from '../lib/service-presets.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -92,6 +92,89 @@ function deriveBusinessServiceLabels(input: { services?: ServiceItem[]; services
   return isHairdresserConfig(input) ? serviceItemsToStaffLabels(HAIRDRESSER_SERVICE_PRESET) : [];
 }
 
+type CalendarServiceOption = {
+  label: string;
+  durationMinutes: number;
+  bufferMinutes: number;
+};
+
+function parseMinutesText(value: string | null | undefined, fallback: number): number {
+  const raw = value?.trim().toLowerCase();
+  if (!raw) return fallback;
+  const normalized = raw.replace(',', '.');
+  const hours = Number(normalized.match(/(\d+(?:\.\d+)?)\s*(?:h|std|stunde|stunden)/)?.[1] ?? 0) * 60;
+  const minutes = Number(normalized.match(/(\d+(?:\.\d+)?)\s*(?:min|minute|minutes|minuten)/)?.[1] ?? 0);
+  const total = hours + minutes;
+  if (total > 0) return Math.min(480, Math.max(5, Math.round(total)));
+  const plain = Number(normalized.match(/\d+(?:\.\d+)?/)?.[0]);
+  return Number.isFinite(plain) ? Math.min(480, Math.max(5, Math.round(plain))) : fallback;
+}
+
+function parseBufferText(value: string | null | undefined): number {
+  const raw = value?.trim().toLowerCase();
+  if (!raw || !/puffer|buffer|pause|abstand/.test(raw)) return 0;
+  const match = raw.match(/(\d{1,3})\s*(?:min|minute|minutes|minuten)?\s*(?:puffer|buffer|pause|abstand)/)
+    ?? raw.match(/(?:puffer|buffer|pause|abstand)\s*(\d{1,3})/);
+  return match ? Math.min(180, Math.max(0, Number(match[1]))) : 0;
+}
+
+function normalizeServiceName(value: string | null | undefined): string {
+  return (value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\([^)]*\)/g, ' ')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function deriveServiceOptions(input: { services?: ServiceItem[]; servicesText?: string; industry?: string; businessDescription?: string }): CalendarServiceOption[] {
+  const source: ServiceItem[] = input.services?.length
+    ? input.services
+    : isHairdresserConfig(input)
+      ? HAIRDRESSER_SERVICE_PRESET
+      : splitServiceText(input.servicesText).map((name, index) => ({ id: `legacy-${index}`, name }));
+  return source
+    .filter((service) => service.name?.trim())
+    .map((service) => ({
+      label: serviceItemToStaffLabel(service),
+      durationMinutes: parseMinutesText(service.duration, 30),
+      bufferMinutes: Math.min(180, Math.max(0, service.bufferMinutes ?? parseBufferText(service.description))),
+    }));
+}
+
+function bookingDateKey(booking: ChipyBooking): string {
+  return isoDate(new Date(booking.slot_time));
+}
+
+function bookingDuration(booking: ChipyBooking): number {
+  return Math.min(480, Math.max(5, Math.round(booking.duration_minutes ?? parseMinutesText(booking.service, 30))));
+}
+
+function bookingBuffer(booking: ChipyBooking): number {
+  return Math.min(180, Math.max(0, Math.round(booking.buffer_minutes ?? parseBufferText(booking.service))));
+}
+
+function clockToMinutes(value: string | null | undefined): number | null {
+  const match = value?.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;
+  return hour * 60 + minute;
+}
+
+function dateToLocalMinutes(value: string): number {
+  const date = new Date(value);
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+function minutesLabel(value: number): string {
+  const hour = Math.floor(value / 60);
+  const minute = value % 60;
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
 // ── Provider badge ────────────────────────────────────────────────────────────
 
 type ProviderMeta = { label: string; color: string; bg: string; icon: string };
@@ -106,22 +189,34 @@ const DEFAULT_PROVIDER_META: ProviderMeta = { label: 'Chipy Kalender', color: '#
 // ── Booking Modal ─────────────────────────────────────────────────────────────
 
 function BookingModal({
-  date, onClose, onSave, createBookingApi,
+  date, onClose, onSave, createBookingApi, serviceOptions = [],
 }: {
   date: Date;
   onClose: () => void;
   onSave: (booking: ChipyBooking) => void;
   createBookingApi?: (data: ChipyBookingInput) => Promise<{ ok: boolean; booking: ChipyBooking }>;
+  serviceOptions?: CalendarServiceOption[];
 }) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [service, setService] = useState('');
   const [notes, setNotes] = useState('');
   const [time, setTime] = useState('09:00');
+  const [durationMinutes, setDurationMinutes] = useState(30);
+  const [bufferMinutes, setBufferMinutes] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const dateStr = isoDate(date);
+  const serviceListId = `service-options-${dateStr}`;
+
+  useEffect(() => {
+    const normalized = normalizeServiceName(service);
+    const match = serviceOptions.find((option) => normalizeServiceName(option.label) === normalized);
+    if (!match) return;
+    setDurationMinutes(match.durationMinutes);
+    setBufferMinutes(match.bufferMinutes);
+  }, [service, serviceOptions]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -130,7 +225,15 @@ function BookingModal({
     setError(null);
     try {
       const slotTime = new Date(`${dateStr}T${time}:00`).toISOString();
-      const res = await (createBookingApi ?? createChipyBooking)({ customer_name: name, customer_phone: phone, service: service || undefined, notes: notes || undefined, slot_time: slotTime });
+      const res = await (createBookingApi ?? createChipyBooking)({
+        customer_name: name,
+        customer_phone: phone,
+        service: service || undefined,
+        notes: notes || undefined,
+        slot_time: slotTime,
+        duration_minutes: durationMinutes,
+        buffer_minutes: bufferMinutes,
+      });
       onSave(res.booking);
     } catch (e: unknown) {
       setError((e instanceof Error ? e.message : null) ?? 'Fehler beim Speichern');
@@ -171,8 +274,25 @@ function BookingModal({
           </div>
           <div>
             <label className="block text-xs text-white/40 mb-1 uppercase tracking-wide">Service</label>
-            <input type="text" value={service} onChange={e => setService(e.target.value)} placeholder="z.B. Haarschnitt, Beratung…"
+            <input type="text" value={service} onChange={e => setService(e.target.value)} list={serviceOptions.length ? serviceListId : undefined} placeholder="z.B. Haarschnitt, Beratung..."
               className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-orange-500/40" />
+            {serviceOptions.length > 0 && (
+              <datalist id={serviceListId}>
+                {serviceOptions.map((option) => <option key={option.label} value={option.label} />)}
+              </datalist>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-white/40 mb-1 uppercase tracking-wide">Dauer</label>
+              <input type="number" min={5} max={480} value={durationMinutes} onChange={e => setDurationMinutes(Number(e.target.value))}
+                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500/40" />
+            </div>
+            <div>
+              <label className="block text-xs text-white/40 mb-1 uppercase tracking-wide">Puffer danach</label>
+              <input type="number" min={0} max={180} value={bufferMinutes} onChange={e => setBufferMinutes(Number(e.target.value))}
+                className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500/40" />
+            </div>
           </div>
           <div>
             <label className="block text-xs text-white/40 mb-1 uppercase tracking-wide">Notizen</label>
@@ -185,7 +305,7 @@ function BookingModal({
               className="flex-1 py-2.5 rounded-xl border border-white/10 text-sm text-white/50 hover:text-white hover:border-white/20 transition-all">
               Abbrechen
             </button>
-            <button type="submit" disabled={loading || !name || !phone}
+            <button type="submit" disabled={loading || !name || !phone || durationMinutes < 5 || bufferMinutes < 0}
               className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition-all"
               style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
               {loading ? 'Speichern…' : 'Termin anlegen'}
@@ -201,12 +321,13 @@ function BookingModal({
 // ── Day Detail Drawer ─────────────────────────────────────────────────────────
 
 function DayDrawer({
-  date, bookings, blocks, externalEvents, onClose, onAddBooking, onDeleteBooking, onOpenCustomer, onAddBlock, onRemoveBlock,
+  date, bookings, blocks, externalEvents, schedule, onClose, onAddBooking, onDeleteBooking, onOpenCustomer, onAddBlock, onRemoveBlock,
 }: {
   date: Date;
   bookings: ChipyBooking[];
   blocks: ChipyBlock[];
   externalEvents: ExternalCalendarEvent[];
+  schedule?: ChipySchedule;
   onClose: () => void;
   onAddBooking: () => void;
   onDeleteBooking: (id: string) => void;
@@ -218,7 +339,7 @@ function DayDrawer({
   const dayBlocks = blocks.filter(b => b.date === dateStr);
   const fullDayBlock = dayBlocks.find(b => !b.start_time);
   const isFullBlocked = !!fullDayBlock;
-  const dayBookings = bookings.filter(b => b.slot_time.startsWith(dateStr));
+  const dayBookings = bookings.filter(b => bookingDateKey(b) === dateStr).sort((a, b) => a.slot_time.localeCompare(b.slot_time));
   // Filter external events to this day — provider returns UTC timestamps,
   // we compare against local date string. Events that span midnight show
   // up on both days (intentional — the user sees the "busy" bleed).
@@ -229,6 +350,38 @@ function DayDrawer({
     const dayEnd = new Date(`${dateStr}T23:59:59.999`);
     return e > dayStart && s < dayEnd;
   });
+
+  const daySchedule = schedule?.[date.getDay().toString()];
+  const baseStart = daySchedule?.enabled ? clockToMinutes(daySchedule.start) ?? 8 * 60 : 8 * 60;
+  const baseEnd = daySchedule?.enabled ? clockToMinutes(daySchedule.end) ?? 18 * 60 : 18 * 60;
+  const timedBlockRanges = dayBlocks
+    .filter((block) => block.start_time && block.end_time)
+    .map((block) => ({
+      block,
+      start: clockToMinutes(block.start_time) ?? baseStart,
+      end: clockToMinutes(block.end_time) ?? baseEnd,
+    }));
+  const bookingRanges = dayBookings.map((booking) => {
+    const start = dateToLocalMinutes(booking.slot_time);
+    const duration = bookingDuration(booking);
+    const buffer = bookingBuffer(booking);
+    return { booking, start, end: start + duration, bufferEnd: start + duration + buffer, duration, buffer };
+  });
+  const externalRanges = dayExternal
+    .filter((event) => !event.all_day)
+    .map((event) => {
+      const startKey = isoDate(new Date(event.slot_start));
+      const endKey = isoDate(new Date(event.slot_end));
+      const start = startKey < dateStr ? 0 : dateToLocalMinutes(event.slot_start);
+      const rawEnd = endKey > dateStr ? 24 * 60 : dateToLocalMinutes(event.slot_end);
+      return { event, start, end: Math.max(start + 15, rawEnd) };
+    });
+  const timelineStart = Math.max(0, Math.min(baseStart, ...bookingRanges.map((item) => item.start), ...externalRanges.map((item) => item.start), ...timedBlockRanges.map((item) => item.start)));
+  const timelineEnd = Math.min(24 * 60, Math.max(baseEnd, ...bookingRanges.map((item) => item.bufferEnd), ...externalRanges.map((item) => item.end), ...timedBlockRanges.map((item) => item.end)));
+  const timelineSpan = Math.max(60, timelineEnd - timelineStart);
+  const timelineHeight = Math.max(520, Math.ceil(timelineSpan * 1.35));
+  const topFor = (minutes: number) => `${((minutes - timelineStart) / timelineSpan) * 100}%`;
+  const heightFor = (start: number, end: number, min = 34) => Math.max(min, ((end - start) / timelineSpan) * timelineHeight);
 
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -255,6 +408,7 @@ function DayDrawer({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
           <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-200/60">Tagesansicht</p>
             <p id="day-drawer-title" className="text-sm font-bold text-white">
               {date.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
             </p>
@@ -272,6 +426,67 @@ function DayDrawer({
         </div>
 
         <div className="px-5 py-4 max-h-[calc(100vh-12rem)] overflow-y-auto space-y-4">
+          <div className="rounded-2xl border border-white/8 bg-black/18 p-3">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold text-white/75">{minutesLabel(timelineStart)} bis {minutesLabel(timelineEnd)}</p>
+                <p className="text-[10px] text-white/32">Termine werden nach echter Dauer und Puffer dargestellt.</p>
+              </div>
+              {!daySchedule?.enabled && <span className="rounded-full border border-red-400/20 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-200/80">Geschlossen</span>}
+            </div>
+            <div className="relative overflow-hidden rounded-xl border border-white/8 bg-white/[0.025]" style={{ height: timelineHeight }}>
+              {Array.from({ length: Math.floor(timelineSpan / 60) + 1 }).map((_, index) => {
+                const minutes = timelineStart + index * 60;
+                if (minutes > timelineEnd) return null;
+                return (
+                  <div key={minutes} className="absolute left-0 right-0 border-t border-white/[0.055]" style={{ top: topFor(minutes) }}>
+                    <span className="absolute left-2 -translate-y-1/2 rounded bg-[#14141F] px-1.5 py-0.5 font-mono text-[10px] text-white/35">{minutesLabel(minutes)}</span>
+                  </div>
+                );
+              })}
+
+              {timedBlockRanges.map(({ block, start, end }) => (
+                <div
+                  key={block.id}
+                  className="absolute left-14 right-3 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs text-red-100/80"
+                  style={{ top: topFor(start), height: heightFor(start, end, 30) }}
+                >
+                  <p className="font-semibold">{minutesLabel(start)}-{minutesLabel(end)} gesperrt</p>
+                  {block.reason && <p className="mt-0.5 truncate text-red-100/45">{block.reason}</p>}
+                </div>
+              ))}
+
+              {externalRanges.map(({ event, start, end }) => (
+                <div
+                  key={`${event.provider}:${event.external_id}:timeline`}
+                  className="absolute left-14 right-3 rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2 text-xs text-white/65"
+                  style={{ top: topFor(start), height: heightFor(start, end, 30) }}
+                >
+                  <p className="truncate font-semibold">{event.summary || 'Externer Termin'}</p>
+                  <p className="mt-0.5 text-[10px] text-white/32">{minutesLabel(start)}-{minutesLabel(end)} · {event.provider}</p>
+                </div>
+              ))}
+
+              {bookingRanges.map(({ booking, start, end, bufferEnd, duration, buffer }) => (
+                <button
+                  key={`${booking.id}:timeline`}
+                  type="button"
+                  data-booking-id={booking.id}
+                  onClick={() => onOpenCustomer(booking)}
+                  className="absolute left-14 right-3 overflow-hidden rounded-2xl border border-orange-400/25 bg-gradient-to-r from-orange-500/[0.22] via-orange-500/[0.12] to-cyan-500/[0.13] px-3 py-2 text-left shadow-[0_14px_38px_rgba(0,0,0,0.24)]"
+                  style={{ top: topFor(start), height: heightFor(start, bufferEnd, 42) }}
+                  title="Kundendetails öffnen"
+                >
+                  <div className="relative z-10">
+                    <p className="truncate text-sm font-bold text-white">{booking.customer_name}</p>
+                    <p className="mt-0.5 truncate text-[11px] text-orange-50/65">{booking.service || 'Termin'} · {minutesLabel(start)}-{minutesLabel(end)} · {duration} min</p>
+                    {buffer > 0 && <p className="mt-1 text-[10px] text-cyan-100/55">Puffer bis {minutesLabel(bufferEnd)} ({buffer} min)</p>}
+                  </div>
+                  {buffer > 0 && <div className="absolute bottom-0 left-0 right-0 border-t border-dashed border-cyan-200/35 bg-cyan-300/[0.06]" style={{ height: `${Math.max(12, (buffer / Math.max(duration + buffer, 1)) * 100)}%` }} />}
+                </button>
+              ))}
+            </div>
+          </div>
           {/* Active blocks list */}
           {dayBlocks.length > 0 && (
             <div className="space-y-1.5">
@@ -470,7 +685,7 @@ function MonthlyCalendar({
   const bookingsByDay = useMemo(() => {
     const map = new Map<string, ChipyBooking[]>();
     for (const b of bookings) {
-      const ds = b.slot_time.slice(0, 10);
+      const ds = bookingDateKey(b);
       const arr = map.get(ds);
       if (arr) arr.push(b);
       else map.set(ds, [b]);
@@ -1270,6 +1485,7 @@ function StaffPanel({
   const [createRole, setCreateRole] = useState('Friseur/in');
   const [editRole, setEditRole] = useState('');
   const [businessServices, setBusinessServices] = useState<string[]>([]);
+  const [businessServiceOptions, setBusinessServiceOptions] = useState<CalendarServiceOption[]>([]);
   const [savingStaff, setSavingStaff] = useState(false);
   const [savingServicesId, setSavingServicesId] = useState<string | null>(null);
   const [staffSchedule, setStaffSchedule] = useState<ChipySchedule>(DEFAULT_SCHEDULE);
@@ -1286,8 +1502,14 @@ function StaffPanel({
 
   useEffect(() => {
     getAgentConfig()
-      .then((cfg) => setBusinessServices(deriveBusinessServiceLabels(cfg)))
-      .catch(() => setBusinessServices(serviceItemsToStaffLabels(HAIRDRESSER_SERVICE_PRESET)));
+      .then((cfg) => {
+        setBusinessServices(deriveBusinessServiceLabels(cfg));
+        setBusinessServiceOptions(deriveServiceOptions(cfg));
+      })
+      .catch(() => {
+        setBusinessServices(serviceItemsToStaffLabels(HAIRDRESSER_SERVICE_PRESET));
+        setBusinessServiceOptions(deriveServiceOptions({ services: HAIRDRESSER_SERVICE_PRESET }));
+      });
   }, []);
 
   const loadStaff = useCallback(async () => {
@@ -1696,6 +1918,7 @@ function StaffPanel({
           bookings={staffBookings}
           blocks={staffBlocks}
           externalEvents={staffExternalEvents}
+          schedule={staffSchedule}
           onClose={() => setSelectedStaffDay(null)}
           onAddBooking={() => setShowStaffAddBooking(true)}
           onDeleteBooking={(id) => { void handleStaffDeleteBooking(id); }}
@@ -1714,6 +1937,7 @@ function StaffPanel({
       {selected && selectedStaffDay && showStaffAddBooking && (
         <BookingModal
           date={selectedStaffDay}
+          serviceOptions={businessServiceOptions}
           createBookingApi={(data) => createStaffChipyBooking(selected.id, data)}
           onClose={() => setShowStaffAddBooking(false)}
           onSave={handleStaffBookingSaved}
@@ -1745,6 +1969,7 @@ export function CalendarPage({
   // when no kalender is connected, which is the common case for new orgs.
   const [externalEvents, setExternalEvents] = useState<ExternalCalendarEvent[]>([]);
   const [calendarError, setCalendarError] = useState<string | null>(null);
+  const [serviceOptions, setServiceOptions] = useState<CalendarServiceOption[]>([]);
 
   // Modal state
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
@@ -1793,6 +2018,11 @@ export function CalendarPage({
   }, []);
 
   useEffect(() => { loadChipy(); }, [loadChipy]);
+  useEffect(() => {
+    getAgentConfig()
+      .then((cfg) => setServiceOptions(deriveServiceOptions(cfg)))
+      .catch(() => setServiceOptions(deriveServiceOptions({ services: HAIRDRESSER_SERVICE_PRESET })));
+  }, []);
   useEffect(() => {
     getCalendarStaff()
       .then((res) => setStaffCount(res.staff.length))
@@ -2022,6 +2252,7 @@ export function CalendarPage({
           bookings={bookings}
           blocks={blocks}
           externalEvents={externalEvents}
+          schedule={schedule}
           onClose={() => setSelectedDay(null)}
           onAddBooking={() => setShowAddBooking(true)}
           onDeleteBooking={handleDeleteBooking}
@@ -2035,6 +2266,7 @@ export function CalendarPage({
       {showAddBooking && selectedDay && (
         <BookingModal
           date={selectedDay}
+          serviceOptions={serviceOptions}
           onClose={() => { setShowAddBooking(false); }}
           onSave={handleBookingSaved}
         />
