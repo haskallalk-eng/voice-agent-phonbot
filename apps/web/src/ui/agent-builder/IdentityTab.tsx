@@ -147,7 +147,7 @@ export function IdentityTab({
           </div>
           <div className="block">
             <span className="text-sm font-medium text-white/70">Services / Angebote</span>
-            <p className="text-[11px] text-white/40 mt-0.5 mb-2">Name, Preis und Dauer direkt erfassen — Chipy kann so sauber Preise nennen und Termine vorschlagen. Klick den Pfeil für Beschreibung, Preisspanne oder Tag.</p>
+            <p className="text-[11px] text-white/40 mt-0.5 mb-2">Name, Preis, Dauer und Puffer direkt erfassen — Chipy kann Termine dadurch mit echter Länge und Abstand buchen. Klick den Pfeil für Beschreibung, Preisspanne oder Tag.</p>
             <ServicesEditor
               value={config.services ?? []}
               legacyText={config.servicesText ?? ''}

@@ -359,6 +359,7 @@ export type ServiceItem = {
   priceFrom?: boolean;     // true → render as "ab 28 €"
   priceUpTo?: string;      // "60" → renders as "28 €–60 €"
   duration?: string;       // "30 min" / "2 h" etc., free-text
+  bufferMinutes?: number;  // internal cleanup/prep gap after this service
   description?: string;    // short note shown after the price
   tag?: 'BELIEBT' | 'NEU' | 'AKTION' | null;
 };
@@ -966,6 +967,8 @@ export type ChipyBlock = {
 export type ChipyBooking = {
   id: string; customer_name: string; customer_phone: string;
   service: string | null; notes: string | null; slot_time: string;
+  duration_minutes?: number | null;
+  buffer_minutes?: number | null;
 };
 export type ChipyBookingInput = {
   customer_name: string;
@@ -973,6 +976,8 @@ export type ChipyBookingInput = {
   service?: string;
   notes?: string;
   slot_time: string;
+  duration_minutes?: number;
+  buffer_minutes?: number;
 };
 
 export function getChipyCalendar() {

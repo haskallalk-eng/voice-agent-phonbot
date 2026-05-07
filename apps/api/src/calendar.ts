@@ -165,6 +165,55 @@ type CalendarStaff = {
 
 // ── DB Migration ──────────────────────────────────────────────────────────────
 
+type BookingTiming = {
+  durationMinutes: number;
+  bufferMinutes: number;
+};
+
+type CalendarServiceConfig = {
+  name: string;
+  duration?: string;
+  bufferMinutes?: number;
+};
+
+const DEFAULT_BOOKING_TIMING: BookingTiming = { durationMinutes: 30, bufferMinutes: 0 };
+const SLOT_STEP_MINUTES = 15;
+
+function clampMinutes(value: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function parseDurationMinutes(value: string | null | undefined): number | null {
+  const raw = value?.trim().toLowerCase();
+  if (!raw) return null;
+  const normalized = raw.replace(',', '.');
+  const hourMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(?:h|std|stunde|stunden)/);
+  const minMatch = normalized.match(/(\d+(?:\.\d+)?)\s*(?:min|minute|minutes|minuten)/);
+  const hours = hourMatch ? Number(hourMatch[1]) * 60 : 0;
+  const minutes = minMatch ? Number(minMatch[1]) : 0;
+  const total = hours + minutes;
+  if (total > 0) return clampMinutes(total, 5, 480, DEFAULT_BOOKING_TIMING.durationMinutes);
+  const plain = Number(normalized.match(/\d+(?:\.\d+)?/)?.[0]);
+  return Number.isFinite(plain) ? clampMinutes(plain, 5, 480, DEFAULT_BOOKING_TIMING.durationMinutes) : null;
+}
+
+function parseBufferMinutes(value: string | null | undefined): number | null {
+  const raw = value?.trim().toLowerCase();
+  if (!raw || !/puffer|buffer|pause|abstand/.test(raw)) return null;
+  const match = raw.match(/(\d{1,3})\s*(?:min|minute|minutes|minuten)?\s*(?:puffer|buffer|pause|abstand)/)
+    ?? raw.match(/(?:puffer|buffer|pause|abstand)\s*(\d{1,3})/);
+  if (!match) return null;
+  return clampMinutes(Number(match[1]), 0, 180, DEFAULT_BOOKING_TIMING.bufferMinutes);
+}
+
+function normalizeBookingTiming(input: { durationMinutes?: number | null; bufferMinutes?: number | null }): BookingTiming {
+  return {
+    durationMinutes: clampMinutes(input.durationMinutes ?? DEFAULT_BOOKING_TIMING.durationMinutes, 5, 480, DEFAULT_BOOKING_TIMING.durationMinutes),
+    bufferMinutes: clampMinutes(input.bufferMinutes ?? DEFAULT_BOOKING_TIMING.bufferMinutes, 0, 180, DEFAULT_BOOKING_TIMING.bufferMinutes),
+  };
+}
+
 export async function migrateCalendar(): Promise<void> {
   if (!pool) return;
 
@@ -353,6 +402,8 @@ export async function migrateCalendar(): Promise<void> {
   `);
   await pool.query(`ALTER TABLE chipy_bookings ADD COLUMN IF NOT EXISTS source_call_id TEXT`);
   await pool.query(`ALTER TABLE chipy_bookings ADD COLUMN IF NOT EXISTS external_refs JSONB NOT NULL DEFAULT '{}'::jsonb`);
+  await pool.query(`ALTER TABLE chipy_bookings ADD COLUMN IF NOT EXISTS duration_minutes INT NOT NULL DEFAULT 30`);
+  await pool.query(`ALTER TABLE chipy_bookings ADD COLUMN IF NOT EXISTS buffer_minutes INT NOT NULL DEFAULT 0`);
 
   // Prevent double bookings for the same org + slot time.
   // PLAN #2: on existing servers, duplicate rows may already exist (before this
@@ -425,6 +476,8 @@ export async function migrateCalendar(): Promise<void> {
       created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  await pool.query(`ALTER TABLE staff_chipy_bookings ADD COLUMN IF NOT EXISTS duration_minutes INT NOT NULL DEFAULT 30`);
+  await pool.query(`ALTER TABLE staff_chipy_bookings ADD COLUMN IF NOT EXISTS buffer_minutes INT NOT NULL DEFAULT 0`);
   await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS staff_chipy_bookings_slot_uniq
       ON staff_chipy_bookings(org_id, staff_id, slot_time);
@@ -541,6 +594,75 @@ function staffSupportsService(member: CalendarStaff, requestedService?: string |
   });
 }
 
+function serviceNamesMatch(requestedService: string | null | undefined, offeredName: string | null | undefined): boolean {
+  const requested = normalizeServiceLookup(requestedService);
+  const offered = normalizeServiceLookup(offeredName);
+  if (!requested || !offered) return false;
+  if (offered.includes(requested) || requested.includes(offered)) return true;
+  const requestedTokens = serviceAliasTokens(requested);
+  const offeredTokens = serviceAliasTokens(offered);
+  if (requestedTokens.has('herrenschnitt') && offeredTokens.has('damenhaarschnitt') && !offeredTokens.has('herrenschnitt')) return false;
+  if (requestedTokens.has('damenhaarschnitt') && offeredTokens.has('herrenschnitt') && !offeredTokens.has('damenhaarschnitt')) return false;
+  for (const token of requestedTokens) {
+    if (offeredTokens.has(token)) return true;
+  }
+  return false;
+}
+
+function parseServiceConfigs(raw: unknown): CalendarServiceConfig[] {
+  if (!Array.isArray(raw)) return [];
+  const out: CalendarServiceConfig[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Record<string, unknown>;
+    const name = typeof record.name === 'string' ? record.name.trim() : '';
+    if (!name) continue;
+    out.push({
+      name,
+      duration: typeof record.duration === 'string' ? record.duration : undefined,
+      bufferMinutes: typeof record.bufferMinutes === 'number' ? record.bufferMinutes : undefined,
+    });
+  }
+  return out;
+}
+
+async function getOrgServiceConfigs(orgId: string): Promise<CalendarServiceConfig[]> {
+  if (!pool) return [];
+  const res = await pool.query<{ services: unknown }>(
+    `SELECT data->'services' AS services
+       FROM agent_configs
+      WHERE org_id = $1 OR tenant_id = $1::text
+      ORDER BY updated_at DESC
+      LIMIT 1`,
+    [orgId],
+  );
+  return parseServiceConfigs(res.rows[0]?.services);
+}
+
+async function resolveBookingTiming(
+  orgId: string,
+  requestedService?: string | null,
+  overrides: { durationMinutes?: number | null; bufferMinutes?: number | null } = {},
+): Promise<BookingTiming> {
+  if (overrides.durationMinutes || overrides.bufferMinutes !== undefined) {
+    return normalizeBookingTiming(overrides);
+  }
+
+  const fromServiceText = normalizeBookingTiming({
+    durationMinutes: parseDurationMinutes(requestedService),
+    bufferMinutes: parseBufferMinutes(requestedService),
+  });
+
+  const services = await getOrgServiceConfigs(orgId).catch(() => []);
+  const matched = services.find((service) => serviceNamesMatch(requestedService, service.name));
+  if (!matched) return fromServiceText;
+
+  return normalizeBookingTiming({
+    durationMinutes: parseDurationMinutes(matched.duration) ?? fromServiceText.durationMinutes,
+    bufferMinutes: matched.bufferMinutes ?? fromServiceText.bufferMinutes,
+  });
+}
+
 async function assertStaffBelongs(orgId: string, staffId?: string | null): Promise<string | null> {
   if (!staffId) return null;
   if (!pool) return staffId;
@@ -564,11 +686,16 @@ async function getCalendarStaff(orgId: string): Promise<CalendarStaff[]> {
   return res.rows;
 }
 
-async function rankAvailableStaffForSlot(orgId: string, staff: CalendarStaff[], slotTime: Date): Promise<CalendarStaff[]> {
+async function rankAvailableStaffForSlot(
+  orgId: string,
+  staff: CalendarStaff[],
+  slotTime: Date,
+  timing: BookingTiming = DEFAULT_BOOKING_TIMING,
+): Promise<CalendarStaff[]> {
   const availability = await Promise.all(
     staff.map(async (member) => ({
       member,
-      available: await isChipySlotAvailable(orgId, slotTime, member.id).catch(() => false),
+      available: await isChipySlotAvailable(orgId, slotTime, member.id, timing).catch(() => false),
     })),
   );
   const available = availability.filter((item) => item.available).map((item) => item.member);
@@ -997,7 +1124,7 @@ export async function getValidMsToken(orgId: string): Promise<string | null> {
 
 // ── Microsoft Graph helpers ───────────────────────────────────────────────────
 
-async function msFindSlots(token: string, email: string): Promise<string[]> {
+async function msFindSlots(token: string, email: string, timing: BookingTiming = DEFAULT_BOOKING_TIMING): Promise<string[]> {
   const now = new Date();
   const timeMax = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
@@ -1032,7 +1159,7 @@ async function msFindSlots(token: string, email: string): Promise<string[]> {
       end: i.end.dateTime,
     }));
 
-    return generateFreeSlots(busyPeriods);
+    return generateFreeSlots(busyPeriods, timing);
   } catch {
     return [];
   }
@@ -1040,11 +1167,11 @@ async function msFindSlots(token: string, email: string): Promise<string[]> {
 
 async function msBookSlot(
   token: string,
-  opts: { customerName: string; customerPhone: string; time: string; service: string; notes?: string },
+  opts: { customerName: string; customerPhone: string; time: string; service: string; notes?: string; durationMinutes?: number },
 ): Promise<{ ok: boolean; eventId?: string; error?: string }> {
   const startTime = parseSlotTime(opts.time);
   if (!startTime) return { ok: false, error: `Cannot parse time: ${opts.time}` };
-  const endTime = new Date(startTime.getTime() + 30 * 60 * 1000);
+  const endTime = new Date(startTime.getTime() + clampMinutes(opts.durationMinutes ?? 30, 5, 480, 30) * 60 * 1000);
 
   try {
     const resp = await calFetch('https://graph.microsoft.com/v1.0/me/calendar/events', {
@@ -1174,22 +1301,27 @@ const DAY_LABELS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'] as const;
 
 function generateFreeSlots(
   busyPeriods: { start: string; end: string }[],
+  timing: BookingTiming = DEFAULT_BOOKING_TIMING,
 ): string[] {
   const slots: string[] = [];
   const now = new Date();
+  const occupiedMs = (timing.durationMinutes + timing.bufferMinutes) * 60 * 1000;
 
   for (let d = 0; d < 7; d++) {
     const day = new Date(now);
     day.setDate(now.getDate() + d);
     day.setHours(0, 0, 0, 0);
+    const dayClose = new Date(day);
+    dayClose.setHours(18, 0, 0, 0);
 
     for (let h = 8; h < 18; h++) {
-      for (const m of [0, 30] as const) {
+      for (let m = 0; m < 60; m += SLOT_STEP_MINUTES) {
         const slotStart = new Date(day);
         slotStart.setHours(h, m, 0, 0);
-        const slotEnd = new Date(slotStart.getTime() + 30 * 60 * 1000);
+        const slotEnd = new Date(slotStart.getTime() + occupiedMs);
 
         if (slotStart <= now) continue; // skip past slots
+        if (slotEnd > dayClose) continue;
 
         const isBusy = busyPeriods.some((bp) => {
           const bStart = new Date(bp.start);
@@ -1398,7 +1530,7 @@ async function getChipySchedule(orgId: string, staffId?: string | null): Promise
         `SELECT
            (slot_time AT TIME ZONE 'Europe/Berlin')::date::text AS date,
            (slot_time AT TIME ZONE 'Europe/Berlin')::time::text AS start_time,
-           ((slot_time AT TIME ZONE 'Europe/Berlin') + interval '30 minutes')::time::text AS end_time
+           ((slot_time AT TIME ZONE 'Europe/Berlin') + ((duration_minutes + buffer_minutes) * interval '1 minute'))::time::text AS end_time
          FROM staff_chipy_bookings
          WHERE org_id = $1 AND staff_id = $2 AND slot_time >= now()
          ORDER BY slot_time`,
@@ -1429,7 +1561,7 @@ async function getChipySchedule(orgId: string, staffId?: string | null): Promise
       `SELECT
          (slot_time AT TIME ZONE 'Europe/Berlin')::date::text AS date,
          (slot_time AT TIME ZONE 'Europe/Berlin')::time::text AS start_time,
-         ((slot_time AT TIME ZONE 'Europe/Berlin') + interval '30 minutes')::time::text AS end_time
+         ((slot_time AT TIME ZONE 'Europe/Berlin') + ((duration_minutes + buffer_minutes) * interval '1 minute'))::time::text AS end_time
        FROM chipy_bookings
        WHERE org_id = $1 AND slot_time >= now()
        ORDER BY slot_time`,
@@ -1452,15 +1584,38 @@ async function getChipySchedule(orgId: string, staffId?: string | null): Promise
   return { schedule, blocks, timeBlocks };
 }
 
+function clockMinutes(value: string | null | undefined): number | null {
+  const match = value?.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return hour * 60 + minute;
+}
+
+function rangesOverlap(start: number, end: number, busyStart: number, busyEnd: number): boolean {
+  return start < busyEnd && end > busyStart;
+}
+
+function timeBlockOverlaps(block: ChipyBlock, startMin: number, endMin: number): boolean {
+  const blockStart = clockMinutes(block.start_time);
+  const blockEnd = clockMinutes(block.end_time);
+  if (blockStart === null || blockEnd === null) return true;
+  return rangesOverlap(startMin, endMin, blockStart, blockEnd);
+}
+
 function generateChipySlots(
   schedule: ChipySchedule,
   blocks: string[],
   timeBlocks: ChipyBlock[] = [],
   onlyDate?: string | null,
+  timing: BookingTiming = DEFAULT_BOOKING_TIMING,
 ): string[] {
   const slots: string[] = [];
   const now = new Date();
   const blockedSet = new Set(blocks);
+  const occupiedMinutes = timing.durationMinutes + timing.bufferMinutes;
 
   for (let d = 0; d < 14; d++) {
     const day = new Date(now);
@@ -1475,27 +1630,26 @@ function generateChipySlots(
     if (onlyDate && dateStr !== onlyDate) continue;
     if (blockedSet.has(dateStr)) continue;
 
-    const [startH] = dayConfig.start.split(':').map(Number);
-    const [endH] = dayConfig.end.split(':').map(Number);
+    const startMin = clockMinutes(dayConfig.start) ?? 9 * 60;
+    const endMin = clockMinutes(dayConfig.end) ?? 17 * 60;
+    const lastStart = endMin - occupiedMinutes;
+    if (lastStart < startMin) continue;
 
     // Get time-specific blocks for this date
     const dayTimeBlocks = timeBlocks.filter(b => b.date === dateStr);
 
-    for (let h = (startH ?? 9); h < (endH ?? 17); h++) {
-      for (const m of [0, 30] as const) {
-        const slotStart = new Date(day);
-        slotStart.setHours(h, m, 0, 0);
-        if (slotStart <= now) continue;
+    for (let minutes = startMin; minutes <= lastStart; minutes += SLOT_STEP_MINUTES) {
+      const h = Math.floor(minutes / 60);
+      const m = minutes % 60;
+      const slotStart = new Date(day);
+      slotStart.setHours(h, m, 0, 0);
+      if (slotStart <= now) continue;
 
-        // Check if this slot falls within a time-specific block
-        const slotTime = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-        const isTimeBlocked = dayTimeBlocks.some(b =>
-          b.start_time && b.end_time && slotTime >= b.start_time.slice(0, 5) && slotTime < b.end_time.slice(0, 5)
-        );
-        if (isTimeBlocked) continue;
+      const slotEnd = minutes + occupiedMinutes;
+      const isTimeBlocked = dayTimeBlocks.some((block) => timeBlockOverlaps(block, minutes, slotEnd));
+      if (isTimeBlocked) continue;
 
-        slots.push(formatSlotLabel(slotStart));
-      }
+      slots.push(formatSlotLabel(slotStart));
     }
   }
 
@@ -1550,21 +1704,30 @@ function formatSlotLabel(date: Date): string {
   return `${DAY_LABELS[dow]} ${dd}.${mm}.${yyyy} ${hh}:${min}`;
 }
 
-async function isChipySlotAvailable(orgId: string, slotTime: Date, staffId?: string | null): Promise<boolean> {
+async function isChipySlotAvailable(
+  orgId: string,
+  slotTime: Date,
+  staffId?: string | null,
+  timing: BookingTiming = DEFAULT_BOOKING_TIMING,
+): Promise<boolean> {
   const { schedule, blocks, timeBlocks } = await getChipySchedule(orgId, staffId);
   const dateStr = localDateKey(slotTime);
   if (blocks.includes(dateStr)) return false;
 
-  const dayConfig = schedule[slotTime.getDay().toString()] ?? DEFAULT_CHIPPY_SCHEDULE[slotTime.getDay().toString()];
+  const localParts = berlinParts(slotTime);
+  const localDow = new Date(Date.UTC(localParts.year, localParts.month - 1, localParts.day)).getUTCDay().toString();
+  const dayConfig = schedule[localDow] ?? DEFAULT_CHIPPY_SCHEDULE[localDow];
   if (!dayConfig?.enabled) return false;
 
   const timeStr = localTimeKey(slotTime);
   if (timeStr < dayConfig.start.slice(0, 5) || timeStr >= dayConfig.end.slice(0, 5)) return false;
+  const startMin = clockMinutes(timeStr);
+  const endMin = startMin === null ? null : startMin + timing.durationMinutes + timing.bufferMinutes;
+  const scheduleEnd = clockMinutes(dayConfig.end);
+  if (startMin === null || endMin === null || scheduleEnd === null || endMin > scheduleEnd) return false;
 
   const dayBlocks = timeBlocks.filter((b) => b.date === dateStr);
-  return !dayBlocks.some((b) =>
-    b.start_time && b.end_time && timeStr >= b.start_time.slice(0, 5) && timeStr < b.end_time.slice(0, 5)
-  );
+  return !dayBlocks.some((b) => timeBlockOverlaps(b, startMin, endMin));
 }
 
 function normalizeSourceCallId(sourceCallId: string | undefined): string | null {
@@ -1609,82 +1772,96 @@ async function claimChipyBooking(
   opts: { customerName: string; customerPhone: string; service: string; notes?: string; sourceCallId?: string },
   slotTime: Date,
   staffId?: string | null,
+  timing: BookingTiming = DEFAULT_BOOKING_TIMING,
 ): Promise<{ ok: true; id?: string; externalRefs: ExternalBookingRefs; reused: boolean } | { ok: false; error: string }> {
   if (!pool) return { ok: true, externalRefs: {}, reused: false };
 
   const sourceCallId = normalizeSourceCallId(opts.sourceCallId);
-  if (staffId) {
-    const inserted = await pool.query<ChipyBookingState>(
-      `INSERT INTO staff_chipy_bookings
-         (org_id, staff_id, customer_name, customer_phone, service, notes, slot_time, source_call_id, external_refs)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '{}'::jsonb)
-       ON CONFLICT (org_id, staff_id, slot_time) DO NOTHING
-       RETURNING id, source_call_id, external_refs`,
-      [
-        orgId,
-        staffId,
-        opts.customerName,
-        opts.customerPhone,
-        opts.service || null,
-        opts.notes || null,
-        slotTime.toISOString(),
-        sourceCallId,
-      ],
-    );
+  const safeTiming = normalizeBookingTiming(timing);
+  const slotEnd = new Date(slotTime.getTime() + (safeTiming.durationMinutes + safeTiming.bufferMinutes) * 60 * 1000);
+  const table = staffId ? 'staff_chipy_bookings' : 'chipy_bookings';
+  const scope = `${orgId}:${staffId ?? 'salon'}:${localDateKey(slotTime)}`;
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+    await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [scope]);
+
+    const overlapSql = staffId
+      ? `SELECT id, source_call_id, external_refs, slot_time
+           FROM staff_chipy_bookings
+          WHERE org_id = $1
+            AND staff_id = $2
+            AND slot_time < $4::timestamptz
+            AND (slot_time + ((duration_minutes + buffer_minutes) * interval '1 minute')) > $3::timestamptz
+          LIMIT 1`
+      : `SELECT id, source_call_id, external_refs, slot_time
+           FROM chipy_bookings
+          WHERE org_id = $1
+            AND slot_time < $3::timestamptz
+            AND (slot_time + ((duration_minutes + buffer_minutes) * interval '1 minute')) > $2::timestamptz
+          LIMIT 1`;
+    const overlapParams = staffId
+      ? [orgId, staffId, slotTime.toISOString(), slotEnd.toISOString()]
+      : [orgId, slotTime.toISOString(), slotEnd.toISOString()];
+    const overlap = await client.query<ChipyBookingState & { slot_time: Date | string }>(overlapSql, overlapParams);
+    const existingRow = overlap.rows[0];
+    if (existingRow) {
+      const existingStart = existingRow.slot_time instanceof Date ? existingRow.slot_time : new Date(existingRow.slot_time);
+      if (sourceCallId && existingRow.source_call_id === sourceCallId && Math.abs(existingStart.getTime() - slotTime.getTime()) < 1000) {
+        await client.query('COMMIT');
+        return { ok: true, id: existingRow.id, externalRefs: parseExternalBookingRefs(existingRow.external_refs), reused: true };
+      }
+      await client.query('ROLLBACK');
+      return { ok: false, error: `${staffId ? 'Staff Chipy' : 'Chipy'} slot overlaps existing booking: ${slotTime.toISOString()}` };
+    }
+
+    const insertSql = staffId
+      ? `INSERT INTO staff_chipy_bookings
+           (org_id, staff_id, customer_name, customer_phone, service, notes, slot_time, source_call_id, external_refs, duration_minutes, buffer_minutes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '{}'::jsonb, $9, $10)
+         RETURNING id, source_call_id, external_refs`
+      : `INSERT INTO chipy_bookings
+           (org_id, customer_name, customer_phone, service, notes, slot_time, source_call_id, external_refs, duration_minutes, buffer_minutes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, '{}'::jsonb, $8, $9)
+         RETURNING id, source_call_id, external_refs`;
+    const insertParams = staffId
+      ? [
+          orgId,
+          staffId,
+          opts.customerName,
+          opts.customerPhone,
+          opts.service || null,
+          opts.notes || null,
+          slotTime.toISOString(),
+          sourceCallId,
+          safeTiming.durationMinutes,
+          safeTiming.bufferMinutes,
+        ]
+      : [
+          orgId,
+          opts.customerName,
+          opts.customerPhone,
+          opts.service || null,
+          opts.notes || null,
+          slotTime.toISOString(),
+          sourceCallId,
+          safeTiming.durationMinutes,
+          safeTiming.bufferMinutes,
+        ];
+
+    const inserted = await client.query<ChipyBookingState>(insertSql, insertParams);
+    await client.query('COMMIT');
     const newRow = inserted.rows[0];
-    if (newRow) {
-      return { ok: true, id: newRow.id, externalRefs: parseExternalBookingRefs(newRow.external_refs), reused: false };
-    }
-
-    const existing = await pool.query<ChipyBookingState>(
-      `SELECT id, source_call_id, external_refs
-       FROM staff_chipy_bookings
-       WHERE org_id = $1 AND staff_id = $2 AND slot_time = $3
-       LIMIT 1`,
-      [orgId, staffId, slotTime.toISOString()],
-    );
-    const existingRow = existing.rows[0];
-    if (existingRow && sourceCallId && existingRow.source_call_id === sourceCallId) {
-      return { ok: true, id: existingRow.id, externalRefs: parseExternalBookingRefs(existingRow.external_refs), reused: true };
-    }
-
-    return { ok: false, error: `Staff Chipy slot already booked: ${slotTime.toISOString()}` };
+    return { ok: true, id: newRow?.id, externalRefs: parseExternalBookingRefs(newRow?.external_refs ?? {}), reused: false };
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    const err = e as { code?: string; message?: string };
+    if (err.code === '23505') return { ok: false, error: `${table} slot already booked: ${slotTime.toISOString()}` };
+    return { ok: false, error: err.message ?? 'Chipy booking failed' };
+  } finally {
+    client.release();
   }
-
-  const inserted = await pool.query<ChipyBookingState>(
-    `INSERT INTO chipy_bookings
-       (org_id, customer_name, customer_phone, service, notes, slot_time, source_call_id, external_refs)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, '{}'::jsonb)
-     ON CONFLICT (org_id, slot_time) DO NOTHING
-     RETURNING id, source_call_id, external_refs`,
-    [
-      orgId,
-      opts.customerName,
-      opts.customerPhone,
-      opts.service || null,
-      opts.notes || null,
-      slotTime.toISOString(),
-      sourceCallId,
-    ],
-  );
-  const newRow = inserted.rows[0];
-  if (newRow) {
-    return { ok: true, id: newRow.id, externalRefs: parseExternalBookingRefs(newRow.external_refs), reused: false };
-  }
-
-  const existing = await pool.query<ChipyBookingState>(
-    `SELECT id, source_call_id, external_refs
-     FROM chipy_bookings
-     WHERE org_id = $1 AND slot_time = $2
-     LIMIT 1`,
-    [orgId, slotTime.toISOString()],
-  );
-  const existingRow = existing.rows[0];
-  if (existingRow && sourceCallId && existingRow.source_call_id === sourceCallId) {
-    return { ok: true, id: existingRow.id, externalRefs: parseExternalBookingRefs(existingRow.external_refs), reused: true };
-  }
-
-  return { ok: false, error: `Chipy slot already booked: ${slotTime.toISOString()}` };
 }
 
 async function loadChipyExternalRefs(
@@ -2049,7 +2226,8 @@ async function findFreeSlotsByContract(
   const connections = await getCheckableConnections(orgId, staffId);
   const sources = ['chipy'];
   const { schedule, blocks, timeBlocks } = await getChipySchedule(orgId, staffId);
-  let slots = generateChipySlots(schedule, blocks, timeBlocks, requestedDateKey(opts));
+  const timing = await resolveBookingTiming(orgId, opts.service);
+  let slots = generateChipySlots(schedule, blocks, timeBlocks, requestedDateKey(opts), timing);
 
   if (connections.length === 0) {
     return { slots: [...new Set(slots)].sort(), source: 'chipy' };
@@ -2062,7 +2240,7 @@ async function findFreeSlotsByContract(
   for (const conn of connections) {
     let connSlots: string[] | null = [];
     try {
-      connSlots = await findSlotsForConnection(conn, orgId);
+      connSlots = await findSlotsForConnection(conn, orgId, timing);
     } catch {
       connSlots = null;
     }
@@ -2150,6 +2328,7 @@ function resolveSlotDate(slot: string, now: Date): { dateStr: string; timeStr: s
 async function findSlotsForConnection(
   conn: CalendarConnection,
   orgId: string,
+  timing: BookingTiming = DEFAULT_BOOKING_TIMING,
 ): Promise<string[] | null> {
   // ── Cal.com path ───────────────────────────────────────────────────────────
   if (conn.provider === 'calcom') {
@@ -2175,7 +2354,7 @@ async function findSlotsForConnection(
     const token = await getValidMsTokenForConnection(conn);
     if (!token) return null;
     const email = conn.email ?? '';
-    return msFindSlots(token, email);
+    return msFindSlots(token, email, timing);
   }
 
   // ── Google path ────────────────────────────────────────────────────────────
@@ -2220,7 +2399,7 @@ async function findSlotsForConnection(
     };
 
     const busyPeriods = data.calendars[conn.calendar_id]?.busy ?? [];
-    return generateFreeSlots(busyPeriods);
+    return generateFreeSlots(busyPeriods, timing);
   } catch (err) {
     log.warn(
       { orgId, provider: 'google', err: (err as Error).message?.slice(0, 200) },
@@ -2240,6 +2419,8 @@ export async function bookSlot(
     notes?: string;
     sourceCallId?: string;
     staffId?: string | null;
+    durationMinutes?: number;
+    bufferMinutes?: number;
   },
 ): Promise<{
   ok: boolean;
@@ -2260,13 +2441,17 @@ export async function bookSlot(
   const connections = await getCheckableConnections(orgId, staffId);
   const slotTime = parseSlotTime(opts.time);
   if (!slotTime) return { ok: false, error: `Cannot parse time: ${opts.time}` };
-  if (!(await isChipySlotAvailable(orgId, slotTime, staffId))) {
+  const timing = await resolveBookingTiming(orgId, opts.service, {
+    durationMinutes: opts.durationMinutes,
+    bufferMinutes: opts.bufferMinutes,
+  });
+  if (!(await isChipySlotAvailable(orgId, slotTime, staffId, timing))) {
     return { ok: false, error: `Chipy slot unavailable: ${opts.time}` };
   }
 
   let chipyBooking: { id?: string; externalRefs: ExternalBookingRefs; reused: boolean };
   try {
-    const claimed = await claimChipyBooking(orgId, opts, slotTime, staffId);
+    const claimed = await claimChipyBooking(orgId, opts, slotTime, staffId, timing);
     if (!claimed.ok) return { ok: false, error: claimed.error };
     chipyBooking = claimed;
   } catch (e) {
@@ -2293,7 +2478,7 @@ export async function bookSlot(
       const bookedAt = new Date().toISOString();
       let nextRef: ExternalBookingResult;
       try {
-        const result = await bookSlotForConnection(conn, orgId, opts);
+        const result = await bookSlotForConnection(conn, orgId, { ...opts, ...timing });
         nextRef = {
           provider: conn.provider,
           connectionId: conn.id,
@@ -2356,6 +2541,8 @@ export async function bookSlotForAnyStaff(
     service: string;
     notes?: string;
     sourceCallId?: string;
+    durationMinutes?: number;
+    bufferMinutes?: number;
   },
 ): Promise<{
   ok: boolean;
@@ -2380,8 +2567,12 @@ export async function bookSlotForAnyStaff(
 
   const slotTime = parseSlotTime(opts.time);
   if (!slotTime) return { ok: false, error: `Cannot parse time: ${opts.time}` };
+  const timing = await resolveBookingTiming(orgId, opts.service, {
+    durationMinutes: opts.durationMinutes,
+    bufferMinutes: opts.bufferMinutes,
+  });
 
-  const candidates = await rankAvailableStaffForSlot(orgId, eligibleStaff, slotTime);
+  const candidates = await rankAvailableStaffForSlot(orgId, eligibleStaff, slotTime, timing);
   const contractCandidates: CalendarStaff[] = [];
   for (const member of candidates) {
     const result = await findFreeSlotsByContract(orgId, {
@@ -2399,7 +2590,7 @@ export async function bookSlotForAnyStaff(
 
   const errors: string[] = [];
   for (const member of contractCandidates) {
-    const result = await bookSlot(orgId, { ...opts, staffId: member.id });
+    const result = await bookSlot(orgId, { ...opts, staffId: member.id, ...timing });
     if (result.ok) {
       return { ...result, assignedStaffId: member.id, assignedStaffName: member.name };
     }
@@ -2417,7 +2608,7 @@ export async function bookSlotForAnyStaff(
 async function bookSlotForConnection(
   conn: CalendarConnection,
   orgId: string,
-  opts: { customerName: string; customerPhone: string; time: string; service: string; notes?: string },
+  opts: { customerName: string; customerPhone: string; time: string; service: string; notes?: string; durationMinutes?: number; bufferMinutes?: number },
 ): Promise<{ ok: boolean; eventId?: string; bookingId?: number | string; error?: string }> {
 
   // ── Microsoft path ─────────────────────────────────────────────────────────
@@ -2456,7 +2647,7 @@ async function bookSlotForConnection(
   if (!startTime) {
     return { ok: false, error: `Cannot parse time: ${opts.time}` };
   }
-  const endTime = new Date(startTime.getTime() + 30 * 60 * 1000);
+  const endTime = new Date(startTime.getTime() + clampMinutes(opts.durationMinutes ?? 30, 5, 480, 30) * 60 * 1000);
 
   const description = [
     `Service: ${opts.service}`,
@@ -3550,7 +3741,7 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
     let bookings: unknown[] = [];
     if (pool) {
       const res = await pool.query(
-        `SELECT id, customer_name, customer_phone, service, notes, slot_time
+        `SELECT id, customer_name, customer_phone, service, notes, slot_time, duration_minutes, buffer_minutes
          FROM chipy_bookings WHERE org_id = $1 AND slot_time >= now()
          ORDER BY slot_time LIMIT 50`,
         [orgId],
@@ -3622,6 +3813,8 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
     service: z.string().max(200).optional(),
     notes: z.string().max(1000).optional(),
     slot_time: z.string().min(1),
+    duration_minutes: z.number().int().min(5).max(480).optional(),
+    buffer_minutes: z.number().int().min(0).max(180).optional(),
   });
 
   app.get('/calendar/staff', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -3748,7 +3941,7 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
         [orgId, staffId],
       ),
       pool.query(
-        `SELECT id, customer_name, customer_phone, service, notes, slot_time
+        `SELECT id, customer_name, customer_phone, service, notes, slot_time, duration_minutes, buffer_minutes
          FROM staff_chipy_bookings WHERE org_id = $1 AND staff_id = $2 AND slot_time >= now()
          ORDER BY slot_time LIMIT 50`,
         [orgId, staffId],
@@ -3822,7 +4015,7 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
     const from = query.from ?? new Date().toISOString().slice(0, 10);
     const toDate = query.to ?? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const res = await pool.query(
-      `SELECT id, customer_name, customer_phone, service, notes, slot_time, created_at
+      `SELECT id, customer_name, customer_phone, service, notes, slot_time, duration_minutes, buffer_minutes, created_at
        FROM staff_chipy_bookings
        WHERE org_id = $1 AND staff_id = $2 AND slot_time >= $3::date AND slot_time < ($4::date + interval '1 day')
        ORDER BY slot_time`,
@@ -3843,24 +4036,31 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
     const staffId = staff.staffId!;
     if (!pool) return reply.send({ ok: true, id: 'mock' });
 
-    try {
-      const res = await pool.query(
-        `INSERT INTO staff_chipy_bookings (org_id, staff_id, customer_name, customer_phone, service, notes, slot_time)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id, customer_name, customer_phone, service, notes, slot_time, created_at`,
-        [orgId, staffId, parsed.data.customer_name, parsed.data.customer_phone, parsed.data.service ?? null, parsed.data.notes ?? null, parsed.data.slot_time],
-      );
-      return reply.send({ ok: true, booking: res.rows[0] });
-    } catch (e: unknown) {
-      const err = e as { code?: string };
-      if (err.code === '23505') {
-        return reply.status(409).send({
-          error: 'Dieser Zeitslot ist bereits gebucht. Bitte wähle einen anderen Slot.',
-          code: 'SLOT_TAKEN',
-        });
-      }
-      throw e;
+    const slotTime = parseSlotTime(parsed.data.slot_time);
+    if (!slotTime) return reply.status(400).send({ error: 'Ungueltige Uhrzeit' });
+    const timing = await resolveBookingTiming(orgId, parsed.data.service, {
+      durationMinutes: parsed.data.duration_minutes,
+      bufferMinutes: parsed.data.buffer_minutes,
+    });
+    if (!(await isChipySlotAvailable(orgId, slotTime, staffId, timing))) {
+      return reply.status(409).send({ error: 'Dieser Zeitraum ist nicht frei. Bitte waehle einen anderen Slot.', code: 'SLOT_TAKEN' });
     }
+    const claimed = await claimChipyBooking(orgId, {
+      customerName: parsed.data.customer_name,
+      customerPhone: parsed.data.customer_phone,
+      service: parsed.data.service ?? 'Termin',
+      notes: parsed.data.notes,
+    }, slotTime, staffId, timing);
+    if (!claimed.ok || !claimed.id) {
+      return reply.status(409).send({ error: 'Dieser Zeitraum ist bereits belegt. Bitte waehle einen anderen Slot.', code: 'SLOT_TAKEN' });
+    }
+    const res = await pool.query(
+      `SELECT id, customer_name, customer_phone, service, notes, slot_time, duration_minutes, buffer_minutes, created_at
+         FROM staff_chipy_bookings
+        WHERE org_id = $1 AND staff_id = $2 AND id = $3`,
+      [orgId, staffId, claimed.id],
+    );
+    return reply.send({ ok: true, booking: res.rows[0] });
   });
 
   app.delete('/calendar/staff/:id/chipy/bookings/:bookingId', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -3959,7 +4159,7 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
     const from = query.from ?? new Date().toISOString().slice(0, 10);
     const toDate = query.to ?? new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const res = await pool.query(
-      `SELECT id, customer_name, customer_phone, service, notes, slot_time, created_at
+      `SELECT id, customer_name, customer_phone, service, notes, slot_time, duration_minutes, buffer_minutes, created_at
        FROM chipy_bookings WHERE org_id = $1 AND slot_time >= $2::date AND slot_time < ($3::date + interval '1 day')
        ORDER BY slot_time`,
       [orgId, from, toDate],
@@ -3973,24 +4173,31 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
     const parsed = ChipyBookingBodySchema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: 'Ungültige Daten', details: parsed.error.flatten() });
     if (!pool) return { ok: true, id: 'mock' };
-    try {
-      const res = await pool.query(
-        `INSERT INTO chipy_bookings (org_id, customer_name, customer_phone, service, notes, slot_time)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, customer_name, customer_phone, service, notes, slot_time`,
-        [orgId, parsed.data.customer_name, parsed.data.customer_phone, parsed.data.service ?? null, parsed.data.notes ?? null, parsed.data.slot_time],
-      );
-      return { ok: true, booking: res.rows[0] };
-    } catch (e: unknown) {
-      // Unique constraint violation on (org_id, slot_time) → slot already booked
-      const err = e as { code?: string; constraint?: string };
-      if (err.code === '23505') {
-        return reply.status(409).send({
-          error: 'Dieser Zeitslot ist bereits gebucht. Bitte wähle einen anderen Slot.',
-          code: 'SLOT_TAKEN',
-        });
-      }
-      throw e;
+    const slotTime = parseSlotTime(parsed.data.slot_time);
+    if (!slotTime) return reply.status(400).send({ error: 'Ungueltige Uhrzeit' });
+    const timing = await resolveBookingTiming(orgId, parsed.data.service, {
+      durationMinutes: parsed.data.duration_minutes,
+      bufferMinutes: parsed.data.buffer_minutes,
+    });
+    if (!(await isChipySlotAvailable(orgId, slotTime, null, timing))) {
+      return reply.status(409).send({ error: 'Dieser Zeitraum ist nicht frei. Bitte waehle einen anderen Slot.', code: 'SLOT_TAKEN' });
     }
+    const claimed = await claimChipyBooking(orgId, {
+      customerName: parsed.data.customer_name,
+      customerPhone: parsed.data.customer_phone,
+      service: parsed.data.service ?? 'Termin',
+      notes: parsed.data.notes,
+    }, slotTime, null, timing);
+    if (!claimed.ok || !claimed.id) {
+      return reply.status(409).send({ error: 'Dieser Zeitraum ist bereits belegt. Bitte waehle einen anderen Slot.', code: 'SLOT_TAKEN' });
+    }
+    const res = await pool.query(
+      `SELECT id, customer_name, customer_phone, service, notes, slot_time, duration_minutes, buffer_minutes, created_at
+         FROM chipy_bookings
+        WHERE org_id = $1 AND id = $2`,
+      [orgId, claimed.id],
+    );
+    return { ok: true, booking: res.rows[0] };
   });
 
   /** DELETE /calendar/chipy/bookings/:id — delete a manual booking */

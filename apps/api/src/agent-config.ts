@@ -173,6 +173,7 @@ const AgentConfigSchema = z.object({
     priceFrom: z.boolean().optional(),
     priceUpTo: z.string().max(20).optional(),
     duration: z.string().max(30).optional(),
+    bufferMinutes: z.number().int().min(0).max(180).optional(),
     description: z.string().max(400).optional(),
     tag: z.enum(['BELIEBT', 'NEU', 'AKTION']).nullable().optional(),
   })).optional().default([]),

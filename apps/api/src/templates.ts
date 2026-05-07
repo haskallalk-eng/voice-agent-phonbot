@@ -10,7 +10,7 @@ export type Template = {
   prompt: string;
   businessDescription: string;
   servicesText: string;
-  services?: Array<{ id: string; name: string; duration?: string; tag?: 'BELIEBT' | 'NEU' | 'AKTION' | null }>;
+  services?: Array<{ id: string; name: string; duration?: string; bufferMinutes?: number; tag?: 'BELIEBT' | 'NEU' | 'AKTION' | null }>;
   openingHours: string;
   tools: string[];
   /**
@@ -39,16 +39,16 @@ export const TEMPLATES: Template[] = [
     businessDescription: 'Friseursalon für Damen und Herren mit Walk-in und Terminbuchung.',
     servicesText: 'Herrenschnitt, Damenschnitt, Färben, Strähnen, Waschen & Föhnen, Bartpflege',
     services: [
-      { id: 'haircut-women', name: 'Damenhaarschnitt', duration: '45 min', tag: 'BELIEBT' },
-      { id: 'haircut-men', name: 'Herrenschnitt', duration: '30 min', tag: 'BELIEBT' },
-      { id: 'haircut-kids', name: 'Kinderhaarschnitt', duration: '30 min' },
-      { id: 'wash-blowdry', name: 'Waschen & Föhnen', duration: '30 min' },
-      { id: 'roots-color', name: 'Ansatzfarbe', duration: '75 min' },
-      { id: 'full-color', name: 'Farbe komplett', duration: '90 min' },
-      { id: 'highlights-partial', name: 'Strähnen Oberkopf', duration: '90 min' },
-      { id: 'balayage', name: 'Balayage', duration: '150 min' },
-      { id: 'glossing', name: 'Glossing / Tönung', duration: '60 min' },
-      { id: 'beard-trim', name: 'Bart trimmen', duration: '20 min' },
+      { id: 'haircut-women', name: 'Damenhaarschnitt', duration: '45 min', bufferMinutes: 5, tag: 'BELIEBT' },
+      { id: 'haircut-men', name: 'Herrenschnitt', duration: '30 min', bufferMinutes: 5, tag: 'BELIEBT' },
+      { id: 'haircut-kids', name: 'Kinderhaarschnitt', duration: '30 min', bufferMinutes: 5 },
+      { id: 'wash-blowdry', name: 'Waschen & Föhnen', duration: '30 min', bufferMinutes: 5 },
+      { id: 'roots-color', name: 'Ansatzfarbe', duration: '75 min', bufferMinutes: 10 },
+      { id: 'full-color', name: 'Farbe komplett', duration: '90 min', bufferMinutes: 15 },
+      { id: 'highlights-partial', name: 'Strähnen Oberkopf', duration: '90 min', bufferMinutes: 15 },
+      { id: 'balayage', name: 'Balayage', duration: '150 min', bufferMinutes: 15 },
+      { id: 'glossing', name: 'Glossing / Tönung', duration: '60 min', bufferMinutes: 10 },
+      { id: 'beard-trim', name: 'Bart trimmen', duration: '20 min', bufferMinutes: 5 },
     ],
     openingHours: 'Mo-Fr 09:00-18:00, Sa 09:00-14:00',
     prompt: `Du bist die Telefonassistenz von Demo-Salon. Du bist herzlich, locker und gut gelaunt.
