@@ -755,7 +755,7 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
       )}
 
       {selected && (
-        <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="space-y-5">
           <div className="rounded-2xl border border-white/10 bg-black/15 p-5 space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
