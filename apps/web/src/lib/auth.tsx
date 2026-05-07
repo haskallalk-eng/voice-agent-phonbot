@@ -4,6 +4,7 @@ import { broadcastSessionCleared, refreshAccessToken, setAccessToken, subscribeA
 export type AuthUser = {
   id: string;
   email: string;
+  phone?: string | null;
   role: 'owner' | 'admin' | 'member';
 };
 
@@ -26,10 +27,11 @@ export type AuthState = {
 };
 
 type AuthContextValue = AuthState & {
-  login: (email: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
   register: (
     orgName: string,
     email: string,
+    phone: string,
     password: string,
     flags: { isBusiness: true; termsAccepted: true; privacyAccepted: true; avvAccepted: true },
   ) => Promise<void>;
@@ -139,14 +141,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const me = await apiFetch<{ id: string; email: string; role: string; org_id: string; org_name: string; org_slug: string }>(
+        const me = await apiFetch<{ id: string; email: string; phone?: string | null; role: string; org_id: string; org_name: string; org_slug: string }>(
           '/auth/me',
           { headers: { authorization: `Bearer ${token}` } },
         );
         if (cancelled) return;
         setState({
           token,
-          user: { id: me.id, email: me.email, role: me.role as AuthUser['role'] },
+          user: { id: me.id, email: me.email, phone: me.phone ?? null, role: me.role as AuthUser['role'] },
           org: { id: me.org_id, name: me.org_name, slug: me.org_slug },
           bootstrapping: false,
         });
@@ -161,10 +163,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (identifier: string, password: string) => {
     const data = await apiFetch<AuthResponse>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email: identifier, password }),
     });
     // Sync token to module store BEFORE React re-render so Dashboard's
     // initial requests already carry the Authorization header.
@@ -175,12 +177,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = useCallback(async (
     orgName: string,
     email: string,
+    phone: string,
     password: string,
     flags: { isBusiness: true; termsAccepted: true; privacyAccepted: true; avvAccepted: true },
   ) => {
     const data = await apiFetch<AuthResponse>('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ orgName, email, password, ...flags }),
+      body: JSON.stringify({ orgName, email, phone, password, ...flags }),
     });
     setAccessToken(data.token);
     setState({ token: data.token, user: data.user, org: data.org, bootstrapping: false });

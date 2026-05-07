@@ -22,6 +22,8 @@ const mockQuery = vi.fn().mockImplementation(async (sql: string, params?: unknow
       rows: [{
         id: 'pending-1',
         email: 'paid@test.de',
+        phone: '+49 176 12345678',
+        phone_normalized: '+4917612345678',
         org_name: 'Paid Org',
         password_hash: '$2b$12$mock',
         plan_id: 'starter',
@@ -29,7 +31,7 @@ const mockQuery = vi.fn().mockImplementation(async (sql: string, params?: unknow
       }],
     };
   }
-  if (sql.includes('SELECT id FROM users WHERE email')) {
+  if (sql.includes('SELECT email, phone_normalized FROM users') || sql.includes('SELECT id FROM users')) {
     return { rowCount: 0, rows: [] };
   }
   if (sql.includes('INSERT INTO orgs')) {
@@ -123,13 +125,22 @@ describe('auth flow (TEST-01)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/auth/register',
-      payload: { orgName: 'Test Org', email: 'new@test.de', password: 'securepass123', isBusiness: true, termsAccepted: true, privacyAccepted: true, avvAccepted: true },
+      payload: { orgName: 'Test Org', email: 'new@test.de', phone: '+49 176 12345678', password: 'securepass123', isBusiness: true, termsAccepted: true, privacyAccepted: true, avvAccepted: true },
     });
     expect(res.statusCode).toBe(201);
     const body = JSON.parse(res.body);
     expect(body.token).toBeDefined();
     expect(body.user.email).toBe('new@test.de');
     expect(body.org.name).toBe('Test Org');
+  });
+
+  it('POST /auth/register without phone returns 400', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { orgName: 'Test Org', email: 'new@test.de', password: 'securepass123', isBusiness: true, termsAccepted: true, privacyAccepted: true, avvAccepted: true },
+    });
+    expect(res.statusCode).toBe(400);
   });
 
   it('POST /auth/register with short password returns 400', async () => {
@@ -146,6 +157,18 @@ describe('auth flow (TEST-01)', () => {
       method: 'POST',
       url: '/auth/login',
       payload: { email: 'test@test.de', password: 'securepass123' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.token).toBeDefined();
+    expect(body.user.id).toBe('user-1');
+  });
+
+  it('POST /auth/login accepts a registered phone number', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: '+49 176 12345678', password: 'securepass123' },
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
@@ -195,7 +218,7 @@ describe('auth flow (TEST-01)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/auth/register',
-      payload: { orgName: 'Edge Org', email: 'edge@test.de', password: 'a'.repeat(72), isBusiness: true, termsAccepted: true, privacyAccepted: true, avvAccepted: true },
+      payload: { orgName: 'Edge Org', email: 'edge@test.de', phone: '0176 76543210', password: 'a'.repeat(72), isBusiness: true, termsAccepted: true, privacyAccepted: true, avvAccepted: true },
     });
     expect(res.statusCode).toBe(201);
   });
