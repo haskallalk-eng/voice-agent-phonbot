@@ -3809,7 +3809,7 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
   const StaffBookingParamsSchema = z.object({ id: z.string().uuid(), bookingId: z.string().uuid() });
   const ChipyBookingBodySchema = z.object({
     customer_name: z.string().min(1).max(200),
-    customer_phone: z.string().min(1).max(50),
+    customer_phone: z.string().max(50).optional().default(''),
     service: z.string().max(200).optional(),
     notes: z.string().max(1000).optional(),
     slot_time: z.string().min(1),
