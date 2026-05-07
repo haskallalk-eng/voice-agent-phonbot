@@ -22,6 +22,7 @@ import {
   type CustomerModuleConfig,
   type CustomerModuleStatus,
   type CustomerQuestionConfig,
+  type ServiceItem,
 } from '../lib/api.js';
 import {
   IconAlertTriangle,
@@ -207,6 +208,12 @@ function deriveBusinessServiceLabels(config: AgentConfig | null): string[] {
     .slice(0, 20);
 }
 
+function deriveBusinessServiceItems(config: AgentConfig | null): ServiceItem[] {
+  if (!config) return [];
+  if (config.services?.length) return config.services.map((service, index) => ({ ...service, id: service.id || `business_svc_${index}` }));
+  return staffLabelsToServiceItems(deriveBusinessServiceLabels(config));
+}
+
 type OpeningDay = 'Mo' | 'Di' | 'Mi' | 'Do' | 'Fr' | 'Sa' | 'So';
 type OpeningWeek = Record<OpeningDay, { open: boolean; from: string; to: string }>;
 
@@ -277,15 +284,75 @@ function chipyScheduleToOpeningHours(schedule: ChipySchedule | null | undefined)
     .join(', ');
 }
 
-function servicesTextareaValue(services: string[]): string {
-  return services.join('\n');
+function staffLabelToServiceItem(label: string, index: number): ServiceItem {
+  let text = label.trim();
+  let tag: ServiceItem['tag'] = null;
+  const tagMatch = text.match(/\s*[·•]\s*(BELIEBT|NEU|AKTION)\s*$/i);
+  if (tagMatch) {
+    tag = tagMatch[1]!.toUpperCase() as ServiceItem['tag'];
+    text = text.slice(0, tagMatch.index).trim();
+  }
+
+  let duration: string | undefined;
+  const durationMatch = text.match(/\(([^()]*)\)\s*$/);
+  if (durationMatch) {
+    duration = durationMatch[1]!.trim();
+    text = text.slice(0, durationMatch.index).trim();
+  }
+
+  let name = text;
+  let price: string | undefined;
+  let priceFrom: boolean | undefined;
+  let priceUpTo: string | undefined;
+  const priceMatch = text.match(/^(.*?):\s*(ab\s*)?(\d+(?:[,.]\d{1,2})?)(?:\s*(?:-|–)\s*(\d+(?:[,.]\d{1,2})?))?\s*€?$/i);
+  if (priceMatch) {
+    name = priceMatch[1]!.trim();
+    priceFrom = Boolean(priceMatch[2]);
+    price = priceMatch[3]!.replace(',', '.');
+    priceUpTo = priceMatch[4]?.replace(',', '.');
+  }
+
+  return {
+    id: `staff_svc_${index}_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 24)}`,
+    name: name || label.trim(),
+    price,
+    priceFrom,
+    priceUpTo,
+    duration,
+    tag,
+  };
 }
 
-function parseServicesTextarea(value: string): string[] {
+function staffLabelsToServiceItems(services: string[]): ServiceItem[] {
+  return services
+    .map((label, index) => staffLabelToServiceItem(label, index))
+    .filter((service) => service.name.trim())
+    .slice(0, 20);
+}
+
+function staffServiceItemLabel(service: ServiceItem): string {
+  const name = service.name.trim();
+  if (!name) return '';
+  let label = name;
+  if (service.price?.trim()) {
+    const price = service.price.trim();
+    const priceText = service.priceFrom
+      ? `ab ${price} €`
+      : service.priceUpTo?.trim()
+        ? `${price}–${service.priceUpTo.trim()} €`
+        : `${price} €`;
+    label = `${label}: ${priceText}`;
+  }
+  if (service.duration?.trim()) label = `${label} (${service.duration.trim()})`;
+  if (service.tag) label = `${label} · ${service.tag}`;
+  return label;
+}
+
+function serviceItemsToStaffStrings(items: ServiceItem[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const raw of value.split(/\r?\n|,/)) {
-    const label = raw.trim();
+  for (const item of items) {
+    const label = staffServiceItemLabel(item);
     const key = label.toLowerCase();
     if (!label || seen.has(key)) continue;
     seen.add(key);
@@ -449,10 +516,11 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
   const [newRole, setNewRole] = useState('');
   const [editName, setEditName] = useState('');
   const [editRole, setEditRole] = useState('');
-  const [servicesText, setServicesText] = useState('');
+  const [staffServices, setStaffServices] = useState<ServiceItem[]>([]);
   const [hoursText, setHoursText] = useState(chipyScheduleToOpeningHours(DEFAULT_CHIPY_SCHEDULE));
 
   const businessServices = useMemo(() => deriveBusinessServiceLabels(config), [config]);
+  const businessServiceItems = useMemo(() => deriveBusinessServiceItems(config), [config]);
   const selected = staff.find((member) => member.id === selectedId) ?? null;
   const defaultHoursText = useMemo(
     () => config?.openingHours?.trim() || chipyScheduleToOpeningHours(DEFAULT_CHIPY_SCHEDULE),
@@ -484,8 +552,8 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
   useEffect(() => {
     setEditName(selected?.name ?? '');
     setEditRole(selected?.role ?? '');
-    setServicesText(servicesTextareaValue(selected?.services ?? []));
-  }, [selected?.id, selected?.name, selected?.role, selected?.services]);
+    setStaffServices(staffLabelsToServiceItems(selected?.services?.length ? selected.services : businessServices));
+  }, [selected?.id, selected?.name, selected?.role, selected?.services, businessServices]);
 
   useEffect(() => {
     let cancelled = false;
@@ -549,7 +617,7 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
       const res = await updateCalendarStaff(selected.id, {
         name: editName.trim(),
         role: editRole.trim() || undefined,
-        services: parseServicesTextarea(servicesText),
+        services: serviceItemsToStaffStrings(staffServices),
       });
       setStaff((prev) => prev.map((member) => member.id === selected.id ? { ...member, ...res.staff } : member));
       setNotice('Mitarbeiterprofil gespeichert. Der Agent nutzt diese Zuordnung beim nächsten Deploy/Speichern.');
@@ -581,7 +649,7 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
 
   async function applyBusinessDefaults() {
     if (!selected) return;
-    setServicesText(servicesTextareaValue(businessServices));
+    setStaffServices(businessServiceItems);
     setHoursText(defaultHoursText);
     setNotice('Betriebs-Defaults übernommen. Speichere Profil und Arbeitszeiten, um sie live zu setzen.');
   }
@@ -703,9 +771,18 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
             <BusinessField label="Rolle">
               <input value={editRole} onChange={(e) => setEditRole(e.target.value)} placeholder="z.B. Senior Stylistin" className={INPUT_CLASS} />
             </BusinessField>
-            <BusinessField label="Leistungen" hint="Eine Leistung pro Zeile. Leer lassen, wenn die Person alle Betriebsleistungen übernehmen soll.">
-              <textarea value={servicesText} onChange={(e) => setServicesText(e.target.value)} rows={8} className={`${INPUT_CLASS} resize-y`} />
-            </BusinessField>
+            <div>
+              <span className="text-sm font-medium text-white/70">Leistungen</span>
+              <p className="mt-0.5 mb-2 text-[11px] leading-relaxed text-white/35">
+                Gleiche Pflege wie beim Betrieb: Name, Preis und Dauer strukturiert erfassen. Ohne eigene Anpassung startet die Person mit den Betriebsleistungen.
+              </p>
+              <ServicesEditor
+                value={staffServices}
+                legacyText=""
+                onChange={setStaffServices}
+                onConsumeLegacy={() => undefined}
+              />
+            </div>
             <div className="flex flex-col gap-2 sm:flex-row">
               <button type="button" onClick={() => { void applyBusinessDefaults(); }} className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm text-white/65 hover:text-white">
                 Betrieb übernehmen

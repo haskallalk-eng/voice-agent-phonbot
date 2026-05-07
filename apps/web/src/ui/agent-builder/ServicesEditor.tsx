@@ -401,36 +401,6 @@ export function ServicesEditor({
         </div>
       )}
 
-      {/* Preview card — how the agent will read this list. Same glass
-          treatment as the "Agent sieht"-preview under Öffnungszeiten. */}
-      {value.length > 0 && (
-        <div
-          className="rounded-2xl border px-4 py-3 mt-2"
-          style={{ borderColor: 'rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.25)' }}
-        >
-          <p className="text-[10px] uppercase tracking-wider text-white/35 mb-1.5">Agent sieht</p>
-          <pre className="text-[11px] text-white/75 font-mono leading-relaxed whitespace-pre-wrap break-words">
-{value
-  .filter((s) => s.name.trim())
-  .map((s) => {
-    const bits: string[] = [s.name];
-    if (s.price) {
-      let price: string;
-      if (s.priceFrom) price = `ab ${s.price} €`;
-      else if (s.priceUpTo) price = `${s.price}–${s.priceUpTo} €`;
-      else price = `${s.price} €`;
-      bits[0] = `${s.name}: ${price}`;
-    }
-    if (s.duration) bits[0] += ` (${s.duration})`;
-    if (typeof s.bufferMinutes === 'number' && s.bufferMinutes > 0) bits.push(`— ${s.bufferMinutes} min Puffer intern`);
-    if (s.description?.trim()) bits.push(`— ${s.description.trim()}`);
-    if (s.tag) bits.push(`· ${s.tag}`);
-    return `- ${bits.join(' ')}`;
-  })
-  .join('\n') || '—'}
-          </pre>
-        </div>
-      )}
     </div>
   );
 }
