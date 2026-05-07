@@ -112,7 +112,8 @@ export async function migratePhone() {
   await pool.query(`
     CREATE OR REPLACE FUNCTION phone_numbers_touch_updated_at() RETURNS trigger AS $$
     BEGIN NEW.updated_at = now(); RETURN NEW; END;
-    $$ LANGUAGE plpgsql;
+    $$ LANGUAGE plpgsql
+    SET search_path = pg_catalog, public;
   `);
   await pool.query(`
     DO $$
