@@ -332,8 +332,9 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
                       className="mt-0.5 rounded border-white/20 bg-white/5 text-orange-500 focus:ring-orange-500/50"
                     />
                     <span className="text-xs text-white/50 leading-relaxed">
-                      Ich schliesse diesen Vertrag in Aus&uuml;bung meiner gewerblichen oder
-                      selbst&auml;ndigen T&auml;tigkeit ab (Unternehmer im Sinne von &sect;14 BGB).
+                      Ich best&auml;tige, dass ich Phonbot ausschlie&szlig;lich als Unternehmer
+                      im Sinne von &sect;14 BGB teste oder nutze. Ein kostenpflichtiger Plan
+                      entsteht erst durch eine sp&auml;tere Buchung.
                     </span>
                   </label>
                 </>
