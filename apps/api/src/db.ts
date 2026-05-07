@@ -273,6 +273,51 @@ export async function cleanupOldWebhookHealth(dbPool: pg.Pool | null): Promise<n
 // every replica uses the same one. Chosen arbitrarily.
 const MIGRATION_ADVISORY_LOCK_KEY = 92541803715;
 
+async function hardenSupabasePublicApiAccess(): Promise<void> {
+  if (!pool) return;
+
+  // Supabase exposes public-schema tables through PostgREST whenever anon /
+  // authenticated have table privileges. Phonbot never uses Supabase directly
+  // from the browser; all reads/writes go through our API using the postgres
+  // server connection. Keep the public API closed by default and let the API
+  // own authorization.
+  await pool.query(`
+    DO $$
+    DECLARE
+      r record;
+      target_roles text;
+    BEGIN
+      SELECT string_agg(quote_ident(rolname), ', ')
+        INTO target_roles
+        FROM pg_roles
+       WHERE rolname IN ('anon', 'authenticated');
+
+      FOR r IN
+        SELECT quote_ident(n.nspname) || '.' || quote_ident(c.relname) AS ident
+          FROM pg_class c
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public'
+           AND c.relkind IN ('r', 'p')
+      LOOP
+        EXECUTE 'ALTER TABLE ' || r.ident || ' ENABLE ROW LEVEL SECURITY';
+        IF target_roles IS NOT NULL THEN
+          EXECUTE 'REVOKE ALL PRIVILEGES ON TABLE ' || r.ident || ' FROM ' || target_roles;
+        END IF;
+      END LOOP;
+
+      IF target_roles IS NOT NULL THEN
+        EXECUTE 'REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM ' || target_roles;
+        EXECUTE 'REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM ' || target_roles;
+        EXECUTE 'REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM ' || target_roles;
+        EXECUTE 'REVOKE USAGE ON SCHEMA public FROM ' || target_roles;
+        EXECUTE 'ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM ' || target_roles;
+        EXECUTE 'ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM ' || target_roles;
+        EXECUTE 'ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM ' || target_roles;
+      END IF;
+    END $$;
+  `);
+}
+
 export async function migrate() {
   if (!pool) {
     // Keep API usable for websocket + UI prototyping.
@@ -1065,6 +1110,8 @@ async function runMigrationBody() {
       END IF;
     END $$;
   `);
+
+  await hardenSupabasePublicApiAccess();
 }
 
 /**
