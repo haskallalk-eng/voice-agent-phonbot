@@ -1690,7 +1690,7 @@ function StaffServicesEditor({
           <p className="text-[11px] font-semibold text-orange-100/60 uppercase tracking-[0.16em]">Leistungen</p>
           <p className="mt-1 text-sm font-bold text-white">Was {member.name} anbieten kann</p>
           <p className="mt-1 text-xs leading-relaxed text-white/42">
-            Neue Mitarbeiter starten mit den Betriebsleistungen. Hier kannst du pro Person einzelne Services ändern, entfernen oder ergänzen.
+            Neue Personen starten mit den allgemeinen Leistungen. Hier kannst du pro Person einzelne Services ändern, entfernen oder ergänzen.
           </p>
         </div>
         {businessServices.length > 0 && (
@@ -1812,7 +1812,7 @@ function StaffPanel({
       onStaffChange?.(res.staff.length);
       setSelectedId(current => current ?? res.staff[0]?.id ?? null);
     } catch (e: unknown) {
-      setError((e instanceof Error ? e.message : null) ?? 'Mitarbeiter konnten nicht geladen werden');
+      setError((e instanceof Error ? e.message : null) ?? 'Personen konnten nicht geladen werden');
     } finally {
       setLoading(false);
     }
@@ -1835,7 +1835,7 @@ function StaffPanel({
       setStaffExternalEvents(external.events);
       setStaffStatus(status);
     } catch (e: unknown) {
-      setError((e instanceof Error ? e.message : null) ?? 'Mitarbeiter-Kalender konnte nicht geladen werden');
+      setError((e instanceof Error ? e.message : null) ?? 'Personen-Kalender konnte nicht geladen werden');
     }
   }, []);
 
@@ -1873,7 +1873,7 @@ function StaffPanel({
       setSelectedId(res.staff.id);
       setName('');
     } catch (e: unknown) {
-      setError((e instanceof Error ? e.message : null) ?? 'Mitarbeiter konnte nicht angelegt werden');
+      setError((e instanceof Error ? e.message : null) ?? 'Person konnte nicht angelegt werden');
     } finally {
       setSavingStaff(false);
     }
@@ -1891,7 +1891,7 @@ function StaffPanel({
         return next;
       });
     } catch (e: unknown) {
-      setError((e instanceof Error ? e.message : null) ?? 'Mitarbeiter konnte nicht gelöscht werden');
+      setError((e instanceof Error ? e.message : null) ?? 'Person konnte nicht gelöscht werden');
     } finally {
       setSavingStaff(false);
     }
@@ -2064,7 +2064,7 @@ function StaffPanel({
     );
   };
 
-  if (loading) return <div className="rounded-2xl border border-white/10 p-5 text-sm text-white/40">Lade Mitarbeiter...</div>;
+  if (loading) return <div className="rounded-2xl border border-white/10 p-5 text-sm text-white/40">Lade Personen...</div>;
 
   return (
     <div className="space-y-5">
@@ -2075,8 +2075,8 @@ function StaffPanel({
       <div className="rounded-2xl border border-white/10 p-5" style={{ background: 'rgba(255,255,255,0.02)' }}>
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
-            <p className="text-sm font-bold text-white">Mitarbeiter</p>
-            <p className="text-xs text-white/35 mt-1">Sobald hier mindestens eine Person angelegt ist, wird der Betriebskalender für Bot-Buchungen ausgeschaltet. Jede Person bekommt eigene Verfügbarkeit und eigene Verbindungen.</p>
+            <p className="text-sm font-bold text-white">Personen</p>
+            <p className="text-xs text-white/35 mt-1">Ohne Personen nutzt Chipy den allgemeinen Kalender. Sobald du Personen anlegst, bekommt jede Person eigene Verfügbarkeit und eigene Verbindungen.</p>
           </div>
           {selected && (
             <button onClick={() => { void handleDeleteSelected(); }} disabled={savingStaff}
@@ -2098,7 +2098,7 @@ function StaffPanel({
           </button>
         </form>
         <p className="mb-4 rounded-xl border border-white/8 bg-black/15 px-3 py-2 text-xs leading-relaxed text-white/40">
-          Neue Mitarbeiter übernehmen automatisch die Betriebsleistungen{businessServices.length ? ` (${businessServices.length})` : ''}. Danach kannst du pro Person einzelne Leistungen bearbeiten.
+          Neue Personen übernehmen automatisch die allgemeinen Leistungen{businessServices.length ? ` (${businessServices.length})` : ''}. Danach kannst du pro Person einzelne Leistungen bearbeiten.
         </p>
 
         {staff.length > 0 ? (
@@ -2111,7 +2111,7 @@ function StaffPanel({
             ))}
           </div>
         ) : (
-          <p className="text-sm text-white/35 py-4">Noch keine Mitarbeiter angelegt. Dann bleibt automatisch der Betriebskalender aktiv.</p>
+          <p className="text-sm text-white/35 py-4">Noch keine Personen angelegt. Dann versteht Chipy den Kalender ohne Namen automatisch als allgemeinen Friseur-Kalender.</p>
         )}
       </div>
 
@@ -2123,7 +2123,7 @@ function StaffPanel({
               <p className="text-xs text-white/35 mt-1">
                 {selected.services?.length
                   ? `${selected.services.length} Leistung${selected.services.length === 1 ? '' : 'en'} aktiv`
-                  : 'Eigener Mitarbeiter-Kalender'}
+                  : 'Eigener Personen-Kalender'}
               </p>
             </div>
             <input value={editRole} onChange={e => setEditRole(e.target.value)} onBlur={() => { void handleRoleBlur(); }} placeholder="Rolle"
@@ -2386,8 +2386,8 @@ export function CalendarPage({
   const providerMeta = PROVIDER_META[calendarStatus?.provider ?? ''] ?? DEFAULT_PROVIDER_META;
 
   const TABS: { id: Tab; label: string }[] = [
-    { id: 'calendar', label: 'Betriebskalender' },
-    { id: 'staff', label: 'Mitarbeiterkalender' },
+    { id: 'calendar', label: 'Kalender' },
+    { id: 'staff', label: 'Personen' },
   ];
   const staffModeActive = staffCount > 0;
 
@@ -2410,8 +2410,8 @@ export function CalendarPage({
               {calendarStatus?.provider && calendarStatus.provider !== 'chipy'
                 ? `Verbunden mit ${providerMeta.label}`
                 : calendarStatus?.connected
-                  ? 'Chipy Kalender aktiv — verbinde optional einen externen Kalender'
-                  : 'Kein Kalender konfiguriert — richte Verfügbarkeit ein oder verbinde einen Kalender'}
+                  ? 'Ein Kalender reicht: ohne Personen gilt er allgemein, mit Personen bucht Chipy gezielt pro Person'
+                  : 'Richte den allgemeinen Kalender ein oder lege Personen mit eigenen Kalendern an'}
             </p>
           </div>
           {tab === 'calendar' && !staffModeActive && (
@@ -2483,18 +2483,18 @@ export function CalendarPage({
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-100/65">Kalenderlogik</p>
-                    <p className="mt-1 text-base font-bold text-white">Mitarbeiterkalender aktiv</p>
+                    <p className="mt-1 text-base font-bold text-white">Personen-Kalender aktiv</p>
                     <p className="mt-1 text-xs text-white/55 leading-relaxed">
-                      Sobald Mitarbeiter angelegt sind, bucht Phonbot pro Person. Der Betriebskalender bleibt sichtbar, ist aber für Bot-Buchungen ausgeschaltet.
+                      Chipy nutzt jetzt die Personen als Buchungsziele. Wenn du nur einen allgemeinen Kalender willst, lass die Personenliste leer.
                     </p>
                   </div>
                   <div className="grid gap-2 text-xs">
-                    <span className="rounded-full border border-orange-400/25 bg-orange-500/15 px-3 py-1.5 text-orange-100">Mitarbeiterkalender: aktiv</span>
-                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-white/45">Betriebskalender: aus</span>
+                    <span className="rounded-full border border-orange-400/25 bg-orange-500/15 px-3 py-1.5 text-orange-100">{staffCount} Person{staffCount === 1 ? '' : 'en'} aktiv</span>
+                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-white/45">Allgemeiner Kalender bleibt sichtbar</span>
                   </div>
                 </div>
                 <button onClick={() => setTab('staff')} className="mt-4 rounded-xl border border-orange-500/25 bg-orange-500/15 px-3 py-2 text-xs font-semibold text-orange-100 hover:bg-orange-500/20">
-                  Mitarbeiterkalender öffnen
+                  Personen verwalten
                 </button>
               </div>
             )}
@@ -2502,8 +2502,8 @@ export function CalendarPage({
             <section className={['rounded-2xl border border-white/10 p-5', staffModeActive ? 'opacity-55' : ''].join(' ')} style={{ background: 'rgba(255,255,255,0.02)' }}>
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-white">Betriebskalender</p>
-                  <p className="text-xs text-white/35 mt-1">{staffModeActive ? 'Für Bot-Buchungen durch Mitarbeiterkalender ersetzt.' : 'Allgemeine Termine, Sperren und freie Zeiten.'}</p>
+                  <p className="text-sm font-semibold text-white">Allgemeiner Kalender</p>
+                  <p className="text-xs text-white/35 mt-1">{staffModeActive ? 'Bleibt als Kalender ohne Person sichtbar. Neue Bot-Termine laufen über Personen.' : 'Wenn keine Person angelegt ist, versteht Chipy diesen Kalender als Friseur allgemein.'}</p>
                 </div>
               </div>
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2555,7 +2555,7 @@ export function CalendarPage({
               <p className="text-sm font-semibold text-white mb-1">Verfügbarkeit</p>
               <p className="text-xs text-white/40 mb-4">
                 {staffModeActive
-                  ? 'Nicht aktiv, solange Mitarbeiterkalender genutzt werden. Pflege die Zeiten pro Mitarbeiter.'
+                  ? 'Für neue Bot-Buchungen zählen die Zeiten pro Person. Lass die Personenliste leer, wenn nur dieser allgemeine Kalender gelten soll.'
                   : calendarStatus?.connected
                     ? 'Dein externer Kalender ist aktiv. Chipy dient als Fallback.'
                     : 'Kein externer Kalender? Trag hier deine Verfügbarkeit ein — der Agent nutzt diese automatisch.'}
@@ -2566,7 +2566,7 @@ export function CalendarPage({
             <section id="calendar-connections" className={['rounded-2xl border border-white/10 p-5', staffModeActive ? 'opacity-55 pointer-events-none' : ''].join(' ')} style={{ background: 'rgba(255,255,255,0.02)' }}>
               <p className="text-sm font-semibold text-white mb-1">Verbindungen</p>
               <p className="text-xs text-white/40 mb-4">
-                {staffModeActive ? 'Nicht aktiv für Bot-Buchungen. Verbinde Kalender direkt bei den Mitarbeitern.' : 'Verbinde Google, Outlook oder Cal.com im gleichen Stil wie im Agent Builder.'}
+                {staffModeActive ? 'Für Personen-Buchungen verbindest du Kalender direkt bei der jeweiligen Person.' : 'Verbinde Google, Outlook oder Cal.com im gleichen Stil wie im Agent Builder.'}
               </p>
               <ConnectionsPanel onStatusChange={setCalendarStatus} />
             </section>

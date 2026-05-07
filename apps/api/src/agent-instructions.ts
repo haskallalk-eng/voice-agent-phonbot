@@ -285,7 +285,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
       calendarRescheduleEnabled ? 'calendar.reschedule' : null,
     ].filter(Boolean).join(' und ');
     parts.push(`Wenn der Anrufer einen Wunschfriseur oder Mitarbeiter nennt, gib diesen Namen bei ${enabledCalendarTools} als preferredStylist weiter.`);
-    parts.push('Wenn Mitarbeiterkalender aktiv sind und der Anrufer keinen Wunsch hat ("egal", "beliebig", "wer frei ist"), gib preferredStylist="beliebig" weiter. Rate nicht selbst, welcher Mitarbeiter passt; das Kalender-Tool weist deterministisch einen freien Mitarbeiter zu.');
+    parts.push('Wenn Personen-Kalender existieren und der Anrufer keinen Wunsch hat ("egal", "beliebig", "wer frei ist"), gib preferredStylist="beliebig" weiter. Rate nicht selbst, welcher Mitarbeiter passt; das Kalender-Tool weist deterministisch eine freie passende Person zu. Wenn keine Person angelegt ist, gilt der allgemeine Kalender fuer den Salon/Friseur als Ganzes.');
   }
   if (calendarBookEnabled) {
     parts.push('Wenn eine Terminbuchung technisch fehlschlaegt, behaupte NIEMALS der Termin sei gebucht. Sage kurz, dass du den Terminwunsch als Rueckruf-Ticket aufgenommen hast und jemand den Termin bestaetigt.');

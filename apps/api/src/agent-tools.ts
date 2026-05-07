@@ -329,7 +329,7 @@ export async function executeKnownTool(input: {
           staffId: null,
           instruction: staff.requested
             ? 'Der Wunschfriseur wurde nicht eindeutig gefunden. Frage kurz nach einem anderen Mitarbeiter oder ob ein beliebiger verfuegbarer Mitarbeiter passt.'
-            : 'Mitarbeiterkalender ist aktiv. Frage nach Wunschfriseur oder ob ein beliebiger verfuegbarer Mitarbeiter passt.',
+            : 'Es gibt Personen-Kalender. Frage nach Wunschfriseur oder ob eine beliebige verfuegbare Person passt.',
         };
       }
       const teamMode = staff.staffModeActive && !staff.staffId;
@@ -366,8 +366,8 @@ export async function executeKnownTool(input: {
           status: staff.requested ? 'staff_not_found' : 'staff_required',
           error: staff.requested ? 'STAFF_NOT_FOUND' : 'STAFF_REQUIRED',
           instruction: staff.requested
-            ? 'Buche keinen allgemeinen Salon-Termin. Frage kurz nach einem anderen Mitarbeiter oder ob ein beliebiger verfuegbarer Mitarbeiter passt.'
-            : 'Buche keinen allgemeinen Salon-Termin. Frage nach Wunschfriseur oder ob ein beliebiger verfuegbarer Mitarbeiter passt.',
+            ? 'Buche nicht ohne Person. Frage kurz nach einem anderen Mitarbeiter oder ob eine beliebige verfuegbare Person passt.'
+            : 'Buche nicht ohne Person. Frage nach Wunschfriseur oder ob eine beliebige verfuegbare Person passt.',
           preferredStylist: staff.requested,
           staffId: null,
         };
