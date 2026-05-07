@@ -9,10 +9,11 @@ import {
   getCalendarStaff, createCalendarStaff, updateCalendarStaff, deleteCalendarStaff,
   getStaffChipyCalendar, saveStaffChipySchedule, addStaffChipyBlock, removeStaffChipyBlock,
   getStaffChipyBookings, createStaffChipyBooking, deleteStaffChipyBooking,
-  getCustomers,
+  getCustomers, getAgentConfig,
 } from '../lib/api.js';
-import type { CalendarProvider, CalendarStatus, CalendarStaff, ChipySchedule, ChipyBlock, ChipyBooking, ChipyBookingInput, ExternalCalendarEvent, Customer } from '../lib/api.js';
+import type { CalendarProvider, CalendarStatus, CalendarStaff, ChipySchedule, ChipyBlock, ChipyBooking, ChipyBookingInput, ExternalCalendarEvent, Customer, ServiceItem } from '../lib/api.js';
 import { FoxLogo } from './FoxLogo.js';
+import { HAIRDRESSER_SERVICE_PRESET, serviceItemsToStaffLabels } from '../lib/service-presets.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -64,6 +65,31 @@ function storeCustomerFocus(customer: Customer, search: string) {
   } catch {
     // Non-critical: the ID deep-link still works for customers in the loaded list.
   }
+}
+
+function splitServiceText(value: string | null | undefined): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of (value ?? '').split(/[,\n]/)) {
+    const item = raw.trim();
+    const key = item.toLowerCase();
+    if (!item || seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
+function isHairdresserConfig(input: { industry?: string; businessDescription?: string; servicesText?: string }) {
+  const haystack = `${input.industry ?? ''} ${input.businessDescription ?? ''} ${input.servicesText ?? ''}`.toLowerCase();
+  return /friseur|salon|haar|farbe|kopfhaut|stylist/.test(haystack);
+}
+
+function deriveBusinessServiceLabels(input: { services?: ServiceItem[]; servicesText?: string; industry?: string; businessDescription?: string }): string[] {
+  if (input.services?.length) return serviceItemsToStaffLabels(input.services);
+  const textServices = splitServiceText(input.servicesText);
+  if (textServices.length) return textServices;
+  return isHairdresserConfig(input) ? serviceItemsToStaffLabels(HAIRDRESSER_SERVICE_PRESET) : [];
 }
 
 // ── Provider badge ────────────────────────────────────────────────────────────
@@ -1083,6 +1109,152 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
+function StaffServicesEditor({
+  member,
+  businessServices,
+  saving,
+  onSave,
+}: {
+  member: CalendarStaff;
+  businessServices: string[];
+  saving: boolean;
+  onSave: (services: string[]) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState<string[]>(member.services?.length ? member.services : businessServices);
+  const [newService, setNewService] = useState('');
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraft(member.services?.length ? member.services : businessServices);
+    setNewService('');
+    setLocalError(null);
+  }, [member.id, member.services, businessServices]);
+
+  const cleanDraft = () => {
+    const seen = new Set<string>();
+    return draft
+      .map((item) => item.trim())
+      .filter((item) => {
+        const key = item.toLowerCase();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 20);
+  };
+
+  const effective = cleanDraft();
+  const changed = effective.join('\n') !== (member.services ?? []).join('\n');
+
+  function patch(index: number, value: string) {
+    setDraft((current) => current.map((item, i) => (i === index ? value : item)));
+  }
+
+  function remove(index: number) {
+    setDraft((current) => current.filter((_, i) => i !== index));
+  }
+
+  function add() {
+    const value = newService.trim();
+    if (!value) return;
+    if (draft.some((item) => item.trim().toLowerCase() === value.toLowerCase())) {
+      setLocalError('Diese Leistung ist schon in der Liste.');
+      return;
+    }
+    setDraft((current) => [...current, value].slice(0, 20));
+    setNewService('');
+    setLocalError(null);
+  }
+
+  async function save() {
+    setLocalError(null);
+    try {
+      await onSave(effective);
+    } catch (e: unknown) {
+      setLocalError((e instanceof Error ? e.message : null) ?? 'Leistungen konnten nicht gespeichert werden');
+    }
+  }
+
+  return (
+    <section
+      className="rounded-2xl border p-4 space-y-3"
+      style={{ borderColor: 'rgba(249,115,22,0.13)', background: 'linear-gradient(135deg, rgba(249,115,22,0.06), rgba(6,182,212,0.035))' }}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-[11px] font-semibold text-orange-100/60 uppercase tracking-[0.16em]">Leistungen</p>
+          <p className="mt-1 text-sm font-bold text-white">Was {member.name} anbieten kann</p>
+          <p className="mt-1 text-xs leading-relaxed text-white/42">
+            Neue Mitarbeiter starten mit den Betriebsleistungen. Hier kannst du pro Person einzelne Services ändern, entfernen oder ergänzen.
+          </p>
+        </div>
+        {businessServices.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setDraft(businessServices)}
+            className="shrink-0 rounded-full border border-cyan-300/20 bg-cyan-400/[0.08] px-3 py-1.5 text-xs font-semibold text-cyan-100/80 hover:bg-cyan-400/[0.13]"
+          >
+            Betrieb übernehmen
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {draft.map((item, index) => (
+          <div key={`${member.id}-${index}`} className="flex items-center gap-2 rounded-xl border border-white/8 bg-black/18 px-2 py-2">
+            <input
+              value={item}
+              onChange={(e) => patch(index, e.target.value)}
+              placeholder="Leistung, z.B. Damenhaarschnitt (45 min)"
+              className="min-w-0 flex-1 bg-transparent text-xs text-white/85 placeholder:text-white/25 outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => remove(index)}
+              className="grid h-7 w-7 place-items-center rounded-full text-white/30 hover:bg-red-500/12 hover:text-red-300"
+              aria-label="Leistung entfernen"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <input
+          value={newService}
+          onChange={(e) => setNewService(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              add();
+            }
+          }}
+          placeholder="Eigene Leistung hinzufügen"
+          className="flex-1 rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2 text-sm text-white placeholder:text-white/25 outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/40"
+        />
+        <button
+          type="button"
+          onClick={add}
+          className="rounded-xl border border-white/10 bg-white/[0.055] px-4 py-2 text-sm font-semibold text-white/75 hover:text-white hover:border-orange-500/35"
+        >
+          Hinzufügen
+        </button>
+        <button
+          type="button"
+          onClick={() => { void save(); }}
+          disabled={saving || !changed}
+          className="rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+          style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+        >
+          {saving ? 'Speichert...' : 'Leistungen speichern'}
+        </button>
+      </div>
+      {localError && <p className="text-xs text-red-300">{localError}</p>}
+    </section>
+  );
+}
+
 function StaffPanel({
   onStaffChange,
   onNavigate,
@@ -1095,10 +1267,11 @@ function StaffPanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('');
-  const [createRole, setCreateRole] = useState('Stylist');
+  const [createRole, setCreateRole] = useState('Friseur/in');
   const [editRole, setEditRole] = useState('');
-  const [services, setServices] = useState('Haarschnitt, Farbe, Styling');
+  const [businessServices, setBusinessServices] = useState<string[]>([]);
   const [savingStaff, setSavingStaff] = useState(false);
+  const [savingServicesId, setSavingServicesId] = useState<string | null>(null);
   const [staffSchedule, setStaffSchedule] = useState<ChipySchedule>(DEFAULT_SCHEDULE);
   const [staffBlocks, setStaffBlocks] = useState<ChipyBlock[]>([]);
   const [staffBookings, setStaffBookings] = useState<ChipyBooking[]>([]);
@@ -1110,6 +1283,12 @@ function StaffPanel({
   const [connectionLoading, setConnectionLoading] = useState<string | null>(null);
 
   const selected = staff.find(s => s.id === selectedId) ?? null;
+
+  useEffect(() => {
+    getAgentConfig()
+      .then((cfg) => setBusinessServices(deriveBusinessServiceLabels(cfg)))
+      .catch(() => setBusinessServices(serviceItemsToStaffLabels(HAIRDRESSER_SERVICE_PRESET)));
+  }, []);
 
   const loadStaff = useCallback(async () => {
     setLoading(true); setError(null);
@@ -1170,7 +1349,7 @@ function StaffPanel({
       const res = await createCalendarStaff({
         name: name.trim(),
         role: createRole.trim() || undefined,
-        services: services.split(',').map(s => s.trim()).filter(Boolean),
+        services: businessServices,
       });
       setStaff(prev => {
         const next = [...prev, res.staff];
@@ -1213,6 +1392,20 @@ function StaffPanel({
       setStaff(prev => prev.map(s => s.id === selected.id ? { ...s, ...res.staff } : s));
     } catch {
       setEditRole(selected.role ?? '');
+    }
+  }
+
+  async function handleStaffServicesSave(member: CalendarStaff, nextServices: string[]) {
+    setSavingServicesId(member.id);
+    setError(null);
+    try {
+      const res = await updateCalendarStaff(member.id, { services: nextServices });
+      setStaff(prev => prev.map(s => s.id === member.id ? { ...s, ...res.staff } : s));
+    } catch (e: unknown) {
+      setError((e instanceof Error ? e.message : null) ?? 'Leistungen konnten nicht gespeichert werden');
+      throw e;
+    } finally {
+      setSavingServicesId(null);
     }
   }
 
@@ -1379,12 +1572,10 @@ function StaffPanel({
           )}
         </div>
 
-        <form onSubmit={handleCreateStaff} className="grid grid-cols-1 sm:grid-cols-[1.2fr_1fr_1.4fr_auto] gap-2 mb-4">
+        <form onSubmit={handleCreateStaff} className="grid grid-cols-1 sm:grid-cols-[1.2fr_1fr_auto] gap-2 mb-4">
           <input value={name} onChange={e => setName(e.target.value)} placeholder="Name, z.B. Lena"
             className="rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }} />
           <input value={createRole} onChange={e => setCreateRole(e.target.value)} placeholder="Rolle"
-            className="rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }} />
-          <input value={services} onChange={e => setServices(e.target.value)} placeholder="Services, kommasepariert"
             className="rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }} />
           <button type="submit" disabled={!name.trim() || savingStaff}
             className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
@@ -1392,6 +1583,9 @@ function StaffPanel({
             Anlegen
           </button>
         </form>
+        <p className="mb-4 rounded-xl border border-white/8 bg-black/15 px-3 py-2 text-xs leading-relaxed text-white/40">
+          Neue Mitarbeiter übernehmen automatisch die Betriebsleistungen{businessServices.length ? ` (${businessServices.length})` : ''}. Danach kannst du pro Person einzelne Leistungen bearbeiten.
+        </p>
 
         {staff.length > 0 ? (
           <div className="flex gap-2 overflow-x-auto pb-1">
@@ -1412,12 +1606,23 @@ function StaffPanel({
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-sm font-bold text-white">{selected.name}</p>
-              <p className="text-xs text-white/35 mt-1">{selected.services?.length ? selected.services.join(', ') : 'Eigener Mitarbeiter-Kalender'}</p>
+              <p className="text-xs text-white/35 mt-1">
+                {selected.services?.length
+                  ? `${selected.services.length} Leistung${selected.services.length === 1 ? '' : 'en'} aktiv`
+                  : 'Eigener Mitarbeiter-Kalender'}
+              </p>
             </div>
             <input value={editRole} onChange={e => setEditRole(e.target.value)} onBlur={() => { void handleRoleBlur(); }} placeholder="Rolle"
               className="w-36 rounded-xl px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none"
               style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }} />
           </div>
+
+          <StaffServicesEditor
+            member={selected}
+            businessServices={businessServices}
+            saving={savingServicesId === selected.id}
+            onSave={(nextServices) => handleStaffServicesSave(selected, nextServices)}
+          />
 
           <section className="-mx-5 px-5 py-5 border-y border-orange-500/10" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.09), rgba(255,255,255,0.025) 48%, rgba(6,182,212,0.07))' }}>
             <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

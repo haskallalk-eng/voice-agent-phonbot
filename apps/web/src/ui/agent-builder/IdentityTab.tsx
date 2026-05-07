@@ -6,6 +6,7 @@ import { VoiceClonePanel } from './VoiceClonePanel.js';
 import { OpeningHoursEditor } from './OpeningHoursEditor.js';
 import { ServicesEditor } from './ServicesEditor.js';
 import { AdaptiveTextarea } from '../../components/AdaptiveTextarea.js';
+import { HAIRDRESSER_SERVICE_PRESET } from '../../lib/service-presets.js';
 
 export interface IdentityTabProps {
   config: AgentConfig;
@@ -30,6 +31,11 @@ export function IdentityTab({
   onVoiceSelect,
   onVoiceCloned,
 }: IdentityTabProps) {
+  const isHairdresser = React.useMemo(() => {
+    const haystack = `${config.industry ?? ''} ${config.businessDescription ?? ''} ${config.servicesText ?? ''}`.toLowerCase();
+    return /friseur|salon|haar|farbe|kopfhaut|stylist/.test(haystack);
+  }, [config.industry, config.businessDescription, config.servicesText]);
+
   // If the persisted voice-id no longer exists in the current language's
   // curated catalog (e.g. a legacy "11labs-Carola" after we tightened the
   // native-only lineup), fall back to the catalog's default voice so the
@@ -145,6 +151,9 @@ export function IdentityTab({
             <ServicesEditor
               value={config.services ?? []}
               legacyText={config.servicesText ?? ''}
+              presetItems={isHairdresser ? HAIRDRESSER_SERVICE_PRESET : undefined}
+              presetLabel="Friseur-Standardservices"
+              presetDescription="Typische Salonleistungen mit grober Dauer. Preise kannst du optional ergänzen."
               onChange={(next) => onUpdate({ services: next })}
               onConsumeLegacy={() => onUpdate({ servicesText: '' })}
             />

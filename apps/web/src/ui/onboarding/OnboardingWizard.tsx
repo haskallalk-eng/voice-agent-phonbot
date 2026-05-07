@@ -226,6 +226,7 @@ export function OnboardingWizard({ onComplete }: Props) {
         address: form.address,
         openingHours: form.openingHours,
         servicesText: form.servicesText,
+        services: template.defaults.services ?? [],
         systemPrompt: template.defaults.systemPrompt,
         tools: template.defaults.tools,
         fallback: { enabled: true, reason: 'Allgemeine Übergabe' },
