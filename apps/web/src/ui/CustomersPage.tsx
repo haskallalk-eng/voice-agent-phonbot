@@ -777,7 +777,30 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
             <BusinessField label="Rolle">
               <input value={editRole} onChange={(e) => setEditRole(e.target.value)} placeholder="z.B. Senior Stylistin" className={INPUT_CLASS} />
             </BusinessField>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-black/15 p-5 space-y-5">
             <div>
+              <div className="mb-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-100/50">Arbeitszeiten</p>
+                <h3 className="mt-1 text-base font-bold text-white">{selected.name}</h3>
+                <p className="mt-1 text-xs leading-relaxed text-white/35">
+                  Nur die Verfügbarkeit der Person. Termine, Sperren und externe Kalender bearbeitest du weiter im Kalender-Modul.
+                </p>
+              </div>
+              <OpeningHoursEditor value={hoursText} onChange={setHoursText} />
+              <button
+                type="button"
+                onClick={() => { void saveSelectedHours(); }}
+                disabled={savingId === `${selected.id}:hours`}
+                className="mt-4 w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
+                style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+              >
+                {savingId === `${selected.id}:hours` ? 'Speichere...' : 'Arbeitszeiten speichern'}
+              </button>
+            </div>
+
+            <div className="border-t border-white/8 pt-5">
               <span className="text-sm font-medium text-white/70">Leistungen</span>
               <p className="mt-0.5 mb-2 text-[11px] leading-relaxed text-white/35">
                 Gleiche Pflege wie beim Betrieb: Name, Preis und Dauer strukturiert erfassen. Ohne eigene Anpassung startet die Person mit den Betriebsleistungen.
@@ -788,40 +811,20 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
                 onChange={setStaffServices}
                 onConsumeLegacy={() => undefined}
               />
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                <button type="button" onClick={() => { void applyBusinessDefaults(); }} className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm text-white/65 hover:text-white">
+                  Betrieb übernehmen
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { void saveSelectedProfile(); }}
+                  disabled={!editName.trim() || savingId === selected.id}
+                  className="rounded-xl border border-orange-500/30 bg-orange-500/14 px-4 py-2.5 text-sm font-semibold text-orange-100 disabled:opacity-40 sm:ml-auto"
+                >
+                  Profil & Leistungen speichern
+                </button>
+              </div>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <button type="button" onClick={() => { void applyBusinessDefaults(); }} className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm text-white/65 hover:text-white">
-                Betrieb übernehmen
-              </button>
-              <button
-                type="button"
-                onClick={() => { void saveSelectedProfile(); }}
-                disabled={!editName.trim() || savingId === selected.id}
-                className="rounded-xl border border-orange-500/30 bg-orange-500/14 px-4 py-2.5 text-sm font-semibold text-orange-100 disabled:opacity-40 sm:ml-auto"
-              >
-                Profil speichern
-              </button>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-white/10 bg-black/15 p-5">
-            <div className="mb-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-100/50">Arbeitszeiten</p>
-              <h3 className="mt-1 text-base font-bold text-white">{selected.name}</h3>
-              <p className="mt-1 text-xs leading-relaxed text-white/35">
-                Nur die Verfügbarkeit der Person. Termine, Sperren und externe Kalender bearbeitest du weiter im Kalender-Modul.
-              </p>
-            </div>
-            <OpeningHoursEditor value={hoursText} onChange={setHoursText} />
-            <button
-              type="button"
-              onClick={() => { void saveSelectedHours(); }}
-              disabled={savingId === `${selected.id}:hours`}
-              className="mt-4 w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
-            >
-              {savingId === `${selected.id}:hours` ? 'Speichere...' : 'Arbeitszeiten speichern'}
-            </button>
           </div>
         </div>
       )}
