@@ -1,3 +1,6 @@
+import type { ServiceItem } from '../../lib/api.js';
+import { HAIRDRESSER_SERVICE_PRESET } from '../../lib/service-presets.js';
+
 export type Template = {
   id: string;
   iconId: string;
@@ -9,6 +12,7 @@ export type Template = {
     voice: string;
     businessDescription: string;
     servicesText: string;
+    services?: ServiceItem[];
     openingHours: string;
     systemPrompt: string;
     tools: string[];
@@ -29,6 +33,7 @@ export const TEMPLATES: Template[] = [
       voice: CHIPY_DEFAULT_VOICE_ID,
       businessDescription: 'Friseursalon für Damen und Herren mit Walk-in und Terminbuchung.',
       servicesText: '',
+      services: HAIRDRESSER_SERVICE_PRESET,
       openingHours: 'Mo-Fr 09:00-18:00, Sa 09:00-14:00',
       systemPrompt:
         `Du bist die Telefonassistenz von {{businessName}}. Du bist herzlich, locker und gut gelaunt — wie eine nette Kollegin am Empfang.

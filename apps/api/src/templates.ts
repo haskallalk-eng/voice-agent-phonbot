@@ -10,6 +10,7 @@ export type Template = {
   prompt: string;
   businessDescription: string;
   servicesText: string;
+  services?: Array<{ id: string; name: string; duration?: string; tag?: 'BELIEBT' | 'NEU' | 'AKTION' | null }>;
   openingHours: string;
   tools: string[];
   /**
@@ -37,6 +38,18 @@ export const TEMPLATES: Template[] = [
     voice: DEFAULT_VOICE_ID,
     businessDescription: 'Friseursalon für Damen und Herren mit Walk-in und Terminbuchung.',
     servicesText: 'Herrenschnitt, Damenschnitt, Färben, Strähnen, Waschen & Föhnen, Bartpflege',
+    services: [
+      { id: 'haircut-women', name: 'Damenhaarschnitt', duration: '45 min', tag: 'BELIEBT' },
+      { id: 'haircut-men', name: 'Herrenschnitt', duration: '30 min', tag: 'BELIEBT' },
+      { id: 'haircut-kids', name: 'Kinderhaarschnitt', duration: '30 min' },
+      { id: 'wash-blowdry', name: 'Waschen & Föhnen', duration: '30 min' },
+      { id: 'roots-color', name: 'Ansatzfarbe', duration: '75 min' },
+      { id: 'full-color', name: 'Farbe komplett', duration: '90 min' },
+      { id: 'highlights-partial', name: 'Strähnen Oberkopf', duration: '90 min' },
+      { id: 'balayage', name: 'Balayage', duration: '150 min' },
+      { id: 'glossing', name: 'Glossing / Tönung', duration: '60 min' },
+      { id: 'beard-trim', name: 'Bart trimmen', duration: '20 min' },
+    ],
     openingHours: 'Mo-Fr 09:00-18:00, Sa 09:00-14:00',
     prompt: `Du bist die Telefonassistenz von Demo-Salon. Du bist herzlich, locker und gut gelaunt.
 
@@ -44,7 +57,7 @@ BEGRÜSSUNG: "Hallo, Demo-Salon, was kann ich für dich tun?"
 
 Hilf beim Buchen von Terminen, beantworte Fragen zu Services und Preisen. Frage nach: 1. Welcher Service? 2. Wunschfriseur? 3. Wann? 4. Name.
 Bei Preisfragen: "Die genauen Preise hängen von Länge und Aufwand ab — dein Friseur berät dich vor Ort."
-Services: Herrenschnitt, Damenschnitt, Färben, Strähnen, Bartpflege.
+Services: Damenhaarschnitt ca. 45 Minuten, Herrenschnitt ca. 30 Minuten, Kinderhaarschnitt ca. 30 Minuten, Waschen & Föhnen ca. 30 Minuten, Ansatzfarbe ca. 75 Minuten, Farbe komplett ca. 90 Minuten, Strähnen Oberkopf ca. 90 Minuten, Balayage ca. 150 Minuten, Glossing/Tönung ca. 60 Minuten, Bart trimmen ca. 20 Minuten.
 Öffnungszeiten: Mo-Fr 09:00-18:00, Sa 09:00-14:00.
 TONFALL: Locker, freundlich, kurze Sätze.`,
     tools: ['calendar.findSlots', 'calendar.book', 'calendar.findBookings', 'calendar.cancel', 'calendar.reschedule', 'ticket.create'],

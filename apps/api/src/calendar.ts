@@ -495,6 +495,52 @@ function sanitizeStaffServices(value: unknown): string[] {
   return services;
 }
 
+function normalizeServiceLookup(value: string | null | undefined): string {
+  return (value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\([^)]*\)/g, ' ')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function serviceAliasTokens(value: string): Set<string> {
+  const normalized = normalizeServiceLookup(value);
+  const tokens = new Set(normalized.split(/\s+/).filter(Boolean));
+  if (/schnitt|schneiden|haarschnitt/.test(normalized)) tokens.add('haarschnitt');
+  if (/herr|mann|barber/.test(normalized)) tokens.add('herrenschnitt');
+  if (/dame|frau/.test(normalized)) tokens.add('damenhaarschnitt');
+  if (/farbe|farben|faerben|color|ansatz|toenung|tonung|glossing/.test(normalized)) tokens.add('farbe');
+  if (/strahne|strahnen|highlights/.test(normalized)) tokens.add('straehnen');
+  if (/balayage/.test(normalized)) tokens.add('balayage');
+  if (/bart|beard/.test(normalized)) tokens.add('bart');
+  if (/fohn|foehn|blow/.test(normalized)) tokens.add('foehnen');
+  return tokens;
+}
+
+function staffSupportsService(member: CalendarStaff, requestedService?: string | null): boolean {
+  const requested = normalizeServiceLookup(requestedService);
+  if (!requested) return true;
+  // Backwards compatibility: legacy staff rows with no service list must not
+  // suddenly stop receiving bookings after this feature ships.
+  if (!member.services?.length) return true;
+
+  const requestedTokens = serviceAliasTokens(requested);
+  return member.services.some((service) => {
+    const offered = normalizeServiceLookup(service);
+    if (!offered) return false;
+    if (offered.includes(requested) || requested.includes(offered)) return true;
+    const offeredTokens = serviceAliasTokens(offered);
+    if (requestedTokens.has('herrenschnitt') && offeredTokens.has('damenhaarschnitt') && !offeredTokens.has('herrenschnitt')) return false;
+    if (requestedTokens.has('damenhaarschnitt') && offeredTokens.has('herrenschnitt') && !offeredTokens.has('damenhaarschnitt')) return false;
+    for (const token of requestedTokens) {
+      if (offeredTokens.has(token)) return true;
+    }
+    return false;
+  });
+}
+
 async function assertStaffBelongs(orgId: string, staffId?: string | null): Promise<string | null> {
   if (!staffId) return null;
   if (!pool) return staffId;
@@ -1994,6 +2040,12 @@ async function findFreeSlotsByContract(
   opts: { date?: string; range?: string; service?: string; staffId?: string | null },
 ): Promise<{ slots: string[]; source: string }> {
   const staffId = await assertStaffBelongs(orgId, opts.staffId);
+  if (staffId) {
+    const member = (await getCalendarStaff(orgId)).find((s) => s.id === staffId);
+    if (member && !staffSupportsService(member, opts.service)) {
+      return { slots: [], source: 'service-not-offered' };
+    }
+  }
   const connections = await getCheckableConnections(orgId, staffId);
   const sources = ['chipy'];
   const { schedule, blocks, timeBlocks } = await getChipySchedule(orgId, staffId);
@@ -2034,9 +2086,13 @@ export async function findFreeSlotsForAnyStaff(
     const result = await findFreeSlotsByContract(orgId, opts);
     return { ...result, staffCount: 0 };
   }
+  const eligibleStaff = staff.filter((member) => staffSupportsService(member, opts.service));
+  if (eligibleStaff.length === 0) {
+    return { slots: [], source: 'team:service-not-offered', staffCount: staff.length };
+  }
 
   const perStaff = await Promise.all(
-    staff.map(async (member) => {
+    eligibleStaff.map(async (member) => {
       const result = await findFreeSlotsByContract(orgId, { ...opts, staffId: member.id });
       return { member, result };
     }),
@@ -2195,6 +2251,12 @@ export async function bookSlot(
   error?: string;
 }> {
   const staffId = await assertStaffBelongs(orgId, opts.staffId);
+  if (staffId) {
+    const member = (await getCalendarStaff(orgId)).find((s) => s.id === staffId);
+    if (member && !staffSupportsService(member, opts.service)) {
+      return { ok: false, error: `Service not offered by staff: ${opts.service}` };
+    }
+  }
   const connections = await getCheckableConnections(orgId, staffId);
   const slotTime = parseSlotTime(opts.time);
   if (!slotTime) return { ok: false, error: `Cannot parse time: ${opts.time}` };
@@ -2311,11 +2373,15 @@ export async function bookSlotForAnyStaff(
     const result = await bookSlot(orgId, { ...opts, staffId: null });
     return { ...result, assignedStaffId: null, assignedStaffName: null };
   }
+  const eligibleStaff = staff.filter((member) => staffSupportsService(member, opts.service));
+  if (eligibleStaff.length === 0) {
+    return { ok: false, error: `No staff offers service: ${opts.service}` };
+  }
 
   const slotTime = parseSlotTime(opts.time);
   if (!slotTime) return { ok: false, error: `Cannot parse time: ${opts.time}` };
 
-  const candidates = await rankAvailableStaffForSlot(orgId, staff, slotTime);
+  const candidates = await rankAvailableStaffForSlot(orgId, eligibleStaff, slotTime);
   const contractCandidates: CalendarStaff[] = [];
   for (const member of candidates) {
     const result = await findFreeSlotsByContract(orgId, {

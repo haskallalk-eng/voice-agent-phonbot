@@ -60,11 +60,17 @@ function newId(): string {
 export function ServicesEditor({
   value,
   legacyText,
+  presetItems,
+  presetLabel = 'Standard-Services einfügen',
+  presetDescription,
   onChange,
   onConsumeLegacy,
 }: {
   value: ServiceItem[];
   legacyText: string;
+  presetItems?: ServiceItem[];
+  presetLabel?: string;
+  presetDescription?: string;
   onChange: (next: ServiceItem[]) => void;
   /** Called when the user accepts the legacy-to-structured migration —
    *  parent should clear `servicesText` so the banner disappears. */
@@ -96,6 +102,21 @@ export function ServicesEditor({
     latestRef.current = next;
     onChange(next);
     setExpandedId(null); // keep the new row collapsed — clean & focused on the name field
+  }
+  function addPreset() {
+    if (!presetItems?.length) return;
+    const existingNames = new Set(latestRef.current.map((s) => s.name.trim().toLowerCase()).filter(Boolean));
+    const additions = presetItems
+      .filter((s) => {
+        const name = s.name.trim().toLowerCase();
+        return name && !existingNames.has(name);
+      })
+      .map<ServiceItem>((s) => ({ ...s, id: newId() }));
+    if (additions.length === 0) return;
+    const next = [...latestRef.current, ...additions];
+    latestRef.current = next;
+    onChange(next);
+    setExpandedId(null);
   }
   function migrateLegacy() {
     // Split the freetext on commas + line breaks, each fragment becomes one
@@ -145,6 +166,31 @@ export function ServicesEditor({
           </div>
         </div>
       )}
+
+      {presetItems?.length ? (
+        <div
+          className="rounded-2xl border px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+          style={{
+            borderColor: 'rgba(249,115,22,0.16)',
+            background: 'linear-gradient(135deg, rgba(249,115,22,0.08), rgba(6,182,212,0.045))',
+          }}
+        >
+          <div>
+            <p className="text-xs font-semibold text-white/80">{presetLabel}</p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-white/42">
+              {presetDescription ?? 'Fügt typische Leistungen mit Dauer hinzu. Bestehende Services bleiben erhalten.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={addPreset}
+            className="shrink-0 rounded-full px-4 py-2 text-xs font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_22px_rgba(249,115,22,0.35)] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60"
+            style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+          >
+            {value.length > 0 ? 'Fehlende ergänzen' : 'Preset übernehmen'}
+          </button>
+        </div>
+      ) : null}
 
       {/* Empty state */}
       {value.length === 0 && legacyText.trim().length === 0 && (
