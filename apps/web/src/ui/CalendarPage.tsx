@@ -675,7 +675,7 @@ function SettingsPanel({
     }
   }
 
-  const inputClass = "rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/40 focus:ring-1 focus:ring-orange-500/20 transition-all";
+  const inputClass = "min-w-0 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/40 focus:ring-1 focus:ring-orange-500/20 transition-all";
   const inputStyle = { background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' };
 
   return (
@@ -687,7 +687,7 @@ function SettingsPanel({
           {DAY_ORDER.map((dow, i) => {
             const day = schedule[dow] ?? DEFAULT_SCHEDULE[dow]!;
             return (
-              <div key={dow} className="flex items-center gap-4 px-5 py-3.5"
+              <div key={dow} className="flex flex-wrap items-center gap-3 px-5 py-3.5 sm:gap-4"
                 style={i < DAY_ORDER.length - 1 ? { borderBottom: '1px solid rgba(255,255,255,0.03)' } : undefined}>
                 <button
                   aria-pressed={day.enabled}
@@ -699,7 +699,7 @@ function SettingsPanel({
                 </button>
                 <span className={`w-20 text-[13px] font-medium ${day.enabled ? 'text-white' : 'text-white/25'}`}>{DAY_NAMES[dow]}</span>
                 {day.enabled ? (
-                  <div className="flex items-center gap-2 flex-1 justify-end">
+                  <div className="grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:flex sm:w-auto sm:flex-1 sm:justify-end">
                     <input type="time" value={day.start} onChange={e => setSchedule(s => ({ ...s, [dow]: { ...day, start: e.target.value } }))}
                       className={inputClass} style={inputStyle} />
                     <span className="text-white/20 text-[11px]">–</span>
@@ -765,13 +765,13 @@ function SettingsPanel({
         </div>
 
         {blockMode === 'day' && (
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <input type="date" value={newBlockDate} min={todayISO()} onChange={e => setNewBlockDate(e.target.value)}
               className={`${inputClass} flex-1`} style={inputStyle} />
             <input type="text" value={newBlockReason} onChange={e => setNewBlockReason(e.target.value)} placeholder="Grund"
               className={`${inputClass} flex-1 placeholder-white/15`} style={inputStyle} />
             <button onClick={handleAddBlock} disabled={!newBlockDate}
-              className="shrink-0 rounded-lg px-4 py-2 text-xs font-semibold disabled:opacity-30 transition-all hover:brightness-110 cursor-pointer"
+              className="w-full shrink-0 rounded-lg px-4 py-2 text-xs font-semibold transition-all hover:brightness-110 disabled:opacity-30 sm:w-auto cursor-pointer"
               style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
               <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Sperren</span>
             </button>
@@ -780,18 +780,18 @@ function SettingsPanel({
 
         {blockMode === 'range' && (
           <div className="space-y-2">
-            <div className="flex gap-2 items-center">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <input type="date" value={newBlockDate} min={todayISO()} onChange={e => setNewBlockDate(e.target.value)}
                 className={`${inputClass} flex-1`} style={inputStyle} />
               <span className="text-white/20 text-[11px]">–</span>
               <input type="date" value={newBlockEndDate} min={newBlockDate || todayISO()} onChange={e => setNewBlockEndDate(e.target.value)}
                 className={`${inputClass} flex-1`} style={inputStyle} />
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <input type="text" value={newBlockReason} onChange={e => setNewBlockReason(e.target.value)} placeholder="Grund"
                 className={`${inputClass} flex-1 placeholder-white/15`} style={inputStyle} />
               <button onClick={handleAddRange} disabled={!newBlockDate || !newBlockEndDate}
-                className="shrink-0 rounded-lg px-4 py-2 text-xs font-semibold disabled:opacity-30 transition-all hover:brightness-110 cursor-pointer"
+                className="w-full shrink-0 rounded-lg px-4 py-2 text-xs font-semibold transition-all hover:brightness-110 disabled:opacity-30 sm:w-auto cursor-pointer"
                 style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
                 <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Sperren</span>
               </button>
@@ -801,7 +801,7 @@ function SettingsPanel({
 
         {blockMode === 'hours' && (
           <div className="space-y-2">
-            <div className="flex gap-2 items-center">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <input type="date" value={newBlockDate} min={todayISO()} onChange={e => setNewBlockDate(e.target.value)}
                 className={`${inputClass} flex-1`} style={inputStyle} />
               <input type="time" value={newBlockStartTime} onChange={e => setNewBlockStartTime(e.target.value)}
@@ -810,11 +810,11 @@ function SettingsPanel({
               <input type="time" value={newBlockEndTime} onChange={e => setNewBlockEndTime(e.target.value)}
                 className={inputClass} style={inputStyle} />
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <input type="text" value={newBlockReason} onChange={e => setNewBlockReason(e.target.value)} placeholder="Grund"
                 className={`${inputClass} flex-1 placeholder-white/15`} style={inputStyle} />
               <button onClick={handleAddHoursBlock} disabled={!newBlockDate || !newBlockStartTime || !newBlockEndTime}
-                className="shrink-0 rounded-lg px-4 py-2 text-xs font-semibold disabled:opacity-30 transition-all hover:brightness-110 cursor-pointer"
+                className="w-full shrink-0 rounded-lg px-4 py-2 text-xs font-semibold transition-all hover:brightness-110 disabled:opacity-30 sm:w-auto cursor-pointer"
                 style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
                 <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Sperren</span>
               </button>
@@ -1509,7 +1509,7 @@ function StaffPanel({
     const connected = Boolean(conn?.connected);
     const meta = PROVIDER_META[provider] ?? DEFAULT_PROVIDER_META;
     return (
-      <div key={provider} className="rounded-2xl px-5 py-4 flex items-center gap-4 hover:bg-white/[0.04] transition-all" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <div key={provider} className="rounded-2xl px-5 py-4 flex flex-col gap-4 hover:bg-white/[0.04] transition-all sm:flex-row sm:items-center" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-lg" style={{ background: meta.bg }}>
           {provider === 'google' ? (
             <svg width="18" height="18" viewBox="0 0 24 24" className="fancy-star"><defs><linearGradient id={`staffGglCal-${selected?.id ?? 'x'}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#4285F4"/><stop offset="33%" stopColor="#34A853"/><stop offset="66%" stopColor="#FBBC05"/><stop offset="100%" stopColor="#EA4335"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill={`url(#staffGglCal-${selected?.id ?? 'x'})`}/></svg>
@@ -1529,9 +1529,9 @@ function StaffPanel({
             Trennen
           </button>
         ) : provider === 'calcom' ? (
-          <div className="flex gap-2 min-w-0">
+          <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row">
             <input value={calcomKey} onChange={e => setCalcomKey(e.target.value)} placeholder="cal_live_..."
-              className="w-32 sm:w-44 rounded-lg px-3 py-1.5 text-xs text-white placeholder-white/20 focus:outline-none"
+              className="w-full min-w-0 rounded-lg px-3 py-1.5 text-xs text-white placeholder-white/20 focus:outline-none sm:w-44"
               style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }} />
             <button onClick={() => { void runConnect(provider); }} disabled={!calcomKey.trim() || connectionLoading === provider}
               className="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-40"

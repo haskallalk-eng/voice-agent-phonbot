@@ -253,8 +253,7 @@ export function OpeningHoursEditor({ value, onChange }: { value: string; onChang
           return (
             <div
               key={d}
-              className="grid items-center gap-3 px-4 py-3 hover:bg-white/[0.02] transition-colors"
-              style={{ gridTemplateColumns: 'minmax(5.5rem, auto) minmax(8rem, auto) 1fr' }}
+              className="grid grid-cols-1 items-center gap-3 px-4 py-3 transition-colors hover:bg-white/[0.02] sm:grid-cols-[minmax(5.5rem,auto)_minmax(8rem,auto)_minmax(0,1fr)]"
             >
               <span className="text-xs font-medium text-white/75">{DAY_LABEL[d]}</span>
               {/* Toggle group — plain div, not label */}
@@ -286,13 +285,13 @@ export function OpeningHoursEditor({ value, onChange }: { value: string; onChang
               {/* Time inputs — always rendered so the 3rd column doesn't
                   collapse and visibility is controlled via CSS instead.
                   Keeps the whole row height consistent across all 7 days. */}
-              <div className={`flex items-center gap-2 justify-end ${ds.open ? '' : 'invisible'}`}>
+              <div className={`grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:flex sm:justify-end ${ds.open ? '' : 'invisible'}`}>
                 <input
                   type="time"
                   value={ds.from}
                   onChange={(e) => setDay(d, { from: e.target.value })}
                   disabled={!ds.open}
-                  className="bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white/85 focus:border-orange-500/45 focus:ring-1 focus:ring-orange-500/30 outline-none [color-scheme:dark] w-[7rem]"
+                  className="w-full min-w-0 rounded-lg border border-white/10 bg-white/[0.05] px-2.5 py-1.5 text-xs text-white/85 outline-none [color-scheme:dark] focus:border-orange-500/45 focus:ring-1 focus:ring-orange-500/30 sm:w-[7rem]"
                 />
                 <span className="text-white/35 text-xs">bis</span>
                 <input
@@ -300,7 +299,7 @@ export function OpeningHoursEditor({ value, onChange }: { value: string; onChang
                   value={ds.to}
                   onChange={(e) => setDay(d, { to: e.target.value })}
                   disabled={!ds.open}
-                  className="bg-white/[0.05] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white/85 focus:border-orange-500/45 focus:ring-1 focus:ring-orange-500/30 outline-none [color-scheme:dark] w-[7rem]"
+                  className="w-full min-w-0 rounded-lg border border-white/10 bg-white/[0.05] px-2.5 py-1.5 text-xs text-white/85 outline-none [color-scheme:dark] focus:border-orange-500/45 focus:ring-1 focus:ring-orange-500/30 sm:w-[7rem]"
                 />
               </div>
             </div>

@@ -117,7 +117,7 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
               <p className="text-lg font-bold text-white">{freePlan.name}</p>
               <p className="text-xs text-green-400/70 font-medium">Für immer kostenlos</p>
             </div>
-            <div className="hidden sm:flex items-center gap-6 ml-6">
+            <div className="hidden lg:flex flex-wrap items-center gap-x-6 gap-y-2 ml-6">
               {freePlan.features.map(f => (
                 <span key={f} className="text-sm text-white/50 flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
@@ -236,36 +236,36 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
           <p className="text-sm text-white/60 mb-4 max-w-2xl">
             Ab 3.000 Minuten/Monat, mehrere Standorte oder eigene Integrationen — wir bauen's passgenau.
           </p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-sm text-white/70 max-w-2xl">
-            <span className="flex items-center gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-2 text-sm text-white/70 max-w-2xl">
+            <span className="flex min-w-0 items-center gap-2 break-words">
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
               Unlimited Agents
             </span>
-            <span className="flex items-center gap-2">
+            <span className="flex min-w-0 items-center gap-2 break-words">
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
               Custom SLA
             </span>
-            <span className="flex items-center gap-2">
+            <span className="flex min-w-0 items-center gap-2 break-words">
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
               Dedicated Manager
             </span>
-            <span className="flex items-center gap-2">
+            <span className="flex min-w-0 items-center gap-2 break-words">
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
               White-Label + SSO
             </span>
-            <span className="flex items-center gap-2">
+            <span className="flex min-w-0 items-center gap-2 break-words">
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
               Custom Integrationen
             </span>
-            <span className="flex items-center gap-2">
+            <span className="flex min-w-0 items-center gap-2 break-words">
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
               AVV & On-Prem möglich
             </span>
-            <span className="flex items-center gap-2">
+            <span className="flex min-w-0 items-center gap-2 break-words">
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
               Volume-Rabatt
             </span>
-            <span className="flex items-center gap-2">
+            <span className="flex min-w-0 items-center gap-2 break-words">
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
               Priority Onboarding
             </span>

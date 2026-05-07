@@ -64,7 +64,7 @@ export function CapabilitiesTab({ config, onUpdate }: CapabilitiesTabProps) {
       <div id="handoff-routing">
         <SectionCard title="Übergabe & Eskalation" icon={IconPhoneOut}>
           <div className="mb-4 flex items-start gap-3 flex-wrap">
-            <div className="flex-1 min-w-[16rem]">
+            <div className="min-w-0 flex-1 sm:min-w-[16rem]">
               <p className="text-sm text-white/60">
                 Baue Live-Regeln nach dem Muster: <span className="text-white/78">Wenn der Anrufer ... → leite weiter an Nummer/Abteilung</span>.
               </p>
@@ -227,7 +227,7 @@ function ActiveToolsPanel({ config, onUpdate }: { config: AgentConfig; onUpdate:
 
       {roleIds.length > 0 && (missing.length > 0 || extra.length > 0) && (
         <div className="mb-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.055] px-3 py-2.5 flex items-center gap-3 flex-wrap">
-          <p className="flex-1 min-w-[14rem] text-xs leading-relaxed text-cyan-100/78">
+          <p className="min-w-0 flex-1 text-xs leading-relaxed text-cyan-100/78 sm:min-w-[14rem]">
             {missing.length > 0 && (
               <>Empfohlen für deine Rollen: {missing.map((tool) => TOOL_META[tool as typeof KNOWN_TOOLS[number]]?.label ?? tool).join(', ')}.</>
             )}
@@ -1470,7 +1470,7 @@ function CalendarConnector({ integrations, onChange }: {
           connected the row shows the email + green status + inline Trennen
           action with a confirmation expand underneath. No separate
           "Connected calendars" section above anymore (was a duplicate). */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {CALENDAR_PROVIDERS.map((prov) => {
           const isConnected = connected.find(
             c => c.provider === prov.id || (prov.id === 'outlook' && c.provider === ('microsoft' as string)),
@@ -1487,7 +1487,7 @@ function CalendarConnector({ integrations, onChange }: {
                   : 'border-white/10 bg-white/5 hover:border-orange-500/40 hover:bg-white/10'
             }`}>
               {/* Row body */}
-              <div className="flex items-center gap-3 p-4">
+              <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
                 <prov.Icon size={18} className={isConnected ? 'text-green-400 shrink-0' : 'text-white/50 shrink-0'} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-white">{prov.name}</p>
@@ -1496,7 +1496,7 @@ function CalendarConnector({ integrations, onChange }: {
                   </p>
                 </div>
                 {isConnected ? (
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                     <span className="flex items-center gap-1 text-[11px] text-green-400/80 font-medium">
                       <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />Verbunden
                     </span>

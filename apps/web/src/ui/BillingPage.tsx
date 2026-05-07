@@ -177,7 +177,7 @@ export function BillingPage() {
       {/* Current Plan Card */}
       {status && (
         <div className="glass rounded-2xl p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="text-lg font-semibold text-white">
                 {status.planName} Plan
@@ -188,7 +188,7 @@ export function BillingPage() {
                 </p>
               )}
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <PlanBadge status={status.planStatus} />
               {isPaid && (
                 <button
@@ -207,7 +207,7 @@ export function BillingPage() {
 
       {/* Plan Cards */}
       <div>
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-sm font-semibold text-white/40 uppercase tracking-wide">Verfügbare Pläne</h3>
           {plans.some((p) => p.hasYearly) && (
             <div className="flex items-center gap-1 bg-white/5 rounded-xl p-1 border border-white/10">

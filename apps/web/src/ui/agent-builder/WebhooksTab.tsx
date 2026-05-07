@@ -211,7 +211,7 @@ function EndpointsEditor({ endpoints, onChange }: { endpoints: ApiEndpoint[]; on
       <p className="text-xs font-semibold text-white/60">Endpunkte</p>
       {endpoints.map((ep, i) => (
         <div key={ep.id} className="bg-white/[0.03] rounded-lg px-3 py-2.5 space-y-2">
-          <div className="grid grid-cols-[6rem_1fr_auto] gap-2 items-center">
+          <div className="grid grid-cols-[5.5rem_minmax(0,1fr)_auto] gap-2 items-center">
             <select value={ep.method} onChange={(e) => patch(i, { method: e.target.value as ApiEndpoint['method'] })}
               className="rounded-md border border-white/10 bg-[#0F0F18] px-2 py-1.5 text-xs text-white font-mono outline-none">
               <option value="GET">GET</option>
@@ -277,13 +277,13 @@ function ParamsEditor({ params, onChange, pathPlaceholders }: {
     <div className="space-y-1">
       <p className="text-[11px] text-white/40">Parameter</p>
       {params.map((p, i) => (
-        <div key={i} className="grid grid-cols-[1fr_1fr_6rem_auto_auto] gap-1.5 items-center">
+        <div key={i} className="grid grid-cols-1 gap-1.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_6rem_auto_auto] sm:items-center">
           <input value={p.name} onChange={(e) => patch(i, { name: e.target.value.replace(/[^a-zA-Z0-9_]/g, '_') })}
             placeholder="name"
-            className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white font-mono placeholder:text-white/25 focus:border-orange-500/50 outline-none" />
+            className="min-w-0 rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white font-mono placeholder:text-white/25 focus:border-orange-500/50 outline-none" />
           <input value={p.description} onChange={(e) => patch(i, { description: e.target.value })}
             placeholder="Beschreibung für den Agent"
-            className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white placeholder:text-white/25 focus:border-orange-500/50 outline-none" />
+            className="min-w-0 rounded border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white placeholder:text-white/25 focus:border-orange-500/50 outline-none" />
           <select value={p.type} onChange={(e) => patch(i, { type: e.target.value as 'string' | 'number' | 'boolean' })}
             className="rounded border border-white/10 bg-[#0F0F18] px-1.5 py-1 text-[11px] text-white outline-none">
             <option value="string">Text</option>
@@ -326,7 +326,7 @@ function VariableEditor({ items, onChange }: { items: ExtractedVariable[]; onCha
   return (
     <div className="space-y-3">
       {items.map((v, i) => (
-        <div key={i} className="grid grid-cols-[1fr_1fr_auto_auto_auto] gap-2 items-center bg-white/5 rounded-xl px-4 py-3">
+        <div key={i} className="grid grid-cols-1 gap-2 bg-white/5 rounded-xl px-4 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto_auto] sm:items-center">
           <Input value={v.name} onChange={(e) => patch(i, { name: e.target.value })} placeholder="Name (z.B. kundenname)" />
           <Input value={v.description} onChange={(e) => patch(i, { description: e.target.value })} placeholder="Beschreibung" />
           <select value={v.type} onChange={(e) => patch(i, { type: e.target.value as ExtractedVariable['type'] })}
