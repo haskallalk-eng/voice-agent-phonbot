@@ -378,7 +378,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
 
   return (
     <div
-      className="relative flex flex-col overflow-hidden bg-[#07070D]"
+      className="relative flex w-full min-w-0 flex-col overflow-hidden bg-[#07070D]"
       style={{ height: 'calc(100vh - 3rem)', position: 'sticky', top: 0 }}
     >
       <div className="pointer-events-none absolute inset-0">
@@ -418,7 +418,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
             <p className="text-xs text-white/38 truncate">{config.businessName || 'Konfiguration'} · {activeTab.label}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end">
           {/* Live stats row (hidden on narrow screens — tabs below show them redundantly) */}
           <AgentStatsRow
             config={config}
@@ -434,7 +434,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
               status.type === 'ok'
                 ? 'text-green-400 bg-green-500/10 border border-green-500/20'
                 : 'text-red-400 bg-red-500/10 border border-red-500/20'
-            }`}>
+            } max-w-full break-words`}>
               {status.text}
             </span>
           )}
@@ -491,7 +491,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
         <div
           role="tablist"
           aria-orientation="vertical"
-          className="w-full md:w-56 shrink-0 border-b md:border-b-0 md:border-r border-white/[0.07] bg-black/18 backdrop-blur-xl flex md:grid md:auto-rows-fr gap-2 px-3 md:px-4 py-3 md:py-4 overflow-x-auto md:overflow-hidden scrollbar-thin"
+          className="w-full md:w-56 shrink-0 border-b md:border-b-0 md:border-r border-white/[0.07] bg-black/18 backdrop-blur-xl flex flex-wrap md:grid md:auto-rows-fr gap-2 px-3 md:px-4 py-3 md:py-4 overflow-x-hidden md:overflow-hidden scrollbar-thin"
         >
           {TABS.map((t, index) => (
             <button
@@ -499,7 +499,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
               aria-selected={tab === t.id}
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`group shrink-0 md:w-full md:h-full md:min-h-0 flex items-center gap-2 md:gap-3 px-3 py-2.5 md:py-0 rounded-2xl text-xs font-semibold transition-all md:text-left cursor-pointer relative whitespace-nowrap border ${
+              className={`group min-w-0 flex-1 basis-[8.5rem] md:basis-auto md:w-full md:h-full md:min-h-0 flex items-center gap-2 md:gap-3 px-3 py-2.5 md:py-0 rounded-2xl text-xs font-semibold transition-all md:text-left cursor-pointer relative border ${
                 tab === t.id
                   ? 'bg-gradient-to-br from-orange-500/16 via-white/[0.07] to-cyan-400/12 text-white border-orange-300/22 shadow-[0_0_28px_rgba(249,115,22,0.12)]'
                   : 'text-white/38 hover:text-white/75 hover:bg-white/[0.05] border-white/[0.04]'

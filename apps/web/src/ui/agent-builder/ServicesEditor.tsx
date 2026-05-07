@@ -226,16 +226,16 @@ export function ServicesEditor({
             }}
           >
             {/* Main row — always visible */}
-            <div className="flex items-center gap-2 px-3 py-2.5">
+            <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
               <input
                 type="text"
                 value={s.name}
                 onChange={(e) => patch(s.id, { name: e.target.value })}
                 placeholder="Name des Services"
                 maxLength={120}
-                className={`flex-1 min-w-0 ${inputBase}`}
+                className={`min-w-0 basis-full sm:basis-auto sm:flex-1 ${inputBase}`}
               />
-              <div className="flex items-center gap-1 shrink-0">
+              <div className="flex min-w-0 flex-1 items-center gap-1 sm:flex-none">
                 <input
                   type="text"
                   value={s.price ?? ''}
@@ -243,7 +243,7 @@ export function ServicesEditor({
                   placeholder="Preis"
                   inputMode="decimal"
                   aria-label="Preis"
-                  className={`w-20 text-right ${inputBase}`}
+                  className={`w-full text-right sm:w-20 ${inputBase}`}
                 />
                 <span className="text-xs text-white/45 px-0.5">€</span>
               </div>
@@ -253,7 +253,7 @@ export function ServicesEditor({
                 onChange={(e) => patch(s.id, { duration: e.target.value })}
                 placeholder="Dauer"
                 aria-label="Dauer"
-                className={`w-24 shrink-0 ${inputBase}`}
+                className={`min-w-0 flex-1 sm:w-24 sm:flex-none ${inputBase}`}
               />
               {tagStyle && (
                 <span

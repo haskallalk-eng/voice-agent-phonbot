@@ -363,7 +363,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
               )}
 
               {error && (
-                <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5">
+                <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 break-words [overflow-wrap:anywhere]">
                   ⚠️ {error}
                 </div>
               )}

@@ -66,9 +66,9 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
                 const pct = ((sl.v - sl.min) / (sl.max - sl.min)) * 100;
                 return (
                   <div key={sl.l}>
-                    <div className="flex items-baseline justify-between mb-3">
-                      <span className="text-sm text-white/45 tracking-wide">{sl.l}</span>
-                      <span className="text-lg font-bold text-white tracking-tight tabular-nums">{sl.d}</span>
+                    <div className="flex items-baseline justify-between gap-3 mb-3">
+                      <span className="min-w-0 text-sm text-white/45 tracking-wide">{sl.l}</span>
+                      <span className="shrink-0 text-lg font-bold text-white tracking-tight tabular-nums">{sl.d}</span>
                     </div>
                     <div className="relative h-7 flex items-center group cursor-pointer">
                       <div className="absolute inset-x-0 h-[3px] rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }} />
@@ -98,13 +98,13 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
               {/* Hero number */}
               <div className="mb-10">
                 <p className="text-xs text-white/25 uppercase tracking-[0.15em] font-medium mb-3">Netto-Ersparnis / Monat</p>
-                <p className={`text-[56px] sm:text-[64px] font-extrabold leading-[0.9] tracking-tighter transition-colors duration-300 ${
+                <p className={`text-4xl sm:text-[64px] font-extrabold leading-[0.9] tracking-tighter transition-colors duration-300 ${
                   netto > 0 ? '' : netto === 0 ? 'text-white/30' : 'text-red-400'
                 }`}
                   style={netto > 0 ? { backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)', WebkitBackgroundClip: 'text', color: 'transparent' } : undefined}
                 >
                   <Num value={netto} />
-                  <span className="text-[32px] sm:text-[36px] ml-1 font-semibold" style={netto > 0 ? { backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)', WebkitBackgroundClip: 'text', color: 'transparent' } : undefined}>€</span>
+                  <span className="text-2xl sm:text-[36px] ml-1 font-semibold" style={netto > 0 ? { backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)', WebkitBackgroundClip: 'text', color: 'transparent' } : undefined}>€</span>
                 </p>
                 {plan > 0 && (
                   <p className="text-xs text-white/20 mt-3 tracking-wide">
@@ -116,21 +116,21 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
 
               {/* Breakdown */}
               <div className="space-y-0 rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
-                <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                  <span className="text-[13px] text-white/35 tracking-wide">Zeitersparnis</span>
-                  <span className="text-[15px] text-white/80 font-semibold tracking-tight tabular-nums"><Num value={stunden} /> h / Monat</span>
+                <div className="flex flex-col gap-1 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                  <span className="min-w-0 text-[13px] text-white/35 tracking-wide">Zeitersparnis</span>
+                  <span className="text-[15px] text-white/80 font-semibold tracking-tight tabular-nums sm:shrink-0"><Num value={stunden} /> h / Monat</span>
                 </div>
-                <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                  <span className="text-[13px] text-white/35 tracking-wide">Personalkosten gespart</span>
-                  <span className="text-[15px] text-white/80 font-semibold tracking-tight tabular-nums"><Num value={personal} /> €</span>
+                <div className="flex flex-col gap-1 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                  <span className="min-w-0 text-[13px] text-white/35 tracking-wide">Personalkosten gespart</span>
+                  <span className="text-[15px] text-white/80 font-semibold tracking-tight tabular-nums sm:shrink-0"><Num value={personal} /> €</span>
                 </div>
-                <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                  <span className="text-[13px] text-white/35 tracking-wide">Chipy ({planName})</span>
-                  <span className="text-[15px] text-white/35 font-semibold tracking-tight tabular-nums">–{plan} €</span>
+                <div className="flex flex-col gap-1 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                  <span className="min-w-0 text-[13px] text-white/35 tracking-wide">Chipy ({planName})</span>
+                  <span className="text-[15px] text-white/35 font-semibold tracking-tight tabular-nums sm:shrink-0">–{plan} €</span>
                 </div>
-                <div className="flex items-center justify-between px-5 py-3.5">
-                  <span className="text-[13px] text-white/50 font-medium tracking-wide">Dein Vorteil</span>
-                  <span className={`text-[15px] font-bold tracking-tight tabular-nums ${netto >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                <div className="flex flex-col gap-1 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="min-w-0 text-[13px] text-white/50 font-medium tracking-wide">Dein Vorteil</span>
+                  <span className={`text-[15px] font-bold tracking-tight tabular-nums sm:shrink-0 ${netto >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                     {netto >= 0 ? '+' : ''}<Num value={netto} /> €
                   </span>
                 </div>

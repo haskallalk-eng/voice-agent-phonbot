@@ -304,7 +304,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
 
         {/* Template grid — shown when idle or error */}
         {!isInCall && (
-          <div style={{ overflow: 'visible' }}>
+          <div className="overflow-x-clip overflow-y-visible">
             {/* How it works inline hint */}
             <div className="flex items-center justify-center gap-6 mb-8 flex-wrap">
               {[
@@ -343,8 +343,8 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
                 )}
               </div>
             )}
-            <div className="flex flex-col items-center gap-4 sm:gap-5 lg:gap-6 pb-10" style={{ overflow: 'visible' }}>
-              <div className="grid w-full max-w-5xl grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-16 justify-items-center" style={{ overflow: 'visible' }}>
+            <div className="flex flex-col items-center gap-4 sm:gap-5 lg:gap-6 pb-10 overflow-x-clip overflow-y-visible">
+              <div className="grid w-full max-w-5xl grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-16 justify-items-center overflow-x-clip overflow-y-visible">
                 {allTemplates.map((t) => (
                   <TemplateCard key={t.id} template={t} onDemoStart={() => handleTemplateClick(t.id)} />
                 ))}

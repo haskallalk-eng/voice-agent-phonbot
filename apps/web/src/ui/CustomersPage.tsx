@@ -691,8 +691,8 @@ export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | 
         <div className="rounded-2xl border border-white/[0.07] bg-white/[0.035] overflow-hidden">
           <div className="p-5 border-b border-white/[0.06] flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-sm font-semibold text-white">Kundenliste</h2>
-            <form onSubmit={runSearch} className="flex gap-2">
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, Nummer, E-Mail" className="w-52 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white placeholder:text-white/25 outline-none focus:border-orange-400/50" />
+            <form onSubmit={runSearch} className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, Nummer, E-Mail" className="w-full min-w-0 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white placeholder:text-white/25 outline-none focus:border-orange-400/50 sm:w-52" />
               <button className="rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-sm text-white/65 hover:text-white">Suchen</button>
             </form>
           </div>
@@ -735,7 +735,7 @@ export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | 
                       {customerTypeLabel(customer)}
                     </span>
                   </div>
-                  <p className="text-xs text-white/35 mt-1">{customer.phone_normalized ?? customer.phone ?? 'keine Nummer'} {customer.email ? ` - ${customer.email}` : ''}</p>
+                  <p className="mt-1 break-all text-xs text-white/35">{customer.phone_normalized ?? customer.phone ?? 'keine Nummer'} {customer.email ? ` - ${customer.email}` : ''}</p>
                   <p className="text-xs text-white/30 mt-1">{isOpen ? 'Details geöffnet' : 'Anklicken, um Details zu sehen'} · Aktualisiert: {dateLabel(customer.updated_at)}</p>
                 </div>
                 <div className="flex shrink-0 flex-col gap-2 items-end" onClick={(e) => e.stopPropagation()}>

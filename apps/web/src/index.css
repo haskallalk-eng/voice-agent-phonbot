@@ -43,6 +43,28 @@ body {
 @media (max-width: 640px) {
   .break-all-mobile { word-break: break-all; overflow-wrap: anywhere; }
 
+  .ambient-glow,
+  .ambient-glow-alt {
+    overflow-x: clip;
+  }
+
+  .ambient-glow::before,
+  .ambient-glow::after {
+    width: 260px;
+    height: 260px;
+    filter: blur(32px);
+  }
+
+  .ambient-glow::before {
+    top: -80px;
+    left: -90px;
+  }
+
+  .ambient-glow::after {
+    right: -90px;
+    bottom: -80px;
+  }
+
   /* iOS auto-zoom guard (Phase 1 — 2026-04-23 mobile sweep).
      Safari on iOS automatically zooms INTO any input whose font-size is
      below 16px, then scrolls the rest of the layout off-screen and does

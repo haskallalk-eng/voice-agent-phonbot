@@ -72,7 +72,7 @@ export function NavHeader({
         <PhonbotBrand size="sm" />
 
         {/* Center nav — desktop */}
-        <nav className="hidden md:flex items-center gap-8">
+        <nav className="hidden lg:flex items-center gap-8">
           {NAV_ITEMS.map((item) => (
             <a key={item.anchor} href={`#${item.anchor}`} onClick={handleNav(item.anchor)} className={navLinkClass}>
               {item.label}
@@ -129,13 +129,13 @@ export function NavHeader({
         <div className="flex items-center gap-4">
           <button
             onClick={onGoToLogin}
-            className="text-sm text-white/60 hover:text-white transition-colors duration-200 hidden md:block"
+            className="text-sm text-white/60 hover:text-white transition-colors duration-200 hidden lg:block"
           >
             Einloggen
           </button>
           <button
             onClick={onGoToRegister}
-            className="text-sm font-semibold text-white rounded-full px-5 py-2.5 transition-all duration-300 hover:shadow-[0_0_24px_rgba(249,115,22,0.5)] hover:scale-105 hidden md:block"
+            className="text-sm font-semibold text-white rounded-full px-5 py-2.5 transition-all duration-300 hover:shadow-[0_0_24px_rgba(249,115,22,0.5)] hover:scale-105 hidden lg:block"
             style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
           >
             Kostenlos testen
@@ -143,7 +143,7 @@ export function NavHeader({
           {/* Hamburger — mobile only */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden flex flex-col gap-1.5 p-2 rounded-lg hover:bg-white/5 transition-colors"
+            className="lg:hidden flex flex-col gap-1.5 p-2 rounded-lg hover:bg-white/5 transition-colors"
             aria-label="Menü öffnen"
           >
             <span className={`block w-5 h-0.5 bg-white/60 transition-all duration-200 ${mobileMenuOpen ? 'rotate-45 translate-y-2' : ''}`} />
@@ -155,7 +155,7 @@ export function NavHeader({
 
       {/* Mobile dropdown menu */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-white/5 bg-[#0A0A0F]/95 backdrop-blur-md px-6 py-4 space-y-1">
+        <div className="lg:hidden border-t border-white/5 bg-[#0A0A0F]/95 backdrop-blur-md px-6 py-4 space-y-1">
           {NAV_ITEMS.map((item) => (
             <a
               key={item.anchor}
