@@ -127,7 +127,12 @@ function normalizeQuestions(input: CustomerQuestionConfig[] | undefined): Custom
   const byId = new Map(incoming.map((q) => [q.id, q]));
   const builtin = DEFAULT_QUESTIONS.map((q) => {
     const override = byId.get(q.id);
-    return { ...q, enabled: q.required ? true : override?.enabled !== false };
+    return {
+      ...q,
+      prompt: typeof override?.prompt === 'string' ? override.prompt.trim() || q.prompt : q.prompt,
+      condition: typeof override?.condition === 'string' ? override.condition.trim() : q.condition,
+      enabled: q.required ? true : override?.enabled !== false,
+    };
   });
   const custom = incoming
     .filter((q) => !BUILTIN_IDS.has(q.id))
@@ -136,6 +141,7 @@ function normalizeQuestions(input: CustomerQuestionConfig[] | undefined): Custom
       id: q.id,
       label: q.label.trim(),
       prompt: q.prompt?.trim() || q.label.trim(),
+      condition: q.condition?.trim() || undefined,
       enabled: q.enabled !== false,
       builtin: false,
       detailsKey: q.detailsKey || q.id,
@@ -912,6 +918,91 @@ function CustomerDetails({ customer, questions }: { customer: Customer; question
   );
 }
 
+function QuestionConfigCard({
+  question,
+  saving,
+  onToggle,
+  onSave,
+  onRemove,
+}: {
+  question: CustomerQuestionConfig;
+  saving: boolean;
+  onToggle: (question: CustomerQuestionConfig) => void;
+  onSave: (question: CustomerQuestionConfig, patch: Pick<CustomerQuestionConfig, 'prompt' | 'condition'>) => void;
+  onRemove: (id: string) => void;
+}) {
+  const [prompt, setPrompt] = useState(question.prompt ?? question.label);
+  const [condition, setCondition] = useState(question.condition ?? '');
+
+  useEffect(() => {
+    setPrompt(question.prompt ?? question.label);
+    setCondition(question.condition ?? '');
+  }, [question.id, question.label, question.prompt, question.condition]);
+
+  const changed = prompt.trim() !== (question.prompt ?? question.label).trim()
+    || condition.trim() !== (question.condition ?? '').trim();
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/15 p-4">
+      <button
+        type="button"
+        onClick={() => onToggle(question)}
+        disabled={question.required || saving}
+        className="w-full flex items-start justify-between gap-3 text-left disabled:cursor-not-allowed"
+      >
+        <span>
+          <span className="text-sm font-semibold text-white">{question.label}</span>
+          {condition.trim() && <span className="ml-2 text-[11px] text-orange-200/60">wenn {condition.trim()}</span>}
+          {question.required && <span className="block text-[11px] text-white/25 mt-2">Pflichtfeld</span>}
+        </span>
+        <TogglePill active={question.enabled !== false} disabled={question.required} />
+      </button>
+
+      <div className="mt-3 space-y-2">
+        <label className="block">
+          <span className="text-[10px] uppercase tracking-[0.13em] text-white/28">Frage / Hinweis</span>
+          <AdaptiveTextarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            minRows={2}
+            className="mt-1 w-full rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2 text-xs text-white placeholder:text-white/25 outline-none focus:border-orange-400/50"
+            placeholder="Wie soll Chipy diese Info erfragen?"
+          />
+        </label>
+        <label className="block">
+          <span className="text-[10px] uppercase tracking-[0.13em] text-white/28">Nur fragen wenn</span>
+          <input
+            value={condition}
+            onChange={(e) => setCondition(e.target.value)}
+            placeholder="z.B. Farbe, Blondierung, Dauerwelle oder empfindliche Kopfhaut"
+            className="mt-1 w-full rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2 text-xs text-white placeholder:text-white/25 outline-none focus:border-orange-400/50"
+          />
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onSave(question, { prompt: prompt.trim(), condition: condition.trim() })}
+            disabled={!changed || saving || !prompt.trim()}
+            className="rounded-xl border border-orange-500/25 bg-orange-500/12 px-3 py-2 text-xs font-semibold text-orange-100 disabled:opacity-40"
+          >
+            Regel speichern
+          </button>
+          {question.builtin !== true && (
+            <button
+              type="button"
+              onClick={() => onRemove(question.id)}
+              disabled={saving}
+              className="text-xs text-red-300/60 hover:text-red-300 disabled:opacity-40"
+            >
+              Frage löschen
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | null } = {}) {
   const [activeTab, setActiveTab] = useState<BusinessTab>('betrieb');
   const [status, setStatus] = useState<CustomerModuleStatus | null>(null);
@@ -923,6 +1014,8 @@ export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [customQuestion, setCustomQuestion] = useState('');
+  const [customQuestionPrompt, setCustomQuestionPrompt] = useState('');
+  const [customQuestionCondition, setCustomQuestionCondition] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
   const [showEmailHint, setShowEmailHint] = useState(false);
   const [emailRejected, setEmailRejected] = useState(false);
@@ -1062,21 +1155,37 @@ export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | 
     );
   }
 
+  async function saveQuestionConfig(question: CustomerQuestionConfig, patch: Pick<CustomerQuestionConfig, 'prompt' | 'condition'>) {
+    const nextQuestions = questions.map((q) => q.id === question.id ? {
+      ...q,
+      prompt: patch.prompt?.trim() || q.label,
+      condition: patch.condition?.trim() ?? '',
+    } : q);
+    await saveModule(
+      { ...moduleConfig, enabled, allowBookingWithoutApproval, questions: nextQuestions },
+      'Fragen-Regel gespeichert. Chipy nutzt den Hinweis beim nächsten Speichern/Deploy.',
+    );
+  }
+
   async function addCustomQuestion(e: React.FormEvent) {
     e.preventDefault();
     const label = customQuestion.trim();
     if (!label) return;
     const id = normalizeQuestionId(label);
+    const prompt = customQuestionPrompt.trim() || label;
+    const condition = customQuestionCondition.trim() || undefined;
     await saveModule(
       {
         ...moduleConfig,
         enabled,
         allowBookingWithoutApproval,
-        questions: [...questions, { id, label, prompt: label, enabled: true, builtin: false, detailsKey: id }],
+        questions: [...questions, { id, label, prompt, condition, enabled: true, builtin: false, detailsKey: id }],
       },
       'Eigene Frage hinzugefügt und im Prompt aktiviert.',
     );
     setCustomQuestion('');
+    setCustomQuestionPrompt('');
+    setCustomQuestionCondition('');
   }
 
   async function removeCustomQuestion(id: string) {
@@ -1308,43 +1417,42 @@ export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | 
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           {questions.map((question) => (
-            <div key={question.id} className="rounded-2xl border border-white/10 bg-black/15 p-4">
-              <button
-                type="button"
-                onClick={() => { void toggleQuestion(question); }}
-                disabled={question.required || saving}
-                className="w-full flex items-start justify-between gap-3 text-left disabled:cursor-not-allowed"
-              >
-                <span>
-                  <span className="text-sm font-semibold text-white">{question.label}</span>
-                  {question.condition && <span className="ml-2 text-[11px] text-orange-200/60">{question.condition}</span>}
-                  <span className="block text-xs text-white/35 mt-1">{question.prompt || question.label}</span>
-                  {question.required && <span className="block text-[11px] text-white/25 mt-2">Pflichtfeld</span>}
-                </span>
-                <TogglePill active={question.enabled !== false} disabled={question.required} />
-              </button>
-              {question.builtin !== true && (
-                <button
-                  onClick={() => { void removeCustomQuestion(question.id); }}
-                  disabled={saving}
-                  className="mt-3 text-xs text-red-300/60 hover:text-red-300 disabled:opacity-40"
-                >
-                  Frage löschen
-                </button>
-              )}
-            </div>
+            <QuestionConfigCard
+              key={question.id}
+              question={question}
+              saving={saving}
+              onToggle={(q) => { void toggleQuestion(q); }}
+              onSave={(q, patch) => { void saveQuestionConfig(q, patch); }}
+              onRemove={(id) => { void removeCustomQuestion(id); }}
+            />
           ))}
         </div>
-        <form onSubmit={addCustomQuestion} className="flex flex-col gap-2 sm:flex-row">
-          <input
-            value={customQuestion}
-            onChange={(e) => setCustomQuestion(e.target.value)}
-            placeholder="Eigene Frage ergänzen, z.B. Wunschprodukt oder Pflegehinweis"
-            className="flex-1 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none focus:border-orange-400/50"
-          />
-          <button disabled={!customQuestion.trim() || saving} className="rounded-xl bg-orange-500/20 border border-orange-500/30 px-4 py-2.5 text-sm font-semibold text-orange-100 hover:bg-orange-500/25 disabled:opacity-40">
-            Frage hinzufügen
-          </button>
+        <form onSubmit={addCustomQuestion} className="rounded-2xl border border-white/10 bg-black/15 p-4 space-y-2">
+          <div className="grid gap-2 md:grid-cols-[0.8fr_1.2fr]">
+            <input
+              value={customQuestion}
+              onChange={(e) => setCustomQuestion(e.target.value)}
+              placeholder="Eigene Frage ergänzen, z.B. Wunschprodukt"
+              className="rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none focus:border-orange-400/50"
+            />
+            <input
+              value={customQuestionPrompt}
+              onChange={(e) => setCustomQuestionPrompt(e.target.value)}
+              placeholder="Hinweis/Fragetext, z.B. gezielt nach Pflegewunsch fragen"
+              className="rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none focus:border-orange-400/50"
+            />
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              value={customQuestionCondition}
+              onChange={(e) => setCustomQuestionCondition(e.target.value)}
+              placeholder="Nur fragen wenn..., z.B. bei Farbe/Chemie oder wenn Neukunde unsicher ist"
+              className="flex-1 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none focus:border-orange-400/50"
+            />
+            <button disabled={!customQuestion.trim() || saving} className="rounded-xl bg-orange-500/20 border border-orange-500/30 px-4 py-2.5 text-sm font-semibold text-orange-100 hover:bg-orange-500/25 disabled:opacity-40">
+              Frage hinzufügen
+            </button>
+          </div>
         </form>
       </section>
 

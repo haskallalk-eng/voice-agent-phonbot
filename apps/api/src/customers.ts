@@ -87,8 +87,16 @@ export function normalizeCustomerModuleConfig(module: CustomerModuleConfig | nul
   const questions: CustomerQuestionConfig[] = DEFAULT_CUSTOMER_QUESTIONS.map((question) => {
     const override = incomingById.get(question.id);
     const required = question.required === true;
+    const prompt = typeof override?.prompt === 'string'
+      ? cleanQuestionText(override.prompt) || question.prompt
+      : question.prompt;
+    const condition = typeof override?.condition === 'string'
+      ? cleanQuestionText(override.condition)
+      : question.condition;
     return {
       ...question,
+      prompt,
+      condition,
       enabled: required ? true : override?.enabled !== false,
     };
   });
@@ -102,6 +110,7 @@ export function normalizeCustomerModuleConfig(module: CustomerModuleConfig | nul
         id,
         label,
         prompt: cleanQuestionText(q.prompt, label),
+        condition: cleanQuestionText(q.condition) || undefined,
         enabled: q.enabled !== false,
         required: false,
         builtin: false,
