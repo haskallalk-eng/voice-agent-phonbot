@@ -6,14 +6,14 @@ import {
   getChipyCalendar, saveChipySchedule, addChipyBlock, removeChipyBlock,
   getChipyBookings, createChipyBooking, deleteChipyBooking,
   getExternalCalendarEvents, getStaffExternalCalendarEvents,
-  getCalendarStaff, createCalendarStaff, updateCalendarStaff, deleteCalendarStaff,
-  getStaffChipyCalendar, saveStaffChipySchedule, addStaffChipyBlock, removeStaffChipyBlock,
+  getCalendarStaff,
+  getStaffChipyCalendar, addStaffChipyBlock, removeStaffChipyBlock,
   getStaffChipyBookings, createStaffChipyBooking, deleteStaffChipyBooking,
   getCustomers, getAgentConfig,
 } from '../lib/api.js';
 import type { CalendarProvider, CalendarStatus, CalendarStaff, ChipySchedule, ChipyBlock, ChipyBooking, ChipyBookingInput, ExternalCalendarEvent, Customer, ServiceItem } from '../lib/api.js';
 import { FoxLogo } from './FoxLogo.js';
-import { HAIRDRESSER_SERVICE_PRESET, serviceItemToStaffLabel, serviceItemsToStaffLabels } from '../lib/service-presets.js';
+import { HAIRDRESSER_SERVICE_PRESET, serviceItemToStaffLabel } from '../lib/service-presets.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -85,13 +85,6 @@ function isHairdresserConfig(input: { industry?: string; businessDescription?: s
   return /friseur|salon|haar|farbe|kopfhaut|stylist/.test(haystack);
 }
 
-function deriveBusinessServiceLabels(input: { services?: ServiceItem[]; servicesText?: string; industry?: string; businessDescription?: string }): string[] {
-  if (input.services?.length) return serviceItemsToStaffLabels(input.services);
-  const textServices = splitServiceText(input.servicesText);
-  if (textServices.length) return textServices;
-  return isHairdresserConfig(input) ? serviceItemsToStaffLabels(HAIRDRESSER_SERVICE_PRESET) : [];
-}
-
 type CalendarServiceOption = {
   label: string;
   durationMinutes: number;
@@ -140,6 +133,23 @@ function deriveServiceOptions(input: { services?: ServiceItem[]; servicesText?: 
       label: serviceItemToStaffLabel(service),
       durationMinutes: parseMinutesText(service.duration, 30),
       bufferMinutes: Math.min(180, Math.max(0, service.bufferMinutes ?? parseBufferText(service.description))),
+    }));
+}
+
+function serviceLabelsToOptions(labels: string[] | null | undefined): CalendarServiceOption[] {
+  const seen = new Set<string>();
+  return (labels ?? [])
+    .map((label) => label.trim())
+    .filter((label) => {
+      const key = normalizeServiceName(label);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map((label) => ({
+      label,
+      durationMinutes: parseMinutesText(label, 30),
+      bufferMinutes: parseBufferText(label),
     }));
 }
 
@@ -1093,8 +1103,15 @@ const DEFAULT_SCHEDULE: ChipySchedule = {
   '6': { enabled: false, start: '09:00', end: '17:00' },
 };
 
+type BlockMode = 'day' | 'range' | 'hours';
+const ALL_BLOCK_MODES: BlockMode[] = ['day', 'range', 'hours'];
+
 function SettingsPanel({
   schedule, setSchedule, blocks, setBlocks, saveScheduleApi, addBlockApi, removeBlockApi,
+  showSchedule = true,
+  blockModeOptions = ALL_BLOCK_MODES,
+  blockTitle = 'Ausnahmen & Sperrzeiten',
+  blockDescription = 'Urlaub, Krankheit, Mittagspause oder einzelne Stunden.',
 }: {
   schedule: ChipySchedule;
   setSchedule: React.Dispatch<React.SetStateAction<ChipySchedule>>;
@@ -1103,6 +1120,10 @@ function SettingsPanel({
   saveScheduleApi?: (schedule: ChipySchedule) => Promise<unknown>;
   addBlockApi?: (date: string, opts?: { start_time?: string; end_time?: string; reason?: string }) => Promise<{ ok: boolean; id: string }>;
   removeBlockApi?: (id: string) => Promise<unknown>;
+  showSchedule?: boolean;
+  blockModeOptions?: BlockMode[];
+  blockTitle?: string;
+  blockDescription?: string;
 }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -1113,7 +1134,14 @@ function SettingsPanel({
   const [newBlockEndTime, setNewBlockEndTime] = useState('');
   const [newBlockReason, setNewBlockReason] = useState('');
   const [blockError, setBlockError] = useState<string | null>(null);
-  const [blockMode, setBlockMode] = useState<'day' | 'range' | 'hours'>('day');
+  const [blockMode, setBlockMode] = useState<BlockMode>('day');
+  const allowedBlockModes = blockModeOptions.length ? blockModeOptions : ALL_BLOCK_MODES;
+
+  useEffect(() => {
+    if (!allowedBlockModes.includes(blockMode)) {
+      setBlockMode(allowedBlockModes[0] ?? 'day');
+    }
+  }, [allowedBlockModes, blockMode]);
 
   async function handleSave() {
     setSaving(true); setSaved(false); setSaveError(null);
@@ -1186,6 +1214,7 @@ function SettingsPanel({
   return (
     <div className="space-y-8">
       {/* Weekly schedule */}
+      {showSchedule && (
       <div>
         <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.15em] mb-4">Wöchentliche Verfügbarkeit</p>
         <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
@@ -1225,11 +1254,12 @@ function SettingsPanel({
           {saving ? 'Speichern…' : saved ? 'Gespeichert ✓' : 'Speichern'}
         </button>
       </div>
+      )}
 
       {/* Date blocks */}
       <div>
-        <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.15em] mb-2">Ausnahmen & Sperrzeiten</p>
-        <p className="text-[11px] text-white/20 mb-4">Urlaub, Krankheit, Mittagspause oder einzelne Stunden.</p>
+        <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.15em] mb-2">{blockTitle}</p>
+        <p className="text-[11px] text-white/20 mb-4">{blockDescription}</p>
 
         {blocks.length > 0 && (
           <div className="rounded-2xl overflow-hidden mb-4" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)' }}>
@@ -1256,8 +1286,9 @@ function SettingsPanel({
         {blockError && <p className="text-xs text-red-300 mb-3">{blockError}</p>}
 
         {/* Block type toggle */}
+        {allowedBlockModes.length > 1 && (
         <div className="flex gap-1.5 mb-4 rounded-xl p-1" style={{ background: 'rgba(255,255,255,0.03)' }}>
-          {(['day', 'range', 'hours'] as const).map(m => (
+          {allowedBlockModes.map(m => (
             <button key={m} onClick={() => setBlockMode(m)}
               className={`flex-1 py-2 rounded-lg text-[11px] font-medium transition-all cursor-pointer ${
                 blockMode === m ? 'bg-white/8' : 'text-white/30 hover:text-white/50'
@@ -1268,6 +1299,7 @@ function SettingsPanel({
             </button>
           ))}
         </div>
+        )}
 
         {blockMode === 'day' && (
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -1614,152 +1646,6 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-function StaffServicesEditor({
-  member,
-  businessServices,
-  saving,
-  onSave,
-}: {
-  member: CalendarStaff;
-  businessServices: string[];
-  saving: boolean;
-  onSave: (services: string[]) => Promise<void>;
-}) {
-  const [draft, setDraft] = useState<string[]>(member.services?.length ? member.services : businessServices);
-  const [newService, setNewService] = useState('');
-  const [localError, setLocalError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setDraft(member.services?.length ? member.services : businessServices);
-    setNewService('');
-    setLocalError(null);
-  }, [member.id, member.services, businessServices]);
-
-  const cleanDraft = () => {
-    const seen = new Set<string>();
-    return draft
-      .map((item) => item.trim())
-      .filter((item) => {
-        const key = item.toLowerCase();
-        if (!key || seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .slice(0, 20);
-  };
-
-  const effective = cleanDraft();
-  const changed = effective.join('\n') !== (member.services ?? []).join('\n');
-
-  function patch(index: number, value: string) {
-    setDraft((current) => current.map((item, i) => (i === index ? value : item)));
-  }
-
-  function remove(index: number) {
-    setDraft((current) => current.filter((_, i) => i !== index));
-  }
-
-  function add() {
-    const value = newService.trim();
-    if (!value) return;
-    if (draft.some((item) => item.trim().toLowerCase() === value.toLowerCase())) {
-      setLocalError('Diese Leistung ist schon in der Liste.');
-      return;
-    }
-    setDraft((current) => [...current, value].slice(0, 20));
-    setNewService('');
-    setLocalError(null);
-  }
-
-  async function save() {
-    setLocalError(null);
-    try {
-      await onSave(effective);
-    } catch (e: unknown) {
-      setLocalError((e instanceof Error ? e.message : null) ?? 'Leistungen konnten nicht gespeichert werden');
-    }
-  }
-
-  return (
-    <section
-      className="rounded-2xl border p-4 space-y-3"
-      style={{ borderColor: 'rgba(249,115,22,0.13)', background: 'linear-gradient(135deg, rgba(249,115,22,0.06), rgba(6,182,212,0.035))' }}
-    >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-[11px] font-semibold text-orange-100/60 uppercase tracking-[0.16em]">Leistungen</p>
-          <p className="mt-1 text-sm font-bold text-white">Was {member.name} anbieten kann</p>
-          <p className="mt-1 text-xs leading-relaxed text-white/42">
-            Neue Personen starten mit den allgemeinen Leistungen. Hier kannst du pro Person einzelne Services ändern, entfernen oder ergänzen.
-          </p>
-        </div>
-        {businessServices.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setDraft(businessServices)}
-            className="shrink-0 rounded-full border border-cyan-300/20 bg-cyan-400/[0.08] px-3 py-1.5 text-xs font-semibold text-cyan-100/80 hover:bg-cyan-400/[0.13]"
-          >
-            Betrieb übernehmen
-          </button>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {draft.map((item, index) => (
-          <div key={`${member.id}-${index}`} className="flex items-center gap-2 rounded-xl border border-white/8 bg-black/18 px-2 py-2">
-            <input
-              value={item}
-              onChange={(e) => patch(index, e.target.value)}
-              placeholder="Leistung, z.B. Damenhaarschnitt (45 min)"
-              className="min-w-0 flex-1 bg-transparent text-xs text-white/85 placeholder:text-white/25 outline-none"
-            />
-            <button
-              type="button"
-              onClick={() => remove(index)}
-              className="grid h-7 w-7 place-items-center rounded-full text-white/30 hover:bg-red-500/12 hover:text-red-300"
-              aria-label="Leistung entfernen"
-            >
-              ×
-            </button>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <input
-          value={newService}
-          onChange={(e) => setNewService(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              add();
-            }
-          }}
-          placeholder="Eigene Leistung hinzufügen"
-          className="flex-1 rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2 text-sm text-white placeholder:text-white/25 outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/40"
-        />
-        <button
-          type="button"
-          onClick={add}
-          className="rounded-xl border border-white/10 bg-white/[0.055] px-4 py-2 text-sm font-semibold text-white/75 hover:text-white hover:border-orange-500/35"
-        >
-          Hinzufügen
-        </button>
-        <button
-          type="button"
-          onClick={() => { void save(); }}
-          disabled={saving || !changed}
-          className="rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
-          style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
-        >
-          {saving ? 'Speichert...' : 'Leistungen speichern'}
-        </button>
-      </div>
-      {localError && <p className="text-xs text-red-300">{localError}</p>}
-    </section>
-  );
-}
-
 function StaffPanel({
   onStaffChange,
   onNavigate,
@@ -1771,13 +1657,6 @@ function StaffPanel({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [name, setName] = useState('');
-  const [createRole, setCreateRole] = useState('Friseur/in');
-  const [editRole, setEditRole] = useState('');
-  const [businessServices, setBusinessServices] = useState<string[]>([]);
-  const [businessServiceOptions, setBusinessServiceOptions] = useState<CalendarServiceOption[]>([]);
-  const [savingStaff, setSavingStaff] = useState(false);
-  const [savingServicesId, setSavingServicesId] = useState<string | null>(null);
   const [staffSchedule, setStaffSchedule] = useState<ChipySchedule>(DEFAULT_SCHEDULE);
   const [staffBlocks, setStaffBlocks] = useState<ChipyBlock[]>([]);
   const [staffBookings, setStaffBookings] = useState<ChipyBooking[]>([]);
@@ -1791,18 +1670,7 @@ function StaffPanel({
   const [connectionLoading, setConnectionLoading] = useState<string | null>(null);
 
   const selected = staff.find(s => s.id === selectedId) ?? null;
-
-  useEffect(() => {
-    getAgentConfig()
-      .then((cfg) => {
-        setBusinessServices(deriveBusinessServiceLabels(cfg));
-        setBusinessServiceOptions(deriveServiceOptions(cfg));
-      })
-      .catch(() => {
-        setBusinessServices(serviceItemsToStaffLabels(HAIRDRESSER_SERVICE_PRESET));
-        setBusinessServiceOptions(deriveServiceOptions({ services: HAIRDRESSER_SERVICE_PRESET }));
-      });
-  }, []);
+  const selectedServiceOptions = useMemo(() => serviceLabelsToOptions(selected?.services), [selected?.services]);
 
   const loadStaff = useCallback(async () => {
     setLoading(true); setError(null);
@@ -1812,7 +1680,7 @@ function StaffPanel({
       onStaffChange?.(res.staff.length);
       setSelectedId(current => current ?? res.staff[0]?.id ?? null);
     } catch (e: unknown) {
-      setError((e instanceof Error ? e.message : null) ?? 'Personen konnten nicht geladen werden');
+      setError((e instanceof Error ? e.message : null) ?? 'Mitarbeiter konnten nicht geladen werden');
     } finally {
       setLoading(false);
     }
@@ -1835,13 +1703,12 @@ function StaffPanel({
       setStaffExternalEvents(external.events);
       setStaffStatus(status);
     } catch (e: unknown) {
-      setError((e instanceof Error ? e.message : null) ?? 'Personen-Kalender konnte nicht geladen werden');
+      setError((e instanceof Error ? e.message : null) ?? 'Mitarbeiter-Kalender konnte nicht geladen werden');
     }
   }, []);
 
   useEffect(() => { loadStaff(); }, [loadStaff]);
   useEffect(() => { if (selectedId) void loadSelectedCalendar(selectedId); }, [selectedId, loadSelectedCalendar]);
-  useEffect(() => { setEditRole(selected?.role ?? ''); }, [selected?.id, selected?.role]);
   useEffect(() => {
     setSelectedStaffDay(null);
     setShowStaffAddBooking(false);
@@ -1854,74 +1721,6 @@ function StaffPanel({
     setStaffExternalEvents([]);
     setStaffStatus(null);
   }, [selectedId]);
-
-  async function handleCreateStaff(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) return;
-    setSavingStaff(true); setError(null);
-    try {
-      const res = await createCalendarStaff({
-        name: name.trim(),
-        role: createRole.trim() || undefined,
-        services: businessServices,
-      });
-      setStaff(prev => {
-        const next = [...prev, res.staff];
-        onStaffChange?.(next.length);
-        return next;
-      });
-      setSelectedId(res.staff.id);
-      setName('');
-    } catch (e: unknown) {
-      setError((e instanceof Error ? e.message : null) ?? 'Person konnte nicht angelegt werden');
-    } finally {
-      setSavingStaff(false);
-    }
-  }
-
-  async function handleDeleteSelected() {
-    if (!selected) return;
-    setSavingStaff(true); setError(null);
-    try {
-      await deleteCalendarStaff(selected.id);
-      setStaff(prev => {
-        const next = prev.filter(s => s.id !== selected.id);
-        onStaffChange?.(next.length);
-        setSelectedId(next[0]?.id ?? null);
-        return next;
-      });
-    } catch (e: unknown) {
-      setError((e instanceof Error ? e.message : null) ?? 'Person konnte nicht gelöscht werden');
-    } finally {
-      setSavingStaff(false);
-    }
-  }
-
-  async function handleRoleBlur() {
-    if (!selected) return;
-    const nextRole = editRole.trim();
-    if ((selected.role ?? '') === nextRole) return;
-    try {
-      const res = await updateCalendarStaff(selected.id, { role: nextRole });
-      setStaff(prev => prev.map(s => s.id === selected.id ? { ...s, ...res.staff } : s));
-    } catch {
-      setEditRole(selected.role ?? '');
-    }
-  }
-
-  async function handleStaffServicesSave(member: CalendarStaff, nextServices: string[]) {
-    setSavingServicesId(member.id);
-    setError(null);
-    try {
-      const res = await updateCalendarStaff(member.id, { services: nextServices });
-      setStaff(prev => prev.map(s => s.id === member.id ? { ...s, ...res.staff } : s));
-    } catch (e: unknown) {
-      setError((e instanceof Error ? e.message : null) ?? 'Leistungen konnten nicht gespeichert werden');
-      throw e;
-    } finally {
-      setSavingServicesId(null);
-    }
-  }
 
   async function runConnect(provider: Exclude<CalendarProvider, 'chipy'>) {
     if (!selected) return;
@@ -2016,8 +1815,6 @@ function StaffPanel({
     setError('Zu diesem Termin wurde kein passender Kunde im Kundenmodul gefunden.');
   }
 
-  const staffActiveDays = Object.values(staffSchedule).filter(day => day.enabled).length;
-
   const providerButton = (provider: Exclude<CalendarProvider, 'chipy'>, label: string) => {
     const conn = getProviderConnection(staffStatus, provider);
     const connected = Boolean(conn?.connected);
@@ -2064,7 +1861,7 @@ function StaffPanel({
     );
   };
 
-  if (loading) return <div className="rounded-2xl border border-white/10 p-5 text-sm text-white/40">Lade Personen...</div>;
+  if (loading) return <div className="rounded-2xl border border-white/10 p-5 text-sm text-white/40">Lade Mitarbeiter...</div>;
 
   return (
     <div className="space-y-5">
@@ -2075,31 +1872,17 @@ function StaffPanel({
       <div className="rounded-2xl border border-white/10 p-5" style={{ background: 'rgba(255,255,255,0.02)' }}>
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
-            <p className="text-sm font-bold text-white">Personen</p>
-            <p className="text-xs text-white/35 mt-1">Ohne Personen nutzt Chipy den allgemeinen Kalender. Sobald du Personen anlegst, bekommt jede Person eigene Verfügbarkeit und eigene Verbindungen.</p>
+            <p className="text-sm font-bold text-white">Mitarbeiterkalender</p>
+            <p className="text-xs text-white/35 mt-1">Wähle aus, welchen Kalender du sehen möchtest. Mitarbeiterdaten pflegst du im Modul Mein Business.</p>
           </div>
-          {selected && (
-            <button onClick={() => { void handleDeleteSelected(); }} disabled={savingStaff}
-              className="shrink-0 rounded-lg px-3 py-2 text-xs text-red-300 bg-red-500/10 border border-red-500/20 disabled:opacity-40">
-              Löschen
-            </button>
-          )}
-        </div>
-
-        <form onSubmit={handleCreateStaff} className="grid grid-cols-1 sm:grid-cols-[1.2fr_1fr_auto] gap-2 mb-4">
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="Name, z.B. Lena"
-            className="rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }} />
-          <input value={createRole} onChange={e => setCreateRole(e.target.value)} placeholder="Rolle"
-            className="rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }} />
-          <button type="submit" disabled={!name.trim() || savingStaff}
-            className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
-            style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
-            Anlegen
+          <button
+            type="button"
+            onClick={() => onNavigate?.('customers')}
+            className="shrink-0 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-white/55 hover:text-white hover:border-orange-500/30"
+          >
+            Mein Business
           </button>
-        </form>
-        <p className="mb-4 rounded-xl border border-white/8 bg-black/15 px-3 py-2 text-xs leading-relaxed text-white/40">
-          Neue Personen übernehmen automatisch die allgemeinen Leistungen{businessServices.length ? ` (${businessServices.length})` : ''}. Danach kannst du pro Person einzelne Leistungen bearbeiten.
-        </p>
+        </div>
 
         {staff.length > 0 ? (
           <div className="flex gap-2 overflow-x-auto pb-1">
@@ -2111,7 +1894,7 @@ function StaffPanel({
             ))}
           </div>
         ) : (
-          <p className="text-sm text-white/35 py-4">Noch keine Personen angelegt. Dann versteht Chipy den Kalender ohne Namen automatisch als allgemeinen Friseur-Kalender.</p>
+          <p className="text-sm text-white/35 py-4">Noch keine Mitarbeiter angelegt. Lege sie unter Mein Business an; bis dahin bleibt der Betriebskalender aktiv.</p>
         )}
       </div>
 
@@ -2120,30 +1903,19 @@ function StaffPanel({
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-sm font-bold text-white">{selected.name}</p>
-              <p className="text-xs text-white/35 mt-1">
-                {selected.services?.length
-                  ? `${selected.services.length} Leistung${selected.services.length === 1 ? '' : 'en'} aktiv`
-                  : 'Eigener Personen-Kalender'}
-              </p>
+              <p className="text-xs text-white/35 mt-1">{selected.role || 'Mitarbeiter-Kalender'}</p>
             </div>
-            <input value={editRole} onChange={e => setEditRole(e.target.value)} onBlur={() => { void handleRoleBlur(); }} placeholder="Rolle"
-              className="w-36 rounded-xl px-3 py-2 text-sm text-white placeholder-white/20 focus:outline-none"
-              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }} />
+            <span className="rounded-full border border-orange-400/20 bg-orange-500/10 px-3 py-1.5 text-xs font-semibold text-orange-100/70">
+              Kalender
+            </span>
           </div>
-
-          <StaffServicesEditor
-            member={selected}
-            businessServices={businessServices}
-            saving={savingServicesId === selected.id}
-            onSave={(nextServices) => handleStaffServicesSave(selected, nextServices)}
-          />
 
           <section className="-mx-5 px-5 py-5 border-y border-orange-500/10" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.09), rgba(255,255,255,0.025) 48%, rgba(6,182,212,0.07))' }}>
             <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <p className="text-[11px] font-semibold text-orange-100/60 uppercase tracking-[0.16em]">Chipy-Kalender</p>
+                <p className="text-[11px] font-semibold text-orange-100/60 uppercase tracking-[0.16em]">Mitarbeiterkalender</p>
                 <h3 className="mt-1 text-base font-bold text-white">{selected.name}</h3>
-                <p className="mt-1 text-xs text-white/45">Termine, Tagesdetails und Sperren genau für diese Person.</p>
+                <p className="mt-1 text-xs text-white/45">Termine, Tagesdetails und Sperren genau für diesen Mitarbeiter.</p>
               </div>
               <button
                 onClick={() => { setSelectedStaffDay(new Date()); setShowStaffAddBooking(true); }}
@@ -2154,7 +1926,7 @@ function StaffPanel({
               </button>
             </div>
 
-            <div className="mb-4 grid grid-cols-3 gap-2">
+            <div className="mb-4 grid grid-cols-2 gap-2">
               <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2.5">
                 <p className="text-[10px] uppercase tracking-[0.12em] text-white/25">Termine</p>
                 <p className="mt-1 text-lg font-bold text-white">{staffBookings.length}</p>
@@ -2162,10 +1934,6 @@ function StaffPanel({
               <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2.5">
                 <p className="text-[10px] uppercase tracking-[0.12em] text-white/25">Sperren</p>
                 <p className="mt-1 text-lg font-bold text-white">{staffBlocks.length}</p>
-              </div>
-              <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2.5">
-                <p className="text-[10px] uppercase tracking-[0.12em] text-white/25">Tage</p>
-                <p className="mt-1 text-lg font-bold text-white">{staffActiveDays}</p>
               </div>
             </div>
 
@@ -2207,7 +1975,6 @@ function StaffPanel({
             <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/5 flex-wrap">
               <div className="flex items-center gap-1.5 text-xs text-white/45"><div className="w-3 h-3 rounded-sm border border-orange-500/40 bg-orange-500/10" />Termin</div>
               <div className="flex items-center gap-1.5 text-xs text-white/45"><div className="w-3 h-3 rounded-sm border border-red-500/30 bg-red-500/10" />Ganztag gesperrt</div>
-              <div className="flex items-center gap-1.5 text-xs text-white/45"><div className="w-3 h-3 rounded-sm border border-amber-500/30 bg-amber-500/8" />Zeiten gesperrt</div>
             </div>
           </section>
 
@@ -2219,15 +1986,18 @@ function StaffPanel({
           </div>
 
           <div>
-            <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.15em] mb-4">Chipy-Kalender für {selected.name}</p>
+            <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.15em] mb-4">Tagessperren für {selected.name}</p>
             <SettingsPanel
               schedule={staffSchedule}
               setSchedule={setStaffSchedule}
               blocks={staffBlocks}
               setBlocks={setStaffBlocks}
-              saveScheduleApi={(schedule) => saveStaffChipySchedule(selected.id, schedule)}
               addBlockApi={(date, opts) => addStaffChipyBlock(selected.id, date, opts)}
               removeBlockApi={(id) => removeStaffChipyBlock(selected.id, id)}
+              showSchedule={false}
+              blockModeOptions={['day']}
+              blockTitle="Tagessperren"
+              blockDescription="Urlaub, Krankheit oder einzelne Tage, an denen dieser Mitarbeiter nicht buchbar ist."
             />
           </div>
         </div>
@@ -2236,7 +2006,7 @@ function StaffPanel({
       {selected && selectedStaffDay && showStaffAddBooking && (
         <BookingModal
           date={selectedStaffDay}
-          serviceOptions={businessServiceOptions}
+          serviceOptions={selectedServiceOptions}
           createBookingApi={(data) => createStaffChipyBooking(selected.id, data)}
           onClose={() => setShowStaffAddBooking(false)}
           onSave={handleStaffBookingSaved}
@@ -2386,8 +2156,8 @@ export function CalendarPage({
   const providerMeta = PROVIDER_META[calendarStatus?.provider ?? ''] ?? DEFAULT_PROVIDER_META;
 
   const TABS: { id: Tab; label: string }[] = [
-    { id: 'calendar', label: 'Kalender' },
-    { id: 'staff', label: 'Personen' },
+    { id: 'calendar', label: 'Betriebskalender' },
+    { id: 'staff', label: 'Mitarbeiterkalender' },
   ];
   const staffModeActive = staffCount > 0;
 
@@ -2401,17 +2171,17 @@ export function CalendarPage({
           style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.05) 0%, transparent 65%)' }} />
       </div>
 
-      <div className="relative z-10 max-w-3xl mx-auto">
+      <div className="relative z-10 mx-auto w-full max-w-[1500px]">
         {/* Header */}
         <div className="flex items-start justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-white">Kalender</h1>
             <p className="text-sm text-white/40 mt-1">
               {calendarStatus?.provider && calendarStatus.provider !== 'chipy'
-                ? `Verbunden mit ${providerMeta.label}`
+                  ? `Verbunden mit ${providerMeta.label}`
                 : calendarStatus?.connected
-                  ? 'Ein Kalender reicht: ohne Personen gilt er allgemein, mit Personen bucht Chipy gezielt pro Person'
-                  : 'Richte den allgemeinen Kalender ein oder lege Personen mit eigenen Kalendern an'}
+                  ? 'Ohne Mitarbeiter gilt der Betriebskalender allgemein, mit Mitarbeitern bucht Chipy gezielt pro Person'
+                  : 'Richte den Betriebskalender ein oder lege Mitarbeiter mit eigenen Kalendern an'}
             </p>
           </div>
           {tab === 'calendar' && !staffModeActive && (
@@ -2483,18 +2253,18 @@ export function CalendarPage({
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-100/65">Kalenderlogik</p>
-                    <p className="mt-1 text-base font-bold text-white">Personen-Kalender aktiv</p>
+                    <p className="mt-1 text-base font-bold text-white">Mitarbeiterkalender aktiv</p>
                     <p className="mt-1 text-xs text-white/55 leading-relaxed">
-                      Chipy nutzt jetzt die Personen als Buchungsziele. Wenn du nur einen allgemeinen Kalender willst, lass die Personenliste leer.
+                      Chipy nutzt jetzt die Mitarbeiter als Buchungsziele. Wenn du nur einen allgemeinen Kalender willst, lass die Mitarbeiterliste leer.
                     </p>
                   </div>
                   <div className="grid gap-2 text-xs">
-                    <span className="rounded-full border border-orange-400/25 bg-orange-500/15 px-3 py-1.5 text-orange-100">{staffCount} Person{staffCount === 1 ? '' : 'en'} aktiv</span>
-                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-white/45">Allgemeiner Kalender bleibt sichtbar</span>
+                    <span className="rounded-full border border-orange-400/25 bg-orange-500/15 px-3 py-1.5 text-orange-100">{staffCount} Mitarbeiter aktiv</span>
+                    <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-white/45">Betriebskalender bleibt sichtbar</span>
                   </div>
                 </div>
                 <button onClick={() => setTab('staff')} className="mt-4 rounded-xl border border-orange-500/25 bg-orange-500/15 px-3 py-2 text-xs font-semibold text-orange-100 hover:bg-orange-500/20">
-                  Personen verwalten
+                  Mitarbeiterkalender öffnen
                 </button>
               </div>
             )}
@@ -2502,8 +2272,8 @@ export function CalendarPage({
             <section className={['rounded-2xl border border-white/10 p-5', staffModeActive ? 'opacity-55' : ''].join(' ')} style={{ background: 'rgba(255,255,255,0.02)' }}>
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-white">Allgemeiner Kalender</p>
-                  <p className="text-xs text-white/35 mt-1">{staffModeActive ? 'Bleibt als Kalender ohne Person sichtbar. Neue Bot-Termine laufen über Personen.' : 'Wenn keine Person angelegt ist, versteht Chipy diesen Kalender als Friseur allgemein.'}</p>
+                  <p className="text-sm font-semibold text-white">Betriebskalender</p>
+                  <p className="text-xs text-white/35 mt-1">{staffModeActive ? 'Bleibt als Kalender ohne Mitarbeiter sichtbar. Neue Bot-Termine laufen über Mitarbeiter.' : 'Wenn kein Mitarbeiter angelegt ist, nutzt Chipy diesen Kalender allgemein.'}</p>
                 </div>
               </div>
               <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2555,7 +2325,7 @@ export function CalendarPage({
               <p className="text-sm font-semibold text-white mb-1">Verfügbarkeit</p>
               <p className="text-xs text-white/40 mb-4">
                 {staffModeActive
-                  ? 'Für neue Bot-Buchungen zählen die Zeiten pro Person. Lass die Personenliste leer, wenn nur dieser allgemeine Kalender gelten soll.'
+                  ? 'Für neue Bot-Buchungen zählen die Zeiten pro Mitarbeiter. Lass die Mitarbeiterliste leer, wenn nur der Betriebskalender gelten soll.'
                   : calendarStatus?.connected
                     ? 'Dein externer Kalender ist aktiv. Chipy dient als Fallback.'
                     : 'Kein externer Kalender? Trag hier deine Verfügbarkeit ein — der Agent nutzt diese automatisch.'}
@@ -2566,7 +2336,7 @@ export function CalendarPage({
             <section id="calendar-connections" className={['rounded-2xl border border-white/10 p-5', staffModeActive ? 'opacity-55 pointer-events-none' : ''].join(' ')} style={{ background: 'rgba(255,255,255,0.02)' }}>
               <p className="text-sm font-semibold text-white mb-1">Verbindungen</p>
               <p className="text-xs text-white/40 mb-4">
-                {staffModeActive ? 'Für Personen-Buchungen verbindest du Kalender direkt bei der jeweiligen Person.' : 'Verbinde Google, Outlook oder Cal.com im gleichen Stil wie im Agent Builder.'}
+                {staffModeActive ? 'Für Mitarbeiter-Buchungen verbindest du Kalender direkt beim jeweiligen Mitarbeiter.' : 'Verbinde Google, Outlook oder Cal.com im gleichen Stil wie im Agent Builder.'}
               </p>
               <ConnectionsPanel onStatusChange={setCalendarStatus} />
             </section>
