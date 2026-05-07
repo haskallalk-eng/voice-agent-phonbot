@@ -306,12 +306,6 @@ export function OpeningHoursEditor({ value, onChange }: { value: string; onChang
           );
         })}
       </div>
-
-      {/* Preview — shows what the agent will actually see */}
-      <div className="rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2">
-        <p className="text-[10px] uppercase tracking-wider text-white/30 mb-0.5">Agent sieht</p>
-        <p className="text-xs text-white/70 font-mono">{value || '—'}</p>
-      </div>
     </div>
   );
 }
