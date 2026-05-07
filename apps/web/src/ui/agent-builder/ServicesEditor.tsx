@@ -235,7 +235,7 @@ export function ServicesEditor({
                 maxLength={120}
                 className={`min-w-0 basis-full sm:basis-auto sm:flex-1 ${inputBase}`}
               />
-              <div className="flex min-w-0 flex-1 items-center gap-1 sm:flex-none">
+              <div className="flex min-w-[5.5rem] flex-1 items-center gap-1 sm:flex-none">
                 <input
                   type="text"
                   value={s.price ?? ''}
@@ -243,9 +243,9 @@ export function ServicesEditor({
                   placeholder="Preis"
                   inputMode="decimal"
                   aria-label="Preis"
-                  className={`w-full text-right sm:w-20 ${inputBase}`}
+                  className={`min-w-0 w-full text-right sm:w-20 ${inputBase}`}
                 />
-                <span className="text-xs text-white/45 px-0.5">€</span>
+                <span className="shrink-0 text-xs text-white/45 px-0.5">€</span>
               </div>
               <input
                 type="text"
@@ -253,7 +253,7 @@ export function ServicesEditor({
                 onChange={(e) => patch(s.id, { duration: e.target.value })}
                 placeholder="Dauer"
                 aria-label="Dauer"
-                className={`min-w-0 flex-1 sm:w-24 sm:flex-none ${inputBase}`}
+                className={`min-w-[5.5rem] flex-1 sm:w-24 sm:flex-none ${inputBase}`}
               />
               <input
                 type="number"
@@ -263,7 +263,7 @@ export function ServicesEditor({
                 onChange={(e) => patch(s.id, { bufferMinutes: e.target.value === '' ? undefined : Number(e.target.value) })}
                 placeholder="Puffer"
                 aria-label="Puffer nach Termin in Minuten"
-                className={`w-20 shrink-0 ${inputBase}`}
+                className={`min-w-[5.5rem] flex-1 sm:w-20 sm:flex-none ${inputBase}`}
               />
               {tagStyle && (
                 <span
