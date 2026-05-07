@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   getCalendarStatus, connectCalcom, disconnectCalendar,
@@ -259,14 +259,14 @@ function BookingModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name || !phone) return;
+    if (!name) return;
     setLoading(true);
     setError(null);
     try {
       const slotTime = new Date(`${dateStr}T${time}:00`).toISOString();
       const res = await (createBookingApi ?? createChipyBooking)({
         customer_name: name,
-        customer_phone: phone,
+        customer_phone: phone.trim(),
         service: service || undefined,
         notes: notes || undefined,
         slot_time: slotTime,
@@ -307,8 +307,8 @@ function BookingModal({
               className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-orange-500/40" />
           </div>
           <div>
-            <label className="block text-xs text-white/40 mb-1 uppercase tracking-wide">Telefon *</label>
-            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} required placeholder="+49 123 456789"
+            <label className="block text-xs text-white/40 mb-1 uppercase tracking-wide">Telefon</label>
+            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+49 123 456789"
               className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-orange-500/40" />
           </div>
           <div>
@@ -344,7 +344,7 @@ function BookingModal({
               className="flex-1 py-2.5 rounded-xl border border-white/10 text-sm text-white/50 hover:text-white hover:border-white/20 transition-all">
               Abbrechen
             </button>
-            <button type="submit" disabled={loading || !name || !phone || durationMinutes < 5 || bufferMinutes < 0}
+            <button type="submit" disabled={loading || !name || durationMinutes < 5 || bufferMinutes < 0}
               className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition-all"
               style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
               {loading ? 'Speichern…' : 'Termin anlegen'}
@@ -725,6 +725,7 @@ function CalendarViewSwitch({ value, onChange }: { value: CalendarViewMode; onCh
 
 function WeeklyCalendar({
   bookings, blocks, externalEvents, schedule, weekStart, onWeekStartChange, onBookingClick, onDeleteBooking, onAddBookingForDay,
+  className = '',
 }: {
   bookings: ChipyBooking[];
   blocks: ChipyBlock[];
@@ -735,6 +736,7 @@ function WeeklyCalendar({
   onBookingClick: (booking: ChipyBooking) => void;
   onDeleteBooking?: (id: string) => void;
   onAddBookingForDay?: (date: Date) => void;
+  className?: string;
 }) {
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart]);
   const dayKeys = useMemo(() => new Set(weekDays.map(isoDate)), [weekDays]);
@@ -828,18 +830,29 @@ function WeeklyCalendar({
   const timelineStart = timelineBounds.start;
   const timelineEnd = timelineBounds.end;
   const timelineSpan = Math.max(60, timelineEnd - timelineStart);
-  const timelineHeight = Math.max(660, Math.ceil(timelineSpan * 1.45));
+  const timelineHeight = Math.max(360, Math.min(460, Math.ceil(timelineSpan * 0.68)));
   const hours = Array.from({ length: Math.floor(timelineSpan / 60) + 1 }, (_, index) => timelineStart + index * 60).filter((minutes) => minutes <= timelineEnd);
   const topFor = (minutes: number) => `${((minutes - timelineStart) / timelineSpan) * 100}%`;
   const heightFor = (start: number, end: number, min = 38) => Math.max(min, ((end - start) / timelineSpan) * timelineHeight);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const blockVerticalWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+      event.preventDefault();
+    };
+    el.addEventListener('wheel', blockVerticalWheel, { passive: false });
+    return () => el.removeEventListener('wheel', blockVerticalWheel);
+  }, []);
 
   return (
-    <div className="rounded-3xl border border-white/10 bg-black/18 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className={['flex min-h-0 flex-col rounded-3xl border border-white/10 bg-black/18 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]', className].filter(Boolean).join(' ')}>
+      <div className="mb-2 flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/28">Wochenansicht</p>
           <h3 className="mt-1 text-sm font-bold text-white">{formatWeekRange(weekStart)}</h3>
-          <p className="mt-0.5 text-xs text-white/35">Termine werden mit echter Dauer und Puffer dargestellt.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => onWeekStartChange(addDays(weekStart, -7))} className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/55 hover:text-white">Vorherige</button>
@@ -848,7 +861,7 @@ function WeeklyCalendar({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-white/8 bg-white/[0.025]">
+      <div ref={gridRef} className="min-h-0 flex-1 overscroll-contain overflow-x-auto overflow-y-hidden rounded-2xl border border-white/8 bg-white/[0.025]">
         <div className="min-w-[860px]">
           <div className="grid border-b border-white/8" style={{ gridTemplateColumns: '64px repeat(7, minmax(108px, 1fr))' }}>
             <div className="border-r border-white/8 bg-black/16" />
@@ -861,7 +874,7 @@ function WeeklyCalendar({
               const allDayExternal = (externalByDay.get(key) ?? []).filter((event) => event.all_day);
               const canAdd = Boolean(onAddBookingForDay && enabled && !fullDayBlock);
               return (
-                <div key={key} className={['min-h-[92px] border-r border-white/8 p-3 last:border-r-0', isToday ? 'bg-orange-500/[0.07]' : 'bg-black/10'].join(' ')}>
+                <div key={key} className={['min-h-[72px] border-r border-white/8 p-2.5 last:border-r-0', isToday ? 'bg-orange-500/[0.07]' : 'bg-black/10'].join(' ')}>
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/28">{DAY_SHORT[index]}</p>
@@ -871,7 +884,7 @@ function WeeklyCalendar({
                       <button type="button" onClick={() => onAddBookingForDay?.(day)} className="rounded-lg border border-orange-400/20 bg-orange-500/10 px-2 py-1 text-xs font-bold text-orange-100/75 hover:text-orange-50" aria-label="Termin anlegen">+</button>
                     )}
                   </div>
-                  <div className="mt-2 space-y-1">
+                  <div className="mt-1.5 space-y-1">
                     {!enabled && <p className="rounded-lg border border-red-400/20 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-200/75">Geschlossen</p>}
                     {fullDayBlock && <p className="rounded-lg border border-red-400/20 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-200/75">Ganztag gesperrt</p>}
                     {allDayExternal.slice(0, 2).map((event) => (
@@ -1864,12 +1877,12 @@ function StaffPanel({
   if (loading) return <div className="rounded-2xl border border-white/10 p-5 text-sm text-white/40">Lade Mitarbeiter...</div>;
 
   return (
-    <div className="space-y-5">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
       {error && (
         <div className="rounded-2xl p-4 border border-red-500/20 bg-red-500/5 text-sm text-red-300">{error}</div>
       )}
 
-      <div className="rounded-2xl border border-white/10 p-5" style={{ background: 'rgba(255,255,255,0.02)' }}>
+      <div className="shrink-0 rounded-2xl border border-white/10 p-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
         <div className="flex items-start justify-between gap-4 mb-4">
           <div>
             <p className="text-sm font-bold text-white">Mitarbeiterkalender</p>
@@ -1899,19 +1912,9 @@ function StaffPanel({
       </div>
 
       {selected && (
-        <div className="rounded-2xl border border-white/10 p-5 space-y-5" style={{ background: 'rgba(255,255,255,0.02)' }}>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-sm font-bold text-white">{selected.name}</p>
-              <p className="text-xs text-white/35 mt-1">{selected.role || 'Mitarbeiter-Kalender'}</p>
-            </div>
-            <span className="rounded-full border border-orange-400/20 bg-orange-500/10 px-3 py-1.5 text-xs font-semibold text-orange-100/70">
-              Kalender
-            </span>
-          </div>
-
-          <section className="-mx-5 px-5 py-5 border-y border-orange-500/10" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.09), rgba(255,255,255,0.025) 48%, rgba(6,182,212,0.07))' }}>
-            <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="grid min-h-0 flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(0,1fr)_360px]">
+          <section className="flex min-h-0 flex-col rounded-2xl border border-white/10 p-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
+            <div className="mb-3 flex shrink-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-[11px] font-semibold text-orange-100/60 uppercase tracking-[0.16em]">Mitarbeiterkalender</p>
                 <h3 className="mt-1 text-base font-bold text-white">{selected.name}</h3>
@@ -1926,7 +1929,7 @@ function StaffPanel({
               </button>
             </div>
 
-            <div className="mb-4 grid grid-cols-2 gap-2">
+            <div className="mb-3 grid shrink-0 grid-cols-2 gap-2">
               <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2.5">
                 <p className="text-[10px] uppercase tracking-[0.12em] text-white/25">Termine</p>
                 <p className="mt-1 text-lg font-bold text-white">{staffBookings.length}</p>
@@ -1937,7 +1940,7 @@ function StaffPanel({
               </div>
             </div>
 
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mb-3 flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-white/35">
                 {staffCalendarView === 'week'
                   ? 'Exakte Wochenplanung mit Terminlaenge, Puffer und externen Belegungen.'
@@ -1957,6 +1960,7 @@ function StaffPanel({
               />
             ) : (
               <WeeklyCalendar
+                className="flex-1"
                 bookings={staffBookings}
                 blocks={staffBlocks}
                 externalEvents={staffExternalEvents}
@@ -1972,21 +1976,27 @@ function StaffPanel({
               />
             )}
 
-            <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/5 flex-wrap">
+            <div className="mt-3 flex shrink-0 items-center gap-4 border-t border-white/5 pt-3 flex-wrap">
               <div className="flex items-center gap-1.5 text-xs text-white/45"><div className="w-3 h-3 rounded-sm border border-orange-500/40 bg-orange-500/10" />Termin</div>
               <div className="flex items-center gap-1.5 text-xs text-white/45"><div className="w-3 h-3 rounded-sm border border-red-500/30 bg-red-500/10" />Ganztag gesperrt</div>
             </div>
           </section>
 
-          <div className="space-y-2">
-            <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.15em]">Kalender-Verbindungen</p>
-            {providerButton('google', 'Google Calendar')}
-            {providerButton('microsoft', 'Microsoft Outlook')}
-            {providerButton('calcom', 'Cal.com')}
-          </div>
-
-          <div>
-            <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.15em] mb-4">Tagessperren für {selected.name}</p>
+          <aside className="min-h-0 space-y-4 overflow-y-auto pr-1">
+          <section
+            className="rounded-2xl border border-orange-500/20 p-4 shadow-[0_18px_52px_rgba(249,115,22,0.08)]"
+            style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.10), rgba(255,255,255,0.025) 46%, rgba(6,182,212,0.07))' }}
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-100/55">Tagessperren</p>
+                <p className="mt-1 text-sm font-bold text-white">{selected.name} sperren</p>
+                <p className="mt-1 text-xs leading-relaxed text-white/42">Urlaub, Krankheit oder einzelne Tage, an denen dieser Mitarbeiter nicht buchbar ist.</p>
+              </div>
+              <span className="rounded-full border border-orange-400/20 bg-black/20 px-3 py-1.5 text-xs font-semibold text-orange-100/70">
+                Tage
+              </span>
+            </div>
             <SettingsPanel
               schedule={staffSchedule}
               setSchedule={setStaffSchedule}
@@ -1996,10 +2006,18 @@ function StaffPanel({
               removeBlockApi={(id) => removeStaffChipyBlock(selected.id, id)}
               showSchedule={false}
               blockModeOptions={['day']}
-              blockTitle="Tagessperren"
-              blockDescription="Urlaub, Krankheit oder einzelne Tage, an denen dieser Mitarbeiter nicht buchbar ist."
+              blockTitle="Gesperrte Tage"
+              blockDescription="Diese Tage werden im Kalender markiert und für Buchungen blockiert."
             />
-          </div>
+          </section>
+
+          <section className="space-y-2 rounded-2xl border border-white/10 p-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
+            <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.15em]">Kalender-Verbindungen</p>
+            {providerButton('google', 'Google Calendar')}
+            {providerButton('microsoft', 'Microsoft Outlook')}
+            {providerButton('calcom', 'Cal.com')}
+          </section>
+          </aside>
         </div>
       )}
 
@@ -2162,7 +2180,7 @@ export function CalendarPage({
   const staffModeActive = staffCount > 0;
 
   return (
-    <div className="min-h-screen bg-[#0A0A0F] text-white px-4 sm:px-6 py-8">
+    <div className="h-[calc(100vh-3rem)] min-h-0 overflow-hidden bg-[#0A0A0F] text-white px-4 py-4 sm:px-6 sm:py-5 md:h-screen">
       {/* Background glow */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-40 left-1/3 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] rounded-full"
@@ -2171,9 +2189,9 @@ export function CalendarPage({
           style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.05) 0%, transparent 65%)' }} />
       </div>
 
-      <div className="relative z-10 mx-auto w-full max-w-[1500px]">
+      <div className="relative z-10 mx-auto flex h-full min-h-0 w-full max-w-[1500px] flex-col">
         {/* Header */}
-        <div className="flex items-start justify-between mb-6">
+        <div className="mb-4 flex shrink-0 items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">Kalender</h1>
             <p className="text-sm text-white/40 mt-1">
@@ -2195,7 +2213,7 @@ export function CalendarPage({
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 rounded-2xl p-1 mb-6" style={{ background: 'rgba(255,255,255,0.03)' }}>
+        <div className="mb-4 flex shrink-0 gap-1 rounded-2xl p-1" style={{ background: 'rgba(255,255,255,0.03)' }}>
           {TABS.map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               className={[
@@ -2220,7 +2238,7 @@ export function CalendarPage({
         {/* Calendar integration hint */}
         {tab === 'calendar' && !staffModeActive && (!calendarStatus?.connected || calendarStatus?.provider === 'chipy') && (
           <div
-            className="mb-4 rounded-2xl p-4 flex items-start gap-3"
+            className="mb-4 shrink-0 rounded-2xl p-4 flex items-start gap-3"
             style={{
               background: 'linear-gradient(135deg, rgba(249,115,22,0.08), rgba(6,182,212,0.05))',
               border: '1px solid rgba(249,115,22,0.15)',
@@ -2247,9 +2265,10 @@ export function CalendarPage({
         )}
 
         {tab === 'calendar' && (
-          <div className="space-y-5">
+          <div className="grid flex-1 min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="flex min-h-0 flex-col gap-4 overflow-hidden">
             {staffModeActive && (
-              <div className="rounded-3xl border border-orange-500/20 p-5 shadow-[0_18px_60px_rgba(249,115,22,0.10)]" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.13), rgba(255,255,255,0.035) 48%, rgba(6,182,212,0.10))' }}>
+              <div className="shrink-0 rounded-3xl border border-orange-500/20 p-4 shadow-[0_18px_60px_rgba(249,115,22,0.10)]" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.13), rgba(255,255,255,0.035) 48%, rgba(6,182,212,0.10))' }}>
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-100/65">Kalenderlogik</p>
@@ -2269,14 +2288,14 @@ export function CalendarPage({
               </div>
             )}
 
-            <section className={['rounded-2xl border border-white/10 p-5', staffModeActive ? 'opacity-55' : ''].join(' ')} style={{ background: 'rgba(255,255,255,0.02)' }}>
-              <div className="mb-4 flex items-start justify-between gap-3">
+            <section className={['flex min-h-0 flex-1 flex-col rounded-2xl border border-white/10 p-4', staffModeActive ? 'opacity-55' : ''].join(' ')} style={{ background: 'rgba(255,255,255,0.02)' }}>
+              <div className="mb-3 flex shrink-0 items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-white">Betriebskalender</p>
                   <p className="text-xs text-white/35 mt-1">{staffModeActive ? 'Bleibt als Kalender ohne Mitarbeiter sichtbar. Neue Bot-Termine laufen über Mitarbeiter.' : 'Wenn kein Mitarbeiter angelegt ist, nutzt Chipy diesen Kalender allgemein.'}</p>
                 </div>
               </div>
-              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mb-3 flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-white/35">
                   {calendarView === 'week'
                     ? 'Google-aehnliche Wochenansicht mit echten Terminlaengen und Pufferzeiten.'
@@ -2298,6 +2317,7 @@ export function CalendarPage({
                 />
               ) : (
                 <WeeklyCalendar
+                  className="flex-1"
                   bookings={bookings}
                   blocks={blocks}
                   externalEvents={externalEvents}
@@ -2313,33 +2333,50 @@ export function CalendarPage({
                 />
               )}
 
-              <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/5 flex-wrap">
+              <div className="mt-3 flex shrink-0 items-center gap-4 border-t border-white/5 pt-3 flex-wrap">
                 <div className="flex items-center gap-1.5 text-xs text-white/40"><div className="w-3 h-3 rounded-sm border border-orange-500/40 bg-orange-500/10" />Termin</div>
                 <div className="flex items-center gap-1.5 text-xs text-white/40"><div className="w-3 h-3 rounded-sm border border-red-500/30 bg-red-500/10" />Ganztägig gesperrt</div>
                 <div className="flex items-center gap-1.5 text-xs text-white/40"><div className="w-3 h-3 rounded-sm border border-amber-500/30 bg-amber-500/8" />Zeiten gesperrt</div>
                 <div className="flex items-center gap-1.5 text-xs text-white/40"><div className="w-3 h-3 rounded-sm ring-2 ring-orange-500/50 border border-white/10" />Heute</div>
               </div>
             </section>
+            </div>
 
-            <section className={['rounded-2xl border border-white/10 p-5', staffModeActive ? 'opacity-55 pointer-events-none' : ''].join(' ')} style={{ background: 'rgba(255,255,255,0.02)' }}>
-              <p className="text-sm font-semibold text-white mb-1">Verfügbarkeit</p>
-              <p className="text-xs text-white/40 mb-4">
-                {staffModeActive
-                  ? 'Für neue Bot-Buchungen zählen die Zeiten pro Mitarbeiter. Lass die Mitarbeiterliste leer, wenn nur der Betriebskalender gelten soll.'
-                  : calendarStatus?.connected
-                    ? 'Dein externer Kalender ist aktiv. Chipy dient als Fallback.'
-                    : 'Kein externer Kalender? Trag hier deine Verfügbarkeit ein — der Agent nutzt diese automatisch.'}
-              </p>
-              <SettingsPanel schedule={schedule} setSchedule={setSchedule} blocks={blocks} setBlocks={setBlocks} />
+            <aside className="min-h-0 space-y-4 overflow-y-auto pr-1">
+            <section
+              className={['rounded-2xl border border-orange-500/20 p-4 shadow-[0_18px_52px_rgba(249,115,22,0.08)]', staffModeActive ? 'opacity-55 pointer-events-none' : ''].join(' ')}
+              style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.10), rgba(255,255,255,0.025) 46%, rgba(6,182,212,0.07))' }}
+            >
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-100/55">Tagessperren</p>
+                  <p className="mt-1 text-sm font-bold text-white">Betrieb sperren</p>
+                  <p className="mt-1 text-xs leading-relaxed text-white/42">Urlaub, Feiertage oder einzelne Tage, an denen keine Bot-Buchungen möglich sind.</p>
+                </div>
+                <span className="rounded-full border border-orange-400/20 bg-black/20 px-3 py-1.5 text-xs font-semibold text-orange-100/70">
+                  Tage
+                </span>
+              </div>
+              <SettingsPanel
+                schedule={schedule}
+                setSchedule={setSchedule}
+                blocks={blocks}
+                setBlocks={setBlocks}
+                showSchedule={false}
+                blockModeOptions={['day']}
+                blockTitle="Gesperrte Tage"
+                blockDescription="Diese Tage werden im Kalender markiert und für Buchungen blockiert."
+              />
             </section>
 
-            <section id="calendar-connections" className={['rounded-2xl border border-white/10 p-5', staffModeActive ? 'opacity-55 pointer-events-none' : ''].join(' ')} style={{ background: 'rgba(255,255,255,0.02)' }}>
-              <p className="text-sm font-semibold text-white mb-1">Verbindungen</p>
-              <p className="text-xs text-white/40 mb-4">
+            <section id="calendar-connections" className={['space-y-2 rounded-2xl border border-white/10 p-4', staffModeActive ? 'opacity-55 pointer-events-none' : ''].join(' ')} style={{ background: 'rgba(255,255,255,0.02)' }}>
+              <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.15em]">Kalender-Verbindungen</p>
+              <p className="text-xs text-white/40">
                 {staffModeActive ? 'Für Mitarbeiter-Buchungen verbindest du Kalender direkt beim jeweiligen Mitarbeiter.' : 'Verbinde Google, Outlook oder Cal.com im gleichen Stil wie im Agent Builder.'}
               </p>
               <ConnectionsPanel onStatusChange={setCalendarStatus} />
             </section>
+            </aside>
           </div>
         )}
 
