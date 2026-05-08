@@ -1877,7 +1877,7 @@ function StaffPanel({
   if (loading) return <div className="rounded-2xl border border-white/10 p-5 text-sm text-white/40">Lade Mitarbeiter...</div>;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+    <div className="flex flex-col gap-4">
       {error && (
         <div className="rounded-2xl p-4 border border-red-500/20 bg-red-500/5 text-sm text-red-300">{error}</div>
       )}
@@ -1912,8 +1912,8 @@ function StaffPanel({
       </div>
 
       {selected && (
-        <div className="grid min-h-0 flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(0,1fr)_360px]">
-          <section className="flex min-h-0 flex-col rounded-2xl border border-white/10 p-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
+        <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
+          <section className="flex min-w-0 flex-col rounded-2xl border border-white/10 p-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
             <div className="mb-3 flex shrink-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-[11px] font-semibold text-orange-100/60 uppercase tracking-[0.16em]">Mitarbeiterkalender</p>
@@ -1982,7 +1982,7 @@ function StaffPanel({
             </div>
           </section>
 
-          <aside className="min-h-0 space-y-4 overflow-y-auto pr-1">
+          <aside className="min-w-0 space-y-4">
           <section
             className="rounded-2xl border border-orange-500/20 p-4 shadow-[0_18px_52px_rgba(249,115,22,0.08)]"
             style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.10), rgba(255,255,255,0.025) 46%, rgba(6,182,212,0.07))' }}
@@ -2180,7 +2180,7 @@ export function CalendarPage({
   const staffModeActive = staffCount > 0;
 
   return (
-    <div className="h-[calc(100vh-3rem)] min-h-0 overflow-hidden bg-[#0A0A0F] text-white px-4 py-4 sm:px-6 sm:py-5 md:h-screen">
+    <div className="min-h-full bg-[#0A0A0F] text-white px-4 py-4 sm:px-6 sm:py-5">
       {/* Background glow */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-40 left-1/3 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] rounded-full"
@@ -2189,7 +2189,7 @@ export function CalendarPage({
           style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.05) 0%, transparent 65%)' }} />
       </div>
 
-      <div className="relative z-10 mx-auto flex h-full min-h-0 w-full max-w-[1500px] flex-col">
+      <div className="relative z-10 mx-auto flex min-h-0 w-full max-w-[1500px] flex-col">
         {/* Header */}
         <div className="mb-4 flex shrink-0 items-start justify-between">
           <div>
@@ -2265,8 +2265,8 @@ export function CalendarPage({
         )}
 
         {tab === 'calendar' && (
-          <div className="grid flex-1 min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="flex min-h-0 flex-col gap-4 overflow-hidden">
+          <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="flex min-w-0 flex-col gap-4">
             {staffModeActive && (
               <div className="shrink-0 rounded-3xl border border-orange-500/20 p-4 shadow-[0_18px_60px_rgba(249,115,22,0.10)]" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.13), rgba(255,255,255,0.035) 48%, rgba(6,182,212,0.10))' }}>
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -2288,7 +2288,7 @@ export function CalendarPage({
               </div>
             )}
 
-            <section className={['flex min-h-0 flex-1 flex-col rounded-2xl border border-white/10 p-4', staffModeActive ? 'opacity-55' : ''].join(' ')} style={{ background: 'rgba(255,255,255,0.02)' }}>
+            <section className="flex min-w-0 flex-col rounded-2xl border border-white/10 p-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
               <div className="mb-3 flex shrink-0 items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-white">Betriebskalender</p>
@@ -2342,9 +2342,9 @@ export function CalendarPage({
             </section>
             </div>
 
-            <aside className="min-h-0 space-y-4 overflow-y-auto pr-1">
+            <aside className="min-w-0 space-y-4">
             <section
-              className={['rounded-2xl border border-orange-500/20 p-4 shadow-[0_18px_52px_rgba(249,115,22,0.08)]', staffModeActive ? 'opacity-55 pointer-events-none' : ''].join(' ')}
+              className="rounded-2xl border border-orange-500/20 p-4 shadow-[0_18px_52px_rgba(249,115,22,0.08)]"
               style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.10), rgba(255,255,255,0.025) 46%, rgba(6,182,212,0.07))' }}
             >
               <div className="mb-4 flex items-start justify-between gap-3">
@@ -2369,7 +2369,7 @@ export function CalendarPage({
               />
             </section>
 
-            <section id="calendar-connections" className={['space-y-2 rounded-2xl border border-white/10 p-4', staffModeActive ? 'opacity-55 pointer-events-none' : ''].join(' ')} style={{ background: 'rgba(255,255,255,0.02)' }}>
+            <section id="calendar-connections" className="space-y-2 rounded-2xl border border-white/10 p-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
               <p className="text-[11px] font-semibold text-white/25 uppercase tracking-[0.15em]">Kalender-Verbindungen</p>
               <p className="text-xs text-white/40">
                 {staffModeActive ? 'Für Mitarbeiter-Buchungen verbindest du Kalender direkt beim jeweiligen Mitarbeiter.' : 'Verbinde Google, Outlook oder Cal.com im gleichen Stil wie im Agent Builder.'}
