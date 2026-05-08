@@ -1587,7 +1587,7 @@ export async function registerPhone(app: FastifyInstance) {
   // effectively no-op → anyone could seed the shared pool with junk numbers).
   app.post('/phone/admin/seed-pool', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const payload = req.user as Record<string, unknown>;
-    if (!payload.admin) return reply.status(403).send({ error: 'Platform-admin only' });
+    if (!payload.admin || payload.aud !== 'phonbot:admin') return reply.status(403).send({ error: 'Platform-admin only' });
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
 
     const parsed = z.object({
@@ -1634,7 +1634,7 @@ export async function registerPhone(app: FastifyInstance) {
   // since every user is owner of their own org. Require payload.admin (platform admin).
   app.get('/phone/admin/pool', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
     const payload = req.user as Record<string, unknown>;
-    if (!payload.admin) return reply.status(403).send({ error: 'Platform-admin only' });
+    if (!payload.admin || payload.aud !== 'phonbot:admin') return reply.status(403).send({ error: 'Platform-admin only' });
     if (!pool) return { items: [] };
 
     const { rows } = await pool.query(

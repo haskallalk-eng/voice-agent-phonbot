@@ -611,7 +611,7 @@ function expandCalendarToolSet(rawTools: string[] | undefined): Set<string> {
 export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTool[] {
   const tools: RetellTool[] = [];
   const enabled = expandCalendarToolSet(config.tools);
-  const signedQuery = buildToolAuthQuery(config.tenantId);
+  const signedQuery = buildToolAuthQuery(config.tenantId, config.retellAgentId);
 
   // Retell's built-in end_call tool — must be explicitly registered
   // (not auto-available). Lets the LLM hang up cleanly, which is
@@ -623,8 +623,8 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
   });
 
   // Custom tool: caller refused recording. Webhook flags the call for
-  // post-call deletion of the audio + transcript. The LLM must still
-  // call end_call immediately after this to actually hang up.
+  // post-call deletion of the audio + transcript. The LLM may continue
+  // helping normally unless the caller explicitly wants to end the call.
   // Only registered when recording is actually active — otherwise the tool
   // is irreführend (would-be-no-op since nothing is recorded). PrivacyTab's
   // `recordCalls` toggle drives this.
@@ -913,11 +913,17 @@ function signToolTenant(tenantId: string): string {
   return crypto.createHmac('sha256', toolAuthSecret()).update(tenantId).digest('base64url');
 }
 
-function buildToolAuthQuery(tenantId: string): string {
+function signToolContext(tenantId: string, agentId?: string): string {
+  const payload = agentId ? `${tenantId}:${agentId}` : tenantId;
+  return crypto.createHmac('sha256', toolAuthSecret()).update(payload).digest('base64url');
+}
+
+function buildToolAuthQuery(tenantId: string, agentId?: string): string {
   const params = new URLSearchParams({
     tenant_id: tenantId,
-    tool_sig: signToolTenant(tenantId),
+    tool_sig: agentId ? signToolContext(tenantId, agentId) : signToolTenant(tenantId),
   });
+  if (agentId) params.set('tool_agent_id', agentId);
   return params.toString();
 }
 
@@ -1054,7 +1060,7 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
     // LLM exists but no agent → update LLM, then create agent (agent needs llmId).
     await updateLLM(llmId, {
       generalPrompt: instructions,
-      tools: retellTools,
+      tools: [],
       model,
       modelTemperature: technical.modelTemperature,
       knowledgeBaseIds,
@@ -1075,11 +1081,14 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
       dataStorageSetting,
     });
     agentId = agent.agent_id;
+    await updateLLM(llmId, {
+      tools: buildRetellTools({ ...preparedConfig, retellLlmId: llmId, retellAgentId: agentId }, webhookBase),
+    });
   } else {
     // Fresh deploy: create LLM first (agent needs llmId), then create agent.
     const llm = await createLLM({
       generalPrompt: instructions,
-      tools: retellTools,
+      tools: [],
       model,
       modelTemperature: technical.modelTemperature,
       knowledgeBaseIds,
@@ -1101,6 +1110,9 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
       dataStorageSetting,
     });
     agentId = agent.agent_id;
+    await updateLLM(llmId, {
+      tools: buildRetellTools({ ...preparedConfig, retellLlmId: llmId, retellAgentId: agentId }, webhookBase),
+    });
   }
 
   return { ...preparedConfig, retellLlmId: llmId, retellAgentId: agentId };

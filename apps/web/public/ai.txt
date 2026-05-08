@@ -43,10 +43,10 @@ User-Agent: Perplexity-User
 Allow: /
 
 User-Agent: Google-Extended
-Allow: /
+Disallow: /
 
 User-Agent: Applebot-Extended
-Allow: /
+Disallow: /
 
 # AI training / foundation-model crawlers — opt-out
 User-Agent: GPTBot

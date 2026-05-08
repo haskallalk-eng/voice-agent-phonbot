@@ -14,13 +14,12 @@
  *   • POST /retell/tools/*   (custom-function dispatchers)
  *     verifyRetellToolRequest() — OR-chain:
  *       1. valid HMAC (Retell may add per-tool signing in future), OR
- *       2. signed-tenant-id query param we set when registering the tool.
+ *       2. signed tenant+agent query params we set when registering the tool.
  *     Body-carried agent_id is treated only as context. It is not a secret.
  */
 
 import crypto from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { logBg } from './logger.js';
 import { createTicket, mergeTicketMetadata } from './tickets.js';
 import { appendTraceEvent } from './traces.js';
 import { reconcileMinutes, DEFAULT_CALL_RESERVE_MINUTES } from './usage.js';
@@ -46,6 +45,7 @@ import { sendBookingConfirmationSms, sendTicketAckSms } from './sms.js';
 import { readDemoCallTemplate, maybeSendDemoSignupLink } from './demo.js';
 import { redactPII } from './pii.js';
 import { RECORDING_CONSENT_PROMPT_VERSION } from './agent-instructions.js';
+import { log } from './logger.js';
 import {
   customerModuleActiveForAgentConfig,
   getActiveCustomerDetailsKeys,
@@ -143,7 +143,7 @@ function timingSafeHexEqual(a: string, b: string): boolean {
  *
  * Accept EITHER:
  *   1. Valid HMAC signature (if Retell ever adds it per-tool in future), OR
- *   2. Signed tenant query params that we put into every registered tool URL.
+ *   2. Signed tenant+agent query params that we put into every registered tool URL.
  *
  * A body-carried _retell_agent_id is not accepted as authentication anymore:
  * agent ids can appear in logs, customer exports, or support screenshots. The
@@ -154,7 +154,7 @@ function timingSafeHexEqual(a: string, b: string): boolean {
  */
 function verifyRetellToolRequest(req: RawBodyRequest): boolean {
   if (verifyRetellSignature(req)) return true;
-  if (getSignedToolTenantId(req)) return true;
+  if (getSignedToolContext(req)) return true;
   return false;
 }
 
@@ -195,7 +195,6 @@ function getRetellAgentId(body: RetellEventBody, args = retellArgs(body)): strin
   const call = getRetellCall(body) as Record<string, unknown>;
   const value =
     args._retell_agent_id ??
-    args.agent_id ??
     body._retell_agent_id ??
     body.agent_id ??
     call.agent_id;
@@ -308,17 +307,33 @@ function signToolTenant(tenantId: string): string {
   return crypto.createHmac('sha256', toolAuthSecret()).update(tenantId).digest('base64url');
 }
 
-function getSignedToolTenantId(req: FastifyRequest): string | null {
+function signToolContext(tenantId: string, agentId?: string): string {
+  const payload = agentId ? `${tenantId}:${agentId}` : tenantId;
+  return crypto.createHmac('sha256', toolAuthSecret()).update(payload).digest('base64url');
+}
+
+function timingSafeEqualText(actual: string, expected: string): boolean {
+  const actualBuf = Buffer.from(actual);
+  const expectedBuf = Buffer.from(expected);
+  if (actualBuf.length !== expectedBuf.length) return false;
+  return crypto.timingSafeEqual(actualBuf, expectedBuf);
+}
+
+function getSignedToolContext(req: FastifyRequest): { tenantId: string; agentId?: string } | null {
   const query = (req.query ?? {}) as Record<string, unknown>;
   const tenantId = query.tenant_id;
+  const agentId = query.tool_agent_id;
   const sig = query.tool_sig;
   if (typeof tenantId !== 'string' || typeof sig !== 'string' || !tenantId || !sig) return null;
 
-  const expected = signToolTenant(tenantId);
-  const actualBuf = Buffer.from(sig);
-  const expectedBuf = Buffer.from(expected);
-  if (actualBuf.length !== expectedBuf.length) return null;
-  return crypto.timingSafeEqual(actualBuf, expectedBuf) ? tenantId : null;
+  if (typeof agentId === 'string' && agentId) {
+    return timingSafeEqualText(sig, signToolContext(tenantId, agentId)) ? { tenantId, agentId } : null;
+  }
+
+  // Legacy tenant-only signatures are authenticated at the URL layer but are
+  // rejected by getToolOrgContext for tenant tools. This keeps old agents from
+  // getting a silent 401 while still requiring a redeploy before mutation.
+  return timingSafeEqualText(sig, signToolTenant(tenantId)) ? { tenantId } : null;
 }
 
 async function getOrgIdByTenantId(tenantId: string): Promise<string | null> {
@@ -330,22 +345,94 @@ async function getOrgIdByTenantId(tenantId: string): Promise<string | null> {
   return (res.rows[0]?.org_id as string | undefined) ?? null;
 }
 
+async function getToolAgentConfigContext(
+  agentId: string,
+  signedTenantId: string | null,
+): Promise<{ tenantId: string; orgId: string | null } | null> {
+  if (!pool) return null;
+  const params: unknown[] = [agentId];
+  const tenantClause = signedTenantId ? 'AND tenant_id = $2' : '';
+  if (signedTenantId) params.push(signedTenantId);
+  const res = await pool.query(
+    `SELECT tenant_id, org_id
+     FROM agent_configs
+     WHERE (data->>'retellAgentId' = $1 OR data->>'retellCallbackAgentId' = $1)
+       ${tenantClause}
+     ORDER BY updated_at DESC
+     LIMIT 1`,
+    params,
+  );
+  const row = res.rows[0] as { tenant_id?: string; org_id?: string | null } | undefined;
+  return row?.tenant_id ? { tenantId: row.tenant_id, orgId: row.org_id ?? null } : null;
+}
+
+async function claimProcessedRetellEvent(callId: string | undefined, eventType: string): Promise<boolean> {
+  if (!pool || !callId) return true;
+  const claim = await pool.query(
+    `INSERT INTO processed_retell_events (call_id, event_type)
+     VALUES ($1, $2)
+     ON CONFLICT (call_id, event_type) DO NOTHING
+     RETURNING call_id`,
+    [callId, eventType],
+  );
+  return (claim.rowCount ?? 0) > 0;
+}
+
+async function forgetProcessedRetellEvent(callId: string | undefined, eventType: string, logger: FastifyRequest['log']) {
+  if (!pool || !callId) return;
+  await pool.query(
+    `DELETE FROM processed_retell_events WHERE call_id = $1 AND event_type = $2`,
+    [callId, eventType],
+  ).catch((dedupErr: Error) =>
+    logger.error({ err: dedupErr.message, callId, eventType }, 'retell dedup rollback failed'),
+  );
+}
+
 async function getToolOrgContext(req: FastifyRequest, body: RetellEventBody, args: Record<string, unknown>): Promise<{
   callId: string;
   agentId?: string;
   signedTenantId: string | null;
   orgId: string | null;
   tenantId: string | null;
+  authError?: 'UNKNOWN_SIGNED_TENANT' | 'UNKNOWN_AGENT' | 'TENANT_AGENT_MISMATCH' | 'SIGNED_AGENT_REQUIRED';
 }> {
   const callId = getRetellCallId(body, args) ?? 'retell';
-  const agentId = getRetellAgentId(body, args);
-  const signedTenantId = getSignedToolTenantId(req);
-  const orgId = agentId
-    ? await getOrgIdByAgentId(agentId)
-    : signedTenantId
-      ? await getOrgIdByTenantId(signedTenantId)
-      : null;
-  return { callId, agentId, signedTenantId, orgId, tenantId: signedTenantId ?? orgId };
+  const bodyAgentId = getRetellAgentId(body, args);
+  const signedContext = getSignedToolContext(req);
+  const signedTenantId = signedContext?.tenantId ?? null;
+  const signedAgentId = signedContext?.agentId;
+  const agentId = signedAgentId ?? bodyAgentId;
+
+  if (signedTenantId && !signedAgentId) {
+    return { callId, agentId: bodyAgentId, signedTenantId, orgId: null, tenantId: signedTenantId, authError: 'SIGNED_AGENT_REQUIRED' };
+  }
+  if (signedAgentId && bodyAgentId && signedAgentId !== bodyAgentId) {
+    return { callId, agentId: bodyAgentId, signedTenantId, orgId: null, tenantId: signedTenantId, authError: 'TENANT_AGENT_MISMATCH' };
+  }
+
+  const signedOrgId = signedTenantId ? await getOrgIdByTenantId(signedTenantId) : null;
+  const exactAgentContext = agentId ? await getToolAgentConfigContext(agentId, signedTenantId) : null;
+  const agentOrgId = exactAgentContext?.orgId ?? null;
+
+  if (signedTenantId && !signedOrgId) {
+    return { callId, agentId, signedTenantId, orgId: null, tenantId: signedTenantId, authError: 'UNKNOWN_SIGNED_TENANT' };
+  }
+  if (agentId && !exactAgentContext) {
+    return { callId, agentId, signedTenantId, orgId: null, tenantId: signedTenantId, authError: 'UNKNOWN_AGENT' };
+  }
+  if (signedOrgId && agentOrgId && signedOrgId !== agentOrgId) {
+    return { callId, agentId, signedTenantId, orgId: null, tenantId: signedTenantId, authError: 'TENANT_AGENT_MISMATCH' };
+  }
+
+  const orgId = signedOrgId ?? agentOrgId;
+  return { callId, agentId, signedTenantId, orgId, tenantId: signedTenantId ?? exactAgentContext?.tenantId ?? orgId };
+}
+
+function rejectToolContext(reply: FastifyReply, ctx: { agentId?: string; signedTenantId: string | null; authError?: string }, tool: string) {
+  if (!ctx.authError) return false;
+  log.warn({ tool, agentId: ctx.agentId, signedTenantId: ctx.signedTenantId, authError: ctx.authError }, 'retell tool tenant/agent authorization failed');
+  reply.status(403).send({ error: 'tool tenant mismatch', code: ctx.authError });
+  return true;
 }
 
 function stringArg(args: Record<string, unknown>, ...keys: string[]): string | undefined {
@@ -361,6 +448,26 @@ function booleanArg(args: Record<string, unknown>, key: string): boolean {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'string') return /^(true|ja|yes|1)$/i.test(value.trim());
   return false;
+}
+
+function customerLookupToolView(result: Awaited<ReturnType<typeof lookupCustomer>>): Record<string, unknown> {
+  const publicCustomer = (customer: NonNullable<typeof result.customer>, score?: number) => ({
+    id: customer.id,
+    fullName: customer.full_name,
+    customerType: customer.customer_type,
+    status: customer.status,
+    lastSeenAt: customer.last_seen_at ?? null,
+    ...(score !== undefined ? { score } : {}),
+  });
+
+  return {
+    ok: result.ok,
+    status: result.status,
+    matchType: result.matchType,
+    customer: result.customer ? publicCustomer(result.customer) : undefined,
+    candidates: result.candidates?.map((candidate) => publicCustomer(candidate, candidate.score)),
+    instruction: result.instruction,
+  };
 }
 
 async function resolveCalendarStaffForTool(
@@ -553,20 +660,12 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       // double-bills overages (€9 bill → €28 on 3x retry) and doubles
       // analyzeCall (double OpenAI cost). INSERT ... ON CONFLICT returns 0
       // rows on second call → we short-circuit.
-      if (dedupCallId && pool) {
-        const claim = await pool.query(
-          `INSERT INTO processed_retell_events (call_id, event_type)
-           VALUES ($1, $2)
-           ON CONFLICT (call_id, event_type) DO NOTHING
-           RETURNING call_id`,
-          [dedupCallId, 'call_ended'],
-        );
-        if (!claim.rowCount) {
-          req.log.info({ callId: dedupCallId }, 'retell call_ended dedup hit — skipping');
-          return { ok: true, deduped: true };
-        }
+      if (dedupCallId && !(await claimProcessedRetellEvent(dedupCallId, 'call_ended'))) {
+        req.log.info({ callId: dedupCallId }, 'retell call_ended dedup hit - skipping');
+        return { ok: true, deduped: true };
       }
 
+      try {
       // § 201 StGB compliance: caller withdrew recording consent mid-call.
       // We still bill the used minutes (service was rendered) but skip
       // transcript persistence + analysis and DELETE the call from Retell.
@@ -595,13 +694,20 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           // callId threads through to make the Stripe idempotency key stable
           // across webhook retries — a retried call_ended can no longer
           // double-charge the customer.
-          await reconcileMinutes(orgId, DEFAULT_CALL_RESERVE_MINUTES, minutes, agentId, dedupCallId);
+          const usageClaimed = await claimProcessedRetellEvent(dedupCallId, 'call_ended_usage');
+          if (usageClaimed) {
+            try {
+              await reconcileMinutes(orgId, DEFAULT_CALL_RESERVE_MINUTES, minutes, agentId, dedupCallId);
+            } catch (err) {
+              await forgetProcessedRetellEvent(dedupCallId, 'call_ended_usage', req.log);
+              throw err;
+            }
+          }
         }
 
         // AI analysis — fire and forget, never blocks the webhook response
         const transcript = (call as RetellCallData & { transcript?: string }).transcript;
         const callId = (call as RetellCallData).call_id;
-        const callType = (call as RetellCallData & { call_type?: string }).call_type;
         const durationMs = (call as RetellCallData & { duration_ms?: number }).duration_ms;
         const fromNumber = (call as RetellCallData).from_number;
         const toNumber = (call as RetellCallData).to_number;
@@ -789,6 +895,10 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           }
         }
       }
+      } catch (err) {
+        await forgetProcessedRetellEvent(dedupCallId, 'call_ended', req.log);
+        throw err;
+      }
     }
 
     // Late-arriving post-call analysis for longer calls. Retell re-POSTs with
@@ -894,6 +1004,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const body = req.body as RetellEventBody;
     const args = retellArgs(body);
     const ctx = await getToolOrgContext(req, body, args);
+    if (rejectToolContext(reply, ctx, 'customer.lookup')) return;
 
     await appendTraceEvent({
       type: 'tool_call',
@@ -916,7 +1027,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     } else {
       const phone = stringArg(args, 'customerPhone', 'customer_phone', 'phone', 'from_number') ?? await resolveCallerPhone(body, args, ctx.callId);
       const name = stringArg(args, 'customerName', 'customer_name', 'name');
-      result = await lookupCustomer({ orgId: ctx.orgId, phone, name });
+      result = customerLookupToolView(await lookupCustomer({ orgId: ctx.orgId, phone, name }));
     }
 
     await appendTraceEvent({
@@ -941,6 +1052,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const body = req.body as RetellEventBody;
     const args = retellArgs(body);
     const ctx = await getToolOrgContext(req, body, args);
+    if (rejectToolContext(reply, ctx, 'customer.upsert')) return;
 
     await appendTraceEvent({
       type: 'tool_call',
@@ -1026,20 +1138,14 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
     const body = req.body as RetellEventBody;
     const args = retellArgs(body);
-    const callId = getRetellCallId(body, args) ?? 'retell';
-    const agentIdForSlots = getRetellAgentId(body, args);
-    const signedTenantIdForSlots = getSignedToolTenantId(req);
-    const orgIdForSlots = agentIdForSlots
-      ? await getOrgIdByAgentId(agentIdForSlots)
-      : signedTenantIdForSlots
-        ? await getOrgIdByTenantId(signedTenantIdForSlots)
-        : null;
+    const ctx = await getToolOrgContext(req, body, args);
+    if (rejectToolContext(reply, ctx, 'calendar.findSlots')) return;
 
     await appendTraceEvent({
       type: 'tool_call',
-      sessionId: callId,
-      tenantId: orgIdForSlots ?? undefined,
-      agentId: agentIdForSlots ?? undefined,
+      sessionId: ctx.callId,
+      tenantId: ctx.orgId ?? undefined,
+      agentId: ctx.agentId ?? undefined,
       tool: 'calendar.findSlots',
       input: args,
       at: now(),
@@ -1059,8 +1165,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       instruction?: string;
     };
 
-    if (orgIdForSlots) {
-      const staff = await resolveCalendarStaffForTool(orgIdForSlots, args);
+    if (ctx.orgId) {
+      const staff = await resolveCalendarStaffForTool(ctx.orgId, args);
       if (staff.staffModeActive && !staff.staffId && staff.requested && !staff.anyStaff) {
         result = {
           ok: false,
@@ -1078,12 +1184,12 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       } else {
         const teamMode = staff.staffModeActive && !staff.staffId;
         const slotResult = teamMode
-          ? await findFreeSlotsForAnyStaff(orgIdForSlots, {
+          ? await findFreeSlotsForAnyStaff(ctx.orgId, {
               date: (args.date as string | undefined) ?? (args.preferredTime as string | undefined),
               range: args.range as string | undefined,
               service: args.service as string | undefined,
             })
-          : await findFreeSlots(orgIdForSlots, {
+          : await findFreeSlots(ctx.orgId, {
               date: (args.date as string | undefined) ?? (args.preferredTime as string | undefined),
               range: args.range as string | undefined,
               service: args.service as string | undefined,
@@ -1104,21 +1210,22 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     } else {
       // Fallback: no calendar connected — return demo slots
       result = {
-        ok: true,
-        source: 'demo',
-        slots: ['Dienstag 10:00', 'Mittwoch 14:00', 'Donnerstag 09:30'],
+        ok: false,
+        source: 'unknown-agent',
+        slots: [],
         service: args.service ?? null,
         range: args.range ?? null,
         preferredTime: args.preferredTime ?? null,
         preferredStylist: args.preferredStylist ?? args.preferred_stylist ?? null,
+        instruction: 'Kalender konnte keinem aktiven Agenten zugeordnet werden. Erfinde keine Zeiten; biete Rueckruf oder menschliche Klaerung an.',
       };
     }
 
     await appendTraceEvent({
       type: 'tool_result',
-      sessionId: callId,
-      tenantId: orgIdForSlots ?? undefined,
-      agentId: agentIdForSlots ?? undefined,
+      sessionId: ctx.callId,
+      tenantId: ctx.orgId ?? undefined,
+      agentId: ctx.agentId ?? undefined,
       tool: 'calendar.findSlots',
       output: result,
       at: now(),
@@ -1138,20 +1245,14 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
     const body = req.body as RetellEventBody;
     const args = retellArgs(body);
-    const callId = getRetellCallId(body, args) ?? 'retell';
-    const agentIdForBook = getRetellAgentId(body, args);
-    const signedTenantIdForBook = getSignedToolTenantId(req);
-    const orgIdForBook = agentIdForBook
-      ? await getOrgIdByAgentId(agentIdForBook)
-      : signedTenantIdForBook
-        ? await getOrgIdByTenantId(signedTenantIdForBook)
-        : null;
+    const ctx = await getToolOrgContext(req, body, args);
+    if (rejectToolContext(reply, ctx, 'calendar.book')) return;
 
     await appendTraceEvent({
       type: 'tool_call',
-      sessionId: callId,
-      tenantId: orgIdForBook ?? undefined,
-      agentId: agentIdForBook ?? undefined,
+      sessionId: ctx.callId,
+      tenantId: ctx.orgId ?? undefined,
+      agentId: ctx.agentId ?? undefined,
       tool: 'calendar.book',
       input: args,
       at: now(),
@@ -1159,17 +1260,17 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
     let result: Record<string, unknown>;
 
-    if (orgIdForBook) {
+    if (ctx.orgId) {
       const customerName = (args.customerName as string | undefined) ?? 'Unbekannt';
-      const customerPhone = await resolveCallerPhone(body, args, callId);
+      const customerPhone = await resolveCallerPhone(body, args, ctx.callId);
       const preferredTime = (args.preferredTime as string | undefined) ?? (args.time as string | undefined) ?? '';
-      const staff = await resolveCalendarStaffForTool(orgIdForBook, args);
+      const staff = await resolveCalendarStaffForTool(ctx.orgId, args);
       const teamMode = staff.staffModeActive && !staff.staffId && (!staff.requested || staff.anyStaff);
       const service = (args.service as string | undefined) ?? '';
       const notes = args.notes as string | undefined;
       const approval = await canBookForCustomerApproval({
-        tenantId: signedTenantIdForBook ?? orgIdForBook,
-        orgId: orgIdForBook,
+        tenantId: ctx.tenantId ?? ctx.orgId,
+        orgId: ctx.orgId,
         customerName,
         customerPhone,
       });
@@ -1203,23 +1304,23 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           service,
         };
       } else {
-        const businessName = await getOrgName(orgIdForBook);
+        const businessName = await getOrgName(ctx.orgId);
         const booking = teamMode
-          ? await bookSlotForAnyStaff(orgIdForBook, {
+          ? await bookSlotForAnyStaff(ctx.orgId, {
               customerName,
               customerPhone,
               time: preferredTime,
               service,
               notes,
-              sourceCallId: callId,
+              sourceCallId: ctx.callId,
             })
-          : await bookSlot(orgIdForBook, {
+          : await bookSlot(ctx.orgId, {
               customerName,
               customerPhone,
               time: preferredTime,
               service,
               notes,
-              sourceCallId: callId,
+              sourceCallId: ctx.callId,
               staffId: staff.staffId,
             });
         const assignedStaffId = 'assignedStaffId' in booking ? booking.assignedStaffId ?? null : staff.staffId;
@@ -1229,9 +1330,9 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         if (!booking.ok) {
           try {
             const ticket = await createTicket({
-              tenantId: signedTenantIdForBook ?? orgIdForBook,
+              tenantId: ctx.tenantId ?? ctx.orgId,
               source: 'phone',
-              sessionId: callId,
+              sessionId: ctx.callId,
               reason: 'calendar-unavailable',
               customerName,
               customerPhone: ticketPhoneOrUnknown(customerPhone),
@@ -1239,13 +1340,15 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
               service,
               notes,
             }, { allowUnverifiedPhone: true });
-            const sms = await sendTicketAckSms({
-              to: ticket.customer_phone,
-              businessName,
-              reason: 'calendar-unavailable',
-              service,
-              logger: req.log,
-            });
+            const sms = ticket.reused
+              ? { ok: false, error: 'DUPLICATE_TICKET' }
+              : await sendTicketAckSms({
+                  to: ticket.customer_phone,
+                  businessName,
+                  reason: 'calendar-unavailable',
+                  service,
+                  logger: req.log,
+                });
 
             result = {
               ok: true,
@@ -1253,6 +1356,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
               fallback: true,
               ticketId: ticket.id,
               ticketStatus: ticket.status,
+              reused: ticket.reused === true,
               error: booking.error ?? null,
               chipyBookingId: booking.chipyBookingId ?? null,
               externalResults: booking.externalResults ?? [],
@@ -1273,8 +1377,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
               {
                 err: e instanceof Error ? e.message : String(e),
                 code,
-                orgId: orgIdForBook,
-                callId,
+                orgId: ctx.orgId,
+                callId: ctx.callId,
               },
               'retell calendar.book fallback ticket failed',
             );
@@ -1327,9 +1431,11 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     } else {
       // Fallback: no org/calendar — confirm as demo
       result = {
-        ok: true,
-        status: 'confirmed',
-        bookingId: `demo_${Date.now()}`,
+        ok: false,
+        status: 'unknown_agent',
+        error: 'UNKNOWN_AGENT',
+        instruction: 'Termin konnte keinem aktiven Agenten zugeordnet werden. Sage nicht, dass der Termin gebucht wurde.',
+        bookingId: null,
         customerName: args.customerName ?? null,
         customerPhone: args.customerPhone ?? null,
         preferredTime: args.preferredTime ?? args.time ?? null,
@@ -1338,13 +1444,13 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       };
     }
 
-    if (orgIdForBook) {
+    if (ctx.orgId) {
       await maybeUpsertCustomerFromTool({
-        tenantId: signedTenantIdForBook ?? orgIdForBook,
-        orgId: orgIdForBook,
-        callId,
+        tenantId: ctx.tenantId ?? ctx.orgId,
+        orgId: ctx.orgId,
+        callId: ctx.callId,
         customerName: (result.customerName as string | undefined) ?? (args.customerName as string | undefined),
-        customerPhone: (result.customerPhone as string | undefined) ?? await resolveCallerPhone(body, args, callId),
+        customerPhone: (result.customerPhone as string | undefined) ?? await resolveCallerPhone(body, args, ctx.callId),
         customerType: 'pending',
         details: {
           service: result.service,
@@ -1360,9 +1466,9 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
     await appendTraceEvent({
       type: 'tool_result',
-      sessionId: callId,
-      tenantId: orgIdForBook ?? undefined,
-      agentId: agentIdForBook ?? undefined,
+      sessionId: ctx.callId,
+      tenantId: ctx.orgId ?? undefined,
+      agentId: ctx.agentId ?? undefined,
       tool: 'calendar.book',
       output: result,
       at: now(),
@@ -1380,6 +1486,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const body = req.body as RetellEventBody;
     const args = retellArgs(body);
     const ctx = await getToolOrgContext(req, body, args);
+    if (rejectToolContext(reply, ctx, 'calendar.findBookings')) return;
     if (!ctx.orgId) {
       req.log.warn({ agentId: ctx.agentId }, 'retell calendar.findBookings: unknown agent_id, refusing');
       return reply.status(403).send({ error: 'unknown agent' });
@@ -1427,6 +1534,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const body = req.body as RetellEventBody;
     const args = retellArgs(body);
     const ctx = await getToolOrgContext(req, body, args);
+    if (rejectToolContext(reply, ctx, 'calendar.cancel')) return;
     if (!ctx.orgId) {
       req.log.warn({ agentId: ctx.agentId }, 'retell calendar.cancel: unknown agent_id, refusing');
       return reply.status(403).send({ error: 'unknown agent' });
@@ -1489,6 +1597,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const body = req.body as RetellEventBody;
     const args = retellArgs(body);
     const ctx = await getToolOrgContext(req, body, args);
+    if (rejectToolContext(reply, ctx, 'calendar.reschedule')) return;
     if (!ctx.orgId) {
       req.log.warn({ agentId: ctx.agentId }, 'retell calendar.reschedule: unknown agent_id, refusing');
       return reply.status(403).send({ error: 'unknown agent' });
@@ -1577,25 +1686,22 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
     const body = req.body as RetellEventBody;
     const args = retellArgs(body);
-    const callId = getRetellCallId(body, args) ?? 'retell';
-    const signedTenantId = getSignedToolTenantId(req);
+    const ctx = await getToolOrgContext(req, body, args);
+    if (rejectToolContext(reply, ctx, 'ticket.create')) return;
 
     // Resolve tenantId from the agent_id in the request. Refuse when we can't
     // map — previously we silently fell back to tenantId='demo', which caused
     // unknown-agent webhooks to land in the demo silo and mix with real demo
     // tickets. Signature was already verified, so a 403 here means either a
     // stale Retell agent (we deleted it) or a misconfigured webhook URL.
-    const agentId = getRetellAgentId(body, args);
-    const orgId = agentId
-      ? await getOrgIdByAgentId(agentId)
-      : signedTenantId
-        ? await getOrgIdByTenantId(signedTenantId)
-        : null;
-    if (!orgId) {
-      req.log.warn({ agentId }, 'retell ticket.create: unknown agent_id, refusing');
+    if (!ctx.orgId) {
+      req.log.warn({ agentId: ctx.agentId }, 'retell ticket.create: unknown agent_id, refusing');
       return reply.status(403).send({ error: 'unknown agent' });
     }
-    const tenantId = signedTenantId ?? orgId;
+    const tenantId = ctx.tenantId ?? ctx.orgId;
+    const orgId = ctx.orgId;
+    const agentId = ctx.agentId;
+    const callId = ctx.callId;
 
     await appendTraceEvent({
       type: 'tool_call',
@@ -1630,49 +1736,61 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       // Auto-trigger callback if customer wants immediate callback
       const isImmediate = !preferredTime
         || /sofort|jetzt|now|asap|gleich|baldmöglich/i.test(preferredTime);
+      const reusedTicket = row.reused === true;
 
-      if (isImmediate && orgId && row.customer_phone && isCallbackSafePhone(row.customer_phone)) {
+      let callbackResult: { ok: boolean; callId?: string; error?: string } | null = null;
+      if (!reusedTicket && isImmediate && row.customer_phone && isCallbackSafePhone(row.customer_phone)) {
         // Fire-and-forget — don't block the agent's response
-        triggerCallback({
+        callbackResult = await triggerCallback({
           orgId,
           customerPhone: row.customer_phone,
           customerName: row.customer_name,
           reason: row.reason,
           service: row.service,
-        }).catch(logBg('triggerCallback', { orgId }));
+        });
+        if (!callbackResult.ok) {
+          req.log.warn({ orgId, ticketId: row.id, error: callbackResult.error }, 'retell ticket.create callback not scheduled');
+        }
       }
 
       // Inbound-webhook fan-out: deliver `ticket.created` to customer URLs.
-      fireInboundWebhooks(orgId, 'ticket.created', {
-        ticketId: row.id,
-        status: row.status,
-        reason: row.reason,
-        customerName: row.customer_name,
-        customerPhone: row.customer_phone,
-        preferredTime: row.preferred_time,
-        service: row.service,
-        callId,
-      }).catch((err: Error) =>
-        req.log.warn(
-          { err: err.message, orgId, ticketId: row.id, event: 'ticket.created' },
-          'inbound-webhook fan-out failed',
-        ),
-      );
+      if (!reusedTicket) {
+        fireInboundWebhooks(orgId, 'ticket.created', {
+          ticketId: row.id,
+          status: row.status,
+          reason: row.reason,
+          customerName: row.customer_name,
+          customerPhone: row.customer_phone,
+          preferredTime: row.preferred_time,
+          service: row.service,
+          callId,
+        }).catch((err: Error) =>
+          req.log.warn(
+            { err: err.message, orgId, ticketId: row.id, event: 'ticket.created' },
+            'inbound-webhook fan-out failed',
+          ),
+        );
+      }
 
-      const sms = await sendTicketAckSms({
-        to: row.customer_phone,
-        businessName: await getOrgName(orgId),
-        reason: row.reason,
-        service: row.service,
-        logger: req.log,
-      });
+      const sms = reusedTicket
+        ? { ok: false, error: 'DUPLICATE_TICKET' }
+        : await sendTicketAckSms({
+            to: row.customer_phone,
+            businessName: await getOrgName(orgId),
+            reason: row.reason,
+            service: row.service,
+            logger: req.log,
+          });
 
       const result = {
         ok: true,
         ticketId: row.id,
         status: row.status,
+        reused: reusedTicket,
         customerPhone: row.customer_phone,
-        callbackScheduled: isImmediate && !!orgId,
+        callbackScheduled: Boolean(callbackResult?.ok),
+        callbackError: callbackResult && !callbackResult.ok ? callbackResult.error ?? 'CALLBACK_FAILED' : null,
+        callbackCallId: callbackResult?.ok ? callbackResult.callId ?? null : null,
         smsSent: sms.ok,
         smsError: sms.ok ? null : sms.error,
       };
@@ -1749,14 +1867,11 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
     const body = req.body as RetellEventBody;
     const args = retellArgs(body);
-    const callId = getRetellCallId(body, args);
-    const agentId = getRetellAgentId(body, args);
-    const signedTenantId = getSignedToolTenantId(req);
-    const orgId = agentId
-      ? await getOrgIdByAgentId(agentId)
-      : signedTenantId
-        ? await getOrgIdByTenantId(signedTenantId)
-        : null;
+    const ctx = await getToolOrgContext(req, body, args);
+    if (rejectToolContext(reply, ctx, 'recording.declined')) return;
+    const callId = ctx.callId === 'retell' ? null : ctx.callId;
+    const agentId = ctx.agentId;
+    const orgId = ctx.orgId;
 
     if (!callId) {
       req.log.warn({ agentId }, 'recording.declined: no call_id in body');
@@ -1774,7 +1889,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           `INSERT INTO recording_declined_calls (call_id, org_id, tenant_id)
            VALUES ($1, $2, $3)
            ON CONFLICT (call_id) DO NOTHING`,
-          [callId, orgId, signedTenantId ?? null],
+          [callId, orgId, ctx.tenantId ?? null],
         );
       } catch (err) {
         req.log.error(
@@ -1817,20 +1932,21 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const query = req.query as Record<string, string | undefined>;
     const integrationId = query.integration_id;
     const endpointId = query.endpoint_id;
-    const signedTenantId = getSignedToolTenantId(req);
     if (!integrationId) return reply.status(400).send({ ok: false, error: 'NO_INTEGRATION_ID' });
 
     const body = req.body as RetellEventBody;
     const args = retellArgs(body);
-    const callId = getRetellCallId(body, args);
-    const agentId = getRetellAgentId(body, args);
+    const ctx = await getToolOrgContext(req, body, args);
+    if (rejectToolContext(reply, ctx, 'external.call')) return;
+    const callId = ctx.callId;
+    const agentId = ctx.agentId;
 
     // Tenant resolution: prefer signed tenant param (comes from our own
     // tool registration), fall back to agent_id → org lookup for a
     // defence-in-depth cross-check.
-    const orgIdFromAgent = agentId ? await getOrgIdByAgentId(agentId) : null;
-    const tenantId = signedTenantId ?? orgIdFromAgent;
-    if (!tenantId) {
+    const tenantId = ctx.tenantId;
+    const orgId = ctx.orgId;
+    if (!tenantId || !orgId) {
       req.log.warn({ agentId, integrationId }, 'external.call: could not resolve tenant');
       return reply.status(403).send({ ok: false, error: 'UNKNOWN_TENANT' });
     }
@@ -1839,7 +1955,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     // (readConfig, NOT the HTTP-masked view). Both args are tenantId here:
     // tenantId was already resolved from a signed param OR an agent_id DB
     // lookup above, so it is the trusted org context for this call.
-    const config = await readConfig(tenantId, tenantId).catch(() => null);
+    const config = await readConfig(tenantId, orgId).catch(() => null);
     if (!config) return reply.status(404).send({ ok: false, error: 'CONFIG_NOT_FOUND' });
 
     const integrations = (config as Record<string, unknown>).apiIntegrations as
@@ -1860,8 +1976,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     // is enough for debugging the routing.
     await appendTraceEvent({
       type: 'tool_call',
-      sessionId: callId ?? 'retell',
-      tenantId,
+      sessionId: callId,
+      tenantId: orgId,
       agentId: agentId ?? undefined,
       tool: `external:${integration.name}${endpoint ? `:${endpoint.name}` : ''}`,
       input: { argKeys: Object.keys(args) },
@@ -1872,13 +1988,13 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       integration,
       endpoint,
       args,
-      callId: callId ?? undefined,
+      callId,
     });
 
     await appendTraceEvent({
       type: 'tool_result',
-      sessionId: callId ?? 'retell',
-      tenantId,
+      sessionId: callId,
+      tenantId: orgId,
       agentId: agentId ?? undefined,
       tool: `external:${integration.name}${endpoint ? `:${endpoint.name}` : ''}`,
       output: result.ok ? { status: result.status } : { error: result.error, status: result.status },

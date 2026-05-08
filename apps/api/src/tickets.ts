@@ -24,6 +24,7 @@ type TicketRow = {
   // Phase 2: custom fields extracted via Retell post-call-analysis.
   // Populated asynchronously by retell-webhooks on call_ended / call_analyzed.
   metadata: Record<string, unknown>;
+  reused?: boolean;
 };
 
 let memId = 1;
@@ -136,6 +137,24 @@ export async function createTicket(
   const orgRes = await pool.query(`SELECT org_id FROM agent_configs WHERE tenant_id = $1 LIMIT 1`, [body.tenantId]);
   if (orgRes.rows[0]?.org_id) orgId = orgRes.rows[0].org_id as string;
 
+  if (orgId && body.source === 'phone' && body.sessionId) {
+    const existing = await pool.query(
+      `SELECT id, created_at, updated_at, tenant_id, status,
+              source, session_id, reason,
+              customer_name, customer_phone, preferred_time, service, notes,
+              metadata
+         FROM tickets
+        WHERE org_id = $1
+          AND source = 'phone'
+          AND session_id = $2
+          AND COALESCE(reason, '') = COALESCE($3, '')
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [orgId, body.sessionId, body.reason ?? null],
+    );
+    if (existing.rows[0]) return { ...(existing.rows[0] as TicketRow), reused: true };
+  }
+
   const { rows } = await pool.query(
     `insert into tickets (
         tenant_id, org_id, status,
@@ -143,10 +162,14 @@ export async function createTicket(
         customer_name, customer_phone, preferred_time, service, notes
       )
      values ($1, $10, 'open', $2, $3, $4, $5, $6, $7, $8, $9)
+     ON CONFLICT (org_id, source, session_id, (COALESCE(reason, '')))
+       WHERE source = 'phone' AND session_id IS NOT NULL AND org_id IS NOT NULL
+     DO UPDATE SET updated_at = tickets.updated_at
      returning id, created_at, updated_at, tenant_id, status,
                source, session_id, reason,
                customer_name, customer_phone, preferred_time, service, notes,
-               metadata`,
+               metadata,
+               (xmax <> 0) AS reused`,
     [
       body.tenantId,
       body.source ?? null,
@@ -168,7 +191,7 @@ export async function createTicket(
   // (id::text = $1 OR legacy agent_configs match) could match a legacy row
   // where another org's tenant_id happens to equal the current org's UUID as
   // text — leaking the new ticket's PII to the wrong owner. Resolves E9.
-  if (pool && orgId) {
+  if (pool && orgId && !ticket.reused) {
     pool.query(
       `SELECT u.email, o.name as org_name
        FROM users u JOIN orgs o ON o.id = u.org_id

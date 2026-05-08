@@ -434,7 +434,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
                     Jetzt eigenen Agenten erstellen →
                   </button>
                   <a
-                    href="/kontakt/"
+                    href="/?page=contact"
                     className="mt-3 flex w-full items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-6 py-3 text-sm font-semibold text-white/80 transition-colors hover:bg-white/[0.08] hover:text-white"
                   >
                     Mit Phonbot-Team sprechen

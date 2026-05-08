@@ -493,7 +493,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
                       className="mt-0.5 accent-orange-500"
                     />
                     <span>
-                      Ich bin einverstanden, dass Chipy mich für die Demo anruft und der Demo-Anruf als Audio/Transkript bis zu 90 Tage zur Demo-Qualität und Lead-Bearbeitung gespeichert wird.
+                      Ich bin einverstanden, dass Chipy mich für die Demo anruft, der Demo-Anruf als Audio/Transkript bis zu 90 Tage zur Demo-Qualität und Lead-Bearbeitung gespeichert wird und Phonbot mir den angefragten Testlink per E-Mail oder SMS senden darf.
                     </span>
                   </label>
                   <button type="submit" disabled={cbLoading}
@@ -505,7 +505,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
                     <p className="text-sm text-red-400 text-center mt-2" role="alert">{cbError}</p>
                   )}
                 </form>
-                <p className="text-xs text-white/25 text-center mt-3">Kein Spam. Daten nur für den Demo-Anruf.</p>
+                <p className="text-xs text-white/25 text-center mt-3">Kein Spam. Daten nur für Demo, Lead-Bearbeitung und den angefragten Testlink.</p>
               </>
             ) : (
               <div className="text-center py-4">

@@ -11,7 +11,7 @@ import {
   getStaffChipyBookings, createStaffChipyBooking, deleteStaffChipyBooking,
   getCustomers, getAgentConfig,
 } from '../lib/api.js';
-import type { CalendarProvider, CalendarStatus, CalendarStaff, ChipySchedule, ChipyBlock, ChipyBooking, ChipyBookingInput, ExternalCalendarEvent, Customer, ServiceItem } from '../lib/api.js';
+import type { CalendarProvider, CalendarStatus, CalendarStaff, ChipySchedule, ChipyBlock, ChipyBooking, ChipyBookingInput, ChipyBookingDeleteResult, ChipyBookingWriteResult, ExternalCalendarEvent, Customer, ServiceItem } from '../lib/api.js';
 import { FoxLogo } from './FoxLogo.js';
 import { IconCalendar, IconMicrosoftWindow } from './PhonbotIcons.js';
 import { HAIRDRESSER_SERVICE_PRESET, serviceItemToStaffLabel } from '../lib/service-presets.js';
@@ -279,6 +279,15 @@ function bookingWithStaffMeta(booking: ChipyBooking, staff: CalendarStaff): Cale
   return { ...booking, calendarScope: 'staff', staffId: staff.id, staffName: staff.name, staffColor: staff.color };
 }
 
+function externalSyncWarning(result: { partial?: boolean; externalResults?: { provider: string; ok: boolean; error?: string }[] }, action: 'created' | 'deleted') {
+  const failed = result.externalResults?.filter((item) => !item.ok) ?? [];
+  if (!result.partial && failed.length === 0) return null;
+  const providers = failed.map((item) => item.provider).filter(Boolean).join(', ') || 'externe Kalender';
+  return action === 'created'
+    ? `Termin wurde in Chipy gespeichert, aber nicht vollstaendig in ${providers} gespiegelt. Bitte Verbindung pruefen oder extern kontrollieren.`
+    : `Termin wurde in Chipy geloescht, aber nicht vollstaendig aus ${providers} entfernt. Bitte Verbindung pruefen oder extern kontrollieren.`;
+}
+
 function bookingOverlapOffset(bookings: CalendarBooking[], booking: CalendarBooking): number {
   const start = dateToLocalMinutes(booking.slot_time);
   const end = start + bookingDuration(booking) + bookingBuffer(booking);
@@ -373,8 +382,8 @@ function BookingModal({
 }: {
   date: Date;
   onClose: () => void;
-  onSave: (booking: ChipyBooking) => void;
-  createBookingApi?: (data: ChipyBookingInput) => Promise<{ ok: boolean; booking: ChipyBooking }>;
+  onSave: (booking: ChipyBooking, result: ChipyBookingWriteResult) => void;
+  createBookingApi?: (data: ChipyBookingInput) => Promise<ChipyBookingWriteResult>;
   serviceOptions?: CalendarServiceOption[];
 }) {
   const [name, setName] = useState('');
@@ -414,7 +423,7 @@ function BookingModal({
         duration_minutes: durationMinutes,
         buffer_minutes: bufferMinutes,
       });
-      onSave(res.booking);
+      onSave(res.booking, res);
     } catch (e: unknown) {
       setError((e instanceof Error ? e.message : null) ?? 'Fehler beim Speichern');
       setLoading(false);
@@ -2220,9 +2229,11 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
 function StaffPanel({
   onStaffChange,
   onNavigate,
+  onBookingsChange,
 }: {
   onStaffChange?: (count: number) => void;
   onNavigate?: (page: 'customers', focusId?: string | null) => void;
+  onBookingsChange?: () => void | Promise<void>;
 } = {}) {
   const [staff, setStaff] = useState<CalendarStaff[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(() => {
@@ -2361,8 +2372,11 @@ function StaffPanel({
   async function handleStaffDeleteBooking(id: string) {
     if (!selected) return;
     try {
-      await deleteStaffChipyBooking(selected.id, id);
+      const res = await deleteStaffChipyBooking(selected.id, id);
       setStaffBookings(prev => prev.filter(b => b.id !== id));
+      const warning = externalSyncWarning(res, 'deleted');
+      if (warning) setError(warning);
+      void onBookingsChange?.();
     } catch (e: unknown) {
       const message = (e instanceof Error ? e.message : null) ?? 'Termin konnte nicht gelöscht werden';
       setError(message);
@@ -2370,8 +2384,11 @@ function StaffPanel({
     }
   }
 
-  function handleStaffBookingSaved(booking: ChipyBooking) {
+  function handleStaffBookingSaved(booking: ChipyBooking, result: ChipyBookingWriteResult) {
     setStaffBookings(prev => [...prev, booking].sort((a, b) => a.slot_time.localeCompare(b.slot_time)));
+    const warning = externalSyncWarning(result, 'created');
+    if (warning) setError(warning);
+    void onBookingsChange?.();
     setShowStaffAddBooking(false);
     setSelectedStaffDay(null);
   }
@@ -2781,13 +2798,16 @@ export function CalendarPage({
 
   async function handleDeleteCalendarBooking(booking: CalendarBooking) {
     try {
+      let res: ChipyBookingDeleteResult;
       if (booking.calendarScope === 'staff' && booking.staffId) {
-        await deleteStaffChipyBooking(booking.staffId, booking.id);
+        res = await deleteStaffChipyBooking(booking.staffId, booking.id);
         setTeamBookings(prev => prev.filter(b => bookingKey(b) !== bookingKey(booking)));
       } else {
-        await deleteChipyBooking(booking.id);
+        res = await deleteChipyBooking(booking.id);
         setBookings(prev => prev.filter(b => b.id !== booking.id));
       }
+      const warning = externalSyncWarning(res, 'deleted');
+      if (warning) setCalendarError(warning);
     } catch (e: unknown) {
       const message = (e instanceof Error ? e.message : null) ?? 'Termin konnte nicht gelöscht werden';
       setCalendarError(message);
@@ -2832,8 +2852,10 @@ export function CalendarPage({
     }
   }
 
-  function handleBookingSaved(booking: ChipyBooking) {
+  function handleBookingSaved(booking: ChipyBooking, result: ChipyBookingWriteResult) {
     setBookings(prev => [...prev, booking].sort((a, b) => a.slot_time.localeCompare(b.slot_time)));
+    const warning = externalSyncWarning(result, 'created');
+    if (warning) setCalendarError(warning);
     setShowAddBooking(false);
     setSelectedDay(null);
   }
@@ -3092,7 +3114,7 @@ export function CalendarPage({
         )}
 
         {tab === 'staff' && (
-          <StaffPanel onStaffChange={setStaffCount} onNavigate={onNavigate} />
+          <StaffPanel onStaffChange={setStaffCount} onNavigate={onNavigate} onBookingsChange={loadChipy} />
         )}
       </div>
 

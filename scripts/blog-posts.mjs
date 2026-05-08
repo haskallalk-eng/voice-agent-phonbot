@@ -51,7 +51,7 @@ export const BLOG_POSTS = [
       {
         heading: 'Welcher Phonbot-Plan fuer welchen Fall passt',
         paragraphs: [
-          'Der Nummer-Plan ab 8,99 EUR pro Monat ist der guenstige Einstieg fuer eine eigene KI-Telefonnummer und enthaelt ein einmaliges 100-Minuten-Gesamtguthaben. Fuer regelmaessige operative Telefonie ist er nicht als vollstaendiger Automatisierungsplan gedacht.',
+          'Der Nummer-Plan ab 8,99 EUR pro Monat ist der guenstige Einstieg fuer eine eigene KI-Telefonnummer und enthaelt 70 Minuten pro Monat. Fuer regelmaessige operative Telefonie mit mehr Volumen ist Starter oder hoeher der bessere Automatisierungsplan.',
           'Der Starter-Plan ab 79 EUR pro Monat passt fuer kleine Betriebe, die wirklich Anrufe annehmen, Termine vorbereiten oder buchen und Rueckruf-Tickets erzeugen wollen. Professional und Agency sind sinnvoll, wenn mehrere Agents, mehr Minuten oder mehrere Standorte gebraucht werden.',
         ],
       },
@@ -234,7 +234,7 @@ export const BLOG_POSTS = [
         heading: 'Was vor dem Aktivieren getestet werden sollte',
         paragraphs: [
           'Vor dem Live-Schalten sollte ein Testanruf aus Kundensicht erfolgen. Wichtig sind Begruessung, KI-Hinweis, korrekte Branche, Rufnummernanzeige, Ticket- oder Kalenderfunktion und die Frage, ob der Agent bei Unsicherheit sauber einen Rueckruf anbietet.',
-          'Auch die Minutenlogik gehoert dazu. Der Nummer-Plan enthaelt ein einmaliges 100-Minuten-Gesamtguthaben. Fuer regelmaessige monatliche Telefonie ist Starter oder hoeher der bessere operative Plan.',
+          'Auch die Minutenlogik gehoert dazu. Der Nummer-Plan enthaelt 70 Minuten pro Monat. Fuer regelmaessige monatliche Telefonie mit vielen Anrufen ist Starter oder hoeher der bessere operative Plan.',
         ],
       },
       {
@@ -255,7 +255,7 @@ export const BLOG_POSTS = [
     faq: [
       ['Muss ich meine alte Telefonnummer ersetzen?', 'Nein. In den meisten Faellen reicht eine Rufweiterleitung auf die Phonbot-Nummer.'],
       ['Kann der Agent nur ausserhalb der Oeffnungszeiten rangehen?', 'Ja, wenn die Weiterleitung oder Telefonie-Regel entsprechend eingerichtet ist.'],
-      ['Was kostet die eigene KI-Nummer?', 'Der Nummer-Plan startet bei 8,99 EUR pro Monat und enthaelt ein einmaliges 100-Minuten-Gesamtguthaben.'],
+      ['Was kostet die eigene KI-Nummer?', 'Der Nummer-Plan startet bei 8,99 EUR pro Monat und enthaelt 70 Minuten pro Monat.'],
     ],
     related: ['kontakt', 'branchen'],
   },

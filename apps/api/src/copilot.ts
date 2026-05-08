@@ -310,7 +310,7 @@ Die Sidebar hat folgende Bereiche. Erkläre dem Nutzer immer genau wo er hinklic
 - **Vorschau:** Zeigt den aktuellen Agent-Status und Konfiguration
 
 ### 📱 Telefon
-- **Nummer provisionieren:** Sidebar → Telefon → "Neue Nummer" → Vorwahl wählen (z.B. 30 für Berlin) → Deutsche Nummer wird automatisch eingerichtet
+- **Nummer provisionieren:** Sidebar → Telefon → "Neue Nummer" → 030-Nummer wird automatisch eingerichtet
 - **Eigene Nummer importieren:** Twilio-Nummer importieren (braucht Twilio Account)
 - **Rufumleitung:** Eigene Geschäftsnummer weiterleiten an die Phonbot-Nummer
   - Anleitung für iPhone, Android und FritzBox wird angezeigt
@@ -318,10 +318,11 @@ Die Sidebar hat folgende Bereiche. Erkläre dem Nutzer immer genau wo er hinklic
 
 ### 💳 Billing
 - **Pläne:**
-  - Free: 100 Minuten/Monat, 1 Agent
-  - Starter: 500 Minuten, Priority Support
-  - Pro: 2000 Minuten, Custom Voice, API Access
-  - Agency: 10.000 Minuten, Multi-Tenant, White Label
+  - Free: 30 Testminuten einmalig, 1 Agent, Web-Call
+  - Nummer: 70 Minuten/Monat, eigene 030-Nummer
+  - Starter: 360 Minuten/Monat, 1 Agent, eigene Nummer inklusive
+  - Pro: 1.000 Minuten/Monat, 3 Agents
+  - Agency: 2.400 Minuten/Monat, 10 Agents
 - **Plan wechseln:** Billing → gewünschten Plan klicken → Stripe Checkout
 - **Minutenverbrauch:** Zeigt genutzte/verfügbare Minuten
 - **Rechnungen & Portal:** "Kundenportal" Button → Stripe Portal für Rechnungen, Zahlungsmethode ändern, kündigen

@@ -108,8 +108,7 @@ export const PLANS = [
     period: '/Monat',
     features: [
       '✦ Eigene Telefonnummer',
-      '100 Gesamt-Freiminuten einmalig',
-      '30 Start + 70 Nummer-Bonus',
+      '70 Minuten / Monat',
       '1 Agent',
       'Ticket-System',
       '+0,22€/Min bei Überschreitung',

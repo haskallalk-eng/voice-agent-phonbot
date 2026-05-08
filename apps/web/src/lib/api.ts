@@ -1011,6 +1011,27 @@ export type ChipyBookingInput = {
   duration_minutes?: number;
   buffer_minutes?: number;
 };
+export type ExternalBookingResult = {
+  provider: string;
+  connectionId: string;
+  ok: boolean;
+  eventId?: string;
+  bookingId?: string | number;
+  error?: string;
+  reused?: boolean;
+  bookedAt?: string;
+};
+export type ChipyBookingWriteResult = {
+  ok: boolean;
+  booking: ChipyBooking;
+  externalResults?: ExternalBookingResult[];
+  partial?: boolean;
+};
+export type ChipyBookingDeleteResult = {
+  ok: boolean;
+  externalResults?: ExternalBookingResult[];
+  partial?: boolean;
+};
 
 export function getChipyCalendar() {
   return request<{ schedule: ChipySchedule; blocks: ChipyBlock[]; bookings: ChipyBooking[] }>('/calendar/chipy');
@@ -1055,10 +1076,10 @@ export function getChipyBookings(from: string, to: string) {
   return request<{ bookings: ChipyBooking[] }>(`/calendar/chipy/bookings?from=${from}&to=${to}`);
 }
 export function createChipyBooking(data: ChipyBookingInput) {
-  return request<{ ok: boolean; booking: ChipyBooking }>('/calendar/chipy/bookings', { method: 'POST', body: JSON.stringify(data) });
+  return request<ChipyBookingWriteResult>('/calendar/chipy/bookings', { method: 'POST', body: JSON.stringify(data) });
 }
 export function deleteChipyBooking(id: string) {
-  return request<{ ok: boolean }>(`/calendar/chipy/bookings/${id}`, { method: 'DELETE' });
+  return request<ChipyBookingDeleteResult>(`/calendar/chipy/bookings/${id}`, { method: 'DELETE' });
 }
 export function getStaffChipyBookings(staffId: string, from: string, to: string) {
   return request<{ bookings: ChipyBooking[] }>(
@@ -1066,13 +1087,13 @@ export function getStaffChipyBookings(staffId: string, from: string, to: string)
   );
 }
 export function createStaffChipyBooking(staffId: string, data: ChipyBookingInput) {
-  return request<{ ok: boolean; booking: ChipyBooking }>(
+  return request<ChipyBookingWriteResult>(
     `/calendar/staff/${encodeURIComponent(staffId)}/chipy/bookings`,
     { method: 'POST', body: JSON.stringify(data) },
   );
 }
 export function deleteStaffChipyBooking(staffId: string, id: string) {
-  return request<{ ok: boolean }>(
+  return request<ChipyBookingDeleteResult>(
     `/calendar/staff/${encodeURIComponent(staffId)}/chipy/bookings/${encodeURIComponent(id)}`,
     { method: 'DELETE' },
   );
