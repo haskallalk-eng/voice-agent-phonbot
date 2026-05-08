@@ -2721,23 +2721,8 @@ export async function bookSlotForAnyStaff(
   });
 
   const candidates = await rankAvailableStaffForSlot(orgId, eligibleStaff, slotTime, timing);
-  const contractCandidates: CalendarStaff[] = [];
-  for (const member of candidates) {
-    const result = await findFreeSlotsByContract(orgId, {
-      date: opts.time,
-      service: opts.service,
-      staffId: member.id,
-    });
-    if (result.slots.some((slot) => {
-      const parsed = parseSlotTime(slot);
-      return Boolean(parsed && Math.abs(parsed.getTime() - slotTime.getTime()) < 60_000);
-    })) {
-      contractCandidates.push(member);
-    }
-  }
-
   const errors: string[] = [];
-  for (const member of contractCandidates) {
+  for (const member of candidates) {
     const result = await bookSlot(orgId, { ...opts, staffId: member.id, ...timing });
     if (result.ok) {
       return { ...result, assignedStaffId: member.id, assignedStaffName: member.name };

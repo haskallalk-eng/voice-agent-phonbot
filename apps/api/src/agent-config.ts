@@ -1520,9 +1520,9 @@ export async function registerAgentConfig(app: FastifyInstance) {
     };
   });
 
-  // Live agent stats — avg measured e2e latency across the last 20 calls,
-  // pulled straight from Retell. Each request triggers a fresh listCalls
-  // so the number in the builder header always reflects current reality.
+  // Live agent stats — latest ended call latency pulled straight from Retell.
+  // Each request triggers a fresh listCalls so the builder header reflects
+  // current preview reality instead of a stale optimistic estimate.
   // Returns callsCount=0 when the agent hasn't been deployed or had no
   // calls yet; frontend shows "—" in that case instead of a fake estimate.
   // Rate-limit guards Retell-API budget: frontend polls every 15s per open
@@ -1555,11 +1555,9 @@ export async function registerAgentConfig(app: FastifyInstance) {
     if (!retellAgentId) return { ...emptyResponse, error: 'not_deployed' };
 
     try {
-      // Retell's agent-builder UI shows a model-based latency estimate
-      // that changes when the user switches LLM. It doesn't come from
-      // /list-calls or /get-agent — it's a per-model baseline baked
-      // into Retell's UI. We mirror the same lookup so Phonbot's chip
-      // matches the user's Retell-builder view 1:1.
+      // Keep Retell's model-based estimate as a fallback, but prefer the
+      // latest measured e2e.p50 below. The preview must reflect the latency
+      // users actually hear, not only the optimistic model baseline.
       const MODEL_LATENCY_MS: Record<string, number> = {
         'gpt-4o-mini': 500,
         'gpt-4o': 800,
@@ -1612,18 +1610,17 @@ export async function registerAgentConfig(app: FastifyInstance) {
       const e2e = pickNum(l?.e2e?.p50);
       const turnsInCall = l?.e2e?.values?.length ?? 0;
 
-      // Primary = model baseline (matches Retell's agent-builder UI).
-      // Fall back to measured llm.p50 only when Retell's model map
-      // doesn't know the LLM — at least the user sees *something* real.
-      const primary = modelBaselineMs ?? llm;
+      // Primary = measured e2e p50 from the latest ended call. If Retell did
+      // not return e2e yet, fall back to measured LLM p50, then model baseline.
+      const primary = e2e ?? llm ?? modelBaselineMs;
       const source: 'model-baseline' | 'measured' | 'none' =
-        modelBaselineMs != null ? 'model-baseline'
-        : llm != null ? 'measured'
+        e2e != null || llm != null ? 'measured'
+        : modelBaselineMs != null ? 'model-baseline'
         : 'none';
 
       return {
         callsCount: endedCalls.length,
-        sampleSize: primary != null ? 1 : 0,
+        sampleSize: e2e != null ? Math.max(1, turnsInCall) : primary != null ? 1 : 0,
         latencyMs: primary,
         latencySource: source === 'model-baseline' ? 'p50' : source === 'measured' ? 'values' : 'none',
         breakdownMs: { llm, tts, asr, e2e },

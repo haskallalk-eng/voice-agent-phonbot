@@ -485,7 +485,7 @@ export async function updateAgent(
 
 // --- Call History ---
 
-/** Retell exposes measured latencies per call in seconds on top-level
+/** Retell exposes measured latencies per call in milliseconds on top-level
  *  latency.* fields. e2e.p50 is the "first user input → first audio
  *  byte out" metric — the number users actually hear. */
 export type RetellLatencyBreakdown = {

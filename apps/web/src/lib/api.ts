@@ -1154,9 +1154,8 @@ export type BillingStatus = {
 export type AgentStats = {
   callsCount: number;
   sampleSize: number;
-  /** Primary latency shown in the UI. Matches Retell's agent-builder
-   *  UI number exactly (model-based baseline). Falls back to measured
-   *  llm.p50 when the model isn't in our map. */
+  /** Primary latency shown in the UI. Prefer latest measured e2e.p50,
+   *  then measured llm.p50, then a model-based fallback estimate. */
   latencyMs: number | null;
   latencySource: 'values' | 'p50' | 'none';
   /** Per-component breakdown from the latest call's measured latency. */
@@ -1170,7 +1169,7 @@ export type AgentStats = {
   lastCallAt: number | null;
   /** The LLM model currently configured on the agent (e.g. 'gpt-4o-mini'). */
   modelName?: string | null;
-  /** Retell's baseline latency for that model (matches their UI). */
+  /** Retell-style baseline latency estimate for that model. */
   modelBaselineMs?: number | null;
   /** Real llm.p50 from the last ended call — shown in tooltip. */
   measuredLlmMs?: number | null;
