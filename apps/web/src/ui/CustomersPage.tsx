@@ -1273,7 +1273,7 @@ export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | 
     const nextQuestions = questions.map((q) => q.id === question.id ? { ...q, enabled: q.enabled === false } : q);
     await saveModule(
       { ...moduleConfig, enabled, allowBookingWithoutApproval, questions: nextQuestions },
-      'Neukunden-Fragen gespeichert. Der Prompt wird beim Speichern/Deploy tenant-spezifisch aktualisiert.',
+      'Neukunden-Fragen gespeichert. Der Prompt wird beim Speichern/Deploy aktualisiert.',
     );
   }
 
@@ -1535,7 +1535,7 @@ export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | 
       <section className="rounded-2xl border border-white/[0.07] bg-white/[0.035] p-5 space-y-4">
         <div>
           <h2 className="text-sm font-semibold text-white">Fragen, die der Bot bei Neukunden stellt</h2>
-          <p className="text-xs text-white/40 mt-1">Diese Liste wird tenant-spezifisch in den Prompt geschrieben. Name bleibt Pflicht, weil ohne Namen kein Kunde sauber angelegt werden kann.</p>
+          <p className="text-xs text-white/40 mt-1">Diese Liste steuert, welche Fragen Chipy bei Neukunden stellt. Name bleibt Pflicht, weil ohne Namen kein Kunde sauber angelegt werden kann.</p>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           {questions.map((question) => (
