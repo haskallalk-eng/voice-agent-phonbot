@@ -314,7 +314,7 @@ function NumberCard({ num, agents, onVerify, onDelete, onRefresh }: {
 
             {verifyResult?.kind === 'not_configured' && (
               <div className="space-y-2">
-                <div className="bg-blue-500/10 border border-blue-500/25 rounded-xl p-3 text-xs text-blue-200 space-y-1">
+                <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-3 text-xs text-cyan-100/80 space-y-1">
                   <p className="font-semibold">Automatischer Test nicht verfügbar</p>
                   <p>{verifyResult.message || 'Der Server kann die Rufumleitung gerade nicht automatisch testen. Bitte manuell testen:'}</p>
                 </div>

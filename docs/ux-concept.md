@@ -191,9 +191,9 @@ Trigger-Punkte:
 ## Design-System — Futuristic
 
 ### Farben
-- **Primary**: Deep Indigo (#4F46E5) → Electric Violet
-- **Bg**: Near-black (#0F0F14) oder Off-white (#FAFAFA) (light/dark toggle)
-- **Accent**: Cyan-Glow (#06B6D4) für CTAs und Active-States
+- **Primary**: Phonbot-Gradient Orange → Cyan (`#F97316` → `#06B6D4`)
+- **Bg**: Near-black `#0A0A0F` als kanonischer Phonbot-Canvas
+- **Accent**: Orange für Handlung/Trust, Cyan als Gradient-Endpunkt und sekundärer Glow
 - **Glass**: `backdrop-blur-xl bg-white/5 border-white/10`
 
 ### Typografie

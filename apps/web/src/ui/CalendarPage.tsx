@@ -478,7 +478,7 @@ function BookingModal({
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Optionale Hinweise…"
               className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-orange-500/40 resize-none" />
           </div>
-          {error && <p className="text-xs text-red-400">⚠️ {error}</p>}
+          {error && <p className="text-xs text-red-400">{error}</p>}
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose}
               className="flex-1 py-2.5 rounded-xl border border-white/10 text-sm text-white/50 hover:text-white hover:border-white/20 transition-all">
@@ -2060,7 +2060,7 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
     <div className="space-y-4">
       {error && (
         <div className="rounded-2xl p-4 border border-red-500/20 bg-red-500/5">
-          <p className="text-sm text-red-300">⚠️ {error}</p>
+          <p className="text-sm text-red-300">{error}</p>
           <button onClick={loadStatus} className="mt-2 text-xs text-white/40 hover:text-white/60 transition-colors">Erneut versuchen</button>
         </div>
       )}
@@ -2075,7 +2075,7 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
         </p>
         {(status as CalendarStatus | null)?.expired && (
           <div className="rounded-xl px-4 py-3 mb-2 text-xs" style={{ background: 'rgba(251,146,60,0.1)', border: '1px solid rgba(251,146,60,0.2)', color: '#FB923C' }}>
-            ⚠️ Deine {(status as CalendarStatus).expiredProvider === 'google' ? 'Google' : (status as CalendarStatus).expiredProvider === 'microsoft' ? 'Microsoft' : ''}-Verbindung ist abgelaufen. Bitte neu verbinden.
+            Deine {(status as CalendarStatus).expiredProvider === 'google' ? 'Google' : (status as CalendarStatus).expiredProvider === 'microsoft' ? 'Microsoft' : ''}-Verbindung ist abgelaufen. Bitte neu verbinden.
           </div>
         )}
 

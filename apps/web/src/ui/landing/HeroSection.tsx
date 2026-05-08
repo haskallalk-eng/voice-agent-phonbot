@@ -84,7 +84,8 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
                 className="absolute -top-6 right-0 sm:-right-2 glass rounded-2xl px-3 py-2 text-xs text-white/70 italic group-hover:scale-105 transition-transform max-w-[140px] sm:max-w-[160px]"
                 style={{ border: '1px solid rgba(255,255,255,0.12)' }}
               >
-                „Hi, ich bin Chipy! Wie kann ich dir heute helfen?" 📞
+                <span>„Hi, ich bin Chipy! Wie kann ich dir heute helfen?"</span>
+                <IconPhone size={12} className="ml-1 inline text-orange-300/80" />
               </div>
 
               {/* Click hint */}

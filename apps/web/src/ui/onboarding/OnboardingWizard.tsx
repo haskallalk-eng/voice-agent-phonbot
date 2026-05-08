@@ -78,12 +78,12 @@ const TEMPLATE_CONFIG: Record<string, {
   },
   custom: {
     Icon: IconSettings,
-    accent: 'text-violet-300',
-    iconBg: 'bg-violet-500/15',
-    hoverBorder: 'hover:border-violet-500/40',
-    hoverGlow: 'hover:shadow-[0_0_22px_rgba(139,92,246,0.18)]',
-    selectedBorder: 'border-violet-500/60',
-    selectedGlow: 'shadow-[0_0_22px_rgba(139,92,246,0.25)]',
+    accent: 'text-cyan-300',
+    iconBg: 'bg-cyan-500/15',
+    hoverBorder: 'hover:border-cyan-500/40',
+    hoverGlow: 'hover:shadow-[0_0_22px_rgba(6,182,212,0.18)]',
+    selectedBorder: 'border-cyan-500/60',
+    selectedGlow: 'shadow-[0_0_22px_rgba(6,182,212,0.25)]',
   },
 };
 
@@ -708,11 +708,11 @@ export function OnboardingWizard({ onComplete }: Props) {
                     onClick={() => setCallMode('always')}
                     className={`w-full glass rounded-2xl p-5 flex items-start gap-4 text-left border-2 transition-all duration-300 cursor-pointer
                       ${callMode === 'always'
-                        ? 'border-violet-500/60 shadow-[0_0_22px_rgba(139,92,246,0.2)] bg-violet-500/5'
+                        ? 'border-orange-500/60 shadow-[0_0_22px_rgba(249,115,22,0.22)] bg-orange-500/5'
                         : 'border-transparent hover:border-white/20 hover:bg-white/[0.03]'}`}
                   >
                     <div className={`shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-300
-                      ${callMode === 'always' ? 'bg-violet-500/25 text-violet-300' : 'bg-white/8 text-white/50'}`}>
+                      ${callMode === 'always' ? 'bg-orange-500/25 text-orange-300' : 'bg-white/8 text-white/50'}`}>
                       <IconAgent size={20} />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -720,7 +720,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                       <p className="text-xs text-white/50 leading-relaxed">Alle eingehenden Anrufe gehen sofort zum Agent — auch wenn du verfügbar wärst. Du bist komplett freihändig.</p>
                       <p className="text-[11px] text-white/30 mt-1.5">Unbedingte Rufumleitung</p>
                     </div>
-                    <div className={`shrink-0 w-5 h-5 rounded-full border-2 mt-0.5 flex-none transition-all ${callMode === 'always' ? 'bg-violet-500 border-violet-500' : 'border-white/20'}`} />
+                    <div className={`shrink-0 w-5 h-5 rounded-full border-2 mt-0.5 flex-none transition-all ${callMode === 'always' ? 'bg-orange-500 border-orange-500' : 'border-white/20'}`} />
                   </button>
                 </div>
 

@@ -171,8 +171,8 @@ Wenn der Anrufer einen Termin möchte: Frage nach Datum, Uhrzeit und Art des Ter
   {
     id: 'support',
     Icon: IconSliders,
-    accent: 'text-violet-400',
-    hex: '#A78BFA',
+    accent: 'text-cyan-400',
+    hex: '#06B6D4',
     name: 'Kundensupport',
     capability: 'Probleme aufnehmen und Support-Tickets erstellen',
     block: `## Kundensupport
@@ -273,7 +273,7 @@ export const PROMPT_SECTIONS: PromptSection[] = [
     text: `Spreche ruhig, klar und professionell. Verwende eine freundliche, empathische Sprache. Vermeide Fachjargon. Höre aktiv zu und bestätige das Gehörte mit kurzen Phrasen wie "Ich verstehe" oder "Gerne helfe ich Ihnen".`,
   },
   {
-    id: 'appointment', label: 'Terminbuchung', Icon: IconCalendar, accent: 'text-violet-400', hex: '#A78BFA',
+    id: 'appointment', label: 'Terminbuchung', Icon: IconCalendar, accent: 'text-cyan-400', hex: '#06B6D4',
     description: 'Termin finden und buchen',
     text: `Wenn ein Anrufer einen Termin möchte: Frage nach gewünschtem Datum, Uhrzeit und Art des Termins. Prüfe die Verfügbarkeit. Biete 2–3 Optionen an. Bestätige den Termin mit Datum, Uhrzeit und Ort. Frage bei Unklarheiten präzise nach.`,
   },
@@ -293,7 +293,7 @@ export const PROMPT_SECTIONS: PromptSection[] = [
     text: `Außerhalb der Öffnungszeiten teile mit, dass {businessName} aktuell geschlossen ist, und nenne die Öffnungszeiten. Bei dringendem Anliegen: Notfall-Kontakt nennen oder Ticket mit Priorität "Dringend" erstellen. Sonst Rückruf anbieten.`,
   },
   {
-    id: 'faq', label: 'FAQ & Auskunft', Icon: IconBookOpen, accent: 'text-indigo-400', hex: '#818CF8',
+    id: 'faq', label: 'FAQ & Auskunft', Icon: IconBookOpen, accent: 'text-orange-300', hex: '#FB923C',
     description: 'Häufige Fragen beantworten',
     text: `Beantworte häufige Fragen anhand des hinterlegten Wissens: Öffnungszeiten, Preise, Services, Standort und Anfahrt. Wenn du eine Antwort nicht sicher kennst, sage das ehrlich und biete Alternativen an.`,
   },

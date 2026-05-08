@@ -279,7 +279,7 @@ function CallCard({ a }: { a: CallAnalysis }) {
 const REASON_LABELS: Record<string, string> = {
   fix_addition: 'Fix angewendet',
   consolidation: 'Prompt konsolidiert',
-  auto_rollback: '⚠️ Auto-Rollback',
+  auto_rollback: 'Auto-Rollback',
   manual_restore: 'Manuell wiederhergestellt',
   holistic_review: 'Holistische Analyse',
 };
@@ -369,7 +369,7 @@ export function InsightsPage() {
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div
           className="absolute -top-60 right-1/4 w-[350px] sm:w-[600px] h-[350px] sm:h-[600px] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(139,92,246,0.07) 0%, transparent 65%)' }}
+          style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.07) 0%, transparent 65%)' }}
         />
       </div>
 
@@ -377,7 +377,7 @@ export function InsightsPage() {
         {/* Header */}
         <div className="mb-8 flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold mb-1">🧠 KI-Insights</h1>
+            <h1 className="text-2xl font-bold mb-1">KI-Insights</h1>
             <p className="text-white/50 text-sm">
               Jeder Anruf wird analysiert. Wiederkehrende Probleme werden automatisch behoben.
             </p>
@@ -461,7 +461,7 @@ export function InsightsPage() {
 
         {error && !loading && (
           <div className="glass rounded-2xl p-5 border border-red-500/20 bg-red-500/5 mb-6">
-            <p className="text-sm text-red-300">⚠️ {error}</p>
+            <p className="text-sm text-red-300">{error}</p>
             <button onClick={load} className="mt-2 text-xs text-white/40 hover:text-white/60 transition-colors">
               Erneut versuchen
             </button>
@@ -563,7 +563,7 @@ export function InsightsPage() {
             {/* Empty state */}
             {data.analyses.length === 0 && pending.length === 0 && (
               <div className="glass rounded-2xl p-10 border border-white/10 text-center">
-                <p className="text-4xl mb-3">🧠</p>
+                <div className="mx-auto mb-3 h-10 w-10 rounded-2xl border border-orange-400/20 bg-orange-500/10 shadow-[0_0_28px_rgba(249,115,22,0.14)]" />
                 <h3 className="text-lg font-semibold text-white mb-2">Noch keine Daten</h3>
                 <p className="text-sm text-white/40">
                   Nach dem ersten Anruf erscheinen hier die KI-Analysen und Verbesserungsvorschläge.
