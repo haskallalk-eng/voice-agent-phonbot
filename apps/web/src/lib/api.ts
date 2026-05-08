@@ -155,12 +155,42 @@ function parseApiErrorBody(body: string): Record<string, unknown> | null {
   }
 }
 
-function apiErrorUserMessage(body: string, parsed: Record<string, unknown> | null): string {
-  const error = parsed?.error;
-  if (typeof error === 'string' && error.trim()) return error;
+function apiErrorFallback(status: number, statusText: string): string {
+  if (status === 400) return 'Die Eingaben konnten nicht verarbeitet werden. Bitte prüfe die Felder.';
+  if (status === 401) return 'Deine Sitzung ist abgelaufen. Bitte melde dich erneut an.';
+  if (status === 403) return 'Du hast dafür keine Berechtigung.';
+  if (status === 404) return 'Das wurde nicht gefunden oder ist nicht mehr verfügbar.';
+  if (status === 409) return 'Diese Änderung ist gerade nicht möglich, weil sich Daten überschneiden oder bereits geändert wurden.';
+  if (status === 422) return 'Bitte prüfe die Eingaben und versuche es erneut.';
+  if (status === 429) return 'Zu viele Anfragen. Bitte warte kurz und versuche es erneut.';
+  if (status >= 500) return 'Der Server konnte die Anfrage gerade nicht ausführen. Bitte versuche es gleich nochmal.';
+  return statusText || 'Die Anfrage konnte nicht abgeschlossen werden.';
+}
+
+function apiErrorUserMessage(status: number, statusText: string, body: string, parsed: Record<string, unknown> | null): string {
   const message = parsed?.message;
   if (typeof message === 'string' && message.trim()) return message;
-  return body;
+
+  const code = parsed?.code;
+  if (typeof code === 'string') {
+    if (code === 'SLOT_TAKEN') return 'Dieser Termin wurde gerade belegt. Bitte wähle eine andere Uhrzeit.';
+    if (code === 'SLOT_UNAVAILABLE') return 'Diese Uhrzeit passt nicht zu Arbeitszeit, Sperren oder Dauer. Bitte wähle einen freien Slot im Kalender.';
+    if (code === 'INVALID_CUSTOMER_EMAIL') return 'Bitte gib eine gültige E-Mail-Adresse ein oder lasse das Feld leer.';
+    if (code === 'PROVIDER_REQUIRED') return 'Bitte wähle aus, welche Kalender-Verbindung getrennt werden soll.';
+  }
+
+  const error = parsed?.error;
+  if (typeof error === 'string' && error.trim()) {
+    const trimmed = error.trim();
+    if (!/^[A-Z0-9_:-]+$/.test(trimmed)) return trimmed;
+    if (trimmed === 'INVALID_CUSTOMER_EMAIL') return 'Bitte gib eine gültige E-Mail-Adresse ein oder lasse das Feld leer.';
+    if (trimmed === 'PROVIDER_REQUIRED') return 'Bitte wähle aus, welche Kalender-Verbindung getrennt werden soll.';
+    if (trimmed === 'SLOT_TAKEN') return 'Dieser Termin ist inzwischen belegt. Bitte wähle eine andere Uhrzeit.';
+    if (trimmed === 'SLOT_UNAVAILABLE') return 'Dieser Termin passt nicht in die Arbeitszeit, eine Sperre oder die gewählte Dauer.';
+  }
+
+  if (body.trim() && !/^[A-Z0-9_:-]+$/.test(body.trim())) return body.trim();
+  return apiErrorFallback(status, statusText);
 }
 
 export class ApiError extends Error {
@@ -169,17 +199,19 @@ export class ApiError extends Error {
   public body: string;
   public parsedBody: Record<string, unknown> | null;
   public userMessage: string;
+  public technicalMessage: string;
 
   constructor(status: number, statusText: string, body: string) {
     const parsedBody = parseApiErrorBody(body);
-    const userMessage = apiErrorUserMessage(body, parsedBody);
-    super(`API ${status}: ${userMessage}`);
+    const userMessage = apiErrorUserMessage(status, statusText, body, parsedBody);
+    super(userMessage);
     this.name = 'ApiError';
     this.status = status;
     this.statusText = statusText;
     this.body = body;
     this.parsedBody = parsedBody;
     this.userMessage = userMessage;
+    this.technicalMessage = `API ${status}: ${userMessage}`;
   }
 
   get isUnauthorized() { return this.status === 401; }
@@ -1258,7 +1290,7 @@ export async function cloneVoice(name: string, audioFile: File, provider = 'cart
     body: form,
     credentials: 'include',
   });
-  if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new ApiError(res.status, res.statusText, await res.text());
   return res.json() as Promise<Voice>;
 }
 
