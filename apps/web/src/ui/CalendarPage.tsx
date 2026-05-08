@@ -190,6 +190,28 @@ function clampTimelineMinute(value: number): number {
   return Math.min(24 * 60, Math.max(0, Math.round(value)));
 }
 
+const TIMELINE_WORKDAY_PADDING_MINUTES = 30;
+const TIMELINE_GRID_STEP_MINUTES = 30;
+
+function floorTimelineMinute(value: number, step = TIMELINE_GRID_STEP_MINUTES): number {
+  return clampTimelineMinute(Math.floor(value / step) * step);
+}
+
+function ceilTimelineMinute(value: number, step = TIMELINE_GRID_STEP_MINUTES): number {
+  return clampTimelineMinute(Math.ceil(value / step) * step);
+}
+
+function buildTimelineLabels(start: number, end: number): number[] {
+  const labels: number[] = [];
+  for (let minutes = start; minutes <= end; minutes += 60) labels.push(minutes);
+  if (labels[labels.length - 1] !== end) labels.push(end);
+  return labels;
+}
+
+function timelineLabelTop(minutes: number, start: number, span: number): string {
+  return `clamp(10px, ${((minutes - start) / span) * 100}%, calc(100% - 10px))`;
+}
+
 type CalendarViewMode = 'day' | 'week' | 'month';
 type CalendarBooking = ChipyBooking & {
   calendarScope?: 'business' | 'staff';
@@ -328,7 +350,7 @@ function BookingModal({
     setLoading(true);
     setError(null);
     try {
-      const slotTime = new Date(`${dateStr}T${time}:00`).toISOString();
+      const slotTime = `${dateStr}T${time}:00`;
       const res = await (createBookingApi ?? createChipyBooking)({
         customer_name: name,
         customer_phone: phone.trim(),
@@ -894,13 +916,13 @@ function WeeklyCalendar({
       }
     }
     const longestWorkday = ranges.sort((a, b) => b.span - a.span || a.start - b.start || b.end - a.end)[0] ?? { start: 8 * 60, end: 18 * 60, span: 10 * 60 };
-    let start = clampTimelineMinute(longestWorkday.start - 60);
-    let end = clampTimelineMinute(Math.max(longestWorkday.end + 60, start + 60));
+    let start = floorTimelineMinute(longestWorkday.start - TIMELINE_WORKDAY_PADDING_MINUTES);
+    let end = ceilTimelineMinute(Math.max(longestWorkday.end + TIMELINE_WORKDAY_PADDING_MINUTES, start + 60));
     if (recordStarts.length) {
-      start = clampTimelineMinute(Math.min(start, Math.floor(Math.min(...recordStarts) / 60) * 60));
+      start = Math.min(start, floorTimelineMinute(Math.min(...recordStarts)));
     }
     if (recordEnds.length) {
-      end = clampTimelineMinute(Math.max(end, Math.ceil(Math.max(...recordEnds) / 60) * 60));
+      end = Math.max(end, ceilTimelineMinute(Math.max(...recordEnds)));
     }
     return { start, end };
   }, [blocksByDay, bookingsByDay, externalByDay, schedule, weekDays]);
@@ -909,13 +931,9 @@ function WeeklyCalendar({
   const timelineEnd = timelineBounds.end;
   const timelineSpan = Math.max(60, timelineEnd - timelineStart);
   const timelineHeight = Math.max(620, Math.min(920, Math.ceil(timelineSpan * 1.05)));
-  const hours = useMemo(() => {
-    const labels = Array.from({ length: Math.floor(timelineSpan / 60) + 1 }, (_, index) => timelineStart + index * 60).filter((minutes) => minutes <= timelineEnd);
-    if (labels[labels.length - 1] !== timelineEnd) labels.push(timelineEnd);
-    return labels;
-  }, [timelineEnd, timelineSpan, timelineStart]);
+  const hours = useMemo(() => buildTimelineLabels(timelineStart, timelineEnd), [timelineEnd, timelineStart]);
   const topFor = (minutes: number) => `${((minutes - timelineStart) / timelineSpan) * 100}%`;
-  const labelTopFor = (minutes: number) => `clamp(10px, ${topFor(minutes)}, calc(100% - 10px))`;
+  const labelTopFor = (minutes: number) => timelineLabelTop(minutes, timelineStart, timelineSpan);
   const heightFor = (start: number, end: number, min = 38) => Math.max(min, ((end - start) / timelineSpan) * timelineHeight);
   const calendarGridColumns = 'clamp(66px, 5.5vw, 88px) repeat(7, minmax(0, 1fr))';
   return (
@@ -1140,12 +1158,24 @@ function DailyCalendar({
     const buffer = bookingBuffer(booking);
     return { booking, start, end: start + duration, bufferEnd: start + duration + buffer, duration, buffer };
   });
-  const timelineStart = Math.max(0, Math.floor(Math.min(baseStart, ...bookingRanges.map((item) => item.start), ...externalRanges.map((item) => item.start), ...timedBlocks.map((item) => item.start)) / 60) * 60);
-  const timelineEnd = Math.min(24 * 60, Math.ceil(Math.max(baseEnd, ...bookingRanges.map((item) => item.bufferEnd), ...externalRanges.map((item) => item.end), ...timedBlocks.map((item) => item.end), timelineStart + 60) / 60) * 60);
+  const timelineStart = floorTimelineMinute(Math.min(
+    baseStart - TIMELINE_WORKDAY_PADDING_MINUTES,
+    ...bookingRanges.map((item) => item.start),
+    ...externalRanges.map((item) => item.start),
+    ...timedBlocks.map((item) => item.start),
+  ));
+  const timelineEnd = ceilTimelineMinute(Math.max(
+    baseEnd + TIMELINE_WORKDAY_PADDING_MINUTES,
+    ...bookingRanges.map((item) => item.bufferEnd),
+    ...externalRanges.map((item) => item.end),
+    ...timedBlocks.map((item) => item.end),
+    timelineStart + 60,
+  ));
   const timelineSpan = Math.max(60, timelineEnd - timelineStart);
   const timelineHeight = Math.max(620, Math.min(940, Math.ceil(timelineSpan * 1.05)));
-  const hours = Array.from({ length: Math.floor(timelineSpan / 60) + 1 }, (_, index) => timelineStart + index * 60).filter((minutes) => minutes <= timelineEnd);
+  const hours = useMemo(() => buildTimelineLabels(timelineStart, timelineEnd), [timelineEnd, timelineStart]);
   const topFor = (minutes: number) => `${((minutes - timelineStart) / timelineSpan) * 100}%`;
+  const labelTopFor = (minutes: number) => timelineLabelTop(minutes, timelineStart, timelineSpan);
   const heightFor = (start: number, end: number, min = 42) => Math.max(min, ((end - start) / timelineSpan) * timelineHeight);
   const sourceCounts = useMemo(() => {
     const map = new Map<string, { label: string; color: string; count: number }>();
@@ -1198,9 +1228,12 @@ function DailyCalendar({
 
       <div className="relative overflow-hidden rounded-2xl border border-white/8 bg-white/[0.025]" style={{ height: timelineHeight }}>
         {hours.map((minutes) => (
-          <div key={minutes} className="absolute left-0 right-0 border-t border-white/[0.055]" style={{ top: topFor(minutes) }}>
-            <span className="absolute left-3 -translate-y-1/2 rounded-lg bg-[#11111A] px-2 py-0.5 font-mono text-[10px] text-white/32">{minutesLabel(minutes)}</span>
-          </div>
+          <div key={`${minutes}:line`} className="absolute left-0 right-0 border-t border-white/[0.055]" style={{ top: topFor(minutes) }} />
+        ))}
+        {hours.map((minutes) => (
+          <span key={`${minutes}:label`} className="absolute left-3 z-10 -translate-y-1/2 rounded-lg bg-[#11111A] px-2 py-0.5 font-mono text-[10px] text-white/45" style={{ top: labelTopFor(minutes) }}>
+            {minutesLabel(minutes)}
+          </span>
         ))}
 
         {timedBlocks.map(({ block, start, end }) => (

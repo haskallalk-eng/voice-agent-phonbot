@@ -1345,7 +1345,7 @@ function generateFreeSlots(
 
 // ── Parse slot time string → Date ────────────────────────────────────────────
 
-function parseSlotTime(slot: string): Date | null {
+export function parseSlotTime(slot: string): Date | null {
   const raw = slot.trim();
   if (!raw) return null;
 
@@ -1426,6 +1426,10 @@ function parseAbsoluteSlotTime(value: string): Date | null {
     /^\s*(\d{4})-(\d{1,2})-(\d{1,2})[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?\s*$/,
   );
   if (isoDateTimeMatch) {
+    if (/(?:Z|[+-]\d{2}:?\d{2})\s*$/i.test(value)) {
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
     const [, year, month, day, hour, minute] = isoDateTimeMatch;
     return buildLocalDate(Number(year), Number(month), Number(day), {
       hour: Number(hour),
