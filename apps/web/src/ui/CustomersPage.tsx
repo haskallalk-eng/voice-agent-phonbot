@@ -44,11 +44,27 @@ const DEFAULT_QUESTIONS: CustomerQuestionConfig[] = [
   { id: 'preferredTime', label: 'Terminwunsch', prompt: 'Wunschtermin oder bevorzugtes Zeitfenster', enabled: true, builtin: true, detailsKey: 'preferredTime' },
   { id: 'preferredStylist', label: 'Wunschfriseur', prompt: 'Bestimmter Friseur oder jeder freie Mitarbeiter', enabled: true, builtin: true, detailsKey: 'preferredStylist' },
   { id: 'hairLength', label: 'Haarlänge grob', prompt: 'Kurz, schulterlang, lang oder Wortlaut des Kunden', enabled: true, builtin: true, detailsKey: 'hairLength' },
-  { id: 'hairHistory', label: 'Vorbehandlung', prompt: 'Nur bei Farbe/Chemie: Farbe, Blondierung, Glättung, Dauerwelle usw.', enabled: true, builtin: true, detailsKey: 'hairHistory', condition: 'bei Farbe/Chemie' },
-  { id: 'allergies', label: 'Allergien / Kopfhaut', prompt: 'Nur bei Farbe/Chemie: Allergien, Unverträglichkeiten oder empfindliche Kopfhaut', enabled: true, builtin: true, detailsKey: 'allergies', condition: 'bei Farbe/Chemie' },
+  { id: 'hairHistory', label: 'Vorbehandlung', prompt: 'Frühere Farbe, Blondierung, Glättung, Dauerwelle oder andere chemische Behandlung', enabled: true, builtin: true, detailsKey: 'hairHistory', condition: 'nur bei Farbe/Chemie' },
+  { id: 'allergies', label: 'Allergien / Kopfhaut', prompt: 'Allergien, Unverträglichkeiten oder empfindliche Kopfhaut', enabled: true, builtin: true, detailsKey: 'allergies', condition: 'nur bei Farbe/Chemie' },
 ];
 
 const BUILTIN_IDS = new Set(DEFAULT_QUESTIONS.map((q) => q.id));
+const LEGACY_BUILTIN_PROMPTS: Record<string, string[]> = {
+  hairHistory: [
+    'Nur bei Farbe/Chemie: Farbe, Blondierung, Glättung, Dauerwelle usw.',
+    'Bei Farbe oder Chemie: frühere Farbe, Blondierung, Glättung, Dauerwelle oder andere chemische Behandlung',
+    'Bei Farbe oder Chemie: fruehere Farbe, Blondierung, Glaettung, Dauerwelle oder andere chemische Behandlung',
+  ],
+  allergies: [
+    'Nur bei Farbe/Chemie: Allergien, Unverträglichkeiten oder empfindliche Kopfhaut',
+    'Bei Farbe oder Chemie: Allergien, Unverträglichkeiten oder empfindliche Kopfhaut',
+    'Bei Farbe oder Chemie: Allergien, Unvertraeglichkeiten oder empfindliche Kopfhaut',
+  ],
+};
+const LEGACY_BUILTIN_CONDITIONS: Record<string, string[]> = {
+  hairHistory: ['bei Farbe/Chemie', 'wenn nur bei Farbe/Chemie'],
+  allergies: ['bei Farbe/Chemie', 'wenn nur bei Farbe/Chemie'],
+};
 
 const EMPTY_FORM = {
   fullName: '',
@@ -110,6 +126,29 @@ function isInvalidCustomerEmailError(error: unknown): boolean {
   return error instanceof Error && /invalid email|INVALID_CUSTOMER_EMAIL/i.test(error.message);
 }
 
+function comparableQuestionText(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function normalizeBuiltinPrompt(question: CustomerQuestionConfig, value: string | undefined): string {
+  const trimmed = value?.trim();
+  if (!trimmed) return question.prompt ?? question.label;
+  const legacy = LEGACY_BUILTIN_PROMPTS[question.id]?.map(comparableQuestionText) ?? [];
+  return legacy.includes(comparableQuestionText(trimmed)) ? question.prompt ?? question.label : trimmed;
+}
+
+function normalizeBuiltinCondition(question: CustomerQuestionConfig, value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return question.condition;
+  const legacy = LEGACY_BUILTIN_CONDITIONS[question.id]?.map(comparableQuestionText) ?? [];
+  return legacy.includes(comparableQuestionText(trimmed)) ? question.condition : trimmed;
+}
+
 function normalizeQuestionId(label: string): string {
   const slug = label
     .trim()
@@ -129,8 +168,8 @@ function normalizeQuestions(input: CustomerQuestionConfig[] | undefined): Custom
     const override = byId.get(q.id);
     return {
       ...q,
-      prompt: typeof override?.prompt === 'string' ? override.prompt.trim() || q.prompt : q.prompt,
-      condition: typeof override?.condition === 'string' ? override.condition.trim() : q.condition,
+      prompt: normalizeBuiltinPrompt(q, override?.prompt),
+      condition: normalizeBuiltinCondition(q, override?.condition),
       enabled: q.required ? true : override?.enabled !== false,
     };
   });
@@ -938,7 +977,7 @@ function QuestionConfigCard({
       >
         <span>
           <span className="text-sm font-semibold text-white">{question.label}</span>
-          {condition.trim() && <span className="ml-2 text-[11px] text-orange-200/60">wenn {condition.trim()}</span>}
+          {condition.trim() && <span className="ml-2 text-[11px] text-orange-200/60">Regel: {condition.trim()}</span>}
           {question.required && <span className="block text-[11px] text-white/25 mt-2">Pflichtfeld</span>}
         </span>
         <TogglePill active={question.enabled !== false} disabled={question.required} />
@@ -956,11 +995,12 @@ function QuestionConfigCard({
           />
         </label>
         <label className="block">
-          <span className="text-[10px] uppercase tracking-[0.13em] text-white/28">Nur fragen wenn</span>
+          <span className="text-[10px] uppercase tracking-[0.13em] text-white/28">Regel</span>
+          <span className="mt-0.5 block text-[11px] text-white/32">Wann soll Chipy diese Frage stellen? Leer lassen = immer fragen.</span>
           <input
             value={condition}
             onChange={(e) => setCondition(e.target.value)}
-            placeholder="z.B. Farbe, Blondierung, Dauerwelle oder empfindliche Kopfhaut"
+            placeholder="z.B. nur bei Farbe/Chemie"
             className="mt-1 w-full rounded-xl border border-white/10 bg-white/[0.045] px-3 py-2 text-xs text-white placeholder:text-white/25 outline-none focus:border-orange-400/50"
           />
         </label>
@@ -971,7 +1011,7 @@ function QuestionConfigCard({
             disabled={!changed || saving || !prompt.trim()}
             className="rounded-xl border border-orange-500/25 bg-orange-500/12 px-3 py-2 text-xs font-semibold text-orange-100 disabled:opacity-40"
           >
-            Regel speichern
+            Änderung speichern
           </button>
           {question.builtin !== true && (
             <button
@@ -1432,7 +1472,7 @@ export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | 
             <input
               value={customQuestionCondition}
               onChange={(e) => setCustomQuestionCondition(e.target.value)}
-              placeholder="Nur fragen wenn..., z.B. bei Farbe/Chemie oder wenn Neukunde unsicher ist"
+              placeholder="Regel optional, z.B. nur bei Farbe/Chemie oder wenn Neukunde unsicher ist"
               className="flex-1 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none focus:border-orange-400/50"
             />
             <button disabled={!customQuestion.trim() || saving} className="rounded-xl bg-orange-500/20 border border-orange-500/30 px-4 py-2.5 text-sm font-semibold text-orange-100 hover:bg-orange-500/25 disabled:opacity-40">
