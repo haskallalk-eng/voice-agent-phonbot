@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   getCalendarStatus, connectCalcom, disconnectCalendar,
@@ -834,19 +834,6 @@ function WeeklyCalendar({
   const hours = Array.from({ length: Math.floor(timelineSpan / 60) + 1 }, (_, index) => timelineStart + index * 60).filter((minutes) => minutes <= timelineEnd);
   const topFor = (minutes: number) => `${((minutes - timelineStart) / timelineSpan) * 100}%`;
   const heightFor = (start: number, end: number, min = 38) => Math.max(min, ((end - start) / timelineSpan) * timelineHeight);
-  const gridRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const el = gridRef.current;
-    if (!el) return;
-    const blockVerticalWheel = (event: WheelEvent) => {
-      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-      event.preventDefault();
-    };
-    el.addEventListener('wheel', blockVerticalWheel, { passive: false });
-    return () => el.removeEventListener('wheel', blockVerticalWheel);
-  }, []);
-
   return (
     <div className={['flex min-h-0 flex-col rounded-3xl border border-white/10 bg-black/18 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]', className].filter(Boolean).join(' ')}>
       <div className="mb-2 flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -861,9 +848,20 @@ function WeeklyCalendar({
         </div>
       </div>
 
-      <div ref={gridRef} className="min-h-0 flex-1 overscroll-contain overflow-x-auto overflow-y-hidden rounded-2xl border border-white/8 bg-white/[0.025]">
-        <div className="min-w-[1016px]">
-          <div className="grid border-b border-white/8" style={{ gridTemplateColumns: '72px repeat(7, minmax(134px, 1fr))' }}>
+      <div
+        data-testid="weekly-calendar-grid"
+        className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/8 bg-white/[0.025]"
+        style={{ touchAction: 'pan-y', overscrollBehaviorX: 'none' }}
+        onWheel={(event) => {
+          if (event.deltaY === 0) return;
+          const pageScroller = event.currentTarget.closest('main');
+          if (!pageScroller) return;
+          event.preventDefault();
+          pageScroller.scrollBy({ top: event.deltaY, left: 0 });
+        }}
+      >
+        <div className="w-full min-w-0">
+          <div className="grid border-b border-white/8" style={{ gridTemplateColumns: 'clamp(44px, 5vw, 72px) repeat(7, minmax(0, 1fr))' }}>
             <div className="border-r border-white/8 bg-black/16" />
             {weekDays.map((day, index) => {
               const key = isoDate(day);
@@ -885,8 +883,8 @@ function WeeklyCalendar({
                     )}
                   </div>
                   <div className="mt-1.5 space-y-1">
-                    {!enabled && <p className="rounded-lg border border-red-400/20 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-200/75">Geschlossen</p>}
-                    {fullDayBlock && <p className="rounded-lg border border-red-400/20 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-200/75">Ganztag gesperrt</p>}
+                    {!enabled && <p className="truncate rounded-lg border border-red-400/20 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-200/75">Geschlossen</p>}
+                    {fullDayBlock && <p className="truncate rounded-lg border border-red-400/20 bg-red-500/10 px-2 py-1 text-[10px] font-semibold text-red-200/75">Ganztag gesperrt</p>}
                     {allDayExternal.slice(0, 2).map((event) => (
                       <p key={`${event.provider}:${event.external_id}:all-day`} className="truncate rounded-lg border border-white/10 bg-white/[0.06] px-2 py-1 text-[10px] text-white/45">{event.summary || 'Externer Termin'}</p>
                     ))}
@@ -896,7 +894,7 @@ function WeeklyCalendar({
             })}
           </div>
 
-          <div className="grid" style={{ gridTemplateColumns: '72px repeat(7, minmax(134px, 1fr))' }}>
+          <div className="grid" style={{ gridTemplateColumns: 'clamp(44px, 5vw, 72px) repeat(7, minmax(0, 1fr))' }}>
             <div className="relative border-r border-white/8 bg-black/20" style={{ height: timelineHeight }}>
               {hours.map((minutes) => (
                 <div key={minutes} className="absolute left-0 right-0 border-t border-white/[0.055]" style={{ top: topFor(minutes) }}>
@@ -1989,12 +1987,12 @@ function StaffPanel({
           >
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-100/55">Tagessperren</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-100/55">Sperrzeiten</p>
                 <p className="mt-1 text-sm font-bold text-white">{selected.name} sperren</p>
-                <p className="mt-1 text-xs leading-relaxed text-white/42">Urlaub, Krankheit oder einzelne Tage, an denen dieser Mitarbeiter nicht buchbar ist.</p>
+                <p className="mt-1 text-xs leading-relaxed text-white/42">Einzelne Tage, mehrere Tage oder Uhrzeiten, an denen dieser Mitarbeiter nicht buchbar ist.</p>
               </div>
               <span className="rounded-full border border-orange-400/20 bg-black/20 px-3 py-1.5 text-xs font-semibold text-orange-100/70">
-                Tage
+                Tag/Zeit
               </span>
             </div>
             <SettingsPanel
@@ -2005,9 +2003,9 @@ function StaffPanel({
               addBlockApi={(date, opts) => addStaffChipyBlock(selected.id, date, opts)}
               removeBlockApi={(id) => removeStaffChipyBlock(selected.id, id)}
               showSchedule={false}
-              blockModeOptions={['day']}
-              blockTitle="Gesperrte Tage"
-              blockDescription="Diese Tage werden im Kalender markiert und für Buchungen blockiert."
+              blockModeOptions={['day', 'range', 'hours']}
+              blockTitle="Sperren"
+              blockDescription="Blockiere einen einzelnen Tag, mehrere Tage oder bestimmte Uhrzeiten."
             />
           </section>
 
@@ -2349,12 +2347,12 @@ export function CalendarPage({
             >
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-100/55">Tagessperren</p>
-                  <p className="mt-1 text-sm font-bold text-white">Betrieb sperren</p>
-                  <p className="mt-1 text-xs leading-relaxed text-white/42">Urlaub, Feiertage oder einzelne Tage, an denen keine Bot-Buchungen möglich sind.</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-orange-100/55">Sperrzeiten</p>
+                  <p className="mt-1 text-sm font-bold text-white">Tage & Zeiten sperren</p>
+                  <p className="mt-1 text-xs leading-relaxed text-white/42">Urlaub, Feiertage, mehrere Tage oder Uhrzeiten, an denen keine Bot-Buchungen möglich sind.</p>
                 </div>
                 <span className="rounded-full border border-orange-400/20 bg-black/20 px-3 py-1.5 text-xs font-semibold text-orange-100/70">
-                  Tage
+                  Tag/Zeit
                 </span>
               </div>
               <SettingsPanel
@@ -2363,9 +2361,9 @@ export function CalendarPage({
                 blocks={blocks}
                 setBlocks={setBlocks}
                 showSchedule={false}
-                blockModeOptions={['day']}
-                blockTitle="Gesperrte Tage"
-                blockDescription="Diese Tage werden im Kalender markiert und für Buchungen blockiert."
+                blockModeOptions={['day', 'range', 'hours']}
+                blockTitle="Sperren"
+                blockDescription="Blockiere einen einzelnen Tag, mehrere Tage oder bestimmte Uhrzeiten."
               />
             </section>
 
