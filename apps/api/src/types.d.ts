@@ -11,9 +11,11 @@ declare module '@fastify/jwt' {
   interface FastifyJWT {
     payload:
       | { userId: string; orgId: string; role: string }
-      | { admin: true; aud: 'phonbot:admin'; email?: string };
+      | { admin: true; aud: 'phonbot:admin'; email?: string }
+      | { aud: 'phonbot:sales'; salesRepId: string; email: string; name: string; mustChangePassword: boolean };
     user:
       | { userId: string; orgId: string; role: string }
-      | { admin: true; aud: 'phonbot:admin'; email?: string };
+      | { admin: true; aud: 'phonbot:admin'; email?: string }
+      | { aud: 'phonbot:sales'; salesRepId: string; email: string; name: string; mustChangePassword: boolean };
   }
 }

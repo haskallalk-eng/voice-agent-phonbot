@@ -291,6 +291,49 @@ export async function sendSignupLinkEmail(opts: { toEmail: string; name?: string
   return send(opts.toEmail, 'Dein Phonbot-Testlink', text, html);
 }
 
+export async function sendSalesTestLinkEmail(opts: {
+  toEmail: string;
+  companyName: string;
+  contactName?: string | null;
+  repName: string;
+  contactBasis: 'explicit_request' | 'existing_business_relation' | 'manual_one_to_one_context';
+}): Promise<EmailSendResult> {
+  const safeName = opts.contactName ? escapeHtml(opts.contactName) : escapeHtml(opts.companyName);
+  const signupUrl = `${APP_URL}/?page=register`;
+  const basisLabel: Record<typeof opts.contactBasis, string> = {
+    explicit_request: 'Testlink wurde im Gespräch angefragt.',
+    existing_business_relation: 'Bestehender Geschäftskontakt.',
+    manual_one_to_one_context: 'Manuell geprüfter 1:1-Geschäftskontakt.',
+  };
+  const html = brandedEmail({
+    title: 'Dein Phonbot-Testlink',
+    body: `
+      <p style="margin:0 0 12px 0;">Hallo <strong style="color:#fff;">${safeName}</strong>,</p>
+      <p style="margin:0 0 16px 0;">hier ist der Testlink für Chipy, den KI-Telefonassistenten für Friseure und lokale Dienstleister.</p>
+      <div style="background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.15);border-radius:12px;padding:14px;margin:0 0 16px 0;text-align:left;">
+        <p style="margin:0;color:rgba(255,255,255,0.7);font-size:13px;line-height:1.55;">
+          Chipy nimmt Anrufe an, erkennt Terminwünsche, beantwortet Rückfragen und legt Rückruf-Tickets an, wenn ein Mensch gebraucht wird.
+        </p>
+      </div>
+      <p style="margin:0;color:rgba(255,255,255,0.45);font-size:12px;">${escapeHtml(basisLabel[opts.contactBasis])}</p>
+    `,
+    cta: { label: 'Chipy kostenlos testen', url: signupUrl },
+    footer: `${opts.repName} · Phonbot Vertrieb`,
+  });
+  const text = [
+    `Hallo ${opts.contactName ?? opts.companyName},`,
+    '',
+    'hier ist dein Phonbot-Testlink:',
+    signupUrl,
+    '',
+    'Chipy nimmt Anrufe an, erkennt Terminwünsche und bucht Termine oder legt Rückruf-Tickets an.',
+    '',
+    basisLabel[opts.contactBasis],
+    `Gesendet von ${opts.repName} · Phonbot Vertrieb`,
+  ].join('\n');
+  return send(opts.toEmail, 'Dein Phonbot-Testlink', text, html);
+}
+
 export async function sendPlanActivatedEmail(opts: {
   toEmail: string;
   orgName: string;

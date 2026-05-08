@@ -15,8 +15,9 @@ import {
   type AdminOrg,
 } from '../lib/api.js';
 import { DemoCallsTab, DemoPromptsTab, LearningsTab } from './AdminTabs.js';
+import { AdminSalesTab } from './AdminSalesTab.js';
 
-type Tab = 'overview' | 'leads' | 'users' | 'demo-calls' | 'demo-prompts' | 'learnings';
+type Tab = 'overview' | 'leads' | 'users' | 'sales' | 'demo-calls' | 'demo-prompts' | 'learnings';
 
 // ── Smart Search Input ───────────────────────────────────────────────────────
 
@@ -548,6 +549,7 @@ export function AdminPage() {
             ['overview', 'Overview'],
             ['leads', 'Leads'],
             ['users', 'Users'],
+            ['sales', 'Vertrieb'],
             ['demo-calls', 'Demo Calls'],
             ['demo-prompts', 'Demo Prompts'],
             ['learnings', 'Verbesserungen'],
@@ -572,6 +574,7 @@ export function AdminPage() {
         {tab === 'overview' && <OverviewTab />}
         {tab === 'leads' && <LeadsTab />}
         {tab === 'users' && <UsersTab />}
+        {tab === 'sales' && <AdminSalesTab />}
         {tab === 'demo-calls' && <DemoCallsTab />}
         {tab === 'demo-prompts' && <DemoPromptsTab />}
         {tab === 'learnings' && <LearningsTab />}
