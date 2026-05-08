@@ -697,12 +697,12 @@ function AgentStatsRow({
     ? `Innerhalb der ${billing?.minutesLimit ?? 0} Inklusiv-Minuten deines Plans${surcharge > 0 ? ` · Premium-Aufschlag +${Math.round(surcharge * 100)} Ct/Min` : ''}`
     : `Inklusiv-Minuten aufgebraucht — ${overage.toFixed(2)} € Überschreitung${surcharge > 0 ? ` + ${Math.round(surcharge * 100)} Ct Premium` : ''} pro Minute`;
 
-  // Real measured latency from Retell. Primary = LLM p50 (matches the
-  // Retell dashboard headline). Breakdown (TTS, ASR, E2E) goes into
-  // the tooltip so users can see where the time goes.
+  // Real measured latency from Retell. Primary = latest e2e p50 when
+  // available, because that is the pause users hear in the preview.
   const measuredMs = stats?.latencyMs ?? null;
   const hasData = typeof measuredMs === 'number' && measuredMs > 0 && (stats?.sampleSize ?? 0) > 0;
   const bk = stats?.breakdownMs;
+  const hasMeasuredE2e = bk?.e2e != null;
   const breakdownStr = bk
     ? [
         bk.llm != null ? `LLM ${bk.llm}` : null,
@@ -753,26 +753,33 @@ function AgentStatsRow({
       : diffSec < 3600 ? `vor ${Math.round(diffSec / 60)} min`
       : `vor ${Math.round(diffSec / 3600)} h`;
   }
-  // Tooltip explains: this number is Retell's model-baseline (matches
-  // the agent-builder UI), and the actually-measured latency from the
-  // last call is shown as extra info.
   const modelLine = stats?.modelName ? `Modell: ${stats.modelName}` : '';
   const measured = stats?.measuredLlmMs;
-  const measuredLine = measured != null
-    ? `Gemessen letzter Call: ${measured} ms (LLM p50)`
-    : 'Gemessen letzter Call: — (noch kein Call)';
+  const primaryLine = hasMeasuredE2e
+    ? `Live gemessen: ${measuredMs} ms (E2E p50, hoerbare Antwortzeit)`
+    : measured != null
+      ? `Live gemessen: ${measured} ms (LLM p50, E2E noch nicht verfuegbar)`
+      : stats?.modelBaselineMs != null
+        ? `Schaetzung: ${stats.modelBaselineMs} ms Modell-Basis`
+        : 'Live gemessen: noch kein Call';
+  const breakdownLine = breakdownStr ? `Breakdown: ${breakdownStr} ms` : '';
+  const modelBaselineLine = stats?.modelBaselineMs != null
+    ? `Modell-Basis: ${stats.modelBaselineMs} ms`
+    : '';
   const latencyTip = hasData
-    ? `Modell-Baseline für dieses Modell
+    ? `${primaryLine}
+${breakdownLine}
 ${modelLine}
-${measuredLine}
+${modelBaselineLine}
 Call ${callAgo} · live ${ageStr}`
     : '';
 
   if (hasData) {
     const ms = measuredMs as number;
-    // E2E-Skala: typisch 800-1500 ms.
-    if (ms < 900) { latencyLabel = 'Schnell'; latencyColor = 'text-green-400 bg-green-500/10 border-green-500/25'; }
-    else if (ms < 1300) { latencyLabel = 'Normal'; latencyColor = 'text-white/65 bg-white/5 border-white/15'; }
+    // E2E voice preview: below ~1.8s feels snappy, 1.8-3s is usable,
+    // above that callers perceive the bot as slow.
+    if (ms < 1800) { latencyLabel = 'Schnell'; latencyColor = 'text-green-400 bg-green-500/10 border-green-500/25'; }
+    else if (ms < 3000) { latencyLabel = 'Normal'; latencyColor = 'text-white/65 bg-white/5 border-white/15'; }
     else { latencyLabel = 'Langsam'; latencyColor = 'text-yellow-400 bg-yellow-500/10 border-yellow-500/25'; }
   }
 
