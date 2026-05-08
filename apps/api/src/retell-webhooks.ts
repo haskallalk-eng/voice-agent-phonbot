@@ -288,7 +288,7 @@ function compactRetellSlots(slots: string[]): { slots: string[]; allSlotsCount: 
     slots: visible,
     allSlotsCount: slots.length,
     moreCount: Math.max(0, slots.length - visible.length),
-    instruction: 'Nenne maximal drei passende Optionen in einem kurzen Satz, nicht jede Uhrzeit einzeln. Wenn mehr Slots vorhanden sind, sage dass es weitere Zeiten gibt.',
+    instruction: 'Nenne maximal drei passende Optionen in einem kurzen Satz, nicht jede Uhrzeit einzeln. Sprich Zeiten natuerlich aus, z.B. "Dienstag um 11 Uhr 15", nicht als technische Zahlenkette. Wenn mehr Slots vorhanden sind, sage dass es weitere Zeiten gibt.',
   };
 }
 

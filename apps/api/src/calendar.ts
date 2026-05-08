@@ -1312,6 +1312,23 @@ export async function getValidToken(orgId: string): Promise<string | null> {
 }
 
 const DAY_LABELS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'] as const;
+const FULL_DAY_LABELS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'] as const;
+const MONTH_LABELS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'] as const;
+const MONTH_INDEX: Record<string, number> = {
+  januar: 1,
+  februar: 2,
+  maerz: 3,
+  marz: 3,
+  april: 4,
+  mai: 5,
+  juni: 6,
+  juli: 7,
+  august: 8,
+  september: 9,
+  oktober: 10,
+  november: 11,
+  dezember: 12,
+};
 
 function generateFreeSlots(
   busyPeriods: { start: string; end: string }[],
@@ -1469,6 +1486,22 @@ function parseAbsoluteSlotTime(value: string): Date | null {
     const time = extractTimeOfDay(normalizeSlotText(rest));
     if (!time) return null;
     return buildLocalDate(Number(germanDateMatch[3]), Number(germanDateMatch[2]), Number(germanDateMatch[1]), time);
+  }
+
+  const normalizedValue = normalizeSlotText(value);
+  const germanMonthMatch = normalizedValue.match(/\b(\d{1,2})\.?\s+(januar|februar|maerz|marz|april|mai|juni|juli|august|september|oktober|november|dezember)(?:\s+(\d{4}))?\b/);
+  if (germanMonthMatch) {
+    const rest = normalizedValue.slice((germanMonthMatch.index ?? 0) + germanMonthMatch[0].length);
+    const time = extractTimeOfDay(rest);
+    if (!time) return null;
+    const now = new Date();
+    const year = germanMonthMatch[3] ? Number(germanMonthMatch[3]) : berlinParts(now).year;
+    const month = MONTH_INDEX[germanMonthMatch[2]!]!;
+    const date = buildLocalDate(year, month, Number(germanMonthMatch[1]), time);
+    if (date && date < now && !germanMonthMatch[3]) {
+      return buildLocalDate(year + 1, month, Number(germanMonthMatch[1]), time);
+    }
+    return date;
   }
 
   return null;
@@ -1718,12 +1751,9 @@ function localTimeKey(date: Date): string {
 function formatSlotLabel(date: Date): string {
   const parts = berlinParts(date);
   const dow = new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6;
-  const dd = parts.day.toString().padStart(2, '0');
-  const mm = parts.month.toString().padStart(2, '0');
   const yyyy = parts.year.toString();
-  const hh = parts.hour.toString().padStart(2, '0');
-  const min = parts.minute.toString().padStart(2, '0');
-  return `${DAY_LABELS[dow]} ${dd}.${mm}.${yyyy} ${hh}:${min}`;
+  const minute = parts.minute === 0 ? '' : ` ${parts.minute.toString().padStart(2, '0')}`;
+  return `${FULL_DAY_LABELS[dow]} ${parts.day}. ${MONTH_LABELS[parts.month - 1]} ${yyyy} um ${parts.hour} Uhr${minute}`;
 }
 
 async function isChipySlotAvailable(
@@ -2339,10 +2369,15 @@ export async function findFreeSlots(
 async function findFreeSlotsByContract(
   orgId: string,
   opts: { date?: string; range?: string; service?: string; staffId?: string | null },
+  knownStaff?: CalendarStaff,
+  timingOverride?: BookingTiming,
 ): Promise<{ slots: string[]; source: string }> {
-  const staffId = await assertStaffBelongs(orgId, opts.staffId);
+  const staffId = opts.staffId ?? null;
   if (staffId) {
-    const member = (await getCalendarStaff(orgId)).find((s) => s.id === staffId);
+    const member = knownStaff?.id === staffId
+      ? knownStaff
+      : (await getCalendarStaff(orgId)).find((s) => s.id === staffId);
+    if (!member) throw new StaffNotFoundError();
     if (member && !staffSupportsService(member, opts.service)) {
       return { slots: [], source: 'service-not-offered' };
     }
@@ -2356,7 +2391,7 @@ async function findFreeSlotsByContract(
   }
   const sources = ['chipy'];
   const { schedule, blocks, timeBlocks } = await getChipySchedule(orgId, staffId);
-  const timing = await resolveBookingTiming(orgId, opts.service);
+  const timing = timingOverride ?? await resolveBookingTiming(orgId, opts.service);
   let slots = generateChipySlots(schedule, blocks, timeBlocks, requestedDateKey(opts), timing);
 
   if (connections.length === 0) {
@@ -2398,10 +2433,11 @@ export async function findFreeSlotsForAnyStaff(
   if (eligibleStaff.length === 0) {
     return { slots: [], source: 'team:service-not-offered', staffCount: staff.length };
   }
+  const timing = await resolveBookingTiming(orgId, opts.service);
 
   const perStaff = await Promise.all(
     eligibleStaff.map(async (member) => {
-      const result = await findFreeSlotsByContract(orgId, { ...opts, staffId: member.id });
+      const result = await findFreeSlotsByContract(orgId, { ...opts, staffId: member.id }, member, timing);
       return { member, result };
     }),
   );
