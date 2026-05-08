@@ -214,12 +214,6 @@ function deriveBusinessServiceLabels(config: AgentConfig | null): string[] {
     .slice(0, 20);
 }
 
-function deriveBusinessServiceItems(config: AgentConfig | null): ServiceItem[] {
-  if (!config) return [];
-  if (config.services?.length) return config.services.map((service, index) => ({ ...service, id: service.id || `business_svc_${index}` }));
-  return staffLabelsToServiceItems(deriveBusinessServiceLabels(config));
-}
-
 type OpeningDay = 'Mo' | 'Di' | 'Mi' | 'Do' | 'Fr' | 'Sa' | 'So';
 type OpeningWeek = Record<OpeningDay, { open: boolean; from: string; to: string }>;
 
@@ -526,7 +520,6 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
   const [hoursText, setHoursText] = useState(chipyScheduleToOpeningHours(DEFAULT_CHIPY_SCHEDULE));
 
   const businessServices = useMemo(() => deriveBusinessServiceLabels(config), [config]);
-  const businessServiceItems = useMemo(() => deriveBusinessServiceItems(config), [config]);
   const selected = staff.find((member) => member.id === selectedId) ?? null;
   const defaultHoursText = useMemo(
     () => config?.openingHours?.trim() || chipyScheduleToOpeningHours(DEFAULT_CHIPY_SCHEDULE),
@@ -651,13 +644,6 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
     } finally {
       setSavingId(null);
     }
-  }
-
-  async function applyBusinessDefaults() {
-    if (!selected) return;
-    setStaffServices(businessServiceItems);
-    setHoursText(defaultHoursText);
-    setNotice('Betriebs-Defaults übernommen. Speichere Profil und Arbeitszeiten, um sie live zu setzen.');
   }
 
   async function deleteSelectedStaff() {
@@ -811,10 +797,7 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
                 onChange={setStaffServices}
                 onConsumeLegacy={() => undefined}
               />
-              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                <button type="button" onClick={() => { void applyBusinessDefaults(); }} className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm text-white/65 hover:text-white">
-                  Betrieb übernehmen
-                </button>
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={() => { void saveSelectedProfile(); }}
