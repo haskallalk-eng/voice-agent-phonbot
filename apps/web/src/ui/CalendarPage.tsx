@@ -218,6 +218,7 @@ type CalendarBooking = ChipyBooking & {
   staffId?: string | null;
   staffName?: string | null;
   staffColor?: string | null;
+  groupedBookings?: CalendarBooking[];
 };
 
 const TEAM_BOOKING_COLORS = ['#F97316', '#06B6D4', '#22C55E', '#A855F7', '#F59E0B', '#EC4899', '#14B8A6'];
@@ -232,7 +233,20 @@ function bookingKey(booking: CalendarBooking): string {
   return `${booking.calendarScope ?? 'business'}:${booking.staffId ?? 'betrieb'}:${booking.id}`;
 }
 
+function bookingGroupMembers(booking: CalendarBooking): CalendarBooking[] {
+  return booking.groupedBookings?.length ? booking.groupedBookings : [booking];
+}
+
+function bookingDisplayCount(booking: CalendarBooking): number {
+  return bookingGroupMembers(booking).length;
+}
+
+function isGroupedBooking(booking: CalendarBooking): boolean {
+  return bookingGroupMembers(booking).length > 1;
+}
+
 function bookingAccent(booking: CalendarBooking): string {
+  if (isGroupedBooking(booking)) return '#06B6D4';
   if (booking.staffColor?.trim()) return booking.staffColor.trim();
   if (booking.calendarScope === 'staff') {
     const key = booking.staffId ?? booking.staffName ?? booking.id;
@@ -251,6 +265,8 @@ function hexToRgba(color: string, alpha: number): string {
 }
 
 function bookingSourceLabel(booking: CalendarBooking): string {
+  const members = bookingGroupMembers(booking);
+  if (members.length > 1) return `${members.length} Termine`;
   return booking.calendarScope === 'staff' && booking.staffName ? booking.staffName : 'Betrieb';
 }
 
@@ -272,6 +288,43 @@ function bookingOverlapOffset(bookings: CalendarBooking[], booking: CalendarBook
     const otherEnd = otherStart + bookingDuration(other) + bookingBuffer(other);
     return otherStart < end && otherEnd > start;
   }).length);
+}
+
+function groupCalendarBookingsByStart(bookings: CalendarBooking[]): CalendarBooking[] {
+  const groups = new Map<string, CalendarBooking[]>();
+  for (const booking of bookings) {
+    const key = new Date(booking.slot_time).getTime().toString();
+    const arr = groups.get(key);
+    if (arr) arr.push(booking);
+    else groups.set(key, [booking]);
+  }
+
+  return [...groups.values()].flatMap((group) => {
+    const sorted = [...group].sort((a, b) =>
+      (a.staffName ?? '').localeCompare(b.staffName ?? '')
+      || a.customer_name.localeCompare(b.customer_name)
+      || a.id.localeCompare(b.id),
+    );
+    if (sorted.length < 2) return sorted;
+    const first = sorted[0]!;
+    const maxDuration = Math.max(...sorted.map(bookingDuration));
+    const maxBuffer = Math.max(...sorted.map(bookingBuffer));
+    return [{
+      ...first,
+      id: `group:${new Date(first.slot_time).getTime()}:${sorted.map((item) => bookingKey(item)).join('|')}`,
+      customer_name: `${sorted.length} Termine gleichzeitig`,
+      customer_phone: '',
+      service: 'Mehrere Mitarbeiter',
+      notes: null,
+      duration_minutes: maxDuration,
+      buffer_minutes: maxBuffer,
+      calendarScope: 'business',
+      staffId: null,
+      staffName: 'Team',
+      staffColor: '#06B6D4',
+      groupedBookings: sorted,
+    } satisfies CalendarBooking];
+  }).sort((a, b) => a.slot_time.localeCompare(b.slot_time));
 }
 
 function startOfWeek(date: Date): Date {
@@ -445,6 +498,185 @@ function BookingModal({
 }
 
 // ── Day Detail Drawer ─────────────────────────────────────────────────────────
+
+function BookingDetailsModal({
+  booking, onClose, onOpenCustomer, onDelete,
+}: {
+  booking: CalendarBooking;
+  onClose: () => void;
+  onOpenCustomer?: (booking: CalendarBooking) => void | Promise<void>;
+  onDelete?: (booking: CalendarBooking) => void | Promise<void>;
+}) {
+  const [confirmingDeleteKey, setConfirmingDeleteKey] = useState<string | null>(null);
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const groupMembers = bookingGroupMembers(booking);
+  const grouped = groupMembers.length > 1;
+  const startMinutes = dateToLocalMinutes(booking.slot_time);
+  const duration = bookingDuration(booking);
+  const buffer = bookingBuffer(booking);
+  const endMinutes = startMinutes + duration;
+  const bufferEnd = endMinutes + buffer;
+  const accent = bookingAccent(booking);
+  const dateLabel = new Date(booking.slot_time).toLocaleDateString('de-DE', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+  const headerTitle = grouped ? `${groupMembers.length} Termine gleichzeitig` : booking.customer_name;
+  const bookingDeleteKey = bookingKey(booking);
+  const confirmingSingleDelete = confirmingDeleteKey === bookingDeleteKey;
+  const deletingSingle = deletingKey === bookingDeleteKey;
+
+  async function handleDelete(target: CalendarBooking) {
+    if (!onDelete) return;
+    const targetKey = bookingKey(target);
+    if (confirmingDeleteKey !== targetKey) {
+      setConfirmingDeleteKey(targetKey);
+      setError(null);
+      return;
+    }
+    setDeletingKey(targetKey);
+    setError(null);
+    try {
+      await onDelete(target);
+      onClose();
+    } catch (e: unknown) {
+      setError((e instanceof Error ? e.message : null) ?? 'Termin konnte nicht gelöscht werden.');
+      setDeletingKey(null);
+    }
+  }
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(8px)' }}>
+      <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-white/10 shadow-[0_32px_120px_rgba(0,0,0,0.62)]" style={{ background: '#14141F' }} role="dialog" aria-modal="true" aria-labelledby="booking-details-title">
+        <div className="relative border-b border-white/8 p-5">
+          <span className="absolute inset-x-0 top-0 h-1" style={{ background: `linear-gradient(90deg, ${accent}, rgba(6,182,212,0.7))` }} />
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/30">Termindetails</p>
+              <h3 id="booking-details-title" className="mt-1 truncate text-xl font-bold text-white">{headerTitle}</h3>
+              <p className="mt-1 text-sm text-white/45">{bookingSourceLabel(booking)} · {dateLabel}</p>
+            </div>
+            <button onClick={onClose} className="rounded-xl px-2.5 py-1.5 text-xl leading-none text-white/35 transition-colors hover:bg-white/5 hover:text-white" aria-label="Schließen">×</button>
+          </div>
+        </div>
+
+        <div className="space-y-4 p-5">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/28">Uhrzeit</p>
+              <p className="mt-1 text-lg font-bold text-white">{minutesLabel(startMinutes)}-{minutesLabel(endMinutes)}</p>
+              <p className="mt-1 text-xs text-white/40">{duration} Minuten{buffer > 0 ? ` + ${buffer} Minuten Puffer` : ''}</p>
+            </div>
+            <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/28">Leistung</p>
+              <p className="mt-1 text-sm font-semibold text-white">{booking.service || 'Termin'}</p>
+              {buffer > 0 && <p className="mt-1 text-xs text-cyan-100/55">Blockiert bis {minutesLabel(bufferEnd)}</p>}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/8 bg-black/18 p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/28">Kontakt</p>
+            <p className="mt-2 text-sm text-white/70">{booking.customer_phone || 'Keine Telefonnummer hinterlegt'}</p>
+          </div>
+
+          {booking.notes && (
+            <div className="rounded-2xl border border-white/8 bg-black/18 p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/28">Notizen</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-white/62">{booking.notes}</p>
+            </div>
+          )}
+
+          {grouped && (
+            <div className="rounded-2xl border border-cyan-300/15 bg-cyan-400/[0.055] p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100/55">Alle Termine in diesem Slot</p>
+              <div className="mt-3 space-y-2">
+                {groupMembers.map((member) => {
+                  const memberKey = bookingKey(member);
+                  const memberStart = dateToLocalMinutes(member.slot_time);
+                  const memberDuration = bookingDuration(member);
+                  const memberEnd = memberStart + memberDuration;
+                  const memberConfirming = confirmingDeleteKey === memberKey;
+                  const memberDeleting = deletingKey === memberKey;
+                  const memberAccent = bookingAccent(member);
+                  return (
+                    <div key={memberKey} className="rounded-2xl border border-white/8 bg-black/18 p-3">
+                      <div className="flex items-start gap-3">
+                        <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: memberAccent }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-semibold text-white">{member.customer_name}</p>
+                            <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-0.5 text-[10px] font-semibold text-white/45">{bookingSourceLabel(member)}</span>
+                          </div>
+                          <p className="mt-1 text-xs text-white/50">{minutesLabel(memberStart)}-{minutesLabel(memberEnd)} · {memberDuration} min · {member.service || 'Termin'}</p>
+                          {member.customer_phone && <p className="mt-0.5 text-[11px] text-white/32">{member.customer_phone}</p>}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {onOpenCustomer && (
+                          <button type="button" onClick={() => { void onOpenCustomer(member); }} className="rounded-xl border border-orange-400/20 bg-orange-500/10 px-3 py-2 text-xs font-semibold text-orange-100/80 hover:text-orange-50">
+                            Kundenmodul öffnen
+                          </button>
+                        )}
+                        {onDelete && (
+                          <button type="button" onClick={() => { void handleDelete(member); }} disabled={memberDeleting} className={[
+                            'rounded-xl border px-3 py-2 text-xs font-semibold transition-all disabled:opacity-50',
+                            memberConfirming ? 'border-red-400/40 bg-red-500/20 text-red-50' : 'border-red-400/20 bg-red-500/10 text-red-100/70 hover:bg-red-500/15',
+                          ].join(' ')}>
+                            {memberDeleting ? 'Löscht...' : memberConfirming ? 'Löschen bestätigen' : 'Termin löschen'}
+                          </button>
+                        )}
+                        {memberConfirming && (
+                          <button type="button" onClick={() => { setConfirmingDeleteKey(null); setError(null); }} className="rounded-xl border border-white/10 px-3 py-2 text-xs font-semibold text-white/50 hover:text-white">
+                            Abbrechen
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {confirmingDeleteKey && !grouped && (
+            <div className="rounded-2xl border border-red-400/25 bg-red-500/10 p-4 text-sm text-red-100/80">
+              Bitte bestätige das Löschen bewusst. Der Termin wird aus diesem Kalender entfernt.
+            </div>
+          )}
+          {error && <div className="rounded-2xl border border-red-400/25 bg-red-500/10 p-4 text-sm text-red-100/80">{error}</div>}
+
+          {!grouped && <div className="flex flex-col gap-2 sm:flex-row">
+            {onOpenCustomer && (
+              <button type="button" onClick={() => { void onOpenCustomer(booking); }} className="flex-1 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-[0_14px_36px_rgba(249,115,22,0.18)]" style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+                Kundenmodul öffnen
+              </button>
+            )}
+            {onDelete && (
+              <button type="button" onClick={() => { void handleDelete(booking); }} disabled={deletingSingle} className={[
+                'rounded-xl border px-4 py-3 text-sm font-semibold transition-all disabled:opacity-50',
+                confirmingSingleDelete ? 'border-red-400/40 bg-red-500/20 text-red-50' : 'border-red-400/20 bg-red-500/10 text-red-100/75 hover:bg-red-500/15',
+                onOpenCustomer ? 'sm:w-44' : 'flex-1',
+              ].join(' ')}>
+                {deletingSingle ? 'Löscht...' : confirmingSingleDelete ? 'Löschen bestätigen' : 'Termin löschen'}
+              </button>
+            )}
+            {confirmingSingleDelete && (
+              <button type="button" onClick={() => { setConfirmingDeleteKey(null); setError(null); }} className="rounded-xl border border-white/10 px-4 py-3 text-sm font-semibold text-white/55 hover:text-white">
+                Abbrechen
+              </button>
+            )}
+          </div>}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
 
 function _DayDrawer({
   date, bookings, blocks, externalEvents, schedule, onClose, onAddBooking, onDeleteBooking, onOpenCustomer, onAddBlock, onRemoveBlock,
@@ -812,7 +1044,7 @@ function CalendarViewSwitch({ value, onChange }: { value: CalendarViewMode; onCh
 }
 
 function WeeklyCalendar({
-  bookings, blocks, externalEvents, schedule, weekStart, onWeekStartChange, onBookingClick, onDeleteBooking, onAddBookingForDay, onDayClick,
+  bookings, blocks, externalEvents, schedule, weekStart, onWeekStartChange, onBookingClick, onAddBookingForDay, onDayClick,
   className = '',
 }: {
   bookings: CalendarBooking[];
@@ -822,7 +1054,6 @@ function WeeklyCalendar({
   weekStart: Date;
   onWeekStartChange: (date: Date) => void;
   onBookingClick: (booking: CalendarBooking) => void;
-  onDeleteBooking?: (booking: CalendarBooking) => void;
   onAddBookingForDay?: (date: Date) => void;
   onDayClick?: (date: Date) => void;
   className?: string;
@@ -1079,16 +1310,6 @@ function WeeklyCalendar({
                           {buffer > 0 && <p className="mt-1 truncate text-[10px] text-cyan-100/55">Puffer bis {minutesLabel(bufferEnd)}</p>}
                         </div>
                         {buffer > 0 && <div className="absolute bottom-0 left-0 right-0 border-t border-dashed border-cyan-200/35 bg-cyan-300/[0.07]" style={{ height: `${Math.max(12, (buffer / Math.max(duration + buffer, 1)) * 100)}%` }} />}
-                        {onDeleteBooking && (
-                          <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); onDeleteBooking(booking); }} onKeyDown={(event) => {
-                            if (event.key !== 'Enter' && event.key !== ' ') return;
-                            event.preventDefault();
-                            event.stopPropagation();
-                            onDeleteBooking(booking);
-                          }} className="absolute right-1.5 top-1.5 z-20 rounded-lg px-1.5 py-0.5 text-[10px] text-red-100/40 hover:bg-red-500/15 hover:text-red-100" aria-label="Termin loeschen">
-                            x
-                          </span>
-                        )}
                       </button>
                     );
                   })}
@@ -1103,7 +1324,7 @@ function WeeklyCalendar({
 }
 
 function DailyCalendar({
-  date, bookings, blocks, externalEvents, schedule, onDateChange, onBookingClick, onDeleteBooking, onAddBooking,
+  date, bookings, blocks, externalEvents, schedule, onDateChange, onBookingClick, onAddBooking,
   className = '',
 }: {
   date: Date;
@@ -1113,7 +1334,6 @@ function DailyCalendar({
   schedule?: ChipySchedule;
   onDateChange: (date: Date) => void;
   onBookingClick: (booking: CalendarBooking) => void;
-  onDeleteBooking?: (booking: CalendarBooking) => void;
   onAddBooking?: (date: Date) => void;
   className?: string;
 }) {
@@ -1180,13 +1400,18 @@ function DailyCalendar({
   const sourceCounts = useMemo(() => {
     const map = new Map<string, { label: string; color: string; count: number }>();
     for (const booking of dayBookings) {
-      const label = bookingSourceLabel(booking);
+      const label = isGroupedBooking(booking) ? 'Gleichzeitige Termine' : bookingSourceLabel(booking);
+      const count = bookingDisplayCount(booking);
       const existing = map.get(label);
-      if (existing) existing.count += 1;
-      else map.set(label, { label, color: bookingAccent(booking), count: 1 });
+      if (existing) existing.count += count;
+      else map.set(label, { label, color: bookingAccent(booking), count });
     }
     return [...map.values()];
   }, [dayBookings]);
+  const dayBookingCount = useMemo(
+    () => dayBookings.reduce((sum, booking) => sum + bookingDisplayCount(booking), 0),
+    [dayBookings],
+  );
   const canAdd = Boolean(onAddBooking && daySchedule?.enabled !== false && !fullDayBlock);
 
   return (
@@ -1198,7 +1423,7 @@ function DailyCalendar({
             {date.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
           </h3>
           <p className="mt-1 text-xs text-white/38">
-            {dayBookings.length} Termin{dayBookings.length === 1 ? '' : 'e'} · {sourceCounts.length || 1} Kalenderquelle{sourceCounts.length === 1 ? '' : 'n'}
+            {dayBookingCount} Termin{dayBookingCount === 1 ? '' : 'e'} · {sourceCounts.length || 1} Kalenderquelle{sourceCounts.length === 1 ? '' : 'n'}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1283,16 +1508,6 @@ function DailyCalendar({
                 {buffer > 0 && <p className="mt-1 truncate text-[10px] text-cyan-100/58">Puffer bis {minutesLabel(bufferEnd)}</p>}
               </div>
               {buffer > 0 && <div className="absolute bottom-0 left-0 right-0 border-t border-dashed border-cyan-200/35 bg-cyan-300/[0.07]" style={{ height: `${Math.max(12, (buffer / Math.max(duration + buffer, 1)) * 100)}%` }} />}
-              {onDeleteBooking && (
-                <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); onDeleteBooking(booking); }} onKeyDown={(event) => {
-                  if (event.key !== 'Enter' && event.key !== ' ') return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onDeleteBooking(booking);
-                }} className="absolute right-2 top-2 z-20 rounded-lg px-2 py-1 text-[10px] text-red-100/45 hover:bg-red-500/15 hover:text-red-100" aria-label="Termin loeschen">
-                  x
-                </span>
-              )}
             </button>
           );
         })}
@@ -1378,6 +1593,10 @@ function MonthlyCalendar({
           const hasTimeBlocks = timeBlockedSet.has(ds);
           const dayBookings = bookingsForDay(d);
           const hasBookings = dayBookings.length > 0;
+          const visibleBookings = dayBookings.slice(0, 2);
+          const dayBookingCount = dayBookings.reduce((sum, b) => sum + bookingDisplayCount(b), 0);
+          const visibleBookingCount = visibleBookings.reduce((sum, b) => sum + bookingDisplayCount(b), 0);
+          const hiddenBookingCount = Math.max(0, dayBookingCount - visibleBookingCount);
 
           return (
             <button
@@ -1407,20 +1626,23 @@ function MonthlyCalendar({
               )}
               {hasBookings && !isFullBlocked && (
                 <div className="mt-0.5 space-y-0.5">
-                  {dayBookings.slice(0, 2).map(b => (
-                    <div
-                      key={bookingKey(b)}
-                      className="truncate rounded-md border px-1.5 py-0.5 text-[9px] leading-tight text-white/80"
-                      style={{
-                        borderColor: hexToRgba(bookingAccent(b), 0.24),
-                        background: hexToRgba(bookingAccent(b), 0.10),
-                      }}
-                    >
-                      {formatTime(b.slot_time)} {bookingSourceLabel(b)} · {b.customer_name}
-                    </div>
-                  ))}
-                  {dayBookings.length > 2 && (
-                    <div className="text-[9px] text-orange-400/60">+{dayBookings.length - 2} weitere</div>
+                  {visibleBookings.map(b => {
+                    const grouped = isGroupedBooking(b);
+                    return (
+                      <div
+                        key={bookingKey(b)}
+                        className="truncate rounded-md border px-1.5 py-0.5 text-[9px] leading-tight text-white/80"
+                        style={{
+                          borderColor: hexToRgba(bookingAccent(b), 0.24),
+                          background: hexToRgba(bookingAccent(b), 0.10),
+                        }}
+                      >
+                        {formatTime(b.slot_time)} {grouped ? `${bookingDisplayCount(b)} gleichzeitig` : `${bookingSourceLabel(b)} · ${b.customer_name}`}
+                      </div>
+                    );
+                  })}
+                  {hiddenBookingCount > 0 && (
+                    <div className="text-[9px] text-orange-400/60">+{hiddenBookingCount} weitere</div>
                   )}
                 </div>
               )}
@@ -2018,6 +2240,7 @@ function StaffPanel({
   const [staffCalendarView, setStaffCalendarView] = useState<CalendarViewMode>('week');
   const [staffWeekStart, setStaffWeekStart] = useState(startOfWeek(new Date()));
   const [staffViewDay, setStaffViewDay] = useState(new Date());
+  const [selectedStaffBooking, setSelectedStaffBooking] = useState<CalendarBooking | null>(null);
   const [staffStatus, setStaffStatus] = useState<CalendarStatus | null>(null);
   const [calcomKey, setCalcomKey] = useState('');
   const [connectionLoading, setConnectionLoading] = useState<string | null>(null);
@@ -2084,6 +2307,7 @@ function StaffPanel({
   useEffect(() => {
     setSelectedStaffDay(null);
     setShowStaffAddBooking(false);
+    setSelectedStaffBooking(null);
   }, [selectedId]);
   useEffect(() => {
     if (selectedId) return;
@@ -2137,7 +2361,9 @@ function StaffPanel({
       await deleteStaffChipyBooking(selected.id, id);
       setStaffBookings(prev => prev.filter(b => b.id !== id));
     } catch (e: unknown) {
-      setError((e instanceof Error ? e.message : null) ?? 'Termin konnte nicht gelöscht werden');
+      const message = (e instanceof Error ? e.message : null) ?? 'Termin konnte nicht gelöscht werden';
+      setError(message);
+      throw new Error(message);
     }
   }
 
@@ -2322,8 +2548,7 @@ function StaffPanel({
                   setStaffViewDay(date);
                   setStaffWeekStart(startOfWeek(date));
                 }}
-                onBookingClick={(booking) => { void handleStaffOpenBookingCustomer(booking); }}
-                onDeleteBooking={(booking) => { void handleStaffDeleteBooking(booking.id); }}
+                onBookingClick={setSelectedStaffBooking}
                 onAddBooking={(date) => {
                   setSelectedStaffDay(date);
                   setShowStaffAddBooking(true);
@@ -2348,8 +2573,7 @@ function StaffPanel({
                 schedule={staffSchedule}
                 weekStart={staffWeekStart}
                 onWeekStartChange={setStaffWeekStart}
-                onBookingClick={(booking) => { void handleStaffOpenBookingCustomer(booking); }}
-                onDeleteBooking={(booking) => { void handleStaffDeleteBooking(booking.id); }}
+                onBookingClick={setSelectedStaffBooking}
                 onDayClick={(date) => {
                   setStaffViewDay(date);
                   setStaffCalendarView('day');
@@ -2415,6 +2639,14 @@ function StaffPanel({
           onSave={handleStaffBookingSaved}
         />
       )}
+      {selectedStaffBooking && (
+        <BookingDetailsModal
+          booking={selectedStaffBooking}
+          onClose={() => setSelectedStaffBooking(null)}
+          onOpenCustomer={(booking) => { void handleStaffOpenBookingCustomer(booking); }}
+          onDelete={(booking) => handleStaffDeleteBooking(booking.id)}
+        />
+      )}
     </div>
   );
 }
@@ -2449,6 +2681,7 @@ export function CalendarPage({
   // Modal state
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [showAddBooking, setShowAddBooking] = useState(false);
+  const [selectedCalendarBooking, setSelectedCalendarBooking] = useState<CalendarBooking | null>(null);
   const [calendarView, setCalendarView] = useState<CalendarViewMode>('week');
   const [calendarWeekStart, setCalendarWeekStart] = useState(startOfWeek(new Date()));
   const [calendarViewDay, setCalendarViewDay] = useState(new Date());
@@ -2457,6 +2690,10 @@ export function CalendarPage({
   const calendarBookings = useMemo(
     () => [...businessCalendarBookings, ...(staffModeActive ? teamBookings : [])].sort((a, b) => a.slot_time.localeCompare(b.slot_time)),
     [businessCalendarBookings, staffModeActive, teamBookings],
+  );
+  const calendarDisplayBookings = useMemo(
+    () => staffModeActive ? groupCalendarBookingsByStart(calendarBookings) : calendarBookings,
+    [calendarBookings, staffModeActive],
   );
   const calendarExternalEvents = useMemo(
     () => staffModeActive ? [...externalEvents, ...teamExternalEvents] : externalEvents,
@@ -2545,7 +2782,9 @@ export function CalendarPage({
         setBookings(prev => prev.filter(b => b.id !== booking.id));
       }
     } catch (e: unknown) {
-      setCalendarError((e instanceof Error ? e.message : null) ?? 'Termin konnte nicht gelöscht werden');
+      const message = (e instanceof Error ? e.message : null) ?? 'Termin konnte nicht gelöscht werden';
+      setCalendarError(message);
+      throw new Error(message);
     }
   }
 
@@ -2751,7 +2990,7 @@ export function CalendarPage({
                 <DailyCalendar
                   className="flex-1"
                   date={calendarViewDay}
-                  bookings={calendarBookings}
+                  bookings={calendarDisplayBookings}
                   blocks={blocks}
                   externalEvents={calendarExternalEvents}
                   schedule={schedule}
@@ -2759,8 +2998,7 @@ export function CalendarPage({
                     setCalendarViewDay(date);
                     setCalendarWeekStart(startOfWeek(date));
                   }}
-                  onBookingClick={(booking) => { void handleOpenBookingCustomer(booking); }}
-                  onDeleteBooking={(booking) => { void handleDeleteCalendarBooking(booking); }}
+                  onBookingClick={setSelectedCalendarBooking}
                   onAddBooking={staffModeActive ? undefined : (date) => {
                     setSelectedDay(date);
                     setShowAddBooking(true);
@@ -2768,7 +3006,7 @@ export function CalendarPage({
                 />
               ) : calendarView === 'month' ? (
                 <MonthlyCalendar
-                  bookings={calendarBookings}
+                  bookings={calendarDisplayBookings}
                   blocks={blocks}
                   onDayClick={(d) => {
                     setCalendarViewDay(d);
@@ -2779,14 +3017,13 @@ export function CalendarPage({
               ) : (
                 <WeeklyCalendar
                   className="flex-1"
-                  bookings={calendarBookings}
+                  bookings={calendarDisplayBookings}
                   blocks={blocks}
                   externalEvents={calendarExternalEvents}
                   schedule={schedule}
                   weekStart={calendarWeekStart}
                   onWeekStartChange={setCalendarWeekStart}
-                  onBookingClick={(booking) => { void handleOpenBookingCustomer(booking); }}
-                  onDeleteBooking={(booking) => { void handleDeleteCalendarBooking(booking); }}
+                  onBookingClick={setSelectedCalendarBooking}
                   onDayClick={(date) => {
                     setCalendarViewDay(date);
                     setCalendarView('day');
@@ -2857,6 +3094,14 @@ export function CalendarPage({
           serviceOptions={serviceOptions}
           onClose={() => { setShowAddBooking(false); }}
           onSave={handleBookingSaved}
+        />
+      )}
+      {selectedCalendarBooking && (
+        <BookingDetailsModal
+          booking={selectedCalendarBooking}
+          onClose={() => setSelectedCalendarBooking(null)}
+          onOpenCustomer={(booking) => { void handleOpenBookingCustomer(booking); }}
+          onDelete={handleDeleteCalendarBooking}
         />
       )}
     </div>

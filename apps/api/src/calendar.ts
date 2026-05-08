@@ -4047,7 +4047,10 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
       bufferMinutes: parsed.data.buffer_minutes,
     });
     if (!(await isChipySlotAvailable(orgId, slotTime, staffId, timing))) {
-      return reply.status(409).send({ error: 'Dieser Zeitraum ist nicht frei. Bitte waehle einen anderen Slot.', code: 'SLOT_TAKEN' });
+      return reply.status(409).send({
+        error: 'Diese Uhrzeit passt nicht zu Arbeitszeit, Sperren oder Dauer. Bitte wähle einen freien Slot im Kalender.',
+        code: 'SLOT_UNAVAILABLE',
+      });
     }
     const claimed = await claimChipyBooking(orgId, {
       customerName: parsed.data.customer_name,
@@ -4056,7 +4059,10 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
       notes: parsed.data.notes,
     }, slotTime, staffId, timing);
     if (!claimed.ok || !claimed.id) {
-      return reply.status(409).send({ error: 'Dieser Zeitraum ist bereits belegt. Bitte waehle einen anderen Slot.', code: 'SLOT_TAKEN' });
+      return reply.status(409).send({
+        error: 'Dieser Termin wurde gerade belegt. Bitte wähle eine andere Uhrzeit.',
+        code: 'SLOT_TAKEN',
+      });
     }
     const res = await pool.query(
       `SELECT id, customer_name, customer_phone, service, notes, slot_time, duration_minutes, buffer_minutes, created_at
@@ -4184,7 +4190,10 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
       bufferMinutes: parsed.data.buffer_minutes,
     });
     if (!(await isChipySlotAvailable(orgId, slotTime, null, timing))) {
-      return reply.status(409).send({ error: 'Dieser Zeitraum ist nicht frei. Bitte waehle einen anderen Slot.', code: 'SLOT_TAKEN' });
+      return reply.status(409).send({
+        error: 'Diese Uhrzeit passt nicht zu Arbeitszeit, Sperren oder Dauer. Bitte wähle einen freien Slot im Kalender.',
+        code: 'SLOT_UNAVAILABLE',
+      });
     }
     const claimed = await claimChipyBooking(orgId, {
       customerName: parsed.data.customer_name,
@@ -4193,7 +4202,10 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
       notes: parsed.data.notes,
     }, slotTime, null, timing);
     if (!claimed.ok || !claimed.id) {
-      return reply.status(409).send({ error: 'Dieser Zeitraum ist bereits belegt. Bitte waehle einen anderen Slot.', code: 'SLOT_TAKEN' });
+      return reply.status(409).send({
+        error: 'Dieser Termin wurde gerade belegt. Bitte wähle eine andere Uhrzeit.',
+        code: 'SLOT_TAKEN',
+      });
     }
     const res = await pool.query(
       `SELECT id, customer_name, customer_phone, service, notes, slot_time, duration_minutes, buffer_minutes, created_at
