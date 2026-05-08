@@ -130,6 +130,7 @@ export async function migrateSales() {
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS sales_leads_source_ext_uniq ON sales_leads(source, source_external_id) WHERE source_external_id IS NOT NULL;`);
   await pool.query(`CREATE INDEX IF NOT EXISTS sales_leads_queue_idx ON sales_leads(status, next_callable_at, city, need_score DESC);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS sales_leads_email_idx ON sales_leads(lower(email)) WHERE email IS NOT NULL;`);
+  await pool.query(`DELETE FROM sales_leads WHERE status IN ('new','called') AND NULLIF(btrim(phone), '') IS NULL`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sales_suppression (
@@ -286,7 +287,8 @@ async function fetchOsmLeads(industry: string, city: string, limit: number) {
     const tags = el.tags ?? {};
     const company = tags.name?.trim();
     if (!company) return null;
-    const phone = tags.phone ?? tags['contact:phone'] ?? null;
+    const phone = (tags.phone ?? tags['contact:phone'] ?? '').trim();
+    if (!phone) return null;
     const email = tags.email ?? tags['contact:email'] ?? null;
     const website = tags.website ?? tags['contact:website'] ?? null;
     const { score, reasons } = leadScore({ phone, email, website, tags });
@@ -400,7 +402,7 @@ export async function registerSales(app: FastifyInstance) {
     if (!pool) return { stats: { coldOpen: 0, hotOpen: 0, closed: 0, commissionPct: 12 }, commissions: [] };
     const id = salesRepId(req);
     const [cold, hot, closed, commissions] = await Promise.all([
-      pool.query(`SELECT count(*)::int AS n FROM sales_leads WHERE status IN ('new','called') AND (next_callable_at IS NULL OR next_callable_at <= now())`),
+      pool.query(`SELECT count(*)::int AS n FROM sales_leads WHERE status IN ('new','called') AND NULLIF(btrim(phone), '') IS NOT NULL AND (next_callable_at IS NULL OR next_callable_at <= now())`),
       pool.query(`SELECT count(*)::int AS n FROM sales_hot_leads WHERE status IN ('scheduled','in_progress','contract_pending') AND (booked_by_rep_id = $1 OR owner_rep_id = $1 OR claimed_by_rep_id = $1 OR owner_rep_id IS NULL)`, [id]),
       pool.query(`SELECT count(*)::int AS n FROM sales_hot_leads WHERE status = 'closed' AND (booked_by_rep_id = $1 OR claimed_by_rep_id = $1 OR owner_rep_id = $1)`, [id]),
       pool.query(`SELECT role, percent, status, count(*)::int AS count FROM sales_commissions WHERE rep_id = $1 GROUP BY role, percent, status ORDER BY role`, [id]),
@@ -424,6 +426,7 @@ export async function registerSales(app: FastifyInstance) {
       limit: z.coerce.number().int().min(5).max(80).default(30),
     }).safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: 'Invalid input' });
+    await pool.query(`DELETE FROM sales_leads WHERE status IN ('new','called') AND NULLIF(btrim(phone), '') IS NULL`);
     const found = await fetchOsmLeads(parsed.data.industry, parsed.data.city, parsed.data.limit);
     let inserted = 0;
     for (const lead of found) {
@@ -459,7 +462,7 @@ export async function registerSales(app: FastifyInstance) {
       offset: z.coerce.number().int().min(0).default(0),
     }).parse(req.query);
     const args: unknown[] = [];
-    const where = [`status IN ('new','called')`, `(next_callable_at IS NULL OR next_callable_at <= now())`];
+    const where = [`status IN ('new','called')`, `NULLIF(btrim(phone), '') IS NOT NULL`, `(next_callable_at IS NULL OR next_callable_at <= now())`];
     if (q.industry) { args.push(q.industry); where.push(`industry = $${args.length}`); }
     if (q.city) { args.push(`%${q.city}%`); where.push(`city ILIKE $${args.length}`); }
     if (q.minScore) { args.push(q.minScore); where.push(`need_score >= $${args.length}`); }
@@ -483,6 +486,45 @@ export async function registerSales(app: FastifyInstance) {
     return { lead: res.rows[0] };
   });
 
+  app.patch('/sales/leads/:id', { ...salesAuth }, async (req, reply) => {
+    if (!pool) return reply.status(503).send({ error: 'DB not configured' });
+    const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+    const body = z.object({
+      email: z.string().trim().email().max(255).optional(),
+      phone: z.string().trim().min(5).max(80).optional(),
+    }).safeParse(req.body);
+    if (!params.success || !body.success || (!body.data.email && !body.data.phone)) {
+      return reply.status(400).send({ error: 'Bitte eine gueltige E-Mail oder Telefonnummer eintragen.' });
+    }
+    const markers = [
+      body.data.email ? marker('email', body.data.email) : null,
+      body.data.phone ? marker('phone', body.data.phone) : null,
+    ].filter((v): v is string => Boolean(v));
+    if (markers.length) {
+      const sup = await pool.query(`SELECT 1 FROM sales_suppression WHERE marker_hash = ANY($1::text[]) LIMIT 1`, [markers]);
+      if (sup.rowCount) return reply.status(409).send({ error: 'Dieser Kontakt wurde dauerhaft gesperrt.' });
+    }
+    const updates: string[] = [];
+    const values: unknown[] = [params.data.id];
+    if (body.data.email) {
+      values.push(normalizeEmail(body.data.email));
+      updates.push(`email = $${values.length}`);
+    }
+    if (body.data.phone) {
+      values.push(body.data.phone);
+      updates.push(`phone = $${values.length}`);
+    }
+    const res = await pool.query(
+      `UPDATE sales_leads
+          SET ${updates.join(', ')}, updated_at = now()
+        WHERE id = $1
+        RETURNING *`,
+      values,
+    );
+    if (!res.rowCount) return reply.status(404).send({ error: 'Lead nicht gefunden' });
+    return { ok: true, lead: res.rows[0] };
+  });
+
   app.post('/sales/leads/:id/send-testlink', { ...salesAuth, config: { rateLimit: { max: 20, timeWindow: '1 hour' } } }, async (req, reply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
     const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
@@ -495,8 +537,9 @@ export async function registerSales(app: FastifyInstance) {
       pool.query(`SELECT * FROM sales_leads WHERE id = $1`, [params.data.id]),
       loadSalesRep(salesRepId(req)),
     ]);
-    const lead = leadRes.rows[0] as { id: string; email: string | null; company_name: string; contact_name: string | null } | undefined;
+    const lead = leadRes.rows[0] as { id: string; email: string | null; phone: string | null; company_name: string; contact_name: string | null } | undefined;
     if (!lead) return reply.status(404).send({ error: 'Lead nicht gefunden' });
+    if (!lead.phone?.trim()) return reply.status(409).send({ error: 'Dieser Lead hat keine Telefonnummer und wird nicht fuer Cold Calls genutzt.' });
     if (!lead.email) return reply.status(400).send({ error: 'Für diesen Lead ist keine E-Mail hinterlegt.' });
     const result = await sendSalesTestLinkEmail({
       toEmail: lead.email,
@@ -578,6 +621,7 @@ export async function registerSales(app: FastifyInstance) {
     const leadRes = await pool.query(`SELECT * FROM sales_leads WHERE id = $1`, [params.data.id]);
     const lead = leadRes.rows[0] as Record<string, unknown> | undefined;
     if (!lead) return reply.status(404).send({ error: 'Lead nicht gefunden' });
+    if (!String(lead.phone ?? '').trim()) return reply.status(409).send({ error: 'Dieser Lead hat keine Telefonnummer und kann nicht gebucht werden.' });
     const handoffMode = body.data.handoffMode ?? rep.mode;
     const ownerRepId = handoffMode === 'auto' ? null : rep.id;
     const hot = await pool.query(

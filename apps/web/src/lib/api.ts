@@ -1745,6 +1745,13 @@ export function salesGetLead(id: string) {
   return salesRequest<{ lead: SalesLead }>(`/sales/leads/${encodeURIComponent(id)}`);
 }
 
+export function salesUpdateLead(id: string, input: { email?: string; phone?: string }) {
+  return salesRequest<{ ok: boolean; lead: SalesLead }>(`/sales/leads/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
 export function salesSendTestLink(id: string, contactBasis: 'explicit_request' | 'existing_business_relation' | 'manual_one_to_one_context') {
   return salesRequest<{ ok: boolean }>(`/sales/leads/${encodeURIComponent(id)}/send-testlink`, {
     method: 'POST',
