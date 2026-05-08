@@ -2505,13 +2505,15 @@ function StaffPanel({
                 <h3 className="mt-1 text-base font-bold text-white">{selected.name}</h3>
                 <p className="mt-1 text-xs text-white/45">Termine, Tagesdetails und Sperren genau für diesen Mitarbeiter.</p>
               </div>
-              <button
-                onClick={() => { setSelectedStaffDay(new Date()); setShowStaffAddBooking(true); }}
-                className="shrink-0 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-all hover:opacity-90"
-                style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
-              >
-                + Termin
-              </button>
+              {staffCalendarView !== 'day' && (
+                <button
+                  onClick={() => { setSelectedStaffDay(new Date()); setShowStaffAddBooking(true); }}
+                  className="shrink-0 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-all hover:opacity-90"
+                  style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                >
+                  + Termin
+                </button>
+              )}
             </div>
 
             <div className="mb-3 grid shrink-0 grid-cols-2 gap-2">
@@ -2868,7 +2870,7 @@ export function CalendarPage({
                   : 'Richte den Betriebskalender ein oder lege Mitarbeiter mit eigenen Kalendern an'}
             </p>
           </div>
-          {tab === 'calendar' && !staffModeActive && (
+          {tab === 'calendar' && !staffModeActive && calendarView !== 'day' && (
             <button
               onClick={() => { setSelectedDay(new Date()); setShowAddBooking(true); }}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
