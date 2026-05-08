@@ -367,7 +367,7 @@ const BRANCHEN = [
     features: [
       { icon: '📅', title: 'Termine direkt gebucht', desc: '„Haben Sie Donnerstag 14 Uhr frei?" — Chipy prüft Google Calendar / Cal.com live und bucht, während du im Workshop bist.' },
       { icon: '📝', title: 'Strukturierte Rückruf-Tickets', desc: 'Name, Nummer, Anliegen, Wunschzeit — alles landet strukturiert im Dashboard. Keine Post-its mehr, keine verlorenen Zettel.' },
-      { icon: '🌍', title: '30+ Sprachen nativ', desc: 'Englisch-sprechende Kunden? Italienische Interessenten? Chipy wechselt sprachlich, bleibt persönlich. Wichtig im Online-Business.' },
+      { icon: '🌍', title: '30 Sprachen, 15 nativ', desc: 'Englisch-sprechende Kunden? Italienische Interessenten? Chipy wechselt sprachlich, bleibt persönlich; weitere Sprachen laufen über hochwertige multilinguale Stimmen.' },
       { icon: '🎙️', title: 'Voice-Clone nach dir', desc: 'Im Premium-Setup klingt Chipy wie DU — nicht wie eine austauschbare KI-Stimme. Deine Marke, deine Bindung zum Kunden.' },
     ],
     dialogue: [
@@ -405,7 +405,7 @@ const BRANCHEN = [
       scenario: 'Coaching-Solo-Business · ø 40 Erstanfragen/Monat · 500 € Lifetime-Value pro Mandat:',
       roi: [
         { icon: 'user', label: 'Menschlicher Büro-Service (Teilzeit, ~10 h/Monat)', amount: '350 €', per: '/Monat' },
-        { icon: 'chat', label: 'Phonbot Starter — 360 Min + Voice-Clone', amount: '79 €', per: '/Monat' },
+        { icon: 'chat', label: 'Phonbot Starter — 360 Min, 1 Agent', amount: '79 €', per: '/Monat' },
         { icon: 'star', label: 'Deine Ersparnis + zurückgewonnene Deep-Work-Zeit', amount: '271 €', per: '/Monat', highlight: true },
       ],
       extras: [
@@ -415,11 +415,11 @@ const BRANCHEN = [
       ],
     },
     faq: [
-      { q: 'Wie klingt Chipy am Telefon — erkennt der Anrufer die KI?', a: 'Im Standard-Setup verwendet Chipy eine von 30+ nativen Stimmen (DE/EN/FR/ES/IT/TR/PL/NL). Die meisten Anrufer merken es nicht. Im Premium-Setup kannst du deine eigene Stimme klonen — dann hört der Anrufer dich.' },
+      { q: 'Wie klingt Chipy am Telefon — erkennt der Anrufer die KI?', a: 'Im Standard-Setup verwendet Chipy eine natürliche Standardstimme und unterstützt rund 30 Sprachen, davon 15 mit nativen Stimmen. Die meisten Anrufer merken vor allem, dass schnell geholfen wird. Voice-Clone ist als separates Premium-Setup möglich.' },
       { q: 'Kann ich bestimmen, welche Anrufe durchgestellt werden?', a: 'Ja. Du legst Regeln fest: Notfall-Keywords („dringend", „heute noch") lösen sofort einen Push oder eine Weiterleitung an dein Handy aus, alles andere landet im Dashboard als Ticket zum ruhigen Nachbearbeiten.' },
       { q: 'Ich bin oft im Ausland / Zeitzone wechselt — geht das?', a: 'Ja. Chipy kennt deine Zeitzone und die des Anrufers und wählt passende Slots. Mehrsprachigkeit auf dem gleichen Agent: ein Anruf kommt auf Deutsch rein, der nächste auf Englisch — Chipy wechselt automatisch.' },
       { q: 'Wie schnell ist das Ding einsatzbereit?', a: 'Schnell-Setup: 5 Minuten (Name, Geschäftsart, Kalender verbunden — fertig). Premium-Setup inkl. Voice-Clone + Custom-Prompt + Workflows: 30 Minuten. Du kannst mit Schnell-Setup starten und später tiefer konfigurieren.' },
-      { q: 'Kann ich später zwischen den Plänen wechseln?', a: 'Jederzeit, monatlich. Der Starter-Plan beginnt bei 79 €/Monat (inklusive 360 Freiminuten + Voice-Clone + alle Integrationen). Brauchst du nur eine Phonbot-Nummer ohne eigenen Agent-Account, gibt es den Nummer-Plan ab 8,99 €/Monat — der ist aber kein vollständiger Assistent, sondern nur die technische Anbindung.' },
+      { q: 'Kann ich später zwischen den Plänen wechseln?', a: 'Jederzeit, monatlich. Der Starter-Plan beginnt bei 79 €/Monat inklusive 360 Minuten und 1 Agent. Brauchst du nur eine Phonbot-Nummer, gibt es separat den Nummer-Plan ab 8,99 €/Monat mit 70 Minuten pro Monat.' },
     ],
     negativeList: {
       heading: 'Nicht geeignet für regulierte Berufsgruppen',

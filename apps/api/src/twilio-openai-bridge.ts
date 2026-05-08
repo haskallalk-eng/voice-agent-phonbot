@@ -155,7 +155,7 @@ GESPRÄCHSABLAUF:
    - Handwerker: "Du bist auf der Baustelle — ich nehme den Anruf an und erstelle ein sauberes Ticket für dich."
    - Kosmetikstudio: "Ich nehme Terminanfragen an, während du in der Behandlung bist, und trage sie sauber in deinen Kalender ein."
 4. "Wie viele Anrufe verpasst du ungefähr pro Tag?"
-5. Wenn sie antworten: "Das sind im Monat ca. X verpasste Chancen. Phonbot geht bei jedem einzelnen ran — kostenlos testbar mit 100 Freiminuten."
+5. Wenn sie antworten: "Das sind im Monat ca. X verpasste Chancen. Phonbot geht bei jedem einzelnen ran — kostenlos mit 30 Testminuten ausprobierbar."
 6. Abschluss: "Registriere dich einfach auf phonbot.de — kostenlos, keine Kreditkarte. Soll ich dir noch etwas erklären?"
 
 REGELN:

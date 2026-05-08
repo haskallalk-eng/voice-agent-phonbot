@@ -1475,7 +1475,7 @@ export async function registerInsights(app: FastifyInstance): Promise<void> {
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
     if (!process.env.OPENAI_API_KEY) return reply.status(503).send({ error: 'OPENAI_API_KEY not configured' });
     const payload = req.user as Record<string, unknown>;
-    if (!payload.admin) return reply.status(403).send({ error: 'Platform-admin only' });
+    if (!payload.admin || payload.aud !== 'phonbot:admin') return reply.status(403).send({ error: 'Platform-admin only' });
 
     const BATCH_SIZE = 50;
     const rows = await pool.query<{ id: string; issue_summary: string }>(

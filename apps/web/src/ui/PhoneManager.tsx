@@ -450,7 +450,7 @@ export function PhoneManager({ onNavigate }: { onNavigate?: (page: string) => vo
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth="1.75" strokeLinecap="round"><path d="M12 2v4m0 12v4m-8-10H0m24 0h-4m-2.93-6.07l2.83-2.83M4.1 19.9l2.83-2.83M19.9 19.9l-2.83-2.83M4.1 4.1l2.83 2.83"/><circle cx="12" cy="12" r="4"/></svg>
             </div>
             <p className="text-sm font-semibold bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Eigene Telefonnummer ab 8,99€/Mo</p>
-            <p className="text-xs text-white/35">Mit dem Nummer-Plan bekommst du eine eigene Telefonnummer + 70 Freiminuten. Dein Agent nimmt dann echte Anrufe entgegen.</p>
+            <p className="text-xs text-white/35">Mit dem Nummer-Plan bekommst du eine eigene Telefonnummer + 70 Minuten pro Monat. Dein Agent nimmt dann echte Anrufe entgegen.</p>
             <p className="text-[11px] text-cyan-400/50 mt-1">Tipp: Ab dem Starter-Plan (79€/Mo) ist eine Nummer bereits gratis inklusive.</p>
             <label className="mx-auto flex max-w-md items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-[11px] text-white/45">
               <input

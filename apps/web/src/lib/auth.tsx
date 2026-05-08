@@ -6,6 +6,7 @@ export type AuthUser = {
   email: string;
   phone?: string | null;
   role: 'owner' | 'admin' | 'member';
+  email_verified?: boolean;
 };
 
 export type AuthOrg = {
@@ -103,6 +104,17 @@ async function tryRefresh(): Promise<string | null> {
 
 type AuthResponse = { token: string; user: AuthUser; org: AuthOrg };
 
+type MeResponse = {
+  id: string;
+  email: string;
+  phone?: string | null;
+  role: string;
+  email_verified?: boolean;
+  org_id: string;
+  org_name: string;
+  org_slug: string;
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Access JWT starts null every session; bootstrap below tries to swap the
   // httpOnly refresh cookie for a fresh one. Never read from localStorage.
@@ -141,14 +153,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const me = await apiFetch<{ id: string; email: string; phone?: string | null; role: string; org_id: string; org_name: string; org_slug: string }>(
+        const me = await apiFetch<MeResponse>(
           '/auth/me',
           { headers: { authorization: `Bearer ${token}` } },
         );
         if (cancelled) return;
         setState({
           token,
-          user: { id: me.id, email: me.email, phone: me.phone ?? null, role: me.role as AuthUser['role'] },
+          user: { id: me.id, email: me.email, phone: me.phone ?? null, role: me.role as AuthUser['role'], email_verified: me.email_verified },
           org: { id: me.org_id, name: me.org_name, slug: me.org_slug },
           bootstrapping: false,
         });

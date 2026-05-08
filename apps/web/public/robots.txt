@@ -30,10 +30,10 @@ User-agent: Perplexity-User
 Allow: /
 
 User-agent: Google-Extended
-Allow: /
+Disallow: /
 
 User-agent: Applebot-Extended
-Allow: /
+Disallow: /
 
 # Google AI Overviews / AI Mode use the normal Search requirements; Googlebot
 # is therefore handled by the wildcard rule above.

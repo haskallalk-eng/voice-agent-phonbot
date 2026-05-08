@@ -9,12 +9,13 @@ import path from 'path';
 
 dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.env') });
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' });
 
 const PLANS = [
-  { id: 'starter', name: 'Starter', price: 4900, description: '300 Min/Mo, 1 Agent, 1 Telefonnummer' },
-  { id: 'pro', name: 'Pro', price: 14900, description: '1.000 Min/Mo, 3 Agents, 2 Telefonnummern' },
-  { id: 'agency', name: 'Agency', price: 39900, description: '5.000 Min/Mo, 10 Agents, White-Label' },
+  { id: 'nummer', name: 'Nummer', price: 899, description: '70 Min/Mo, 1 Agent, 1 Telefonnummer' },
+  { id: 'starter', name: 'Starter', price: 7900, description: '360 Min/Mo, 1 Agent, 1 Telefonnummer' },
+  { id: 'pro', name: 'Professional', price: 17900, description: '1.000 Min/Mo, 3 Agents, 3 Telefonnummern' },
+  { id: 'agency', name: 'Agency', price: 34900, description: '2.400 Min/Mo, 10 Agents, 10 Telefonnummern' },
 ];
 
 async function main() {
@@ -42,6 +43,7 @@ async function main() {
   }
 
   console.log('Done! Copy the Price IDs into your .env file:');
+  console.log('STRIPE_PRICE_NUMMER=price_...');
   console.log('STRIPE_PRICE_STARTER=price_...');
   console.log('STRIPE_PRICE_PRO=price_...');
   console.log('STRIPE_PRICE_AGENCY=price_...');

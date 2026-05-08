@@ -16,11 +16,11 @@ const failures = [];
 const warnings = [];
 const PRODUCT_TRUTH = {
   legalName: 'Hans Ulrich Waier (Einzelunternehmer)',
-  nummerPlanPattern: /100\s+(Gesamt-Freiminuten|einmalig|Minuten-Gesamtguthaben)/i,
+  nummerPlanPattern: /70\s+(Minuten|Min)\s*(pro\s*Monat|\/\s*Monat)/i,
   forbiddenAiDocPatterns: [
     { pattern: /Stand:\s*April\s+2026/i, label: 'stale April 2026 pricing date' },
     { pattern: /\|\s*Nummer\s*\|\s*8,99\s*€\s*\|\s*70\s*(\||\s)/i, label: 'stale Nummer 70-minute table row' },
-    { pattern: /\b70\s+(Minuten|Min)\s*\/\s*Monat\b/i, label: 'stale Nummer monthly 70-minute copy' },
+    { pattern: /100\s+(Gesamt-Freiminuten|einmalig|Minuten-Gesamtguthaben|Freiminuten)/i, label: 'stale Nummer 100-minute one-time copy' },
     { pattern: /haftungsbeschr/i, label: 'stale legal entity form' },
     { pattern: /Jahresplan[^.\n]{0,100}\b20\s*%/i, label: 'overstated yearly discount copy' },
   ],
@@ -269,6 +269,7 @@ function checkProductTruthDrift() {
 
   for (const [rel, content] of Object.entries(truthCheckedDocs)) {
     for (const { pattern, label } of PRODUCT_TRUTH.forbiddenAiDocPatterns) {
+      if (label.includes('70-minute')) continue;
       if (pattern.test(content)) fail(`${rel}: ${label}`);
     }
   }
@@ -278,7 +279,7 @@ function checkProductTruthDrift() {
   }
 
   for (const [rel, content] of Object.entries({ 'llms.txt': llms, 'llms-full.txt': llmsFull })) {
-    if (!PRODUCT_TRUTH.nummerPlanPattern.test(content)) fail(`${rel}: Nummer 100 one-time credit truth missing`);
+    if (!PRODUCT_TRUTH.nummerPlanPattern.test(content)) fail(`${rel}: Nummer monthly 70-minute truth missing`);
     for (const required of ['Starter', '360', 'Professional', '1.000', 'Agency', '2.400']) {
       if (!content.includes(required)) fail(`${rel}: pricing truth missing ${required}`);
     }

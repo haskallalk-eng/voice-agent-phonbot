@@ -778,6 +778,11 @@ async function runMigrationBody() {
   await pool.query(`alter table tickets add column if not exists source text;`);
   await pool.query(`alter table tickets add column if not exists session_id text;`);
   await pool.query(`alter table tickets add column if not exists reason text;`);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS tickets_phone_session_reason_uniq
+      ON tickets(org_id, source, session_id, (COALESCE(reason, '')))
+      WHERE source = 'phone' AND session_id IS NOT NULL AND org_id IS NOT NULL;
+  `);
   // Phase 2: custom fields extracted from the call transcript via Retell
   // post_call_analysis_data. Written by retell-webhooks on call_ended /
   // call_analyzed (jsonb concat so late-arriving analyses don't clobber

@@ -825,12 +825,21 @@ async function canCheckConnection(conn: CalendarConnection, orgId: string): Prom
   return slots !== null;
 }
 
-async function getCheckableConnections(orgId: string, staffId: string | null = null): Promise<CalendarConnection[]> {
+async function getCheckableConnections(
+  orgId: string,
+  staffId: string | null = null,
+  opts: { strict?: boolean } = {},
+): Promise<CalendarConnection[]> {
   const connections = await getAllConnections(orgId, staffId);
   const usable: CalendarConnection[] = [];
+  const broken: Array<{ provider: string; id: string; error?: string }> = [];
   for (const conn of connections) {
     try {
-      if (await canCheckConnection(conn, orgId)) usable.push(conn);
+      if (await canCheckConnection(conn, orgId)) {
+        usable.push(conn);
+      } else {
+        broken.push({ provider: conn.provider, id: conn.id, error: 'NO_AVAILABILITY_RESPONSE' });
+      }
     } catch (err) {
       // A broken/stale integration must not make the agent unusable. Treat it
       // as disconnected and fall back to Chipy for this call — BUT log it so
@@ -839,7 +848,12 @@ async function getCheckableConnections(orgId: string, staffId: string | null = n
         { orgId, provider: conn.provider, err: (err as Error).message?.slice(0, 200) },
         'calendar: canCheckConnection threw, connection excluded from agent',
       );
+      broken.push({ provider: conn.provider, id: conn.id, error: (err as Error).message?.slice(0, 200) });
     }
+  }
+  if (opts.strict && broken.length > 0) {
+    const providers = broken.map((item) => item.provider).join(',');
+    throw new Error(`CALENDAR_CONNECTION_UNAVAILABLE:${providers}`);
   }
   return usable;
 }
@@ -1345,6 +1359,10 @@ function generateFreeSlots(
 
 // ── Parse slot time string → Date ────────────────────────────────────────────
 
+function dateRangesOverlap(startA: Date, endA: Date, startB: Date, endB: Date): boolean {
+  return startA < endB && endA > startB;
+}
+
 export function parseSlotTime(slot: string): Date | null {
   const raw = slot.trim();
   if (!raw) return null;
@@ -1738,6 +1756,102 @@ function normalizeSourceCallId(sourceCallId: string | undefined): string | null 
   const trimmed = sourceCallId?.trim();
   if (!trimmed || trimmed === 'retell') return null;
   return trimmed.slice(0, 160);
+}
+
+async function isExternalSlotAvailable(
+  conn: CalendarConnection,
+  orgId: string,
+  slotTime: Date,
+  timing: BookingTiming,
+): Promise<{ ok: boolean; error?: string }> {
+  const safeTiming = normalizeBookingTiming(timing);
+  const slotEnd = new Date(slotTime.getTime() + (safeTiming.durationMinutes + safeTiming.bufferMinutes) * 60 * 1000);
+
+  if (conn.provider === 'microsoft') {
+    const token = await getValidMsTokenForConnection(conn);
+    if (!token) return { ok: false, error: 'Microsoft calendar not connected' };
+    const email = conn.email ?? '';
+    const resp = await calFetch('https://graph.microsoft.com/v1.0/me/calendar/getSchedule', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        Prefer: 'outlook.timezone="Europe/Berlin"',
+      },
+      body: JSON.stringify({
+        schedules: [email],
+        startTime: { dateTime: slotTime.toISOString(), timeZone: 'UTC' },
+        endTime: { dateTime: slotEnd.toISOString(), timeZone: 'UTC' },
+        availabilityViewInterval: 30,
+      }),
+    });
+    if (!resp.ok) {
+      const body = (await resp.text().catch(() => '')).slice(0, 200);
+      return { ok: false, error: `Microsoft availability ${resp.status}: ${body}` };
+    }
+    const data = (await resp.json()) as {
+      value?: { scheduleItems?: { start: { dateTime: string }; end: { dateTime: string }; status: string }[] }[];
+    };
+    const busyItems = data.value?.[0]?.scheduleItems?.filter(
+      (i) => i.status === 'busy' || i.status === 'tentative' || i.status === 'oof',
+    ) ?? [];
+    const blocked = busyItems.some((item) => {
+      const busyStart = new Date(item.start.dateTime);
+      const busyEnd = new Date(item.end.dateTime);
+      if (Number.isNaN(busyStart.getTime()) || Number.isNaN(busyEnd.getTime())) return true;
+      return dateRangesOverlap(slotTime, slotEnd, busyStart, busyEnd);
+    });
+    return blocked ? { ok: false, error: 'Microsoft calendar busy at requested time' } : { ok: true };
+  }
+
+  if (conn.provider === 'calcom') {
+    const apiKey = conn.api_key;
+    if (!apiKey) return { ok: false, error: 'calcom-no-key' };
+    const eventTypes = await calcomGetEventTypes(apiKey);
+    const eventType = eventTypes[0];
+    if (!eventType) return { ok: false, error: 'No event type configured in Cal.com' };
+    const dateToDate = new Date(slotTime);
+    dateToDate.setDate(dateToDate.getDate() + 1);
+    const slots = await calcomFindSlots(apiKey, {
+      eventTypeId: eventType.id,
+      dateFrom: localDateKey(slotTime),
+      dateTo: localDateKey(dateToDate),
+    });
+    const requested = formatSlotLabel(slotTime);
+    return slots.includes(requested)
+      ? { ok: true }
+      : { ok: false, error: 'Cal.com has no availability at requested time' };
+  }
+
+  const token = await getValidTokenForConnection(conn);
+  if (!token) return { ok: false, error: 'Calendar not connected' };
+  const resp = await calFetch('https://www.googleapis.com/calendar/v3/freeBusy', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      timeMin: slotTime.toISOString(),
+      timeMax: slotEnd.toISOString(),
+      items: [{ id: conn.calendar_id }],
+    }),
+  });
+  if (!resp.ok) {
+    const body = (await resp.text().catch(() => '')).slice(0, 200);
+    return { ok: false, error: `Google availability ${resp.status}: ${body}` };
+  }
+  const data = (await resp.json()) as {
+    calendars: Record<string, { busy: { start: string; end: string }[] }>;
+  };
+  const busyPeriods = data.calendars[conn.calendar_id]?.busy ?? [];
+  const blocked = busyPeriods.some((period) => {
+    const busyStart = new Date(period.start);
+    const busyEnd = new Date(period.end);
+    if (Number.isNaN(busyStart.getTime()) || Number.isNaN(busyEnd.getTime())) return true;
+    return dateRangesOverlap(slotTime, slotEnd, busyStart, busyEnd);
+  });
+  return blocked ? { ok: false, error: 'Google calendar busy at requested time' } : { ok: true };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -2147,7 +2261,13 @@ export async function findFreeSlots(
   // Chipy calendar acts as the MASTER scheduler: blocked days/times in
   // Chipy are removed from ALL sources (including external calendars).
   const staffId = await assertStaffBelongs(orgId, opts.staffId);
-  const connections = await getCheckableConnections(orgId, staffId);
+  let connections: CalendarConnection[];
+  try {
+    connections = await getCheckableConnections(orgId, staffId, { strict: true });
+  } catch (err) {
+    log.warn({ orgId, staffId, err: (err as Error).message }, 'calendar: availability blocked by broken external connection');
+    return { slots: [], source: 'calendar-unavailable' };
+  }
   const allSlots: string[] = [];
   const sources: string[] = [];
 
@@ -2227,7 +2347,13 @@ async function findFreeSlotsByContract(
       return { slots: [], source: 'service-not-offered' };
     }
   }
-  const connections = await getCheckableConnections(orgId, staffId);
+  let connections: CalendarConnection[];
+  try {
+    connections = await getCheckableConnections(orgId, staffId, { strict: true });
+  } catch (err) {
+    log.warn({ orgId, staffId, err: (err as Error).message }, 'calendar: availability blocked by broken external connection');
+    return { slots: [], source: 'calendar-unavailable' };
+  }
   const sources = ['chipy'];
   const { schedule, blocks, timeBlocks } = await getChipySchedule(orgId, staffId);
   const timing = await resolveBookingTiming(orgId, opts.service);
@@ -2442,15 +2568,33 @@ export async function bookSlot(
       return { ok: false, error: `Service not offered by staff: ${opts.service}` };
     }
   }
-  const connections = await getCheckableConnections(orgId, staffId);
   const slotTime = parseSlotTime(opts.time);
   if (!slotTime) return { ok: false, error: `Cannot parse time: ${opts.time}` };
+  let connections: CalendarConnection[];
+  try {
+    connections = await getCheckableConnections(orgId, staffId, { strict: true });
+  } catch (err) {
+    return { ok: false, error: (err as Error).message || 'CALENDAR_CONNECTION_UNAVAILABLE' };
+  }
   const timing = await resolveBookingTiming(orgId, opts.service, {
     durationMinutes: opts.durationMinutes,
     bufferMinutes: opts.bufferMinutes,
   });
   if (!(await isChipySlotAvailable(orgId, slotTime, staffId, timing))) {
     return { ok: false, error: `Chipy slot unavailable: ${opts.time}` };
+  }
+
+  for (const conn of connections) {
+    const available = await isExternalSlotAvailable(conn, orgId, slotTime, timing).catch((err: Error) => ({
+      ok: false,
+      error: err.message,
+    }));
+    if (!available.ok) {
+      return {
+        ok: false,
+        error: `External calendar unavailable: ${conn.provider}: ${available.error ?? 'requested slot is busy'}`,
+      };
+    }
   }
 
   let chipyBooking: { id?: string; externalRefs: ExternalBookingRefs; reused: boolean };
@@ -3795,11 +3939,18 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
 
   /** POST /calendar/chipy/block — block a specific date or time range */
   // CAL-09: validated with Zod to prevent arbitrary-length strings in DB.
+  const TimeOfDaySchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
   const ChipyBlockSchema = z.object({
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    start_time: z.string().max(10).optional(),
-    end_time: z.string().max(10).optional(),
+    start_time: TimeOfDaySchema.optional(),
+    end_time: TimeOfDaySchema.optional(),
     reason: z.string().max(500).optional(),
+  }).refine((value) => Boolean(value.start_time) === Boolean(value.end_time), {
+    message: 'start_time and end_time must be provided together',
+    path: ['end_time'],
+  }).refine((value) => !value.start_time || !value.end_time || value.start_time < value.end_time, {
+    message: 'end_time must be after start_time',
+    path: ['end_time'],
   });
 
   const StaffBodySchema = z.object({
@@ -4040,37 +4191,26 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
     const staffId = staff.staffId!;
     if (!pool) return reply.send({ ok: true, id: 'mock' });
 
-    const slotTime = parseSlotTime(parsed.data.slot_time);
-    if (!slotTime) return reply.status(400).send({ error: 'Ungueltige Uhrzeit' });
-    const timing = await resolveBookingTiming(orgId, parsed.data.service, {
+    const booked = await bookSlot(orgId, {
+      customerName: parsed.data.customer_name,
+      customerPhone: parsed.data.customer_phone,
+      time: parsed.data.slot_time,
+      service: parsed.data.service ?? 'Termin',
+      notes: parsed.data.notes,
+      staffId,
       durationMinutes: parsed.data.duration_minutes,
       bufferMinutes: parsed.data.buffer_minutes,
     });
-    if (!(await isChipySlotAvailable(orgId, slotTime, staffId, timing))) {
-      return reply.status(409).send({
-        error: 'Diese Uhrzeit passt nicht zu Arbeitszeit, Sperren oder Dauer. Bitte wähle einen freien Slot im Kalender.',
-        code: 'SLOT_UNAVAILABLE',
-      });
-    }
-    const claimed = await claimChipyBooking(orgId, {
-      customerName: parsed.data.customer_name,
-      customerPhone: parsed.data.customer_phone,
-      service: parsed.data.service ?? 'Termin',
-      notes: parsed.data.notes,
-    }, slotTime, staffId, timing);
-    if (!claimed.ok || !claimed.id) {
-      return reply.status(409).send({
-        error: 'Dieser Termin wurde gerade belegt. Bitte wähle eine andere Uhrzeit.',
-        code: 'SLOT_TAKEN',
-      });
+    if (!booked.ok || !booked.chipyBookingId) {
+      return reply.status(409).send({ error: booked.error ?? 'Dieser Zeitraum ist nicht frei. Bitte waehle einen anderen Slot.', code: 'SLOT_TAKEN' });
     }
     const res = await pool.query(
       `SELECT id, customer_name, customer_phone, service, notes, slot_time, duration_minutes, buffer_minutes, created_at
          FROM staff_chipy_bookings
         WHERE org_id = $1 AND staff_id = $2 AND id = $3`,
-      [orgId, staffId, claimed.id],
+      [orgId, staffId, booked.chipyBookingId],
     );
-    return reply.send({ ok: true, booking: res.rows[0] });
+    return reply.send({ ok: true, booking: res.rows[0], externalResults: booked.externalResults ?? [], partial: booked.partial ?? false });
   });
 
   app.delete('/calendar/staff/:id/chipy/bookings/:bookingId', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -4081,11 +4221,15 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
     if (!staff.ok) return;
     const staffId = staff.staffId!;
     if (!pool) return reply.send({ ok: true });
-    await pool.query(
-      `DELETE FROM staff_chipy_bookings WHERE id = $1 AND org_id = $2 AND staff_id = $3`,
-      [params.data.bookingId, orgId, staffId],
-    );
-    return reply.send({ ok: true });
+    const cancelled = await cancelChipyBookingForChange(orgId, {
+      bookingId: params.data.bookingId,
+      staffId,
+      reason: 'Dashboard deletion',
+    });
+    if (!cancelled.ok) {
+      return reply.status(cancelled.status === 'not_found' ? 404 : 409).send({ error: cancelled.error ?? 'BOOKING_DELETE_FAILED', status: cancelled.status });
+    }
+    return reply.send({ ok: true, externalResults: cancelled.externalResults ?? [], partial: cancelled.partial ?? false });
   });
 
   app.post('/calendar/chipy/block', { ...auth }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -4183,37 +4327,25 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
     const parsed = ChipyBookingBodySchema.safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: 'Ungültige Daten', details: parsed.error.flatten() });
     if (!pool) return { ok: true, id: 'mock' };
-    const slotTime = parseSlotTime(parsed.data.slot_time);
-    if (!slotTime) return reply.status(400).send({ error: 'Ungueltige Uhrzeit' });
-    const timing = await resolveBookingTiming(orgId, parsed.data.service, {
+    const booked = await bookSlot(orgId, {
+      customerName: parsed.data.customer_name,
+      customerPhone: parsed.data.customer_phone,
+      time: parsed.data.slot_time,
+      service: parsed.data.service ?? 'Termin',
+      notes: parsed.data.notes,
       durationMinutes: parsed.data.duration_minutes,
       bufferMinutes: parsed.data.buffer_minutes,
     });
-    if (!(await isChipySlotAvailable(orgId, slotTime, null, timing))) {
-      return reply.status(409).send({
-        error: 'Diese Uhrzeit passt nicht zu Arbeitszeit, Sperren oder Dauer. Bitte wähle einen freien Slot im Kalender.',
-        code: 'SLOT_UNAVAILABLE',
-      });
-    }
-    const claimed = await claimChipyBooking(orgId, {
-      customerName: parsed.data.customer_name,
-      customerPhone: parsed.data.customer_phone,
-      service: parsed.data.service ?? 'Termin',
-      notes: parsed.data.notes,
-    }, slotTime, null, timing);
-    if (!claimed.ok || !claimed.id) {
-      return reply.status(409).send({
-        error: 'Dieser Termin wurde gerade belegt. Bitte wähle eine andere Uhrzeit.',
-        code: 'SLOT_TAKEN',
-      });
+    if (!booked.ok || !booked.chipyBookingId) {
+      return reply.status(409).send({ error: booked.error ?? 'Dieser Zeitraum ist nicht frei. Bitte waehle einen anderen Slot.', code: 'SLOT_TAKEN' });
     }
     const res = await pool.query(
       `SELECT id, customer_name, customer_phone, service, notes, slot_time, duration_minutes, buffer_minutes, created_at
          FROM chipy_bookings
         WHERE org_id = $1 AND id = $2`,
-      [orgId, claimed.id],
+      [orgId, booked.chipyBookingId],
     );
-    return { ok: true, booking: res.rows[0] };
+    return { ok: true, booking: res.rows[0], externalResults: booked.externalResults ?? [], partial: booked.partial ?? false };
   });
 
   /** DELETE /calendar/chipy/bookings/:id — delete a manual booking */
@@ -4221,7 +4353,13 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
     const { orgId } = req.user as JwtPayload;
     const { id } = req.params as { id: string };
     if (!pool) return reply.send({ ok: true });
-    await pool.query(`DELETE FROM chipy_bookings WHERE id = $1 AND org_id = $2`, [id, orgId]);
-    return { ok: true };
+    const cancelled = await cancelChipyBookingForChange(orgId, {
+      bookingId: id,
+      reason: 'Dashboard deletion',
+    });
+    if (!cancelled.ok) {
+      return reply.status(cancelled.status === 'not_found' ? 404 : 409).send({ error: cancelled.error ?? 'BOOKING_DELETE_FAILED', status: cancelled.status });
+    }
+    return { ok: true, externalResults: cancelled.externalResults ?? [], partial: cancelled.partial ?? false };
   });
 }

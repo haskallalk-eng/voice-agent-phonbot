@@ -24,7 +24,7 @@ if (
 }
 
 export const stripe = STRIPE_SECRET
-  ? new Stripe(STRIPE_SECRET)
+  ? new Stripe(STRIPE_SECRET, { apiVersion: '2026-02-25.clover' })
   : null;
 
 // ── Plan definitions ──────────────────────────────────────────────────────────
@@ -520,8 +520,11 @@ async function syncSubscription(sub: Stripe.Subscription) {
   if (!orgId) return;
 
   const priceId = sub.items.data[0]?.price.id ?? null;
+  const isDeletedOrCanceled = sub.status === 'canceled' || Boolean((sub as unknown as { canceled_at?: number | null }).canceled_at);
   // Match against both monthly AND yearly price IDs
-  const plan = Object.values(PLANS).find((p) => p.stripePriceId === priceId || p.stripePriceIdYearly === priceId)?.id ?? 'free';
+  const plan = isDeletedOrCanceled
+    ? 'free'
+    : Object.values(PLANS).find((p) => p.stripePriceId === priceId || p.stripePriceIdYearly === priceId)?.id ?? 'free';
   const minutesLimit = PLANS[plan as PlanId]?.minutesLimit ?? 30;
 
   const currentPeriodEnd = (sub as unknown as { current_period_end?: number }).current_period_end ?? null;
@@ -564,7 +567,7 @@ async function syncSubscription(sub: Stripe.Subscription) {
         stripe_subscription_id = $4,
         plan_interval = $5,
         current_period_end = to_timestamp($6),
-        minutes_limit = $7${resetMinutes ? ',\n        minutes_used = 0' : ''}
+        minutes_limit = $7${isDeletedOrCanceled ? ',\n        minutes_used = LEAST(minutes_used, $7)' : resetMinutes ? ',\n        minutes_used = 0' : ''}
        WHERE id = $1`,
       [
         orgId,
@@ -852,6 +855,7 @@ export async function registerBilling(app: FastifyInstance) {
       }
     }
 
+    try {
     switch (event.type) {
       case 'checkout.session.completed': {
         // Stripe-first registration flow: the user paid via /auth/checkout-start
@@ -867,6 +871,7 @@ export async function registerBilling(app: FastifyInstance) {
             req.log.info({ sessionId: session.id, userId: res?.userId ?? null }, 'pending registration materialized via webhook');
           } catch (err) {
             req.log.error({ err: (err as Error).message, sessionId: session.id }, 'materialize pending from webhook failed');
+            throw err;
           }
         }
         break;
@@ -893,6 +898,7 @@ export async function registerBilling(app: FastifyInstance) {
             }
           } catch (err) {
             req.log.error({ err: (err as Error).message, subId: newSub.id, pendingRegistrationId }, 'materialize pending from subscription.created failed');
+            throw err;
           }
         }
         await syncSubscription(newSub);
@@ -1054,6 +1060,16 @@ export async function registerBilling(app: FastifyInstance) {
         }
         break;
       }
+    }
+
+    } catch (err) {
+      if (pool) {
+        await pool.query(`DELETE FROM processed_stripe_events WHERE event_id = $1`, [event.id])
+          .catch((dedupErr: Error) =>
+            req.log.error({ err: dedupErr.message, eventId: event.id }, 'stripe webhook dedup rollback failed'),
+          );
+      }
+      throw err;
     }
 
     return { received: true };
