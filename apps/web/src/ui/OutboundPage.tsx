@@ -175,12 +175,15 @@ export function OutboundPage() {
             {loading ? (
               <p className="text-white/30 text-sm">Lade…</p>
             ) : calls.length === 0 ? (
-              <div className="text-center py-12 text-white/30">
-                <div className="text-4xl mb-3">📭</div>
+              <div className="flex flex-col items-center py-12 text-center text-white/35">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-orange-300">
+                  <IconInsights size={22} />
+                </div>
                 <p className="text-sm">Noch keine Outbound-Anrufe.</p>
                 <button
                   onClick={() => setTab('call')}
-                  className="mt-4 bg-gradient-to-r from-orange-500 to-cyan-500 text-white text-sm font-medium rounded-xl px-4 py-2"
+                  className="mt-4 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-all hover:brightness-110"
+                  style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
                 >
                   Ersten Anruf starten →
                 </button>

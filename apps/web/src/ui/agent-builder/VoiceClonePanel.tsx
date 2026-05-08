@@ -305,7 +305,7 @@ export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
               type="button"
               onClick={handleUploadClone}
               disabled={!uploadFile || !uploadName.trim() || uploading}
-              className="rounded-lg bg-gradient-to-r from-cyan-500 to-orange-500 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
+              className="rounded-lg bg-gradient-to-r from-orange-500 to-cyan-500 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
             >
               {uploading ? 'Wird hochgeladen…' : 'Stimme klonen'}
             </button>
@@ -394,7 +394,7 @@ export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
                   type="button"
                   onClick={handleRecordClone}
                   disabled={!recordName.trim() || uploading}
-                  className="rounded-lg bg-gradient-to-r from-cyan-500 to-orange-500 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
+                  className="rounded-lg bg-gradient-to-r from-orange-500 to-cyan-500 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
                 >
                   {uploading ? 'Wird hochgeladen…' : 'Stimme klonen'}
                 </button>

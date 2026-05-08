@@ -60,12 +60,12 @@ const TEMPLATE_CONFIG: Record<string, {
   },
   auto: {
     Icon: IconCar,
-    accent: 'text-blue-300',
-    iconBg: 'bg-blue-500/15',
-    hoverBorder: 'hover:border-blue-500/40',
-    hoverGlow: 'hover:shadow-[0_0_22px_rgba(59,130,246,0.18)]',
-    selectedBorder: 'border-blue-500/60',
-    selectedGlow: 'shadow-[0_0_22px_rgba(59,130,246,0.25)]',
+    accent: 'text-cyan-300',
+    iconBg: 'bg-cyan-500/15',
+    hoverBorder: 'hover:border-cyan-500/40',
+    hoverGlow: 'hover:shadow-[0_0_22px_rgba(6,182,212,0.18)]',
+    selectedBorder: 'border-cyan-500/60',
+    selectedGlow: 'shadow-[0_0_22px_rgba(6,182,212,0.25)]',
   },
   cleaning: {
     Icon: IconBroom,
@@ -888,7 +888,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                 style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}
                 onClick={() => { void handleMicrosoftCalendar(); }}>
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(0,120,212,0.08)' }}>
-                  <span className="text-lg">🪟</span>
+                  <span className="text-sm font-bold text-[#00BCF2]">M</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white">Microsoft Outlook</p>
@@ -901,7 +901,7 @@ export function OnboardingWizard({ onComplete }: Props) {
               <div className="rounded-2xl p-5 transition-all" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <div className="flex items-center gap-4 mb-3">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(59,130,246,0.08)' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#06B6D4" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-white">Cal.com</p>
