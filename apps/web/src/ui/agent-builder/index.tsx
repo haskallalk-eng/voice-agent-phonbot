@@ -255,7 +255,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
         if (c) savedConfigRef.current = JSON.stringify(c);
         return c;
       });
-      setStatus({ type: 'ok', text: 'Gespeichert ✅' });
+      setStatus({ type: 'ok', text: 'Gespeichert' });
       // Voice/Prompt changes can shift latency — pull fresh stats so the
       // chip reflects the new config within a second, not 15.
       void refreshAgentStats(nextConfig.tenantId);

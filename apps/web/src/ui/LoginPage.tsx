@@ -193,7 +193,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
             <h2 className="text-base font-semibold text-white mb-4">Passwort zurücksetzen</h2>
             {forgotSuccess ? (
               <div className="text-sm text-green-300 bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 mb-4">
-                ✅ Falls ein Account mit dieser E-Mail existiert, haben wir dir einen Reset-Link gesendet.
+                Falls ein Account mit dieser E-Mail existiert, haben wir dir einen Reset-Link gesendet.
               </div>
             ) : (
               <form onSubmit={handleForgotFormSubmit(onForgotSubmit)} className="space-y-4" aria-label="Passwort zurücksetzen">
@@ -364,7 +364,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
 
               {error && (
                 <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 break-words [overflow-wrap:anywhere]">
-                  ⚠️ {error}
+                  {error}
                 </div>
               )}
 

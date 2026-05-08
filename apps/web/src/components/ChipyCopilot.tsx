@@ -38,7 +38,7 @@ function TypingIndicator() {
               className="block rounded-full"
               style={{
                 width: 6, height: 6,
-                background: 'linear-gradient(135deg, #F97316, #FB923C)',
+                background: 'linear-gradient(135deg, #F97316, #06B6D4)',
                 animation: 'chipy-dot-bounce 1.4s ease-in-out infinite',
                 animationDelay: `${i * 0.18}s`,
               }}

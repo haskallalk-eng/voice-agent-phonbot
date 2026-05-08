@@ -18,7 +18,7 @@ type Tab = 'dashboard' | 'call' | 'suggestions';
 const OUTCOME_LABELS: Record<string, { label: string; color: string }> = {
   converted:      { label: '✓ Gewonnen',        color: 'text-green-400 bg-green-500/10 border-green-500/20' },
   interested:     { label: '+ Interessiert',     color: 'text-orange-400 bg-orange-500/10 border-orange-500/20' },
-  callback:       { label: '↩ Rückruf',          color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' },
+  callback:       { label: 'Rückruf',            color: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/20' },
   not_interested: { label: '✗ Kein Interesse',   color: 'text-red-400 bg-red-500/10 border-red-500/20' },
   no_answer:      { label: '– Nicht erreicht',   color: 'text-white/40 bg-white/5 border-white/10' },
   voicemail:      { label: '↵ Mailbox',           color: 'text-white/40 bg-white/5 border-white/10' },
@@ -110,14 +110,14 @@ export function OutboundPage() {
   }
 
   const TABS: { id: Tab; label: string; badge?: number }[] = [
-    { id: 'dashboard', label: '📊 Dashboard' },
-    { id: 'call',      label: '📞 Anruf starten' },
-    { id: 'suggestions', label: `🧠 Verbesserungen`, badge: suggestions.length },
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'call',      label: 'Anruf starten' },
+    { id: 'suggestions', label: 'Verbesserungen', badge: suggestions.length },
   ];
 
   return (
     <div className="p-6 max-w-4xl">
-      <h1 className="text-2xl font-bold text-white mb-1">🎯 Outbound Sales</h1>
+      <h1 className="text-2xl font-bold text-white mb-1">Outbound Sales</h1>
       <p className="text-sm text-white/50 mb-6">
         KI-Verkaufsagent mit automatischem Lernzyklus — verbessert seine Conversion nach jedem Gespräch.
       </p>
@@ -144,7 +144,7 @@ export function OutboundPage() {
 
       {error && (
         <div className="mb-4 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
-          ⚠️ {error}
+          {error}
         </div>
       )}
 
@@ -301,7 +301,7 @@ export function OutboundPage() {
             </span>
           </button>
 
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3 text-xs text-blue-400 flex items-start gap-2">
+          <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-4 py-3 text-xs text-cyan-100/75 flex items-start gap-2">
             <IconCapabilities size={13} className="shrink-0 mt-0.5" />
             Der Agent nutzt SPIN-Qualifizierung, Micro-Commitments und präzise Einwandbehandlung.
             Nach dem Gespräch wird es analysiert — Verbesserungsvorschläge erscheinen unter „Verbesserungen" und werden erst nach deiner Freigabe übernommen.

@@ -310,7 +310,7 @@ export function DemoPromptsTab() {
           }`}
           title="Plattform-Baseline — gilt für JEDEN Inbound-Agent (Demo + zahlende Kunden), Mindest-Qualitätsstandard"
         >
-          🌐 Plattform-Baseline (Inbound)
+          Plattform-Baseline (Inbound)
         </button>
         <button
           onClick={() => setScope('__outbound__')}
@@ -319,16 +319,16 @@ export function DemoPromptsTab() {
           }`}
           title="Outbound-Baseline — gilt für JEDEN Outbound-Agent (Sales-Callback + Customer-Outbound). DSGVO Art.21, KI-Identifikation, kein Hard-Close"
         >
-          📞 Outbound-Baseline (Rückrufe)
+          Outbound-Baseline (Rückrufe)
         </button>
         <button
           onClick={() => setScope('__sales__')}
           className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-            isSales ? 'bg-fuchsia-500/20 border-fuchsia-500/40 text-fuchsia-300' : 'bg-fuchsia-500/5 border-fuchsia-500/15 text-fuchsia-300/70 hover:bg-fuchsia-500/10'
+            isSales ? 'bg-orange-500/20 border-orange-500/40 text-orange-300' : 'bg-orange-500/5 border-orange-500/15 text-orange-300/70 hover:bg-orange-500/10'
           }`}
           title="Phonbot Sales-Callback-Prompt — Chipy ruft Lead nach Website-Formular zurück"
         >
-          ✨ Sales-Rückruf-Prompt
+          Sales-Rückruf-Prompt
         </button>
         <span className="text-white/20 text-sm">·</span>
         <button
@@ -375,7 +375,7 @@ export function DemoPromptsTab() {
         </div>
       )}
       {isSales && (
-        <div className="rounded-xl bg-fuchsia-500/5 border border-fuchsia-500/20 px-4 py-3 text-xs text-fuchsia-200/90 space-y-1">
+        <div className="rounded-xl bg-orange-500/5 border border-orange-500/20 px-4 py-3 text-xs text-orange-100/85 space-y-1">
           <p><strong>Sales-Rückruf-Prompt</strong> — der Prompt für Chipy's Outbound-Anrufe nach Website-Formular. Wird mit der Outbound-Baseline (siehe oben) kombiniert.</p>
           <p>Dynamische Variablen die Retell zur Laufzeit ersetzt: <code>{`{{signup_link}}`}</code>, <code>{`{{signup_sms_sent}}`}</code>. Behalte sie wenn du den Prompt anpasst.</p>
         </div>
@@ -388,9 +388,9 @@ export function DemoPromptsTab() {
       <div className="rounded-xl bg-white/5 border border-white/10 p-4 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-white">
-            {isPlatform ? '🌐 Plattform-Baseline (Inbound)'
-              : isOutbound ? '📞 Outbound-Baseline (Rückrufe)'
-              : isSales ? '✨ Sales-Rückruf-Prompt'
+            {isPlatform ? 'Plattform-Baseline (Inbound)'
+              : isOutbound ? 'Outbound-Baseline (Rückrufe)'
+              : isSales ? 'Sales-Rückruf-Prompt'
               : isGlobal ? 'Demo-Epilog (nur Demo)'
               : `${tmpl?.icon} ${tmpl?.name} — Branche-Prompt`}
           </h3>
@@ -590,7 +590,7 @@ export function LearningsTab() {
             view === 'corrections' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white/70'
           }`}
         >
-          🧠 Meta-Lernen
+          Meta-Lernen
         </button>
       </div>
 
@@ -792,7 +792,7 @@ function CorrectionsFeed() {
   return (
     <div className="space-y-4">
       <div className="rounded-xl bg-white/[0.03] border border-white/10 px-4 py-3 text-xs text-white/70 space-y-1">
-        <p><strong className="text-white/90">🧠 Meta-Lernen (Verbesserungen der Verbesserungen)</strong></p>
+        <p><strong className="text-white/90">Meta-Lernen (Verbesserungen der Verbesserungen)</strong></p>
         <p>Jedes Mal wenn du einen Vorschlag mit <Pill tone="orange">Verbessern</Pill> umschreibst statt blind zu übernehmen, landet das Tupel <em>(Original → Korrektur + Grund)</em> hier. Der Suggestion-Generator zieht diesen Feed als Trainingsmaterial heran — das System lernt aus seinen eigenen Fehlern.</p>
         <p className="text-white/40">Nur im Admin sichtbar. Kunden sehen weder den ursprünglichen Vorschlag noch die Korrektur.</p>
       </div>
