@@ -275,9 +275,9 @@ function Dashboard() {
         {showVerifyBanner && emailVerified === false && (
           <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm text-amber-300">
-              <span>📧</span>
+              <span className="h-2 w-2 rounded-full bg-amber-300 shadow-[0_0_14px_rgba(251,191,36,0.45)]" aria-hidden="true" />
               {verifyError ? (
-                <span className="text-red-300 font-medium" role="alert">⚠ {verifyError}</span>
+                <span className="text-red-300 font-medium" role="alert">Fehler: {verifyError}</span>
               ) : verifySent ? (
                 <span className="text-green-300 font-medium">✓ E-Mail gesendet!</span>
               ) : (

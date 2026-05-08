@@ -78,7 +78,7 @@ function formatDuration(ms?: number): string {
 
 const STATUS_STYLES: Record<string, string> = {
   ended: 'bg-green-500/20 text-green-400',
-  ongoing: 'bg-blue-500/20 text-blue-400',
+  ongoing: 'bg-cyan-500/15 text-cyan-300',
   registered: 'bg-yellow-500/20 text-yellow-400',
   error: 'bg-red-500/20 text-red-400',
 };

@@ -24,8 +24,8 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 const btnBase = 'inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-orange-500/50 px-4 py-2.5 text-sm';
 
 const btnVariants: Record<ButtonVariant, string> = {
-  primary: 'text-white hover:scale-105 active:scale-95',
-  secondary: 'bg-white/5 border border-white/10 text-white hover:bg-white/10 active:scale-95',
+  primary: 'text-white hover:scale-105 active:scale-95 shadow-[0_10px_34px_rgba(249,115,22,0.18)] hover:shadow-[0_14px_42px_rgba(6,182,212,0.18)]',
+  secondary: 'bg-white/[0.05] border border-white/10 text-white hover:border-orange-500/30 hover:bg-white/[0.08] active:scale-95',
   danger: 'bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 active:scale-95',
   ghost: 'text-white/60 hover:text-white hover:bg-white/5 active:scale-95',
 };
@@ -35,7 +35,7 @@ export function Button({ variant = 'secondary', loading, icon, children, classNa
     <button
       className={`${btnBase} ${btnVariants[variant]} ${className}`}
       disabled={disabled || loading}
-      style={variant === 'primary' ? { background: 'linear-gradient(135deg, #F97316, #EA580C)' } : undefined}
+      style={variant === 'primary' ? { background: 'linear-gradient(135deg, #F97316, #06B6D4)' } : undefined}
       {...props}
     >
       {loading ? <Spinner size="sm" /> : icon}
@@ -59,7 +59,7 @@ export function Spinner({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
 /* ── Skeleton Loader ───────────────────────────────── */
 
 export function Skeleton({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse bg-white/10 rounded-lg ${className}`} />;
+  return <div className={`animate-pulse rounded-xl bg-white/[0.08] ${className}`} />;
 }
 
 export function SkeletonCard() {
@@ -171,14 +171,15 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
       aria-labelledby="modal-title"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div ref={dialogRef} className={`${sizeClass} w-full bg-[#141420] border border-white/10 rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto`}>
+      <div ref={dialogRef} className={`${sizeClass} relative w-full overflow-hidden rounded-3xl border border-white/10 bg-[#14141F] shadow-[0_32px_120px_rgba(0,0,0,0.62)] max-h-[90vh]`}>
+        <span className="absolute inset-x-0 top-0 h-1" style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }} />
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
           <h2 id="modal-title" className="text-lg font-semibold text-white">{title}</h2>
-          <button onClick={onClose} className="text-white/40 hover:text-white p-1 rounded-lg hover:bg-white/5" aria-label="Schließen">
+          <button onClick={onClose} className="text-white/40 hover:text-white p-1 rounded-xl hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-orange-500/50" aria-label="Schließen">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M15 5L5 15M5 5l10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
           </button>
         </div>
-        <div className="px-6 py-4">{children}</div>
+        <div className="max-h-[calc(90vh-65px)] overflow-y-auto px-6 py-4">{children}</div>
       </div>
     </div>
   );
@@ -195,7 +196,7 @@ type CardProps = {
 export function Card({ children, className = '', padding = 'md' }: CardProps) {
   const pad = padding === 'sm' ? 'p-4' : padding === 'lg' ? 'p-8' : 'p-6';
   return (
-    <div className={`bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl ${pad} ${className}`}>
+    <div className={`rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ${pad} ${className}`}>
       {children}
     </div>
   );
@@ -209,7 +210,7 @@ const statusStyles: Record<StatusType, string> = {
   success: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
   warning: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
   error: 'bg-red-500/20 text-red-400 border-red-500/30',
-  info: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  info: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
   neutral: 'bg-white/10 text-white/60 border-white/10',
 };
 

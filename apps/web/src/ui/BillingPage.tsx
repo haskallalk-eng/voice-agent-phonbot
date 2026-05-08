@@ -39,7 +39,7 @@ function UsageBar({ used, limit }: { used: number; limit: number }) {
 function PlanBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; className: string }> = {
     active: { label: 'Aktiv', className: 'bg-green-500/20 text-green-400' },
-    trialing: { label: 'Testphase', className: 'bg-blue-500/20 text-blue-400' },
+    trialing: { label: 'Testphase', className: 'bg-cyan-500/15 text-cyan-300' },
     past_due: { label: 'Zahlung überfällig', className: 'bg-red-500/20 text-red-400' },
     canceled: { label: 'Gekündigt', className: 'bg-white/10 text-white/40' },
     free: { label: 'Gratis', className: 'bg-white/10 text-white/40' },

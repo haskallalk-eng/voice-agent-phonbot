@@ -13,6 +13,7 @@ import {
 } from '../lib/api.js';
 import type { CalendarProvider, CalendarStatus, CalendarStaff, ChipySchedule, ChipyBlock, ChipyBooking, ChipyBookingInput, ExternalCalendarEvent, Customer, ServiceItem } from '../lib/api.js';
 import { FoxLogo } from './FoxLogo.js';
+import { IconCalendar } from './PhonbotIcons.js';
 import { HAIRDRESSER_SERVICE_PRESET, serviceItemToStaffLabel } from '../lib/service-presets.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -358,12 +359,12 @@ function dayBounds(dateStr: string) {
 
 type ProviderMeta = { label: string; color: string; bg: string; icon: string };
 const PROVIDER_META: Record<string, ProviderMeta> = {
-  google:    { label: 'Google Calendar',   color: '#4285F4', bg: 'rgba(66,133,244,0.08)',   icon: '📅' },
-  microsoft: { label: 'Microsoft Outlook', color: '#0078D4', bg: 'rgba(0,120,212,0.12)',    icon: '🪟' },
-  calcom:    { label: 'Cal.com',           color: '#3B82F6', bg: 'rgba(59,130,246,0.12)',   icon: '🔵' },
-  chipy:    { label: 'Chipy Kalender',   color: '#F97316', bg: 'rgba(249,115,22,0.12)',   icon: '🐾' },
+  google:    { label: 'Google Calendar',   color: '#4285F4', bg: 'rgba(66,133,244,0.08)',   icon: 'G' },
+  microsoft: { label: 'Microsoft Outlook', color: '#0078D4', bg: 'rgba(0,120,212,0.12)',    icon: 'M' },
+  calcom:    { label: 'Cal.com',           color: '#06B6D4', bg: 'rgba(6,182,212,0.10)',   icon: 'C' },
+  chipy:    { label: 'Chipy Kalender',   color: '#F97316', bg: 'rgba(249,115,22,0.12)',   icon: 'P' },
 };
-const DEFAULT_PROVIDER_META: ProviderMeta = { label: 'Chipy Kalender', color: '#F97316', bg: 'rgba(249,115,22,0.12)', icon: '🐾' };
+const DEFAULT_PROVIDER_META: ProviderMeta = { label: 'Chipy Kalender', color: '#F97316', bg: 'rgba(249,115,22,0.12)', icon: 'P' };
 
 // ── Booking Modal ─────────────────────────────────────────────────────────────
 
@@ -2123,7 +2124,7 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
             return (
               <div className="rounded-2xl hover:bg-white/[0.04] transition-all" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <div className="flex items-center gap-4 px-5 py-4">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-lg" style={{ background: 'rgba(0,120,212,0.08)' }}>🪟</div>
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-sm font-bold text-[#00BCF2]" style={{ background: 'rgba(0,120,212,0.08)' }}>M</div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-white">Microsoft Outlook</p>
                     <p className="text-[11px] text-white/30 truncate">{isConnected ? conn?.email ?? 'Verbunden' : 'Office 365 / Outlook.com'}</p>
@@ -2158,7 +2159,7 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
               <div className="rounded-2xl px-5 py-4 hover:bg-white/[0.04] transition-all" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(59,130,246,0.08)' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#06B6D4" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-white">Cal.com</p>
@@ -2423,7 +2424,7 @@ function StaffPanel({
           {provider === 'google' ? (
             <svg width="18" height="18" viewBox="0 0 24 24" className="fancy-star"><defs><linearGradient id={`staffGglCal-${selected?.id ?? 'x'}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#4285F4"/><stop offset="33%" stopColor="#34A853"/><stop offset="66%" stopColor="#FBBC05"/><stop offset="100%" stopColor="#EA4335"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill={`url(#staffGglCal-${selected?.id ?? 'x'})`}/></svg>
           ) : provider === 'calcom' ? (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#06B6D4" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           ) : (
             <span>{meta.icon}</span>
           )}
@@ -2912,7 +2913,9 @@ export function CalendarPage({
               border: '1px solid rgba(249,115,22,0.15)',
             }}
           >
-            <span className="text-xl shrink-0 mt-0.5">📅</span>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-orange-500/15 bg-orange-500/10 text-orange-300">
+              <IconCalendar size={18} />
+            </span>
             <div>
               <p className="text-sm font-medium text-white/90 mb-1">
                 Verbinde deinen Kalender für automatische Terminbuchungen

@@ -26,7 +26,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   misunderstanding: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
   wrong_info: 'text-red-400 bg-red-400/10 border-red-400/20',
   escalation: 'text-orange-400 bg-orange-400/10 border-orange-400/20',
-  unanswered: 'text-purple-400 bg-purple-400/10 border-purple-400/20',
+  unanswered: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/20',
   frustration: 'text-pink-400 bg-pink-400/10 border-pink-400/20',
   other: 'text-white/40 bg-white/5 border-white/10',
 };
@@ -162,12 +162,12 @@ function AbTestCard({ t }: { t: AbTest }) {
 
   return (
     <div className={`glass rounded-2xl p-5 border ${
-      isRunning ? 'border-blue-400/30 bg-blue-400/[0.03]' :
+      isRunning ? 'border-cyan-400/30 bg-cyan-400/[0.03]' :
       isPromoted ? 'border-green-500/20' : 'border-red-500/20 opacity-60'
     }`}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${isRunning ? 'bg-blue-400 animate-pulse' : isPromoted ? 'bg-green-400' : 'bg-red-400'}`} />
+          <span className={`w-2 h-2 rounded-full ${isRunning ? 'bg-cyan-400 animate-pulse' : isPromoted ? 'bg-green-400' : 'bg-red-400'}`} />
           <span className="text-sm font-semibold text-white/80">
             {isRunning ? 'A/B-Test läuft' : isPromoted ? 'A/B-Test: Übernommen' : 'A/B-Test: Rollback'}
           </span>
@@ -204,7 +204,7 @@ function AbTestCard({ t }: { t: AbTest }) {
           <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-500"
-              style={{ width: `${progress * 100}%`, background: 'linear-gradient(to right, #3b82f6, #06B6D4)' }}
+              style={{ width: `${progress * 100}%`, background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
             />
           </div>
         </div>

@@ -189,7 +189,7 @@ export function CallbackSection() {
                     disabled={state === 'loading' || !phone.trim() || !email.trim() || !privacyConsent}
                     className="w-full rounded-xl px-6 py-3.5 font-bold text-white text-sm disabled:opacity-40 transition-all duration-300 hover:scale-[1.02] cursor-pointer"
                     style={{
-                      background: 'linear-gradient(135deg, #F97316, #EA580C)',
+                      background: 'linear-gradient(135deg, #F97316, #06B6D4)',
                       boxShadow: state !== 'loading' && phone.trim() && email.trim() && privacyConsent ? '0 4px 24px rgba(249,115,22,0.3)' : 'none',
                     }}
                   >

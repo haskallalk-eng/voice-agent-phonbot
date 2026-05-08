@@ -60,7 +60,7 @@ function MessageBubble({ message }: { message: Message }) {
       <div className="flex justify-end mb-4">
         <div
           className="max-w-[82%] px-4 py-2.5 rounded-2xl rounded-br-md text-sm text-white leading-relaxed"
-          style={{ background: 'linear-gradient(135deg, #F97316, #EA580C)' }}
+          style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
         >
           {message.content}
         </div>
@@ -105,7 +105,7 @@ export function ChipyCopilot() {
     {
       id: 'welcome',
       role: 'assistant',
-      content: 'Hey! Ich bin Chipy 👋\nDein Phonbot-Assistent. Frag mich alles zum Dashboard, deinem Agent oder den Features!',
+      content: 'Hey! Ich bin Chipy.\nDein Phonbot-Assistent. Frag mich alles zum Dashboard, deinem Agent oder den Features!',
       timestamp: new Date(),
     },
   ]);
@@ -495,7 +495,7 @@ export function ChipyCopilot() {
                 style={{
                   background: !input.trim() || loading
                     ? 'rgba(255,255,255,0.05)'
-                    : 'linear-gradient(135deg, #F97316, #EA580C)',
+                    : 'linear-gradient(135deg, #F97316, #06B6D4)',
                 }}
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>

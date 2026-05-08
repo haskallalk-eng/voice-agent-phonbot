@@ -3,7 +3,7 @@ import { RetellWebClient } from 'retell-client-js-sdk';
 import { createDemoCall } from '../../lib/api.js';
 import { useWebCallCleanup } from '../../lib/use-web-call-cleanup.js';
 import { FoxLogo } from '../FoxLogo.js';
-import { IconPhone } from '../PhonbotIcons.js';
+import { IconPhone, IconPrivacy } from '../PhonbotIcons.js';
 import { TurnstileWidget, type TurnstileHandle } from '../TurnstileWidget.js';
 import { TEMPLATES, TEMPLATE_PREVIEWS, type CallState } from './shared.js';
 import { playForwardingTone, looksLikeForwarding } from '../../lib/demo-tones.js';
@@ -351,8 +351,9 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
               </div>
             </div>
             {/* Reassurance */}
-            <p className="text-center text-xs text-white/35 mt-2">
-              🔒 Keine Weitergabe an Dritte — Demo-Daten nur für Qualität und deine Anfrage
+            <p className="mt-2 inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-center text-xs text-white/40">
+              <IconPrivacy size={14} className="text-orange-300" />
+              Keine Weitergabe an Dritte — Demo-Daten nur für Qualität und deine Anfrage
             </p>
             {/* Mic hint */}
             <p className="text-center text-xs text-white/30 mt-2 italic">
