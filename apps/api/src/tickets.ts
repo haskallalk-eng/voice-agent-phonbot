@@ -32,6 +32,12 @@ const mem: TicketRow[] = [];
 
 const TicketStatus = z.enum(['open', 'assigned', 'done']);
 
+const OptionalNonEmptyString = z.preprocess((value) => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : undefined;
+}, z.string().min(1).optional());
+
 const CreateTicketBody = z.object({
   // tenantId is REQUIRED. Previous default ('demo') was a foot-gun: any future
   // caller of createTicket() that forgot to pass tenantId would silently land
@@ -41,20 +47,20 @@ const CreateTicketBody = z.object({
 
   // Handoff context
   source: z.enum(['phone', 'web', 'system']).optional(),
-  sessionId: z.string().min(1).optional(),
-  reason: z.string().min(1).optional(),
+  sessionId: OptionalNonEmptyString,
+  reason: OptionalNonEmptyString,
 
-  customerName: z.string().min(1).optional(),
+  customerName: OptionalNonEmptyString,
   // Required: prevents anonymous spam and is needed for callbacks.
   customerPhone: z.string().min(1),
-  preferredTime: z.string().min(1).optional(),
-  service: z.string().min(1).optional(),
-  notes: z.string().min(1).optional(),
+  preferredTime: OptionalNonEmptyString,
+  service: OptionalNonEmptyString,
+  notes: OptionalNonEmptyString,
 });
 
 const UpdateTicketBody = z.object({
   status: TicketStatus.optional(),
-  notes: z.string().min(1).optional(),
+  notes: OptionalNonEmptyString,
 });
 
 function normalizeTicketPhoneForStorage(input: string): string {

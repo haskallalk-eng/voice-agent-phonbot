@@ -490,8 +490,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
         {/* Tab list — horizontal scroll on mobile, vertical sidebar on desktop */}
         <div
           role="tablist"
-          aria-orientation="vertical"
-          className="w-full md:w-56 shrink-0 border-b md:border-b-0 md:border-r border-white/[0.07] bg-black/18 backdrop-blur-xl flex flex-wrap md:grid md:auto-rows-fr gap-2 px-3 md:px-4 py-3 md:py-4 overflow-x-hidden md:overflow-hidden scrollbar-thin"
+          className="w-full md:w-56 shrink-0 border-b md:border-b-0 md:border-r border-white/[0.07] bg-black/18 backdrop-blur-xl flex flex-nowrap md:grid md:auto-rows-fr gap-2 px-3 md:px-4 py-3 md:py-4 overflow-x-auto md:overflow-hidden overscroll-x-contain snap-x snap-mandatory scrollbar-thin"
         >
           {TABS.map((t, index) => (
             <button
@@ -499,7 +498,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
               aria-selected={tab === t.id}
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`group min-w-0 flex-1 basis-[8.5rem] md:basis-auto md:w-full md:h-full md:min-h-0 flex items-center gap-2 md:gap-3 px-3 py-2.5 md:py-0 rounded-2xl text-xs font-semibold transition-all md:text-left cursor-pointer relative border ${
+              className={`group min-w-[9rem] shrink-0 snap-start md:min-w-0 md:shrink md:flex-1 md:basis-auto md:w-full md:h-full md:min-h-0 flex items-center gap-2 md:gap-3 px-3 py-2.5 md:py-0 rounded-2xl text-xs font-semibold transition-all md:text-left cursor-pointer relative border ${
                 tab === t.id
                   ? 'bg-gradient-to-br from-orange-500/16 via-white/[0.07] to-cyan-400/12 text-white border-orange-300/22 shadow-[0_0_28px_rgba(249,115,22,0.12)]'
                   : 'text-white/38 hover:text-white/75 hover:bg-white/[0.05] border-white/[0.04]'
