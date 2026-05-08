@@ -190,7 +190,67 @@ function clampTimelineMinute(value: number): number {
   return Math.min(24 * 60, Math.max(0, Math.round(value)));
 }
 
-type CalendarViewMode = 'week' | 'month';
+type CalendarViewMode = 'day' | 'week' | 'month';
+type CalendarBooking = ChipyBooking & {
+  calendarScope?: 'business' | 'staff';
+  staffId?: string | null;
+  staffName?: string | null;
+  staffColor?: string | null;
+};
+
+const TEAM_BOOKING_COLORS = ['#F97316', '#06B6D4', '#22C55E', '#A855F7', '#F59E0B', '#EC4899', '#14B8A6'];
+
+function colorHash(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) hash = ((hash << 5) - hash) + value.charCodeAt(i);
+  return Math.abs(hash);
+}
+
+function bookingKey(booking: CalendarBooking): string {
+  return `${booking.calendarScope ?? 'business'}:${booking.staffId ?? 'betrieb'}:${booking.id}`;
+}
+
+function bookingAccent(booking: CalendarBooking): string {
+  if (booking.staffColor?.trim()) return booking.staffColor.trim();
+  if (booking.calendarScope === 'staff') {
+    const key = booking.staffId ?? booking.staffName ?? booking.id;
+    return TEAM_BOOKING_COLORS[colorHash(key) % TEAM_BOOKING_COLORS.length]!;
+  }
+  return '#F97316';
+}
+
+function hexToRgba(color: string, alpha: number): string {
+  const hex = color.trim().replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(hex)) return `rgba(249,115,22,${alpha})`;
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function bookingSourceLabel(booking: CalendarBooking): string {
+  return booking.calendarScope === 'staff' && booking.staffName ? booking.staffName : 'Betrieb';
+}
+
+function bookingWithBusinessMeta(booking: ChipyBooking): CalendarBooking {
+  return { ...booking, calendarScope: 'business', staffId: null, staffName: 'Betrieb', staffColor: '#F97316' };
+}
+
+function bookingWithStaffMeta(booking: ChipyBooking, staff: CalendarStaff): CalendarBooking {
+  return { ...booking, calendarScope: 'staff', staffId: staff.id, staffName: staff.name, staffColor: staff.color };
+}
+
+function bookingOverlapOffset(bookings: CalendarBooking[], booking: CalendarBooking): number {
+  const start = dateToLocalMinutes(booking.slot_time);
+  const end = start + bookingDuration(booking) + bookingBuffer(booking);
+  return Math.min(4, bookings.filter((other) => {
+    if (bookingKey(other) === bookingKey(booking)) return false;
+    if (other.slot_time.localeCompare(booking.slot_time) > 0) return false;
+    const otherStart = dateToLocalMinutes(other.slot_time);
+    const otherEnd = otherStart + bookingDuration(other) + bookingBuffer(other);
+    return otherStart < end && otherEnd > start;
+  }).length);
+}
 
 function startOfWeek(date: Date): Date {
   const d = new Date(date);
@@ -708,9 +768,10 @@ function _DayDrawer({
 // ── Monthly Calendar Grid ─────────────────────────────────────────────────────
 
 function CalendarViewSwitch({ value, onChange }: { value: CalendarViewMode; onChange: (value: CalendarViewMode) => void }) {
+  const labels: Record<CalendarViewMode, string> = { day: 'Tag', week: 'Woche', month: 'Monat' };
   return (
     <div className="flex shrink-0 gap-1 rounded-2xl border border-white/8 bg-black/20 p-1">
-      {(['week', 'month'] as const).map((mode) => (
+      {(['day', 'week', 'month'] as const).map((mode) => (
         <button
           key={mode}
           type="button"
@@ -721,7 +782,7 @@ function CalendarViewSwitch({ value, onChange }: { value: CalendarViewMode; onCh
           ].join(' ')}
           style={value === mode ? { background: 'linear-gradient(135deg, rgba(249,115,22,0.28), rgba(6,182,212,0.22))' } : undefined}
         >
-          {mode === 'week' ? 'Woche' : 'Monat'}
+          {labels[mode]}
         </button>
       ))}
     </div>
@@ -729,25 +790,26 @@ function CalendarViewSwitch({ value, onChange }: { value: CalendarViewMode; onCh
 }
 
 function WeeklyCalendar({
-  bookings, blocks, externalEvents, schedule, weekStart, onWeekStartChange, onBookingClick, onDeleteBooking, onAddBookingForDay,
+  bookings, blocks, externalEvents, schedule, weekStart, onWeekStartChange, onBookingClick, onDeleteBooking, onAddBookingForDay, onDayClick,
   className = '',
 }: {
-  bookings: ChipyBooking[];
+  bookings: CalendarBooking[];
   blocks: ChipyBlock[];
   externalEvents: ExternalCalendarEvent[];
   schedule?: ChipySchedule;
   weekStart: Date;
   onWeekStartChange: (date: Date) => void;
-  onBookingClick: (booking: ChipyBooking) => void;
-  onDeleteBooking?: (id: string) => void;
+  onBookingClick: (booking: CalendarBooking) => void;
+  onDeleteBooking?: (booking: CalendarBooking) => void;
   onAddBookingForDay?: (date: Date) => void;
+  onDayClick?: (date: Date) => void;
   className?: string;
 }) {
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart]);
   const dayKeys = useMemo(() => new Set(weekDays.map(isoDate)), [weekDays]);
 
   const bookingsByDay = useMemo(() => {
-    const map = new Map<string, ChipyBooking[]>();
+    const map = new Map<string, CalendarBooking[]>();
     for (const booking of bookings) {
       const key = bookingDateKey(booking);
       if (!dayKeys.has(key)) continue;
@@ -896,10 +958,10 @@ function WeeklyCalendar({
               return (
                 <div key={key} className={['min-h-[72px] border-r border-white/8 p-2.5 last:border-r-0', isToday ? 'bg-orange-500/[0.07]' : 'bg-black/10'].join(' ')}>
                   <div className="flex items-start justify-between gap-2">
-                    <div>
+                    <button type="button" onClick={() => onDayClick?.(day)} className="min-w-0 text-left">
                       <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/28">{DAY_SHORT[index]}</p>
-                      <p className={['mt-1 text-sm font-bold', isToday ? 'text-orange-200' : 'text-white'].join(' ')}>{day.getDate()}. {MONTH_NAMES[day.getMonth()]}</p>
-                    </div>
+                      <p className={['mt-1 text-sm font-bold transition-colors', isToday ? 'text-orange-200' : 'text-white hover:text-orange-100'].join(' ')}>{day.getDate()}. {MONTH_NAMES[day.getMonth()]}</p>
+                    </button>
                     {canAdd && (
                       <button type="button" onClick={() => onAddBookingForDay?.(day)} className="rounded-lg border border-orange-400/20 bg-orange-500/10 px-2 py-1 text-xs font-bold text-orange-100/75 hover:text-orange-50" aria-label="Termin anlegen">+</button>
                     )}
@@ -967,21 +1029,44 @@ function WeeklyCalendar({
                     const buffer = bookingBuffer(booking);
                     const end = start + duration;
                     const bufferEnd = end + buffer;
+                    const accent = bookingAccent(booking);
+                    const overlap = bookingOverlapOffset(dayBookings, booking);
+                    const inset = 6 + overlap * 7;
                     return (
-                      <button key={booking.id} type="button" data-booking-id={booking.id} onClick={() => onBookingClick(booking)} className="absolute left-1.5 right-1.5 overflow-hidden rounded-2xl border border-orange-400/25 bg-gradient-to-br from-orange-500/[0.24] via-orange-500/[0.12] to-cyan-500/[0.16] px-2.5 py-2 text-left shadow-[0_14px_36px_rgba(0,0,0,0.28)] transition-transform hover:-translate-y-0.5" style={{ top: topFor(start), height: heightFor(start, bufferEnd, 44) }} title="Kundendetails oeffnen">
+                      <button
+                        key={bookingKey(booking)}
+                        type="button"
+                        data-booking-id={booking.id}
+                        onClick={() => onBookingClick(booking)}
+                        className="absolute overflow-hidden rounded-2xl border px-2.5 py-2 text-left shadow-[0_14px_36px_rgba(0,0,0,0.28)] transition-transform hover:-translate-y-0.5"
+                        style={{
+                          top: topFor(start),
+                          height: heightFor(start, bufferEnd, 44),
+                          left: `${inset}px`,
+                          right: `${6 + Math.max(0, 4 - overlap) * 2}px`,
+                          borderColor: hexToRgba(accent, 0.42),
+                          background: `linear-gradient(135deg, ${hexToRgba(accent, 0.24)}, rgba(255,255,255,0.045) 48%, rgba(6,182,212,0.12))`,
+                        }}
+                        title="Kundendetails oeffnen"
+                      >
+                        <span className="absolute left-0 top-0 h-full w-1" style={{ background: accent }} />
                         <div className="relative z-10 pr-5">
-                          <p className="truncate text-xs font-bold text-white">{booking.customer_name}</p>
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: accent }} />
+                            <p className="truncate text-xs font-bold text-white">{booking.customer_name}</p>
+                          </div>
+                          <p className="mt-0.5 truncate text-[10px] font-semibold text-white/55">{bookingSourceLabel(booking)}</p>
                           <p className="mt-0.5 truncate text-[10px] text-orange-50/70">{minutesLabel(start)}-{minutesLabel(end)} · {duration} min</p>
                           <p className="mt-0.5 truncate text-[10px] text-white/45">{booking.service || 'Termin'}</p>
                           {buffer > 0 && <p className="mt-1 truncate text-[10px] text-cyan-100/55">Puffer bis {minutesLabel(bufferEnd)}</p>}
                         </div>
                         {buffer > 0 && <div className="absolute bottom-0 left-0 right-0 border-t border-dashed border-cyan-200/35 bg-cyan-300/[0.07]" style={{ height: `${Math.max(12, (buffer / Math.max(duration + buffer, 1)) * 100)}%` }} />}
                         {onDeleteBooking && (
-                          <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); onDeleteBooking(booking.id); }} onKeyDown={(event) => {
+                          <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); onDeleteBooking(booking); }} onKeyDown={(event) => {
                             if (event.key !== 'Enter' && event.key !== ' ') return;
                             event.preventDefault();
                             event.stopPropagation();
-                            onDeleteBooking(booking.id);
+                            onDeleteBooking(booking);
                           }} className="absolute right-1.5 top-1.5 z-20 rounded-lg px-1.5 py-0.5 text-[10px] text-red-100/40 hover:bg-red-500/15 hover:text-red-100" aria-label="Termin loeschen">
                             x
                           </span>
@@ -999,10 +1084,194 @@ function WeeklyCalendar({
   );
 }
 
+function DailyCalendar({
+  date, bookings, blocks, externalEvents, schedule, onDateChange, onBookingClick, onDeleteBooking, onAddBooking,
+  className = '',
+}: {
+  date: Date;
+  bookings: CalendarBooking[];
+  blocks: ChipyBlock[];
+  externalEvents: ExternalCalendarEvent[];
+  schedule?: ChipySchedule;
+  onDateChange: (date: Date) => void;
+  onBookingClick: (booking: CalendarBooking) => void;
+  onDeleteBooking?: (booking: CalendarBooking) => void;
+  onAddBooking?: (date: Date) => void;
+  className?: string;
+}) {
+  const dateStr = isoDate(date);
+  const dayBlocks = useMemo(() => blocks.filter((block) => block.date === dateStr), [blocks, dateStr]);
+  const fullDayBlock = dayBlocks.find((block) => !block.start_time);
+  const dayBookings = useMemo(
+    () => bookings.filter((booking) => bookingDateKey(booking) === dateStr).sort((a, b) => a.slot_time.localeCompare(b.slot_time)),
+    [bookings, dateStr],
+  );
+  const dayExternal = useMemo(() => {
+    const bounds = dayBounds(dateStr);
+    return externalEvents.filter((event) => {
+      const start = new Date(event.slot_start);
+      const end = new Date(event.slot_end);
+      return end > bounds.start && start < bounds.end;
+    });
+  }, [dateStr, externalEvents]);
+
+  const daySchedule = schedule?.[date.getDay().toString()];
+  const baseStart = daySchedule?.enabled ? clockToMinutes(daySchedule.start) ?? 8 * 60 : 8 * 60;
+  const baseEnd = daySchedule?.enabled ? clockToMinutes(daySchedule.end) ?? 18 * 60 : 18 * 60;
+  const timedBlocks = dayBlocks
+    .filter((block) => block.start_time && block.end_time)
+    .map((block) => ({
+      block,
+      start: clockToMinutes(block.start_time) ?? baseStart,
+      end: clockToMinutes(block.end_time) ?? baseEnd,
+    }));
+  const externalRanges = dayExternal
+    .filter((event) => !event.all_day)
+    .map((event) => {
+      const startKey = isoDate(new Date(event.slot_start));
+      const endKey = isoDate(new Date(event.slot_end));
+      const start = startKey < dateStr ? 0 : dateToLocalMinutes(event.slot_start);
+      const rawEnd = endKey > dateStr ? 24 * 60 : dateToLocalMinutes(event.slot_end);
+      return { event, start, end: Math.min(24 * 60, Math.max(start + 15, rawEnd)) };
+    });
+  const bookingRanges = dayBookings.map((booking) => {
+    const start = dateToLocalMinutes(booking.slot_time);
+    const duration = bookingDuration(booking);
+    const buffer = bookingBuffer(booking);
+    return { booking, start, end: start + duration, bufferEnd: start + duration + buffer, duration, buffer };
+  });
+  const timelineStart = Math.max(0, Math.floor(Math.min(baseStart, ...bookingRanges.map((item) => item.start), ...externalRanges.map((item) => item.start), ...timedBlocks.map((item) => item.start)) / 60) * 60);
+  const timelineEnd = Math.min(24 * 60, Math.ceil(Math.max(baseEnd, ...bookingRanges.map((item) => item.bufferEnd), ...externalRanges.map((item) => item.end), ...timedBlocks.map((item) => item.end), timelineStart + 60) / 60) * 60);
+  const timelineSpan = Math.max(60, timelineEnd - timelineStart);
+  const timelineHeight = Math.max(620, Math.min(940, Math.ceil(timelineSpan * 1.05)));
+  const hours = Array.from({ length: Math.floor(timelineSpan / 60) + 1 }, (_, index) => timelineStart + index * 60).filter((minutes) => minutes <= timelineEnd);
+  const topFor = (minutes: number) => `${((minutes - timelineStart) / timelineSpan) * 100}%`;
+  const heightFor = (start: number, end: number, min = 42) => Math.max(min, ((end - start) / timelineSpan) * timelineHeight);
+  const sourceCounts = useMemo(() => {
+    const map = new Map<string, { label: string; color: string; count: number }>();
+    for (const booking of dayBookings) {
+      const label = bookingSourceLabel(booking);
+      const existing = map.get(label);
+      if (existing) existing.count += 1;
+      else map.set(label, { label, color: bookingAccent(booking), count: 1 });
+    }
+    return [...map.values()];
+  }, [dayBookings]);
+  const canAdd = Boolean(onAddBooking && daySchedule?.enabled !== false && !fullDayBlock);
+
+  return (
+    <div className={['rounded-3xl border border-white/10 bg-black/18 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]', className].filter(Boolean).join(' ')}>
+      <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/28">Tagesansicht</p>
+          <h3 className="mt-1 text-base font-bold text-white">
+            {date.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+          </h3>
+          <p className="mt-1 text-xs text-white/38">
+            {dayBookings.length} Termin{dayBookings.length === 1 ? '' : 'e'} · {sourceCounts.length || 1} Kalenderquelle{sourceCounts.length === 1 ? '' : 'n'}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => onDateChange(addDays(date, -1))} className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/55 hover:text-white">Vorheriger Tag</button>
+          <button type="button" onClick={() => onDateChange(new Date())} className="rounded-xl border border-orange-400/20 bg-orange-500/10 px-3 py-2 text-xs font-semibold text-orange-100/75 hover:text-orange-50">Heute</button>
+          <button type="button" onClick={() => onDateChange(addDays(date, 1))} className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/55 hover:text-white">Naechster Tag</button>
+          {canAdd && (
+            <button type="button" onClick={() => onAddBooking?.(date)} className="rounded-xl px-3 py-2 text-xs font-semibold text-white shadow-[0_12px_30px_rgba(249,115,22,0.18)]" style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+              + Termin
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="mb-3 flex flex-wrap gap-2">
+        {sourceCounts.length > 0 ? sourceCounts.map((source) => (
+          <span key={source.label} className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold text-white/70" style={{ borderColor: hexToRgba(source.color, 0.28), background: hexToRgba(source.color, 0.10) }}>
+            <span className="h-2 w-2 rounded-full" style={{ background: source.color }} />
+            {source.label} · {source.count}
+          </span>
+        )) : (
+          <span className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-1.5 text-xs text-white/35">Keine Termine für diesen Tag</span>
+        )}
+        {fullDayBlock && <span className="rounded-full border border-red-400/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-200/75">Ganztag gesperrt</span>}
+        {daySchedule?.enabled === false && <span className="rounded-full border border-red-400/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-200/75">Geschlossen</span>}
+      </div>
+
+      <div className="relative overflow-hidden rounded-2xl border border-white/8 bg-white/[0.025]" style={{ height: timelineHeight }}>
+        {hours.map((minutes) => (
+          <div key={minutes} className="absolute left-0 right-0 border-t border-white/[0.055]" style={{ top: topFor(minutes) }}>
+            <span className="absolute left-3 -translate-y-1/2 rounded-lg bg-[#11111A] px-2 py-0.5 font-mono text-[10px] text-white/32">{minutesLabel(minutes)}</span>
+          </div>
+        ))}
+
+        {timedBlocks.map(({ block, start, end }) => (
+          <div key={block.id} className="absolute left-20 right-4 overflow-hidden rounded-2xl border border-red-400/22 bg-red-500/10 px-3 py-2 text-left" style={{ top: topFor(start), height: heightFor(start, end, 34) }}>
+            <p className="truncate text-xs font-semibold text-red-100/80">{minutesLabel(start)}-{minutesLabel(end)} gesperrt</p>
+            <p className="truncate text-[10px] text-red-100/45">{block.reason || 'Sperre'}</p>
+          </div>
+        ))}
+
+        {externalRanges.map(({ event, start, end }) => (
+          <div key={`${event.provider}:${event.external_id}:day`} className="absolute left-20 right-4 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.07] px-3 py-2 text-left" style={{ top: topFor(start), height: heightFor(start, end, 34) }}>
+            <p className="truncate text-xs font-semibold text-white/60">{event.summary || 'Externer Termin'}</p>
+            <p className="truncate text-[10px] text-white/28">{minutesLabel(start)}-{minutesLabel(end)} · {event.provider}</p>
+          </div>
+        ))}
+
+        {bookingRanges.map(({ booking, start, end, bufferEnd, duration, buffer }) => {
+          const accent = bookingAccent(booking);
+          const overlap = bookingOverlapOffset(dayBookings, booking);
+          const inset = 80 + overlap * 18;
+          return (
+            <button
+              key={bookingKey(booking)}
+              type="button"
+              data-booking-id={booking.id}
+              onClick={() => onBookingClick(booking)}
+              className="absolute overflow-hidden rounded-3xl border px-4 py-3 text-left shadow-[0_18px_54px_rgba(0,0,0,0.32)] transition-transform hover:-translate-y-0.5"
+              style={{
+                top: topFor(start),
+                height: heightFor(start, bufferEnd, 56),
+                left: `${inset}px`,
+                right: '16px',
+                borderColor: hexToRgba(accent, 0.42),
+                background: `linear-gradient(135deg, ${hexToRgba(accent, 0.25)}, rgba(255,255,255,0.045) 46%, rgba(6,182,212,0.12))`,
+              }}
+              title="Kundendetails oeffnen"
+            >
+              <span className="absolute left-0 top-0 h-full w-1.5" style={{ background: accent }} />
+              <div className="relative z-10 pr-9">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: accent }} />
+                  <p className="truncate text-sm font-bold text-white">{booking.customer_name}</p>
+                  <span className="shrink-0 rounded-full border border-white/10 bg-black/18 px-2 py-0.5 text-[10px] font-semibold text-white/55">{bookingSourceLabel(booking)}</span>
+                </div>
+                <p className="mt-1 truncate text-xs text-orange-50/72">{minutesLabel(start)}-{minutesLabel(end)} · {duration} min · {booking.service || 'Termin'}</p>
+                {booking.customer_phone && <p className="mt-0.5 truncate text-[10px] text-white/35">{booking.customer_phone}</p>}
+                {buffer > 0 && <p className="mt-1 truncate text-[10px] text-cyan-100/58">Puffer bis {minutesLabel(bufferEnd)}</p>}
+              </div>
+              {buffer > 0 && <div className="absolute bottom-0 left-0 right-0 border-t border-dashed border-cyan-200/35 bg-cyan-300/[0.07]" style={{ height: `${Math.max(12, (buffer / Math.max(duration + buffer, 1)) * 100)}%` }} />}
+              {onDeleteBooking && (
+                <span role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); onDeleteBooking(booking); }} onKeyDown={(event) => {
+                  if (event.key !== 'Enter' && event.key !== ' ') return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onDeleteBooking(booking);
+                }} className="absolute right-2 top-2 z-20 rounded-lg px-2 py-1 text-[10px] text-red-100/45 hover:bg-red-500/15 hover:text-red-100" aria-label="Termin loeschen">
+                  x
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function MonthlyCalendar({
   bookings, blocks, onDayClick,
 }: {
-  bookings: ChipyBooking[];
+  bookings: CalendarBooking[];
   blocks: ChipyBlock[];
   onDayClick: (date: Date) => void;
 }) {
@@ -1019,13 +1288,14 @@ function MonthlyCalendar({
   const timeBlockedSet = useMemo(() => new Set(blocks.filter(b => !!b.start_time).map(b => b.date)), [blocks]);
 
   const bookingsByDay = useMemo(() => {
-    const map = new Map<string, ChipyBooking[]>();
+    const map = new Map<string, CalendarBooking[]>();
     for (const b of bookings) {
       const ds = bookingDateKey(b);
       const arr = map.get(ds);
       if (arr) arr.push(b);
       else map.set(ds, [b]);
     }
+    for (const arr of map.values()) arr.sort((a, b) => a.slot_time.localeCompare(b.slot_time));
     return map;
   }, [bookings]);
 
@@ -1105,8 +1375,15 @@ function MonthlyCalendar({
               {hasBookings && !isFullBlocked && (
                 <div className="mt-0.5 space-y-0.5">
                   {dayBookings.slice(0, 2).map(b => (
-                    <div key={b.id} className="truncate text-[9px] text-orange-300/80 leading-tight">
-                      {formatTime(b.slot_time)} {b.customer_name}
+                    <div
+                      key={bookingKey(b)}
+                      className="truncate rounded-md border px-1.5 py-0.5 text-[9px] leading-tight text-white/80"
+                      style={{
+                        borderColor: hexToRgba(bookingAccent(b), 0.24),
+                        background: hexToRgba(bookingAccent(b), 0.10),
+                      }}
+                    >
+                      {formatTime(b.slot_time)} {bookingSourceLabel(b)} · {b.customer_name}
                     </div>
                   ))}
                   {dayBookings.length > 2 && (
@@ -1707,6 +1984,7 @@ function StaffPanel({
   const [showStaffAddBooking, setShowStaffAddBooking] = useState(false);
   const [staffCalendarView, setStaffCalendarView] = useState<CalendarViewMode>('week');
   const [staffWeekStart, setStaffWeekStart] = useState(startOfWeek(new Date()));
+  const [staffViewDay, setStaffViewDay] = useState(new Date());
   const [staffStatus, setStaffStatus] = useState<CalendarStatus | null>(null);
   const [calcomKey, setCalcomKey] = useState('');
   const [connectionLoading, setConnectionLoading] = useState<string | null>(null);
@@ -1714,6 +1992,10 @@ function StaffPanel({
   const selectedIdIsLoaded = Boolean(selectedId && staff.some(s => s.id === selectedId));
   const selected = selectedIdIsLoaded ? staff.find(s => s.id === selectedId) ?? null : null;
   const selectedServiceOptions = useMemo(() => serviceLabelsToOptions(selected?.services), [selected?.services]);
+  const selectedCalendarBookings = useMemo(
+    () => selected ? staffBookings.map((booking) => bookingWithStaffMeta(booking, selected)) : [],
+    [selected, staffBookings],
+  );
 
   const loadStaff = useCallback(async () => {
     setLoading(true); setError(null);
@@ -1986,33 +2268,59 @@ function StaffPanel({
 
             <div className="mb-3 flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-white/35">
-                {staffCalendarView === 'week'
+                {staffCalendarView === 'day'
+                  ? 'Tagesansicht mit exakter Terminlänge, Puffer und dieser Person als Kalenderquelle.'
+                  : staffCalendarView === 'week'
                   ? 'Exakte Wochenplanung mit Terminlänge, Puffer und externen Belegungen.'
-                  : 'Monatsüberblick. Ein Tag springt direkt in die passende Woche.'}
+                  : 'Monatsüberblick. Ein Tag springt direkt in die Tagesansicht.'}
               </p>
               <CalendarViewSwitch value={staffCalendarView} onChange={setStaffCalendarView} />
             </div>
 
-            {staffCalendarView === 'month' ? (
+            {staffCalendarView === 'day' ? (
+              <DailyCalendar
+                className="flex-1"
+                date={staffViewDay}
+                bookings={selectedCalendarBookings}
+                blocks={staffBlocks}
+                externalEvents={staffExternalEvents}
+                schedule={staffSchedule}
+                onDateChange={(date) => {
+                  setStaffViewDay(date);
+                  setStaffWeekStart(startOfWeek(date));
+                }}
+                onBookingClick={(booking) => { void handleStaffOpenBookingCustomer(booking); }}
+                onDeleteBooking={(booking) => { void handleStaffDeleteBooking(booking.id); }}
+                onAddBooking={(date) => {
+                  setSelectedStaffDay(date);
+                  setShowStaffAddBooking(true);
+                }}
+              />
+            ) : staffCalendarView === 'month' ? (
               <MonthlyCalendar
-                bookings={staffBookings}
+                bookings={selectedCalendarBookings}
                 blocks={staffBlocks}
                 onDayClick={(d) => {
+                  setStaffViewDay(d);
                   setStaffWeekStart(startOfWeek(d));
-                  setStaffCalendarView('week');
+                  setStaffCalendarView('day');
                 }}
               />
             ) : (
               <WeeklyCalendar
                 className="flex-1"
-                bookings={staffBookings}
+                bookings={selectedCalendarBookings}
                 blocks={staffBlocks}
                 externalEvents={staffExternalEvents}
                 schedule={staffSchedule}
                 weekStart={staffWeekStart}
                 onWeekStartChange={setStaffWeekStart}
                 onBookingClick={(booking) => { void handleStaffOpenBookingCustomer(booking); }}
-                onDeleteBooking={(id) => { void handleStaffDeleteBooking(id); }}
+                onDeleteBooking={(booking) => { void handleStaffDeleteBooking(booking.id); }}
+                onDayClick={(date) => {
+                  setStaffViewDay(date);
+                  setStaffCalendarView('day');
+                }}
                 onAddBookingForDay={(date) => {
                   setSelectedStaffDay(date);
                   setShowStaffAddBooking(true);
@@ -2090,6 +2398,9 @@ export function CalendarPage({
   const [tab, setTab] = useState<Tab>('calendar');
   const [calendarStatus, setCalendarStatus] = useState<CalendarStatus | null>(null);
   const [staffCount, setStaffCount] = useState(0);
+  const [calendarStaff, setCalendarStaff] = useState<CalendarStaff[]>([]);
+  const [teamBookings, setTeamBookings] = useState<CalendarBooking[]>([]);
+  const [teamExternalEvents, setTeamExternalEvents] = useState<ExternalCalendarEvent[]>([]);
 
   // Chipy data (shared between calendar + settings)
   const [schedule, setSchedule] = useState<ChipySchedule>(DEFAULT_SCHEDULE);
@@ -2107,16 +2418,28 @@ export function CalendarPage({
   const [showAddBooking, setShowAddBooking] = useState(false);
   const [calendarView, setCalendarView] = useState<CalendarViewMode>('week');
   const [calendarWeekStart, setCalendarWeekStart] = useState(startOfWeek(new Date()));
+  const [calendarViewDay, setCalendarViewDay] = useState(new Date());
+  const staffModeActive = staffCount > 0;
+  const businessCalendarBookings = useMemo(() => bookings.map(bookingWithBusinessMeta), [bookings]);
+  const calendarBookings = useMemo(
+    () => [...businessCalendarBookings, ...(staffModeActive ? teamBookings : [])].sort((a, b) => a.slot_time.localeCompare(b.slot_time)),
+    [businessCalendarBookings, staffModeActive, teamBookings],
+  );
+  const calendarExternalEvents = useMemo(
+    () => staffModeActive ? [...externalEvents, ...teamExternalEvents] : externalEvents,
+    [externalEvents, staffModeActive, teamExternalEvents],
+  );
 
   // Deep-link from dashboard click: arrive with ?focusBookingId → switch to
   // the calendar tab, open the day panel for that booking's date, and pulse
   // the row briefly so the user sees which one they clicked.
   useEffect(() => {
-    if (!focusBookingId || bookings.length === 0) return;
-    const b = bookings.find((x) => x.id === focusBookingId);
+    if (!focusBookingId || calendarBookings.length === 0) return;
+    const b = calendarBookings.find((x) => x.id === focusBookingId);
     if (!b) return;
     setTab('calendar');
-    setCalendarView('week');
+    setCalendarView('day');
+    setCalendarViewDay(new Date(b.slot_time));
     setCalendarWeekStart(startOfWeek(new Date(b.slot_time)));
     const t = window.setTimeout(() => {
       const el = document.querySelector<HTMLElement>(`[data-booking-id="${CSS.escape(b.id)}"]`);
@@ -2126,7 +2449,7 @@ export function CalendarPage({
       window.setTimeout(() => el.classList.remove('focus-pulse'), 2200);
     }, 200);
     return () => window.clearTimeout(t);
-  }, [focusBookingId, bookings]);
+  }, [focusBookingId, calendarBookings]);
 
   // Load chipy data + bookings + external events for a 3-month window.
   // External-events call is non-blocking: if the endpoint errors (e.g. on
@@ -2137,15 +2460,32 @@ export function CalendarPage({
     const from = isoDate(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1));
     const to = isoDate(new Date(new Date().getFullYear(), new Date().getMonth() + 3, 0));
     try {
-      const [chipy, bkgs, ext] = await Promise.all([
+      const [chipy, bkgs, ext, staffRes] = await Promise.all([
         getChipyCalendar(),
         getChipyBookings(from, to),
         getExternalCalendarEvents(from, to).catch(() => ({ events: [] as ExternalCalendarEvent[] })),
+        getCalendarStaff().catch(() => ({ staff: [] as CalendarStaff[] })),
       ]);
+      const staff = staffRes.staff ?? [];
+      const team = await Promise.all(staff.map(async (member) => {
+        const [staffBkgs, staffExt] = await Promise.all([
+          getStaffChipyBookings(member.id, from, to).catch(() => ({ bookings: [] as ChipyBooking[] })),
+          getStaffExternalCalendarEvents(member.id, from, to).catch(() => ({ events: [] as ExternalCalendarEvent[] })),
+        ]);
+        return {
+          member,
+          bookings: staffBkgs.bookings.map((booking) => bookingWithStaffMeta(booking, member)),
+          externalEvents: staffExt.events,
+        };
+      }));
       setSchedule({ ...DEFAULT_SCHEDULE, ...chipy.schedule });
       setBlocks(chipy.blocks);
       setBookings(bkgs.bookings);
       setExternalEvents(ext.events);
+      setCalendarStaff(staff);
+      setStaffCount(staff.length);
+      setTeamBookings(team.flatMap((item) => item.bookings).sort((a, b) => a.slot_time.localeCompare(b.slot_time)));
+      setTeamExternalEvents(team.flatMap((item) => item.externalEvents));
     } catch (e: unknown) {
       setCalendarError((e instanceof Error ? e.message : null) ?? 'Kalenderdaten konnten nicht geladen werden');
     }
@@ -2158,20 +2498,19 @@ export function CalendarPage({
       .catch(() => setServiceOptions(deriveServiceOptions({ services: HAIRDRESSER_SERVICE_PRESET })));
   }, []);
   useEffect(() => {
-    getCalendarStaff()
-      .then((res) => setStaffCount(res.staff.length))
-      .catch(() => setStaffCount(0));
-  }, []);
-  const staffModeActive = staffCount > 0;
-  useEffect(() => {
     if (!staffModeActive) return;
     setTab(current => (current === 'calendar' ? 'staff' : current));
   }, [staffModeActive]);
 
-  async function handleDeleteBooking(id: string) {
+  async function handleDeleteCalendarBooking(booking: CalendarBooking) {
     try {
-      await deleteChipyBooking(id);
-      setBookings(prev => prev.filter(b => b.id !== id));
+      if (booking.calendarScope === 'staff' && booking.staffId) {
+        await deleteStaffChipyBooking(booking.staffId, booking.id);
+        setTeamBookings(prev => prev.filter(b => bookingKey(b) !== bookingKey(booking)));
+      } else {
+        await deleteChipyBooking(booking.id);
+        setBookings(prev => prev.filter(b => b.id !== booking.id));
+      }
     } catch (e: unknown) {
       setCalendarError((e instanceof Error ? e.message : null) ?? 'Termin konnte nicht gelöscht werden');
     }
@@ -2337,6 +2676,20 @@ export function CalendarPage({
                     <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-white/45">Betriebskalender bleibt sichtbar</span>
                   </div>
                 </div>
+                {calendarStaff.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {calendarStaff.slice(0, 7).map((member) => {
+                      const color = member.color ?? TEAM_BOOKING_COLORS[colorHash(member.id) % TEAM_BOOKING_COLORS.length]!;
+                      return (
+                        <span key={member.id} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/18 px-3 py-1.5 text-xs text-white/55">
+                          <span className="h-2 w-2 rounded-full" style={{ background: color }} />
+                          {member.name}
+                        </span>
+                      );
+                    })}
+                    {calendarStaff.length > 7 && <span className="rounded-full border border-white/10 bg-black/18 px-3 py-1.5 text-xs text-white/35">+{calendarStaff.length - 7} weitere</span>}
+                  </div>
+                )}
                 <button onClick={() => setTab('staff')} className="mt-4 rounded-xl border border-orange-500/25 bg-orange-500/15 px-3 py-2 text-xs font-semibold text-orange-100 hover:bg-orange-500/20">
                   Mitarbeiterkalender öffnen
                 </button>
@@ -2347,40 +2700,64 @@ export function CalendarPage({
               <div className="mb-3 flex shrink-0 items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-white">Betriebskalender</p>
-                  <p className="text-xs text-white/35 mt-1">{staffModeActive ? 'Bleibt als Kalender ohne Mitarbeiter sichtbar. Neue Bot-Termine laufen über Mitarbeiter.' : 'Wenn kein Mitarbeiter angelegt ist, nutzt Chipy diesen Kalender allgemein.'}</p>
+                  <p className="text-xs text-white/35 mt-1">{staffModeActive ? 'Team-Übersicht: Betriebstermine und alle Mitarbeitertermine liegen hier gemeinsam übereinander.' : 'Wenn kein Mitarbeiter angelegt ist, nutzt Chipy diesen Kalender allgemein.'}</p>
                 </div>
               </div>
               <div className="mb-3 flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-white/35">
-                  {calendarView === 'week'
-                    ? 'Google-ähnliche Wochenansicht mit echten Terminlängen und Pufferzeiten.'
-                    : 'Monatsüberblick. Ein Tag öffnet direkt die passende Woche.'}
+                  {calendarView === 'day'
+                    ? 'Tagesansicht mit allen Mitarbeiterterminen, Farben und echter Terminlänge.'
+                    : calendarView === 'week'
+                      ? 'Google-ähnliche Wochenansicht mit elegant überlagerten Team-Terminen.'
+                      : 'Monatsüberblick. Ein Tag öffnet die Tagesansicht.'}
                 </p>
                 <CalendarViewSwitch value={calendarView} onChange={setCalendarView} />
               </div>
 
-              {calendarView === 'month' ? (
+              {calendarView === 'day' ? (
+                <DailyCalendar
+                  className="flex-1"
+                  date={calendarViewDay}
+                  bookings={calendarBookings}
+                  blocks={blocks}
+                  externalEvents={calendarExternalEvents}
+                  schedule={schedule}
+                  onDateChange={(date) => {
+                    setCalendarViewDay(date);
+                    setCalendarWeekStart(startOfWeek(date));
+                  }}
+                  onBookingClick={(booking) => { void handleOpenBookingCustomer(booking); }}
+                  onDeleteBooking={(booking) => { void handleDeleteCalendarBooking(booking); }}
+                  onAddBooking={staffModeActive ? undefined : (date) => {
+                    setSelectedDay(date);
+                    setShowAddBooking(true);
+                  }}
+                />
+              ) : calendarView === 'month' ? (
                 <MonthlyCalendar
-                  bookings={bookings}
+                  bookings={calendarBookings}
                   blocks={blocks}
                   onDayClick={(d) => {
-                    if (!staffModeActive) {
-                      setCalendarWeekStart(startOfWeek(d));
-                      setCalendarView('week');
-                    }
+                    setCalendarViewDay(d);
+                    setCalendarWeekStart(startOfWeek(d));
+                    setCalendarView('day');
                   }}
                 />
               ) : (
                 <WeeklyCalendar
                   className="flex-1"
-                  bookings={bookings}
+                  bookings={calendarBookings}
                   blocks={blocks}
-                  externalEvents={externalEvents}
+                  externalEvents={calendarExternalEvents}
                   schedule={schedule}
                   weekStart={calendarWeekStart}
                   onWeekStartChange={setCalendarWeekStart}
                   onBookingClick={(booking) => { void handleOpenBookingCustomer(booking); }}
-                  onDeleteBooking={(id) => { void handleDeleteBooking(id); }}
+                  onDeleteBooking={(booking) => { void handleDeleteCalendarBooking(booking); }}
+                  onDayClick={(date) => {
+                    setCalendarViewDay(date);
+                    setCalendarView('day');
+                  }}
                   onAddBookingForDay={staffModeActive ? undefined : (date) => {
                     setSelectedDay(date);
                     setShowAddBooking(true);
