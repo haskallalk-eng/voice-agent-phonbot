@@ -448,6 +448,22 @@ function normalizeBusinessPatch(patch: BusinessInfoPatch): BusinessInfoPatch {
   };
 }
 
+function serviceLabelListChanged(before: string[], after: string[]): boolean {
+  return JSON.stringify(before) !== JSON.stringify(after);
+}
+
+async function syncBusinessServicesToAllStaff(services: string[]): Promise<{ total: number; saved: number; failed: number }> {
+  const res = await getCalendarStaff();
+  const members = res.staff ?? [];
+  if (!members.length) return { total: 0, saved: 0, failed: 0 };
+
+  const updates = await Promise.allSettled(
+    members.map((member) => updateCalendarStaff(member.id, { services })),
+  );
+  const saved = updates.filter((result) => result.status === 'fulfilled').length;
+  return { total: members.length, saved, failed: members.length - saved };
+}
+
 function BusinessTabButton({
   id,
   label,
@@ -581,7 +597,7 @@ function BusinessInfoPanel({
             <div>
               <span className="text-sm font-medium text-white/70">Services / Angebote</span>
               <p className="mt-0.5 text-[11px] leading-relaxed text-white/35">
-                Name, Preis und Dauer zentral erfassen. Gespeicherte Betriebsleistungen sind der Startwert für neue Mitarbeiter.
+                Name, Preis und Dauer zentral erfassen. Beim Speichern werden diese Leistungen automatisch bei allen Mitarbeitern gespeichert.
               </p>
             </div>
             <button
@@ -730,25 +746,6 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
     }
   }
 
-  async function applyBusinessServicesToSelected() {
-    if (!selected || businessServices.length === 0) return;
-    setSavingId(`${selected.id}:business-services`);
-    setError(null);
-    setNotice(null);
-    try {
-      const res = await updateCalendarStaff(selected.id, {
-        services: businessServices,
-      });
-      setStaff((prev) => prev.map((member) => member.id === selected.id ? { ...member, ...res.staff } : member));
-      setStaffServices(staffLabelsToServiceItems(businessServices));
-      setNotice('Betriebsleistungen wurden für diesen Mitarbeiter übernommen und gespeichert.');
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Betriebsleistungen konnten nicht übernommen werden.');
-    } finally {
-      setSavingId(null);
-    }
-  }
-
   async function saveSelectedHours() {
     if (!selected) return;
     if (!canConvertOpeningHours(hoursText)) {
@@ -835,7 +832,7 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
       </form>
 
       <p className="mb-5 rounded-2xl border border-white/8 bg-black/15 px-4 py-3 text-xs leading-relaxed text-white/40">
-        Neue Mitarbeiter übernehmen standardmäßig {businessServices.length || 'keine'} Betriebsleistung{businessServices.length === 1 ? '' : 'en'} und die Betriebsöffnungszeiten. Wenn eine Person keine eigenen Leistungen hat, wirkt sie wie “beliebiger freier Mitarbeiter”.
+        Betriebsleistungen werden beim Speichern im Betrieb automatisch bei allen Mitarbeitern gespeichert. Danach kannst du einzelne Mitarbeiter hier gezielt anpassen.
       </p>
 
       {staff.length ? (
@@ -913,19 +910,6 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
               <p className="mt-0.5 mb-2 text-[11px] leading-relaxed text-white/35">
                 Gleiche Pflege wie beim Betrieb: Name, Preis und Dauer strukturiert erfassen. Ohne eigene Anpassung startet die Person mit den Betriebsleistungen.
               </p>
-              <div className="mb-3 flex flex-col gap-2 rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <span className="text-xs leading-relaxed text-white/42">
-                  Gespeicherte Betriebsleistungen: {businessServices.length || 0}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => { void applyBusinessServicesToSelected(); }}
-                  disabled={businessServices.length === 0 || savingId === `${selected.id}:business-services`}
-                  className="rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-100 transition-colors hover:border-cyan-300/45 hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {savingId === `${selected.id}:business-services` ? 'Übernehme...' : 'Betriebsleistungen übernehmen'}
-                </button>
-              </div>
               <ServicesEditor
                 value={staffServices}
                 legacyText=""
@@ -1234,14 +1218,37 @@ export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | 
     setError(null);
     setNotice(null);
     try {
-      const nextConfig: AgentConfig = { ...config, ...normalizeBusinessPatch(patch) };
+      const normalizedPatch = normalizeBusinessPatch(patch);
+      const previousServices = deriveBusinessServiceLabels(config);
+      const nextConfig: AgentConfig = { ...config, ...normalizedPatch };
+      const nextServices = deriveBusinessServiceLabels(nextConfig);
+      const shouldSyncStaffServices = serviceLabelListChanged(previousServices, nextServices);
       const saved = config.retellAgentId
         ? (await deployAgentConfig(nextConfig)).config
         : await saveAgentConfig(nextConfig);
       setConfig(saved);
-      setNotice(config.retellAgentId
+      const baseMessage = config.retellAgentId
         ? 'Betriebsinfos gespeichert und im aktiven Agent aktualisiert.'
-        : 'Betriebsinfos gespeichert. Beim Deploy nutzt Chipy diese Daten.');
+        : 'Betriebsinfos gespeichert. Beim Deploy nutzt Chipy diese Daten.';
+
+      if (shouldSyncStaffServices) {
+        try {
+          const staffSync = await syncBusinessServicesToAllStaff(nextServices);
+          if (staffSync.failed > 0) {
+            setNotice(baseMessage);
+            setError(`Betriebsservices gespeichert, aber ${staffSync.failed} von ${staffSync.total} Mitarbeiterprofilen konnten nicht aktualisiert werden.`);
+          } else if (staffSync.total > 0) {
+            setNotice(`${baseMessage} ${staffSync.saved} Mitarbeiterprofil${staffSync.saved === 1 ? '' : 'e'} mit Betriebsservices aktualisiert.`);
+          } else {
+            setNotice(baseMessage);
+          }
+        } catch {
+          setNotice(baseMessage);
+          setError('Betriebsservices gespeichert, aber die Mitarbeiterprofile konnten nicht automatisch aktualisiert werden.');
+        }
+      } else {
+        setNotice(baseMessage);
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Betriebsinfos konnten nicht gespeichert werden.');
     } finally {
