@@ -830,7 +830,7 @@ function WeeklyCalendar({
   const timelineStart = timelineBounds.start;
   const timelineEnd = timelineBounds.end;
   const timelineSpan = Math.max(60, timelineEnd - timelineStart);
-  const timelineHeight = Math.max(360, Math.min(460, Math.ceil(timelineSpan * 0.68)));
+  const timelineHeight = Math.max(540, Math.min(680, Math.ceil(timelineSpan * 0.96)));
   const hours = Array.from({ length: Math.floor(timelineSpan / 60) + 1 }, (_, index) => timelineStart + index * 60).filter((minutes) => minutes <= timelineEnd);
   const topFor = (minutes: number) => `${((minutes - timelineStart) / timelineSpan) * 100}%`;
   const heightFor = (start: number, end: number, min = 38) => Math.max(min, ((end - start) / timelineSpan) * timelineHeight);
@@ -862,8 +862,8 @@ function WeeklyCalendar({
       </div>
 
       <div ref={gridRef} className="min-h-0 flex-1 overscroll-contain overflow-x-auto overflow-y-hidden rounded-2xl border border-white/8 bg-white/[0.025]">
-        <div className="min-w-[860px]">
-          <div className="grid border-b border-white/8" style={{ gridTemplateColumns: '64px repeat(7, minmax(108px, 1fr))' }}>
+        <div className="min-w-[1016px]">
+          <div className="grid border-b border-white/8" style={{ gridTemplateColumns: '72px repeat(7, minmax(134px, 1fr))' }}>
             <div className="border-r border-white/8 bg-black/16" />
             {weekDays.map((day, index) => {
               const key = isoDate(day);
@@ -896,7 +896,7 @@ function WeeklyCalendar({
             })}
           </div>
 
-          <div className="grid" style={{ gridTemplateColumns: '64px repeat(7, minmax(108px, 1fr))' }}>
+          <div className="grid" style={{ gridTemplateColumns: '72px repeat(7, minmax(134px, 1fr))' }}>
             <div className="relative border-r border-white/8 bg-black/20" style={{ height: timelineHeight }}>
               {hours.map((minutes) => (
                 <div key={minutes} className="absolute left-0 right-0 border-t border-white/[0.055]" style={{ top: topFor(minutes) }}>
@@ -1912,7 +1912,7 @@ function StaffPanel({
       </div>
 
       {selected && (
-        <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid gap-4">
           <section className="flex min-w-0 flex-col rounded-2xl border border-white/10 p-4" style={{ background: 'rgba(255,255,255,0.02)' }}>
             <div className="mb-3 flex shrink-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
@@ -2189,7 +2189,7 @@ export function CalendarPage({
           style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.05) 0%, transparent 65%)' }} />
       </div>
 
-      <div className="relative z-10 mx-auto flex min-h-0 w-full max-w-[1500px] flex-col">
+      <div className="relative z-10 mx-auto flex min-h-0 w-full max-w-[1900px] flex-col">
         {/* Header */}
         <div className="mb-4 flex shrink-0 items-start justify-between">
           <div>
@@ -2265,7 +2265,7 @@ export function CalendarPage({
         )}
 
         {tab === 'calendar' && (
-          <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="grid gap-4">
             <div className="flex min-w-0 flex-col gap-4">
             {staffModeActive && (
               <div className="shrink-0 rounded-3xl border border-orange-500/20 p-4 shadow-[0_18px_60px_rgba(249,115,22,0.10)]" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.13), rgba(255,255,255,0.035) 48%, rgba(6,182,212,0.10))' }}>
