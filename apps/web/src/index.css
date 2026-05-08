@@ -455,6 +455,14 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
 }
 
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* -- Chipy animations ---------------------------------------------- */
 
 /* Smooth float for hero/dashboard */

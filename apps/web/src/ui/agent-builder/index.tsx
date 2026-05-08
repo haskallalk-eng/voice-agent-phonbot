@@ -490,7 +490,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
         {/* Tab list — horizontal scroll on mobile, vertical sidebar on desktop */}
         <div
           role="tablist"
-          className="w-full md:w-56 shrink-0 border-b md:border-b-0 md:border-r border-white/[0.07] bg-black/18 backdrop-blur-xl flex flex-nowrap md:grid md:auto-rows-fr gap-2 px-3 md:px-4 py-3 md:py-4 overflow-x-auto md:overflow-hidden overscroll-x-contain snap-x snap-mandatory scrollbar-thin"
+          className="scrollbar-none w-full md:w-56 shrink-0 border-b md:border-b-0 md:border-r border-white/[0.07] bg-black/18 backdrop-blur-xl flex flex-nowrap md:grid md:auto-rows-fr gap-2 px-3 md:px-4 py-3 md:py-4 overflow-x-auto md:overflow-hidden overscroll-x-contain snap-x snap-mandatory"
         >
           {TABS.map((t, index) => (
             <button
