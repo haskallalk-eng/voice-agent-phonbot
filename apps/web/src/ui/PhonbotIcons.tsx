@@ -84,6 +84,17 @@ export const IconCalendar = icon(() => (
   </>
 ));
 
+/** Abstract window panes for Microsoft calendar connections */
+export const IconMicrosoftWindow = icon(() => (
+  <>
+    <path d="M4.25 6.6l6.55-1.05v5.7H4.25V6.6z" fill="currentColor" stroke="none" opacity={0.72} />
+    <path d="M13.2 5.15l6.55-1.05v7.15H13.2v-6.1z" fill="currentColor" stroke="none" opacity={0.95} />
+    <path d="M4.25 12.85h6.55v5.6L4.25 17.4v-4.55z" fill="currentColor" stroke="none" opacity={0.55} />
+    <path d="M13.2 12.85h6.55v7.05l-6.55-1.05v-6z" fill="currentColor" stroke="none" opacity={0.82} />
+    <path d="M11.95 5.2v13.6M4.25 12.05h15.5" strokeWidth={1.15} opacity={0.5} />
+  </>
+));
+
 /** Credit card with stripe */
 export const IconBilling = icon(() => (
   <>
