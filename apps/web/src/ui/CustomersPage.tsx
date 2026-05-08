@@ -35,7 +35,7 @@ import {
 import { AdaptiveTextarea } from '../components/AdaptiveTextarea.js';
 import { OpeningHoursEditor, parseOpeningHours } from './agent-builder/OpeningHoursEditor.js';
 import { ServicesEditor } from './agent-builder/ServicesEditor.js';
-import { HAIRDRESSER_SERVICE_PRESET, serviceItemsToStaffLabels } from '../lib/service-presets.js';
+import { HAIRDRESSER_SERVICE_PRESET } from '../lib/service-presets.js';
 
 const DEFAULT_QUESTIONS: CustomerQuestionConfig[] = [
   { id: 'name', label: 'Name', prompt: 'Vor- und Nachname', enabled: true, required: true, builtin: true },
@@ -216,6 +216,7 @@ function TogglePill({ active, disabled = false }: { active: boolean; disabled?: 
 }
 
 type BusinessTab = 'betrieb' | 'mitarbeiter' | 'kunden';
+type BusinessInfoPatch = Pick<AgentConfig, 'businessName' | 'address' | 'businessDescription' | 'openingHours' | 'services' | 'servicesText'>;
 
 const BUSINESS_TABS: Array<{ id: BusinessTab; label: string; description: string }> = [
   { id: 'betrieb', label: 'Betrieb', description: 'Stammdaten, Öffnungszeiten und Leistungen' },
@@ -238,13 +239,14 @@ function BusinessField({ label, hint, children }: { label: string; hint?: string
 
 function isHairdresserConfig(config: AgentConfig | null): boolean {
   if (!config) return false;
-  const haystack = `${config.industry ?? ''} ${config.businessDescription ?? ''} ${config.servicesText ?? ''}`.toLowerCase();
+  const structuredServices = serviceItemsToStaffStrings(config.services ?? []).join(' ');
+  const haystack = `${config.industry ?? ''} ${config.businessDescription ?? ''} ${config.servicesText ?? ''} ${structuredServices}`.toLowerCase();
   return /friseur|salon|haar|farbe|kopfhaut|stylist/.test(haystack);
 }
 
 function deriveBusinessServiceLabels(config: AgentConfig | null): string[] {
   if (!config) return [];
-  const structured = serviceItemsToStaffLabels(config.services ?? []);
+  const structured = serviceItemsToStaffStrings(config.services ?? []);
   if (structured.length) return structured;
   return (config.servicesText ?? '')
     .split(',')
@@ -401,6 +403,51 @@ function serviceItemsToStaffStrings(items: ServiceItem[]): string[] {
   return out;
 }
 
+function normalizeServiceItemsForSave(items: ServiceItem[]): ServiceItem[] {
+  const seen = new Set<string>();
+  const out: ServiceItem[] = [];
+  for (const item of items) {
+    const name = item.name?.trim() ?? '';
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+
+    const next: ServiceItem = {
+      id: item.id?.trim() || `svc_${Date.now().toString(36)}_${out.length}`,
+      name,
+    };
+    const price = item.price?.trim();
+    const priceUpTo = item.priceUpTo?.trim();
+    const duration = item.duration?.trim();
+    const description = item.description?.trim();
+    if (price) next.price = price;
+    if (item.priceFrom) next.priceFrom = true;
+    if (priceUpTo && !item.priceFrom) next.priceUpTo = priceUpTo;
+    if (duration) next.duration = duration;
+    if (typeof item.bufferMinutes === 'number' && Number.isFinite(item.bufferMinutes)) {
+      next.bufferMinutes = Math.min(180, Math.max(0, Math.round(item.bufferMinutes)));
+    }
+    if (description) next.description = description;
+    if (item.tag) next.tag = item.tag;
+
+    out.push(next);
+    if (out.length >= 30) break;
+  }
+  return out;
+}
+
+function normalizeBusinessPatch(patch: BusinessInfoPatch): BusinessInfoPatch {
+  return {
+    ...patch,
+    businessName: patch.businessName.trim(),
+    address: patch.address.trim(),
+    businessDescription: patch.businessDescription.trim(),
+    openingHours: patch.openingHours.trim(),
+    services: normalizeServiceItemsForSave(patch.services ?? []),
+    servicesText: patch.servicesText.trim(),
+  };
+}
+
 function BusinessTabButton({
   id,
   label,
@@ -439,7 +486,7 @@ function BusinessInfoPanel({
 }: {
   config: AgentConfig | null;
   saving: boolean;
-  onSave: (patch: Pick<AgentConfig, 'businessName' | 'address' | 'businessDescription' | 'openingHours' | 'services' | 'servicesText'>) => Promise<void>;
+  onSave: (patch: BusinessInfoPatch) => Promise<void>;
 }) {
   const [draft, setDraft] = useState({
     businessName: '',
@@ -470,6 +517,11 @@ function BusinessInfoPanel({
     draft.servicesText !== (config?.servicesText ?? '') ||
     JSON.stringify(draft.services) !== JSON.stringify(config?.services ?? [])
   );
+  const serviceDirty = Boolean(config) && (
+    draft.servicesText !== (config?.servicesText ?? '') ||
+    JSON.stringify(draft.services) !== JSON.stringify(config?.services ?? [])
+  );
+  const saveDraft = () => { void onSave(normalizeBusinessPatch(draft)); };
 
   return (
     <section className={CARD_CLASS}>
@@ -487,7 +539,7 @@ function BusinessInfoPanel({
         </div>
         <button
           type="button"
-          onClick={() => { void onSave(draft); }}
+          onClick={saveDraft}
           disabled={!config || !dirty || saving || !draft.businessName.trim()}
           className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-all disabled:cursor-not-allowed disabled:opacity-40"
           style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
@@ -525,10 +577,22 @@ function BusinessInfoPanel({
         </div>
 
         <div>
-          <span className="text-sm font-medium text-white/70">Services / Angebote</span>
-          <p className="mt-0.5 mb-2 text-[11px] leading-relaxed text-white/35">
-            Name, Preis und Dauer zentral erfassen. Mitarbeiter können später eine eigene Teilmenge übernehmen.
-          </p>
+          <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <span className="text-sm font-medium text-white/70">Services / Angebote</span>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-white/35">
+                Name, Preis und Dauer zentral erfassen. Gespeicherte Betriebsleistungen sind der Startwert für neue Mitarbeiter.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={saveDraft}
+              disabled={!config || !serviceDirty || saving || !draft.businessName.trim()}
+              className="shrink-0 rounded-xl border border-orange-500/25 bg-orange-500/12 px-3 py-2 text-xs font-semibold text-orange-100 transition-colors hover:border-orange-400/45 hover:bg-orange-500/18 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {saving ? 'Speichere...' : serviceDirty ? 'Services speichern' : 'Services gespeichert'}
+            </button>
+          </div>
           <ServicesEditor
             value={draft.services}
             legacyText={draft.servicesText}
@@ -661,6 +725,25 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
       setNotice('Mitarbeiterprofil gespeichert. Der Agent nutzt diese Zuordnung beim nächsten Deploy/Speichern.');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Mitarbeiterprofil konnte nicht gespeichert werden.');
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function applyBusinessServicesToSelected() {
+    if (!selected || businessServices.length === 0) return;
+    setSavingId(`${selected.id}:business-services`);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await updateCalendarStaff(selected.id, {
+        services: businessServices,
+      });
+      setStaff((prev) => prev.map((member) => member.id === selected.id ? { ...member, ...res.staff } : member));
+      setStaffServices(staffLabelsToServiceItems(businessServices));
+      setNotice('Betriebsleistungen wurden für diesen Mitarbeiter übernommen und gespeichert.');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Betriebsleistungen konnten nicht übernommen werden.');
     } finally {
       setSavingId(null);
     }
@@ -830,6 +913,19 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
               <p className="mt-0.5 mb-2 text-[11px] leading-relaxed text-white/35">
                 Gleiche Pflege wie beim Betrieb: Name, Preis und Dauer strukturiert erfassen. Ohne eigene Anpassung startet die Person mit den Betriebsleistungen.
               </p>
+              <div className="mb-3 flex flex-col gap-2 rounded-2xl border border-white/8 bg-white/[0.03] px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-xs leading-relaxed text-white/42">
+                  Gespeicherte Betriebsleistungen: {businessServices.length || 0}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => { void applyBusinessServicesToSelected(); }}
+                  disabled={businessServices.length === 0 || savingId === `${selected.id}:business-services`}
+                  className="rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-100 transition-colors hover:border-cyan-300/45 hover:bg-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {savingId === `${selected.id}:business-services` ? 'Übernehme...' : 'Betriebsleistungen übernehmen'}
+                </button>
+              </div>
               <ServicesEditor
                 value={staffServices}
                 legacyText=""
@@ -1132,13 +1228,13 @@ export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | 
     }
   }
 
-  async function saveBusinessInfo(patch: Pick<AgentConfig, 'businessName' | 'address' | 'businessDescription' | 'openingHours' | 'services' | 'servicesText'>) {
+  async function saveBusinessInfo(patch: BusinessInfoPatch) {
     if (!config) return;
     setSaving(true);
     setError(null);
     setNotice(null);
     try {
-      const nextConfig: AgentConfig = { ...config, ...patch };
+      const nextConfig: AgentConfig = { ...config, ...normalizeBusinessPatch(patch) };
       const saved = config.retellAgentId
         ? (await deployAgentConfig(nextConfig)).config
         : await saveAgentConfig(nextConfig);
