@@ -40,6 +40,7 @@ function _formatDateTime(iso: string) {
 }
 
 const CUSTOMER_FOCUS_STORAGE_KEY = 'phonbot_focus_customer';
+const STAFF_CALENDAR_SELECTION_STORAGE_KEY = 'phonbot_calendar_selected_staff';
 
 function normalizeLookupPhone(value: string | null | undefined): string {
   return (value ?? '').replace(/\D/g, '');
@@ -183,6 +184,10 @@ function minutesLabel(value: number): string {
   const hour = Math.floor(value / 60);
   const minute = value % 60;
   return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+function clampTimelineMinute(value: number): number {
+  return Math.min(24 * 60, Math.max(0, Math.round(value)));
 }
 
 type CalendarViewMode = 'week' | 'month';
@@ -792,48 +797,65 @@ function WeeklyCalendar({
   };
 
   const timelineBounds = useMemo(() => {
-    const starts = [8 * 60];
-    const ends = [18 * 60];
+    const ranges: Array<{ start: number; end: number; span: number }> = [];
+    const recordStarts: number[] = [];
+    const recordEnds: number[] = [];
     for (const day of weekDays) {
       const key = isoDate(day);
       const daySchedule = schedule?.[day.getDay().toString()];
       if (daySchedule?.enabled) {
         const start = clockToMinutes(daySchedule.start);
         const end = clockToMinutes(daySchedule.end);
-        if (start !== null) starts.push(start);
-        if (end !== null) ends.push(end);
+        if (start !== null && end !== null && end > start) {
+          ranges.push({ start, end, span: end - start });
+        }
       }
       for (const booking of bookingsByDay.get(key) ?? []) {
         const start = dateToLocalMinutes(booking.slot_time);
-        starts.push(start);
-        ends.push(start + bookingDuration(booking) + bookingBuffer(booking));
+        recordStarts.push(start);
+        recordEnds.push(start + bookingDuration(booking) + bookingBuffer(booking));
       }
       for (const block of blocksByDay.get(key) ?? []) {
         if (!block.start_time || !block.end_time) continue;
         const start = clockToMinutes(block.start_time);
         const end = clockToMinutes(block.end_time);
-        if (start !== null) starts.push(start);
-        if (end !== null) ends.push(end);
+        if (start !== null && end !== null && end > start) {
+          recordStarts.push(start);
+          recordEnds.push(end);
+        }
       }
       for (const event of externalByDay.get(key) ?? []) {
         if (event.all_day) continue;
         const range = getExternalRange(event, key);
-        starts.push(range.start);
-        ends.push(range.end);
+        recordStarts.push(range.start);
+        recordEnds.push(range.end);
       }
     }
-    const start = Math.max(0, Math.floor(Math.min(...starts) / 60) * 60);
-    const end = Math.min(24 * 60, Math.ceil(Math.max(start + 60, ...ends) / 60) * 60);
+    const longestWorkday = ranges.sort((a, b) => b.span - a.span || a.start - b.start || b.end - a.end)[0] ?? { start: 8 * 60, end: 18 * 60, span: 10 * 60 };
+    let start = clampTimelineMinute(longestWorkday.start - 60);
+    let end = clampTimelineMinute(Math.max(longestWorkday.end + 60, start + 60));
+    if (recordStarts.length) {
+      start = clampTimelineMinute(Math.min(start, Math.floor(Math.min(...recordStarts) / 60) * 60));
+    }
+    if (recordEnds.length) {
+      end = clampTimelineMinute(Math.max(end, Math.ceil(Math.max(...recordEnds) / 60) * 60));
+    }
     return { start, end };
   }, [blocksByDay, bookingsByDay, externalByDay, schedule, weekDays]);
 
   const timelineStart = timelineBounds.start;
   const timelineEnd = timelineBounds.end;
   const timelineSpan = Math.max(60, timelineEnd - timelineStart);
-  const timelineHeight = Math.max(540, Math.min(680, Math.ceil(timelineSpan * 0.96)));
-  const hours = Array.from({ length: Math.floor(timelineSpan / 60) + 1 }, (_, index) => timelineStart + index * 60).filter((minutes) => minutes <= timelineEnd);
+  const timelineHeight = Math.max(620, Math.min(920, Math.ceil(timelineSpan * 1.05)));
+  const hours = useMemo(() => {
+    const labels = Array.from({ length: Math.floor(timelineSpan / 60) + 1 }, (_, index) => timelineStart + index * 60).filter((minutes) => minutes <= timelineEnd);
+    if (labels[labels.length - 1] !== timelineEnd) labels.push(timelineEnd);
+    return labels;
+  }, [timelineEnd, timelineSpan, timelineStart]);
   const topFor = (minutes: number) => `${((minutes - timelineStart) / timelineSpan) * 100}%`;
+  const labelTopFor = (minutes: number) => `clamp(10px, ${topFor(minutes)}, calc(100% - 10px))`;
   const heightFor = (start: number, end: number, min = 38) => Math.max(min, ((end - start) / timelineSpan) * timelineHeight);
+  const calendarGridColumns = 'clamp(66px, 5.5vw, 88px) repeat(7, minmax(0, 1fr))';
   return (
     <div className={['flex min-h-0 flex-col rounded-3xl border border-white/10 bg-black/18 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]', className].filter(Boolean).join(' ')}>
       <div className="mb-2 flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -844,7 +866,7 @@ function WeeklyCalendar({
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => onWeekStartChange(addDays(weekStart, -7))} className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/55 hover:text-white">Vorherige</button>
           <button type="button" onClick={() => onWeekStartChange(startOfWeek(new Date()))} className="rounded-xl border border-orange-400/20 bg-orange-500/10 px-3 py-2 text-xs font-semibold text-orange-100/75 hover:text-orange-50">Diese Woche</button>
-          <button type="button" onClick={() => onWeekStartChange(addDays(weekStart, 7))} className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/55 hover:text-white">Naechste</button>
+          <button type="button" onClick={() => onWeekStartChange(addDays(weekStart, 7))} className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/55 hover:text-white">Nächste</button>
         </div>
       </div>
 
@@ -861,7 +883,7 @@ function WeeklyCalendar({
         }}
       >
         <div className="w-full min-w-0">
-          <div className="grid border-b border-white/8" style={{ gridTemplateColumns: 'clamp(44px, 5vw, 72px) repeat(7, minmax(0, 1fr))' }}>
+          <div className="grid border-b border-white/8" style={{ gridTemplateColumns: calendarGridColumns }}>
             <div className="border-r border-white/8 bg-black/16" />
             {weekDays.map((day, index) => {
               const key = isoDate(day);
@@ -894,12 +916,15 @@ function WeeklyCalendar({
             })}
           </div>
 
-          <div className="grid" style={{ gridTemplateColumns: 'clamp(44px, 5vw, 72px) repeat(7, minmax(0, 1fr))' }}>
-            <div className="relative border-r border-white/8 bg-black/20" style={{ height: timelineHeight }}>
+          <div className="grid" style={{ gridTemplateColumns: calendarGridColumns }}>
+            <div data-testid="calendar-time-column" className="relative border-r border-white/8 bg-black/20" style={{ height: timelineHeight }}>
               {hours.map((minutes) => (
-                <div key={minutes} className="absolute left-0 right-0 border-t border-white/[0.055]" style={{ top: topFor(minutes) }}>
-                  <span className="absolute right-2 -translate-y-1/2 font-mono text-[10px] text-white/32">{minutesLabel(minutes)}</span>
-                </div>
+                <div key={`${minutes}:line`} className="absolute left-0 right-0 border-t border-white/[0.055]" style={{ top: topFor(minutes) }} />
+              ))}
+              {hours.map((minutes) => (
+                <span key={`${minutes}:label`} data-testid="calendar-time-label" className="absolute right-2 -translate-y-1/2 whitespace-nowrap rounded-sm bg-black/40 px-0.5 font-mono text-[11px] leading-none tabular-nums text-white/50" style={{ top: labelTopFor(minutes) }}>
+                  {minutesLabel(minutes)}
+                </span>
               ))}
             </div>
 
@@ -1665,7 +1690,13 @@ function StaffPanel({
   onNavigate?: (page: 'customers', focusId?: string | null) => void;
 } = {}) {
   const [staff, setStaff] = useState<CalendarStaff[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    try {
+      return window.localStorage.getItem(STAFF_CALENDAR_SELECTION_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [staffSchedule, setStaffSchedule] = useState<ChipySchedule>(DEFAULT_SCHEDULE);
@@ -1680,7 +1711,8 @@ function StaffPanel({
   const [calcomKey, setCalcomKey] = useState('');
   const [connectionLoading, setConnectionLoading] = useState<string | null>(null);
 
-  const selected = staff.find(s => s.id === selectedId) ?? null;
+  const selectedIdIsLoaded = Boolean(selectedId && staff.some(s => s.id === selectedId));
+  const selected = selectedIdIsLoaded ? staff.find(s => s.id === selectedId) ?? null : null;
   const selectedServiceOptions = useMemo(() => serviceLabelsToOptions(selected?.services), [selected?.services]);
 
   const loadStaff = useCallback(async () => {
@@ -1689,7 +1721,10 @@ function StaffPanel({
       const res = await getCalendarStaff();
       setStaff(res.staff);
       onStaffChange?.(res.staff.length);
-      setSelectedId(current => current ?? res.staff[0]?.id ?? null);
+      setSelectedId(current => {
+        if (current && res.staff.some(member => member.id === current)) return current;
+        return res.staff[0]?.id ?? null;
+      });
     } catch (e: unknown) {
       setError((e instanceof Error ? e.message : null) ?? 'Mitarbeiter konnten nicht geladen werden');
     } finally {
@@ -1719,7 +1754,18 @@ function StaffPanel({
   }, []);
 
   useEffect(() => { loadStaff(); }, [loadStaff]);
-  useEffect(() => { if (selectedId) void loadSelectedCalendar(selectedId); }, [selectedId, loadSelectedCalendar]);
+  useEffect(() => {
+    try {
+      if (selectedId && selectedIdIsLoaded) {
+        window.localStorage.setItem(STAFF_CALENDAR_SELECTION_STORAGE_KEY, selectedId);
+      } else {
+        window.localStorage.removeItem(STAFF_CALENDAR_SELECTION_STORAGE_KEY);
+      }
+    } catch {
+      // Persisting the open staff calendar is a UX nicety, not required for booking.
+    }
+  }, [selectedId, selectedIdIsLoaded]);
+  useEffect(() => { if (selectedId && selectedIdIsLoaded) void loadSelectedCalendar(selectedId); }, [selectedId, selectedIdIsLoaded, loadSelectedCalendar]);
   useEffect(() => {
     setSelectedStaffDay(null);
     setShowStaffAddBooking(false);
@@ -1896,7 +1942,7 @@ function StaffPanel({
         </div>
 
         {staff.length > 0 ? (
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="flex flex-wrap gap-2 pb-1">
             {staff.map(member => (
               <button key={member.id} onClick={() => { setSelectedId(member.id); }}
                 className={`shrink-0 rounded-xl px-4 py-2 text-sm border transition-all ${selectedId === member.id ? 'text-white border-orange-500/40 bg-orange-500/10' : 'text-white/45 border-white/8 bg-white/[0.02]'}`}>
@@ -1941,8 +1987,8 @@ function StaffPanel({
             <div className="mb-3 flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-white/35">
                 {staffCalendarView === 'week'
-                  ? 'Exakte Wochenplanung mit Terminlaenge, Puffer und externen Belegungen.'
-                  : 'Monatsueberblick. Ein Tag springt direkt in die passende Woche.'}
+                  ? 'Exakte Wochenplanung mit Terminlänge, Puffer und externen Belegungen.'
+                  : 'Monatsüberblick. Ein Tag springt direkt in die passende Woche.'}
               </p>
               <CalendarViewSwitch value={staffCalendarView} onChange={setStaffCalendarView} />
             </div>
@@ -2116,6 +2162,11 @@ export function CalendarPage({
       .then((res) => setStaffCount(res.staff.length))
       .catch(() => setStaffCount(0));
   }, []);
+  const staffModeActive = staffCount > 0;
+  useEffect(() => {
+    if (!staffModeActive) return;
+    setTab(current => (current === 'calendar' ? 'staff' : current));
+  }, [staffModeActive]);
 
   async function handleDeleteBooking(id: string) {
     try {
@@ -2171,11 +2222,15 @@ export function CalendarPage({
 
   const providerMeta = PROVIDER_META[calendarStatus?.provider ?? ''] ?? DEFAULT_PROVIDER_META;
 
-  const TABS: { id: Tab; label: string }[] = [
-    { id: 'calendar', label: 'Betriebskalender' },
-    { id: 'staff', label: 'Mitarbeiterkalender' },
-  ];
-  const staffModeActive = staffCount > 0;
+  const TABS: { id: Tab; label: string }[] = staffModeActive
+    ? [
+      { id: 'staff', label: 'Aktiver Kalender' },
+      { id: 'calendar', label: 'Betriebskalender' },
+    ]
+    : [
+      { id: 'calendar', label: 'Betriebskalender' },
+      { id: 'staff', label: 'Mitarbeiterkalender' },
+    ];
 
   return (
     <div className="min-h-full bg-[#0A0A0F] text-white px-4 py-4 sm:px-6 sm:py-5">
@@ -2195,8 +2250,10 @@ export function CalendarPage({
             <p className="text-sm text-white/40 mt-1">
               {calendarStatus?.provider && calendarStatus.provider !== 'chipy'
                   ? `Verbunden mit ${providerMeta.label}`
-                : calendarStatus?.connected
-                  ? 'Ohne Mitarbeiter gilt der Betriebskalender allgemein, mit Mitarbeitern bucht Chipy gezielt pro Person'
+                : staffModeActive
+                  ? 'Aktiver Bot-Kalender: Mitarbeiterkalender. Der Betriebskalender bleibt als Referenz erreichbar.'
+                  : calendarStatus?.connected
+                    ? 'Ohne Mitarbeiter gilt der Betriebskalender allgemein, mit Mitarbeitern bucht Chipy gezielt pro Person'
                   : 'Richte den Betriebskalender ein oder lege Mitarbeiter mit eigenen Kalendern an'}
             </p>
           </div>
@@ -2296,8 +2353,8 @@ export function CalendarPage({
               <div className="mb-3 flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-white/35">
                   {calendarView === 'week'
-                    ? 'Google-aehnliche Wochenansicht mit echten Terminlaengen und Pufferzeiten.'
-                    : 'Monatsueberblick. Ein Tag oeffnet direkt die passende Woche.'}
+                    ? 'Google-ähnliche Wochenansicht mit echten Terminlängen und Pufferzeiten.'
+                    : 'Monatsüberblick. Ein Tag öffnet direkt die passende Woche.'}
                 </p>
                 <CalendarViewSwitch value={calendarView} onChange={setCalendarView} />
               </div>
