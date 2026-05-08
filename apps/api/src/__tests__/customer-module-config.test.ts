@@ -32,11 +32,20 @@ describe('customer module question config', () => {
     const config = normalizeCustomerModuleConfig({
       enabled: true,
       questions: [
-        { id: 'hairHistory', label: 'Vorbehandlung', enabled: true, builtin: true },
+        {
+          id: 'hairHistory',
+          label: 'Vorbehandlung',
+          prompt: 'Bei Farbe oder Chemie: fruehere Farbe, Blondierung, Glaettung, Dauerwelle oder andere chemische Behandlung',
+          condition: 'bei Farbe/Chemie',
+          enabled: true,
+          builtin: true,
+        },
       ],
     });
 
-    expect(config.questions?.find((q) => q.id === 'hairHistory')?.condition).toBe('nur bei Farbe/Chemie');
+    const hairHistory = config.questions?.find((q) => q.id === 'hairHistory');
+    expect(hairHistory?.condition).toBe('nur bei Farbe/Chemie');
+    expect(hairHistory?.prompt).toBe('Fruehere Farbe, Blondierung, Glaettung, Dauerwelle oder andere chemische Behandlung');
   });
 
   it('injects saved question hints and conditions into the agent prompt', () => {

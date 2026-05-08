@@ -31,11 +31,25 @@ export const DEFAULT_CUSTOMER_QUESTIONS: CustomerQuestionConfig[] = [
   { id: 'preferredTime', label: 'Terminwunsch', prompt: 'Wunschtermin oder bevorzugtes Zeitfenster', enabled: true, builtin: true, detailsKey: 'preferredTime' },
   { id: 'preferredStylist', label: 'Wunschfriseur', prompt: 'Ob ein bestimmter Friseur gewuenscht ist oder jeder freie Mitarbeiter passt', enabled: true, builtin: true, detailsKey: 'preferredStylist' },
   { id: 'hairLength', label: 'Haarlaenge grob', prompt: 'Grobe Haarlaenge, z.B. kurz, schulterlang oder lang', enabled: true, builtin: true, detailsKey: 'hairLength' },
-  { id: 'hairHistory', label: 'Vorbehandlung', prompt: 'Bei Farbe oder Chemie: fruehere Farbe, Blondierung, Glaettung, Dauerwelle oder andere chemische Behandlung', enabled: true, builtin: true, detailsKey: 'hairHistory', condition: 'nur bei Farbe/Chemie' },
-  { id: 'allergies', label: 'Allergien / Kopfhaut', prompt: 'Bei Farbe oder Chemie: Allergien, Unvertraeglichkeiten oder empfindliche Kopfhaut', enabled: true, builtin: true, detailsKey: 'allergies', condition: 'nur bei Farbe/Chemie' },
+  { id: 'hairHistory', label: 'Vorbehandlung', prompt: 'Fruehere Farbe, Blondierung, Glaettung, Dauerwelle oder andere chemische Behandlung', enabled: true, builtin: true, detailsKey: 'hairHistory', condition: 'nur bei Farbe/Chemie' },
+  { id: 'allergies', label: 'Allergien / Kopfhaut', prompt: 'Allergien, Unvertraeglichkeiten oder empfindliche Kopfhaut', enabled: true, builtin: true, detailsKey: 'allergies', condition: 'nur bei Farbe/Chemie' },
 ];
 
 const BUILTIN_CUSTOMER_QUESTION_IDS = new Set(DEFAULT_CUSTOMER_QUESTIONS.map((q) => q.id));
+const LEGACY_BUILTIN_PROMPTS: Record<string, string[]> = {
+  hairHistory: [
+    'Nur bei Farbe/Chemie: Farbe, Blondierung, Glaettung, Dauerwelle usw.',
+    'Bei Farbe oder Chemie: fruehere Farbe, Blondierung, Glaettung, Dauerwelle oder andere chemische Behandlung',
+  ],
+  allergies: [
+    'Nur bei Farbe/Chemie: Allergien, Unvertraeglichkeiten oder empfindliche Kopfhaut',
+    'Bei Farbe oder Chemie: Allergien, Unvertraeglichkeiten oder empfindliche Kopfhaut',
+  ],
+};
+const LEGACY_BUILTIN_CONDITIONS: Record<string, string[]> = {
+  hairHistory: ['bei Farbe/Chemie', 'wenn nur bei Farbe/Chemie'],
+  allergies: ['bei Farbe/Chemie', 'wenn nur bei Farbe/Chemie'],
+};
 
 type AgentConfigLike = {
   industry?: string;
@@ -70,6 +84,24 @@ function cleanQuestionText(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, 180) : fallback;
 }
 
+function comparableQuestionText(value: string): string {
+  return value.trim().toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+}
+
+function normalizeBuiltinPrompt(question: CustomerQuestionConfig, value: unknown): string | undefined {
+  const cleaned = cleanQuestionText(value);
+  if (!cleaned) return question.prompt;
+  const legacy = LEGACY_BUILTIN_PROMPTS[question.id]?.map(comparableQuestionText) ?? [];
+  return legacy.includes(comparableQuestionText(cleaned)) ? question.prompt : cleaned;
+}
+
+function normalizeBuiltinCondition(question: CustomerQuestionConfig, value: unknown): string | undefined {
+  const cleaned = cleanQuestionText(value);
+  if (!cleaned) return question.condition;
+  const legacy = LEGACY_BUILTIN_CONDITIONS[question.id]?.map(comparableQuestionText) ?? [];
+  return legacy.includes(comparableQuestionText(cleaned)) ? question.condition : cleaned;
+}
+
 function normalizeQuestionId(value: unknown, fallback: string): string {
   const raw = cleanQuestionText(value, fallback)
     .toLowerCase()
@@ -87,12 +119,8 @@ export function normalizeCustomerModuleConfig(module: CustomerModuleConfig | nul
   const questions: CustomerQuestionConfig[] = DEFAULT_CUSTOMER_QUESTIONS.map((question) => {
     const override = incomingById.get(question.id);
     const required = question.required === true;
-    const prompt = typeof override?.prompt === 'string'
-      ? cleanQuestionText(override.prompt) || question.prompt
-      : question.prompt;
-    const condition = typeof override?.condition === 'string'
-      ? cleanQuestionText(override.condition)
-      : question.condition;
+    const prompt = normalizeBuiltinPrompt(question, override?.prompt);
+    const condition = normalizeBuiltinCondition(question, override?.condition);
     return {
       ...question,
       prompt,
