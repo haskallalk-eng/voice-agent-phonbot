@@ -16,7 +16,7 @@ import {
   IconStar, IconCalendar, IconPhone, IconCapabilities,
   IconScissors, IconWrench, IconBroom, IconSettings,
   IconTickets, IconAgent, IconDeploy, IconPhoneForward,
-  IconRestaurant,
+  IconRestaurant, IconMicrosoftWindow,
 } from '../PhonbotIcons.js';
 import { IconCar } from '../PhonbotIcons.js';
 import { OpeningHoursEditor } from '../agent-builder/OpeningHoursEditor.js';
@@ -888,7 +888,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                 style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}
                 onClick={() => { void handleMicrosoftCalendar(); }}>
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(0,120,212,0.08)' }}>
-                  <span className="text-sm font-bold text-[#00BCF2]">M</span>
+                  <IconMicrosoftWindow size={19} className="text-[#00BCF2]" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white">Microsoft Outlook</p>
