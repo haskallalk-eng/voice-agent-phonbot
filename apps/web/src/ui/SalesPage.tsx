@@ -18,6 +18,7 @@ import {
   salesLogin,
   salesMarkCalled,
   salesSendTestLink,
+  salesUpdateLead,
   type SalesHotLead,
   type SalesLead,
   type SalesRep,
@@ -145,12 +146,19 @@ function PasswordSetup({ onDone }: { onDone: () => void }) {
 }
 
 function LeadDetail({ lead, onClose, onChanged }: { lead: SalesLead; onClose: () => void; onChanged: () => void }) {
+  const [localLead, setLocalLead] = useState(lead);
   const [basis, setBasis] = useState<'explicit_request' | 'existing_business_relation' | 'manual_one_to_one_context'>('explicit_request');
+  const [emailDraft, setEmailDraft] = useState(lead.email ?? '');
   const [appointmentType, setAppointmentType] = useState<SalesHotLead['appointment_type']>('phone');
   const [slotTime, setSlotTime] = useState('');
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLocalLead(lead);
+    setEmailDraft(lead.email ?? '');
+  }, [lead]);
 
   async function run(label: string, fn: () => Promise<unknown>) {
     setBusy(label);
@@ -165,14 +173,28 @@ function LeadDetail({ lead, onClose, onChanged }: { lead: SalesLead; onClose: ()
     }
   }
 
+  async function saveEmail() {
+    setBusy('email');
+    setError(null);
+    try {
+      const saved = await salesUpdateLead(localLead.id, { email: emailDraft });
+      setLocalLead(saved.lead);
+      setEmailDraft(saved.lead.email ?? '');
+    } catch (err) {
+      setError(parseError(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xl" onClick={onClose}>
       <div className={glassClass('max-h-[90vh] w-full max-w-3xl overflow-y-auto p-6')} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200/60">Cold Lead</p>
-            <h2 className="mt-1 text-2xl font-black text-white">{lead.company_name}</h2>
-            <p className="mt-1 text-sm text-white/45">{lead.address ?? lead.city ?? 'Adresse fehlt'}</p>
+            <h2 className="mt-1 text-2xl font-black text-white">{localLead.company_name}</h2>
+            <p className="mt-1 text-sm text-white/45">{localLead.address ?? localLead.city ?? 'Adresse fehlt'}</p>
           </div>
           <button onClick={onClose} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/50 hover:text-white">Schließen</button>
         </div>
@@ -180,25 +202,25 @@ function LeadDetail({ lead, onClose, onChanged }: { lead: SalesLead; onClose: ()
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
             <p className="text-xs text-white/35">Telefon</p>
-            <p className="mt-1 text-sm font-semibold text-white">{lead.phone ?? 'fehlt'}</p>
+            <p className="mt-1 text-sm font-semibold text-white">{localLead.phone}</p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
             <p className="text-xs text-white/35">E-Mail</p>
-            <p className="mt-1 truncate text-sm font-semibold text-white">{lead.email ?? 'fehlt'}</p>
+            <p className="mt-1 truncate text-sm font-semibold text-white">{localLead.email ?? 'noch offen'}</p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
             <p className="text-xs text-white/35">Ansprechpartner</p>
-            <p className="mt-1 text-sm font-semibold text-white">{lead.contact_name ?? 'nicht gefunden'}</p>
+            <p className="mt-1 text-sm font-semibold text-white">{localLead.contact_name ?? 'nicht gefunden'}</p>
           </div>
         </div>
 
         <div className="mt-5 rounded-2xl border border-orange-500/20 bg-orange-500/[0.07] p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <p className="text-sm font-bold text-white">Bedarfsanalyse</p>
-            <ScorePill score={lead.need_score} />
+            <ScorePill score={localLead.need_score} />
           </div>
           <ul className="space-y-2 text-sm text-white/65">
-            {(lead.need_reasons ?? []).map((r, i) => <li key={`${r}-${i}`}>• {r}</li>)}
+            {(localLead.need_reasons ?? []).map((r, i) => <li key={`${r}-${i}`}>- {r}</li>)}
           </ul>
         </div>
 
@@ -206,12 +228,22 @@ function LeadDetail({ lead, onClose, onChanged }: { lead: SalesLead; onClose: ()
           <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <p className="text-sm font-bold text-white">Testlink schicken</p>
             <p className="mt-1 text-xs leading-relaxed text-white/45">Nur nutzen, wenn der Kontaktgrund geprüft ist. Kein freier Massenversand.</p>
+            <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 p-3">
+              <label className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35">E-Mail fuer Testlink</label>
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                <input type="email" value={emailDraft} onChange={(e) => setEmailDraft(e.target.value)} placeholder="name@salon.de" className="min-h-11 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-orange-500/50 focus:ring-1 focus:ring-orange-500/50" />
+                <button disabled={busy === 'email' || !emailDraft.trim()} onClick={() => void saveEmail()} className="min-h-11 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white/70 transition-colors hover:border-orange-500/30 hover:text-white disabled:opacity-40">
+                  Speichern
+                </button>
+              </div>
+              {!localLead.email && <p className="mt-2 rounded-xl border border-cyan-400/15 bg-cyan-400/10 px-3 py-2 text-xs text-cyan-100/75">E-Mail fehlt noch. Trag sie einmal ein, dann ist der Testlink-Button aktiv.</p>}
+            </div>
             <select value={basis} onChange={(e) => setBasis(e.target.value as typeof basis)} className="mt-3 w-full rounded-xl border border-white/10 bg-[#101018] px-3 py-2 text-sm text-white">
               <option value="explicit_request">Kunde hat Link angefragt</option>
               <option value="existing_business_relation">Bestehender Geschäftskontakt</option>
               <option value="manual_one_to_one_context">Manuell geprüfter 1:1 Kontext</option>
             </select>
-            <button disabled={!lead.email || busy === 'mail'} onClick={() => run('mail', () => salesSendTestLink(lead.id, basis))} className="mt-3 rounded-xl px-4 py-2 text-sm font-bold text-white disabled:opacity-40" style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)' }}>
+            <button disabled={!localLead.email || busy === 'mail'} onClick={() => run('mail', () => salesSendTestLink(localLead.id, basis))} className="mt-3 rounded-xl px-4 py-2 text-sm font-bold text-white disabled:opacity-40" style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)' }}>
               Testlink schicken
             </button>
           </section>
@@ -227,7 +259,7 @@ function LeadDetail({ lead, onClose, onChanged }: { lead: SalesLead; onClose: ()
               <input type="datetime-local" value={slotTime} onChange={(e) => setSlotTime(e.target.value)} className="rounded-xl border border-white/10 bg-[#101018] px-3 py-2 text-sm text-white" />
             </div>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Wichtige Gesprächsnotizen" className="mt-2 min-h-20 w-full rounded-xl border border-white/10 bg-[#101018] px-3 py-2 text-sm text-white placeholder:text-white/25" />
-            <button disabled={!slotTime || busy === 'book'} onClick={() => run('book', () => salesBookLead(lead.id, { appointmentType, slotTime, durationMinutes: 45, notes }))} className="rounded-xl px-4 py-2 text-sm font-bold text-white disabled:opacity-40" style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)' }}>
+            <button disabled={!slotTime || busy === 'book'} onClick={() => run('book', () => salesBookLead(localLead.id, { appointmentType, slotTime, durationMinutes: 45, notes }))} className="rounded-xl px-4 py-2 text-sm font-bold text-white disabled:opacity-40" style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)' }}>
               In Hot Leads schieben
             </button>
           </section>
@@ -236,7 +268,7 @@ function LeadDetail({ lead, onClose, onChanged }: { lead: SalesLead; onClose: ()
         {error && <p className="mt-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p>}
         <div className="mt-5 flex justify-end">
           <button onClick={() => {
-            if (window.confirm('Lead wirklich dauerhaft sperren und löschen?')) void run('delete', () => salesDeleteLead(lead.id).then(onClose));
+            if (window.confirm('Lead wirklich dauerhaft sperren und löschen?')) void run('delete', () => salesDeleteLead(localLead.id).then(onClose));
           }} className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-200">
             Dauerhaft löschen
           </button>
@@ -416,11 +448,11 @@ export function SalesPage() {
                             <h3 className="truncate text-base font-bold">{lead.company_name}</h3>
                             <ScorePill score={lead.need_score} />
                           </div>
-                          <p className="mt-1 text-sm text-white/45">{lead.address ?? lead.city ?? 'Adresse fehlt'} · {lead.phone ?? 'Telefon fehlt'} · {lead.email ?? 'E-Mail fehlt'}</p>
+                          <p className="mt-1 text-sm text-white/45">{lead.address ?? lead.city ?? 'Adresse fehlt'} · {lead.phone} · {lead.email ?? 'E-Mail nachtragen'}</p>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           <button onClick={(e) => { e.stopPropagation(); void salesMarkCalled(lead.id).then(() => { setLeads(prev => prev.filter(l => l.id !== lead.id)); refreshDashboard(); }); }} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/60 hover:text-white">Angerufen</button>
-                          <button disabled={!lead.email} onClick={(e) => { e.stopPropagation(); setSelectedLead(lead); }} className="rounded-xl border border-orange-400/25 bg-orange-500/10 px-3 py-2 text-xs font-semibold text-orange-100 disabled:opacity-35">Testlink</button>
+                          <button onClick={(e) => { e.stopPropagation(); setSelectedLead(lead); }} className="rounded-xl border border-orange-400/25 bg-orange-500/10 px-3 py-2 text-xs font-semibold text-orange-100">{lead.email ? 'Testlink' : 'E-Mail nachtragen'}</button>
                         </div>
                       </div>
                     </button>
