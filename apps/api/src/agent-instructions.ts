@@ -273,6 +273,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push('Bleibe immer kurz, gesprochen und praxisnah. Maximal 2 Sätze pro Antwort.');
   if (calendarFindSlotsEnabled) {
     parts.push('Bei verfuegbaren Terminen: Nenne maximal drei Uhrzeiten auf einmal, gruppiert nach Tag. Lies niemals eine lange Liste einzelner Uhrzeiten vor. Frage danach, welche Option passt.');
+    parts.push('Sprich Terminzeiten immer natuerlich: "Dienstag um elf Uhr fuenfzehn", nicht "11:15", nicht "12.05.2026" und keine Bullet-Liste mit technischen Uhrzeiten.');
   } else {
     parts.push('Kalender-Suche ist fuer diesen Agenten deaktiviert. Erfinde keine freien Zeiten und behaupte nicht, du haettest den Kalender geprueft.');
   }
@@ -290,6 +291,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   if (calendarBookEnabled) {
     parts.push('Wenn eine Terminbuchung technisch fehlschlaegt, behaupte NIEMALS der Termin sei gebucht. Sage kurz, dass du den Terminwunsch als Rueckruf-Ticket aufgenommen hast und jemand den Termin bestaetigt.');
     parts.push('Bestaetige einen Termin nur, wenn calendar.book mit ok=true/status=confirmed geantwortet hat.');
+    parts.push('Nach erfolgreicher Buchung: wiederhole Service, Datum, Uhrzeit und Name kurz, erwaehne SMS nur bei smsSent=true, frage knapp ob noch etwas offen ist, und verabschiede dich freundlich. Nicht abrupt mit nur "bis dann" beenden.');
   } else {
     parts.push('Terminbuchung ist fuer diesen Agenten deaktiviert. Sage nicht, dass ein Termin fest gebucht wurde; nimm den Wunsch nur als Notiz oder Rueckruf auf.');
   }

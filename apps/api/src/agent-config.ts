@@ -36,7 +36,7 @@ import {
   maskApiIntegrationsForClient,
   type ApiIntegration,
 } from './api-integrations.js';
-import { syncOpeningHoursToChipy } from './opening-hours-sync.js';
+import { chipyScheduleToOpeningHours, syncOpeningHoursToChipy } from './opening-hours-sync.js';
 import { PLANS, type PlanId } from './billing.js';
 import { invalidateInboundWebhooksCache } from './inbound-webhooks.js';
 import { isVoiceAllowedForOrg } from './voice-ownership.js';
@@ -257,6 +257,9 @@ type AgentConfig = z.infer<typeof AgentConfigSchema>;
 
 const KNOWLEDGE_PDF_MAX_BYTES = 50 * 1024 * 1024;
 
+type PromptDaySchedule = { enabled: boolean; start: string; end: string };
+type PromptWeekSchedule = Record<string, PromptDaySchedule>;
+
 function parseAgentConfig(input: unknown): AgentConfig {
   const parsed = AgentConfigSchema.parse(input);
   parsed.fallback.reason = normalizeFallbackReasonValue(parsed.fallback.reason);
@@ -268,6 +271,69 @@ function parseAgentConfig(input: unknown): AgentConfig {
     return reason;
   });
   return parsed;
+}
+
+function isPromptWeekSchedule(value: unknown): value is PromptWeekSchedule {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const schedule = value as Record<string, unknown>;
+  return ['0', '1', '2', '3', '4', '5', '6'].every((key) => {
+    const day = schedule[key] as Partial<PromptDaySchedule> | undefined;
+    return Boolean(
+      day &&
+      typeof day === 'object' &&
+      typeof day.enabled === 'boolean' &&
+      typeof day.start === 'string' &&
+      typeof day.end === 'string',
+    );
+  });
+}
+
+function mergeWeekSchedules(schedules: PromptWeekSchedule[]): PromptWeekSchedule | null {
+  if (schedules.length === 0) return null;
+  const merged: PromptWeekSchedule = {};
+  for (const key of ['0', '1', '2', '3', '4', '5', '6']) {
+    const enabledDays = schedules
+      .map((schedule) => schedule[key])
+      .filter((day): day is PromptDaySchedule => Boolean(day?.enabled));
+    if (enabledDays.length === 0) {
+      merged[key] = { enabled: false, start: '09:00', end: '17:00' };
+      continue;
+    }
+    const starts = enabledDays.map((day) => day.start).sort();
+    const ends = enabledDays.map((day) => day.end).sort();
+    merged[key] = { enabled: true, start: starts[0]!, end: ends[ends.length - 1]! };
+  }
+  return merged;
+}
+
+async function withCalendarOpeningHoursForPrompt(config: AgentConfig, orgId?: string): Promise<AgentConfig> {
+  if (config.openingHours?.trim() || !orgId || !pool) return config;
+  try {
+    const business = await pool.query<{ schedule: unknown }>(
+      'SELECT schedule FROM chipy_schedules WHERE org_id = $1 LIMIT 1',
+      [orgId],
+    );
+    if (isPromptWeekSchedule(business.rows[0]?.schedule)) {
+      return { ...config, openingHours: chipyScheduleToOpeningHours(business.rows[0]!.schedule) };
+    }
+
+    const staff = await pool.query<{ schedule: unknown }>(
+      `SELECT sc.schedule
+         FROM staff_chipy_schedules sc
+         JOIN calendar_staff s ON s.org_id = sc.org_id AND s.id = sc.staff_id
+        WHERE sc.org_id = $1
+          AND COALESCE(s.active, true) = true`,
+      [orgId],
+    );
+    const schedules = staff.rows
+      .map((row) => row.schedule)
+      .filter(isPromptWeekSchedule);
+    const merged = mergeWeekSchedules(schedules);
+    return merged ? { ...config, openingHours: chipyScheduleToOpeningHours(merged) } : config;
+  } catch (err) {
+    log.warn({ err: err instanceof Error ? err.message : String(err), orgId }, 'agent prompt openingHours calendar fallback failed');
+    return config;
+  }
 }
 
 const CALLBACK_LANGUAGE_LABELS: Record<string, string> = {
@@ -697,7 +763,7 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
     tools.push({
       type: 'custom',
       name: 'calendar_find_slots',
-      description: 'Find available appointment slots. Present at most three options to the caller, grouped by day.',
+      description: 'Find available appointment slots. Present at most three options to the caller in natural spoken German. Use spokenOptionsText from the tool result when present; never read technical times like 11:00 aloud.',
       url: `${webhookBaseUrl}/retell/tools/calendar.findSlots?${signedQuery}`,
       execution_message_description: 'Searching for available slots…',
       parameters: {
@@ -999,7 +1065,8 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
   // when no admin override exists. Customer's own systemPrompt + roles + custom
   // additions then layer on top.
   const platformBaseline = await loadPlatformBaseline();
-  const customerPrompt = buildAgentInstructions(preparedConfig);
+  const promptConfig = await withCalendarOpeningHoursForPrompt(preparedConfig, orgId);
+  const customerPrompt = buildAgentInstructions(promptConfig);
   const instructions = `${platformBaseline}\n\n${customerPrompt}`;
   const retellTools = buildRetellTools(preparedConfig, webhookBase);
   const postCallAnalysisData = buildPostCallAnalysisData(preparedConfig);
@@ -1516,8 +1583,9 @@ export async function registerAgentConfig(app: FastifyInstance) {
     const query = req.query as { tenantId?: unknown };
     const requestedTenantId = typeof query.tenantId === 'string' ? query.tenantId.trim() : '';
     const config = await readConfig(requestedTenantId || orgId, orgId);
+    const promptConfig = await withCalendarOpeningHoursForPrompt(config, orgId);
     return {
-      instructions: buildAgentInstructions(config),
+      instructions: buildAgentInstructions(promptConfig),
       tools: config.tools,
       fallback: config.fallback,
     };
