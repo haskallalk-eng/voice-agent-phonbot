@@ -1639,6 +1639,85 @@ async function getChipySchedule(orgId: string, staffId?: string | null): Promise
   return { schedule, blocks, timeBlocks };
 }
 
+type ChipyScheduleBundle = { schedule: ChipySchedule; blocks: string[]; timeBlocks: ChipyBlock[] };
+
+function defaultChipyScheduleBundle(): ChipyScheduleBundle {
+  return { schedule: DEFAULT_CHIPPY_SCHEDULE, blocks: [], timeBlocks: [] };
+}
+
+async function getStaffIdsWithCalendarConnections(orgId: string, staffIds: string[]): Promise<Set<string>> {
+  if (!pool || staffIds.length === 0) return new Set();
+  const res = await pool.query<{ staff_id: string }>(
+    `SELECT DISTINCT staff_id::text AS staff_id
+       FROM calendar_connections
+      WHERE org_id = $1
+        AND staff_id = ANY($2::uuid[])`,
+    [orgId, staffIds],
+  );
+  return new Set(res.rows.map((row) => row.staff_id));
+}
+
+async function getChipySchedulesForStaff(orgId: string, staffIds: string[]): Promise<Map<string, ChipyScheduleBundle>> {
+  const out = new Map<string, ChipyScheduleBundle>();
+  for (const staffId of staffIds) out.set(staffId, defaultChipyScheduleBundle());
+  if (!pool || staffIds.length === 0) return out;
+
+  const [schedRes, blockRes, bookingRes] = await Promise.all([
+    pool.query<{ staff_id: string; schedule: ChipySchedule }>(
+      `SELECT staff_id::text AS staff_id, schedule
+         FROM staff_chipy_schedules
+        WHERE org_id = $1
+          AND staff_id = ANY($2::uuid[])`,
+      [orgId, staffIds],
+    ),
+    pool.query<{ staff_id: string; date: string; start_time: string | null; end_time: string | null }>(
+      `SELECT staff_id::text AS staff_id, date::text, start_time::text, end_time::text
+         FROM staff_chipy_blocks
+        WHERE org_id = $1
+          AND staff_id = ANY($2::uuid[])
+          AND date >= CURRENT_DATE
+        ORDER BY date`,
+      [orgId, staffIds],
+    ),
+    pool.query<{ staff_id: string; date: string; start_time: string; end_time: string }>(
+      `SELECT
+         staff_id::text AS staff_id,
+         (slot_time AT TIME ZONE 'Europe/Berlin')::date::text AS date,
+         (slot_time AT TIME ZONE 'Europe/Berlin')::time::text AS start_time,
+         ((slot_time AT TIME ZONE 'Europe/Berlin') + ((duration_minutes + buffer_minutes) * interval '1 minute'))::time::text AS end_time
+       FROM staff_chipy_bookings
+       WHERE org_id = $1
+         AND staff_id = ANY($2::uuid[])
+         AND slot_time >= now()
+       ORDER BY slot_time`,
+      [orgId, staffIds],
+    ),
+  ]);
+
+  for (const row of schedRes.rows) {
+    const current = out.get(row.staff_id) ?? defaultChipyScheduleBundle();
+    out.set(row.staff_id, { ...current, schedule: row.schedule ?? DEFAULT_CHIPPY_SCHEDULE });
+  }
+
+  for (const row of blockRes.rows) {
+    const current = out.get(row.staff_id) ?? defaultChipyScheduleBundle();
+    if (!row.start_time) {
+      current.blocks.push(row.date);
+    } else {
+      current.timeBlocks.push({ date: row.date, start_time: row.start_time, end_time: row.end_time });
+    }
+    out.set(row.staff_id, current);
+  }
+
+  for (const row of bookingRes.rows) {
+    const current = out.get(row.staff_id) ?? defaultChipyScheduleBundle();
+    current.timeBlocks.push({ date: row.date, start_time: row.start_time, end_time: row.end_time });
+    out.set(row.staff_id, current);
+  }
+
+  return out;
+}
+
 function clockMinutes(value: string | null | undefined): number | null {
   const match = value?.match(/^(\d{1,2}):(\d{2})/);
   if (!match) return null;
@@ -2434,6 +2513,27 @@ export async function findFreeSlotsForAnyStaff(
     return { slots: [], source: 'team:service-not-offered', staffCount: staff.length };
   }
   const timing = await resolveBookingTiming(orgId, opts.service);
+  const eligibleStaffIds = eligibleStaff.map((member) => member.id);
+  const staffWithConnections = await getStaffIdsWithCalendarConnections(orgId, eligibleStaffIds);
+
+  // Fast path for Chipy-only teams: one batched read instead of N separate
+  // availability checks. External calendars still use the safer per-staff path.
+  if (staffWithConnections.size === 0) {
+    const requestedDate = requestedDateKey(opts);
+    const schedules = await getChipySchedulesForStaff(orgId, eligibleStaffIds);
+    const slots = new Set<string>();
+    for (const member of eligibleStaff) {
+      const bundle = schedules.get(member.id) ?? defaultChipyScheduleBundle();
+      for (const slot of generateChipySlots(bundle.schedule, bundle.blocks, bundle.timeBlocks, requestedDate, timing)) {
+        slots.add(slot);
+      }
+    }
+    return {
+      slots: [...slots].sort(),
+      source: 'team:chipy',
+      staffCount: staff.length,
+    };
+  }
 
   const perStaff = await Promise.all(
     eligibleStaff.map(async (member) => {
