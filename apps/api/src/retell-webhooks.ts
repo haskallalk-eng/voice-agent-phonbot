@@ -282,13 +282,17 @@ function isCallbackSafePhone(phone: string): boolean {
   return allowed.some((prefix) => phone.startsWith(prefix));
 }
 
-function compactRetellSlots(slots: string[]): { slots: string[]; allSlotsCount: number; moreCount: number; instruction: string } {
-  const visible = slots.slice(0, 6);
+function compactRetellSlots(slots: string[]): { slots: string[]; spokenOptionsText: string; allSlotsCount: number; moreCount: number; instruction: string } {
+  const visible = slots.slice(0, 3);
+  const spokenOptionsText = visible.length
+    ? `Sag diese Optionen in einem Satz: ${visible.join(' oder ')}.`
+    : 'Keine freien Zeiten gefunden.';
   return {
     slots: visible,
+    spokenOptionsText,
     allSlotsCount: slots.length,
     moreCount: Math.max(0, slots.length - visible.length),
-    instruction: 'Nenne maximal drei passende Optionen in einem kurzen Satz, nicht jede Uhrzeit einzeln. Sprich Zeiten natuerlich aus, z.B. "Dienstag um 11 Uhr 15", nicht als technische Zahlenkette. Wenn mehr Slots vorhanden sind, sage dass es weitere Zeiten gibt.',
+    instruction: 'Nutze spokenOptionsText als Sprechvorlage. Nenne keine Bullet-Liste und keine technische Schreibweise wie "11:00", "11:15" oder "12.05.2026". Sprich Zeiten natuerlich, z.B. "Dienstag um elf Uhr fuenfzehn". Wenn moreCount > 0, sage nur kurz, dass es noch weitere Zeiten gibt.',
   };
 }
 
