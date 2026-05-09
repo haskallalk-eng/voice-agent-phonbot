@@ -53,10 +53,10 @@ export function KnowledgeTab({ config, onUpdate }: KnowledgeTabProps) {
 
     <SectionCard title="Spezielle Begriffe" icon={IconBookOpen}>
       <p className="text-sm text-white/50 mb-4">
-        Begriffe die Chipy korrekt aussprechen und im Kontext verstehen soll —
-        Produktnamen, Fachausdrücke, Fremdwörter. Optional kannst du erklären,
-        was der Begriff bedeutet und wann/mit wem er typischerweise vorkommt;
-        Chipy nutzt das, um den Begriff im richtigen Moment passend einzusetzen.
+        Begriffe, die Chipy korrekt aussprechen und im Kontext verstehen soll —
+        Produktnamen, Fachausdrücke, Fremdwörter. Gib bei schwierigen Wörtern
+        eine Aussprache als Lautmalerei an; Chipy nutzt sie beim Sprechen und
+        zum besseren Wiedererkennen im Kontext.
       </p>
 
       <VocabularyEditor
@@ -135,6 +135,21 @@ function VocabularyEditor({
           </div>
 
           <div className="px-3 py-2 space-y-2">
+            <div className="rounded-xl border border-cyan-300/[0.10] bg-cyan-300/[0.035] px-3 py-2">
+              <p className="text-[10px] uppercase tracking-wider text-cyan-200/55 mb-1">
+                Aussprache / Lautmalerei
+              </p>
+              <Input
+                value={it.pronunciation ?? ''}
+                onChange={(e) => patch(i, { pronunciation: e.target.value })}
+                placeholder="Sprich es so: Balla-jaa-sch, Ke-ra-tin oder Pi-Eitsch-Wert"
+                className="!border-white/[0.06] !bg-black/15 text-xs"
+                maxLength={220}
+              />
+              <p className="mt-1.5 text-[11px] leading-relaxed text-white/35">
+                Am zuverlässigsten: kurz so ausschreiben, wie Chipy es sagen soll. Diese Hilfe landet direkt im Agent-Prompt.
+              </p>
+            </div>
             <div>
               <p className="text-[10px] uppercase tracking-wider text-white/30 mb-1">
                 Was bedeutet das?

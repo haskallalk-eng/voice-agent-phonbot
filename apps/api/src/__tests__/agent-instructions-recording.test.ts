@@ -93,6 +93,25 @@ describe('buildAgentInstructions: agent-builder toggles', () => {
     expect(out).toContain('confirmed=true');
     expect(out).not.toContain('Ich kann den Termin nicht direkt');
   });
+
+  it('passes vocabulary pronunciation hints into the agent prompt', () => {
+    const out = buildAgentInstructions(baseCfg({
+      customVocabulary: [
+        {
+          term: 'Balayage',
+          pronunciation: 'Balla-jaa-sch',
+          explanation: 'französische Färbetechnik mit fließenden Übergängen',
+          context: 'bei modernen Strähnchen',
+        },
+      ],
+    } as Partial<ConfigArg>));
+
+    expect(out).toContain('Spezielle Begriffe');
+    expect(out).toContain('- Balayage (Aussprache: Balla-jaa-sch)');
+    expect(out).toContain('französische Färbetechnik');
+    expect(out).toContain('Kontext: bei modernen Strähnchen');
+    expect(out).toContain('Wenn eine Aussprache-Hilfe vorhanden ist');
+  });
 });
 
 describe('buildAgentInstructions: handoff transfer fallback', () => {

@@ -382,6 +382,7 @@ export type CallRoutingRule = {
 
 export type VocabularyTerm = {
   term: string;            // "Balayage"
+  pronunciation?: string;  // "Balla-jaa-sch" / IPA / phonetic hint for TTS
   explanation?: string;    // "französische Färbetechnik mit fließenden Übergängen"
   context?: string;        // "Wenn ein Kunde nach modernen Strähnchen fragt — meist Frauen 25+"
 };
@@ -506,9 +507,9 @@ export type AgentConfig = {
   interruptionSensitivity?: number; // 0 – 1
   enableBackchannel?: boolean;
   // Domain-specific terms the AI should pronounce, recognise, and explain
-  // correctly. Each entry can carry a short explanation + a usage context
-  // ("when to use it / for whom"). Older configs may still hold plain
-  // strings — readers fall back to `{term: x}` for those.
+  // correctly. Each entry can carry a pronunciation hint, short explanation,
+  // and usage context ("when to use it / for whom"). Older configs may still
+  // hold plain strings — readers fall back to `{term: x}` for those.
   customVocabulary?: Array<string | VocabularyTerm>;
   enableDtmf?: boolean;
   interruptionMode?: 'allow' | 'hold' | 'block';
