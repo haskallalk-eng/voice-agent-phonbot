@@ -86,15 +86,15 @@ const DEFAULT_FALLBACK_REASONS: DefaultFallbackReason[] = [
     reason: 'Mensch angefordert',
     enabled: true,
     priority: 'high',
-    instruction: 'Wenn der Anrufer klar mit einem Menschen sprechen will: zuerst live weiterleiten. Wenn niemand erreichbar ist oder keine Weiterleitung konfiguriert ist, ein Rueckruf-Ticket mit diesem Grund anlegen.',
+    instruction: 'Wenn der Anrufer klar mit einem Menschen sprechen will: zuerst live weiterleiten. Wenn niemand erreichbar ist oder keine Weiterleitung konfiguriert ist, ein Rückruf-Ticket mit diesem Grund anlegen.',
   },
   {
     id: 'unresolved_question',
-    label: 'Nicht sicher loesbar',
+    label: 'Nicht sicher lösbar',
     reason: 'Antwort nicht sicher',
     enabled: true,
     priority: 'normal',
-    instruction: 'Wenn Wissen, Preise, Details oder Zustaendigkeit fehlen, ehrlich sagen und als Rueckruf aufnehmen.',
+    instruction: 'Wenn Wissen, Preise, Details oder Zuständigkeit fehlen, ehrlich sagen und als Rückruf aufnehmen.',
   },
   {
     id: 'urgent_or_emergency',
@@ -102,7 +102,7 @@ const DEFAULT_FALLBACK_REASONS: DefaultFallbackReason[] = [
     reason: 'dringendes Anliegen',
     enabled: true,
     priority: 'urgent',
-    instruction: 'Bei Gefahr, Schmerzen, Ausfall oder akutem Problem: sofort live weiterleiten. Wenn niemand erreichbar ist, ein dringendes Ticket mit den noetigsten Angaben anlegen und keine langen Nachfragen stellen.',
+    instruction: 'Bei Gefahr, Schmerzen, Ausfall oder akutem Problem: sofort live weiterleiten. Wenn niemand erreichbar ist, ein dringendes Ticket mit den nötigsten Angaben anlegen und keine langen Nachfragen stellen.',
   },
   {
     id: 'complaint',
@@ -110,15 +110,15 @@ const DEFAULT_FALLBACK_REASONS: DefaultFallbackReason[] = [
     reason: 'Beschwerde / unzufrieden',
     enabled: true,
     priority: 'high',
-    instruction: 'Verstaendnis zeigen, keine Loesung versprechen, Sachverhalt knapp notieren.',
+    instruction: 'Verständnis zeigen, keine Lösung versprechen, Sachverhalt knapp notieren.',
   },
   {
     id: 'outside_scope',
-    label: 'Ausserhalb des Angebots',
-    reason: 'ausserhalb Angebot / falscher Ansprechpartner',
+    label: 'Außerhalb des Angebots',
+    reason: 'außerhalb Angebot / falscher Ansprechpartner',
     enabled: true,
     priority: 'normal',
-    instruction: 'Wenn das Anliegen nicht zur Branche oder Leistung passt, freundlich abgrenzen und Rueckruf nur anbieten, wenn sinnvoll.',
+    instruction: 'Wenn das Anliegen nicht zur Branche oder Leistung passt, freundlich abgrenzen und Rückruf nur anbieten, wenn sinnvoll.',
   },
   {
     id: 'privacy_legal',
@@ -126,7 +126,7 @@ const DEFAULT_FALLBACK_REASONS: DefaultFallbackReason[] = [
     reason: 'DSGVO / rechtlich sensibel',
     enabled: true,
     priority: 'high',
-    instruction: 'Bei Datenschutz, Loeschung, rechtlichen oder finanziellen Fragen nicht beraten, sondern an das Team eskalieren.',
+    instruction: 'Bei Datenschutz, Löschung, rechtlichen oder finanziellen Fragen nicht beraten, sondern an das Team eskalieren.',
   },
   {
     id: 'audio_problem',
@@ -134,12 +134,12 @@ const DEFAULT_FALLBACK_REASONS: DefaultFallbackReason[] = [
     reason: 'akustisch nicht verstanden',
     enabled: true,
     priority: 'normal',
-    instruction: 'Nach wiederholtem Nichtverstehen Rueckruf anbieten, statt den Anrufer zu nerven.',
+    instruction: 'Nach wiederholtem Nichtverstehen Rückruf anbieten, statt den Anrufer zu nerven.',
   },
 ];
 
 const LEGACY_FALLBACK_INSTRUCTIONS: Record<string, string> = {
-  human_requested: 'Wenn der Anrufer klar mit einem Menschen sprechen will, nicht diskutieren: Rueckruf-Ticket oder konfigurierte Weiterleitung.',
+  human_requested: 'Wenn der Anrufer klar mit einem Menschen sprechen will, nicht diskutieren: Rückruf-Ticket oder konfigurierte Weiterleitung.',
   urgent_or_emergency: 'Bei Gefahr, Schmerzen, Ausfall oder akutem Problem sofort als dringend markieren und keine langen Nachfragen stellen.',
 };
 
@@ -1679,7 +1679,9 @@ export async function registerAgentConfig(app: FastifyInstance) {
       const pickNum = (v: unknown): number | null =>
         typeof v === 'number' && v > 0 ? Math.round(v) : null;
 
-      const endedCalls = calls.filter((c) => c.call_status === 'ended');
+      const endedCalls = calls
+        .filter((c) => c.call_status === 'ended')
+        .sort((a, b) => (b.end_timestamp ?? b.start_timestamp ?? 0) - (a.end_timestamp ?? a.start_timestamp ?? 0));
       const latest = endedCalls[0];
       const l = latest?.latency;
 

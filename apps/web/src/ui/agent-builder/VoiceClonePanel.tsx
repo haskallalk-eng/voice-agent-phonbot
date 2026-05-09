@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { cloneVoice, type Voice } from '../../lib/api.js';
-import { IconMicUpload, IconRefresh, IconChevronDown } from './shared.js';
+import { IconMicUpload, IconRefresh, IconChevronDown, IconInfo } from './shared.js';
 
 // Backend-side supplier whitelist stays exactly as Retell expects; the
 // labels are product-facing names (no supplier literals).
@@ -192,6 +192,21 @@ export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
       <div className="flex items-center gap-3 mb-1">
         <IconMicUpload size={20} className="text-cyan-400" />
         <h3 className="text-lg font-semibold text-white">Eigene Stimme klonen</h3>
+        <div className="group relative">
+          <button
+            type="button"
+            aria-label="Hinweis zur Aufnahmequalität"
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/45 outline-none transition-all hover:border-orange-400/35 hover:text-orange-100 focus:border-orange-400/45 focus:text-orange-100 focus:ring-2 focus:ring-orange-500/30"
+          >
+            <IconInfo size={14} />
+          </button>
+          <div className="pointer-events-none absolute left-1/2 top-full z-30 mt-3 w-72 -translate-x-1/2 rounded-2xl border border-orange-400/20 bg-[#101018]/95 p-4 text-xs leading-relaxed text-white/72 opacity-0 shadow-[0_24px_70px_rgba(0,0,0,0.42)] backdrop-blur-xl transition-all duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+            <p className="font-semibold text-white">Die Qualität hängt stark von der Aufnahme ab.</p>
+            <p className="mt-2 text-white/58">
+              Am besten: ruhiger Raum, kein Hall, keine Musik, kein Rauschen, normale Lautstärke und mindestens 1 Minute natürliche Sprache derselben Person. Je sauberer die Audiodatei, desto natürlicher klingt die geklonte Stimme.
+            </p>
+          </div>
+        </div>
       </div>
       <p className="text-sm text-white/50 mb-4">
         Lade eine Aufnahme hoch oder nimm direkt auf — Phonbot erstellt daraus deine KI-Stimme.

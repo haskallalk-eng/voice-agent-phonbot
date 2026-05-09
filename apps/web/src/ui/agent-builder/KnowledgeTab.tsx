@@ -188,10 +188,10 @@ function KnowledgeAdder({ tenantId, onAdd }: { tenantId: string; onAdd: (src: Kn
 
   function pdfErrorMessage(err: unknown): string {
     const raw = err instanceof Error ? err.message : String(err);
-    if (raw.includes('PDF_TOO_LARGE')) return 'PDF ist zu gross. Maximal 50 MB.';
+    if (raw.includes('PDF_TOO_LARGE')) return 'PDF ist zu groß. Maximal 50 MB.';
     if (raw.includes('PDF_INVALID')) return 'Diese Datei sieht nicht wie eine PDF aus.';
     if (raw.includes('PDF_ONLY')) return 'Bitte eine PDF-Datei hochladen.';
-    if (raw.includes('Database not configured')) return 'PDF-Upload ist gerade nicht verfuegbar.';
+    if (raw.includes('Database not configured')) return 'PDF-Upload ist gerade nicht verfügbar.';
     return 'PDF konnte nicht hochgeladen werden.';
   }
 
