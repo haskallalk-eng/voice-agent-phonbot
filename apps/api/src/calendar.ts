@@ -1313,6 +1313,23 @@ export async function getValidToken(orgId: string): Promise<string | null> {
 
 const DAY_LABELS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'] as const;
 const FULL_DAY_LABELS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'] as const;
+const GERMAN_WEEKDAY_INDEX: Record<string, number> = {
+  sonntag: 0,
+  so: 0,
+  montag: 1,
+  mo: 1,
+  dienstag: 2,
+  di: 2,
+  mittwoch: 3,
+  mi: 3,
+  donnerstag: 4,
+  do: 4,
+  freitag: 5,
+  fr: 5,
+  samstag: 6,
+  sa: 6,
+};
+const GERMAN_WEEKDAY_PATTERN = /\b(sonntag|montag|dienstag|mittwoch|donnerstag|freitag|samstag|so|mo|di|mi|do|fr|sa)\b/;
 const MONTH_LABELS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'] as const;
 const MONTH_INDEX: Record<string, number> = {
   januar: 1,
@@ -1402,27 +1419,10 @@ export function parseSlotTime(slot: string): Date | null {
     return result;
   }
 
-  const dayIndex: Record<string, number> = {
-    sonntag: 0,
-    so: 0,
-    montag: 1,
-    mo: 1,
-    dienstag: 2,
-    di: 2,
-    mittwoch: 3,
-    mi: 3,
-    donnerstag: 4,
-    do: 4,
-    freitag: 5,
-    fr: 5,
-    samstag: 6,
-    sa: 6,
-  };
-
-  const dayMatch = normalized.match(/\b(sonntag|montag|dienstag|mittwoch|donnerstag|freitag|samstag|so|mo|di|mi|do|fr|sa)\b/);
+  const dayMatch = normalized.match(GERMAN_WEEKDAY_PATTERN);
   if (!dayMatch) return null;
 
-  const targetDay = dayIndex[dayMatch[1]!];
+  const targetDay = GERMAN_WEEKDAY_INDEX[dayMatch[1]!];
   if (targetDay === undefined) return null;
 
   const result = new Date(now);
@@ -1812,6 +1812,19 @@ function requestedDateKey(opts: { date?: string; range?: string; service?: strin
   if (isoDate) {
     const date = buildLocalDate(Number(isoDate[1]), Number(isoDate[2]), Number(isoDate[3]), { hour: 12, minute: 0 });
     return date ? localDateKey(date) : null;
+  }
+
+  const dayMatch = normalized.match(GERMAN_WEEKDAY_PATTERN);
+  if (dayMatch) {
+    const targetDay = GERMAN_WEEKDAY_INDEX[dayMatch[1]!];
+    if (targetDay === undefined) return null;
+
+    const date = new Date(now);
+    date.setHours(12, 0, 0, 0);
+    let daysAhead = targetDay - now.getDay();
+    if (daysAhead < 0) daysAhead += 7;
+    date.setDate(now.getDate() + daysAhead);
+    return localDateKey(date);
   }
 
   return null;
