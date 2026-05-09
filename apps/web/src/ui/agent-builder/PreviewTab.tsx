@@ -115,7 +115,7 @@ export function PreviewTab({ config, preview, voices, deploying, onDeploy, onPre
                   <IconMic size={14} className="text-orange-300" />
                   Web-Call Test
                 </div>
-                <p className="text-[11px] text-white/35">Direkt im Browser sprechen. Ideal fuer schnelle Prompt- und Logikchecks.</p>
+                <p className="text-[11px] text-white/35">Direkt im Browser sprechen. Ideal für schnelle Prompt- und Logikchecks.</p>
               </div>
               <span className="rounded-full border border-orange-300/20 bg-orange-400/10 px-2 py-1 text-[10px] font-semibold text-orange-100/70">
                 Mikrofon

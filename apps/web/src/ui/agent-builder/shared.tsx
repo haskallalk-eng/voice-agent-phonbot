@@ -36,7 +36,7 @@ import type { AgentConfig, FallbackReasonConfig } from '../../lib/api.js';
 
 export type IconComp = React.FC<{ size?: number; className?: string }>;
 export type SectionIconComp = React.FC<{ size?: number; className?: string }>;
-export type Tab = 'identity' | 'knowledge' | 'behavior' | 'capabilities' | 'technical' | 'privacy' | 'webhooks' | 'preview';
+export type Tab = 'identity' | 'knowledge' | 'capabilities' | 'technical' | 'privacy' | 'webhooks' | 'preview';
 
 /* ── Constants ── */
 
@@ -327,7 +327,6 @@ export const PROMPT_SECTIONS: PromptSection[] = [
 export const TABS: { id: Tab; label: string; Icon: SectionIconComp }[] = [
   { id: 'identity',     label: 'Identität',    Icon: IconAgent },
   { id: 'knowledge',    label: 'Wissen',       Icon: IconKnowledge },
-  { id: 'behavior',     label: 'Verhalten',    Icon: IconMessageSquare },
   { id: 'capabilities', label: 'Fähigkeiten',  Icon: IconCapabilities },
   { id: 'technical',    label: 'Technik',      Icon: IconSliders },
   { id: 'privacy',      label: 'Datenschutz',  Icon: IconPrivacy },
@@ -346,11 +345,11 @@ export const DEFAULT_FALLBACK_REASONS: FallbackReasonConfig[] = [
   },
   {
     id: 'unresolved_question',
-    label: 'Nicht sicher loesbar',
+    label: 'Nicht sicher lösbar',
     reason: 'Antwort nicht sicher',
     enabled: true,
     priority: 'normal',
-    instruction: 'Wenn Wissen, Preise, Details oder Zustaendigkeit fehlen, ehrlich sagen und als Rueckruf aufnehmen.',
+    instruction: 'Wenn Wissen, Preise, Details oder Zuständigkeit fehlen, ehrlich sagen und als Rückruf aufnehmen.',
   },
   {
     id: 'urgent_or_emergency',
@@ -366,15 +365,15 @@ export const DEFAULT_FALLBACK_REASONS: FallbackReasonConfig[] = [
     reason: 'Beschwerde / unzufrieden',
     enabled: true,
     priority: 'high',
-    instruction: 'Verstaendnis zeigen, keine Loesung versprechen, Sachverhalt knapp notieren.',
+    instruction: 'Verständnis zeigen, keine Lösung versprechen, Sachverhalt knapp notieren.',
   },
   {
     id: 'outside_scope',
-    label: 'Ausserhalb des Angebots',
-    reason: 'ausserhalb Angebot / falscher Ansprechpartner',
+    label: 'Außerhalb des Angebots',
+    reason: 'außerhalb Angebot / falscher Ansprechpartner',
     enabled: true,
     priority: 'normal',
-    instruction: 'Wenn das Anliegen nicht zur Branche oder Leistung passt, freundlich abgrenzen und Rueckruf nur anbieten, wenn sinnvoll.',
+    instruction: 'Wenn das Anliegen nicht zur Branche oder Leistung passt, freundlich abgrenzen und Rückruf nur anbieten, wenn sinnvoll.',
   },
   {
     id: 'privacy_legal',
@@ -382,7 +381,7 @@ export const DEFAULT_FALLBACK_REASONS: FallbackReasonConfig[] = [
     reason: 'DSGVO / rechtlich sensibel',
     enabled: true,
     priority: 'high',
-    instruction: 'Bei Datenschutz, Loeschung, rechtlichen oder finanziellen Fragen nicht beraten, sondern an das Team eskalieren.',
+    instruction: 'Bei Datenschutz, Löschung, rechtlichen oder finanziellen Fragen nicht beraten, sondern an das Team eskalieren.',
   },
   {
     id: 'audio_problem',
@@ -390,7 +389,7 @@ export const DEFAULT_FALLBACK_REASONS: FallbackReasonConfig[] = [
     reason: 'akustisch nicht verstanden',
     enabled: true,
     priority: 'normal',
-    instruction: 'Nach wiederholtem Nichtverstehen Rueckruf anbieten, statt den Anrufer zu nerven.',
+    instruction: 'Nach wiederholtem Nichtverstehen Rückruf anbieten, statt den Anrufer zu nerven.',
   },
 ];
 

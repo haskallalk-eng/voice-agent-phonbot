@@ -515,7 +515,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
                   Schritt {index + 1}
                 </span>
               </span>
-              {t.id === 'behavior' && pendingSuggestions > 0 && (
+              {t.id === 'identity' && pendingSuggestions > 0 && (
                 <span
                   aria-label={`${pendingSuggestions} Vorschlag${pendingSuggestions === 1 ? '' : 'e'} wartet`}
                   title={`${pendingSuggestions} neue${pendingSuggestions === 1 ? 'r' : ''} Vorschlag${pendingSuggestions === 1 ? '' : 'e'}`}
@@ -559,62 +559,57 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
                   {config.retellAgentId ? 'Agent aktiv' : 'Noch nicht aktiviert'}
                 </span>
                 <span className={`rounded-full border px-3 py-1.5 ${isDirty ? 'border-orange-300/25 bg-orange-400/10 text-orange-100' : 'border-green-300/18 bg-green-400/8 text-green-100/70'}`}>
-                  {isDirty ? 'Ungespeicherte Aenderungen' : 'Alles gespeichert'}
+                  {isDirty ? 'Ungespeicherte Änderungen' : 'Alles gespeichert'}
                 </span>
               </div>
             </div>
           </div>
 
       {tab === 'identity' && (
-        <IdentityTab
-          config={config}
-          voices={voices}
-          voicesLoading={voicesLoading}
-          voiceDropdownOpen={voiceDropdownOpen}
-          voiceDropdownRef={voiceDropdownRef}
-          onUpdate={update}
-          onVoiceDropdownToggle={() => setVoiceDropdownOpen((v) => !v)}
-          onVoiceSelect={(id) => { update({ voice: id }); setVoiceDropdownOpen(false); }}
-          onVoiceCloned={(newVoice) => {
-            setVoices((prev) => {
-              const filtered = prev.filter((v) => v.voice_id !== newVoice.voice_id);
-              return [newVoice, ...filtered];
-            });
-            update({ voice: newVoice.voice_id });
-          }}
-        />
+        <>
+          <IdentityTab
+            config={config}
+            voices={voices}
+            voicesLoading={voicesLoading}
+            voiceDropdownOpen={voiceDropdownOpen}
+            voiceDropdownRef={voiceDropdownRef}
+            onUpdate={update}
+            onVoiceDropdownToggle={() => setVoiceDropdownOpen((v) => !v)}
+            onVoiceSelect={(id) => { update({ voice: id }); setVoiceDropdownOpen(false); }}
+            onVoiceCloned={(newVoice) => {
+              setVoices((prev) => {
+                const filtered = prev.filter((v) => v.voice_id !== newVoice.voice_id);
+                return [newVoice, ...filtered];
+              });
+              update({ voice: newVoice.voice_id });
+            }}
+          />
+          <BehaviorTab
+            config={config}
+            activePromptSections={activePromptSections}
+            onUpdate={update}
+            onTogglePromptSection={togglePromptSection}
+            onSetActivePromptSections={setActivePromptSections}
+            onNavigateTab={(route) => {
+              if (route === 'behavior') {
+                setTab('identity');
+                return;
+              }
+              const KNOWN = new Set(['identity', 'knowledge', 'capabilities', 'privacy', 'technical', 'webhooks', 'preview']);
+              if (KNOWN.has(route)) setTab(route as typeof tab);
+            }}
+            onConfigRefresh={async () => {
+              await loadConfig({ resetView: false });
+              void getInsights()
+                .then((d) => setPendingSuggestions(d.suggestions.filter((s) => s.status === 'pending').length))
+                .catch(() => {});
+            }}
+          />
+        </>
       )}
 
       {tab === 'knowledge' && (
         <KnowledgeTab config={config} onUpdate={update} />
-      )}
-
-      {tab === 'behavior' && (
-        <BehaviorTab
-          config={config}
-          activePromptSections={activePromptSections}
-          onUpdate={update}
-          onTogglePromptSection={togglePromptSection}
-          onSetActivePromptSections={setActivePromptSections}
-          onNavigateTab={(route) => {
-            // Suggestion banner asked us to send the user to another tab
-            // (e.g. to fill in opening hours). We only honor a whitelist
-            // of known tab ids to stay resilient to backend-side typos.
-            const KNOWN = new Set(['identity', 'knowledge', 'behavior', 'capabilities', 'privacy', 'technical', 'webhooks', 'preview']);
-            if (KNOWN.has(route)) setTab(route as typeof tab);
-          }}
-          onConfigRefresh={async () => {
-            // Re-read agent config so the TextArea shows the server-side
-            // prompt change a suggestion apply just made. Also refresh the
-            // sidebar badge count. Keep the user in edit-mode — the default
-            // list-jump in loadConfig() would otherwise yank them out of
-            // the tab they were just working in.
-            await loadConfig({ resetView: false });
-            void getInsights()
-              .then((d) => setPendingSuggestions(d.suggestions.filter((s) => s.status === 'pending').length))
-              .catch(() => {});
-          }}
-        />
       )}
 
       {tab === 'capabilities' && (
@@ -756,11 +751,11 @@ function AgentStatsRow({
   const modelLine = stats?.modelName ? `Modell: ${stats.modelName}` : '';
   const measured = stats?.measuredLlmMs;
   const primaryLine = hasMeasuredE2e
-    ? `Live gemessen: ${measuredMs} ms (E2E p50, hoerbare Antwortzeit)`
+    ? `Live gemessen: ${measuredMs} ms (E2E p50: ASR + LLM + TTS bis zur hörbaren Antwort)`
     : measured != null
-      ? `Live gemessen: ${measured} ms (LLM p50, E2E noch nicht verfuegbar)`
+      ? `Live gemessen: ${measured} ms (LLM p50, E2E noch nicht verfügbar)`
       : stats?.modelBaselineMs != null
-        ? `Schaetzung: ${stats.modelBaselineMs} ms Modell-Basis`
+        ? `Schätzung: ${stats.modelBaselineMs} ms Modell-Basis`
         : 'Live gemessen: noch kein Call';
   const breakdownLine = breakdownStr ? `Breakdown: ${breakdownStr} ms` : '';
   const modelBaselineLine = stats?.modelBaselineMs != null
