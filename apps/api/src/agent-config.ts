@@ -48,6 +48,9 @@ import {
   normalizeCustomerModuleConfig,
 } from './customers.js';
 
+const AGENT_STATS_CACHE_TTL_MS = 10_000;
+const agentStatsCache = new Map<string, { expiresAt: number; value?: unknown; promise?: Promise<unknown> }>();
+
 const CustomerQuestionConfigSchema = z.object({
   id: z.string().min(1).max(80),
   label: z.string().min(1).max(180),
@@ -1554,7 +1557,15 @@ export async function registerAgentConfig(app: FastifyInstance) {
     };
     if (!retellAgentId) return { ...emptyResponse, error: 'not_deployed' };
 
-    try {
+    const cacheKey = `${tenantId}:${retellAgentId}`;
+    const cached = agentStatsCache.get(cacheKey);
+    const nowMs = Date.now();
+    if (cached?.value !== undefined && cached.expiresAt > nowMs) return cached.value;
+    if (cached?.promise) return cached.promise;
+
+    const statsPromise = (async () => {
+      let response: unknown;
+      try {
       // Keep Retell's model-based estimate as a fallback, but prefer the
       // latest measured e2e.p50 below. The preview must reflect the latency
       // users actually hear, not only the optimistic model baseline.
@@ -1618,7 +1629,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
         : modelBaselineMs != null ? 'model-baseline'
         : 'none';
 
-      return {
+      response = {
         callsCount: endedCalls.length,
         sampleSize: e2e != null ? Math.max(1, turnsInCall) : primary != null ? 1 : 0,
         latencyMs: primary,
@@ -1631,10 +1642,15 @@ export async function registerAgentConfig(app: FastifyInstance) {
         measuredLlmMs: llm,
         error: null,
       };
-    } catch (err) {
-      app.log.warn({ err: err instanceof Error ? err.message : String(err), tenantId }, 'listCalls failed');
-      return { ...emptyResponse, error: 'retell_unreachable' };
-    }
+      } catch (err) {
+        app.log.warn({ err: err instanceof Error ? err.message : String(err), tenantId }, 'listCalls failed');
+        response = { ...emptyResponse, error: 'retell_unreachable' };
+      }
+      agentStatsCache.set(cacheKey, { expiresAt: Date.now() + AGENT_STATS_CACHE_TTL_MS, value: response });
+      return response;
+    })();
+    agentStatsCache.set(cacheKey, { expiresAt: 0, promise: statsPromise });
+    return statsPromise;
   });
 
   // Save config (local only, no Retell deploy).
