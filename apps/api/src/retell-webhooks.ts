@@ -1199,16 +1199,20 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
               service: args.service as string | undefined,
               staffId: staff.staffId,
             });
+        const compactSlots = compactRetellSlots(slotResult.slots);
         result = {
           ok: true,
           source: slotResult.source,
-          ...compactRetellSlots(slotResult.slots),
+          ...compactSlots,
           service: args.service ?? null,
           range: args.range ?? null,
           preferredTime: args.preferredTime ?? null,
           preferredStylist: staff.matchedName ?? (teamMode ? 'Beliebiger freier Mitarbeiter' : staff.requested),
           staffId: staff.staffId,
-          ...(teamMode ? { instruction: 'Biete diese Zeiten als Team-Termine an. Der konkrete Mitarbeiter wird beim Buchen automatisch nach Verfuegbarkeit zugewiesen.' } : {}),
+          instruction: [
+            compactSlots.instruction,
+            teamMode ? 'Biete diese Zeiten als Team-Termine an. Der konkrete Mitarbeiter wird beim Buchen automatisch nach Verfuegbarkeit zugewiesen.' : null,
+          ].filter(Boolean).join(' '),
         };
       }
     } else {
