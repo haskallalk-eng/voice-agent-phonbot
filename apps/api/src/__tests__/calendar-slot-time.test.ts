@@ -76,4 +76,15 @@ describe('calendar slot time parsing', () => {
 
     expect(result).toEqual({ slots: [], source: 'past-date' });
   });
+
+  it('parses speech-friendly German calendar slot labels', () => {
+    const parsed = parseSlotTime('Dienstag 12. Mai 2026 um 11 Uhr 15');
+    expect(berlinTime(parsed)).toBe('11:15');
+    expect(new Intl.DateTimeFormat('de-DE', {
+      timeZone: 'Europe/Berlin',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(parsed!)).toBe('12.05.2026');
+  });
 });

@@ -1314,6 +1314,40 @@ export async function getValidToken(orgId: string): Promise<string | null> {
 }
 
 const DAY_LABELS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'] as const;
+const FULL_DAY_LABELS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'] as const;
+const GERMAN_WEEKDAY_INDEX: Record<string, number> = {
+  sonntag: 0,
+  so: 0,
+  montag: 1,
+  mo: 1,
+  dienstag: 2,
+  di: 2,
+  mittwoch: 3,
+  mi: 3,
+  donnerstag: 4,
+  do: 4,
+  freitag: 5,
+  fr: 5,
+  samstag: 6,
+  sa: 6,
+};
+const GERMAN_WEEKDAY_PATTERN = /\b(sonntag|montag|dienstag|mittwoch|donnerstag|freitag|samstag|so|mo|di|mi|do|fr|sa)\b/;
+const MONTH_LABELS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'] as const;
+const MONTH_INDEX: Record<string, number> = {
+  januar: 1,
+  februar: 2,
+  maerz: 3,
+  marz: 3,
+  april: 4,
+  mai: 5,
+  juni: 6,
+  juli: 7,
+  august: 8,
+  september: 9,
+  oktober: 10,
+  november: 11,
+  dezember: 12,
+};
 
 function generateFreeSlots(
   busyPeriods: { start: string; end: string }[],
@@ -1386,27 +1420,10 @@ export function parseSlotTime(slot: string): Date | null {
     return result;
   }
 
-  const dayIndex: Record<string, number> = {
-    sonntag: 0,
-    so: 0,
-    montag: 1,
-    mo: 1,
-    dienstag: 2,
-    di: 2,
-    mittwoch: 3,
-    mi: 3,
-    donnerstag: 4,
-    do: 4,
-    freitag: 5,
-    fr: 5,
-    samstag: 6,
-    sa: 6,
-  };
-
-  const dayMatch = normalized.match(/\b(sonntag|montag|dienstag|mittwoch|donnerstag|freitag|samstag|so|mo|di|mi|do|fr|sa)\b/);
+  const dayMatch = normalized.match(GERMAN_WEEKDAY_PATTERN);
   if (!dayMatch) return null;
 
-  const targetDay = dayIndex[dayMatch[1]!];
+  const targetDay = GERMAN_WEEKDAY_INDEX[dayMatch[1]!];
   if (targetDay === undefined) return null;
 
   const result = new Date(now);
@@ -1474,6 +1491,22 @@ function parseAbsoluteSlotTime(value: string): Date | null {
     const time = extractTimeOfDay(normalizeSlotText(rest));
     if (!time) return null;
     return buildLocalDate(Number(germanDateMatch[3]), Number(germanDateMatch[2]), Number(germanDateMatch[1]), time);
+  }
+
+  const normalizedValue = normalizeSlotText(value);
+  const germanMonthMatch = normalizedValue.match(/\b(\d{1,2})\.?\s+(januar|februar|maerz|marz|april|mai|juni|juli|august|september|oktober|november|dezember)(?:\s+(\d{4}))?\b/);
+  if (germanMonthMatch) {
+    const rest = normalizedValue.slice((germanMonthMatch.index ?? 0) + germanMonthMatch[0].length);
+    const time = extractTimeOfDay(rest);
+    if (!time) return null;
+    const now = new Date();
+    const year = germanMonthMatch[3] ? Number(germanMonthMatch[3]) : berlinParts(now).year;
+    const month = MONTH_INDEX[germanMonthMatch[2]!]!;
+    const date = buildLocalDate(year, month, Number(germanMonthMatch[1]), time);
+    if (date && date < now && !germanMonthMatch[3]) {
+      return buildLocalDate(year + 1, month, Number(germanMonthMatch[1]), time);
+    }
+    return date;
   }
 
   return null;
@@ -1611,6 +1644,85 @@ async function getChipySchedule(orgId: string, staffId?: string | null): Promise
   return { schedule, blocks, timeBlocks };
 }
 
+type ChipyScheduleBundle = { schedule: ChipySchedule; blocks: string[]; timeBlocks: ChipyBlock[] };
+
+function defaultChipyScheduleBundle(): ChipyScheduleBundle {
+  return { schedule: DEFAULT_CHIPPY_SCHEDULE, blocks: [], timeBlocks: [] };
+}
+
+async function getStaffIdsWithCalendarConnections(orgId: string, staffIds: string[]): Promise<Set<string>> {
+  if (!pool || staffIds.length === 0) return new Set();
+  const res = await pool.query<{ staff_id: string }>(
+    `SELECT DISTINCT staff_id::text AS staff_id
+       FROM calendar_connections
+      WHERE org_id = $1
+        AND staff_id = ANY($2::uuid[])`,
+    [orgId, staffIds],
+  );
+  return new Set(res.rows.map((row) => row.staff_id));
+}
+
+async function getChipySchedulesForStaff(orgId: string, staffIds: string[]): Promise<Map<string, ChipyScheduleBundle>> {
+  const out = new Map<string, ChipyScheduleBundle>();
+  for (const staffId of staffIds) out.set(staffId, defaultChipyScheduleBundle());
+  if (!pool || staffIds.length === 0) return out;
+
+  const [schedRes, blockRes, bookingRes] = await Promise.all([
+    pool.query<{ staff_id: string; schedule: ChipySchedule }>(
+      `SELECT staff_id::text AS staff_id, schedule
+         FROM staff_chipy_schedules
+        WHERE org_id = $1
+          AND staff_id = ANY($2::uuid[])`,
+      [orgId, staffIds],
+    ),
+    pool.query<{ staff_id: string; date: string; start_time: string | null; end_time: string | null }>(
+      `SELECT staff_id::text AS staff_id, date::text, start_time::text, end_time::text
+         FROM staff_chipy_blocks
+        WHERE org_id = $1
+          AND staff_id = ANY($2::uuid[])
+          AND date >= CURRENT_DATE
+        ORDER BY date`,
+      [orgId, staffIds],
+    ),
+    pool.query<{ staff_id: string; date: string; start_time: string; end_time: string }>(
+      `SELECT
+         staff_id::text AS staff_id,
+         (slot_time AT TIME ZONE 'Europe/Berlin')::date::text AS date,
+         (slot_time AT TIME ZONE 'Europe/Berlin')::time::text AS start_time,
+         ((slot_time AT TIME ZONE 'Europe/Berlin') + ((duration_minutes + buffer_minutes) * interval '1 minute'))::time::text AS end_time
+       FROM staff_chipy_bookings
+       WHERE org_id = $1
+         AND staff_id = ANY($2::uuid[])
+         AND slot_time >= now()
+       ORDER BY slot_time`,
+      [orgId, staffIds],
+    ),
+  ]);
+
+  for (const row of schedRes.rows) {
+    const current = out.get(row.staff_id) ?? defaultChipyScheduleBundle();
+    out.set(row.staff_id, { ...current, schedule: row.schedule ?? DEFAULT_CHIPPY_SCHEDULE });
+  }
+
+  for (const row of blockRes.rows) {
+    const current = out.get(row.staff_id) ?? defaultChipyScheduleBundle();
+    if (!row.start_time) {
+      current.blocks.push(row.date);
+    } else {
+      current.timeBlocks.push({ date: row.date, start_time: row.start_time, end_time: row.end_time });
+    }
+    out.set(row.staff_id, current);
+  }
+
+  for (const row of bookingRes.rows) {
+    const current = out.get(row.staff_id) ?? defaultChipyScheduleBundle();
+    current.timeBlocks.push({ date: row.date, start_time: row.start_time, end_time: row.end_time });
+    out.set(row.staff_id, current);
+  }
+
+  return out;
+}
+
 function clockMinutes(value: string | null | undefined): number | null {
   const match = value?.match(/^(\d{1,2}):(\d{2})/);
   if (!match) return null;
@@ -1713,6 +1825,19 @@ function requestedDateKey(opts: { date?: string; range?: string; service?: strin
     return date ? localDateKey(date) : null;
   }
 
+  const dayMatch = normalized.match(GERMAN_WEEKDAY_PATTERN);
+  if (dayMatch) {
+    const targetDay = GERMAN_WEEKDAY_INDEX[dayMatch[1]!];
+    if (targetDay === undefined) return null;
+
+    const date = new Date(now);
+    date.setHours(12, 0, 0, 0);
+    let daysAhead = targetDay - now.getDay();
+    if (daysAhead < 0) daysAhead += 7;
+    date.setDate(now.getDate() + daysAhead);
+    return localDateKey(date);
+  }
+
   return null;
 }
 
@@ -1733,12 +1858,9 @@ function localTimeKey(date: Date): string {
 function formatSlotLabel(date: Date): string {
   const parts = berlinParts(date);
   const dow = new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6;
-  const dd = parts.day.toString().padStart(2, '0');
-  const mm = parts.month.toString().padStart(2, '0');
   const yyyy = parts.year.toString();
-  const hh = parts.hour.toString().padStart(2, '0');
-  const min = parts.minute.toString().padStart(2, '0');
-  return `${DAY_LABELS[dow]} ${dd}.${mm}.${yyyy} ${hh}:${min}`;
+  const minute = parts.minute === 0 ? '' : ` ${parts.minute.toString().padStart(2, '0')}`;
+  return `${FULL_DAY_LABELS[dow]} ${parts.day}. ${MONTH_LABELS[parts.month - 1]} ${yyyy} um ${parts.hour} Uhr${minute}`;
 }
 
 async function isChipySlotAvailable(
@@ -2356,10 +2478,15 @@ export async function findFreeSlots(
 async function findFreeSlotsByContract(
   orgId: string,
   opts: { date?: string; range?: string; service?: string; staffId?: string | null },
+  knownStaff?: CalendarStaff,
+  timingOverride?: BookingTiming,
 ): Promise<{ slots: string[]; source: string }> {
-  const staffId = await assertStaffBelongs(orgId, opts.staffId);
+  const staffId = opts.staffId ?? null;
   if (staffId) {
-    const member = (await getCalendarStaff(orgId)).find((s) => s.id === staffId);
+    const member = knownStaff?.id === staffId
+      ? knownStaff
+      : (await getCalendarStaff(orgId)).find((s) => s.id === staffId);
+    if (!member) throw new StaffNotFoundError();
     if (member && !staffSupportsService(member, opts.service)) {
       return { slots: [], source: 'service-not-offered' };
     }
@@ -2373,7 +2500,7 @@ async function findFreeSlotsByContract(
   }
   const sources = ['chipy'];
   const { schedule, blocks, timeBlocks } = await getChipySchedule(orgId, staffId);
-  const timing = await resolveBookingTiming(orgId, opts.service);
+  const timing = timingOverride ?? await resolveBookingTiming(orgId, opts.service);
   const requestedDate = requestedDateKey(opts);
   if (requestedDate && isPastLocalDateKey(requestedDate)) {
     return { slots: [], source: 'past-date' };
@@ -2419,10 +2546,32 @@ export async function findFreeSlotsForAnyStaff(
   if (eligibleStaff.length === 0) {
     return { slots: [], source: 'team:service-not-offered', staffCount: staff.length };
   }
+  const timing = await resolveBookingTiming(orgId, opts.service);
+  const eligibleStaffIds = eligibleStaff.map((member) => member.id);
+  const staffWithConnections = await getStaffIdsWithCalendarConnections(orgId, eligibleStaffIds);
+
+  // Fast path for Chipy-only teams: one batched read instead of N separate
+  // availability checks. External calendars still use the safer per-staff path.
+  if (staffWithConnections.size === 0) {
+    const requestedDate = requestedDateKey(opts);
+    const schedules = await getChipySchedulesForStaff(orgId, eligibleStaffIds);
+    const slots = new Set<string>();
+    for (const member of eligibleStaff) {
+      const bundle = schedules.get(member.id) ?? defaultChipyScheduleBundle();
+      for (const slot of generateChipySlots(bundle.schedule, bundle.blocks, bundle.timeBlocks, requestedDate, timing)) {
+        slots.add(slot);
+      }
+    }
+    return {
+      slots: [...slots].sort(),
+      source: 'team:chipy',
+      staffCount: staff.length,
+    };
+  }
 
   const perStaff = await Promise.all(
     eligibleStaff.map(async (member) => {
-      const result = await findFreeSlotsByContract(orgId, { ...opts, staffId: member.id });
+      const result = await findFreeSlotsByContract(orgId, { ...opts, staffId: member.id }, member, timing);
       return { member, result };
     }),
   );
@@ -2793,23 +2942,8 @@ export async function bookSlotForAnyStaff(
   });
 
   const candidates = await rankAvailableStaffForSlot(orgId, eligibleStaff, slotTime, timing);
-  const contractCandidates: CalendarStaff[] = [];
-  for (const member of candidates) {
-    const result = await findFreeSlotsByContract(orgId, {
-      date: opts.time,
-      service: opts.service,
-      staffId: member.id,
-    });
-    if (result.slots.some((slot) => {
-      const parsed = parseSlotTime(slot);
-      return Boolean(parsed && Math.abs(parsed.getTime() - slotTime.getTime()) < 60_000);
-    })) {
-      contractCandidates.push(member);
-    }
-  }
-
   const errors: string[] = [];
-  for (const member of contractCandidates) {
+  for (const member of candidates) {
     const result = await bookSlot(orgId, { ...opts, staffId: member.id, ...timing });
     if (result.ok) {
       return { ...result, assignedStaffId: member.id, assignedStaffName: member.name };

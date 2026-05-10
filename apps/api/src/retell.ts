@@ -20,7 +20,9 @@ export function getDefaultRetellLlmHighPriority(): boolean {
 }
 
 // Default voices for new demo agents + fallback when an agent config has no explicit voice.
-// HQ prioritizes human quality: Ben, a native German ElevenLabs community voice on multilingual_v2.
+// HQ prioritizes human quality, but phone preview needs low first-audio latency.
+// eleven_flash_v2_5 keeps the ElevenLabs voice while avoiding multilingual_v2's
+// ~1s TTS p50 stalls seen in live preview calls.
 // Standard prioritizes robust/lower-cost phone delivery: Cartesia Sonic 3 German
 // Conversational Woman, imported into this Retell workspace as a community voice.
 export const DEFAULT_STANDARD_VOICE_ID =
@@ -369,7 +371,7 @@ function envCsv(name: string, fallback: string[]): string[] {
 
 function defaultHqRuntime(): VoiceRuntimeConfig {
   return {
-    voiceModel: (process.env.RETELL_DEFAULT_VOICE_MODEL as RetellVoiceModel | undefined) ?? 'eleven_multilingual_v2',
+    voiceModel: (process.env.RETELL_DEFAULT_VOICE_MODEL as RetellVoiceModel | undefined) ?? 'eleven_flash_v2_5',
     voiceTemperature: envNumber('RETELL_DEFAULT_VOICE_TEMPERATURE', 0.55, 0, 2),
     fallbackVoiceIds: envCsv('RETELL_DEFAULT_FALLBACK_VOICE_IDS', [DEFAULT_STANDARD_VOICE_ID]),
   };
@@ -521,7 +523,7 @@ export async function updateAgent(
 
 // --- Call History ---
 
-/** Retell exposes measured latencies per call in seconds on top-level
+/** Retell exposes measured latencies per call in milliseconds on top-level
  *  latency.* fields. e2e.p50 is the "first user input → first audio
  *  byte out" metric — the number users actually hear. */
 export type RetellLatencyBreakdown = {

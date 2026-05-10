@@ -37,7 +37,7 @@ import {
   maskApiIntegrationsForClient,
   type ApiIntegration,
 } from './api-integrations.js';
-import { syncOpeningHoursToChipy } from './opening-hours-sync.js';
+import { chipyScheduleToOpeningHours, syncOpeningHoursToChipy } from './opening-hours-sync.js';
 import { PLANS, type PlanId } from './billing.js';
 import { invalidateInboundWebhooksCache } from './inbound-webhooks.js';
 import { isVoiceAllowedForOrg } from './voice-ownership.js';
@@ -49,6 +49,9 @@ import {
   getCustomCustomerQuestions,
   normalizeCustomerModuleConfig,
 } from './customers.js';
+
+const AGENT_STATS_CACHE_TTL_MS = 10_000;
+const agentStatsCache = new Map<string, { expiresAt: number; value?: unknown; promise?: Promise<unknown> }>();
 
 const CustomerQuestionConfigSchema = z.object({
   id: z.string().min(1).max(80),
@@ -106,15 +109,15 @@ const DEFAULT_FALLBACK_REASONS: DefaultFallbackReason[] = [
     reason: 'Mensch angefordert',
     enabled: true,
     priority: 'high',
-    instruction: 'Wenn der Anrufer klar mit einem Menschen sprechen will: zuerst live weiterleiten. Wenn niemand erreichbar ist oder keine Weiterleitung konfiguriert ist, ein Rueckruf-Ticket mit diesem Grund anlegen.',
+    instruction: 'Wenn der Anrufer klar mit einem Menschen sprechen will: zuerst live weiterleiten. Wenn niemand erreichbar ist oder keine Weiterleitung konfiguriert ist, ein Rückruf-Ticket mit diesem Grund anlegen.',
   },
   {
     id: 'unresolved_question',
-    label: 'Nicht sicher loesbar',
+    label: 'Nicht sicher lösbar',
     reason: 'Antwort nicht sicher',
     enabled: true,
     priority: 'normal',
-    instruction: 'Wenn Wissen, Preise, Details oder Zustaendigkeit fehlen, ehrlich sagen und als Rueckruf aufnehmen.',
+    instruction: 'Wenn Wissen, Preise, Details oder Zuständigkeit fehlen, ehrlich sagen und als Rückruf aufnehmen.',
   },
   {
     id: 'urgent_or_emergency',
@@ -122,7 +125,7 @@ const DEFAULT_FALLBACK_REASONS: DefaultFallbackReason[] = [
     reason: 'dringendes Anliegen',
     enabled: true,
     priority: 'urgent',
-    instruction: 'Bei Gefahr, Schmerzen, Ausfall oder akutem Problem: sofort live weiterleiten. Wenn niemand erreichbar ist, ein dringendes Ticket mit den noetigsten Angaben anlegen und keine langen Nachfragen stellen.',
+    instruction: 'Bei Gefahr, Schmerzen, Ausfall oder akutem Problem: sofort live weiterleiten. Wenn niemand erreichbar ist, ein dringendes Ticket mit den nötigsten Angaben anlegen und keine langen Nachfragen stellen.',
   },
   {
     id: 'complaint',
@@ -130,15 +133,15 @@ const DEFAULT_FALLBACK_REASONS: DefaultFallbackReason[] = [
     reason: 'Beschwerde / unzufrieden',
     enabled: true,
     priority: 'high',
-    instruction: 'Verstaendnis zeigen, keine Loesung versprechen, Sachverhalt knapp notieren.',
+    instruction: 'Verständnis zeigen, keine Lösung versprechen, Sachverhalt knapp notieren.',
   },
   {
     id: 'outside_scope',
-    label: 'Ausserhalb des Angebots',
-    reason: 'ausserhalb Angebot / falscher Ansprechpartner',
+    label: 'Außerhalb des Angebots',
+    reason: 'außerhalb Angebot / falscher Ansprechpartner',
     enabled: true,
     priority: 'normal',
-    instruction: 'Wenn das Anliegen nicht zur Branche oder Leistung passt, freundlich abgrenzen und Rueckruf nur anbieten, wenn sinnvoll.',
+    instruction: 'Wenn das Anliegen nicht zur Branche oder Leistung passt, freundlich abgrenzen und Rückruf nur anbieten, wenn sinnvoll.',
   },
   {
     id: 'privacy_legal',
@@ -146,7 +149,7 @@ const DEFAULT_FALLBACK_REASONS: DefaultFallbackReason[] = [
     reason: 'DSGVO / rechtlich sensibel',
     enabled: true,
     priority: 'high',
-    instruction: 'Bei Datenschutz, Loeschung, rechtlichen oder finanziellen Fragen nicht beraten, sondern an das Team eskalieren.',
+    instruction: 'Bei Datenschutz, Löschung, rechtlichen oder finanziellen Fragen nicht beraten, sondern an das Team eskalieren.',
   },
   {
     id: 'audio_problem',
@@ -154,12 +157,12 @@ const DEFAULT_FALLBACK_REASONS: DefaultFallbackReason[] = [
     reason: 'akustisch nicht verstanden',
     enabled: true,
     priority: 'normal',
-    instruction: 'Nach wiederholtem Nichtverstehen Rueckruf anbieten, statt den Anrufer zu nerven.',
+    instruction: 'Nach wiederholtem Nichtverstehen Rückruf anbieten, statt den Anrufer zu nerven.',
   },
 ];
 
 const LEGACY_FALLBACK_INSTRUCTIONS: Record<string, string> = {
-  human_requested: 'Wenn der Anrufer klar mit einem Menschen sprechen will, nicht diskutieren: Rueckruf-Ticket oder konfigurierte Weiterleitung.',
+  human_requested: 'Wenn der Anrufer klar mit einem Menschen sprechen will, nicht diskutieren: Rückruf-Ticket oder konfigurierte Weiterleitung.',
   urgent_or_emergency: 'Bei Gefahr, Schmerzen, Ausfall oder akutem Problem sofort als dringend markieren und keine langen Nachfragen stellen.',
 };
 
@@ -278,6 +281,9 @@ type AgentConfig = z.infer<typeof AgentConfigSchema>;
 
 const KNOWLEDGE_PDF_MAX_BYTES = 50 * 1024 * 1024;
 
+type PromptDaySchedule = { enabled: boolean; start: string; end: string };
+type PromptWeekSchedule = Record<string, PromptDaySchedule>;
+
 function parseAgentConfig(input: unknown): AgentConfig {
   const parsed = AgentConfigSchema.parse(input);
   parsed.fallback.reason = normalizeFallbackReasonValue(parsed.fallback.reason);
@@ -289,6 +295,69 @@ function parseAgentConfig(input: unknown): AgentConfig {
     return reason;
   });
   return parsed;
+}
+
+function isPromptWeekSchedule(value: unknown): value is PromptWeekSchedule {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const schedule = value as Record<string, unknown>;
+  return ['0', '1', '2', '3', '4', '5', '6'].every((key) => {
+    const day = schedule[key] as Partial<PromptDaySchedule> | undefined;
+    return Boolean(
+      day &&
+      typeof day === 'object' &&
+      typeof day.enabled === 'boolean' &&
+      typeof day.start === 'string' &&
+      typeof day.end === 'string',
+    );
+  });
+}
+
+function mergeWeekSchedules(schedules: PromptWeekSchedule[]): PromptWeekSchedule | null {
+  if (schedules.length === 0) return null;
+  const merged: PromptWeekSchedule = {};
+  for (const key of ['0', '1', '2', '3', '4', '5', '6']) {
+    const enabledDays = schedules
+      .map((schedule) => schedule[key])
+      .filter((day): day is PromptDaySchedule => Boolean(day?.enabled));
+    if (enabledDays.length === 0) {
+      merged[key] = { enabled: false, start: '09:00', end: '17:00' };
+      continue;
+    }
+    const starts = enabledDays.map((day) => day.start).sort();
+    const ends = enabledDays.map((day) => day.end).sort();
+    merged[key] = { enabled: true, start: starts[0]!, end: ends[ends.length - 1]! };
+  }
+  return merged;
+}
+
+async function withCalendarOpeningHoursForPrompt(config: AgentConfig, orgId?: string): Promise<AgentConfig> {
+  if (config.openingHours?.trim() || !orgId || !pool) return config;
+  try {
+    const business = await pool.query<{ schedule: unknown }>(
+      'SELECT schedule FROM chipy_schedules WHERE org_id = $1 LIMIT 1',
+      [orgId],
+    );
+    if (isPromptWeekSchedule(business.rows[0]?.schedule)) {
+      return { ...config, openingHours: chipyScheduleToOpeningHours(business.rows[0]!.schedule) };
+    }
+
+    const staff = await pool.query<{ schedule: unknown }>(
+      `SELECT sc.schedule
+         FROM staff_chipy_schedules sc
+         JOIN calendar_staff s ON s.org_id = sc.org_id AND s.id = sc.staff_id
+        WHERE sc.org_id = $1
+          AND COALESCE(s.active, true) = true`,
+      [orgId],
+    );
+    const schedules = staff.rows
+      .map((row) => row.schedule)
+      .filter(isPromptWeekSchedule);
+    const merged = mergeWeekSchedules(schedules);
+    return merged ? { ...config, openingHours: chipyScheduleToOpeningHours(merged) } : config;
+  } catch (err) {
+    log.warn({ err: err instanceof Error ? err.message : String(err), orgId }, 'agent prompt openingHours calendar fallback failed');
+    return config;
+  }
 }
 
 const CALLBACK_LANGUAGE_LABELS: Record<string, string> = {
@@ -754,7 +823,7 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
     tools.push({
       type: 'custom',
       name: 'calendar_find_slots',
-      description: 'Find available appointment slots. Present at most three options to the caller, grouped by day.',
+      description: 'Find available appointment slots. Present at most three options to the caller in natural spoken German. Use spokenOptionsText from the tool result when present; never read technical times like 11:00 aloud.',
       url: `${webhookBaseUrl}/retell/tools/calendar.findSlots?${signedQuery}`,
       execution_message_description: 'Searching for available slots…',
       parameters: {
@@ -1057,7 +1126,8 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
   // when no admin override exists. Customer's own systemPrompt + roles + custom
   // additions then layer on top.
   const platformBaseline = await loadPlatformBaseline();
-  const customerPrompt = buildAgentInstructions(preparedConfig);
+  const promptConfig = await withCalendarOpeningHoursForPrompt(preparedConfig, orgId);
+  const customerPrompt = buildAgentInstructions(promptConfig);
   const instructions = `${platformBaseline}\n\n${customerPrompt}`;
   const retellTools = buildRetellTools(preparedConfig, webhookBase);
   const postCallAnalysisData = buildPostCallAnalysisData(preparedConfig);
@@ -1619,16 +1689,17 @@ export async function registerAgentConfig(app: FastifyInstance) {
     const query = req.query as { tenantId?: unknown };
     const requestedTenantId = typeof query.tenantId === 'string' ? query.tenantId.trim() : '';
     const config = await readConfig(requestedTenantId || orgId, orgId);
+    const promptConfig = await withCalendarOpeningHoursForPrompt(config, orgId);
     return {
-      instructions: buildAgentInstructions(config),
+      instructions: buildAgentInstructions(promptConfig),
       tools: config.tools,
       fallback: config.fallback,
     };
   });
 
-  // Live agent stats — avg measured e2e latency across the last 20 calls,
-  // pulled straight from Retell. Each request triggers a fresh listCalls
-  // so the number in the builder header always reflects current reality.
+  // Live agent stats — latest ended call latency pulled straight from Retell.
+  // Each request triggers a fresh listCalls so the builder header reflects
+  // current preview reality instead of a stale optimistic estimate.
   // Returns callsCount=0 when the agent hasn't been deployed or had no
   // calls yet; frontend shows "—" in that case instead of a fake estimate.
   // Rate-limit guards Retell-API budget: frontend polls every 15s per open
@@ -1662,12 +1733,18 @@ export async function registerAgentConfig(app: FastifyInstance) {
     };
     if (!retellAgentId) return { ...emptyResponse, error: 'not_deployed' };
 
-    try {
-      // Retell's agent-builder UI shows a model-based latency estimate
-      // that changes when the user switches LLM. It doesn't come from
-      // /list-calls or /get-agent — it's a per-model baseline baked
-      // into Retell's UI. We mirror the same lookup so Phonbot's chip
-      // matches the user's Retell-builder view 1:1.
+    const cacheKey = `${tenantId}:${retellAgentId}`;
+    const cached = agentStatsCache.get(cacheKey);
+    const nowMs = Date.now();
+    if (cached?.value !== undefined && cached.expiresAt > nowMs) return cached.value;
+    if (cached?.promise) return cached.promise;
+
+    const statsPromise = (async () => {
+      let response: unknown;
+      try {
+      // Keep Retell's model-based estimate as a fallback, but prefer the
+      // latest measured e2e.p50 below. The preview must reflect the latency
+      // users actually hear, not only the optimistic model baseline.
       const MODEL_LATENCY_MS: Record<string, number> = {
         'gpt-4o-mini': 500,
         'gpt-4o': 800,
@@ -1714,7 +1791,9 @@ export async function registerAgentConfig(app: FastifyInstance) {
         } catch { /* keep null */ }
       }
 
-      const endedCalls = calls.filter((c) => c.call_status === 'ended');
+      const endedCalls = calls
+        .filter((c) => c.call_status === 'ended')
+        .sort((a, b) => (b.end_timestamp ?? b.start_timestamp ?? 0) - (a.end_timestamp ?? a.start_timestamp ?? 0));
       const latest = endedCalls[0];
       const latencyToMs = (v: unknown): number | null => {
         if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) return null;
@@ -1770,13 +1849,13 @@ export async function registerAgentConfig(app: FastifyInstance) {
 
       // Primary = measured E2E p50 when available; this is what callers feel.
       // Fall back to measured LLM p50, then Retell's model-baseline estimate.
-      const primary = recentLatencyMs.e2e?.p50 ?? recentLatencyMs.llm?.p50 ?? modelBaselineMs;
+      const primary = e2e ?? llm ?? modelBaselineMs;
       const source: 'model-baseline' | 'measured' | 'none' =
-        recentLatencyMs.e2e?.p50 != null || recentLatencyMs.llm?.p50 != null ? 'measured'
+        e2e != null || llm != null ? 'measured'
         : modelBaselineMs != null ? 'model-baseline'
         : 'none';
 
-      return {
+      response = {
         callsCount: endedCalls.length,
         sampleSize: recentLatencyMs.e2e?.samples ?? recentLatencyMs.llm?.samples ?? (primary != null ? 1 : 0),
         latencyMs: primary,
@@ -1790,10 +1869,15 @@ export async function registerAgentConfig(app: FastifyInstance) {
         measuredLlmMs: llm,
         error: null,
       };
-    } catch (err) {
-      app.log.warn({ err: err instanceof Error ? err.message : String(err), tenantId }, 'listCalls failed');
-      return { ...emptyResponse, error: 'retell_unreachable' };
-    }
+      } catch (err) {
+        app.log.warn({ err: err instanceof Error ? err.message : String(err), tenantId }, 'listCalls failed');
+        response = { ...emptyResponse, error: 'retell_unreachable' };
+      }
+      agentStatsCache.set(cacheKey, { expiresAt: Date.now() + AGENT_STATS_CACHE_TTL_MS, value: response });
+      return response;
+    })();
+    agentStatsCache.set(cacheKey, { expiresAt: 0, promise: statsPromise });
+    return statsPromise;
   });
 
   // Save config (local only, no Retell deploy).

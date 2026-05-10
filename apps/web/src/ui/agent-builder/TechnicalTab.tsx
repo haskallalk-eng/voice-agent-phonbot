@@ -75,14 +75,14 @@ export function TechnicalTab({ config, onUpdate }: TechnicalTabProps) {
         </div>
       </SectionCard>
 
-      <SectionCard title="Gespraechsfluss" icon={IconSliders}>
+      <SectionCard title="Gesprächsfluss" icon={IconSliders}>
         <div className="space-y-5">
           <Field label="Unterbrechungs-Profil">
             <Select
               value={runtime.interruptionMode}
               onChange={(e) => applyMode(e.target.value as InterruptionMode)}
             >
-              <option value="allow">Natuerlich - leicht unterbrechbar</option>
+              <option value="allow">Natürlich - leicht unterbrechbar</option>
               <option value="hold">Kurz halten - etwas kontrollierter</option>
               <option value="block">Ohne Unterbrechung - am ruhigsten</option>
             </Select>
@@ -116,10 +116,10 @@ export function TechnicalTab({ config, onUpdate }: TechnicalTabProps) {
           <Toggle
             checked={runtime.enableBackchannel}
             onChange={(v) => onUpdate({ enableBackchannel: v })}
-            label="Kurze Hoersignale erlauben"
+            label="Kurze Hörsignale erlauben"
           />
           <div className="rounded-xl bg-white/5 px-4 py-3 text-xs leading-relaxed text-white/50 ml-14">
-            Kleine Einwuerfe wie "mhm" oder "okay" lassen den Agenten natuerlicher wirken, koennen aber in sehr formellen Setups stoeren.
+            Kleine Einwürfe wie "mhm" oder "okay" lassen den Agenten natürlicher wirken, können aber in sehr formellen Setups stören.
           </div>
         </div>
       </SectionCard>
@@ -132,7 +132,7 @@ export function TechnicalTab({ config, onUpdate }: TechnicalTabProps) {
             label="DTMF-Eingabe erlauben"
           />
           <div className="rounded-xl bg-white/5 px-4 py-3 text-xs leading-relaxed text-white/50 ml-14">
-            Anrufer koennen dann ueber die Telefontastatur Eingaben machen, etwa fuer Menues oder Verifizierungsschritte.
+            Anrufer können dann über die Telefontastatur Eingaben machen, etwa für Menüs oder Verifizierungsschritte.
           </div>
         </div>
       </SectionCard>
