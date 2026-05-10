@@ -6,7 +6,7 @@ import { FOOTER_STYLE, FOOTER_HTML } from './_footer.mjs';
 import { SITE, TODAY, CORE_INDUSTRY_PAGES, SEO_NICHE_PAGES, ALL_INDUSTRY_PAGES } from './seo-pages.mjs';
 
 const OUT_DIR = path.resolve('apps/web/public');
-const FULL_AGENT_STARTER_PRICE = '79';
+const FULL_AGENT_STARTER_PRICE = '89';
 
 const germanPairs = [
   ['fuer', 'für'], ['Fuer', 'Für'], ['Oeff', 'Öff'], ['oeff', 'öff'], ['Foerder', 'Förder'], ['foerder', 'förder'],

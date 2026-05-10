@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../db.js', () => ({
   pool: null,
@@ -16,7 +16,7 @@ vi.mock('../logger.js', () => {
   };
 });
 
-const { parseSlotTime } = await import('../calendar.js');
+const { parseSlotTime, bookSlot, findFreeSlots } = await import('../calendar.js');
 
 function berlinTime(date: Date | null): string {
   expect(date).not.toBeNull();
@@ -29,11 +29,51 @@ function berlinTime(date: Date | null): string {
 }
 
 describe('calendar slot time parsing', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('keeps explicit UTC instants as the intended Berlin wall-clock time', () => {
     expect(berlinTime(parseSlotTime('2026-05-11T07:00:00.000Z'))).toBe('09:00');
   });
 
   it('treats timezone-less ISO input as Berlin local wall-clock time', () => {
     expect(berlinTime(parseSlotTime('2026-05-11T09:00:00'))).toBe('09:00');
+  });
+
+  it('keeps explicit "heute" times in the past so booking can reject them', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-09T10:00:00.000Z')); // 12:00 Berlin
+
+    const parsed = parseSlotTime('heute um 08:00');
+
+    expect(parsed).not.toBeNull();
+    expect(parsed!.getTime()).toBeLessThan(Date.now());
+  });
+
+  it('rejects absolute German dates in the past before any booking side effect', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-09T10:00:00.000Z'));
+
+    const result = await bookSlot('org-1', {
+      customerName: 'Max Mustermann',
+      customerPhone: '+4917612345678',
+      time: '18.04.2025 18 Uhr',
+      service: 'Beratung',
+    });
+
+    expect(result).toEqual({ ok: false, error: 'PAST_SLOT' });
+  });
+
+  it('does not return slots for a requested past date', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-09T10:00:00.000Z'));
+
+    const result = await findFreeSlots('org-1', {
+      date: '18.04.2025',
+      service: 'Beratung',
+    });
+
+    expect(result).toEqual({ slots: [], source: 'past-date' });
   });
 });

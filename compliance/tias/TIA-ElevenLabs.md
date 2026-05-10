@@ -1,9 +1,9 @@
 # Transfer Impact Assessment (TIA) — ElevenLabs
 
-> **Stand:** 2026-04-30 · **Verantwortlich:** Hans Waier, Hans Ulrich Waier · **Re-Verifikation:** 2026-10-30
+> **Stand:** 2026-04-30 · **Verantwortlich:** Hassieb Kalla · **Re-Verifikation:** 2026-10-30
 
 ## 1. Verantwortlicher
-Hans Ulrich Waier, Berlin · Phonbot.
+Hassieb Kalla, Berlin · Phonbot.
 
 ## 2. Datenimporteur
 **ElevenLabs Inc.** · 169 Madison Avenue STE 11008, New York, NY 10016, USA · Rolle: Sub-Auftragsverarbeiter (aktiv für Premium-Stimmen-Tier) · Vertrag: DPA + SCC Modul 3 (Click-Wrap auf elevenlabs.io/dpa) · DPF: zu verifizieren auf dataprivacyframework.gov.

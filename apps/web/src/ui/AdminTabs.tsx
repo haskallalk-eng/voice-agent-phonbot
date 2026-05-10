@@ -2,14 +2,24 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   adminGetDemoCalls,
   adminPromoteDemoCall,
+  adminGetDemoMeetings,
+  adminUpdateDemoMeeting,
   adminGetDemoPrompts,
   adminPutDemoPrompt,
   adminFlushDemoCache,
+  adminGetPromptQa,
   adminGetLearnings,
   adminDecideLearning,
   adminGetCorrections,
   type AdminDemoCall,
+  type AdminDemoMeeting,
+  type AdminDemoMeetingStatus,
   type AdminDemoPrompts,
+  type AdminPromptQaLayer,
+  type AdminPromptQaLiveCallSourceResult,
+  type AdminPromptQaReport,
+  type AdminPromptQaSourceResult,
+  type AdminPromptQaStatus,
   type AdminLearningItem,
   type AdminLearningCorrection,
 } from '../lib/api.js';
@@ -172,6 +182,186 @@ export function DemoCallsTab() {
                         </button>
                       </div>
                     )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Demo Human Meetings ─────────────────────────────────────────────────────
+
+const MEETING_STATUS_LABELS: Record<AdminDemoMeetingStatus | 'all', string> = {
+  open: 'Offen',
+  contacted: 'Kontaktiert',
+  scheduled: 'Termin fix',
+  done: 'Erledigt',
+  ignored: 'Ignoriert',
+  all: 'Alle',
+};
+
+function meetingTone(status: AdminDemoMeetingStatus): 'gray' | 'orange' | 'green' | 'red' {
+  if (status === 'open') return 'orange';
+  if (status === 'ignored') return 'red';
+  if (status === 'done' || status === 'scheduled') return 'green';
+  return 'gray';
+}
+
+export function DemoMeetingsTab() {
+  const [items, setItems] = useState<AdminDemoMeeting[]>([]);
+  const [meetingUrl, setMeetingUrl] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<AdminDemoMeetingStatus | 'all'>('open');
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    adminGetDemoMeetings({ status, limit: 200 })
+      .then((res) => {
+        setItems(res.items);
+        setMeetingUrl(res.meetingUrl);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [status]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function setMeetingStatus(item: AdminDemoMeeting, next: AdminDemoMeetingStatus) {
+    const note = next === 'scheduled' || next === 'done'
+      ? (prompt('Interne Notiz optional:') ?? undefined)
+      : undefined;
+    setBusy(item.id);
+    try {
+      await adminUpdateDemoMeeting(item.id, { status: next, notes: note?.trim() || undefined });
+      load();
+    } catch (e) {
+      alert(`Fehler: ${(e as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Demo-Gespraeche mit Menschen</h2>
+            <p className="mt-1 max-w-2xl text-sm text-white/45">
+              Hier landen Demo-Anrufer, die mit einem echten Phonbot-Mitarbeiter sprechen oder einen Beratungstermin wollen. Chipy nimmt nur den Wunsch auf; der echte Termin wird hier nachgefasst.
+            </p>
+          </div>
+          {meetingUrl && (
+            <a
+              href={meetingUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/15 transition-colors"
+            >
+              Terminlink oeffnen
+            </a>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-white/45 text-sm">Status:</span>
+        {(['open', 'contacted', 'scheduled', 'done', 'ignored', 'all'] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => setStatus(s)}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+              status === s ? 'border-orange-500/40 bg-orange-500/15 text-orange-200' : 'border-white/10 bg-white/5 text-white/45 hover:bg-white/10'
+            }`}
+          >
+            {MEETING_STATUS_LABELS[s]}
+          </button>
+        ))}
+        <button
+          onClick={load}
+          className="ml-auto rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/50 hover:bg-white/10 transition-colors"
+        >
+          Aktualisieren
+        </button>
+      </div>
+
+      {loading ? <Spinner /> : items.length === 0 ? (
+        <p className="text-white/30 text-sm text-center py-12">Keine Demo-Gespraechswuensche in diesem Status.</p>
+      ) : (
+        <div className="space-y-3">
+          {items.map((item) => {
+            const open = openId === item.id;
+            return (
+              <div key={item.id} className="rounded-2xl border border-white/10 bg-white/[0.035]">
+                <button
+                  onClick={() => setOpenId(open ? null : item.id)}
+                  className="w-full px-4 py-4 text-left flex flex-col gap-3 hover:bg-white/[0.03] transition-colors rounded-2xl"
+                >
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <Pill tone={meetingTone(item.human_meeting_status)}>{MEETING_STATUS_LABELS[item.human_meeting_status]}</Pill>
+                    <span className="text-xs text-white/35">{fmtDate(item.created_at)}</span>
+                    <Pill tone="gray">{item.template_id}</Pill>
+                    <span className="text-sm font-semibold text-white truncate">
+                      {item.caller_name ?? 'Unbekannter Kontakt'}
+                    </span>
+                    <span className="ml-auto text-xs text-white/35">{item.duration_sec ?? '?'}s</span>
+                  </div>
+                  <div className="grid sm:grid-cols-3 gap-2 text-xs">
+                    <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                      <p className="text-white/35">Kontakt</p>
+                      <p className="text-white/80 truncate">{item.caller_phone ?? item.caller_email ?? 'fehlt'}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                      <p className="text-white/35">Wunschzeit</p>
+                      <p className="text-white/80 truncate">{item.human_meeting_time ?? 'nicht genannt'}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                      <p className="text-white/35">Kanal</p>
+                      <p className="text-white/80 truncate">{item.human_meeting_channel ?? 'unknown'}</p>
+                    </div>
+                  </div>
+                  {item.intent_summary && <p className="text-sm text-white/60">{item.intent_summary}</p>}
+                </button>
+
+                {open && (
+                  <div className="px-4 pb-4 space-y-3 border-t border-white/5">
+                    <div className="grid md:grid-cols-2 gap-3 text-xs pt-3">
+                      <div><span className="text-white/35">Name:</span> <span className="text-white/75">{item.caller_name ?? '-'}</span></div>
+                      <div><span className="text-white/35">Telefon:</span> <span className="text-white/75">{item.caller_phone ?? '-'}</span></div>
+                      <div><span className="text-white/35">E-Mail:</span> <span className="text-white/75">{item.caller_email ?? '-'}</span></div>
+                      <div><span className="text-white/35">call_id:</span> <span className="text-white/50 font-mono text-[10px]">{item.call_id}</span></div>
+                      <div><span className="text-white/35">Testlink Mail:</span> <span className="text-white/75">{fmtDate(item.signup_link_email_sent_at)}</span></div>
+                      <div><span className="text-white/35">Testlink SMS:</span> <span className="text-white/75">{fmtDate(item.signup_link_sms_sent_at)}</span></div>
+                    </div>
+                    {item.human_meeting_notes && (
+                      <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/65">
+                        {item.human_meeting_notes}
+                      </div>
+                    )}
+                    {item.transcript_excerpt && (
+                      <details className="text-xs">
+                        <summary className="cursor-pointer text-white/50 hover:text-white/80">Transcript anzeigen</summary>
+                        <pre className="mt-2 max-h-80 overflow-auto rounded-lg border border-white/5 bg-black/40 p-3 whitespace-pre-wrap text-white/65">{item.transcript_excerpt}</pre>
+                      </details>
+                    )}
+                    <div className="flex items-center gap-2 flex-wrap pt-1">
+                      {(['contacted', 'scheduled', 'done', 'ignored'] as const).map((next) => (
+                        <button
+                          key={next}
+                          onClick={() => setMeetingStatus(item, next)}
+                          disabled={busy === item.id || item.human_meeting_status === next}
+                          className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/55 hover:bg-white/10 disabled:opacity-40 transition-colors"
+                        >
+                          {MEETING_STATUS_LABELS[next]}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -459,6 +649,350 @@ export function DemoPromptsTab() {
             Kunden sehen diese Texte nie. Sie wirken nur auf Demo-Agents.
           </span>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Prompt QA ────────────────────────────────────────────────────────────────
+
+const LAYER_LABELS: Record<AdminPromptQaLayer, string> = {
+  prompt: 'Prompt',
+  latency: 'Latenz',
+  stt: 'STT',
+  tts: 'TTS',
+  e2e: 'E2E',
+  tooling: 'Tools',
+  privacy: 'Privacy',
+};
+
+function qaStatusTone(status: AdminPromptQaStatus): 'green' | 'orange' | 'red' {
+  if (status === 'green') return 'green';
+  if (status === 'yellow') return 'orange';
+  return 'red';
+}
+
+function qaStatusLabel(status: AdminPromptQaStatus): string {
+  if (status === 'green') return 'Gruen';
+  if (status === 'yellow') return 'Gelb';
+  return 'Rot';
+}
+
+function PromptQaSourceCard({ source }: { source: AdminPromptQaSourceResult }) {
+  const [open, setOpen] = useState(source.status !== 'green');
+  const layers = Object.entries(source.layerBreakdown) as Array<[AdminPromptQaLayer, { total: number; passed: number; failed: number }]>;
+  const topFailures = source.failures.slice(0, 6);
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.035]">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full px-4 py-4 text-left flex flex-col gap-3 hover:bg-white/[0.03] transition-colors rounded-2xl"
+      >
+        <div className="flex items-center gap-3 flex-wrap">
+          <Pill tone={qaStatusTone(source.status)}>{qaStatusLabel(source.status)}</Pill>
+          <span className="text-sm font-semibold text-white">{source.label}</span>
+          <span className="text-xs text-white/35">{source.kind}</span>
+          <span className="ml-auto text-sm font-semibold text-white">{source.score.toFixed(1)}%</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+            <p className="text-white/35">Faelle</p>
+            <p className="text-white/80 font-medium">{source.passedCases}/{source.applicableCases}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+            <p className="text-white/35">Fails</p>
+            <p className={source.failedCases ? 'text-red-300 font-medium' : 'text-emerald-300 font-medium'}>{source.failedCases}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+            <p className="text-white/35">Kritisch</p>
+            <p className={source.criticalFailures ? 'text-red-300 font-medium' : 'text-emerald-300 font-medium'}>{source.criticalFailures}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+            <p className="text-white/35">Tokens ca.</p>
+            <p className="text-white/80 font-medium">{source.estimatedTokens.toLocaleString('de-DE')}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+            <p className="text-white/35">Latenzrisiko</p>
+            <p className={source.latencyRisk === 'high' ? 'text-red-300 font-medium' : source.latencyRisk === 'medium' ? 'text-orange-300 font-medium' : 'text-emerald-300 font-medium'}>{source.latencyRisk}</p>
+          </div>
+        </div>
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 space-y-4">
+          {source.notes.length > 0 && (
+            <div className="rounded-xl border border-cyan-500/15 bg-cyan-500/5 px-3 py-2 text-xs text-cyan-100/75">
+              {source.notes.join(' ')}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2">
+            {layers.map(([layer, stats]) => (
+              <div key={layer} className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs">
+                <p className="text-white/35">{LAYER_LABELS[layer]}</p>
+                <p className="text-white/80">{stats.passed}/{stats.total}</p>
+                {stats.failed > 0 && <p className="text-red-300/90">{stats.failed} offen</p>}
+              </div>
+            ))}
+          </div>
+
+          {source.promptOptimizations.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold text-white/70">Prompt-Optimierer</h4>
+              <div className="grid md:grid-cols-2 gap-2">
+                {source.promptOptimizations.slice(0, 6).map((item) => (
+                  <div key={item} className="rounded-xl border border-orange-500/15 bg-orange-500/5 px-3 py-2 text-xs text-orange-100/85">
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {topFailures.length > 0 ? (
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold text-white/70">Kritische Samples</h4>
+              {topFailures.map((failure) => (
+                <div key={failure.id} className="rounded-xl border border-white/10 bg-black/25 px-3 py-3 text-xs space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Pill tone={failure.severity === 'critical' || failure.severity === 'high' ? 'red' : 'orange'}>{failure.severity}</Pill>
+                    <Pill tone="gray">{failure.promptManagerArea}</Pill>
+                    <span className="text-white/80 font-medium">{failure.title}</span>
+                  </div>
+                  <p className="text-white/45">Nutzerinput: {failure.userInput}</p>
+                  <p className="text-white/65">{failure.requirement}</p>
+                  {failure.missing.length > 0 && <p className="text-red-200/75">Fehlt: {failure.missing.join(', ')}</p>}
+                  <p className="text-orange-100/75">{failure.recommendation}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-200/80">
+              Keine offenen Sample-Failures in diesem Prompt.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PromptQaLiveCallCard({ result }: { result: AdminPromptQaLiveCallSourceResult }) {
+  const [open, setOpen] = useState(result.status !== 'green');
+  const families = Object.entries(result.familyBreakdown)
+    .sort((a, b) => b[1].failed - a[1].failed || b[1].total - a[1].total)
+    .slice(0, 5);
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/20">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full px-3 py-3 text-left flex items-center gap-3 flex-wrap hover:bg-white/[0.03] transition-colors rounded-xl"
+      >
+        <Pill tone={qaStatusTone(result.status)}>{qaStatusLabel(result.status)}</Pill>
+        <span className="text-sm font-semibold text-white">{result.label}</span>
+        <span className="text-xs text-white/35">{result.kind}</span>
+        <span className="ml-auto text-sm font-semibold text-white">{result.score.toFixed(1)}%</span>
+        <span className={result.failedRuns ? 'text-xs text-red-300' : 'text-xs text-emerald-300'}>
+          {result.passedRuns}/{result.applicableRuns} bestanden
+        </span>
+      </button>
+
+      {open && (
+        <div className="px-3 pb-3 space-y-3">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-2">
+            {families.map(([family, stats]) => (
+              <div key={family} className="rounded-lg border border-white/10 bg-white/[0.035] px-3 py-2 text-xs">
+                <p className="text-white/35 truncate">{family}</p>
+                <p className="text-white/80">{stats.passed}/{stats.total}</p>
+                {stats.failed > 0 && <p className="text-red-300/90">{stats.failed} offen</p>}
+              </div>
+            ))}
+          </div>
+
+          {result.highestRiskFailures.length > 0 ? (
+            <div className="space-y-2">
+              {result.highestRiskFailures.slice(0, 3).map((failure) => (
+                <div key={failure.scenarioId} className="rounded-lg border border-red-500/15 bg-red-500/5 px-3 py-2 text-xs space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Pill tone={failure.severity === 'critical' || failure.severity === 'high' ? 'red' : 'orange'}>{failure.severity}</Pill>
+                    <Pill tone="gray">{LAYER_LABELS[failure.layer]}</Pill>
+                    <span className="text-white/80 font-medium">{failure.title}</span>
+                  </div>
+                  <p className="text-white/45">Call-Situation: {failure.callerInput}</p>
+                  <p className="text-white/60">Soll: {failure.expectedAgentBehavior}</p>
+                  <p className="text-red-200/75">Fehlende Regeln: {failure.missingRuleIds.join(', ')}</p>
+                  {failure.recommendations[0] && <p className="text-orange-100/75">{failure.recommendations[0]}</p>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-200/80">
+              Keine offenen Livecall-Dry-Run-Failures fuer diese Quelle.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function PromptQaTab() {
+  const [report, setReport] = useState<AdminPromptQaReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | AdminPromptQaStatus>('all');
+
+  const load = useCallback(() => {
+    setLoading(true);
+    adminGetPromptQa()
+      .then(setReport)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading || !report) return <Spinner />;
+
+  const sources = report.sources
+    .filter((source) => filter === 'all' || source.status === filter)
+    .sort((a, b) => b.criticalFailures - a.criticalFailures || a.score - b.score || b.failedCases - a.failedCases);
+  const liveCall = report.liveCallDryRun;
+  const liveCallSources = liveCall?.sourceResults
+    .filter((source) => filter === 'all' || source.status === filter)
+    .sort((a, b) => b.criticalFailures - a.criticalFailures || a.score - b.score || b.failedRuns - a.failedRuns) ?? [];
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 space-y-4">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Prompt QA: {report.caseBank.totalCases}-Fall Dry-Run</h2>
+            <p className="text-sm text-white/45 mt-1">
+              Mehrere simulierte Tester-Agenten pruefen Website-Demo, Dashboard-Prompt, Sales und Baselines. Es werden keine echten Calls, Termine, SMS, CRM-Aktionen oder Retell-Deploys ausgefuehrt.
+            </p>
+          </div>
+          <button
+            onClick={load}
+            className="rounded-xl border border-orange-500/30 bg-orange-500/10 px-4 py-2 text-sm font-semibold text-orange-200 hover:bg-orange-500/15 transition-colors"
+          >
+            Neu testen
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
+            <p className="text-xs text-white/35">Gesamtstatus</p>
+            <p className="mt-1"><Pill tone={qaStatusTone(report.overall.status)}>{qaStatusLabel(report.overall.status)}</Pill></p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
+            <p className="text-xs text-white/35">Score</p>
+            <p className="text-xl font-semibold text-white">{report.overall.score.toFixed(1)}%</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
+            <p className="text-xs text-white/35">Case-Bank</p>
+            <p className="text-xl font-semibold text-white">{report.caseBank.totalCases}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
+            <p className="text-xs text-white/35">Quellen</p>
+            <p className="text-xl font-semibold text-white">{report.overall.sources}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
+            <p className="text-xs text-white/35">Fails</p>
+            <p className={report.overall.failedCases ? 'text-xl font-semibold text-red-300' : 'text-xl font-semibold text-emerald-300'}>{report.overall.failedCases}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
+            <p className="text-xs text-white/35">Modell</p>
+            <p className="text-sm font-semibold text-white truncate">{report.model}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h3 className="text-sm font-semibold text-white">Simulierte Reviewer-Agenten</h3>
+          <span className="text-xs text-white/35">Run mode: {report.runMode}, Live-Modell: {report.liveModelSimulation}</span>
+        </div>
+        <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-3">
+          {report.simulationAgents.map((agent) => (
+            <div key={agent.id} className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-xs space-y-2">
+              <p className="font-semibold text-white">{agent.name}</p>
+              <p className="text-white/55 leading-relaxed">{agent.focus}</p>
+              <div className="flex gap-1 flex-wrap">
+                {agent.layers.map((layer) => <Pill key={layer} tone="gray">{LAYER_LABELS[layer]}</Pill>)}
+              </div>
+              <p className="text-cyan-100/60">{agent.guardrail}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {liveCall && (
+        <div className="rounded-2xl border border-cyan-500/15 bg-cyan-500/[0.045] p-4 space-y-4">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <h3 className="text-sm font-semibold text-white">Livecall-Dry-Run: {liveCall.totalRuns} Szenarien</h3>
+              <p className="text-sm text-white/50 mt-1">
+                Simuliert echte Call-Risiken wie STT, Barge-in, E-Mail, Nummern, Tools, Handoff und Datenschutz. Keine echten Retell-Anrufe.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                <p className="text-white/35">Runs</p>
+                <p className="text-white font-semibold">{liveCall.totalRuns}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                <p className="text-white/35">Echte Calls</p>
+                <p className="text-emerald-300 font-semibold">{liveCall.actualCallsPlaced}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                <p className="text-white/35">Modell</p>
+                <p className="text-white font-semibold">{liveCall.liveModelSimulation}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 xl:grid-cols-5 gap-2">
+            {liveCall.families.map((family) => (
+              <div key={family.id} className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs">
+                <p className="text-white/35">{LAYER_LABELS[family.layer]}</p>
+                <p className="text-white/80 truncate">{family.title}</p>
+                <p className="text-cyan-100/60">{family.runs} Varianten</p>
+              </div>
+            ))}
+          </div>
+
+          <p className="rounded-xl border border-cyan-500/15 bg-black/20 px-3 py-2 text-xs text-cyan-100/70">
+            {liveCall.note}
+          </p>
+
+          <div className="space-y-2">
+            {liveCallSources.map((source) => <PromptQaLiveCallCard key={source.sourceId} result={source} />)}
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-white/45 text-sm">Filter:</span>
+        {(['all', 'red', 'yellow', 'green'] as const).map((item) => (
+          <button
+            key={item}
+            onClick={() => setFilter(item)}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+              filter === item
+                ? 'border-orange-500/40 bg-orange-500/15 text-orange-200'
+                : 'border-white/10 bg-white/5 text-white/45 hover:bg-white/10'
+            }`}
+          >
+            {item === 'all' ? 'Alle' : qaStatusLabel(item)}
+          </button>
+        ))}
+        <span className="ml-auto text-xs text-white/30">Generiert: {fmtDate(report.generatedAt)}</span>
+      </div>
+
+      <div className="space-y-3">
+        {sources.map((source) => <PromptQaSourceCard key={source.id} source={source} />)}
       </div>
     </div>
   );

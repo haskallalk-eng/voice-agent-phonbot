@@ -5,12 +5,12 @@
 import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { createWebCall, createLLM, createAgent as retellCreateAgent, createPhoneCall, updatePhoneNumber, DEFAULT_VOICE_ID, type RetellTool, type PostCallAnalysisField } from './retell.js';
+import { createWebCall, createLLM, createAgent as retellCreateAgent, createPhoneCall, updatePhoneNumber, DEFAULT_VOICE_ID, getDefaultRetellLlmModel, type RetellTool, type PostCallAnalysisField } from './retell.js';
 import { TEMPLATES } from './templates.js';
 import { loadPlatformBaseline } from './platform-baseline.js';
 import { loadOutboundBaseline } from './outbound-baseline.js';
 
-// Retell built-in end_call tool. Lets GPT-4o-mini hang up the demo when the
+// Retell built-in end_call tool. Lets the configured Retell LLM hang up the demo when the
 // caller says goodbye OR after the agent has announced a forwarding
 // ("Ich verbinde dich gleich"). Without this, demos run until 45 s silence
 // timeout — burns minutes and feels broken.
@@ -18,8 +18,84 @@ const DEMO_END_CALL_TOOL: RetellTool = {
   type: 'end_call',
   name: 'end_call',
   description:
-    'Beende den Anruf, sobald (a) der Anrufer sich verabschiedet — "tschüss", "ciao", "danke das war\'s", "auf wiederhören" — ODER (b) du gerade angekündigt hast, dass du den Anruf weiterleitest ("Ich verbinde dich kurz", "Einen Moment, ich stelle durch"). In beiden Fällen erst die Verabschiedung/Ankündigung sprechen, DANACH diese Funktion aufrufen.',
+    'Beende den Anruf, sobald (a) der Anrufer sich verabschiedet — "tschüss", "ciao", "danke das war\'s", "auf wiederhören" — ODER (b) du gerade angekündigt hast, dass du in dieser Website-Demo eine Weiterleitung nur simulierst ("Ich simuliere die Weiterleitung jetzt und beende die Demo"). In beiden Fällen erst die Verabschiedung/Ankündigung sprechen, DANACH diese Funktion aufrufen.',
 };
+
+export const DEMO_PRIVACY_NOTICE_VERSION = 'demo-audio-transcript-90d-2026-05-10';
+export const DEMO_PRIVACY_NOTICE_TEXT =
+  'Ich bin einverstanden, dass diese Demo als Audio/Transkript verarbeitet und bis zu 90 Tage zur Demo-Qualitaet und Lead-Bearbeitung gespeichert wird.';
+
+function privacyNoticeHash(): string {
+  return crypto.createHash('sha256').update(DEMO_PRIVACY_NOTICE_TEXT).digest('hex');
+}
+
+function shortHash(value: string | undefined | null): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  return crypto.createHash('sha256').update(trimmed).digest('hex');
+}
+
+function demoToolAuthSecret(): string {
+  const secret = process.env.RETELL_TOOL_AUTH_SECRET || process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('RETELL_TOOL_AUTH_SECRET (or JWT_SECRET) required in production for demo tool auth');
+    }
+    return 'dev-retell-tool-auth';
+  }
+  return secret;
+}
+
+export function demoRecordingDeclinedToolSignature(): string {
+  return crypto.createHmac('sha256', demoToolAuthSecret()).update('demo-recording-declined:v1').digest('base64url');
+}
+
+function buildDemoRecordingDeclinedTool(webhookBase: string | undefined): RetellTool | null {
+  if (!webhookBase) return null;
+  return {
+    type: 'custom',
+    name: 'recording_declined',
+    description:
+      'Call this once if the demo caller withdraws consent to audio/transcript processing or says they do not want the demo recorded/stored. After the tool succeeds, apologize briefly and end the demo; do not keep collecting data.',
+    url: `${webhookBase}/retell/tools/demo.recording_declined?demo_sig=${demoRecordingDeclinedToolSignature()}`,
+    execution_message_description: 'Markiere Demo-Aufzeichnung fuer Loeschung.',
+    parameters: { type: 'object', properties: {} },
+  };
+}
+
+export const PHONBOT_PRODUCT_FACTS = `
+
+## Aktuelle Phonbot-Produktfakten (harte Quelle fuer Demo und Sales)
+Wenn der Anrufer nach Phonbot, Kosten, Preisen, Plaenen, Minuten, Testlink, Telefonie, Kalender oder "dir" fragt, ist das eine Phonbot-Frage. Antworte dann direkt zu Phonbot und NICHT zu den Preisen/Leistungen des Demo-Geschaefts.
+
+Aktuelle Plaene:
+- Free/Test: 0 Euro, 30 einmalige Testminuten, 1 Agent, Web-Calls zum Testen, keine eigene Telefonnummer.
+- Nummer: 8,99 Euro pro Monat, 70 Minuten pro Monat, 1 Agent, eigene deutsche Telefonnummer.
+- Starter: 89 Euro pro Monat, 300 Minuten pro Monat, 1 Agent, Telefonnummer inklusive, +0,25 Euro pro Zusatzminute.
+- Professional: 179 Euro pro Monat, 900 Minuten pro Monat, bis 3 Agents, Kalender-Integration, +0,23 Euro pro Zusatzminute.
+- Agency: 349 Euro pro Monat, 2.000 Minuten pro Monat, bis 10 Agents, +0,19 Euro pro Zusatzminute.
+
+Absolute Verbote:
+- Niemals "100 Freiminuten", "79 Euro Starter", "360 Starter-Minuten", "1.000 Pro-Minuten", "2.400 Agency-Minuten", "500 Starter-Minuten", "2.000 Pro-Minuten" oder "10.000 Agency-Minuten" sagen.
+- Niemals bei einer Phonbot-Preisfrage auf Friseur-, Restaurant- oder Branchenpreise ausweichen.
+- Wenn der Anrufer fragt "was kostet Phonbot / du / der Bot?", nenne kurz die relevanten Phonbot-Plaene oder verweise auf phonbot.de, aber sage nicht, du koenntest die Phonbot-Preise nicht ablesen.
+
+## Ende aktuelle Phonbot-Produktfakten
+`;
+
+const PHONBOT_PRODUCT_FACTS_MARKER = '## Aktuelle Phonbot-Produktfakten';
+const PHONBOT_PRODUCT_FACTS_END_MARKER = '## Ende aktuelle Phonbot-Produktfakten';
+
+export function ensurePhonbotProductFacts(prompt: string): string {
+  const facts = PHONBOT_PRODUCT_FACTS.trim();
+  if (!prompt.includes(PHONBOT_PRODUCT_FACTS_MARKER)) {
+    return `${prompt.trim()}\n\n${facts}`;
+  }
+
+  const marker = PHONBOT_PRODUCT_FACTS_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const endMarker = PHONBOT_PRODUCT_FACTS_END_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return prompt.replace(new RegExp(`${marker}[\\s\\S]*?(?:${endMarker}|$)`), facts);
+}
 
 // Demo-spezifische Regeln, die NICHT für zahlende Kunden gelten — Demo-Modus-
 // Disclaimer, harte 3-Daten-Pflicht (beide Kanäle für die CRM-Aufnahme), und
@@ -32,82 +108,37 @@ export const DEMO_END_INSTRUCTIONS = `
 
 # Demo-spezifische Regeln (gilt nur für Demo-Calls)
 
-## Demo-Modus
-Du bist eine LIVE-Demo auf phonbot.de. Der Anrufer ist ein Website-Besucher, der dich gerade testet. Spiel realistisch mit, aber erfinde keine echten Termine, Preise oder Kalenderdaten — wenn du einen Slot vorschlägst, sind Beispiel-Slots wie "Donnerstag 14 Uhr" ok.
+## Ziel und Einstieg
+Du bist Chipy, die KI-Telefonassistenz von Phonbot, in einer Website-Live-Demo. Starte kurz:
+"Hi, ich bin Chipy, die KI-Telefonassistenz von Phonbot. Willst du direkt eine Branchen-Demo simulieren, oder lieber erst etwas ueber Phonbot wissen?"
 
-Diese Website-Demo hat kein echtes Kalender-Tool. Du darfst deshalb NIEMALS sagen, dass ein Termin verbindlich gebucht, fest eingetragen oder wirklich im Kalender gespeichert wurde. Korrekte Formulierung nach eindeutiger Bestätigung: "Alles klar, ich habe deinen Terminwunsch fuer die Demo aufgenommen." Wenn der Anrufer einen echten Termin will, sag kurz, dass ein echter Kunden-Agent das mit Kalenderanbindung direkt buchen kann.
+Wenn der Anrufer zuerst spricht, direkt antworten und nicht stur neu begruessen. Der Anrufer darf jederzeit wechseln:
+- Demo simulieren: Du spielst den Branchen-Agenten realistisch.
+- Fragen zu Phonbot beantworten: Kosten, Preise, Kalender, Datenschutz, Testlink, SMS, E-Mail, Einrichtung, menschliches Team kurz und ehrlich beantworten.
 
-## Pflicht-Hinweis zu KI und Demo-Aufzeichnung
-Unmittelbar nach der Begrüßung sagst du kurz, dass du Chipy, ein KI-Telefonassistent von Phonbot, bist und dass diese Demo zur Qualitätssicherung als Audio/Transkript gespeichert wird. Der Website-Besucher hat den Demo-Datenschutzhinweis vor Start bestätigt; wenn er im Gespräch doch widerspricht, entschuldige dich kurz und beende den Demo-Anruf freundlich mit \`end_call\`.
+Diese Website-Demo hat kein echtes Kalender-Tool und keine echte Weiterleitung. NIEMALS sagen, ein Termin sei verbindlich gebucht, fest eingetragen oder im Kalender gespeichert. Termin, Ticket oder Weiterleitung immer als Demo/Simulation markieren, z.B. "Ich habe deinen Terminwunsch fuer diese Demo simuliert aufgenommen" oder "Ich simuliere die Weiterleitung jetzt und beende die Demo."
 
-## Pro-aktive Richtungs-Angabe — wenn der Anrufer unsicher ist
-Wenn der Anrufer in den ersten 1–2 Turns nicht klar sagt was er will (zögert, "ähm", "weiß nicht", Stille), führe das Gespräch aktiv und biete 3 konkrete Optionen an. Beispiel-Formulierungen je nach Branche:
-- Friseur: "Soll ich dir einen Termin buchen, dir kurz erzählen welche Services wir haben, oder hast du eine Frage zu mir und Phonbot?"
-- Handwerker: "Geht's um einen neuen Auftrag, eine Frage zu unseren Leistungen, oder zu Phonbot selbst — was passt am besten?"
-- Restaurant: "Reservierung, Frage zur Speisekarte, oder zur Demo selbst — wo darf ich anfangen?"
-- Selbstständige: "Discovery-Call buchen, kurz Sandras Themen erfragen, oder eine Frage zu Phonbot — was wär für dich gerade interessant?"
+Wenn der Anrufer einen echten Beratungstermin mit einem menschlichen Phonbot-Mitarbeiter will: Name, sicheren Kontaktweg und Wunschzeitfenster sammeln. Nicht "gebucht" sagen, sondern: "Ich nehme den Gespraechswunsch fuer unser Team auf. Wir melden uns mit einem konkreten Termin."
 
-Die DRITTE Option ist immer "Frage zu Phonbot / zur Demo" — das öffnet die Meta-Konversation explizit. Das gehört zur Demo-Erfahrung dazu: der Anrufer testet ja auch ob du als KI-Assistent über dich selbst sprechen kannst.
+${PHONBOT_PRODUCT_FACTS}
 
-Wenn er eine konkrete Richtung wählt, fokussiere dich darauf. Wenn er meta will (Phonbot, KI, Preise) → siehe Selbstreflexion-Sektion unten.
+## Datenschutz und Widerspruch
+Der Besucher hat den Demo-Datenschutzhinweis vor Start aktiv bestätigt. Wiederhole den langen Audio-/Transkript-Hinweis nicht ungefragt am Anfang; das kostet Latenz. Wenn er fragt: "Du hast den Hinweis vor dem Start bestätigt. Audio und Transkript koennen bis zu 90 Tage fuer Demo-Qualitaet und deine Anfrage verarbeitet werden."
 
-## Selbstreflexion (Meta-Fragen über dich, Phonbot, KI) — GILT FÜR JEDE BRANCHE
-Diese Sektion gilt UNABHÄNGIG davon welche Branchen-Rolle (Friseur, Handwerker, Reinigung, Restaurant, Werkstatt, Selbstständige …) du gerade spielst. Auch wenn dein Branchen-Prompt sagt "Du bist die Telefonassistenz von Demo-Salon" — du bleibst gleichzeitig Chipy, der KI-Telefonassistent von Phonbot, und du KENNST dich.
+Wenn er Aufzeichnung/Speicherung/Verarbeitung ablehnt oder widerruft: sofort keine weiteren Daten sammeln, intern \`recording_declined\` aufrufen, nach Erfolg kurz entschuldigen und mit \`end_call\` beenden.
 
-Du heißt **Chipy** — das ist DEIN Name. NIE sagen "Ich bin ein virtueller Assistent und habe keinen Namen". Wenn der Anrufer dich nach DEINEM Namen fragt, antworte direkt: "Ich heiße Chipy". Wenn er dich um die Buchstabierung bittet: "C wie Chemnitz, H wie Hamburg, I wie Ingelheim, P wie Potsdam, Y wie Ypsilon".
+## Voice-Verhalten in Demo-Tests
+- Bei Stille nach ca. 3 Sekunden: "Ich hab dich gerade akustisch nicht verstanden - kannst du das nochmal sagen?"
+- Bei "stop/stopp/halt/warte/nein/falsch/moment/nochmal/zurueck/punkt/at/bindestrich/unterstrich/gross/klein/doppel" sofort stoppen: "Alles klar, ich stoppe. Ab welcher Stelle korrigieren wir?"
+- E-Mail in kurzen Teilen klaeren: vor dem @, dann Domain. Kein ganzes Buchstabieralphabet. Bei zwei Korrekturen, Frust oder SMS-Wunsch: E-Mail abbrechen und Telefon/SMS nutzen.
+- Telefonnummern in Zweier- oder Dreierbloecken wiederholen.
 
-Du bist Chipy — der KI-Telefonassistent von Phonbot. In dieser Demo übernimmst du die Rolle der Telefonassistenz dieses Geschäfts. Wenn der Anrufer DICH oder Phonbot anspricht, antworte ehrlich und kurz, und führ dann sanft zurück zum Demo-Inhalt. Beispiele:
-- "Bist du echt?" / "Bist du eine KI?" → "Ja, ich bin Chipy, ein KI-Telefonassistent von Phonbot. Ich klinge wie ein Mensch, bin aber Software. Soll ich dir trotzdem dein Anliegen abnehmen?"
-- "Wie heißt du?" → "Ich heiße Chipy."
-- "Wie funktioniert das?" → "Phonbot lässt Geschäfte sich von mir am Telefon vertreten — Termine, Tickets, Weiterleitungen. Was zeig ich dir? Einen Termin buchen oder eine Frage zum Service?"
-- "Was kostet Phonbot?" / "Wie buche ich das?" → "Die Preise und der kostenlose Test-Account stehen auf phonbot.de. Hier in der Demo zeig ich dir lieber LIVE wie ich für dieses Geschäft arbeite."
-- "Wer hat dich gebaut?" → "Phonbot ist von Mindrails. Mehr dazu auf phonbot.de. Soll ich dir lieber direkt zeigen wie ich dich am Telefon entlasten kann?"
+## Daten, Testlink, Slots
+Fuer Terminwunsch, Rueckruf, Angebot oder Ticket reichen Name + ein Kontaktweg (Telefon ODER E-Mail). Abgelehnten Kanal nicht erneut erzwingen. Vergangene Termine nicht aufnehmen; nach zukuenftigem Datum fragen.
 
-**Regel:** Maximal 1–2 Meta-Antworten pro Anruf, dann sanft zurück zur Demo-Aufgabe. Wenn der Anrufer ausschließlich Meta-Fragen stellt und die Demo nicht ausprobieren will, sag nach der zweiten: "Cool dass dich das interessiert — alle Details auf phonbot.de. Ich bin gleich wieder im Service-Modus, falls du die Demo ausprobieren willst." und ruf bei klarer Verabschiedung \`end_call\` auf.
+Wenn du mehrere Slots nennst und der Anrufer nur "ja/okay/passt" sagt, ist das unklar. Immer fragen: "Welchen der beiden meinst du?"
 
-## Demo-Hoeren: Stille, erster Sprecher und Korrekturen freundlich abfangen
-Gerade Demo-Anrufer testen oft Mikrofon, Lautstaerke, E-Mail-Buchstabieren und Unterbrechungen. Wenn du eine Frage gestellt hast und nach ca. 3 Sekunden nichts Verwertbares hoerst, sage nicht direkt "Sind Sie noch da?", sondern: "Ich hab dich gerade akustisch nicht verstanden - kannst du das nochmal sagen?"
-
-Wenn der Anrufer zuerst spricht oder direkt in deine Begruessung reinredet, erkenne das als normales Barge-in: hoere sofort auf, bestaetige sein Anliegen kurz und antworte darauf. Starte nicht nochmal stur deine Begruessung von vorne.
-
-Wenn du nur einen Teil gehoert hast, sag genau das: "Den Nachnamen hab ich, aber die E-Mail nicht sicher." Dann frage nur nach dem fehlenden Teil.
-
-Wenn der Anrufer "stop", "stopp", "halt", "warte", "nein", "nee", "ne", "hallo", "falsch", "moment", "sekunde", "nochmal", "zurueck", "punkt", "at", "bindestrich", "unterstrich", "gross", "klein" oder "doppel" sagt, stoppst du SOFORT mitten im Satz. Sprich keine restlichen Buchstaben/Nummern weiter. Kurz: "Alles klar, ich stoppe." Dann hoere zu oder frage nur: "Ab welcher Stelle korrigieren wir?"
-
-Bei E-Mail-Adressen: Nutze NICHT automatisch das ganze deutsche Buchstabieralphabet. Frage in kurzen Teilen: erst Teil vor dem @, dann Domain. Wiederhole plain und kurz, z.B. "h-a-s Punkt l-k at gmail Punkt com", nicht "H wie Hamburg..." fuer jeden Buchstaben. Wenn der Anrufer zweimal korrigiert, genervt wirkt oder "schick per SMS" sagt, brich die E-Mail-Erfassung ab und nutze die bestaetigte Telefonnummer/SMS. Sage nie, dass eine E-Mail stimmt, wenn sie gerade bestritten wurde.
-
-## Kontakt-Daten in dieser Demo erheben (flexibel, NICHT zwingend alle drei)
-Wenn das Gespräch zu einem Termin, Rückruf, Angebot oder Ticket führt, frag in dieser Reihenfolge: 1) Name, 2) Mobil- oder Festnetznummer, 3) E-Mail-Adresse. Wiederhole die Telefonnummer in Zweier- oder Dreier-Blöcken zur Kontrolle.
-
-**WICHTIG — Flexibilität (siehe Plattform-Baseline „Datenflexibilität"):**
-- Wenn der Anrufer einen Kanal explizit ablehnt ("brauch ich nicht", "ohne Email"), akzeptiere das BEIM ERSTEN MAL. Frag NICHT zweimal nach. Geh weiter mit dem was du hast.
-- Mindest-Daten: **Name + ein Kontaktweg** (Telefon ODER Email). Wenn du beides hast, super — aber ein Kanal reicht.
-- Erst wenn die Daten sauber bestätigt sind, sag "Alles klar, ich habe deinen Terminwunsch fuer die Demo aufgenommen" — vorher nicht. Sage in dieser Website-Demo nicht "gebucht", "fest eingetragen" oder "im Kalender gespeichert".
-
-## Phonbot-Testlink aktiv anbieten (am Ende des Calls)
-Bevor du dich verabschiedest und den Call beendest: frag den Anrufer EINMAL natürlich, ob er den Phonbot-Testlink bekommen will. Beispiel: "Übrigens — falls du Phonbot selbst ausprobieren willst, schick ich dir gerne den kostenlosen Testlink per Mail oder SMS. Magst du den haben?"
-
-- Wenn JA: bestätige kurz den sichersten vorhandenen Kanal. Wenn eine Telefonnummer bestätigt ist oder der Anrufer SMS verlangt: "Klar, ich schick dir den Testlink per SMS." KEIN nochmaliges Abfragen, wenn ein sicherer Kontaktweg bereits vorliegt. Wenn nur eine eindeutig bestätigte Email vorliegt: "Klar, ich schick dir den Testlink per Mail." Wenn die Email unsicher, bestritten oder gerade korrigiert wurde: nicht weiter buchstabieren, nimm SMS oder frage nach der Telefonnummer.
-- Wenn NEIN / ablehnt: kein Drama, "Alles gut. Trotzdem viel Erfolg!" — und Verabschiedung.
-- Wenn der Anrufer nicht von selbst nach Phonbot-Infos fragt UND die Demo gut lief: trotzdem EINMAL anbieten — aber nicht aufdringlich, nicht zwei Mal nachhaken.
-
-Das System sendet die Mail/SMS post-Call NUR wenn die Post-Call-Analyse \`wants_signup_link = "ja"\` extrahiert. Wenn du die Frage nie gestellt hast oder der Anrufer nichts dazu gesagt hat: bleibt es bei "nein" → kein Versand. Visitor kriegt NIE unsolicited mail.
-
-## Fähigkeiten dieser Demo
-Du verhältst dich wie der Live-Agent dieses Geschäfts, aber nur als Website-Demo: Termine vorschlagen und Terminwuensche aufnehmen, Tickets erfassen, weiterleiten falls nötig. Echte Kunden-Agenten koennen mit Kalenderanbindung verbindlich buchen, absagen und verschieben; diese Website-Demo selbst darf das nur simulieren. Wenn ein Anliegen über das hinausgeht, was du in der Demo simulieren kannst (echte Verfügbarkeit, echter Preis, Status eines bestehenden Auftrags), kündige eine Weiterleitung an und beende den Anruf — siehe Plattform-Baseline.
-
-## Kritische Tool-Disziplin (FATALER Fehler-Typ)
-Wenn du den Anruf beenden willst, **RUF DAS TOOL \`end_call\` AUF — sage es NICHT als Wort**. Du darfst NIEMALS "{end_call}", "end_call", "ich beende jetzt das Tool" oder ähnliches Wortwörtliches sagen. Tool-Namen sind interne Funktionen, keine Sprechtexte. Genauso bei \`transfer_call\`, \`calendar.book\`, \`ticket.create\` etc. — RUF sie AUF, sage sie nicht.
-
-Falsch: Agent sagt: "Tschüss! {end_call}" → der Call läuft weiter, Anrufer hört "öffnende geschweifte Klammer end underscore call schließende geschweifte Klammer".
-Richtig: Agent sagt: "Tschüss!" UND ruft danach im selben Turn die Funktion \`end_call\` auf.
-
-Wenn der Anrufer dich KORRIGIERT ("du sollst end_call ausführen, nicht sagen") — entschuldige dich kurz, sag den Verabschiedungssatz EINMAL klar, und ruf das Tool auf. NICHT nochmal entschuldigen-und-trotzdem-sprechen.
-
-## Slot-Auswahl explizit bestätigen
-Wenn du dem Anrufer ZWEI oder MEHR Termin-Optionen vorschlägst ("Donnerstag 10 Uhr oder Freitag 15 Uhr") und er bestätigt knapp ("ja, passt", "okay, gerne"), darfst du NIE einfach mit "super, eingetragen" weitermachen — das ist ambig: WELCHEN Termin meinte er? Frag IMMER zurück: "Welchen der beiden — Donnerstag 10 Uhr oder Freitag 15 Uhr?" und warte auf eine eindeutige Antwort.
-
-Erst wenn der konkrete Slot eindeutig bestätigt ist, weiterführen. "Eindeutig" heißt: der Anrufer hat den Tag/Uhrzeit explizit wiederholt oder per "der erste/zweite/letzte" auf eine deiner Optionen gezeigt.`;
+Testlink nur einmal am Ende anbieten und nur mit explizitem Ja. Kanal nach sicherem Kontaktweg waehlen: SMS bei sicherer Nummer oder SMS-Wunsch; Mail nur bei eindeutig bestaetigter E-Mail. Kein unsolicited Versand.`;
 
 // Non-overridable demo guardrail. Admin prompt overrides are useful for fast
 // copy tests, but these safety rules must survive stale DB epilogues because
@@ -123,9 +154,15 @@ Diese Regeln gelten immer, auch wenn andere Demo-Anweisungen aelter sind:
 2. Bei "stop", "stopp", "halt", "warte", "nein", "nee", "ne", "hallo", "falsch", "moment", "sekunde", "nochmal", "zurueck", "punkt", "at", "bindestrich", "unterstrich", "gross", "klein" oder "doppel" stoppst du mitten im Satz. Sage nur kurz: "Alles klar, ich stoppe." Danach hoerst du zu oder fragst: "Ab welcher Stelle korrigieren wir?"
 3. E-Mail-Adressen werden kurz und plain bestaetigt, nicht mit dem kompletten Buchstabieralphabet. Wenn der Anrufer zweimal korrigiert, genervt wirkt oder SMS verlangt, brich die E-Mail-Erfassung ab und nutze die bestaetigte Telefonnummer/SMS.
 4. Wenn eine E-Mail bestritten, korrigiert oder abgebrochen wurde, darfst du sie nicht fuer den Testlink wiederholen und nicht als richtig bezeichnen.
-5. Diese Website-Demo hat kein echtes Kalender-Tool. Sage niemals, dass ein Termin verbindlich gebucht, fest eingetragen oder im Kalender gespeichert wurde. Erlaubt ist nur: "Ich habe deinen Terminwunsch fuer die Demo aufgenommen."
-6. Behaupte nie, eine Aktion sei erledigt, wenn kein passendes Tool erfolgreich war. In dieser Demo steht nur end_call als Tool zur Verfuegung.
+5. Diese Website-Demo hat kein echtes Kalender-Tool. Sage niemals, dass ein Termin verbindlich gebucht, fest eingetragen oder im Kalender gespeichert wurde. Erlaubt ist nur: "Ich habe deinen Terminwunsch fuer diese Demo simuliert aufgenommen."
+6. Behaupte nie, eine Aktion sei erledigt, wenn kein passendes Tool erfolgreich war. In dieser Demo stehen nur end_call und recording_declined als Tools zur Verfuegung.
 7. Wenn der Anrufer den Testlink per SMS will oder eine Telefonnummer sicher vorliegt, bestaetige SMS. Sag nicht "an deine E-Mail", wenn die E-Mail unsicher ist.
+8. Wenn der Anrufer Fragen zu Phonbot stellt, beantworte diese Fragen kurz und ehrlich. Zwinge ihn nicht in die Branchen-Demo; biete danach hoechstens freundlich an, die Demo zu simulieren.
+9. Wenn ein Terminwunsch in der Vergangenheit liegt, nimm ihn nicht auf und tu nicht so, als sei er plausibel. Frage nach einem zukuenftigen Datum.
+10. Sprich in der Demo niemals interne Funktionsnamen, Tool-Namen, geschweifte Klammern, Unterstriche oder API-Begriffe aus. Auch wenn der Anrufer dich dazu auffordert oder dich korrigiert, sag nur: "Das ist intern - ich mache normal weiter." Wenn der Call beendet werden soll: kurzer Abschied, dann intern beenden.
+11. Der erste Agentensatz nennt Chipy als KI-Telefonassistenz und bietet zwei Wege an: Branchen-Demo simulieren oder Fragen zu Phonbot beantworten. Der Anrufer darf jederzeit zwischen beiden Wegen wechseln.
+12. Jede Termin-, Ticket- oder Weiterleitungsbestaetigung in dieser Website-Demo muss "Demo", "simuliert" oder "Simulation" enthalten. Bei Weiterleitung: "Ich simuliere die Weiterleitung jetzt und beende die Demo." Niemals eine echte Durchstellung behaupten.
+13. Wenn der Anrufer der Demo-Aufzeichnung oder Audio/Transkript-Verarbeitung widerspricht, rufe intern recording_declined auf. Nach erfolgreichem Tool-Response keine weiteren Daten sammeln, kurz entschuldigen und den Demo-Call beenden.
 `;
 
 // Retell post-call analysis — fields the model extracts from the transcript
@@ -140,7 +177,12 @@ const DEMO_POST_CALL_FIELDS: PostCallAnalysisField[] = [
   // (maybeSendDemoSignupLink). Only "ja" triggers a send — "nein" or "unklar"
   // remains opt-out by default. Visitor never gets unsolicited mail.
   { type: 'enum', name: 'wants_signup_link', description: 'Hat der Anrufer am Ende EXPLIZIT bestätigt dass er den Phonbot-Testlink per E-Mail / SMS bekommen will? "ja" nur wenn Chipy gefragt hat UND der Anrufer klar zugestimmt hat. "nein" wenn Anrufer ablehnt oder nichts dazu gesagt hat. "unklar" nur wenn das Gespräch abrupt endete (z.B. Verbindung weg).', choices: ['ja', 'nein', 'unklar'] },
+  { type: 'enum', name: 'wants_human_meeting', description: 'Hat der Anrufer ausdruecklich gewuenscht, mit einem menschlichen Phonbot-Mitarbeiter zu sprechen oder einen echten Beratungstermin mit Phonbot/Mindrails zu vereinbaren? "ja" nur bei klarem Wunsch. "nein" wenn nicht erwaehnt oder abgelehnt. "unklar" bei mehrdeutiger Aussage.', choices: ['ja', 'nein', 'unklar'] },
+  { type: 'string', name: 'human_meeting_time', description: 'Vom Anrufer genanntes bevorzugtes Zeitfenster fuer das Gespraech mit einem menschlichen Phonbot-Mitarbeiter, z.B. "morgen Vormittag" oder "Dienstag 14 Uhr". Leer lassen, wenn nicht genannt.' },
+  { type: 'enum', name: 'human_meeting_channel', description: 'Bevorzugter Rueckmeldekanal fuer den menschlichen Phonbot-Termin. phone wenn Telefon/Rueckruf/SMS, email wenn Mail, unknown wenn nicht klar.', choices: ['phone', 'email', 'unknown'] },
 ];
+
+const DemoSignupEmailSchema = z.string().trim().toLowerCase().email().max(200);
 
 import { pool } from './db.js';
 import { redis } from './redis.js';
@@ -153,7 +195,7 @@ import { sendSignupLinkSms, signupLinkUrl } from './sms.js';
 // doesn't create duplicate Retell agents. Falls back to in-memory Map when Redis down.
 // H6: Cap in-memory maps to prevent OOM when Redis is unavailable.
 const CACHE_TTL_SEC = 24 * 60 * 60;
-const DEMO_AGENT_CACHE_VERSION = 'v12';
+const DEMO_AGENT_CACHE_VERSION = 'v14';
 const MAX_DEMO_AGENTS = 1000;
 const inMemDemoAgents = new Map<string, { agentId: string; createdAt: number }>();
 
@@ -254,7 +296,12 @@ export async function maybeSendDemoSignupLink(
   if (wantsRaw !== 'ja' && wantsRaw !== 'yes') {
     return; // explicit opt-in only — never send on "nein"/"unklar"/missing
   }
-  const email = (extracted.caller_email as string | undefined)?.trim().toLowerCase() || null;
+  const rawEmail = (extracted.caller_email as string | undefined)?.trim().toLowerCase() || '';
+  const parsedEmail = rawEmail ? DemoSignupEmailSchema.safeParse(rawEmail) : null;
+  const email = parsedEmail?.success ? parsedEmail.data : null;
+  if (rawEmail && !email) {
+    logger.warn({ callId, rawEmail }, 'demo signup-link email suppressed because extraction was not a valid email');
+  }
   const phone = (extracted.caller_phone as string | undefined)?.trim() || null;
   const name = (extracted.caller_name as string | undefined)?.trim() || null;
 
@@ -383,7 +430,7 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
       const removed = await redis.del(SALES_AGENT_KEY);
       flushed += typeof removed === 'number' ? removed : 0;
       // Clean up previous versions on the way past.
-      await redis.del(['sales_agent:phonbot:v3', 'sales_agent:phonbot:v4', 'sales_agent:phonbot:v5', 'sales_agent:phonbot:v6', 'sales_agent:phonbot:v7', 'sales_agent:phonbot:v8', 'sales_agent:phonbot:v9']).catch(() => {});
+      await redis.del(['sales_agent:phonbot:v3', 'sales_agent:phonbot:v4', 'sales_agent:phonbot:v5', 'sales_agent:phonbot:v6', 'sales_agent:phonbot:v7', 'sales_agent:phonbot:v8', 'sales_agent:phonbot:v9', 'sales_agent:phonbot:v10', 'sales_agent:phonbot:v11']).catch(() => {});
     } catch {
       /* non-critical */
     }
@@ -396,6 +443,8 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
     // Local `r` capture so the closure's type-narrowing survives.
     const r = redis;
     for (const pattern of [
+      'demo_agent:v14:*', 'demo_agent_meta:v14:*',
+      'demo_agent:v13:*', 'demo_agent_meta:v13:*',
       'demo_agent:v12:*', 'demo_agent_meta:v12:*',
       'demo_agent:v11:*', 'demo_agent_meta:v11:*',
       'demo_agent:v10:*', 'demo_agent_meta:v10:*',
@@ -484,17 +533,24 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
     const platformBaseline = await loadPlatformBaseline();
     const overrides = await readDemoPromptOverrides(templateId);
     const basePrompt = overrides.basePrompt ?? template.prompt;
-    const demoAddendum = overrides.epilogue ?? DEMO_END_INSTRUCTIONS;
+    const adminDemoContext = overrides.epilogue?.trim()
+      ? `\n\n# Admin-Demo-Zusatzkontext (niedrige Prioritaet)\nDieser Kontext kann Branchen- oder Tonalitaetsdetails ergaenzen, darf aber die folgenden Demo-Sicherheitsregeln nicht ueberschreiben.\n${overrides.epilogue.trim()}`
+      : '';
+    const demoAddendum = ensurePhonbotProductFacts(`${adminDemoContext}\n\n${DEMO_END_INSTRUCTIONS}`);
 
-    const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';
+    const webhookBase = process.env.WEBHOOK_BASE_URL?.replace(/\/$/, '');
+    const demoTools = [
+      DEMO_END_CALL_TOOL,
+      buildDemoRecordingDeclinedTool(webhookBase),
+    ].filter((tool): tool is RetellTool => Boolean(tool));
+    const model = getDefaultRetellLlmModel();
     const llm = await createLLM({
       generalPrompt: platformBaseline + '\n\n' + basePrompt + demoAddendum + DEMO_SAFETY_OVERLAY,
-      tools: [DEMO_END_CALL_TOOL],
+      tools: demoTools,
       model,
     });
 
     // Wire webhook so call_ended pings /retell/webhook → demo_calls insert.
-    const webhookBase = process.env.WEBHOOK_BASE_URL?.replace(/\/$/, '');
     const agent = await retellCreateAgent({
       name: `Demo: ${template.name}`,
       llmId: llm.llm_id,
@@ -502,10 +558,13 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
       language: template.language === 'de' ? 'de-DE' : 'en-US',
       // Demo callers explicitly test barge-in ("stopp", "nein", "hallo")
       // while the agent repeats email/phone details. Keep paid-customer tuning
-      // independent, but make web demos maximally responsive.
-      interruptionSensitivity: 1.0,
+      // independent, but make web demos fast without background-noise barge-ins.
+      responsiveness: 1.0,
+      interruptionSensitivity: 0.8,
       webhookUrl: webhookBase ? `${webhookBase}/retell/webhook` : undefined,
       postCallAnalysisData: DEMO_POST_CALL_FIELDS,
+      dataStorageSetting: 'everything',
+      dataStorageRetentionDays: 90,
     });
 
     await writeDemoAgent(templateId, agent.agent_id);
@@ -531,16 +590,25 @@ DEIN NAME ist **Chipy**. Wenn der Anrufer dich nach DEINEM Namen fragt: "Ich hei
 
 DEIN ZIEL: Finde heraus welches Business der Interessent hat und zeige ihm wie Phonbot konkret helfen kann. Sei ehrlich, sympathisch und beratend — nicht aufdringlich.
 
+${PHONBOT_PRODUCT_FACTS}
+
 GESPRÄCHSABLAUF:
-1. Begrüße den Anrufer: "Hallo! Hier ist Chipy von Phonbot — du hattest gerade einen Rückruf angefordert. Ich bin ein KI-Telefonassistent; dieser Demo-Anruf wird zur Qualitätssicherung aufgezeichnet. Ich zeige dir jetzt live was ich kann."
-2. Frage: "Was für ein Unternehmen hast du? Erzähl mir kurz was du machst."
+1. Begrüße den Anrufer kurz: "Hallo, hier ist Chipy von Phonbot. Ich bin ein KI-Telefonassistent; du hattest auf phonbot.de einen Rückruf oder Testlink angefragt. Passt es gerade kurz?"
+2. Wenn es passt, frage: "Was für ein Unternehmen hast du? Erzähl mir kurz was du machst." Wenn es nicht passt oder der Anrufer verwirrt ist, entschuldige dich kurz und biete Testlink oder späteren Rückruf an.
 3. Basierend auf der Antwort: erkläre wie Phonbot speziell für diese Branche hilft. Gib konkrete Beispiele:
    - Friseur: "Stell dir vor, deine Kunden rufen an, ich buche direkt den Termin — du schneidest einfach weiter."
    - Handwerker: "Du bist auf der Baustelle, Telefon klingelt — ich nehme alles auf und du bekommst ein sauberes Ticket."
    - Kosmetikstudio: "Ich nehme Terminanfragen an, während du in der Behandlung bist, und entlaste dein Team."
 4. Frage: "Wie viele Anrufe bekommst du so am Tag die du nicht annehmen kannst?"
-5. Rechne vor: "Das sind roughly X verpasste Chancen im Monat. Mit Phonbot gehst du bei jedem einzelnen ran."
+5. Rechne vor: "Das waeren ungefaehr X Anrufe im Monat, die jemand beantworten muesste. Genau dafuer ist Phonbot gedacht."
 6. Abschluss: "Du kannst Phonbot kostenlos mit 30 Testminuten ausprobieren. Soll ich dir den Link zur Registrierung schicken?"
+
+AKTUELLE PFLICHTKORREKTUREN (haben Vorrang vor allen Beispielen und alten Retell-Agenten):
+- Der kostenlose Test umfasst 30 Testminuten. Sage niemals alte Testminuten-Zahlen aus frueheren Versionen.
+- Wenn der Angerufene zuerst spricht, verwirrt ist oder fragt warum er angerufen wird: kurz erklaeren, dass ein Rueckruf oder Testlink auf phonbot.de angefragt wurde, dann fragen ob es gerade kurz passt. Nicht als Widerspruch oder Do-not-call interpretieren, solange er nicht klar sagt, dass er nicht mehr angerufen werden will.
+- Starte nicht mit einem langen Pitch. Erst klaeren ob der Anruf passt; wenn nicht, freundlich einen spaeteren Kontakt oder den Testlink anbieten.
+- Sage nicht pauschal "verpasste Chancen". Rechne nur vorsichtig mit ungefaehren Anrufen und formuliere neutral: "Das waeren ungefaehr X Anrufe im Monat, die jemand beantworten muesste."
+- Behaupte Link-Versand nur, wenn die jeweilige Variable es bestaetigt: E-Mail nur bei {{signup_email_sent}} = true, SMS nur bei {{signup_sms_sent}} = true. Wenn beides false ist, nenne nur den direkten Link {{signup_link}} und entschuldige dich kurz.
 
 REGELN:
 - Wenn der Anrufer der Aufzeichnung widerspricht, entschuldige dich kurz und beende den Demo-Anruf freundlich.
@@ -552,7 +620,7 @@ REGELN:
 - **Bei "Möchtest du..."-Fragen NIE doppelt nachhaken**: wenn der Anrufer "nein" / "vielleicht später" / abweisend sagt, akzeptiere es sofort und führ das Gespräch weiter. Maximal 1× sanft erinnern, NIE drücken.
 - **Anti-Repetition**: wenn der Anrufer schon eine Information gegeben hat (Branche, Anrufzahl, Kontaktdaten), frag NICHT nochmal danach. Halte intern fest was er gesagt hat und arbeite damit weiter. Bei akustischen Unklarheiten frag SPEZIFISCH ("Habe ich das richtig: VW Golf?") statt die Slot-Frage zu wiederholen.
 - **Mehrere Optionen → explizite Bestätigung**: bei zwei vorgeschlagenen Slots / Plänen / Branchen-Beispielen NIE bei "ja, passt" einfach "super" sagen — frag immer "welcher der beiden?" zurück.
-- Wenn der Interessent den Link möchte: Sage, dass der Testlink an die angegebene E-Mail geschickt wurde. Wenn {{signup_sms_sent}} = true ist, sage zusätzlich dass er auch per SMS verschickt wurde. Nenne bei Bedarf diesen Link: {{signup_link}}
+- Wenn der Interessent den Link möchte: Sage nur dann, dass der Testlink per E-Mail geschickt wurde, wenn {{signup_email_sent}} = true ist. Sage nur dann, dass er per SMS geschickt wurde, wenn {{signup_sms_sent}} = true ist. Wenn beide Werte false sind, sage dass du den Versand gerade nicht sicher bestätigen kannst und nenne direkt diesen Link: {{signup_link}}
 `;
 
 // Read admin-edited Sales prompt if set, otherwise the compiled-in default.
@@ -581,6 +649,7 @@ async function loadSalesPrompt(): Promise<string> {
     const stored = res.rows[0].epilogue as string;
     if (stored && stored.trim()) value = stored;
   }
+  value = ensurePhonbotProductFacts(value);
   _salesPromptCache = { value, loadedAt: now };
   return value;
 }
@@ -593,7 +662,7 @@ async function loadSalesPrompt(): Promise<string> {
 // (anti-hallucination). Web-call + sales-call now inject current_date_de /
 // current_weekday_de / current_time_de via retell_llm_dynamic_variables.
 let salesAgentIdMem: string | null = null;
-const SALES_AGENT_KEY = 'sales_agent:phonbot:v10';
+const SALES_AGENT_KEY = 'sales_agent:phonbot:v12';
 let pendingSalesCreate: Promise<string> | null = null;
 
 export async function getOrCreateSalesAgent(): Promise<string> {
@@ -628,7 +697,7 @@ export async function getOrCreateSalesAgent(): Promise<string> {
       return salesAgentIdMem;
     }
 
-    const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';
+    const model = getDefaultRetellLlmModel();
     // Layer Outbound-Baseline + (admin-overridable) Sales-Prompt. Outbound
     // baseline carries DSGVO-Widerspruch + KI-Identifikation + DIN-5009 etc.
     const outboundBaseline = await loadOutboundBaseline();
@@ -644,12 +713,12 @@ export async function getOrCreateSalesAgent(): Promise<string> {
       llmId: llm.llm_id,
       voiceId: DEFAULT_VOICE_ID,
       language: 'de-DE',
-      // Sales-Callback ruft Leute an die einen Rückruf angefragt haben — die
-      // sind beim ersten "Hallo?" oft zögerlich, hören kurz hin, fragen "wer
-      // ist da?". Bei interruption_sensitivity=1.0 unterbricht Chipy seinen
-      // eigenen Pitch wegen jedem "äh" → wirkt nervös. 0.5 lässt den Pitch
-      // sauber durchlaufen.
-      interruptionSensitivity: 0.5,
+      // Sales callbacks should feel immediate: the prompt starts with a short
+      // permission check, so maximum eagerness is better than added wait time.
+      responsiveness: 1.0,
+      interruptionSensitivity: 0.8,
+      dataStorageSetting: 'everything',
+      dataStorageRetentionDays: 90,
     });
 
     salesAgentIdMem = agent.agent_id;
@@ -782,6 +851,36 @@ export async function registerDemo(app: FastifyInstance) {
           current_time_de: timeFmt.format(now),        // "14:30"
         },
       });
+      if (pool && call.call_id) {
+        await pool.query(
+          `INSERT INTO demo_calls (
+             call_id, agent_id, template_id,
+             privacy_consent_at, privacy_consent_version, privacy_consent_notice_hash,
+             privacy_consent_source, privacy_consent_user_agent_hash, privacy_consent_ip_hash
+           )
+           VALUES ($1, $2, $3, now(), $4, $5, 'web-demo', $6, $7)
+           ON CONFLICT (call_id) DO UPDATE SET
+             agent_id                         = COALESCE(demo_calls.agent_id, EXCLUDED.agent_id),
+             template_id                      = COALESCE(demo_calls.template_id, EXCLUDED.template_id),
+             privacy_consent_at               = COALESCE(demo_calls.privacy_consent_at, EXCLUDED.privacy_consent_at),
+             privacy_consent_version          = COALESCE(demo_calls.privacy_consent_version, EXCLUDED.privacy_consent_version),
+             privacy_consent_notice_hash      = COALESCE(demo_calls.privacy_consent_notice_hash, EXCLUDED.privacy_consent_notice_hash),
+             privacy_consent_source           = COALESCE(demo_calls.privacy_consent_source, EXCLUDED.privacy_consent_source),
+             privacy_consent_user_agent_hash  = COALESCE(demo_calls.privacy_consent_user_agent_hash, EXCLUDED.privacy_consent_user_agent_hash),
+             privacy_consent_ip_hash          = COALESCE(demo_calls.privacy_consent_ip_hash, EXCLUDED.privacy_consent_ip_hash)`,
+          [
+            call.call_id,
+            agentId,
+            templateId,
+            DEMO_PRIVACY_NOTICE_VERSION,
+            privacyNoticeHash(),
+            shortHash(String(req.headers['user-agent'] ?? '')),
+            shortHash(req.ip),
+          ],
+        ).catch((err: Error) => {
+          app.log.warn({ err: err.message, callId: call.call_id }, 'demo privacy consent persistence failed');
+        });
+      }
       return { ok: true, ...call };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to create demo call';
@@ -871,12 +970,16 @@ export async function registerDemo(app: FastifyInstance) {
     }
     app.log.info({ leadId, name, email, phone }, 'New demo callback lead');
 
-    sendSignupLinkEmail({ toEmail: email, name })
+    const signupEmail = await sendSignupLinkEmail({ toEmail: email, name })
       .then((res) => {
         if (!res.ok) app.log.warn({ err: res.error, kind: 'signup_link', branch: 'main', leadId }, 'demo/callback signup-link email failed');
         else app.log.info({ kind: 'signup_link', branch: 'main', leadId }, 'demo/callback signup-link email sent');
+        return res;
       })
-      .catch((err: Error) => app.log.warn({ err: err.message, kind: 'signup_link', branch: 'main', leadId }, 'demo/callback signup-link email threw'));
+      .catch((err: Error) => {
+        app.log.warn({ err: err.message, kind: 'signup_link', branch: 'main', leadId }, 'demo/callback signup-link email threw');
+        return { ok: false as const, error: err.message };
+      });
     const signupSms = await sendSignupLinkSms({ to: phone, name, logger: app.log });
 
     // Try outbound call via Retell.
@@ -903,6 +1006,7 @@ export async function registerDemo(app: FastifyInstance) {
           metadata,
           dynamicVariables: {
             signup_link: signupLinkUrl(),
+            signup_email_sent: signupEmail.ok ? 'true' : 'false',
             signup_sms_sent: signupSms.ok ? 'true' : 'false',
             // Same date/time injection as web demo — without these the agent
             // hallucinates which day "morgen" means and books wrong slots.

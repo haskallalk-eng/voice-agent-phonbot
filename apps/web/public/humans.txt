@@ -2,7 +2,7 @@
 
 /* TEAM */
 
-  Product: Phonbot (operated by Hans Ulrich Waier (Einzelunternehmer))
+  Product: Phonbot (operated by Hassieb Kalla (Einzelunternehmer))
   Contact: info [at] phonbot.de
   Location: Berlin, Deutschland
 

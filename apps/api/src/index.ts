@@ -17,6 +17,7 @@ import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import formbody from '@fastify/formbody';
 import { migrate, pool, cleanupOldTranscripts, cleanupOldLeads, cleanupOldWebhookDedupKeys, cleanupOldAuditLogs, cleanupOldPrivacySettingChanges, cleanupOldWebhookHealth, sweepAbandonedRegistrations } from './db.js';
+import { cleanupRetellStoredCalls } from './retell-retention.js';
 import { connectRedis, redis } from './redis.js';
 import { registerAuth } from './auth.js';
 import { registerTickets } from './tickets.js';
@@ -277,6 +278,8 @@ if (pool) {
   // DSGVO Art. 5: purge call_transcripts older than 90 days (daily)
   const runTranscriptCleanup = async () => {
     try {
+      const retell = await cleanupRetellStoredCalls();
+      if (retell.deleted > 0 || retell.failed > 0) app.log.info(retell, 'DSGVO retention: processed Retell call deletion');
       const deleted = await cleanupOldTranscripts();
       if (deleted > 0) app.log.info({ deleted }, 'DSGVO retention: purged old call_transcripts');
     } catch (e) {
@@ -285,6 +288,17 @@ if (pool) {
   };
   setInterval(runTranscriptCleanup, 24 * 60 * 60 * 1000); // every 24h
   setTimeout(runTranscriptCleanup, 60_000); // first run 60s after startup
+
+  const runRetellRetentionCleanup = async () => {
+    try {
+      const retell = await cleanupRetellStoredCalls();
+      if (retell.deleted > 0 || retell.failed > 0) app.log.info(retell, 'DSGVO retention: processed Retell call deletion');
+    } catch (e) {
+      app.log.warn({ err: (e as Error).message }, 'DSGVO Retell cleanup failed');
+    }
+  };
+  setInterval(runRetellRetentionCleanup, 60 * 60 * 1000); // every hour
+  setTimeout(runRetellRetentionCleanup, 90_000);
 
   // DSGVO Art. 5: purge crm_leads older than 90 days (daily)
   const runLeadsCleanup = async () => {

@@ -1,16 +1,16 @@
-# Verzeichnis von Verarbeitungstätigkeiten (VVT) — Hans Ulrich Waier / Phonbot
+# Verzeichnis von Verarbeitungstätigkeiten (VVT) — Hassieb Kalla / Phonbot
 
 > Pflicht-Dokument nach **Art. 30 Abs. 1 DSGVO** für jeden Verantwortlichen mit ≥ 250 Beschäftigten ODER bei nicht-gelegentlicher / risikoreicher Verarbeitung. Beides trifft auf Mindrails zu (Phonbot verarbeitet kontinuierlich personenbezogene Daten von Anrufern).
 >
-> **Stand:** 2026-04-30 · **Version:** 1.0 · **Verantwortlich:** Hans Waier, Geschäftsführer
+> **Stand:** 2026-04-30 · **Version:** 1.0 · **Verantwortlich:** Hassieb Kalla, Geschäftsinhaber
 
 ## A. Verantwortlicher
 
 | Feld | Wert |
 |---|---|
-| Firma | Hans Ulrich Waier (Einzelunternehmer) |
+| Firma | Hassieb Kalla (Einzelunternehmer) |
 | Anschrift | Scharnhorststraße 8, 12307 Berlin |
-| Vertretungsberechtigt | Hans Waier, Geschäftsführer |
+| Vertretungsberechtigt | Hassieb Kalla, Geschäftsinhaber |
 | Kontakt Datenschutz | info@phonbot.de · +49 30 75937169 |
 | Datenschutzbeauftragter | *kein bestellter DSB; Mindrails liegt unter den Pflichtschwellen des § 38 BDSG (regelmäßig < 20 Personen mit DV-Tätigkeiten, keine Kerngeschäfts-Verarbeitung besonderer Kategorien)* |
 

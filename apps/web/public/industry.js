@@ -11,6 +11,43 @@ let callState = 'idle'; // idle | connecting | active | ended | error
 
 function $(sel, ctx) { return (ctx || document).querySelector(sel); }
 
+function ensureConsentNudgeStyle() {
+  if (document.getElementById('phonbot-consent-nudge-style')) return;
+  const style = document.createElement('style');
+  style.id = 'phonbot-consent-nudge-style';
+  style.textContent = `
+@keyframes phonbot-consent-nudge{0%,100%{transform:translateX(0)}16%{transform:translateX(-7px)}32%{transform:translateX(7px)}48%{transform:translateX(-5px)}64%{transform:translateX(5px)}80%{transform:translateX(-2px)}}
+.phonbot-consent-nudge{animation:phonbot-consent-nudge .5s ease both!important;border-color:rgba(249,115,22,.65)!important;box-shadow:0 0 0 1px rgba(249,115,22,.28),0 0 28px rgba(249,115,22,.16)!important}
+@media (prefers-reduced-motion:reduce){.phonbot-consent-nudge{animation:none!important}}
+`;
+  document.head.appendChild(style);
+}
+
+function nudgeDemoConsent(message) {
+  ensureConsentNudgeStyle();
+  const consentBox = $('#demo-consent');
+  const target = consentBox?.closest('label') || consentBox || $('#demo-widget') || $('#demo-section');
+  const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  const idle = $('#demo-idle');
+  if (idle) idle.style.display = '';
+  let msg = $('#demo-consent-error');
+  if (!msg && target?.parentElement) {
+    msg = document.createElement('p');
+    msg.id = 'demo-consent-error';
+    msg.setAttribute('role', 'alert');
+    msg.style.cssText = 'margin:.75rem 0 0;color:#fed7aa;font-size:.875rem;text-align:left;background:rgba(251,146,60,.10);border:1px solid rgba(251,146,60,.25);border-radius:.75rem;padding:.65rem .8rem;';
+    target.insertAdjacentElement('afterend', msg);
+  }
+  if (msg) msg.textContent = message || 'Bitte bestaetige zuerst den Demo-Datenschutzhinweis.';
+  if (target) {
+    target.classList.remove('phonbot-consent-nudge');
+    void target.offsetWidth;
+    target.classList.add('phonbot-consent-nudge');
+    target.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'center' });
+  }
+  consentBox?.focus({ preventScroll: true });
+}
+
 function updateDemoUI() {
   const w = $('#demo-widget');
   if (!w) return;
@@ -31,8 +68,6 @@ function updateDemoUI() {
 
 async function startDemo(templateId) {
   if (callState === 'connecting' || callState === 'active') return;
-  callState = 'connecting';
-  updateDemoUI();
 
   // Show the demo section
   const sec = $('#demo-section');
@@ -44,11 +79,20 @@ async function startDemo(templateId) {
   try {
     const consentBox = $('#demo-consent');
     if (consentBox && !consentBox.checked) {
-      throw new Error('Bitte bestätige zuerst den Demo-Datenschutzhinweis.');
+      callState = 'idle';
+      updateDemoUI();
+      nudgeDemoConsent('Bitte bestaetige zuerst den Demo-Datenschutzhinweis.');
+      return;
     }
-    if (!consentBox && !window.confirm('Diese Demo wird als Audio/Transkript verarbeitet und bis zu 90 Tage zur Demo-Qualität gespeichert. Einverstanden?')) {
-      throw new Error('Demo-Datenschutzhinweis nicht bestätigt.');
+    if (!consentBox) {
+      callState = 'idle';
+      updateDemoUI();
+      nudgeDemoConsent('Bitte bestaetige zuerst den Demo-Datenschutzhinweis.');
+      return;
     }
+
+    callState = 'connecting';
+    updateDemoUI();
 
     // Request mic permission early (iOS Safari user-gesture requirement)
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -230,8 +274,8 @@ function initCalculator() {
     const botMin = anrufe * (dauer + nacharbeit) * (quote / 100) * 22;
     const stunden = Math.round(botMin / 60);
     const personal = Math.round((botMin / 60) * lohn);
-    const plan = anrufe <= 5 ? 0 : anrufe <= 20 ? 79 : anrufe <= 50 ? 179 : 349;
-    const planName = plan === 0 ? 'Free' : plan === 79 ? 'Starter' : plan === 179 ? 'Professional' : 'Agency';
+    const plan = anrufe <= 5 ? 0 : anrufe <= 20 ? 89 : anrufe <= 50 ? 179 : 349;
+    const planName = plan === 0 ? 'Free' : plan === 89 ? 'Starter' : plan === 179 ? 'Professional' : 'Agency';
     const netto = personal - plan;
 
     // Update results

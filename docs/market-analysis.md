@@ -33,7 +33,7 @@ _Stand: März 2026_
 - → Synthflow macht das genau so
 
 **2. Flat-Rate mit Minutenkontingent** (einfachste Kaufentscheidung)
-- z.B. Starter 49€/mo = 300 Min inkl.
+- z.B. Starter 89€/mo = 300 Min inkl.
 - Überschreitung = €/Min
 - Kunden wissen was sie zahlen — niedrige Abbruchrate
 
@@ -107,7 +107,7 @@ _Stand: März 2026_
 **Primär:** Lokale Dienstleister in DACH (Friseur, Handwerker, Arztpraxis, Reinigung)
 - Kein Tech-Background
 - Brauchen jemanden der Anrufe abnimmt wenn sie beschäftigt sind
-- Budget: 49–149€/Monat
+- Budget: 89–349€/Monat
 - Entscheidung in <5 Minuten
 
 **Sekundär:** Agenturen die Voice Agents für ihre Kunden konfigurieren (Reseller)
@@ -149,8 +149,8 @@ _Stand: März 2026_
 | Plan | Preis | Inkl. | Überschreitung |
 |---|---|---|---|
 | **Free** | 0€ | 30 Min/Mo, 1 Agent | — (kein Upgrade-Prompt) |
-| **Starter** | 49€/Mo | 300 Min, 1 Agent, 1 Nummer | 0.12€/Min |
-| **Pro** | 149€/Mo | 1.000 Min, 3 Agents, 2 Nummern | 0.10€/Min |
-| **Agency** | 399€/Mo | 5.000 Min, 10 Agents, White-Label | 0.08€/Min |
+| **Starter** | 89€/Mo | 300 Min, 1 Agent, 1 Nummer | 0.25€/Min |
+| **Pro** | 179€/Mo | 900 Min, 3 Agents, 3 Nummern | 0.23€/Min |
+| **Agency** | 349€/Mo | 2.000 Min, 10 Agents, White-Label | 0.19€/Min |
 
 _Unsere Kosten bei Retell: ~0.07€/Min → Marge ~40–70% je nach Plan_

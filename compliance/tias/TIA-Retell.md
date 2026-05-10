@@ -1,9 +1,9 @@
 # Transfer Impact Assessment (TIA) — Retell AI
 
-> **Stand:** 2026-04-30 · **Verantwortlich:** Hans Waier, Hans Ulrich Waier · **Re-Verifikation:** 2026-10-30
+> **Stand:** 2026-04-30 · **Verantwortlich:** Hassieb Kalla · **Re-Verifikation:** 2026-10-30
 
 ## 1. Verantwortlicher
-Hans Ulrich Waier, Berlin, Deutschland · Phonbot · Geschäftsführung: Hans Waier.
+Hassieb Kalla, Berlin, Deutschland · Phonbot · Geschäftsinhaber: Hassieb Kalla.
 
 ## 2. Datenimporteur
 **Retell AI Inc.** · Palo Alto, CA, USA · *(keine bekannte EU-Tochter, Stand 2026-04-30)* · Rolle: Sub-Auftragsverarbeiter · Vertrag: DPA + SCC Modul 3 (in Anfrage 2026-04-30, vgl. `compliance/dpa-requests/2026-04-30-retell-dpa-request.eml`) · DPF: **noch zu verifizieren** auf dataprivacyframework.gov.

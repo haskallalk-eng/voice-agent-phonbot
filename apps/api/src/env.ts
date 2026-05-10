@@ -24,6 +24,11 @@ const KNOWN_TOOL_CAPABLE_MODELS = new Set([
   'gpt-4.1-mini',
   'gpt-4.1-nano',
   'gpt-5',
+  'gpt-5.4',
+  'gpt-5.4-mini',
+  'gpt-5.4-nano',
+  'gpt-5.1',
+  'gpt-5.1-mini',
   'gpt-5-mini',
 ]);
 const model = process.env.OPENAI_MODEL;

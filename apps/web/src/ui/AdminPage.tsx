@@ -14,9 +14,9 @@ import {
   type AdminUser,
   type AdminOrg,
 } from '../lib/api.js';
-import { DemoCallsTab, DemoPromptsTab, LearningsTab } from './AdminTabs.js';
+import { DemoCallsTab, DemoMeetingsTab, DemoPromptsTab, LearningsTab, PromptQaTab } from './AdminTabs.js';
 
-type Tab = 'overview' | 'leads' | 'users' | 'demo-calls' | 'demo-prompts' | 'learnings';
+type Tab = 'overview' | 'leads' | 'users' | 'demo-calls' | 'demo-meetings' | 'demo-prompts' | 'prompt-qa' | 'learnings';
 
 // ── Smart Search Input ───────────────────────────────────────────────────────
 
@@ -543,19 +543,21 @@ export function AdminPage() {
 
       {/* Tabs */}
       <div className="border-b border-white/5 px-6">
-        <div className="flex gap-1">
+        <div className="flex gap-1 overflow-x-auto">
           {([
             ['overview', 'Overview'],
             ['leads', 'Leads'],
             ['users', 'Users'],
             ['demo-calls', 'Demo Calls'],
+            ['demo-meetings', 'Demo Termine'],
             ['demo-prompts', 'Demo Prompts'],
+            ['prompt-qa', 'Prompt QA'],
             ['learnings', 'Verbesserungen'],
           ] as const).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={`px-5 py-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
+              className={`shrink-0 px-5 py-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
                 tab === key
                   ? 'border-orange-500 text-white'
                   : 'border-transparent text-white/40 hover:text-white/60'
@@ -573,7 +575,9 @@ export function AdminPage() {
         {tab === 'leads' && <LeadsTab />}
         {tab === 'users' && <UsersTab />}
         {tab === 'demo-calls' && <DemoCallsTab />}
+        {tab === 'demo-meetings' && <DemoMeetingsTab />}
         {tab === 'demo-prompts' && <DemoPromptsTab />}
+        {tab === 'prompt-qa' && <PromptQaTab />}
         {tab === 'learnings' && <LearningsTab />}
       </main>
     </div>

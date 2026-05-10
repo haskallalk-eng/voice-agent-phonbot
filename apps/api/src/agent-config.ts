@@ -21,6 +21,7 @@ import {
   deleteLLM as retellDeleteLlm,
   updatePhoneNumber as retellUpdatePhoneNumber,
   DEFAULT_VOICE_ID,
+  getDefaultRetellLlmModel,
   type RetellTool,
   type PostCallAnalysisField,
 } from './retell.js';
@@ -40,6 +41,7 @@ import { syncOpeningHoursToChipy } from './opening-hours-sync.js';
 import { PLANS, type PlanId } from './billing.js';
 import { invalidateInboundWebhooksCache } from './inbound-webhooks.js';
 import { isVoiceAllowedForOrg } from './voice-ownership.js';
+import { shortenRetellRetentionForAgentConfig } from './retell-retention.js';
 import {
   customerModuleActiveForAgentConfig,
   customerModuleStatus,
@@ -74,6 +76,27 @@ function normalizeFallbackReasonValue(reason: string | null | undefined): string
   const trimmed = reason?.trim();
   if (!trimmed || trimmed === 'handoff') return DEFAULT_FALLBACK_REASON;
   return trimmed;
+}
+
+function buildBerlinDynamicVariables(now = new Date()): Record<string, string> {
+  const dateFmt = new Intl.DateTimeFormat('de-DE', {
+    timeZone: 'Europe/Berlin',
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+  const timeFmt = new Intl.DateTimeFormat('de-DE', {
+    timeZone: 'Europe/Berlin',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return {
+    current_date_de: dateFmt.format(now),
+    current_date_iso: new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' }).format(now),
+    current_weekday_de: new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', weekday: 'long' }).format(now),
+    current_time_de: timeFmt.format(now),
+  };
 }
 
 const DEFAULT_FALLBACK_REASONS: DefaultFallbackReason[] = [
@@ -231,6 +254,7 @@ const AgentConfigSchema = z.object({
   // never touched the toggle. Optional + treat `undefined` as legacy-on at
   // every consumer site (`!== false` checks instead of `=== true`).
   recordCalls: z.boolean().optional(),
+  dataRetentionDays: z.number().int().min(0).max(365).optional().default(30),
   customerModule: z.object({
     enabled: z.boolean().optional(),
     allowBookingWithoutApproval: z.boolean().optional(),
@@ -488,12 +512,14 @@ async function writeConfig(config: AgentConfig, orgId?: string, actorUserId?: st
   // previous value from the DB row before the upsert so we capture the
   // delta — `undefined → undefined` and unchanged values stay quiet.
   let previousRecordCalls: boolean | undefined;
+  let previousDataRetentionDays: number | undefined;
   try {
-    const prev = await pool.query<{ data: { recordCalls?: boolean } | null }>(
+    const prev = await pool.query<{ data: { recordCalls?: boolean; dataRetentionDays?: number } | null }>(
       `SELECT data FROM agent_configs WHERE tenant_id = $1 LIMIT 1`,
       [normalized.tenantId],
     );
     previousRecordCalls = prev.rows[0]?.data?.recordCalls;
+    previousDataRetentionDays = prev.rows[0]?.data?.dataRetentionDays;
   } catch { /* non-fatal; audit is best-effort */ }
 
   // Defence-in-depth: even though the HTTP handlers gate by tenantIdAvailableOrOwned,
@@ -558,6 +584,33 @@ async function writeConfig(config: AgentConfig, orgId?: string, actorUserId?: st
       ],
     ).catch((err: Error) => log.warn({ err: err.message, tenantId: normalized.tenantId }, 'privacy: audit-insert failed'));
   }
+  const previousRetentionForAudit = previousDataRetentionDays ?? 30;
+  if (previousRetentionForAudit !== normalized.dataRetentionDays) {
+    pool.query(
+      `INSERT INTO privacy_setting_changes (org_id, tenant_id, setting, value_before, value_after, changed_by)
+       VALUES ($1, $2, 'dataRetentionDays', $3, $4, $5)`,
+      [
+        orgId ?? null,
+        normalized.tenantId,
+        previousDataRetentionDays === undefined ? null : String(previousDataRetentionDays),
+        String(normalized.dataRetentionDays),
+        actorUserId ?? orgId ?? null,
+      ],
+    ).catch((err: Error) => log.warn({ err: err.message, tenantId: normalized.tenantId }, 'privacy: retention-audit-insert failed'));
+  }
+  if (orgId && (previousRetentionForAudit !== normalized.dataRetentionDays || wasOn !== isOn)) {
+    const agentIds = [normalized.retellAgentId, normalized.retellCallbackAgentId].filter(
+      (id): id is string => typeof id === 'string' && id.length > 0,
+    );
+    if (agentIds.length) {
+      await shortenRetellRetentionForAgentConfig({
+        orgId,
+        agentIds,
+        recordCalls: normalized.recordCalls,
+        retentionDays: normalized.dataRetentionDays,
+      });
+    }
+  }
 
   // Keep chipy_schedules in sync with what the customer just edited in the
   // Agent Builder. Loop-breaker + empty-string handling live in the helper.
@@ -607,6 +660,13 @@ function expandCalendarToolSet(rawTools: string[] | undefined): Set<string> {
   return enabled;
 }
 
+function retellDataStorageRetentionDays(config: { recordCalls?: boolean; dataRetentionDays?: number }): number {
+  if (config.recordCalls === false || config.dataRetentionDays === 0) return 1;
+  const days = config.dataRetentionDays ?? 30;
+  if (!Number.isFinite(days)) return 30;
+  return Math.min(365, Math.max(1, Math.trunc(days)));
+}
+
 /** Map our tool names to Retell custom function definitions. */
 export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTool[] {
   const tools: RetellTool[] = [];
@@ -628,7 +688,7 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
   // Only registered when recording is actually active — otherwise the tool
   // is irreführend (would-be-no-op since nothing is recorded). PrivacyTab's
   // `recordCalls` toggle drives this.
-  if (config.recordCalls !== false) {
+  if (config.recordCalls !== false && config.dataRetentionDays !== 0) {
     tools.push({
       type: 'custom',
       name: 'recording_declined',
@@ -713,18 +773,19 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
     tools.push({
       type: 'custom',
       name: 'calendar_book',
-      description: 'Create a booking after the user confirmed a slot and service. Mention SMS confirmation only when the result returns smsSent=true.',
+      description: 'Create a booking only after the caller explicitly confirmed the exact future date/time, service, and customer name. Mention SMS confirmation only when the result returns smsSent=true.',
       url: `${webhookBaseUrl}/retell/tools/calendar.book?${signedQuery}`,
       execution_message_description: 'Booking your appointment…',
       parameters: {
         type: 'object',
-        required: ['preferredTime', 'service'],
+        required: ['customerName', 'preferredTime', 'service', 'confirmed'],
         properties: {
-          customerName: { type: 'string' },
+          customerName: { type: 'string', description: 'Confirmed caller/customer name. Do not use "unknown".' },
           customerPhone: { type: 'string', description: 'Caller phone number. Optional when Retell provides from_number.' },
-          preferredTime: { type: 'string', description: 'Confirmed slot/time.' },
+          preferredTime: { type: 'string', description: 'Confirmed future slot/time, never a past date.' },
           service: { type: 'string', description: 'Booked service.' },
           preferredStylist: { type: 'string', description: 'Requested staff member/stylist name. Use "beliebig" when the caller has no staff preference.' },
+          confirmed: { type: 'boolean', description: 'True only after the caller explicitly confirmed exact future date/time, service, and name in the latest turn.' },
           notes: { type: 'string' },
         },
       },
@@ -1003,7 +1064,7 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
   const technical = deriveTechnicalRuntimeSettings(preparedConfig as Parameters<typeof deriveTechnicalRuntimeSettings>[0]);
   const knowledgeBaseId = (preparedConfig as Record<string, unknown>).retellKnowledgeBaseId as string | undefined;
   const knowledgeBaseIds = knowledgeBaseId ? [knowledgeBaseId] : [];
-  const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';
+  const model = getDefaultRetellLlmModel();
   const LANG_MAP: Record<string, string> = {
     de: 'de-DE', en: 'en-US', fr: 'fr-FR', es: 'es-ES',
     it: 'it-IT', tr: 'tr-TR', pl: 'pl-PL', nl: 'nl-NL',
@@ -1015,14 +1076,18 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
   };
   const language = LANG_MAP[preparedConfig.language] ?? 'de-DE';
 
-  // PrivacyTab `recordCalls` toggle → Retell data_storage_setting:
+  // PrivacyTab `recordCalls` + `dataRetentionDays` → Retell data_storage_setting
+  // and data_storage_retention_days:
   //   true (or legacy undefined) → 'everything' (transcripts + recordings + logs).
   //   false                       → 'basic_attributes_only' (no transcripts, no
   //                                  audio, no logs persisted on Retell's side).
+  // Disabled/immediate retention maps to Retell's 1-day native minimum; the
+  // webhook still deletes the call immediately when terminal events arrive.
   // Paired with the conditional disclosure-block in agent-instructions.ts so
   // the prompt promise (or absence thereof) actually matches what Retell does.
   const dataStorageSetting: 'everything' | 'basic_attributes_only' =
-    preparedConfig.recordCalls === false ? 'basic_attributes_only' : 'everything';
+    preparedConfig.recordCalls === false || preparedConfig.dataRetentionDays === 0 ? 'basic_attributes_only' : 'everything';
+  const dataStorageRetentionDays = retellDataStorageRetentionDays(preparedConfig);
 
   let llmId = preparedConfig.retellLlmId;
   let agentId = preparedConfig.retellAgentId;
@@ -1037,6 +1102,7 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
         generalPrompt: instructions,
         tools: retellTools,
         model,
+        modelHighPriority: true,
         modelTemperature: technical.modelTemperature,
         knowledgeBaseIds,
       }),
@@ -1054,6 +1120,7 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
         webhookUrl,
         postCallAnalysisData,
         dataStorageSetting,
+        dataStorageRetentionDays,
       }),
     ]);
   } else if (llmId && !agentId) {
@@ -1062,6 +1129,7 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
       generalPrompt: instructions,
       tools: [],
       model,
+      modelHighPriority: true,
       modelTemperature: technical.modelTemperature,
       knowledgeBaseIds,
     });
@@ -1079,6 +1147,7 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
       webhookUrl,
       postCallAnalysisData,
       dataStorageSetting,
+      dataStorageRetentionDays,
     });
     agentId = agent.agent_id;
     await updateLLM(llmId, {
@@ -1090,6 +1159,7 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
       generalPrompt: instructions,
       tools: [],
       model,
+      modelHighPriority: true,
       modelTemperature: technical.modelTemperature,
       knowledgeBaseIds,
     });
@@ -1108,11 +1178,33 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
       webhookUrl,
       postCallAnalysisData,
       dataStorageSetting,
+      dataStorageRetentionDays,
     });
     agentId = agent.agent_id;
     await updateLLM(llmId, {
       tools: buildRetellTools({ ...preparedConfig, retellLlmId: llmId, retellAgentId: agentId }, webhookBase),
     });
+  }
+
+  if (preparedConfig.retellCallbackAgentId) {
+    const callbackUpdates: Promise<unknown>[] = [];
+    if (preparedConfig.retellCallbackLlmId) {
+      const outboundBaseline = await loadOutboundBaseline();
+      callbackUpdates.push(updateLLM(preparedConfig.retellCallbackLlmId, {
+        generalPrompt: `${outboundBaseline}\n\n${buildCallbackPrompt(preparedConfig)}`,
+        model,
+        modelHighPriority: true,
+      }));
+    }
+    callbackUpdates.push(retellUpdateAgent(preparedConfig.retellCallbackAgentId, {
+      name: `${preparedConfig.name} (Callback)`,
+      voiceId: preparedConfig.voice,
+      language,
+      llmId: preparedConfig.retellCallbackLlmId,
+      dataStorageSetting,
+      dataStorageRetentionDays,
+    }));
+    await Promise.all(callbackUpdates);
   }
 
   return { ...preparedConfig, retellLlmId: llmId, retellAgentId: agentId };
@@ -1161,7 +1253,7 @@ function buildCallbackPrompt(config: AgentConfig): string {
  * Returns the (possibly updated) config.
  */
 async function ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise<AgentConfig> {
-  const model = process.env.RETELL_LLM_MODEL ?? 'gpt-4o-mini';
+  const model = getDefaultRetellLlmModel();
   const LANG_MAP: Record<string, string> = {
     de: 'de-DE', en: 'en-US', fr: 'fr-FR', es: 'es-ES',
     it: 'it-IT', tr: 'tr-TR', pl: 'pl-PL', nl: 'nl-NL',
@@ -1174,6 +1266,9 @@ async function ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise
   const language = LANG_MAP[config.language] ?? 'de-DE';
   let callbackLlmId = config.retellCallbackLlmId;
   let callbackAgentId = config.retellCallbackAgentId;
+  const callbackDataStorage: 'everything' | 'basic_attributes_only' =
+    config.recordCalls === false || config.dataRetentionDays === 0 ? 'basic_attributes_only' : 'everything';
+  const callbackDataStorageRetentionDays = retellDataStorageRetentionDays(config);
 
   if (!callbackLlmId) {
     // Outbound flow (we call THE CUSTOMER'S customer back): prepend the
@@ -1185,6 +1280,7 @@ async function ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise
       generalPrompt: `${outboundBaseline}\n\n${buildCallbackPrompt(config)}`,
       tools: [],
       model,
+      modelHighPriority: true,
     });
     callbackLlmId = llm.llm_id;
   } else {
@@ -1198,6 +1294,8 @@ async function ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise
     const outboundBaseline = await loadOutboundBaseline();
     await updateLLM(callbackLlmId, {
       generalPrompt: `${outboundBaseline}\n\n${buildCallbackPrompt(config)}`,
+      model,
+      modelHighPriority: true,
     }).catch((err: Error) => {
       log.warn({ err: err.message, orgId, callbackLlmId }, 'callback LLM baseline-refresh failed (non-fatal)');
     });
@@ -1207,16 +1305,24 @@ async function ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise
     // Callback agent inherits the org's recordCalls setting — outbound callbacks
     // are bound by the same § 201 StGB / Art. 6 DSGVO recording-consent rules
     // as inbound calls. Same toggle, same Retell side-effect.
-    const callbackDataStorage: 'everything' | 'basic_attributes_only' =
-      config.recordCalls === false ? 'basic_attributes_only' : 'everything';
     const agent = await retellCreateAgent({
       name: `${config.name} (Callback)`,
       llmId: callbackLlmId,
       voiceId: config.voice,
       language,
       dataStorageSetting: callbackDataStorage,
+      dataStorageRetentionDays: callbackDataStorageRetentionDays,
     });
     callbackAgentId = agent.agent_id;
+  } else {
+    await retellUpdateAgent(callbackAgentId, {
+      name: `${config.name} (Callback)`,
+      llmId: callbackLlmId,
+      voiceId: config.voice,
+      language,
+      dataStorageSetting: callbackDataStorage,
+      dataStorageRetentionDays: callbackDataStorageRetentionDays,
+    });
   }
 
   if (callbackLlmId !== config.retellCallbackLlmId || callbackAgentId !== config.retellCallbackAgentId) {
@@ -1539,12 +1645,14 @@ export async function registerAgentConfig(app: FastifyInstance) {
     if (!owned.exists) return reply.status(404).send({ error: 'Agent not found' });
     const retellAgentId = owned.data.retellAgentId;
     const emptyBreakdown = { llm: null, tts: null, asr: null, e2e: null };
+    const emptyRecentLatency = { llm: null, tts: null, asr: null, e2e: null };
     const emptyResponse = {
       callsCount: 0,
       sampleSize: 0,
       latencyMs: null,
       latencySource: 'none' as const,
       breakdownMs: emptyBreakdown,
+      recentLatencyMs: emptyRecentLatency,
       turnsInCall: 0,
       lastCallAt: null,
       modelName: null as string | null,
@@ -1566,6 +1674,13 @@ export async function registerAgentConfig(app: FastifyInstance) {
         'gpt-4.1-mini': 500,
         'gpt-4.1': 800,
         'gpt-4.1-nano': 400,
+        'gpt-5-mini': 500,
+        'gpt-5-nano': 400,
+        'gpt-5.1': 800,
+        'gpt-5.1-mini': 500,
+        'gpt-5.4': 800,
+        'gpt-5.4-mini': 500,
+        'gpt-5.4-nano': 400,
         'claude-haiku-3.5': 400,
         'claude-3-haiku': 400,
         'claude-sonnet-3.5': 900,
@@ -1599,34 +1714,75 @@ export async function registerAgentConfig(app: FastifyInstance) {
         } catch { /* keep null */ }
       }
 
-      const pickNum = (v: unknown): number | null =>
-        typeof v === 'number' && v > 0 ? Math.round(v) : null;
-
       const endedCalls = calls.filter((c) => c.call_status === 'ended');
       const latest = endedCalls[0];
-      const l = latest?.latency;
+      const latencyToMs = (v: unknown): number | null => {
+        if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) return null;
+        // Retell has exposed latency as seconds-like floats on some surfaces
+        // and millisecond-like integers on others. Normalize both so 1.2 and
+        // 1200 mean the same thing in our UI.
+        return Math.round(v < 60 ? v * 1000 : v);
+      };
+      const percentile = (values: number[], p: number): number | null => {
+        if (!values.length) return null;
+        const sorted = [...values].sort((a, b) => a - b);
+        const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
+        return sorted[index] ?? null;
+      };
+      const latencyMetric = (key: 'llm' | 'tts' | 'asr' | 'e2e') => {
+        const values: number[] = [];
+        for (const call of endedCalls) {
+          const raw = call.latency?.[key];
+          const rawValues = Array.isArray(raw?.values) ? raw.values : [];
+          if (rawValues.length) {
+            for (const value of rawValues) {
+              const ms = latencyToMs(value);
+              if (ms != null) values.push(ms);
+            }
+          } else {
+            const ms = latencyToMs(raw?.p50);
+            if (ms != null) values.push(ms);
+          }
+        }
+        if (!values.length) return null;
+        const sum = values.reduce((acc, value) => acc + value, 0);
+        return {
+          p50: percentile(values, 50),
+          p95: percentile(values, 95),
+          avg: Math.round(sum / values.length),
+          samples: values.length,
+          latestP50: latencyToMs(latest?.latency?.[key]?.p50),
+        };
+      };
 
-      const llm = pickNum(l?.llm?.p50);
-      const tts = pickNum(l?.tts?.p50);
-      const asr = pickNum(l?.asr?.p50);
-      const e2e = pickNum(l?.e2e?.p50);
-      const turnsInCall = l?.e2e?.values?.length ?? 0;
+      const recentLatencyMs = {
+        llm: latencyMetric('llm'),
+        tts: latencyMetric('tts'),
+        asr: latencyMetric('asr'),
+        e2e: latencyMetric('e2e'),
+      };
 
-      // Primary = model baseline (matches Retell's agent-builder UI).
-      // Fall back to measured llm.p50 only when Retell's model map
-      // doesn't know the LLM — at least the user sees *something* real.
-      const primary = modelBaselineMs ?? llm;
+      const llm = recentLatencyMs.llm?.latestP50 ?? recentLatencyMs.llm?.p50 ?? null;
+      const tts = recentLatencyMs.tts?.latestP50 ?? recentLatencyMs.tts?.p50 ?? null;
+      const asr = recentLatencyMs.asr?.latestP50 ?? recentLatencyMs.asr?.p50 ?? null;
+      const e2e = recentLatencyMs.e2e?.latestP50 ?? recentLatencyMs.e2e?.p50 ?? null;
+      const turnsInCall = latest?.latency?.e2e?.values?.length ?? 0;
+
+      // Primary = measured E2E p50 when available; this is what callers feel.
+      // Fall back to measured LLM p50, then Retell's model-baseline estimate.
+      const primary = recentLatencyMs.e2e?.p50 ?? recentLatencyMs.llm?.p50 ?? modelBaselineMs;
       const source: 'model-baseline' | 'measured' | 'none' =
-        modelBaselineMs != null ? 'model-baseline'
-        : llm != null ? 'measured'
+        recentLatencyMs.e2e?.p50 != null || recentLatencyMs.llm?.p50 != null ? 'measured'
+        : modelBaselineMs != null ? 'model-baseline'
         : 'none';
 
       return {
         callsCount: endedCalls.length,
-        sampleSize: primary != null ? 1 : 0,
+        sampleSize: recentLatencyMs.e2e?.samples ?? recentLatencyMs.llm?.samples ?? (primary != null ? 1 : 0),
         latencyMs: primary,
-        latencySource: source === 'model-baseline' ? 'p50' : source === 'measured' ? 'values' : 'none',
+        latencySource: source === 'measured' ? 'values' : source === 'model-baseline' ? 'p50' : 'none',
         breakdownMs: { llm, tts, asr, e2e },
+        recentLatencyMs,
         turnsInCall,
         lastCallAt: latest?.end_timestamp ?? null,
         modelName,
@@ -1906,7 +2062,9 @@ export async function registerAgentConfig(app: FastifyInstance) {
     if (!config.retellAgentId) {
       return { ok: false, error: 'AGENT_NOT_DEPLOYED', message: 'Deploy the agent first.' };
     }
-    const call = await createWebCall(config.retellAgentId);
+    const call = await createWebCall(config.retellAgentId, {
+      dynamicVariables: buildBerlinDynamicVariables(),
+    });
     return { ok: true, ...call };
   });
 

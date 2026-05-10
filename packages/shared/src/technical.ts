@@ -33,13 +33,15 @@ export type DerivedTechnicalRuntime = {
   allowUserDtmf: boolean;
 };
 
+export const DEFAULT_MODEL_TEMPERATURE = 0.3;
+
 export const TECHNICAL_MODE_PRESETS: Record<InterruptionMode, TechnicalModePreset> = {
   allow: {
     mode: 'allow',
     label: 'Natuerlich',
     description: 'Laesst den Anrufer leicht dazwischenreden und reagiert direkt.',
-    interruptionSensitivity: 1,
-    responsiveness: 0.85,
+    interruptionSensitivity: 0.8,
+    responsiveness: 1,
     enableBackchannel: true,
   },
   hold: {
@@ -47,7 +49,7 @@ export const TECHNICAL_MODE_PRESETS: Record<InterruptionMode, TechnicalModePrese
     label: 'Kurz halten',
     description: 'Etwas ruhiger, beendet Saetze haeufiger erst sauber.',
     interruptionSensitivity: 0.45,
-    responsiveness: 0.55,
+    responsiveness: 1,
     enableBackchannel: true,
   },
   block: {
@@ -55,7 +57,7 @@ export const TECHNICAL_MODE_PRESETS: Record<InterruptionMode, TechnicalModePrese
     label: 'Ohne Unterbrechung',
     description: 'Unterbricht kaum und klingt am kontrolliertesten.',
     interruptionSensitivity: 0,
-    responsiveness: 0.3,
+    responsiveness: 1,
     enableBackchannel: false,
   },
 };
@@ -81,7 +83,7 @@ export function deriveTechnicalRuntimeSettings(input: TechnicalConfigInput): Der
   const mode = input.interruptionMode ?? 'allow';
   const preset = TECHNICAL_MODE_PRESETS[mode];
   const voiceSpeed = clamp(pickNumber(input.speakingSpeed, 1), MIN_VOICE_SPEED, MAX_VOICE_SPEED);
-  const modelTemperature = clamp(pickNumber(input.temperature, 0.7), MIN_TEMPERATURE, MAX_TEMPERATURE);
+  const modelTemperature = clamp(pickNumber(input.temperature, DEFAULT_MODEL_TEMPERATURE), MIN_TEMPERATURE, MAX_TEMPERATURE);
   const maxCallDurationSeconds = Math.round(
     clamp(
       pickNumber(input.maxCallDuration, 300),

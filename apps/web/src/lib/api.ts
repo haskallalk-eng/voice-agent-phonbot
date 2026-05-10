@@ -1151,18 +1151,24 @@ export type BillingStatus = {
 export type AgentStats = {
   callsCount: number;
   sampleSize: number;
-  /** Primary latency shown in the UI. Matches Retell's agent-builder
-   *  UI number exactly (model-based baseline). Falls back to measured
-   *  llm.p50 when the model isn't in our map. */
+  /** Primary latency shown in the UI. Prefer measured E2E p50 from recent
+   *  Retell calls; fall back to LLM p50 or model baseline if no calls exist. */
   latencyMs: number | null;
   latencySource: 'values' | 'p50' | 'none';
-  /** Per-component breakdown from the latest call's measured latency. */
+  /** Per-component p50 breakdown from the latest/recent measured calls. */
   breakdownMs: {
     llm: number | null;
     tts: number | null;
     asr: number | null;
     e2e: number | null;
   };
+  recentLatencyMs?: Record<'llm' | 'tts' | 'asr' | 'e2e', {
+    p50: number | null;
+    p95: number | null;
+    avg: number | null;
+    samples: number;
+    latestP50: number | null;
+  } | null>;
   turnsInCall: number;
   lastCallAt: number | null;
   /** The LLM model currently configured on the agent (e.g. 'gpt-4o-mini'). */
@@ -1501,6 +1507,13 @@ export function resetPassword(token: string, password: string) {
   });
 }
 
+export function verifyEmail(token: string) {
+  return request<{ ok: boolean }>('/auth/verify-email', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+}
+
 export function resendVerification() {
   return request<{ ok: boolean }>('/auth/resend-verification', { method: 'POST', body: '{}' });
 }
@@ -1690,6 +1703,33 @@ export function adminPromoteDemoCall(id: string, body?: { email?: string; phone?
   });
 }
 
+export type AdminDemoMeetingStatus = 'open' | 'contacted' | 'scheduled' | 'done' | 'ignored';
+
+export type AdminDemoMeeting = AdminDemoCall & {
+  wants_human_meeting: string | null;
+  human_meeting_time: string | null;
+  human_meeting_channel: 'phone' | 'email' | 'unknown' | string | null;
+  human_meeting_status: AdminDemoMeetingStatus;
+  human_meeting_notes: string | null;
+  signup_link_email_sent_at: string | null;
+  signup_link_sms_sent_at: string | null;
+};
+
+export function adminGetDemoMeetings(params?: { status?: AdminDemoMeetingStatus | 'all'; limit?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.limit) qs.set('limit', String(params.limit));
+  const q = qs.toString();
+  return adminRequest<{ items: AdminDemoMeeting[]; meetingUrl: string }>(`/admin/demo-meetings${q ? `?${q}` : ''}`);
+}
+
+export function adminUpdateDemoMeeting(id: string, body: { status: AdminDemoMeetingStatus; notes?: string }) {
+  return adminRequest<{ ok: boolean }>(`/admin/demo-meetings/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
 // ── Demo Prompt Overrides ────────────────────────────────────────────────────
 
 export type AdminDemoPromptOverride = {
@@ -1729,6 +1769,119 @@ export function adminPutDemoPrompt(scope: string, body: { epilogue: string | nul
 
 export function adminFlushDemoCache() {
   return adminRequest<{ flushed: number }>('/admin/demo-prompts/flush-cache', { method: 'POST' });
+}
+
+export type AdminPromptQaLayer = 'prompt' | 'latency' | 'stt' | 'tts' | 'e2e' | 'tooling' | 'privacy';
+export type AdminPromptQaSeverity = 'low' | 'medium' | 'high' | 'critical';
+export type AdminPromptQaStatus = 'green' | 'yellow' | 'red';
+
+export type AdminPromptQaSimulationAgent = {
+  id: string;
+  name: string;
+  focus: string;
+  layers: AdminPromptQaLayer[];
+  guardrail: string;
+};
+
+export type AdminPromptQaFailure = {
+  id: string;
+  ruleId: string;
+  layer: AdminPromptQaLayer;
+  severity: AdminPromptQaSeverity;
+  variant: string;
+  title: string;
+  userInput: string;
+  requirement: string;
+  missing: string[];
+  forbiddenHits: string[];
+  recommendation: string;
+  promptManagerArea: string;
+};
+
+export type AdminPromptQaLiveCallFailure = {
+  scenarioId: string;
+  family: string;
+  layer: AdminPromptQaLayer;
+  severity: AdminPromptQaSeverity;
+  title: string;
+  callerInput: string;
+  expectedAgentBehavior: string;
+  missingRuleIds: string[];
+  recommendations: string[];
+  risk: string;
+};
+
+export type AdminPromptQaLiveCallSourceResult = {
+  sourceId: string;
+  label: string;
+  kind: 'platform' | 'demo' | 'dashboard' | 'outbound' | 'sales';
+  totalScenarioBank: number;
+  applicableRuns: number;
+  passedRuns: number;
+  failedRuns: number;
+  criticalFailures: number;
+  score: number;
+  status: AdminPromptQaStatus;
+  familyBreakdown: Record<string, { total: number; passed: number; failed: number }>;
+  highestRiskFailures: AdminPromptQaLiveCallFailure[];
+};
+
+export type AdminPromptQaSourceResult = {
+  id: string;
+  label: string;
+  kind: 'platform' | 'demo' | 'dashboard' | 'outbound' | 'sales';
+  model: string;
+  promptChars: number;
+  estimatedTokens: number;
+  latencyRisk: 'low' | 'medium' | 'high';
+  score: number;
+  status: AdminPromptQaStatus;
+  applicableCases: number;
+  passedCases: number;
+  failedCases: number;
+  criticalFailures: number;
+  layerBreakdown: Record<AdminPromptQaLayer, { total: number; passed: number; failed: number }>;
+  promptOptimizations: string[];
+  failures: AdminPromptQaFailure[];
+  notes: string[];
+};
+
+export type AdminPromptQaReport = {
+  generatedAt: string;
+  runMode: 'static-dry-run';
+  dryRunOnly: true;
+  liveModelSimulation: 'not_run';
+  model: string;
+  simulationAgents: AdminPromptQaSimulationAgent[];
+  caseBank: {
+    totalCases: number;
+    variants: number;
+    rules: number;
+    layers: Record<AdminPromptQaLayer, number>;
+  };
+  liveCallDryRun?: {
+    totalRuns: 1000;
+    dryRunOnly: true;
+    liveModelSimulation: 'not_run';
+    actualCallsPlaced: 0;
+    families: Array<{ id: string; title: string; layer: AdminPromptQaLayer; runs: number }>;
+    note: string;
+    sourceResults: AdminPromptQaLiveCallSourceResult[];
+  };
+  overall: {
+    sources: number;
+    applicableCases: number;
+    passedCases: number;
+    failedCases: number;
+    criticalFailures: number;
+    score: number;
+    status: AdminPromptQaStatus;
+  };
+  sources: AdminPromptQaSourceResult[];
+};
+
+export function adminGetPromptQa() {
+  return adminRequest<AdminPromptQaReport>('/admin/prompt-qa');
 }
 
 // ── Learning Improvements ────────────────────────────────────────────────────

@@ -9,7 +9,8 @@ export interface PrivacyTabProps {
 }
 
 export function PrivacyTab({ config, onUpdate }: PrivacyTabProps) {
-  const recordingEnabled = config.recordCalls ?? true;
+  const retentionDays = config.dataRetentionDays ?? 30;
+  const recordingEnabled = (config.recordCalls ?? true) && retentionDays > 0;
   const [sharePatterns, setSharePatterns] = useState<boolean | null>(null);
   const [consentedAt, setConsentedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -48,7 +49,7 @@ export function PrivacyTab({ config, onUpdate }: PrivacyTabProps) {
     <SectionCard title="Aufzeichnung & Datenschutz" icon={IconPrivacy}>
       <div className="space-y-6">
         <Toggle checked={recordingEnabled}
-          onChange={(v) => onUpdate({ recordCalls: v })}
+          onChange={(v) => onUpdate({ recordCalls: v, dataRetentionDays: v ? 30 : 0 })}
           label="Anrufe aufzeichnen" />
         {recordingEnabled ? (
           <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-4 py-3 text-sm text-yellow-300 ml-14">
@@ -64,10 +65,13 @@ export function PrivacyTab({ config, onUpdate }: PrivacyTabProps) {
         </div>
 
         <Field label="Audio & Transkript aufbewahren">
-          <Select value={String(config.dataRetentionDays ?? 30)}
+          <Select value={String(recordingEnabled ? retentionDays : 0)}
             disabled={!recordingEnabled}
             className={!recordingEnabled ? 'opacity-50 cursor-not-allowed' : ''}
-            onChange={(e) => onUpdate({ dataRetentionDays: parseInt(e.target.value) })}>
+            onChange={(e) => {
+              const days = parseInt(e.target.value);
+              onUpdate({ dataRetentionDays: days, recordCalls: days > 0 });
+            }}>
             <option value="0">Nicht speichern (sofort löschen)</option>
             <option value="7">7 Tage</option>
             <option value="30">30 Tage</option>

@@ -19,7 +19,7 @@ export type Template = {
   };
 };
 
-const CHIPY_DEFAULT_VOICE_ID = 'custom_voice_f428053d5d6100d7a2611e0cc4';
+const CHIPY_DEFAULT_VOICE_ID = 'custom_voice_74a89687ae8c8f1ad19e239e7c';
 
 export const TEMPLATES: Template[] = [
   {

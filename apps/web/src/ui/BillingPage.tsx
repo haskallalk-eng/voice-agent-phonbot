@@ -13,10 +13,10 @@ import { SkeletonCard } from '../components/ui.js';
 
 const PLAN_FEATURES: Record<string, string[]> = {
   free: ['30 Freiminuten (einmalig)', '1 Agent', 'Web-Call Test', 'Community Support'],
-  nummer: ['✦ Eigene Telefonnummer', '70 Minuten / Monat', '1 Agent', 'Ticket-System', '+0,22€/Min bei Überschreitung'],
-  starter: ['✦ Telefonnummer inklusive', '360 Minuten / Monat', '1 Agent', 'Ticket-System', 'E-Mail Support', '+0,22€/Min bei Überschreitung'],
-  pro: ['✦ Telefonnummer inklusive', '1.000 Minuten / Monat', '3 Agents', 'Kalender-Integration', 'Priority Support', '+0,20€/Min bei Überschreitung'],
-  agency: ['✦ Telefonnummer inklusive', '2.400 Minuten / Monat', '10 Agents', 'White-Label', 'Dedicated Support', '+0,15€/Min bei Überschreitung'],
+  nummer: ['✦ Eigene Telefonnummer', '70 Minuten / Monat', '1 Agent', 'Ticket-System'],
+  starter: ['✦ Telefonnummer inklusive', '300 Minuten / Monat', '1 Agent', 'Ticket-System', 'E-Mail Support', '+0,25€/Min bei Überschreitung'],
+  pro: ['✦ Telefonnummer inklusive', '900 Minuten / Monat', '3 Agents', 'Kalender-Integration', 'Priority Support', '+0,23€/Min bei Überschreitung'],
+  agency: ['✦ Telefonnummer inklusive', '2.000 Minuten / Monat', '10 Agents', 'White-Label', 'Dedicated Support', '+0,19€/Min bei Überschreitung'],
 };
 
 function UsageBar({ used, limit }: { used: number; limit: number }) {
@@ -331,7 +331,7 @@ export function BillingPage() {
               <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72c.12.96.36 1.9.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.34 1.85.58 2.81.7A2 2 0 0122 16.92z"/>
             </svg>
             <span className="text-white/50">
-              <span className="text-white/70 font-medium">Eigene Telefonnummer</span> · 8,99€/Mo · 70 Min inkl. · +0,22€/Min Überschreitung
+              <span className="text-white/70 font-medium">Eigene Telefonnummer</span> · 8,99€/Mo · 70 Min inkl.
             </span>
           </div>
           {currentPlan !== 'nummer' ? (
@@ -347,7 +347,7 @@ export function BillingPage() {
 
       {/* Overage note */}
       <p className="text-xs text-white/30">
-        Überschreitung: Nummer 0,22€/Min · Starter 0,22€/Min · Pro 0,20€/Min · Agency 0,15€/Min. Kleinunternehmerregelung nach §19 UStG: keine Umsatzsteuer ausgewiesen.
+        Überschreitung: Starter 0,25€/Min · Pro 0,23€/Min · Agency 0,19€/Min. Kleinunternehmerregelung nach §19 UStG: keine Umsatzsteuer ausgewiesen.
       </p>
     </div>
   );

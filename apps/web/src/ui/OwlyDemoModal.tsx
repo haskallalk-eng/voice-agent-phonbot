@@ -40,8 +40,11 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
   const [agentTalking, setAgentTalking] = useState(false);
   const [callError, setCallError] = useState<string | null>(null);
   const [webConsent, setWebConsent] = useState(false);
+  const [webConsentNudge, setWebConsentNudge] = useState(false);
   const clientRef = useRef<RetellWebClient | null>(null);
   const lastAgentMessageRef = useRef<string>('');
+  const webConsentRef = useRef<HTMLLabelElement | null>(null);
+  const webConsentInputRef = useRef<HTMLInputElement | null>(null);
   useWebCallCleanup(clientRef);
 
   // Callback state
@@ -52,6 +55,26 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
   const [cbLoading, setCbLoading] = useState(false);
   const [cbError, setCbError] = useState<string | null>(null);
   const [cbConsent, setCbConsent] = useState(false);
+  const [cbConsentNudge, setCbConsentNudge] = useState(false);
+  const cbConsentRef = useRef<HTMLLabelElement | null>(null);
+  const cbConsentInputRef = useRef<HTMLInputElement | null>(null);
+  const consentNudgeTimerRef = useRef<number | null>(null);
+
+  function pulseConsent(
+    ref: React.RefObject<HTMLLabelElement | null>,
+    inputRef: React.RefObject<HTMLInputElement | null>,
+    setNudge: React.Dispatch<React.SetStateAction<boolean>>,
+  ) {
+    if (consentNudgeTimerRef.current) clearTimeout(consentNudgeTimerRef.current);
+    setNudge(false);
+    window.setTimeout(() => setNudge(true), 0);
+    consentNudgeTimerRef.current = window.setTimeout(() => setNudge(false), 560);
+    queueMicrotask(() => {
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      ref.current?.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'center' });
+      inputRef.current?.focus({ preventScroll: true });
+    });
+  }
 
   function stopActiveCall() {
     if (clientRef.current) {
@@ -76,7 +99,9 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
     if (callState === 'active' || callState === 'connecting') return;
     if (!webConsent) {
       setCallError('Bitte bestätige zuerst den Demo-Datenschutzhinweis.');
-      setCallState('error');
+      setSelectedTemplate(templateId);
+      setCallState('idle');
+      pulseConsent(webConsentRef, webConsentInputRef, setWebConsentNudge);
       return;
     }
     setSelectedTemplate(templateId);
@@ -152,6 +177,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
     e.preventDefault();
     if (!cbConsent) {
       setCbError('Bitte bestätige zuerst den Demo-Datenschutzhinweis.');
+      pulseConsent(cbConsentRef, cbConsentInputRef, setCbConsentNudge);
       return;
     }
     setCbLoading(true);
@@ -260,6 +286,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
       first?.focus();
     });
     return () => {
+      if (consentNudgeTimerRef.current) clearTimeout(consentNudgeTimerRef.current);
       document.removeEventListener('keydown', handleKey);
       previouslyFocused?.focus?.();
     };
@@ -343,17 +370,35 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
                     </button>
                   ))}
                 </div>
-                <label className="mb-3 flex items-start gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs text-white/45">
+                <label
+                  ref={webConsentRef}
+                  onAnimationEnd={() => setWebConsentNudge(false)}
+                  className={`mb-3 flex items-start gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs text-white/45 ${webConsentNudge ? 'consent-nudge' : ''}`}
+                >
                   <input
+                    ref={webConsentInputRef}
                     type="checkbox"
                     checked={webConsent}
-                    onChange={(e) => setWebConsent(e.target.checked)}
+                    aria-describedby={callError?.startsWith('Bitte best') ? 'web-demo-consent-error' : undefined}
+                    onChange={(e) => {
+                      setWebConsent(e.target.checked);
+                      if (e.target.checked && callError?.startsWith('Bitte best')) setCallError(null);
+                    }}
                     className="mt-0.5 accent-orange-500"
                   />
                   <span>
-                    Ich bin einverstanden, dass diese Demo als Audio/Transkript verarbeitet und bis zu 90 Tage zur Demo-Qualität und Lead-Bearbeitung gespeichert wird. Der Agent weist zu Beginn zusätzlich auf KI und Aufzeichnung hin.
+                    Ich bin einverstanden, dass diese Demo als Audio/Transkript verarbeitet und bis zu 90 Tage zur Demo-Qualität und Lead-Bearbeitung gespeichert wird.
                   </span>
                 </label>
+                {callError && (
+                  <p
+                    id="web-demo-consent-error"
+                    className="mb-3 rounded-xl border border-orange-400/25 bg-orange-400/[0.08] px-3 py-2 text-left text-xs text-orange-100"
+                    role="alert"
+                  >
+                    {callError}
+                  </p>
+                )}
                 <p className="text-xs text-white/25 text-center">Kein Account · Mikrofon wird benötigt · ca. 30 Sek.</p>
               </div>
             )}
@@ -484,12 +529,17 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
                       placeholder="+49 170 1234567"
                       className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none focus:ring-2 focus:ring-orange-500/40 transition-all" />
                   </div>
-                  <label className="flex items-start gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs text-white/45">
+                  <label
+                    ref={cbConsentRef}
+                    onAnimationEnd={() => setCbConsentNudge(false)}
+                    className={`flex items-start gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs text-white/45 ${cbConsentNudge ? 'consent-nudge' : ''}`}
+                  >
                     <input
+                      ref={cbConsentInputRef}
                       type="checkbox"
                       checked={cbConsent}
+                      aria-describedby={cbError?.startsWith('Bitte best') ? 'callback-demo-consent-error' : undefined}
                       onChange={(e) => { setCbConsent(e.target.checked); if (cbError) setCbError(null); }}
-                      required
                       className="mt-0.5 accent-orange-500"
                     />
                     <span>
@@ -502,7 +552,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
                     {cbLoading ? '…' : 'Chipy soll mich anrufen'}
                   </button>
                   {cbError && (
-                    <p className="text-sm text-red-400 text-center mt-2" role="alert">{cbError}</p>
+                    <p id="callback-demo-consent-error" className="text-sm text-red-400 text-center mt-2" role="alert">{cbError}</p>
                   )}
                 </form>
                 <p className="text-xs text-white/25 text-center mt-3">Kein Spam. Daten nur für Demo, Lead-Bearbeitung und den angefragten Testlink.</p>

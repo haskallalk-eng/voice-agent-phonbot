@@ -113,6 +113,10 @@ export function humanMeetingUrl(): string {
   return configured || `${APP_URL}/kontakt/`;
 }
 
+export function buildSignupLinkSmsBody(): string {
+  return `Hi, hier ist Chipy von Phonbot nochmal. Hier ist dein Testlink: ${signupLinkUrl()} Wenn du mit einem Menschen von Phonbot sprechen willst: ${humanMeetingUrl()}`;
+}
+
 export async function sendSignupLinkSms(opts: {
   to: string | null | undefined;
   name?: string | null;
@@ -121,7 +125,7 @@ export async function sendSignupLinkSms(opts: {
   return sendSms({
     to: opts.to,
     kind: 'signup_link',
-    body: `Hi, hier ist Chipy von Phonbot nochmal. Hier ist dein Testlink: ${signupLinkUrl()} Wenn du mit einem Menschen von Phonbot sprechen willst: ${humanMeetingUrl()}`,
+    body: buildSignupLinkSmsBody(),
     logger: opts.logger,
   });
 }

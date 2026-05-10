@@ -1,9 +1,9 @@
 # ai.txt - AI Training & Usage Policy
 # https://spawning.ai/ai-txt
 
-# This file declares the policy of Phonbot, operated by Hans Ulrich Waier
+# This file declares the policy of Phonbot, operated by Hassieb Kalla
 # (Einzelunternehmer), Berlin. Canonical legal entity string:
-# Hans Ulrich Waier (Einzelunternehmer). This policy covers AI crawlers,
+# Hassieb Kalla (Einzelunternehmer). This policy covers AI crawlers,
 # training data usage, and content retrieval for LLM-powered assistants.
 #
 # Phonbot welcomes retrieval/search crawlers that respect copyright and
