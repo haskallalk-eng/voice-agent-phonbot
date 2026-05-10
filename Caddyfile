@@ -98,14 +98,6 @@ www.{$DOMAIN:phonbot.de} {
         reverse_proxy web:80
     }
 
-    # Google Search Console should always see XML here. The /sitemap.xml* route
-    # also catches slash variants before they can fall through to HTML.
-    route /sitemap.xml* {
-        rewrite * /sitemap.xml
-        header >Content-Type "application/xml; charset=utf-8"
-        reverse_proxy web:80
-    }
-
     # OG image SVG
     handle /og-image.svg {
         header >Content-Type "image/svg+xml; charset=utf-8"
