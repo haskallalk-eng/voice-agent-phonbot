@@ -142,12 +142,12 @@ function VocabularyEditor({
               <Input
                 value={it.pronunciation ?? ''}
                 onChange={(e) => patch(i, { pronunciation: e.target.value })}
-                placeholder="Sprich es so: Balla-jaa-sch, Ke-ra-tin oder Pi-Eitsch-Wert"
+                placeholder="Sprich es so: Meind Räils, Balla-jaa-sch oder Pi-Eitsch-Wert"
                 className="!border-white/[0.06] !bg-black/15 text-xs"
                 maxLength={220}
               />
               <p className="mt-1.5 text-[11px] leading-relaxed text-white/35">
-                Am zuverlässigsten: kurz so ausschreiben, wie Chipy es sagen soll. Diese Hilfe landet direkt im Agent-Prompt.
+                Am zuverlässigsten: deutsch-lautmalerisch mit Leerzeichen schreiben, z. B. „Meind Räils". Chipy ersetzt das Wort beim Sprechen durch diese Form.
               </p>
             </div>
             <div>

@@ -129,10 +129,24 @@ describe('buildAgentInstructions: agent-builder toggles', () => {
     } as Partial<ConfigArg>));
 
     expect(out).toContain('Spezielle Begriffe');
-    expect(out).toContain('- Balayage (Aussprache: Balla-jaa-sch)');
+    expect(out).toContain('- Balayage (gesprochen ausgeben als: "Balla-jaa-sch"');
     expect(out).toContain('französische Färbetechnik');
     expect(out).toContain('Kontext: bei modernen Strähnchen');
-    expect(out).toContain('Wenn eine Aussprache-Hilfe vorhanden ist');
+    expect(out).toContain('ersetze das Originalwort im gesprochenen Antworttext');
+  });
+
+  it('hardens Mindrails pronunciation and deduplicates repeated vocabulary terms', () => {
+    const out = buildAgentInstructions(baseCfg({
+      customVocabulary: [
+        { term: 'mindrails', pronunciation: 'meindrayls' },
+        { term: 'Mindrails', pronunciation: 'meindrails', explanation: 'Name der Firma' },
+      ],
+    } as Partial<ConfigArg>));
+
+    expect(out).toContain('Den Namen "Mindrails" sprichst du immer als "Meind Räils"');
+    expect(out).toContain('- mindrails (gesprochen ausgeben als: "Meind Räils"');
+    expect(out).toContain('Name der Firma');
+    expect((out.match(/gesprochen ausgeben als: "Meind Räils"/g) ?? [])).toHaveLength(1);
   });
 });
 

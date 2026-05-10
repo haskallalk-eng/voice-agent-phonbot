@@ -130,6 +130,62 @@ function buildOpeningHoursBlock(openingHours: string): string {
   return lines.join('\n');
 }
 
+type VocabularyPromptItem = {
+  term: string;
+  pronunciation: string;
+  explanation: string;
+  context: string;
+};
+
+function vocabularyKey(term: string): string {
+  return term.trim().normalize('NFKC').toLocaleLowerCase('de-DE');
+}
+
+function spokenPronunciation(term: string, pronunciation: string): string {
+  const hint = pronunciation.trim();
+  if (vocabularyKey(term) === 'mindrails') {
+    // Retell's hard pronunciation_dictionary currently does not cover our
+    // German agents, so make the LLM output a German-readable spoken alias.
+    return 'Meind Räils';
+  }
+  return hint;
+}
+
+function collectVocabularyPromptItems(vocabRaw: unknown): VocabularyPromptItem[] {
+  if (!Array.isArray(vocabRaw)) return [];
+
+  const byTerm = new Map<string, VocabularyPromptItem>();
+  for (const item of vocabRaw) {
+    if (typeof item === 'string') {
+      const term = item.trim();
+      if (!term) continue;
+      const key = vocabularyKey(term);
+      if (!byTerm.has(key)) {
+        byTerm.set(key, { term, pronunciation: spokenPronunciation(term, ''), explanation: '', context: '' });
+      }
+      continue;
+    }
+
+    if (!item || typeof item !== 'object' || !('term' in item)) continue;
+    const v = item as { term?: unknown; pronunciation?: unknown; explanation?: unknown; context?: unknown };
+    const term = typeof v.term === 'string' ? v.term.trim() : '';
+    if (!term) continue;
+
+    const key = vocabularyKey(term);
+    const pronunciation = spokenPronunciation(term, typeof v.pronunciation === 'string' ? v.pronunciation : '');
+    const explanation = typeof v.explanation === 'string' ? v.explanation.trim() : '';
+    const context = typeof v.context === 'string' ? v.context.trim() : '';
+    const prev = byTerm.get(key);
+    byTerm.set(key, {
+      term: prev?.term ?? term,
+      pronunciation: pronunciation || prev?.pronunciation || '',
+      explanation: explanation || prev?.explanation || '',
+      context: context || prev?.context || '',
+    });
+  }
+  return [...byTerm.values()];
+}
+
 export function buildAgentInstructions(cfg: AgentConfig) {
   // Interpolate {{businessName}} in the systemPrompt so greeting templates work
   const prompt = (cfg.systemPrompt || DEFAULT_INSTRUCTIONS)
@@ -188,6 +244,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push(`Agent-Name: ${cfg.name}`);
   parts.push(`Firmenname: ${cfg.businessName}`);
   parts.push(`Aktuelles Datum: ${today}. Interpretiere relative Terminwuensche wie "morgen", "naechste Woche" und Wochentage immer von diesem Datum aus.`);
+  parts.push('Aussprache-Fix: Den Namen "Mindrails" sprichst du immer als "Meind Räils". Wenn du ihn im Audio nennst, schreibe in deinem Antworttext "Meind Räils". Nur wenn der Anrufer nach der Schreibweise fragt, sag: "geschrieben Mindrails".');
 
   if (cfg.businessDescription?.trim()) {
     parts.push(`Beschreibung: ${cfg.businessDescription.trim()}`);
@@ -233,36 +290,23 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   // ── Custom vocabulary (terms + pronunciation + meaning + usage context) ─
   // Old configs stored this as `string[]` (term-only); new configs hold
   // `{term, pronunciation?, explanation?, context?}`. Accept both transparently.
-  const vocabRaw = (cfg as Record<string, unknown>).customVocabulary;
-  if (Array.isArray(vocabRaw) && vocabRaw.length > 0) {
+  const vocabItems = collectVocabularyPromptItems((cfg as Record<string, unknown>).customVocabulary);
+  if (vocabItems.length > 0) {
     const vocabLines: string[] = [];
     let hasPronunciationHints = false;
-    for (const item of vocabRaw) {
-      if (typeof item === 'string') {
-        const t = item.trim();
-        if (t) vocabLines.push(`- ${t}`);
-        continue;
+    for (const item of vocabItems) {
+      const bits: string[] = [`- ${item.term}`];
+      if (item.pronunciation) {
+        hasPronunciationHints = true;
+        bits.push(`(gesprochen ausgeben als: "${item.pronunciation}" — nicht als "${item.term}")`);
       }
-      if (item && typeof item === 'object' && 'term' in item) {
-        const v = item as { term?: unknown; pronunciation?: unknown; explanation?: unknown; context?: unknown };
-        const term = typeof v.term === 'string' ? v.term.trim() : '';
-        if (!term) continue;
-        const pronunciation = typeof v.pronunciation === 'string' ? v.pronunciation.trim() : '';
-        const exp = typeof v.explanation === 'string' ? v.explanation.trim() : '';
-        const ctx = typeof v.context === 'string' ? v.context.trim() : '';
-        const bits: string[] = [`- ${term}`];
-        if (pronunciation) {
-          hasPronunciationHints = true;
-          bits.push(`(Aussprache: ${pronunciation})`);
-        }
-        if (exp) bits.push(`= ${exp}`);
-        if (ctx) bits.push(`(Kontext: ${ctx})`);
-        vocabLines.push(bits.join(' '));
-      }
+      if (item.explanation) bits.push(`= ${item.explanation}`);
+      if (item.context) bits.push(`(Kontext: ${item.context})`);
+      vocabLines.push(bits.join(' '));
     }
     if (vocabLines.length > 0) {
       const pronunciationRule = hasPronunciationHints
-        ? '\nWenn eine Aussprache-Hilfe vorhanden ist, nutze sie beim Sprechen. Sage die Aussprache-Hilfe nicht als Erklärung vor, außer der Anrufer fragt danach.'
+        ? '\nWenn eine Aussprache-Hilfe vorhanden ist, ersetze das Originalwort im gesprochenen Antworttext durch diese Lautmalerei. Sage die Aussprache-Hilfe nicht als Erklärung vor, außer der Anrufer fragt danach. Wenn nach der Schreibweise gefragt wird, nenne erst die normale Schreibweise und danach kurz die Aussprache.'
         : '';
       parts.push(
         `Spezielle Begriffe — diese Wörter korrekt aussprechen, ihre Bedeutung kennen und im richtigen Kontext einsetzen:\n${vocabLines.join('\n')}${pronunciationRule}`,
