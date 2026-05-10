@@ -10,16 +10,20 @@
 
 ## Quick Start (Docker)
 
+Production deploys use the root `docker-compose.yml`, root `Caddyfile`, and
+`scripts/deploy.sh`. Do not deploy from `infra/docker`; that folder is only a
+legacy local/dev stack and does not carry the production SEO/security routing
+rules.
+
 1. Clone the repo and copy env:
    ```bash
-   cp .env.example .env
-   # Edit .env with your actual keys
+   cp apps/api/.env.example apps/api/.env
+   # Edit apps/api/.env with your actual keys
    ```
 
 2. Start everything:
    ```bash
-   cd infra/docker
-   DOMAIN=yourdomain.com docker compose up -d
+   DOMAIN=yourdomain.com bash scripts/deploy.sh
    ```
 
 3. Caddy auto-provisions SSL via Let's Encrypt. Your app is live at `https://yourdomain.com`.
@@ -30,9 +34,11 @@
 |----------|---------------|---------------------------------|
 | api      | 3001          | Fastify API server              |
 | web      | 80            | React SPA (nginx)               |
-| postgres | 5432          | PostgreSQL 16                   |
 | redis    | 6379          | Redis 7 (sessions + traces)     |
 | caddy    | 80, 443       | Reverse proxy + auto-SSL        |
+
+Production data lives in the configured external PostgreSQL/Supabase
+`DATABASE_URL`; the root Compose stack does not expose a public database.
 
 ## Environment Variables
 
