@@ -98,14 +98,10 @@ www.{$DOMAIN:phonbot.de} {
         reverse_proxy web:80
     }
 
-    # Google Search Console should always see XML here. The slash variant is a
-    # common manual-submission mistake and otherwise returns an HTML 404.
-    handle /sitemap.xml/* {
+    # Google Search Console should always see XML here. The /sitemap.xml* route
+    # also catches slash variants before they can fall through to HTML.
+    route /sitemap.xml* {
         rewrite * /sitemap.xml
-        header >Content-Type "application/xml; charset=utf-8"
-        reverse_proxy web:80
-    }
-    handle /sitemap.xml {
         header >Content-Type "application/xml; charset=utf-8"
         reverse_proxy web:80
     }
