@@ -4,6 +4,12 @@ import { useAuth } from '../lib/auth.js';
 import { forgotPassword, startCheckoutSignup, LEGAL_CONFIRMATION } from '../lib/api.js';
 import { FoxLogo } from './FoxLogo.js';
 import { PasswordInput } from './PasswordInput.js';
+import {
+  PAID_PLAN_LABELS,
+  readPaidPlanPreselection,
+  startPaidCheckoutSignupAndClearOnSuccess,
+  type PaidPlanId,
+} from './loginCheckout.js';
 
 type Mode = 'login' | 'register';
 type AuthFormValues = { orgName: string; email: string; phone: string; password: string };
@@ -24,6 +30,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
   // Widerrufsrecht (§312g BGB). Die Checkbox ist Pflicht für Account-
   // Erstellung; der Backend-Audit-Trail dokumentiert die B2B-Bestätigung.
   const [isBusiness, setIsBusiness] = useState(false);
+  const [preselectedPaidPlan, setPreselectedPaidPlan] = useState<PaidPlanId | null>(null);
 
   // Forgot password state
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -35,6 +42,14 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
     setShowForgotPassword(false);
     setForgotSuccess(false);
   }, [initialMode]);
+
+  useEffect(() => {
+    if (mode !== 'register') {
+      setPreselectedPaidPlan(null);
+      return;
+    }
+    setPreselectedPaidPlan(readPaidPlanPreselection().plan);
+  }, [mode]);
 
   // Main login/register form
   const {
@@ -60,33 +75,20 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
     // account is only materialized after Stripe confirms payment. That way,
     // a Stripe cancel returns the user to the landing page with no account
     // persisted at all.
-    let plan: string | null = null;
-    let interval: 'month' | 'year' = 'month';
-    try {
-      plan = sessionStorage.getItem('preselectedPlan');
-      const iv = sessionStorage.getItem('preselectedInterval');
-      if (iv === 'year' || iv === 'month') interval = iv;
-    } catch { /* privacy mode */ }
+    const { plan, interval } = readPaidPlanPreselection();
 
     const wantsCheckoutFirst =
       mode === 'register' &&
-      !!plan && plan !== 'free' &&
-      ['nummer', 'starter', 'pro', 'agency'].includes(plan);
+      !!plan;
 
     try {
       if (wantsCheckoutFirst) {
-        try {
-          sessionStorage.removeItem('preselectedPlan');
-          sessionStorage.removeItem('preselectedInterval');
-        } catch { /* ignore */ }
-        const { url } = await startCheckoutSignup({
-          orgName: data.orgName,
-          email: data.email,
-          phone: data.phone,
-          password: data.password,
-          planId: plan as 'nummer' | 'starter' | 'pro' | 'agency',
+        const url = await startPaidCheckoutSignupAndClearOnSuccess({
+          form: data,
+          plan,
           interval,
-          ...LEGAL_CONFIRMATION,
+          legalConfirmation: LEGAL_CONFIRMATION,
+          startCheckoutSignup,
         });
         window.location.href = url;
         return; // browser navigates away
@@ -102,7 +104,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
 
       // Existing users confirm current legal documents in Billing before a
       // paid checkout is opened; keep the preselection for that view.
-      if (plan && plan !== 'free') {
+      if (plan) {
         try {
           sessionStorage.setItem('preselectedPlan', plan);
           sessionStorage.setItem('preselectedInterval', interval);
@@ -239,6 +241,11 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
         ) : (
           <>
             <form onSubmit={handleFormSubmit(onMainSubmit)} className="space-y-4">
+              {mode === 'register' && preselectedPaidPlan && (
+                <div className="rounded-xl border border-orange-500/20 bg-orange-500/10 px-4 py-3 text-xs leading-relaxed text-orange-100/80">
+                  Du registrierst dich fuer den {PAID_PLAN_LABELS[preselectedPaidPlan]}-Plan. Nach dem Klick oeffnet sich Stripe; der Account wird erst nach erfolgreicher Zahlung aktiviert.
+                </div>
+              )}
               {mode === 'register' && (
                 <div>
                   <label className="block text-xs font-medium text-white/60 mb-1.5 uppercase tracking-wide">
@@ -355,8 +362,9 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
                     />
                     <span className="text-xs text-white/50 leading-relaxed">
                       Ich best&auml;tige, dass ich Phonbot ausschlie&szlig;lich als Unternehmer
-                      im Sinne von &sect;14 BGB teste oder nutze. Ein kostenpflichtiger Plan
-                      entsteht erst durch eine sp&auml;tere Buchung.
+                      im Sinne von &sect;14 BGB teste oder nutze. {preselectedPaidPlan
+                        ? 'Der ausgewaehlte kostenpflichtige Plan wird nach erfolgreicher Stripe-Zahlung aktiviert.'
+                        : 'Ein kostenpflichtiger Plan entsteht erst durch eine spaetere Buchung.'}
                     </span>
                   </label>
                 </>
@@ -383,6 +391,8 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
                   </span>
                 ) : mode === 'login' ? (
                   'Einloggen'
+                ) : preselectedPaidPlan ? (
+                  'Weiter zur sicheren Zahlung'
                 ) : (
                   'Account erstellen'
                 )}

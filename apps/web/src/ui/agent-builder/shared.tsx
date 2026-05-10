@@ -75,7 +75,7 @@ export const LANGUAGES = [
   { id: 'vi', label: '🇻🇳 Tiếng Việt' },
 ] as const;
 
-export const CHIPY_VOICE_ID = 'custom_voice_f428053d5d6100d7a2611e0cc4';
+export const CHIPY_VOICE_ID = 'custom_voice_74a89687ae8c8f1ad19e239e7c';
 
 export type NativeStatus = 'many' | 'few' | 'none';
 
@@ -406,7 +406,7 @@ export function normalizeFallbackReasonValue(reason: string | null | undefined):
 
 export const DEFAULT_CONFIG_VALUES: Partial<AgentConfig> = {
   speakingSpeed: 1.0,
-  temperature: 0.7,
+  temperature: 0.3,
   maxCallDuration: 300,
   backgroundSound: 'off',
   responsiveness: 0.85,

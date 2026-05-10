@@ -1,9 +1,9 @@
 # Transfer Impact Assessment (TIA) — Cloudflare
 
-> **Stand:** 2026-04-30 · **Verantwortlich:** Hans Waier, Hans Ulrich Waier · **Re-Verifikation:** 2026-10-30
+> **Stand:** 2026-04-30 · **Verantwortlich:** Hassieb Kalla · **Re-Verifikation:** 2026-10-30
 
 ## 1. Verantwortlicher
-Hans Ulrich Waier, Berlin · Phonbot.
+Hassieb Kalla, Berlin · Phonbot.
 
 ## 2. Datenimporteur
 **Cloudflare, Inc.** · 101 Townsend Street, San Francisco, CA 94107, USA · *(EU-Vertragspartner möglich: Cloudflare Germany GmbH)* · Rolle: Sub-Auftragsverarbeiter (Edge/CDN/CAPTCHA) · Vertrag: DPA + SCC (Click-Wrap auf cloudflare.com/cloudflare-customer-dpa) · DPF: aktiv.

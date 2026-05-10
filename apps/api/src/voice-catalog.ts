@@ -69,12 +69,23 @@ const STD_IDS = {
   n1: 'openai-alloy',
 } as const;
 
-const CHIPY_HQ_ID = DEFAULT_VOICE_ID;             // ElevenLabs Susi (DE), quality-first default
+const CHIPY_HQ_ID = DEFAULT_VOICE_ID;             // ElevenLabs Ben (DE), quality-first default
 const CHIPY_STD_ID = DEFAULT_STANDARD_VOICE_ID;   // Cartesia German Conversational Woman, Sonic 3
 const DE_HQ_IDS = {
+  susi: 'custom_voice_f428053d5d6100d7a2611e0cc4',
   ben: 'custom_voice_74a89687ae8c8f1ad19e239e7c',
   otto: 'custom_voice_3426c893b24dd3173a963f232c',
   mila: 'custom_voice_725e2277b354e8b7054d53be8c',
+  marc: 'custom_voice_03f8ac3359115054f10be9b797',
+  elias: 'custom_voice_b743578aa93ec1805bf60bd3d6',
+  doreen: 'custom_voice_90cc9e158bae7cc1cf2f529d2f',
+  felix: 'custom_voice_da3278f195cd36f184519418a8',
+  lea: 'custom_voice_68fd41f2d8c9a667ae7beaeb6a',
+  stefanRank: 'custom_voice_6ce325659b4010bc1548f71370',
+  tobias: 'custom_voice_e315018c30eeb6afe1c67e8606',
+  heidi: 'custom_voice_d93929fcbf7010ad6ed689e480',
+  johanna: 'custom_voice_1e7fa582a4061344be3ff1137b',
+  ramona: 'custom_voice_a743c0dfd71db77e5a44e330e1',
 } as const;
 
 // ── Builders ───────────────────────────────────────────────────────────
@@ -131,36 +142,33 @@ function withDefault(voices: CuratedVoice[]): CuratedVoice[] {
   return voices.map((v, i) => (i === 0 ? { ...v, isDefault: true } : v));
 }
 
-// ── DE — 19 native + multilingual-HQ voices ────────────────────────────
+// ── DE — native German HQ + Standard voices ────────────────────────────
 // Tier-Zusammensetzung:
-//  • Chipy (HQ) = ElevenLabs Hassieb-Kalla custom clone, vollständig DE-nativ
+//  • Chipy (HQ) = ElevenLabs Ben community voice, vollständig DE-nativ
 //  • Chipy Basic (Standard) = Cartesia Chipy clone, DE-nativ
+//  • Additional ElevenLabs HQ = native de-DE community voices imported into Retell
 //  • 8× Cartesia Sonic Standard (DE-nativ über Sonic-DE)
-//  • 8× ElevenLabs Multilingual-v2 (HQ): die englischen 11labs-Actors klingen
-//    seit Multilingual-v2 (2024) auf DE sehr ordentlich — nicht 100 % nativ,
-//    aber deutlich höher in akustischer Qualität (Stimm-Tiefe, Atmung,
-//    Mikro-Pausen) als die DE-nativen Standard-Stimmen. Aktiviert via
-//    Retell's Default-11labs-Library — kein BYO-Key nötig. +5 Ct/Min
-//    Surcharge wie alle HQ-Voices.
 // Current Chipy defaults are intentionally vendor voices, not the older clones:
-// HQ = native German ElevenLabs, Standard = German Cartesia Sonic.
-// 2026-05: Chipy HQ is Susi, a native German ElevenLabs community voice.
-// Ben, Otto, and Mila are native German HQ alternatives for Agent Builder.
+// HQ = Ben, a native German ElevenLabs community voice; Standard = German Cartesia Sonic.
+// Native German ElevenLabs voices are imported into Retell as custom_voice_* IDs
+// because Retell agents cannot use raw ElevenLabs shared-library IDs directly.
 const DE_VOICES: CuratedVoice[] = [
-  { id: CHIPY_HQ_ID,        name: 'Chipy HQ',       tier: 'hq',       gender: 'female', provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: CHIPY_HQ_ID,        name: 'Chipy HQ Ben',   tier: 'hq',       gender: 'male',   provider: 'elevenlabs', isDefault: true, surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
   { id: CHIPY_STD_ID,       name: 'Chipy Standard', tier: 'standard', gender: 'female', provider: 'cartesia' },
-  { id: DE_HQ_IDS.ben,      name: 'Ben HQ',         tier: 'hq',       gender: 'male',   provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: DE_HQ_IDS.susi,     name: 'Susi HQ',        tier: 'hq',       gender: 'female', provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
   { id: DE_HQ_IDS.otto,     name: 'Otto HQ',        tier: 'hq',       gender: 'male',   provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
   { id: DE_HQ_IDS.mila,     name: 'Mila HQ',        tier: 'hq',       gender: 'female', provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  // ── ElevenLabs HQ (Multilingual-v2 auf Deutsch) ─────────────────────
-  { id: '11labs-Sarah',     name: 'Sarah',       tier: 'hq',       gender: 'female', provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: '11labs-Charlotte', name: 'Charlotte',   tier: 'hq',       gender: 'female', provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: '11labs-Matilda',   name: 'Matilda',     tier: 'hq',       gender: 'female', provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: '11labs-Lily',      name: 'Lily',        tier: 'hq',       gender: 'female', provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: '11labs-Daniel',    name: 'Daniel HQ',   tier: 'hq',       gender: 'male',   provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: '11labs-Brian',     name: 'Brian',       tier: 'hq',       gender: 'male',   provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: '11labs-Adam',      name: 'Adam',        tier: 'hq',       gender: 'male',   provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
-  { id: '11labs-James',     name: 'James',       tier: 'hq',       gender: 'male',   provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  // ── ElevenLabs HQ (native de-DE community voices imported into Retell) ──
+  { id: DE_HQ_IDS.marc,       name: 'Marc HQ',        tier: 'hq', gender: 'male',   provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: DE_HQ_IDS.elias,      name: 'Elias HQ',       tier: 'hq', gender: 'male',   provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: DE_HQ_IDS.doreen,     name: 'Doreen HQ',      tier: 'hq', gender: 'female', provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: DE_HQ_IDS.felix,      name: 'Felix HQ',       tier: 'hq', gender: 'male',   provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: DE_HQ_IDS.lea,        name: 'Lea HQ',         tier: 'hq', gender: 'female', provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: DE_HQ_IDS.stefanRank, name: 'Stefan Rank HQ', tier: 'hq', gender: 'male',   provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: DE_HQ_IDS.tobias,     name: 'Tobias HQ',      tier: 'hq', gender: 'male',   provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: DE_HQ_IDS.heidi,      name: 'Heidi HQ',       tier: 'hq', gender: 'female', provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: DE_HQ_IDS.johanna,    name: 'Johanna HQ',     tier: 'hq', gender: 'female', provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
+  { id: DE_HQ_IDS.ramona,     name: 'Ramona HQ',      tier: 'hq', gender: 'female', provider: 'elevenlabs', surchargePerMinute: PREMIUM_VOICE_SURCHARGE_PER_MINUTE },
   // ── Cartesia Sonic Standard (DE-nativ) ──────────────────────────────
   ...buildCartesiaStd({
     f1: 'Eva',   f2: 'Lina',   f3: 'Nora',    f4: 'Emma',  f5: 'Clara',  f6: 'Greta',

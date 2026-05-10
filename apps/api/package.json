@@ -7,7 +7,9 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
-    "test": "vitest"
+    "test": "vitest",
+    "model:smoke": "tsx src/scripts/model-smoke-test.ts",
+    "model:retell-ab": "tsx src/scripts/retell-model-ab-test.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

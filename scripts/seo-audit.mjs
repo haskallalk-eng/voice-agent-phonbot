@@ -15,7 +15,7 @@ const INDEXABLE = [...SUPPORT, ...BRANCHES, ...NICHES, ...LEGAL];
 const failures = [];
 const warnings = [];
 const PRODUCT_TRUTH = {
-  legalName: 'Hans Ulrich Waier (Einzelunternehmer)',
+  legalName: 'Hassieb Kalla (Einzelunternehmer)',
   nummerPlanPattern: /70\s+(Minuten|Min)\s*(pro\s*Monat|\/\s*Monat)/i,
   forbiddenAiDocPatterns: [
     { pattern: /Stand:\s*April\s+2026/i, label: 'stale April 2026 pricing date' },
@@ -130,7 +130,7 @@ function checkBranches() {
     if (!graph.some((item) => item['@type'] === 'WebPage')) fail(`${url}: WebPage JSON-LD missing`);
     if (!graph.some((item) => item['@type'] === 'FAQPage')) fail(`${url}: FAQPage JSON-LD missing`);
     const offer = graph.find((item) => item['@type'] === 'Service')?.offers;
-    const expected = '79';
+    const expected = '89';
     if (String(offer?.price) !== expected) fail(`${url}: offer price ${offer?.price ?? 'missing'} != ${expected}`);
   }
 }
@@ -146,7 +146,7 @@ function checkNiches() {
       if (!graph.some((item) => item['@type'] === type)) fail(`${url}: JSON-LD ${type} missing`);
     }
     const offer = graph.find((item) => item['@type'] === 'Service')?.offers;
-    if (String(offer?.price) !== '79') fail(`${url}: offer price ${offer?.price ?? 'missing'} != 79`);
+    if (String(offer?.price) !== '89') fail(`${url}: offer price ${offer?.price ?? 'missing'} != 89`);
   }
 }
 
@@ -280,7 +280,7 @@ function checkProductTruthDrift() {
 
   for (const [rel, content] of Object.entries({ 'llms.txt': llms, 'llms-full.txt': llmsFull })) {
     if (!PRODUCT_TRUTH.nummerPlanPattern.test(content)) fail(`${rel}: Nummer monthly 70-minute truth missing`);
-    for (const required of ['Starter', '360', 'Professional', '1.000', 'Agency', '2.400']) {
+    for (const required of ['Starter', '300', 'Professional', '900', 'Agency', '2.000']) {
       if (!content.includes(required)) fail(`${rel}: pricing truth missing ${required}`);
     }
   }

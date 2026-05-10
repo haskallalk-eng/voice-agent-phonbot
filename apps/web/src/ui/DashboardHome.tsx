@@ -95,27 +95,42 @@ const TICKET_STATUS_LABELS: Record<string, string> = {
   done: 'Erledigt',
 };
 
+function settledValue<T>(result: PromiseSettledResult<T>, label: string, failures: string[]): T | null {
+  if (result.status === 'fulfilled') return result.value;
+  failures.push(label);
+  console.error(`${label} failed`, result.reason);
+  return null;
+}
+
 export function DashboardHome({ onNavigate }: Props) {
   const { data, isLoading: loading, error: queryError } = useQuery({
     queryKey: ['dashboard'],
     queryFn: async () => {
       const bookingsFrom = new Date().toISOString().slice(0, 10);
       const bookingsTo = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-      const [b, c, t, a, bk, ph] = await Promise.all([
-        getBillingStatus().catch((err) => { console.error('getBillingStatus failed', err); return null; }),
-        getCalls().catch((err) => { console.error('getCalls failed', err); return { items: [] as RetellCall[] }; }),
-        getTickets().catch((err) => { console.error('getTickets failed', err); return { items: [] as Ticket[] }; }),
-        getAgentConfig().catch((err) => { console.error('getAgentConfig failed', err); return null; }),
-        getChipyBookings(bookingsFrom, bookingsTo).catch(() => ({ bookings: [] as ChipyBooking[] })),
-        getPhoneNumbers().catch((err) => { console.error('getPhoneNumbers failed', err); return { items: [] as PhoneNumber[] }; }),
+      const failures: string[] = [];
+      const [b, c, t, a, bk, ph] = await Promise.allSettled([
+        getBillingStatus(),
+        getCalls(),
+        getTickets(),
+        getAgentConfig(),
+        getChipyBookings(bookingsFrom, bookingsTo),
+        getPhoneNumbers(),
       ]);
+      const billing = settledValue<BillingStatus>(b as PromiseSettledResult<BillingStatus>, 'Abrechnung', failures);
+      const calls = settledValue<{ items: RetellCall[] }>(c as PromiseSettledResult<{ items: RetellCall[] }>, 'Anrufe', failures);
+      const tickets = settledValue<{ items: Ticket[] }>(t as PromiseSettledResult<{ items: Ticket[] }>, 'Tickets', failures);
+      const agentConfig = settledValue<AgentConfig>(a as PromiseSettledResult<AgentConfig>, 'Agent-Konfiguration', failures);
+      const bookings = settledValue<{ bookings: ChipyBooking[] }>(bk as PromiseSettledResult<{ bookings: ChipyBooking[] }>, 'Kalender', failures);
+      const phoneNumbers = settledValue<{ items: PhoneNumber[] }>(ph as PromiseSettledResult<{ items: PhoneNumber[] }>, 'Telefonnummern', failures);
       return {
-        billing: b,
-        calls: c?.items ?? [],
-        tickets: t?.items ?? [],
-        agentConfig: a,
-        bookings: bk?.bookings ?? [],
-        phoneNumbers: ph?.items ?? [],
+        billing,
+        calls: calls?.items ?? [],
+        tickets: tickets?.items ?? [],
+        agentConfig,
+        bookings: bookings?.bookings ?? [],
+        phoneNumbers: phoneNumbers?.items ?? [],
+        failures,
       };
     },
   });
@@ -126,7 +141,15 @@ export function DashboardHome({ onNavigate }: Props) {
   const agentConfig = data?.agentConfig ?? null;
   const bookings = data?.bookings ?? [];
   const phoneNumbers = data?.phoneNumbers ?? [];
-  const error = queryError ? 'Daten konnten nicht geladen werden' : null;
+  const failures = data?.failures ?? [];
+  const callsFailed = failures.includes('Anrufe');
+  const ticketsFailed = failures.includes('Tickets');
+  const billingFailed = failures.includes('Abrechnung');
+  const error = queryError
+    ? 'Daten konnten nicht geladen werden.'
+    : failures.length
+      ? `Einige Bereiche konnten nicht geladen werden: ${failures.join(', ')}. Zahlen in diesen Bereichen koennen fehlen.`
+      : null;
 
   // Upcoming bookings – sorted by slot_time, max 4
   const upcomingBookings = [...bookings]
@@ -232,7 +255,7 @@ export function DashboardHome({ onNavigate }: Props) {
               {[
                 { label: 'Agent konfiguriert', done: step1Done, action: () => onNavigate('agent') },
                 { label: 'Agent deployed', done: step2Done, action: () => onNavigate('agent') },
-                { label: 'Erster Testanruf', done: step3Done, action: () => onNavigate('test') },
+                { label: callsFailed ? 'Testanrufstatus nicht geladen' : 'Erster Testanruf', done: step3Done, action: () => onNavigate(callsFailed ? 'logs' : 'test') },
                 { label: 'Telefonnummer verbunden', done: step4Done, action: () => onNavigate('phone') },
                 { label: 'Live gehen', done: step5Done, action: () => onNavigate('phone') },
               ].map((step, i) => (
@@ -274,25 +297,25 @@ export function DashboardHome({ onNavigate }: Props) {
             <StatCard
               Icon={IconCalls}
               label="Calls heute"
-              value={callsToday}
-              sub={`${calls.length} gesamt`}
+              value={callsFailed ? 'Nicht geladen' : callsToday}
+              sub={callsFailed ? 'Anrufdaten fehlen' : `${calls.length} gesamt`}
             />
             <StatCard
               Icon={IconPhone}
               label="Zeit gespart"
-              value={`~${savedHours} Std`}
-              sub={`${savedMinutes} Min / ${calls.length} Calls`}
+              value={callsFailed ? 'Nicht geladen' : `~${savedHours} Std`}
+              sub={callsFailed ? 'Anrufdaten fehlen' : `${savedMinutes} Min / ${calls.length} Calls`}
             />
             <StatCard
               Icon={IconTickets}
               label="Offene Tickets"
-              value={openTickets}
-              sub={`${tickets.length} gesamt`}
+              value={ticketsFailed ? 'Nicht geladen' : openTickets}
+              sub={ticketsFailed ? 'Ticketdaten fehlen' : `${tickets.length} gesamt`}
             />
             <StatCard
               Icon={IconBilling}
               label="Plan"
-              value={billing?.planName ?? 'Free'}
+              value={billing?.planName ?? (billingFailed ? 'Nicht geladen' : 'Free')}
               sub={billing?.planStatus ?? undefined}
             />
           </div>
@@ -302,26 +325,26 @@ export function DashboardHome({ onNavigate }: Props) {
             <StatCard
               Icon={IconCalendar}
               label="Calls diese Woche"
-              value={callsThisWeek}
-              sub="laufende Woche"
+              value={callsFailed ? 'Nicht geladen' : callsThisWeek}
+              sub={callsFailed ? 'Anrufdaten fehlen' : 'laufende Woche'}
             />
             <StatCard
               Icon={IconCalls}
               label="Ø Dauer"
-              value={formatDuration(avgDurationMs)}
-              sub="Durchschnitt"
+              value={callsFailed ? 'Nicht geladen' : formatDuration(avgDurationMs)}
+              sub={callsFailed ? 'Anrufdaten fehlen' : 'Durchschnitt'}
             />
             <StatCard
               Icon={IconAgent}
               label="Erfolgsrate"
-              value={`${successRate}%`}
-              sub="erfolgreich beendet"
+              value={callsFailed ? 'Nicht geladen' : `${successRate}%`}
+              sub={callsFailed ? 'Anrufdaten fehlen' : 'erfolgreich beendet'}
             />
             <StatCard
               Icon={IconTickets}
               label="Tickets gelöst"
-              value={solvedTickets}
-              sub={`von ${tickets.length} gesamt`}
+              value={ticketsFailed ? 'Nicht geladen' : solvedTickets}
+              sub={ticketsFailed ? 'Ticketdaten fehlen' : `von ${tickets.length} gesamt`}
             />
           </div>
       </div>
@@ -383,7 +406,13 @@ export function DashboardHome({ onNavigate }: Props) {
               Alle anzeigen →
             </button>
           </div>
-          {recentCalls.length === 0 ? (
+          {callsFailed ? (
+            <div className="text-center py-8 text-white/30">
+              <IconCalls size={32} className="mx-auto mb-2 opacity-30" />
+              <p className="text-sm font-medium text-white/40 mb-1">Anrufe nicht geladen</p>
+              <p className="text-xs text-white/25">Bitte lade das Dashboard neu oder öffne die Anruf-Logs.</p>
+            </div>
+          ) : recentCalls.length === 0 ? (
             <div className="text-center py-8 text-white/30">
               <IconCalls size={32} className="mx-auto mb-2 opacity-30" />
               <p className="text-sm font-medium text-white/40 mb-1">Noch keine Anrufe</p>
@@ -432,7 +461,13 @@ export function DashboardHome({ onNavigate }: Props) {
               Alle anzeigen →
             </button>
           </div>
-          {recentOpenTickets.length === 0 ? (
+          {ticketsFailed ? (
+            <div className="text-center py-8 text-white/30">
+              <IconTickets size={32} className="mx-auto mb-2 opacity-30" />
+              <p className="text-sm font-medium text-white/40 mb-1">Tickets nicht geladen</p>
+              <p className="text-xs text-white/25">Bitte lade das Dashboard neu oder öffne den Ticketbereich.</p>
+            </div>
+          ) : recentOpenTickets.length === 0 ? (
             <div className="text-center py-8 text-white/30">
               <IconTickets size={32} className="mx-auto mb-2 opacity-30" />
               <p className="text-sm">Keine offenen Tickets</p>
@@ -475,7 +510,13 @@ export function DashboardHome({ onNavigate }: Props) {
               Kalender →
             </button>
           </div>
-          {upcomingBookings.length === 0 ? (
+          {failures.includes('Kalender') ? (
+            <div className="text-center py-8 text-white/30">
+              <IconCalendar size={32} className="mx-auto mb-2 opacity-30" />
+              <p className="text-sm font-medium text-white/40 mb-1">Termine nicht geladen</p>
+              <p className="text-xs text-white/25">Bitte lade das Dashboard neu oder öffne den Kalender.</p>
+            </div>
+          ) : upcomingBookings.length === 0 ? (
             <div className="text-center py-8 text-white/30">
               <IconCalendar size={32} className="mx-auto mb-2 opacity-30" />
               <p className="text-sm font-medium text-white/40 mb-1">Keine Termine</p>

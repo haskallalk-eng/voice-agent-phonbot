@@ -451,7 +451,7 @@ export function PhoneManager({ onNavigate }: { onNavigate?: (page: string) => vo
             </div>
             <p className="text-sm font-semibold bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Eigene Telefonnummer ab 8,99€/Mo</p>
             <p className="text-xs text-white/35">Mit dem Nummer-Plan bekommst du eine eigene Telefonnummer + 70 Minuten pro Monat. Dein Agent nimmt dann echte Anrufe entgegen.</p>
-            <p className="text-[11px] text-cyan-400/50 mt-1">Tipp: Ab dem Starter-Plan (79€/Mo) ist eine Nummer bereits gratis inklusive.</p>
+            <p className="text-[11px] text-cyan-400/50 mt-1">Tipp: Ab dem Starter-Plan (89€/Mo) ist eine Nummer bereits gratis inklusive.</p>
             <label className="mx-auto flex max-w-md items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-[11px] text-white/45">
               <input
                 type="checkbox"

@@ -6,9 +6,21 @@
  */
 
 const RETELL_API = 'https://api.retellai.com';
+const DEFAULT_RETELL_LLM_MODEL = 'gpt-5.4-mini';
+
+export function getDefaultRetellLlmModel(): string {
+  const configured = process.env.RETELL_LLM_MODEL?.trim();
+  return configured || DEFAULT_RETELL_LLM_MODEL;
+}
+
+export function getDefaultRetellLlmHighPriority(): boolean {
+  const raw = process.env.RETELL_LLM_FAST_TIER ?? process.env.RETELL_LLM_HIGH_PRIORITY;
+  if (raw === undefined || raw.trim() === '') return true;
+  return /^(1|true|yes|ja|on)$/i.test(raw.trim());
+}
 
 // Default voices for new demo agents + fallback when an agent config has no explicit voice.
-// HQ prioritizes human quality: Susi, a native German ElevenLabs community voice on multilingual_v2.
+// HQ prioritizes human quality: Ben, a native German ElevenLabs community voice on multilingual_v2.
 // Standard prioritizes robust/lower-cost phone delivery: Cartesia Sonic 3 German
 // Conversational Woman, imported into this Retell workspace as a community voice.
 export const DEFAULT_STANDARD_VOICE_ID =
@@ -17,13 +29,23 @@ export const DEFAULT_STANDARD_VOICE_ID =
 export const DEFAULT_VOICE_ID =
   process.env.RETELL_DEFAULT_HQ_VOICE_ID ??
   process.env.RETELL_DEFAULT_VOICE_ID ??
-  'custom_voice_f428053d5d6100d7a2611e0cc4';
+  'custom_voice_74a89687ae8c8f1ad19e239e7c';
 
 const NATIVE_GERMAN_ELEVENLABS_VOICE_IDS = new Set<string>([
   'custom_voice_f428053d5d6100d7a2611e0cc4',
   'custom_voice_74a89687ae8c8f1ad19e239e7c',
   'custom_voice_3426c893b24dd3173a963f232c',
   'custom_voice_725e2277b354e8b7054d53be8c',
+  'custom_voice_03f8ac3359115054f10be9b797',
+  'custom_voice_b743578aa93ec1805bf60bd3d6',
+  'custom_voice_90cc9e158bae7cc1cf2f529d2f',
+  'custom_voice_da3278f195cd36f184519418a8',
+  'custom_voice_68fd41f2d8c9a667ae7beaeb6a',
+  'custom_voice_6ce325659b4010bc1548f71370',
+  'custom_voice_e315018c30eeb6afe1c67e8606',
+  'custom_voice_d93929fcbf7010ad6ed689e480',
+  'custom_voice_1e7fa582a4061344be3ff1137b',
+  'custom_voice_a743c0dfd71db77e5a44e330e1',
 ]);
 
 function getApiKey(): string {
@@ -92,6 +114,7 @@ export type RetellLLMConfig = {
   states: RetellState[] | null;
   starting_state: string | null;
   model: string;
+  model_high_priority?: boolean | null;
 };
 
 export type RetellTool = {
@@ -143,6 +166,7 @@ export async function createLLM(config: {
   tools: RetellTool[];
   model?: string;
   modelTemperature?: number;
+  modelHighPriority?: boolean;
   knowledgeBaseIds?: string[];
   kbConfig?: { top_k?: number; filter_score?: number };
 }): Promise<RetellLLMConfig> {
@@ -151,8 +175,9 @@ export async function createLLM(config: {
     body: JSON.stringify({
       general_prompt: config.generalPrompt,
       general_tools: config.tools.length ? config.tools : undefined,
-      model: config.model ?? 'gpt-4o-mini',
+      model: config.model ?? getDefaultRetellLlmModel(),
       model_temperature: config.modelTemperature,
+      model_high_priority: config.modelHighPriority ?? getDefaultRetellLlmHighPriority(),
       knowledge_base_ids: config.knowledgeBaseIds?.length ? config.knowledgeBaseIds : undefined,
       kb_config: config.knowledgeBaseIds?.length ? (config.kbConfig ?? { top_k: 3, filter_score: 0.6 }) : undefined,
     }),
@@ -166,6 +191,7 @@ export async function updateLLM(
     tools?: RetellTool[];
     model?: string;
     modelTemperature?: number;
+    modelHighPriority?: boolean;
     knowledgeBaseIds?: string[];
     kbConfig?: { top_k?: number; filter_score?: number };
   },
@@ -175,6 +201,7 @@ export async function updateLLM(
   if (config.tools !== undefined) body.general_tools = config.tools.length ? config.tools : [];
   if (config.model !== undefined) body.model = config.model;
   if (config.modelTemperature !== undefined) body.model_temperature = config.modelTemperature;
+  body.model_high_priority = config.modelHighPriority ?? getDefaultRetellLlmHighPriority();
   if (config.knowledgeBaseIds !== undefined) {
     body.knowledge_base_ids = config.knowledgeBaseIds.length ? config.knowledgeBaseIds : [];
     if (config.knowledgeBaseIds.length) body.kb_config = config.kbConfig ?? { top_k: 3, filter_score: 0.6 };
@@ -238,14 +265,14 @@ export async function deleteKnowledgeBase(knowledgeBaseId: string): Promise<void
 // differ by tone and pacing across industries.
 function defaultInterruption(): number {
   const raw = process.env.RETELL_AGENT_INTERRUPTION_SENSITIVITY;
-  if (raw === undefined || raw === '') return 1.0;
+  if (raw === undefined || raw === '') return 0.8;
   const v = Number(raw);
   if (!Number.isFinite(v) || v < 0 || v > 1) {
     // Warn once at first use so a typo (e.g. "0,5" or "auto") doesn't silently
-    // fall back to 1.0 without anyone noticing. Log to stderr (no pino here —
+    // fall back to 0.8 without anyone noticing. Log to stderr (no pino here —
     // this module is imported synchronously before app logger is wired up).
-    process.stderr.write(`[retell] RETELL_AGENT_INTERRUPTION_SENSITIVITY=${JSON.stringify(raw)} is not a number in [0,1] — using default 1.0\n`);
-    return 1.0;
+    process.stderr.write(`[retell] RETELL_AGENT_INTERRUPTION_SENSITIVITY=${JSON.stringify(raw)} is not a number in [0,1] — using default 0.8\n`);
+    return 0.8;
   }
   return v;
 }
@@ -398,6 +425,7 @@ export async function createAgent(config: {
   webhookUrl?: string;
   postCallAnalysisData?: PostCallAnalysisField[];
   dataStorageSetting?: RetellDataStorageSetting;
+  dataStorageRetentionDays?: number;
 }): Promise<RetellAgent> {
   const voiceId = config.voiceId ?? DEFAULT_VOICE_ID;
   const body: Record<string, unknown> = {
@@ -410,7 +438,10 @@ export async function createAgent(config: {
     interruption_sensitivity: config.interruptionSensitivity ?? defaultInterruption(),
     enable_backchannel: config.enableBackchannel ?? defaultBackchannel(),
     allow_user_dtmf: config.allowUserDtmf,
-    enable_dynamic_responsiveness: true,
+    // Keep response eagerness at the configured value instead of letting Retell
+    // dynamically add wait time for slower speakers. Phonbot demos optimize for
+    // snappy turn-taking; caller patience can still be handled in the prompt.
+    enable_dynamic_responsiveness: false,
     max_call_duration_ms: config.maxCallDurationMs,
     reminder_trigger_ms: defaultReminderTriggerMs(),
     reminder_max_count: defaultReminderMaxCount(),
@@ -427,6 +458,9 @@ export async function createAgent(config: {
   }
   if (config.dataStorageSetting !== undefined) {
     body.data_storage_setting = config.dataStorageSetting;
+  }
+  if (config.dataStorageRetentionDays !== undefined) {
+    body.data_storage_retention_days = config.dataStorageRetentionDays;
   }
   return retellRequest('/create-agent', { method: 'POST', body: JSON.stringify(body) });
 }
@@ -450,6 +484,7 @@ export async function updateAgent(
     webhookUrl?: string;
     postCallAnalysisData?: PostCallAnalysisField[];
     dataStorageSetting?: RetellDataStorageSetting;
+    dataStorageRetentionDays?: number;
   },
 ): Promise<RetellAgent> {
   // RET-08: only set tuning params when the caller explicitly provides them.
@@ -457,7 +492,7 @@ export async function updateAgent(
   // name-only update silently reset any per-agent tuning the user had
   // configured in the Retell dashboard. Now we only override when asked.
   const body: Record<string, unknown> = {
-    enable_dynamic_responsiveness: true,
+    enable_dynamic_responsiveness: false,
     reminder_trigger_ms: defaultReminderTriggerMs(),
     reminder_max_count: defaultReminderMaxCount(),
     end_call_after_silence_ms: defaultEndCallSilenceMs(),
@@ -476,6 +511,7 @@ export async function updateAgent(
   if (config.webhookUrl !== undefined) body.webhook_url = config.webhookUrl;
   if (config.postCallAnalysisData !== undefined) body.post_call_analysis_data = config.postCallAnalysisData;
   if (config.dataStorageSetting !== undefined) body.data_storage_setting = config.dataStorageSetting;
+  if (config.dataStorageRetentionDays !== undefined) body.data_storage_retention_days = config.dataStorageRetentionDays;
 
   return retellRequest(`/update-agent/${encodeURIComponent(agentId)}`, {
     method: 'PATCH',
@@ -732,6 +768,10 @@ export type PhoneCallResponse = {
 /**
  * Initiate an outbound phone call via Retell.
  * Requires a provisioned "from" phone number in your Retell account.
+ *
+ * Retell v2 uses the phone number's configured outbound_agent_id by default.
+ * To force a specific one-off agent for callbacks/tests, the API expects
+ * override_agent_id, not agent_id.
  */
 export async function createPhoneCall(config: {
   agentId: string;
@@ -743,7 +783,7 @@ export async function createPhoneCall(config: {
   return retellRequest('/v2/create-phone-call', {
     method: 'POST',
     body: JSON.stringify({
-      agent_id: config.agentId,
+      override_agent_id: config.agentId,
       to_number: config.toNumber,
       from_number: config.fromNumber,
       metadata: config.metadata,

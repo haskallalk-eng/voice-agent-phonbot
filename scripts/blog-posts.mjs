@@ -10,6 +10,92 @@ export const BLOG_INDEX = {
 
 export const BLOG_POSTS = [
   {
+    slug: 'ki-anrufannahme-handwerker-notdienst-tickets',
+    title: 'KI-Anrufannahme fuer Handwerker: Notdienst-Tickets statt Chaos',
+    description: 'Wie Handwerksbetriebe Baustellenanrufe, Notdienst-Faelle und Rueckrufwuensche mit einem KI-Telefonassistenten sauber strukturieren.',
+    headline: 'KI-Anrufannahme fuer Handwerker: aus Baustellenanrufen werden saubere Tickets.',
+    datePublished: '2026-05-09',
+    dateModified: TODAY,
+    category: 'Branchen',
+    readingMinutes: 7,
+    primaryKeyword: 'KI Anrufannahme Handwerker',
+    secondaryKeywords: ['KI Telefonassistent Handwerker', 'Notdienst Tickets automatisch', 'Baustellenanrufe strukturieren'],
+    intent: 'Kaufnahe Informationsintention fuer Handwerksbetriebe, die Anrufe auf Baustellen, Notdienst-Faelle und Rueckrufwuensche verlaesslich erfassen wollen.',
+    reviewedBy: 'Phonbot SEO/Superhirn',
+    summary: 'Handwerksbetriebe brauchen keinen plaudernden Telefonbot, sondern eine robuste Anrufannahme: Anliegen erkennen, Dringlichkeit klaeren, Pflichtdaten sammeln, nichts erfinden und nur nach klaren Regeln weiterleiten oder ein Ticket anlegen.',
+    sections: [
+      {
+        heading: 'Warum Handwerker am Telefon besonders viel verlieren',
+        paragraphs: [
+          'Auf der Baustelle ist ein Anruf selten bequem. Die Bohrmaschine laeuft, ein Kunde steht daneben, das Team ist unterwegs oder der Meister sitzt gerade im Auto. Trotzdem sind genau diese Anrufe oft wertvoll: Rohrbruch, Heizungsausfall, Rueckfrage zu einem Angebot, Terminverschiebung oder ein neuer Auftrag aus der Nachbarschaft.',
+          'Ein klassischer Anrufbeantworter hilft nur begrenzt, weil viele Anrufer keine strukturierte Nachricht hinterlassen. Eine gute KI-Anrufannahme fuer Handwerker muss deshalb aktiv klaeren, worum es geht, welche Dringlichkeit vorliegt und welche Rueckmeldung der Betrieb geben soll. Sie ersetzt nicht die fachliche Entscheidung, aber sie verhindert, dass wichtige Informationen verloren gehen.',
+        ],
+      },
+      {
+        heading: 'Welche Daten ein Handwerker-Agent sicher sammeln sollte',
+        bullets: [
+          'Name, Rueckrufnummer und optional E-Mail fuer die weitere Abstimmung.',
+          'Adresse oder Einsatzort, wenn es um Vor-Ort-Arbeit, Notdienst oder Besichtigung geht.',
+          'Gewerk, Anliegen und kurze Problembeschreibung in normaler Kundensprache.',
+          'Dringlichkeit: akuter Schaden, laufender Ausfall, Frist, Wunschzeit oder normale Anfrage.',
+          'Vorhandene Kundennummer, Angebot oder Projektbezug, falls der Anrufer das nennen kann.',
+          'Erlaubnis fuer Rueckruf oder Nachricht, falls der Betrieb per SMS oder E-Mail antwortet.',
+        ],
+      },
+      {
+        heading: 'Notdienst ist kein normales Formular',
+        paragraphs: [
+          'Bei Notdienst-Anrufen darf der Agent nicht so tun, als koenne er jede Situation selbst loesen. Er sollte Dringlichkeit erkennen, Basisdaten sichern und klar kommunizieren, dass ein Mensch oder der hinterlegte Notdienstprozess uebernimmt. Besonders wichtig sind Warnsignale wie Wasserschaden, Stromausfall, Heizungsausfall bei Kaelte, verschlossene Tuer oder ein Sicherheitsrisiko.',
+          'Die saubere Regel lautet: Der Agent nimmt keine gefaehrlichen fachlichen Bewertungen vor, verspricht keine feste Einsatzzeit ohne Tool-Erfolg und erfindet keine Verfuegbarkeit. Wenn der Notdienst nicht erreichbar oder nicht konfiguriert ist, muss er das kurz sagen und einen Rueckruf oder eine alternative Eskalation vorbereiten.',
+        ],
+      },
+      {
+        heading: 'Wie aus einem Anruf ein brauchbares Ticket wird',
+        paragraphs: [
+          'Ein starkes Ticket ist kurz, aber entscheidungsfaehig. Es enthaelt den Anlass, den Standort, die Dringlichkeit, die Kontaktmethode und den naechsten Schritt. Fuer den Betrieb ist das viel wertvoller als ein langes Transkript, in dem die wichtigsten Details gesucht werden muessen.',
+          'Phonbot kann genau dafuer konfiguriert werden: Der Agent fragt fehlende Pflichtdaten nach, bestaetigt kritische Angaben wie Telefonnummer, Adresse und Wunschzeit und legt erst dann ein Ticket oder einen Rueckrufwunsch an. Wenn Kalender oder Mitarbeiterverfuegbarkeit verbunden sind, darf er freie Zeiten nur aus dem Tool uebernehmen und muss bei leerem Ergebnis Alternativen anbieten.',
+        ],
+      },
+      {
+        heading: 'Typische Anrufarten im Handwerk',
+        bullets: [
+          'Neukunde fragt nach einem Angebot oder einer Besichtigung.',
+          'Bestandskunde will einen Termin verschieben oder eine Rueckfrage stellen.',
+          'Notdienst-Anruf mit hoher Dringlichkeit und unvollstaendigen Daten.',
+          'Baustellenkunde fragt nach Ankunftszeit, Material oder Status.',
+          'Lieferant, Partner oder Hausverwaltung moechte eine interne Nachricht hinterlassen.',
+        ],
+      },
+      {
+        heading: 'Grenzen: Was der Agent bewusst nicht machen sollte',
+        paragraphs: [
+          'Ein Handwerker-Agent sollte keine Preise fuer unbekannte Schaeden garantieren, keine Reparaturanleitung fuer riskante Situationen geben und keine Zusage machen, wenn Kalender, Ticket- oder Notdienst-Tool keinen Erfolg melden. Er sollte auch nicht personenbezogene Daten sammeln, die fuer den Zweck nicht gebraucht werden.',
+          'Gerade fuer Voice ist Kuerze wichtig. Der Agent muss nicht jedes Detail der internen Logik erklaeren. Besser ist eine klare, ruhige Antwort: "Ich nehme das als dringenden Rueckruf auf. Ich habe Ihre Nummer und die Adresse, bitte bestaetigen Sie kurz noch einmal die Hausnummer." So bleibt der Anruf menschlich und trotzdem robust.',
+        ],
+      },
+      {
+        heading: 'So wird Phonbot fuer Handwerker sinnvoll eingesetzt',
+        paragraphs: [
+          'Im Phonbot-Dashboard werden Betrieb, Leistungen, Oeffnungszeiten, Mitarbeiter und Kalenderregeln gepflegt. Fuer Handwerksbetriebe ist besonders wichtig, dass Notdienst, normale Rueckrufe und Terminwunsch nicht vermischt werden. Ein guter Prompt trennt diese Faelle und entscheidet erst nach Pflichtdaten und Bestaetigung, ob gebucht, verschoben, storniert oder nur ein Ticket erstellt wird.',
+          'Der groesste Nutzen entsteht nicht durch moeglichst viele Funktionen, sondern durch wenige stabile Regeln: Pflichtdaten sammeln, wichtige Angaben wiederholen, Tool-Ergebnisse nicht erfinden, bei Fehlern menschliche Uebergabe anbieten und doppelte Aktionen vermeiden. Dann wird KI-Anrufannahme nicht zur Spielerei, sondern zu einem verlaesslichen Teil des Betriebsablaufs.',
+        ],
+      },
+    ],
+    checklist: [
+      'Notdienst, normale Anfrage und Rueckrufwunsch im Agent Builder klar trennen.',
+      'Pflichtdaten fuer Adresse, Rueckrufnummer, Anliegen und Dringlichkeit festlegen.',
+      'Kalender- oder Ticket-Tools nur nach vollstaendigen Daten und Bestaetigung nutzen.',
+      'Fehlertexte fuer keine Verfuegbarkeit, Timeout und unklare Tool-Antworten definieren.',
+      'Nach den ersten Testanrufen pruefen, ob Tickets kurz, eindeutig und handlungsfaehig sind.',
+    ],
+    faq: [
+      ['Kann ein KI-Telefonassistent Notdienst-Anrufe fuer Handwerker annehmen?', 'Ja, wenn klare Regeln hinterlegt sind. Er sollte Dringlichkeit und Kontaktdaten erfassen, aber keine fachliche Gefahreneinschaetzung oder Einsatzzeit erfinden.'],
+      ['Kann Phonbot aus Handwerker-Anrufen Tickets erstellen?', 'Ja. Der Agent kann strukturierte Rueckruf- oder Auftragstickets vorbereiten, wenn die benoetigten Daten gesammelt wurden und das jeweilige Tool erfolgreich antwortet.'],
+      ['Darf der Agent Termine fuer Handwerker buchen oder verschieben?', 'Nur wenn Kalenderregeln, Pflichtdaten und ausdrueckliche Bestaetigung vorhanden sind. Ohne erfolgreiche Tool-Antwort darf er keinen Termin als gebucht, verschoben oder storniert darstellen.'],
+    ],
+    related: ['handwerker', 'branchen', 'kontakt'],
+  },
+  {
     slug: 'ki-telefonassistent-kosten-roi-kleine-unternehmen',
     title: 'KI-Telefonassistent Kosten: Wann lohnt sich Phonbot?',
     description: 'Was kleine Unternehmen bei Kosten, Minuten, verpassten Anrufen und Amortisation eines KI-Telefonassistenten realistisch rechnen sollten.',
@@ -52,7 +138,7 @@ export const BLOG_POSTS = [
         heading: 'Welcher Phonbot-Plan fuer welchen Fall passt',
         paragraphs: [
           'Der Nummer-Plan ab 8,99 EUR pro Monat ist der guenstige Einstieg fuer eine eigene KI-Telefonnummer und enthaelt 70 Minuten pro Monat. Fuer regelmaessige operative Telefonie mit mehr Volumen ist Starter oder hoeher der bessere Automatisierungsplan.',
-          'Der Starter-Plan ab 79 EUR pro Monat passt fuer kleine Betriebe, die wirklich Anrufe annehmen, Termine vorbereiten oder buchen und Rueckruf-Tickets erzeugen wollen. Professional und Agency sind sinnvoll, wenn mehrere Agents, mehr Minuten oder mehrere Standorte gebraucht werden.',
+          'Der Starter-Plan ab 89 EUR pro Monat passt fuer kleine Betriebe, die wirklich Anrufe annehmen, Termine vorbereiten oder buchen und Rueckruf-Tickets erzeugen wollen. Professional und Agency sind sinnvoll, wenn mehrere Agents, mehr Minuten oder mehrere Standorte gebraucht werden.',
         ],
       },
       {
@@ -66,12 +152,12 @@ export const BLOG_POSTS = [
     checklist: [
       'Verpasste Anrufe pro Woche realistisch schaetzen.',
       'Durchschnittlichen Wert eines Termins oder Auftrags notieren.',
-      'Starter-Plan mit 360 Minuten pro Monat als operativen Standard pruefen.',
+      'Starter-Plan mit 300 Minuten pro Monat als operativen Standard pruefen.',
       'Nach dem ersten Monat Anrufgruende, Tickets und Buchungen auswerten.',
       'Prompt, FAQ und Kalenderregeln anhand echter Anrufe verbessern.',
     ],
     faq: [
-      ['Was kostet ein KI-Telefonassistent bei Phonbot?', 'Der Einstieg mit eigener KI-Telefonnummer startet ab 8,99 EUR pro Monat. Fuer operative Anrufannahme mit 360 Minuten pro Monat startet der Starter-Plan bei 79 EUR pro Monat.'],
+      ['Was kostet ein KI-Telefonassistent bei Phonbot?', 'Der Einstieg mit eigener KI-Telefonnummer startet ab 8,99 EUR pro Monat. Fuer operative Anrufannahme mit 300 Minuten pro Monat startet der Starter-Plan bei 89 EUR pro Monat.'],
       ['Wann lohnt sich ein KI-Telefonassistent?', 'Wenn regelmaessig Anrufe verloren gehen, das Team unterbrochen wird oder Termine und Rueckrufe ausserhalb der Oeffnungszeiten entstehen.'],
       ['Ist der guenstigste Plan genug fuer mein Unternehmen?', 'Der Nummer-Plan ist gut fuer die technische Telefon-Anbindung. Fuer laufende Automatisierung, Termine und echten Tagesbetrieb ist Starter oder hoeher meist passender.'],
     ],
@@ -120,7 +206,7 @@ export const BLOG_POSTS = [
         heading: 'So passt Phonbot in den Salon-Alltag',
         paragraphs: [
           'Phonbot fragt strukturiert nach Leistung, Terminwunsch und Kontakt. Wenn ein Kalender verbunden ist, prueft der Agent freie Slots und bestaetigt erst nach erfolgreicher Buchung. Wenn kein Slot passt, wird kein falscher Termin versprochen, sondern ein Rueckruf oder eine Wartelistenanfrage vorbereitet.',
-          'Der Starter-Plan ab 79 EUR pro Monat ist der realistische Einstieg fuer vollstaendige Terminbuchung. Der Nummer-Plan ab 8,99 EUR pro Monat ist prima fuer eine eigene KI-Telefonnummer, aber nicht der vollstaendige Salon-Automatisierungsplan.',
+          'Der Starter-Plan ab 89 EUR pro Monat ist der realistische Einstieg fuer vollstaendige Terminbuchung. Der Nummer-Plan ab 8,99 EUR pro Monat ist prima fuer eine eigene KI-Telefonnummer, aber nicht der vollstaendige Salon-Automatisierungsplan.',
         ],
       },
     ],

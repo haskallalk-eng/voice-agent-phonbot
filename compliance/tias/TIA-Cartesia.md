@@ -1,9 +1,9 @@
 # Transfer Impact Assessment (TIA) — Cartesia
 
-> **Stand:** 2026-04-30 · **Verantwortlich:** Hans Waier, Hans Ulrich Waier · **Re-Verifikation:** 2026-10-30
+> **Stand:** 2026-04-30 · **Verantwortlich:** Hassieb Kalla · **Re-Verifikation:** 2026-10-30
 
 ## 1. Verantwortlicher
-Hans Ulrich Waier, Berlin · Phonbot.
+Hassieb Kalla, Berlin · Phonbot.
 
 ## 2. Datenimporteur
 **Cartesia, Inc.** · San Francisco, CA, USA · *(keine bekannte EU-Tochter)* · Rolle: Sub-Auftragsverarbeiter · Vertrag: DPA + SCC Modul 3 (in Anfrage 2026-04-30, vgl. `compliance/dpa-requests/2026-04-30-cartesia-dpa-request.eml`) · DPF-Status: **noch zu verifizieren** auf dataprivacyframework.gov.

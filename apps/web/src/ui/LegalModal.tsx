@@ -19,7 +19,7 @@ function ImpressumContent() {
       <section>
         <h2 className="text-base font-semibold text-white mb-2">Angaben gemäß § 5 DDG</h2>
         <p>
-          Hans Ulrich Waier (Einzelunternehmer)<br />
+          Hassieb Kalla (Einzelunternehmer)<br />
           Scharnhorststraße 8<br />
           12307 Berlin<br />
           Deutschland
@@ -29,7 +29,7 @@ function ImpressumContent() {
       <section>
         <h2 className="text-base font-semibold text-white mb-2">Vertreten durch</h2>
         <p>
-          Inhaber: Hans Ulrich Waier
+          Inhaber: Hassieb Kalla
         </p>
       </section>
 
@@ -64,7 +64,7 @@ function ImpressumContent() {
           Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV
         </h2>
         <p>
-          Hans Ulrich Waier<br />
+          Hassieb Kalla<br />
           Scharnhorststraße 8, 12307 Berlin
         </p>
       </section>
@@ -72,7 +72,7 @@ function ImpressumContent() {
       <section>
         <h2 className="text-base font-semibold text-white mb-2">Produktportfolio</h2>
         <p>
-          Phonbot ist ein Produkt von Hans Ulrich Waier (Einzelunternehmer). Weitere geplante
+          Phonbot ist ein Produkt von Hassieb Kalla (Einzelunternehmer). Weitere geplante
           Produkte unter dem Mindrails-Banner werden getrennt von Phonbot veröffentlicht.
         </p>
       </section>
@@ -125,7 +125,7 @@ function DatenschutzContent() {
         <h2 className="text-base font-semibold text-white mb-2">1. Verantwortlicher</h2>
         <p>
           Verantwortlicher im Sinne der DSGVO ist:<br />
-          Hans Ulrich Waier (Einzelunternehmer)<br />
+          Hassieb Kalla (Einzelunternehmer)<br />
           Scharnhorststraße 8, 12307 Berlin<br />
           E-Mail: info@phonbot.de
         </p>
@@ -338,8 +338,8 @@ function DatenschutzContent() {
         <h2 className="text-base font-semibold text-white mb-2">6. Kontakt Datenschutz</h2>
         <p>
           Bei Fragen zum Datenschutz wende dich an:<br />
-          Hans Ulrich Waier (Einzelunternehmer)<br />
-          z. Hd. Hans Ulrich Waier<br />
+          Hassieb Kalla (Einzelunternehmer)<br />
+          z. Hd. Hassieb Kalla<br />
           Scharnhorststraße 8, 12307 Berlin<br />
           Telefon: +49 30 75937169<br />
           E-Mail: info@phonbot.de
@@ -358,7 +358,7 @@ function AgbContent() {
       <section>
         <h2 className="text-base font-semibold text-white mb-2">§ 1 Geltungsbereich</h2>
         <p>
-          Diese Allgemeinen Geschäftsbedingungen (AGB) gelten für alle Verträge zwischen von Hans Ulrich Waier (Einzelunternehmer) (nachfolgend „Anbieter") und dem Kunden (nachfolgend „Nutzer") über die Nutzung
+          Diese Allgemeinen Geschäftsbedingungen (AGB) gelten für alle Verträge zwischen von Hassieb Kalla (Einzelunternehmer) (nachfolgend „Anbieter") und dem Kunden (nachfolgend „Nutzer") über die Nutzung
           der Phonbot-Plattform. Abweichende Bedingungen des Nutzers werden nicht anerkannt, es sei
           denn, der Anbieter stimmt ihrer Geltung ausdrücklich schriftlich zu.
         </p>

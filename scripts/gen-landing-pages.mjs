@@ -63,7 +63,7 @@ function stripLeadingEmoji(text, inlineSize = 14) {
 }
 
 const OUT_DIR = path.resolve('apps/web/public');
-const FULL_AGENT_STARTER_PRICE = '79';
+const FULL_AGENT_STARTER_PRICE = '89';
 
 const BRANCHEN = [
   {
@@ -72,9 +72,9 @@ const BRANCHEN = [
     emoji: '✂️',
     h1Text: 'KI-Telefonassistent für Friseursalons: <span class="accent">Termine buchen</span>, wenn niemand ans Telefon kann.',
     title: 'KI-Telefonassistent für Friseursalons · Termine automatisch buchen | Phonbot',
-    description: 'KI-Telefonassistent für Friseure: bucht Salon-Termine, fragt Leistung und Wunschfriseur ab, beantwortet Preise und Öffnungszeiten. Starter ab 79 €/Monat.',
+    description: 'KI-Telefonassistent für Friseure: bucht Salon-Termine, fragt Leistung und Wunschfriseur ab, beantwortet Preise und Öffnungszeiten. Starter ab 89 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Friseure',
-    subtitle: 'Phonbot nimmt Anrufe an, fragt Service, Terminwunsch und Wunschfriseur ab und bucht direkt in deinen Kalender — während du föhnst, färbst oder schneidest. Starter ab 79 €/Monat.',
+    subtitle: 'Phonbot nimmt Anrufe an, fragt Service, Terminwunsch und Wunschfriseur ab und bucht direkt in deinen Kalender — während du föhnst, färbst oder schneidest. Starter ab 89 €/Monat.',
     ogTitle: 'KI-Telefonassistent für Friseursalons · Phonbot',
     ogDesc: 'Nie wieder Terminanrufe zwischen den Schnitten: Phonbot fragt Wunschfriseur, Service und Zeit ab und bucht direkt.',
     serviceName: 'KI-Telefonassistent für Friseursalons',
@@ -103,7 +103,7 @@ const BRANCHEN = [
       scenario: 'Typischer Salon mit 300 Anrufen pro Monat:',
       roi: [
         { icon: 'user', label: 'Teilzeit-Rezeption', amount: '1.500 €', per: '/Monat' },
-        { icon: 'chat', label: 'Phonbot Starter — 360 Min inklusive', amount: '79 €', per: '/Monat' },
+        { icon: 'chat', label: 'Phonbot Starter — 300 Min inklusive', amount: '89 €', per: '/Monat' },
         { icon: 'star', label: 'Deine Ersparnis', amount: '1.421 €', per: '/Monat', highlight: true },
       ],
       extras: [
@@ -119,7 +119,7 @@ const BRANCHEN = [
       { q: 'Kann Phonbot Termine verschieben oder absagen?', a: 'Ja. Phonbot sucht den bestehenden Termin, lässt ihn ausdrücklich bestätigen und kann ihn danach direkt absagen oder auf einen neuen freien Slot verschieben. Bei Unsicherheit erstellt der Agent ein Rückruf-Ticket.' },
       { q: 'Welche Kalender werden unterstützt?', a: 'Google Calendar, Microsoft Outlook und Cal.com sind die Standard-Verbindungen. Im Mitarbeiterkalender-Modus bekommt jede Person eigene externe Verbindungen.' },
       { q: 'Wie werden KI-Hinweis, Aufzeichnung und Datenschutz geregelt?', a: 'Der Agent weist zu Beginn auf KI-Nutzung und Aufzeichnung hin und fragt nach Zustimmung. AVV, Datenschutz und Subprozessoren sind öffentlich verlinkt.' },
-      { q: 'Was kostet Phonbot für einen kleinen Friseursalon wirklich?', a: 'Der volle KI-Telefonassistent mit Terminbuchung startet im Starter-Plan ab 79 €/Monat. Der Nummer-Plan ab 8,99 €/Monat ist nur die technische Telefon-Anbindung.' },
+      { q: 'Was kostet Phonbot für einen kleinen Friseursalon wirklich?', a: 'Der volle KI-Telefonassistent mit Terminbuchung startet im Starter-Plan ab 89 €/Monat. Der Nummer-Plan ab 8,99 €/Monat ist nur die technische Telefon-Anbindung.' },
       { q: 'Was wenn eine Kundin sofort jemanden sprechen will?', a: 'Phonbot bietet Rückruf an („Ich notiere dich, ruf dich in 30 Min zurück") oder erstellt ein Prioritäts-Ticket.' },
       { q: 'Versteht Phonbot Friseur-Fachbegriffe (Pony, Balayage, Keratin)?', a: 'Ja. Der Agent kann Friseur-Begriffe, Leistungen und Dauerregeln nutzen und fragt bei Unsicherheit nach.' },
       { q: 'Kann ich meine bisherige Salon-Nummer behalten?', a: 'Ja. Rufweiterleitung bei deinem Telefonanbieter einrichten, fertig. Kein Nummernwechsel nötig.' },
@@ -132,7 +132,7 @@ const BRANCHEN = [
     emoji: '🔧',
     h1Text: 'Du bist auf der <span class="accent">Baustelle</span> — Phonbot nimmt den Anruf an.',
     title: 'KI-Telefonassistent für Handwerker & Handwerksbetriebe | Phonbot',
-    description: 'Phonbot ist der KI-Telefonassistent für Handwerker. Nimmt Aufträge entgegen, priorisiert Notfälle und erstellt Tickets — 24/7. Starter ab 79 €/Monat.',
+    description: 'Phonbot ist der KI-Telefonassistent für Handwerker. Nimmt Aufträge entgegen, priorisiert Notfälle und erstellt Tickets — 24/7. Starter ab 89 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Handwerk',
     subtitle: 'Phonbot nimmt Anrufe an während du auf der Baustelle bist, unterscheidet Notdienst von regulären Terminen und erstellt strukturierte Tickets mit Kundendaten und Priorität.',
     ogTitle: 'KI-Telefonassistent für Handwerker · Phonbot',
@@ -163,7 +163,7 @@ const BRANCHEN = [
       scenario: 'Handwerksbetrieb mit 200 Anrufen pro Monat:',
       roi: [
         { icon: 'user', label: 'Angestellte Büro-Kraft', amount: '2.000 €', per: '/Monat' },
-        { icon: 'chat', label: 'Phonbot Pro — 1.000 Min inklusive', amount: '179 €', per: '/Monat' },
+        { icon: 'chat', label: 'Phonbot Pro — 900 Min inklusive', amount: '179 €', per: '/Monat' },
         { icon: 'star', label: 'Deine Ersparnis', amount: '1.821 €', per: '/Monat', highlight: true },
       ],
       extras: [
@@ -186,7 +186,7 @@ const BRANCHEN = [
     emoji: '🧹',
     h1Text: 'Keine <span class="accent">Auftragsanfrage</span> mehr verpassen — auch beim Putzen.',
     title: 'KI-Telefonassistent für Reinigungsfirmen | Phonbot',
-    description: 'KI-Telefonassistent für Reinigungsfirmen: nimmt Auftragsanfragen an, erfasst Objekt-Details und plant Besichtigungstermine. Starter ab 79 €/Monat.',
+    description: 'KI-Telefonassistent für Reinigungsfirmen: nimmt Auftragsanfragen an, erfasst Objekt-Details und plant Besichtigungstermine. Starter ab 89 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Reinigung',
     subtitle: 'Phonbot nimmt Auftragsanfragen an, erfasst Objekt-Details und Leistungswünsche, und bucht Besichtigungstermine — während dein Team bei Kunden vor Ort putzt. 24/7 auf Deutsch.',
     ogTitle: 'KI-Telefonassistent für Reinigungsfirmen · Phonbot',
@@ -217,7 +217,7 @@ const BRANCHEN = [
       scenario: 'Reinigungsfirma, 150 Auftrags-Anfragen pro Monat:',
       roi: [
         { icon: 'user', label: 'Disposition / Bürokraft', amount: '1.800 €', per: '/Monat' },
-        { icon: 'chat', label: 'Phonbot Starter — 360 Min inklusive', amount: '79 €', per: '/Monat' },
+        { icon: 'chat', label: 'Phonbot Starter — 300 Min inklusive', amount: '89 €', per: '/Monat' },
         { icon: 'star', label: 'Deine Ersparnis', amount: '1.721 €', per: '/Monat', highlight: true },
       ],
       extras: [
@@ -240,7 +240,7 @@ const BRANCHEN = [
     emoji: '🍽️',
     h1Text: 'In der <span class="accent">Küche</span> das Telefon verpasst? Nie wieder.',
     title: 'KI-Telefonassistent für Restaurants & Gastronomie | Phonbot',
-    description: 'Phonbot ist der KI-Telefonassistent für Restaurants. Nimmt Reservierungen an, beantwortet Speisekarten-Fragen und Take-away-Anfragen. Starter ab 79 €/Monat.',
+    description: 'Phonbot ist der KI-Telefonassistent für Restaurants. Nimmt Reservierungen an, beantwortet Speisekarten-Fragen und Take-away-Anfragen. Starter ab 89 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Restaurants',
     subtitle: 'Phonbot nimmt Reservierungen an während du in der Küche bist, beantwortet Fragen zur Speisekarte, erfasst Take-away-Bestellungen und bucht direkt in dein Reservierungssystem.',
     ogTitle: 'KI-Telefonassistent für Restaurants · Phonbot',
@@ -271,7 +271,7 @@ const BRANCHEN = [
       scenario: 'Restaurant mit 400 Anrufen pro Monat:',
       roi: [
         { icon: 'user', label: 'Service-Kraft nur fürs Telefon', amount: '1.700 €', per: '/Monat' },
-        { icon: 'chat', label: 'Phonbot Starter — 360 Min inklusive', amount: '79 €', per: '/Monat' },
+        { icon: 'chat', label: 'Phonbot Starter — 300 Min inklusive', amount: '89 €', per: '/Monat' },
         { icon: 'star', label: 'Deine Ersparnis', amount: '1.621 €', per: '/Monat', highlight: true },
       ],
       extras: [
@@ -294,7 +294,7 @@ const BRANCHEN = [
     emoji: '🚗',
     h1Text: 'Der <span class="accent">Hebebühne</span> keinen Vorrang vor dem Kunden geben müssen.',
     title: 'KI-Telefonassistent für Autowerkstätten & Kfz-Meisterbetriebe | Phonbot',
-    description: 'KI-Telefonassistent für Autowerkstätten: nimmt Terminanfragen an, erfasst Fahrzeugdaten und erstellt Kostenvoranschlag-Tickets. Starter ab 79 €/Monat.',
+    description: 'KI-Telefonassistent für Autowerkstätten: nimmt Terminanfragen an, erfasst Fahrzeugdaten und erstellt Kostenvoranschlag-Tickets. Starter ab 89 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Autowerkstätten',
     subtitle: 'Phonbot nimmt Anrufe während du unter dem Auto liegst. Erfasst Fahrzeug (Marke, Modell, Baujahr), das Problem und den Wunschtermin — direkt als Ticket im Dashboard.',
     ogTitle: 'KI-Telefonassistent für Autowerkstätten · Phonbot',
@@ -327,7 +327,7 @@ const BRANCHEN = [
       scenario: 'Werkstatt mit 250 Anrufen pro Monat:',
       roi: [
         { icon: 'user', label: 'Teilzeit-Tresen', amount: '1.800 €', per: '/Monat' },
-        { icon: 'chat', label: 'Phonbot Pro — 1.000 Min inklusive', amount: '179 €', per: '/Monat' },
+        { icon: 'chat', label: 'Phonbot Pro — 900 Min inklusive', amount: '179 €', per: '/Monat' },
         { icon: 'star', label: 'Deine Ersparnis', amount: '1.621 €', per: '/Monat', highlight: true },
       ],
       extras: [
@@ -354,12 +354,12 @@ const BRANCHEN = [
     slug: 'selbststaendig',
     templateId: 'solo',
     emoji: '💼',
-    offerPrice: '79',
+    offerPrice: '89',
     h1Text: 'Dein Handy klingelt, während du arbeitest? <span class="accent">Chipy geht ran.</span>',
     title: 'KI-Telefonassistent für Selbstständige · Keine Anrufe verpassen | Phonbot',
-    description: 'Chipy hebt ab, wenn du arbeitest. Für Freelancer, Coaches, Berater, Fotografen & Kreative. Termine buchen, Rückrufe verwalten, DSGVO-fokussiert. Ab 79 €/Monat.',
+    description: 'Chipy hebt ab, wenn du arbeitest. Für Freelancer, Coaches, Berater, Fotografen & Kreative. Termine buchen, Rückrufe verwalten, DSGVO-fokussiert. Ab 89 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Selbstständige',
-    subtitle: 'Der einzige KI-Telefonassistent, der nach dir klingt. Chipy nimmt deine Anrufe an — mit deiner Stimme, deinen Regeln — während du im Kundentermin, im Workshop oder im Deep Work bist. Starter-Plan 79 €/Monat inkl. 360 Minuten.',
+    subtitle: 'Der einzige KI-Telefonassistent, der nach dir klingt. Chipy nimmt deine Anrufe an — mit deiner Stimme, deinen Regeln — während du im Kundentermin, im Workshop oder im Deep Work bist. Starter-Plan 89 €/Monat inkl. 300 Minuten.',
     ogTitle: 'KI-Telefonassistent für Selbstständige · Phonbot',
     ogDesc: 'Chipy hebt ab, wenn du nicht kannst. Mit deiner Stimme, deinen Regeln — kein Corporate-Tool, ein persönlicher Voice-Twin für Solopreneurs.',
     serviceName: 'KI-Telefonassistent für Selbstständige',
@@ -405,7 +405,7 @@ const BRANCHEN = [
       scenario: 'Coaching-Solo-Business · ø 40 Erstanfragen/Monat · 500 € Lifetime-Value pro Mandat:',
       roi: [
         { icon: 'user', label: 'Menschlicher Büro-Service (Teilzeit, ~10 h/Monat)', amount: '350 €', per: '/Monat' },
-        { icon: 'chat', label: 'Phonbot Starter — 360 Min, 1 Agent', amount: '79 €', per: '/Monat' },
+        { icon: 'chat', label: 'Phonbot Starter — 300 Min, 1 Agent', amount: '89 €', per: '/Monat' },
         { icon: 'star', label: 'Deine Ersparnis + zurückgewonnene Deep-Work-Zeit', amount: '271 €', per: '/Monat', highlight: true },
       ],
       extras: [
@@ -419,7 +419,7 @@ const BRANCHEN = [
       { q: 'Kann ich bestimmen, welche Anrufe durchgestellt werden?', a: 'Ja. Du legst Regeln fest: Notfall-Keywords („dringend", „heute noch") lösen sofort einen Push oder eine Weiterleitung an dein Handy aus, alles andere landet im Dashboard als Ticket zum ruhigen Nachbearbeiten.' },
       { q: 'Ich bin oft im Ausland / Zeitzone wechselt — geht das?', a: 'Ja. Chipy kennt deine Zeitzone und die des Anrufers und wählt passende Slots. Mehrsprachigkeit auf dem gleichen Agent: ein Anruf kommt auf Deutsch rein, der nächste auf Englisch — Chipy wechselt automatisch.' },
       { q: 'Wie schnell ist das Ding einsatzbereit?', a: 'Schnell-Setup: 5 Minuten (Name, Geschäftsart, Kalender verbunden — fertig). Premium-Setup inkl. Voice-Clone + Custom-Prompt + Workflows: 30 Minuten. Du kannst mit Schnell-Setup starten und später tiefer konfigurieren.' },
-      { q: 'Kann ich später zwischen den Plänen wechseln?', a: 'Jederzeit, monatlich. Der Starter-Plan beginnt bei 79 €/Monat inklusive 360 Minuten und 1 Agent. Brauchst du nur eine Phonbot-Nummer, gibt es separat den Nummer-Plan ab 8,99 €/Monat mit 70 Minuten pro Monat.' },
+      { q: 'Kann ich später zwischen den Plänen wechseln?', a: 'Jederzeit, monatlich. Der Starter-Plan beginnt bei 89 €/Monat inklusive 300 Minuten und 1 Agent. Brauchst du nur eine Phonbot-Nummer, gibt es separat den Nummer-Plan ab 8,99 €/Monat mit 70 Minuten pro Monat.' },
     ],
     negativeList: {
       heading: 'Nicht geeignet für regulierte Berufsgruppen',
@@ -671,7 +671,7 @@ function buildPage(d) {
           url: 'https://phonbot.de/',
           parentOrganization: {
             '@type': 'Person',
-            name: 'Hans Ulrich Waier',
+            name: 'Hassieb Kalla',
             url: 'https://mindrails.de/',
           },
         },

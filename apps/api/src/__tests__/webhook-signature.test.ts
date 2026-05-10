@@ -9,10 +9,16 @@ import crypto from 'node:crypto';
 // Mock env
 const TEST_API_KEY = 'test-retell-key-for-hmac-verification';
 vi.stubEnv('RETELL_API_KEY', TEST_API_KEY);
-vi.stubEnv('NODE_ENV', 'production');
+vi.stubEnv('NODE_ENV', 'test');
 
-// We need to test verifyRetellSignature which is not exported.
-// Instead, test the HMAC logic directly to verify correctness.
+const { verifyRetellSignature } = await import('../retell-webhooks.js');
+
+function signedReq(body: string, signature: string) {
+  return {
+    headers: { 'x-retell-signature': signature },
+    rawBody: body,
+  } as unknown as Parameters<typeof verifyRetellSignature>[0];
+}
 
 describe('Retell webhook HMAC verification logic', () => {
   function computeHmac(body: string, key: string): string {
@@ -23,6 +29,35 @@ describe('Retell webhook HMAC verification logic', () => {
     const digest = crypto.createHmac('sha256', key).update(body + timestamp).digest('hex');
     return `v=${timestamp},d=${digest}`;
   }
+
+  it('production verifier accepts current Retell signature format', () => {
+    const body = JSON.stringify({ event: 'call_ended', call: { call_id: 'test' } });
+    const timestamp = String(Date.now());
+    const signature = computeCurrentRetellSignature(body, TEST_API_KEY, timestamp);
+
+    expect(verifyRetellSignature(signedReq(body, signature))).toBe(true);
+  });
+
+  it('production verifier rejects tampered current-format bodies', () => {
+    const body = JSON.stringify({ event: 'call_ended', call: { call_id: 'test' } });
+    const tampered = JSON.stringify({ event: 'call_ended', call: { call_id: 'evil' } });
+    const timestamp = String(Date.now());
+    const signature = computeCurrentRetellSignature(body, TEST_API_KEY, timestamp);
+
+    expect(verifyRetellSignature(signedReq(tampered, signature))).toBe(false);
+  });
+
+  it('production verifier rejects requests without rawBody', () => {
+    const body = JSON.stringify({ event: 'call_ended', call: { call_id: 'test' } });
+    const timestamp = String(Date.now());
+    const signature = computeCurrentRetellSignature(body, TEST_API_KEY, timestamp);
+
+    expect(
+      verifyRetellSignature({
+        headers: { 'x-retell-signature': signature },
+      } as unknown as Parameters<typeof verifyRetellSignature>[0])
+    ).toBe(false);
+  });
 
   it('current Retell signature format is v=timestamp,d=digest over body plus timestamp', () => {
     const body = JSON.stringify({ event: 'call_ended', call: { call_id: 'test' } });
@@ -48,31 +83,34 @@ describe('Retell webhook HMAC verification logic', () => {
 
   it('wrong key produces different HMAC', () => {
     const body = '{"event":"call_ended"}';
-    const correctSig = computeHmac(body, TEST_API_KEY);
-    const wrongSig = computeHmac(body, 'wrong-key');
+    const timestamp = String(Date.now());
+    const wrongDigest = crypto.createHmac('sha256', 'wrong-key').update(body + timestamp).digest('hex');
+    const wrongSignature = `v=${timestamp},d=${wrongDigest}`;
 
-    expect(correctSig).not.toBe(wrongSig);
+    expect(verifyRetellSignature(signedReq(body, wrongSignature))).toBe(false);
   });
 
   it('tampered body produces different HMAC', () => {
     const original = '{"event":"call_ended","call":{"minutes":5}}';
     const tampered = '{"event":"call_ended","call":{"minutes":999}}';
-    const sig = computeHmac(original, TEST_API_KEY);
-    const expected = computeHmac(tampered, TEST_API_KEY);
+    const timestamp = String(Date.now());
+    const digest = crypto.createHmac('sha256', TEST_API_KEY).update(original + timestamp).digest('hex');
 
-    expect(sig).not.toBe(expected);
+    expect(verifyRetellSignature(signedReq(tampered, `v=${timestamp},d=${digest}`))).toBe(false);
   });
 
-  it('empty signature is rejected (different length)', () => {
+  it('empty signature is rejected by the verifier', () => {
     const body = '{"event":"call_ended"}';
-    const expected = computeHmac(body, TEST_API_KEY);
 
-    expect(''.length).not.toBe(expected.length);
+    expect(verifyRetellSignature(signedReq(body, ''))).toBe(false);
   });
 
-  it('non-hex signature is invalid', () => {
+  it('non-hex signature is rejected by the verifier', () => {
+    const body = '{"event":"call_ended"}';
+    const timestamp = String(Date.now());
     const nonHex = 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz';
-    expect(/^[0-9a-f]*$/.test(nonHex)).toBe(false);
+
+    expect(verifyRetellSignature(signedReq(body, `v=${timestamp},d=${nonHex}`))).toBe(false);
   });
 
   it('HMAC is deterministic (same input → same output)', () => {

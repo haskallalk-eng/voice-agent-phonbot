@@ -378,8 +378,8 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
 
   return (
     <div
-      className="relative flex w-full min-w-0 flex-col overflow-hidden bg-[#07070D]"
-      style={{ height: 'calc(100vh - 3rem)', position: 'sticky', top: 0 }}
+      className="relative flex h-[calc(100dvh-3rem)] w-full min-w-0 flex-col overflow-hidden bg-[#07070D] md:h-screen"
+      style={{ position: 'sticky', top: 0 }}
     >
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-36 -right-20 h-96 w-96 rounded-full bg-orange-500/14 blur-3xl" />
@@ -395,30 +395,33 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
       </div>
 
       {/* Header — fixed at top */}
-      <div className="relative shrink-0 z-20 px-5 md:px-7 py-5 flex items-center justify-between flex-wrap gap-4 border-b border-white/[0.08] bg-[#0A0A0F]/82 backdrop-blur-2xl shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="relative z-20 shrink-0 border-b border-white/[0.08] bg-[#0A0A0F]/86 shadow-[0_18px_58px_rgba(0,0,0,0.24)] backdrop-blur-2xl">
+        <div className="flex min-h-[3.6rem] items-center gap-2 px-3 py-2 md:px-5 md:py-2.5">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <button
             onClick={() => setView('list')}
-            className="shrink-0 flex items-center gap-1.5 text-xs text-white/45 hover:text-white transition-colors px-3 py-2 rounded-xl border border-white/[0.07] bg-white/[0.03] hover:bg-white/[0.07] cursor-pointer"
+            aria-label="Zur Agentenliste"
+            className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-white/[0.07] bg-white/[0.03] px-2.5 text-xs text-white/48 transition-colors hover:bg-white/[0.07] hover:text-white cursor-pointer"
           >
-            <span className="text-base leading-none">‹</span> Agenten
+            <span className="text-base leading-none">‹</span>
+            <span className="hidden sm:inline">Agenten</span>
           </button>
-          <div className="relative h-11 w-11 shrink-0 rounded-2xl border border-orange-400/25 bg-gradient-to-br from-orange-500/25 via-white/[0.05] to-cyan-400/20 shadow-[0_0_34px_rgba(249,115,22,0.18)] flex items-center justify-center">
-            <ActiveIcon size={18} className="text-orange-200" />
+          <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-orange-400/25 bg-gradient-to-br from-orange-500/22 via-white/[0.04] to-cyan-400/18 shadow-[0_0_26px_rgba(249,115,22,0.16)]">
+            <ActiveIcon size={16} className="text-orange-200" />
             <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.9)]" />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-100/70">
+            <div className="hidden items-center gap-2 md:flex">
+              <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.2em] text-cyan-100/70">
                 Chipy Studio
               </span>
               {isDirty && <span className="h-1.5 w-1.5 rounded-full bg-orange-300 shadow-[0_0_12px_rgba(251,146,60,0.85)]" />}
             </div>
-            <h2 className="mt-1 text-lg font-semibold text-white truncate">{config.name || 'Agent Builder'}</h2>
-            <p className="text-xs text-white/38 truncate">{config.businessName || 'Konfiguration'} · {activeTab.label}</p>
+            <h2 className="text-sm font-semibold text-white truncate md:mt-0.5 md:text-base">{config.name || 'Agent Builder'}</h2>
+            <p className="text-[11px] text-white/38 truncate">{activeTab.label} · {config.businessName || 'Konfiguration'}</p>
           </div>
         </div>
-        <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end">
+        <div className="ml-auto flex shrink-0 items-center justify-end gap-2">
           {/* Live stats row (hidden on narrow screens — tabs below show them redundantly) */}
           <AgentStatsRow
             config={config}
@@ -434,24 +437,24 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
               status.type === 'ok'
                 ? 'text-green-400 bg-green-500/10 border border-green-500/20'
                 : 'text-red-400 bg-red-500/10 border border-red-500/20'
-            } max-w-full break-words`}>
+            } hidden max-w-[14rem] truncate lg:inline-flex`}>
               {status.text}
             </span>
           )}
           {config.retellAgentId && (
             <button
               onClick={() => setTab('preview')}
-              className="flex items-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-3.5 py-2 text-xs font-semibold text-cyan-100 hover:bg-cyan-300/16 hover:border-cyan-300/40 transition-all cursor-pointer shadow-[0_0_24px_rgba(6,182,212,0.08)]"
+              className="flex h-9 items-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-3 text-xs font-semibold text-cyan-100 shadow-[0_0_24px_rgba(6,182,212,0.08)] transition-all hover:bg-cyan-300/16 hover:border-cyan-300/40 cursor-pointer"
             >
               <IconPlay size={13} />
-              Testen
+              <span className="hidden sm:inline">Testen</span>
             </button>
           )}
           {config.retellAgentId ? (
             <button
               onClick={handleSave}
               disabled={saving || deploying || !isDirty}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 transition-all shadow-[0_0_28px_rgba(249,115,22,0.16)] ${isDirty ? 'cursor-pointer hover:scale-[1.02]' : 'cursor-default'}`}
+              className={`flex h-9 items-center gap-2 rounded-xl px-3.5 text-xs font-semibold text-white shadow-[0_0_28px_rgba(249,115,22,0.16)] transition-all disabled:opacity-50 ${isDirty ? 'cursor-pointer hover:scale-[1.02]' : 'cursor-default'}`}
               style={{ background: isDirty ? 'linear-gradient(135deg, #F97316, #06B6D4)' : 'rgba(255,255,255,0.08)' }}
             >
               {saving ? (
@@ -463,7 +466,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
             <button
               onClick={handleDeploy}
               disabled={deploying || saving}
-              className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 transition-all cursor-pointer hover:scale-[1.02] shadow-[0_0_30px_rgba(249,115,22,0.18)]"
+              className="flex h-9 items-center gap-2 rounded-xl px-3.5 text-xs font-semibold text-white shadow-[0_0_30px_rgba(249,115,22,0.18)] transition-all disabled:opacity-50 cursor-pointer hover:scale-[1.02]"
               style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
             >
               <IconDeploy size={13} />
@@ -472,11 +475,12 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
           )}
         </div>
       </div>
+      </div>
 
       {/* No phone hint */}
       {config.retellAgentId && !hasPhone && (
-        <div className="flex items-center justify-between px-6 py-2.5" style={{ background: 'rgba(6,182,212,0.04)', borderBottom: '1px solid rgba(6,182,212,0.08)' }}>
-          <p className="text-[11px] text-cyan-400/60">Nur per Web-Call erreichbar — verbinde eine Telefonnummer für echte Anrufe</p>
+        <div className="flex items-center justify-between px-4 py-2" style={{ background: 'rgba(6,182,212,0.04)', borderBottom: '1px solid rgba(6,182,212,0.08)' }}>
+          <p className="truncate text-[11px] text-cyan-400/60">Nur per Web-Call erreichbar — verbinde eine Telefonnummer für echte Anrufe</p>
           <button onClick={() => onNavigate?.('phone' as Page)}
             className="shrink-0 ml-3 text-[11px] font-medium bg-clip-text text-transparent cursor-pointer"
             style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
@@ -491,7 +495,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
         <div
           role="tablist"
           aria-orientation="vertical"
-          className="w-full md:w-56 shrink-0 border-b md:border-b-0 md:border-r border-white/[0.07] bg-black/18 backdrop-blur-xl flex flex-wrap md:grid md:auto-rows-fr gap-2 px-3 md:px-4 py-3 md:py-4 overflow-x-hidden md:overflow-hidden scrollbar-thin"
+          className="grid w-full shrink-0 grid-cols-4 gap-1.5 overflow-hidden border-b border-white/[0.07] bg-black/18 px-2 py-2 backdrop-blur-xl md:w-52 md:grid-cols-1 md:auto-rows-fr md:border-b-0 md:border-r md:px-3 md:py-3"
         >
           {TABS.map((t, index) => (
             <button
@@ -499,18 +503,18 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
               aria-selected={tab === t.id}
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`group min-w-0 flex-1 basis-[8.5rem] md:basis-auto md:w-full md:h-full md:min-h-0 flex items-center gap-2 md:gap-3 px-3 py-2.5 md:py-0 rounded-2xl text-xs font-semibold transition-all md:text-left cursor-pointer relative border ${
+              className={`group relative flex h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl border px-1.5 text-[10px] font-semibold transition-all cursor-pointer md:h-full md:min-h-0 md:w-full md:flex-row md:justify-start md:gap-3 md:rounded-2xl md:px-3 md:py-0 md:text-left md:text-xs ${
                 tab === t.id
                   ? 'bg-gradient-to-br from-orange-500/16 via-white/[0.07] to-cyan-400/12 text-white border-orange-300/22 shadow-[0_0_28px_rgba(249,115,22,0.12)]'
                   : 'text-white/38 hover:text-white/75 hover:bg-white/[0.05] border-white/[0.04]'
               }`}
             >
-              <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-xl border transition-all ${
+              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border transition-all md:h-7 md:w-7 md:rounded-xl ${
                 tab === t.id ? 'border-cyan-300/25 bg-cyan-300/12 text-cyan-100' : 'border-white/[0.06] bg-white/[0.03] text-white/35 group-hover:text-white/65'
               }`}>
-                <t.Icon size={14} />
+                <t.Icon size={13} />
               </span>
-              <span className="min-w-0 flex-1">
+              <span className="min-w-0 max-w-full md:flex-1">
                 <span className="block truncate">{t.label}</span>
                 <span className={`hidden md:block text-[10px] font-normal ${tab === t.id ? 'text-cyan-100/45' : 'text-white/20'}`}>
                   Schritt {index + 1}
@@ -520,7 +524,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
                 <span
                   aria-label={`${pendingSuggestions} Vorschlag${pendingSuggestions === 1 ? '' : 'e'} wartet`}
                   title={`${pendingSuggestions} neue${pendingSuggestions === 1 ? 'r' : ''} Vorschlag${pendingSuggestions === 1 ? '' : 'e'}`}
-                  className="ml-1 md:ml-0 md:absolute md:right-2 md:top-1/2 md:-translate-y-1/2 inline-flex items-center gap-1 breathe"
+                  className="absolute right-1.5 top-1.5 inline-flex items-center gap-1 breathe md:right-2 md:top-1/2 md:-translate-y-1/2"
                 >
                   {/* Chipy-design: gradient sparkle instead of a loud counter pill.
                      The banner inside the tab shows the detail, so the badge only
@@ -542,25 +546,19 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
         </div>
 
         {/* Content — scrollable */}
-        <div className="flex-1 min-w-0 overflow-y-auto px-4 md:px-7 py-5 md:py-7">
-          <div className="mb-5 overflow-hidden rounded-[1.65rem] border border-white/[0.09] bg-gradient-to-br from-white/[0.075] via-white/[0.035] to-cyan-400/[0.045] p-4 md:p-5 shadow-[0_24px_80px_rgba(0,0,0,0.25)]">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-orange-300/20 bg-orange-400/10 text-orange-100 shadow-[0_0_28px_rgba(249,115,22,0.14)]">
-                  <ActiveIcon size={19} />
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-100/45">Aktiver Bereich</p>
-                  <h1 className="text-xl font-semibold text-white">{activeTab.label}</h1>
-                  <p className="mt-0.5 text-sm text-white/42">Bearbeite nur diesen Layer, speichere dann direkt in die Live-Konfiguration.</p>
-                </div>
+        <div className="flex-1 min-w-0 overflow-y-auto px-3 py-3 md:px-6 md:py-5">
+          <div className="mb-3 rounded-2xl border border-white/[0.08] bg-white/[0.035] px-3 py-2.5 md:px-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100/42">Bereich</p>
+                <h1 className="truncate text-base font-semibold text-white">{activeTab.label}</h1>
               </div>
-              <div className="flex flex-wrap gap-2 text-[11px]">
-                <span className="rounded-full border border-white/[0.09] bg-black/20 px-3 py-1.5 text-white/50">
-                  {config.retellAgentId ? 'Agent aktiv' : 'Noch nicht aktiviert'}
+              <div className="flex shrink-0 items-center gap-1.5 text-[10px] md:text-[11px]">
+                <span className="rounded-full border border-white/[0.09] bg-black/20 px-2.5 py-1 text-white/50">
+                  {config.retellAgentId ? 'Aktiv' : 'Entwurf'}
                 </span>
-                <span className={`rounded-full border px-3 py-1.5 ${isDirty ? 'border-orange-300/25 bg-orange-400/10 text-orange-100' : 'border-green-300/18 bg-green-400/8 text-green-100/70'}`}>
-                  {isDirty ? 'Ungespeicherte Aenderungen' : 'Alles gespeichert'}
+                <span className={`rounded-full border px-2.5 py-1 ${isDirty ? 'border-orange-300/25 bg-orange-400/10 text-orange-100' : 'border-green-300/18 bg-green-400/8 text-green-100/70'}`}>
+                  {isDirty ? 'Ungespeichert' : 'Gespeichert'}
                 </span>
               </div>
             </div>
@@ -698,9 +696,9 @@ function AgentStatsRow({
     ? `Innerhalb der ${billing?.minutesLimit ?? 0} Inklusiv-Minuten deines Plans${surcharge > 0 ? ` · Premium-Aufschlag +${Math.round(surcharge * 100)} Ct/Min` : ''}`
     : `Inklusiv-Minuten aufgebraucht — ${overage.toFixed(2)} € Überschreitung${surcharge > 0 ? ` + ${Math.round(surcharge * 100)} Ct Premium` : ''} pro Minute`;
 
-  // Real measured latency from Retell. Primary = LLM p50 (matches the
-  // Retell dashboard headline). Breakdown (TTS, ASR, E2E) goes into
-  // the tooltip so users can see where the time goes.
+  // Real measured latency from Retell. Primary = E2E p50 when measured,
+  // because that is what callers actually feel. Breakdown (LLM, TTS,
+  // ASR, E2E) goes into the tooltip so users can see where the time goes.
   const measuredMs = stats?.latencyMs ?? null;
   const hasData = typeof measuredMs === 'number' && measuredMs > 0 && (stats?.sampleSize ?? 0) > 0;
   const bk = stats?.breakdownMs;
@@ -754,18 +752,23 @@ function AgentStatsRow({
       : diffSec < 3600 ? `vor ${Math.round(diffSec / 60)} min`
       : `vor ${Math.round(diffSec / 3600)} h`;
   }
-  // Tooltip explains: this number is Retell's model-baseline (matches
-  // the agent-builder UI), and the actually-measured latency from the
-  // last call is shown as extra info.
+  // Tooltip explains whether the headline is measured E2E or a model
+  // baseline fallback, then shows recent p50/p95 for diagnosis.
   const modelLine = stats?.modelName ? `Modell: ${stats.modelName}` : '';
   const measured = stats?.measuredLlmMs;
+  const recent = stats?.recentLatencyMs;
+  const recentLine = recent?.e2e?.p50 != null
+    ? `Recent E2E: p50 ${recent.e2e.p50} ms · p95 ${recent.e2e.p95 ?? '—'} ms · ${recent.e2e.samples} Samples`
+    : 'Recent E2E: —';
   const measuredLine = measured != null
     ? `Gemessen letzter Call: ${measured} ms (LLM p50)`
     : 'Gemessen letzter Call: — (noch kein Call)';
   const latencyTip = hasData
-    ? `Modell-Baseline für dieses Modell
+    ? `${stats?.latencySource === 'values' ? 'Gemessene E2E-Latenz' : 'Modell-Baseline für dieses Modell'}
 ${modelLine}
+${recentLine}
 ${measuredLine}
+${breakdownStr ? `Breakdown: ${breakdownStr}` : ''}
 Call ${callAgo} · live ${ageStr}`
     : '';
 
@@ -788,7 +791,7 @@ Call ${callAgo} · live ${ageStr}`
 
   return (
     <div
-      className="hidden md:flex items-stretch rounded-xl border border-white/8 bg-white/[0.03] overflow-hidden text-xs relative cursor-pointer"
+      className="hidden xl:flex items-stretch rounded-xl border border-white/8 bg-white/[0.03] overflow-hidden text-xs relative cursor-pointer"
       title={outerTip}
       onClick={onRefresh}
     >

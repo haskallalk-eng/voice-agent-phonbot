@@ -704,9 +704,11 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
         services: businessServices,
       });
       const canSaveDefaultHours = canConvertOpeningHours(defaultHoursText);
+      let defaultHoursSaved = false;
       if (canSaveDefaultHours) {
         try {
           await saveStaffChipySchedule(res.staff.id, openingHoursToChipySchedule(defaultHoursText));
+          defaultHoursSaved = true;
         } catch {
           // The staff profile exists even if saving default hours fails. The
           // user can retry from the explicit Arbeitszeiten save button.
@@ -716,9 +718,11 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
       setSelectedId(res.staff.id);
       setNewName('');
       setNewRole('');
-      setNotice(canSaveDefaultHours
+      setNotice(defaultHoursSaved
         ? 'Mitarbeiter angelegt. Leistungen und Arbeitszeiten wurden aus dem Betrieb übernommen.'
-        : 'Mitarbeiter angelegt. Leistungen wurden übernommen; Arbeitszeiten bitte einmal strukturiert speichern.');
+        : canSaveDefaultHours
+          ? 'Mitarbeiter angelegt. Leistungen wurden übernommen; Arbeitszeiten konnten nicht automatisch gespeichert werden. Bitte einmal manuell speichern.'
+          : 'Mitarbeiter angelegt. Leistungen wurden übernommen; Arbeitszeiten bitte einmal strukturiert speichern.');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Mitarbeiter konnte nicht angelegt werden.');
     } finally {
@@ -1126,12 +1130,12 @@ export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | 
   const [showEmailHint, setShowEmailHint] = useState(false);
   const [emailRejected, setEmailRejected] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(focusCustomerId ?? null);
+  const [pendingDeleteCustomerId, setPendingDeleteCustomerId] = useState<string | null>(null);
 
   const moduleConfig = useMemo(() => normalizeModule(config?.customerModule), [config?.customerModule]);
   const enabled = status?.available ? moduleConfig.enabled !== false : false;
   const allowBookingWithoutApproval = moduleConfig.allowBookingWithoutApproval !== false;
   const questions = moduleConfig.questions ?? DEFAULT_QUESTIONS;
-  const activeQuestions = questions.filter((q) => q.enabled !== false);
   const customQuestions = questions.filter((q) => q.builtin !== true);
   const existingCount = useMemo(() => customers.filter((c) => c.customer_type === 'existing').length, [customers]);
   const pendingCount = useMemo(() => customers.filter((c) => c.customer_type === 'pending').length, [customers]);
@@ -1403,6 +1407,8 @@ export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | 
     try {
       await deleteCustomer(id);
       setCustomers((items) => items.filter((c) => c.id !== id));
+      setPendingDeleteCustomerId(null);
+      setNotice('Kunde gelöscht.');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Kunde konnte nicht entfernt werden.');
     } finally {
@@ -1664,6 +1670,7 @@ export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | 
                   tabIndex={0}
                   onClick={() => setSelectedCustomerId(isOpen ? null : customer.id)}
                   onKeyDown={(e) => {
+                    if ((e.target as HTMLElement).closest('button, a, input, select, textarea')) return;
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
                       setSelectedCustomerId(isOpen ? null : customer.id);
@@ -1697,9 +1704,25 @@ export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | 
                       Bestätigen
                     </button>
                   )}
-                  <button onClick={() => { void removeCustomer(customer.id); }} disabled={saving} className="text-xs text-red-300/45 hover:text-red-300 disabled:opacity-40">
-                    Löschen
-                  </button>
+                  {pendingDeleteCustomerId === customer.id ? (
+                    <div className="flex w-full min-w-[190px] flex-col items-stretch gap-2 rounded-xl border border-red-500/20 bg-red-500/10 p-2.5 text-right sm:w-auto">
+                      <span className="text-[11px] font-semibold leading-snug text-red-100/80">
+                        {customer.full_name || 'Diesen Kunden'} wirklich löschen?
+                      </span>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <button onClick={(e) => { e.stopPropagation(); void removeCustomer(customer.id); }} disabled={saving} className="min-h-11 rounded-lg bg-red-500/20 px-3 py-2 text-xs font-semibold text-red-100 hover:bg-red-500/30 disabled:opacity-40" aria-label={`${customer.full_name || 'Kunden'} löschen`}>
+                          Kunde löschen
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); setPendingDeleteCustomerId(null); }} disabled={saving} className="min-h-11 rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-white/55 hover:text-white disabled:opacity-40">
+                          Abbrechen
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={(e) => { e.stopPropagation(); setPendingDeleteCustomerId(customer.id); }} disabled={saving} className="text-xs text-red-300/45 hover:text-red-300 disabled:opacity-40">
+                      Löschen
+                    </button>
+                  )}
                   <span className="text-[11px] text-orange-200/45">{isOpen ? 'Schließen' : 'Details'}</span>
                 </div>
                 </div>

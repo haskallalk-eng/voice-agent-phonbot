@@ -135,6 +135,7 @@ interface ExternalBookingResult {
   provider: string;
   connectionId: string;
   ok: boolean;
+  status?: 'pending' | 'ok' | 'failed';
   eventId?: string;
   bookingId?: number | string;
   error?: string;
@@ -858,7 +859,7 @@ async function getCheckableConnections(
   return usable;
 }
 
-async function getConnectionStatus(conn: CalendarConnection, orgId: string): Promise<CalendarConnectionStatus> {
+async function getConnectionStatus(conn: CalendarConnection, _orgId: string): Promise<CalendarConnectionStatus> {
   let connected = true;
   if (conn.provider === 'google') {
     connected = Boolean(await getValidTokenForConnection(conn));
@@ -1185,6 +1186,7 @@ async function msBookSlot(
 ): Promise<{ ok: boolean; eventId?: string; error?: string }> {
   const startTime = parseSlotTime(opts.time);
   if (!startTime) return { ok: false, error: `Cannot parse time: ${opts.time}` };
+  if (isPastSlotStart(startTime)) return { ok: false, error: 'PAST_SLOT' };
   const endTime = new Date(startTime.getTime() + clampMinutes(opts.durationMinutes ?? 30, 5, 480, 30) * 60 * 1000);
 
   try {
@@ -1381,7 +1383,6 @@ export function parseSlotTime(slot: string): Date | null {
     const result = new Date(now);
     result.setDate(now.getDate() + daysAhead);
     result.setHours(time.hour, time.minute, 0, 0);
-    if (daysAhead === 0 && result <= now) result.setDate(result.getDate() + 7);
     return result;
   }
 
@@ -1416,6 +1417,10 @@ export function parseSlotTime(slot: string): Date | null {
   result.setDate(result.getDate() + daysAhead);
 
   return result;
+}
+
+function isPastSlotStart(slotTime: Date): boolean {
+  return slotTime.getTime() <= Date.now();
 }
 
 function normalizeSlotText(value: string): string {
@@ -1702,7 +1707,17 @@ function requestedDateKey(opts: { date?: string; range?: string; service?: strin
     return date ? localDateKey(date) : null;
   }
 
+  const germanDate = raw.match(/\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b/);
+  if (germanDate) {
+    const date = buildLocalDate(Number(germanDate[3]), Number(germanDate[2]), Number(germanDate[1]), { hour: 12, minute: 0 });
+    return date ? localDateKey(date) : null;
+  }
+
   return null;
+}
+
+function isPastLocalDateKey(dateKey: string): boolean {
+  return dateKey < localDateKey(new Date());
 }
 
 function localDateKey(date: Date): string {
@@ -1796,8 +1811,9 @@ async function isExternalSlotAvailable(
       (i) => i.status === 'busy' || i.status === 'tentative' || i.status === 'oof',
     ) ?? [];
     const blocked = busyItems.some((item) => {
-      const busyStart = new Date(item.start.dateTime);
-      const busyEnd = new Date(item.end.dateTime);
+      const busyStart = parseSlotTime(item.start.dateTime);
+      const busyEnd = parseSlotTime(item.end.dateTime);
+      if (!busyStart || !busyEnd) return true;
       if (Number.isNaN(busyStart.getTime()) || Number.isNaN(busyEnd.getTime())) return true;
       return dateRangesOverlap(slotTime, slotEnd, busyStart, busyEnd);
     });
@@ -1871,6 +1887,7 @@ function parseExternalBookingRefs(raw: unknown): ExternalBookingRefs {
       provider,
       connectionId,
       ok,
+      status: value.status === 'pending' || value.status === 'ok' || value.status === 'failed' ? value.status : undefined,
       eventId: typeof value.eventId === 'string' ? value.eventId : undefined,
       bookingId: typeof value.bookingId === 'string' || typeof value.bookingId === 'number' ? value.bookingId : undefined,
       error: typeof value.error === 'string' ? value.error : undefined,
@@ -2357,7 +2374,11 @@ async function findFreeSlotsByContract(
   const sources = ['chipy'];
   const { schedule, blocks, timeBlocks } = await getChipySchedule(orgId, staffId);
   const timing = await resolveBookingTiming(orgId, opts.service);
-  let slots = generateChipySlots(schedule, blocks, timeBlocks, requestedDateKey(opts), timing);
+  const requestedDate = requestedDateKey(opts);
+  if (requestedDate && isPastLocalDateKey(requestedDate)) {
+    return { slots: [], source: 'past-date' };
+  }
+  let slots = generateChipySlots(schedule, blocks, timeBlocks, requestedDate, timing);
 
   if (connections.length === 0) {
     return { slots: [...new Set(slots)].sort(), source: 'chipy' };
@@ -2570,6 +2591,7 @@ export async function bookSlot(
   }
   const slotTime = parseSlotTime(opts.time);
   if (!slotTime) return { ok: false, error: `Cannot parse time: ${opts.time}` };
+  if (isPastSlotStart(slotTime)) return { ok: false, error: 'PAST_SLOT' };
   let connections: CalendarConnection[];
   try {
     connections = await getCheckableConnections(orgId, staffId, { strict: true });
@@ -2622,8 +2644,41 @@ export async function bookSlot(
         results.push({ ...existingRef, reused: true });
         continue;
       }
+      if (existingRef?.status === 'pending') {
+        results.push({
+          ...existingRef,
+          ok: false,
+          reused: true,
+          error: existingRef.error ?? 'External booking is already pending; manual review required before retry.',
+        });
+        continue;
+      }
 
       const bookedAt = new Date().toISOString();
+      refs[key] = {
+        provider: conn.provider,
+        connectionId: conn.id,
+        ok: false,
+        status: 'pending',
+        error: 'External booking request started; final provider result not saved yet.',
+        bookedAt,
+      };
+      try {
+        await saveChipyExternalRefs(orgId, chipyBooking.id, refs, staffId);
+      } catch (e) {
+        const error = e instanceof Error ? e.message : 'Could not persist external booking guard';
+        log.warn({ err: error, orgId, bookingId: chipyBooking.id, provider: conn.provider }, 'external booking guard save failed');
+        results.push({
+          provider: conn.provider,
+          connectionId: conn.id,
+          ok: false,
+          status: 'failed',
+          error,
+          bookedAt,
+        });
+        continue;
+      }
+
       let nextRef: ExternalBookingResult;
       try {
         const result = await bookSlotForConnection(conn, orgId, { ...opts, ...timing });
@@ -2631,6 +2686,7 @@ export async function bookSlot(
           provider: conn.provider,
           connectionId: conn.id,
           ok: result.ok,
+          status: result.ok ? 'ok' : 'failed',
           eventId: result.eventId,
           bookingId: result.bookingId,
           error: result.error,
@@ -2641,14 +2697,29 @@ export async function bookSlot(
           provider: conn.provider,
           connectionId: conn.id,
           ok: false,
+          status: 'failed',
           error: e instanceof Error ? e.message : 'Unknown error',
           bookedAt,
         };
       }
 
       refs[key] = nextRef;
+      try {
+        await saveChipyExternalRefs(orgId, chipyBooking.id, refs, staffId);
+      } catch (e) {
+        const error = e instanceof Error ? e.message : 'Could not persist external booking result';
+        log.warn({ err: error, orgId, bookingId: chipyBooking.id, provider: conn.provider }, 'external booking result save failed');
+        nextRef = {
+          ...nextRef,
+          ok: false,
+          status: 'pending',
+          error: nextRef.ok
+            ? `Provider booking may exist but Phonbot could not save the reference: ${error}`
+            : error,
+        };
+        refs[key] = nextRef;
+      }
       results.push(nextRef);
-      await saveChipyExternalRefs(orgId, chipyBooking.id, refs, staffId);
     }
 
     // Chipy is the source of truth for the customer-facing booking. External
@@ -2715,6 +2786,7 @@ export async function bookSlotForAnyStaff(
 
   const slotTime = parseSlotTime(opts.time);
   if (!slotTime) return { ok: false, error: `Cannot parse time: ${opts.time}` };
+  if (isPastSlotStart(slotTime)) return { ok: false, error: 'PAST_SLOT' };
   const timing = await resolveBookingTiming(orgId, opts.service, {
     durationMinutes: opts.durationMinutes,
     bufferMinutes: opts.bufferMinutes,
@@ -2777,6 +2849,7 @@ async function bookSlotForConnection(
 
     const startTime = parseSlotTime(opts.time);
     if (!startTime) return { ok: false, error: `Cannot parse time: ${opts.time}` };
+    if (isPastSlotStart(startTime)) return { ok: false, error: 'PAST_SLOT' };
 
     return calcomBookSlot(apiKey, {
       eventTypeId: eventType.id,
@@ -2795,6 +2868,7 @@ async function bookSlotForConnection(
   if (!startTime) {
     return { ok: false, error: `Cannot parse time: ${opts.time}` };
   }
+  if (isPastSlotStart(startTime)) return { ok: false, error: 'PAST_SLOT' };
   const endTime = new Date(startTime.getTime() + clampMinutes(opts.durationMinutes ?? 30, 5, 480, 30) * 60 * 1000);
 
   const description = [
@@ -3255,7 +3329,7 @@ export async function rescheduleChipyBookingForChange(
   },
 ): Promise<{
   ok: boolean;
-  status: 'rescheduled' | 'rescheduled_partial' | 'book_failed' | 'not_found' | 'multiple_matches' | 'verification_required';
+  status: 'rescheduled' | 'reschedule_needs_review' | 'book_failed' | 'not_found' | 'multiple_matches' | 'verification_required';
   oldBooking?: CalendarBookingSummary;
   newBookingId?: number | string;
   newChipyBookingId?: string;
@@ -3299,15 +3373,15 @@ export async function rescheduleChipyBookingForChange(
     customerPhone: old.customer_phone,
     reason: opts.reason ?? 'Customer requested reschedule by phone',
   });
-  const partial = booked.partial || !cancelled.ok || cancelled.partial;
+  const needsReview = booked.partial || !cancelled.ok || cancelled.partial;
   return {
-    ok: true,
-    status: partial ? 'rescheduled_partial' : 'rescheduled',
+    ok: !needsReview,
+    status: needsReview ? 'reschedule_needs_review' : 'rescheduled',
     oldBooking: bookingSummary(old),
     newBookingId: booked.bookingId,
     newChipyBookingId: booked.chipyBookingId,
     externalResults: cancelled.externalResults,
-    partial,
+    partial: needsReview,
     error: cancelled.ok ? booked.error : cancelled.error,
   };
 }

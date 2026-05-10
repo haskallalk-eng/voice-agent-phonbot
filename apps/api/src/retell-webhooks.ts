@@ -40,9 +40,10 @@ import { analyzeOutboundCall } from './outbound-insights.js';
 import { getOrgIdByAgentId } from './org-id-cache.js';
 import { checkForwardingVerificationMatch } from './phone.js';
 import { getCall, deleteCall } from './retell.js';
+import { trackRetellCallRetention } from './retell-retention.js';
 import { fireInboundWebhooks } from './inbound-webhooks.js';
 import { sendBookingConfirmationSms, sendTicketAckSms } from './sms.js';
-import { readDemoCallTemplate, maybeSendDemoSignupLink } from './demo.js';
+import { readDemoCallTemplate, maybeSendDemoSignupLink, demoRecordingDeclinedToolSignature } from './demo.js';
 import { redactPII } from './pii.js';
 import { RECORDING_CONSENT_PROMPT_VERSION } from './agent-instructions.js';
 import { log } from './logger.js';
@@ -68,6 +69,49 @@ async function getOrgName(orgId: string | null | undefined): Promise<string | nu
   return (res?.rows[0]?.name as string | undefined) ?? null;
 }
 
+function normalizeRetentionDays(value: unknown): number {
+  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : 30;
+  if (!Number.isFinite(n)) return 30;
+  return Math.min(365, Math.max(0, Math.trunc(n)));
+}
+
+async function getTranscriptStoragePolicy(
+  orgId: string | null,
+  agentId: string | null | undefined,
+): Promise<{ storeTranscript: boolean; retentionDays: number }> {
+  if (!pool) throw new Error('RETENTION_POLICY_UNAVAILABLE');
+  if (!orgId || !agentId) throw new Error('RETENTION_POLICY_CONTEXT_MISSING');
+  const res = await pool.query<{ data: { recordCalls?: boolean; dataRetentionDays?: number } | null }>(
+    `SELECT data
+       FROM agent_configs
+      WHERE org_id = $1
+        AND (
+          data->>'retellAgentId' = $2
+          OR data->>'retellCallbackAgentId' = $2
+        )
+      ORDER BY updated_at DESC
+      LIMIT 1`,
+    [orgId, agentId],
+  );
+  const data = res?.rows[0]?.data ?? null;
+  if (!data) throw new Error('RETENTION_POLICY_NOT_FOUND');
+  const retentionDays = normalizeRetentionDays(data?.dataRetentionDays);
+  return {
+    storeTranscript: data?.recordCalls !== false && retentionDays > 0,
+    retentionDays,
+  };
+}
+
+async function deleteRetellCallForPrivacy(callId: string): Promise<void> {
+  try {
+    await deleteCall(callId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/\b404\b/.test(message)) return;
+    throw err;
+  }
+}
+
 /** Internal shape of the extended request with rawBody attached by the content-type parser. */
 type RawBodyRequest = FastifyRequest & { rawBody?: Buffer | string };
 
@@ -77,7 +121,7 @@ type RawBodyRequest = FastifyRequest & { rawBody?: Buffer | string };
  * signed with RETELL_API_KEY.
  * Returns true when valid or when RETELL_API_KEY is not configured (dev mode).
  */
-function verifyRetellSignature(req: RawBodyRequest): boolean {
+export function verifyRetellSignature(req: RawBodyRequest): boolean {
   // Always require signature — no NODE_ENV bypass. Misconfigured env would otherwise
   // let attackers forge call_ended webhooks (manipulate minutes_used, inject transcripts, etc.).
   if (!RETELL_API_KEY) {
@@ -156,6 +200,13 @@ function verifyRetellToolRequest(req: RawBodyRequest): boolean {
   if (verifyRetellSignature(req)) return true;
   if (getSignedToolContext(req)) return true;
   return false;
+}
+
+function verifyDemoRecordingToolRequest(req: RawBodyRequest): boolean {
+  if (verifyRetellSignature(req)) return true;
+  const query = (req.query ?? {}) as Record<string, unknown>;
+  const sig = query.demo_sig;
+  return typeof sig === 'string' && timingSafeEqualText(sig, demoRecordingDeclinedToolSignature());
 }
 
 // getOrgIdByAgentId + invalidateOrgIdCache live in org-id-cache.ts (breaks
@@ -289,6 +340,57 @@ function compactRetellSlots(slots: string[]): { slots: string[]; allSlotsCount: 
     allSlotsCount: slots.length,
     moreCount: Math.max(0, slots.length - visible.length),
     instruction: 'Nenne maximal drei passende Optionen in einem kurzen Satz, nicht jede Uhrzeit einzeln. Wenn mehr Slots vorhanden sind, sage dass es weitere Zeiten gibt.',
+  };
+}
+
+function calendarSlotLookupOk(source: string): boolean {
+  return !/(^|:|\+)past-date($|\+)|service-not-offered|calendar-unavailable/.test(source);
+}
+
+function calendarSlotInstruction(source: string, fallbackInstruction: string): string {
+  if (/(^|:|\+)past-date($|\+)/.test(source)) {
+    return 'Das gewuenschte Datum liegt in der Vergangenheit. Keine Zeiten vorschlagen und nach einem zukuenftigen Datum fragen.';
+  }
+  if (source.includes('service-not-offered')) {
+    return 'Der gewuenschte Service wird von dieser Person/diesem Betrieb nicht angeboten. Nicht buchen; Alternative oder Rueckruf anbieten.';
+  }
+  if (source.includes('calendar-unavailable')) {
+    return 'Der Kalender ist gerade nicht sicher pruefbar. Keine Zeiten erfinden; Rueckruf- oder Terminwunsch-Ticket anbieten.';
+  }
+  return fallbackInstruction;
+}
+
+function knownCustomerName(value: string | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed || /^(unbekannt|unknown|anonymous|kunde|kundin|gast)$/i.test(trimmed)) return null;
+  return trimmed;
+}
+
+function isPastSlotError(error: unknown): boolean {
+  return typeof error === 'string' && error.includes('PAST_SLOT');
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function callMetadata(call: unknown): Record<string, unknown> {
+  const metadata = (call as { metadata?: unknown } | null)?.metadata;
+  return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? metadata as Record<string, unknown>
+    : {};
+}
+
+function metadataUuid(metadata: Record<string, unknown>, key: string): string | null {
+  const value = metadata[key];
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return UUID_RE.test(trimmed) ? trimmed : null;
+}
+
+function knownPlatformCallbackRef(call: unknown): { leadId: string | null; outboundRecordId: string | null } {
+  const metadata = callMetadata(call);
+  return {
+    leadId: metadataUuid(metadata, 'leadId'),
+    outboundRecordId: metadataUuid(metadata, 'outboundRecordId'),
   };
 }
 
@@ -719,7 +821,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           // If this transiently fails, Retell retries the webhook and we try
           // again instead of leaving stored audio/transcript behind silently.
           try {
-            await deleteCall(callId);
+            await deleteRetellCallForPrivacy(callId);
             req.log.info({ callId }, 'recording_declined → Retell call deleted');
           } catch (err) {
             req.log.error(
@@ -732,7 +834,66 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           return { ok: true, recordingDeclined: true };
         }
 
-        if (orgId && callId && transcript) {
+        const demoTemplateId = !orgId && agentId ? await readDemoCallTemplate(agentId) : null;
+        const platformCallback = knownPlatformCallbackRef(call);
+        const isKnownPlatformCallback = Boolean(platformCallback.leadId || platformCallback.outboundRecordId);
+        if (!orgId && callId && !demoTemplateId && !isKnownPlatformCallback) {
+          await deleteRetellCallForPrivacy(callId);
+          req.log.warn({ callId, agentId }, 'retell call_ended from unknown agent deleted for privacy');
+          return { ok: true, unknownAgentDeleted: true };
+        }
+        if (!orgId && callId && isKnownPlatformCallback && pool) {
+          if (platformCallback.outboundRecordId) {
+            pool.query(
+              `UPDATE outbound_calls
+                  SET call_id = COALESCE(call_id, $1),
+                      duration_s = COALESCE(duration_s, $2),
+                      status = CASE WHEN status IN ('initiated', 'calling') THEN 'completed' ELSE status END
+                WHERE id = $3`,
+              [callId, durationMs ? Math.round(durationMs / 1000) : null, platformCallback.outboundRecordId],
+            ).catch((err: Error) =>
+              req.log.warn({ err: err.message, callId, outboundRecordId: platformCallback.outboundRecordId }, 'platform callback outbound_calls update failed'),
+            );
+          }
+          if (platformCallback.leadId) {
+            pool.query(
+              `UPDATE crm_leads
+                  SET call_id = COALESCE(call_id, $1),
+                      status = CASE WHEN status = 'new' THEN 'contacted' ELSE status END
+                WHERE id = $2 AND org_id IS NULL`,
+              [callId, platformCallback.leadId],
+            ).catch((err: Error) =>
+              req.log.warn({ err: err.message, callId, leadId: platformCallback.leadId }, 'platform callback crm_leads update failed'),
+            );
+          }
+        }
+        const storagePolicy = orgId && callId
+          ? await getTranscriptStoragePolicy(orgId, agentId)
+          : { storeTranscript: true, retentionDays: 30 };
+
+        if (!storagePolicy.storeTranscript && callId) {
+          try {
+            await deleteRetellCallForPrivacy(callId);
+            req.log.info({ callId, orgId, retentionDays: storagePolicy.retentionDays }, 'privacy retention disabled → Retell call deleted');
+          } catch (err) {
+            req.log.error(
+              { err: err instanceof Error ? err.message : String(err), callId, orgId },
+              'privacy retention disabled → Retell deleteCall failed',
+            );
+            throw err;
+          }
+        }
+
+        if (orgId && callId && storagePolicy.storeTranscript) {
+          await trackRetellCallRetention({
+            orgId,
+            callId,
+            agentId,
+            retentionDays: storagePolicy.retentionDays,
+          });
+        }
+
+        if (orgId && callId && transcript && storagePolicy.storeTranscript) {
           const metadata = (call as RetellCallData & { metadata?: Record<string, unknown> }).metadata;
           const isOutbound = !!(metadata?.outboundRecordId);
 
@@ -757,12 +918,13 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
               ],
             );
             pool.query(
-              `INSERT INTO call_transcripts (org_id, call_id, direction, transcript, duration_sec, from_number, to_number, disconnection_reason, metadata)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+              `INSERT INTO call_transcripts (org_id, call_id, agent_id, direction, transcript, duration_sec, from_number, to_number, disconnection_reason, metadata)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                ON CONFLICT (call_id) DO NOTHING`,
               [
                 orgId,
                 callId,
+                agentId ?? null,
                 isOutbound ? 'outbound' : 'inbound',
                 transcript,
                 durationMs ? Math.round(durationMs / 1000) : null,
@@ -800,7 +962,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         // mergeTicketMetadata is org-scoped — Retell's HMAC only authenticates
         // the platform-wide event, not the target org, so we must match on
         // org_id to prevent cross-tenant metadata writes.
-        if (extracted && callId && orgId) {
+        if (extracted && callId && orgId && storagePolicy.storeTranscript) {
           mergeTicketMetadata(callId, orgId, extracted).catch((err: Error) =>
             req.log.warn({ err: err.message, orgId, callId }, 'mergeTicketMetadata failed'),
           );
@@ -820,7 +982,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
             disconnectionReason: disconnectionReason ?? null,
             startTimestamp: startTs,
             endTimestamp: endTs,
-            variables: extracted ?? {},
+            variables: storagePolicy.storeTranscript ? (extracted ?? {}) : {},
           }).catch((err: Error) =>
             req.log.warn(
               { err: err.message, orgId, callId, event: 'call.ended' },
@@ -836,12 +998,14 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         // caller_email, caller_phone, intent_summary) come back in `extracted`
         // for short calls; for long calls they arrive later in call_analyzed.
         if (!orgId && callId && agentId) {
-          const templateId = await readDemoCallTemplate(agentId);
-          if (templateId && pool) {
+          if (demoTemplateId && pool) {
             const cn = (extracted?.caller_name as string | undefined)?.trim() || null;
             const ce = (extracted?.caller_email as string | undefined)?.trim().toLowerCase() || null;
             const cp = (extracted?.caller_phone as string | undefined)?.trim() || null;
             const intent = (extracted?.intent_summary as string | undefined)?.trim() || null;
+            const wantsHumanMeeting = (extracted?.wants_human_meeting as string | undefined)?.trim().toLowerCase() || null;
+            const humanMeetingTime = (extracted?.human_meeting_time as string | undefined)?.trim() || null;
+            const humanMeetingChannel = (extracted?.human_meeting_channel as string | undefined)?.trim().toLowerCase() || null;
             // UPSERT — `call_analyzed` may arrive BEFORE `call_ended` for short
             // calls (Retell does not guarantee ordering). If call_analyzed
             // already inserted a stub row with only caller_*/intent fields,
@@ -852,8 +1016,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
             // written analysis fields; transcript/duration are call_ended-
             // only so they always come from EXCLUDED.
             pool.query(
-              `INSERT INTO demo_calls (call_id, agent_id, template_id, duration_sec, transcript, caller_name, caller_email, caller_phone, intent_summary, disconnection_reason)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+              `INSERT INTO demo_calls (call_id, agent_id, template_id, duration_sec, transcript, caller_name, caller_email, caller_phone, intent_summary, disconnection_reason, wants_human_meeting, human_meeting_time, human_meeting_channel)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                ON CONFLICT (call_id) DO UPDATE SET
                  agent_id             = COALESCE(demo_calls.agent_id, EXCLUDED.agent_id),
                  template_id          = COALESCE(demo_calls.template_id, EXCLUDED.template_id),
@@ -863,11 +1027,17 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
                  caller_email         = COALESCE(demo_calls.caller_email, EXCLUDED.caller_email),
                  caller_phone         = COALESCE(demo_calls.caller_phone, EXCLUDED.caller_phone),
                  intent_summary       = COALESCE(demo_calls.intent_summary, EXCLUDED.intent_summary),
-                 disconnection_reason = COALESCE(EXCLUDED.disconnection_reason, demo_calls.disconnection_reason)`,
+                 disconnection_reason = COALESCE(EXCLUDED.disconnection_reason, demo_calls.disconnection_reason),
+                 wants_human_meeting  = CASE
+                   WHEN EXCLUDED.wants_human_meeting IN ('ja', 'yes') THEN EXCLUDED.wants_human_meeting
+                   ELSE COALESCE(demo_calls.wants_human_meeting, EXCLUDED.wants_human_meeting)
+                 END,
+                 human_meeting_time   = COALESCE(demo_calls.human_meeting_time, EXCLUDED.human_meeting_time),
+                 human_meeting_channel = COALESCE(demo_calls.human_meeting_channel, EXCLUDED.human_meeting_channel)`,
               [
                 callId,
                 agentId,
-                templateId,
+                demoTemplateId,
                 durationMs ? Math.round(durationMs / 1000) : null,
                 // Audit-Round-8 (Codex M07-MEDIUM-B): demo_calls keeps
                 // transcripts for 90 days for promotion to leads. Redact PII
@@ -880,8 +1050,11 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
                 cp,
                 intent,
                 disconnectionReason ?? null,
+                wantsHumanMeeting,
+                humanMeetingTime,
+                humanMeetingChannel,
               ],
-            ).catch((err: Error) => req.log.error({ err: err.message, callId, templateId }, 'demo_calls insert failed'));
+            ).catch((err: Error) => req.log.error({ err: err.message, callId, templateId: demoTemplateId }, 'demo_calls insert failed'));
             // Post-call signup-link send: if Chipy asked + caller said "ja",
             // dispatch email/SMS now. Helper is internally fire-and-forget,
             // dedup'd via DB UPDATE-RETURNING claim. For SHORT calls Retell
@@ -932,17 +1105,27 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         }
       }
 
+      try {
       const analysis = (call as RetellCallData & { call_analysis?: Record<string, unknown> }).call_analysis;
       const extracted = (analysis?.custom_analysis_data as Record<string, unknown> | undefined) ?? null;
       const orgId = agentId ? await getOrgIdByAgentId(agentId) : null;
+      const demoTemplateId = !orgId && agentId ? await readDemoCallTemplate(agentId) : null;
+      const platformCallback = knownPlatformCallbackRef(call);
+      if (!orgId && !demoTemplateId && !platformCallback.leadId && !platformCallback.outboundRecordId) {
+        req.log.warn({ callId, agentId }, 'call_analyzed from unknown agent ignored');
+        return { ok: true, unknownAgent: true };
+      }
+      const storagePolicy = orgId
+        ? await getTranscriptStoragePolicy(orgId, agentId)
+        : { storeTranscript: true, retentionDays: 30 };
 
-      if (extracted && callId && orgId) {
+      if (extracted && callId && orgId && storagePolicy.storeTranscript) {
         await mergeTicketMetadata(callId, orgId, extracted).catch((err: Error) =>
           req.log.warn({ err: err.message, orgId, callId }, 'call_analyzed: mergeTicketMetadata failed'),
         );
       }
 
-      if (orgId && callId && extracted) {
+      if (orgId && callId && extracted && storagePolicy.storeTranscript) {
         fireInboundWebhooks(orgId, 'variable.extracted', {
           callId,
           agentId,
@@ -963,21 +1146,29 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       // value when both events carry the same field, so a later (less
       // confident) extraction can't blank out an earlier one.
       if (!orgId && callId && agentId && extracted && pool) {
-        const templateId = await readDemoCallTemplate(agentId);
-        if (templateId) {
+        if (demoTemplateId) {
           const cn = (extracted.caller_name as string | undefined)?.trim() || null;
           const ce = (extracted.caller_email as string | undefined)?.trim().toLowerCase() || null;
           const cp = (extracted.caller_phone as string | undefined)?.trim() || null;
           const intent = (extracted.intent_summary as string | undefined)?.trim() || null;
+          const wantsHumanMeeting = (extracted.wants_human_meeting as string | undefined)?.trim().toLowerCase() || null;
+          const humanMeetingTime = (extracted.human_meeting_time as string | undefined)?.trim() || null;
+          const humanMeetingChannel = (extracted.human_meeting_channel as string | undefined)?.trim().toLowerCase() || null;
           pool.query(
-            `INSERT INTO demo_calls (call_id, agent_id, template_id, caller_name, caller_email, caller_phone, intent_summary)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
+            `INSERT INTO demo_calls (call_id, agent_id, template_id, caller_name, caller_email, caller_phone, intent_summary, wants_human_meeting, human_meeting_time, human_meeting_channel)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
              ON CONFLICT (call_id) DO UPDATE SET
                caller_name    = COALESCE(demo_calls.caller_name, EXCLUDED.caller_name),
                caller_email   = COALESCE(demo_calls.caller_email, EXCLUDED.caller_email),
                caller_phone   = COALESCE(demo_calls.caller_phone, EXCLUDED.caller_phone),
-               intent_summary = COALESCE(demo_calls.intent_summary, EXCLUDED.intent_summary)`,
-            [callId, agentId, templateId, cn, ce, cp, intent],
+               intent_summary = COALESCE(demo_calls.intent_summary, EXCLUDED.intent_summary),
+               wants_human_meeting = CASE
+                 WHEN EXCLUDED.wants_human_meeting IN ('ja', 'yes') THEN EXCLUDED.wants_human_meeting
+                 ELSE COALESCE(demo_calls.wants_human_meeting, EXCLUDED.wants_human_meeting)
+               END,
+               human_meeting_time = COALESCE(demo_calls.human_meeting_time, EXCLUDED.human_meeting_time),
+               human_meeting_channel = COALESCE(demo_calls.human_meeting_channel, EXCLUDED.human_meeting_channel)`,
+            [callId, agentId, demoTemplateId, cn, ce, cp, intent, wantsHumanMeeting, humanMeetingTime, humanMeetingChannel],
           ).catch((err: Error) => req.log.warn({ err: err.message, callId }, 'demo_calls late-upsert failed'));
           // Post-call signup-link send for long calls — call_analyzed is the
           // primary path (call_ended above handles the short-call case where
@@ -987,6 +1178,10 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
             req.log.warn({ err: err.message, callId }, 'maybeSendDemoSignupLink (call_analyzed) failed'),
           );
         }
+      }
+      } catch (err) {
+        await forgetProcessedRetellEvent(callId, 'call_analyzed', req.log);
+        throw err;
       }
     }
 
@@ -1196,7 +1391,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
               staffId: staff.staffId,
             });
         result = {
-          ok: true,
+          ok: calendarSlotLookupOk(slotResult.source),
           source: slotResult.source,
           ...compactRetellSlots(slotResult.slots),
           service: args.service ?? null,
@@ -1204,7 +1399,12 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           preferredTime: args.preferredTime ?? null,
           preferredStylist: staff.matchedName ?? (teamMode ? 'Beliebiger freier Mitarbeiter' : staff.requested),
           staffId: staff.staffId,
-          ...(teamMode ? { instruction: 'Biete diese Zeiten als Team-Termine an. Der konkrete Mitarbeiter wird beim Buchen automatisch nach Verfuegbarkeit zugewiesen.' } : {}),
+          instruction: calendarSlotInstruction(
+            slotResult.source,
+            teamMode
+              ? 'Biete diese Zeiten als Team-Termine an. Der konkrete Mitarbeiter wird beim Buchen automatisch nach Verfuegbarkeit zugewiesen.'
+              : compactRetellSlots(slotResult.slots).instruction,
+          ),
         };
       }
     } else {
@@ -1261,7 +1461,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     let result: Record<string, unknown>;
 
     if (ctx.orgId) {
-      const customerName = (args.customerName as string | undefined) ?? 'Unbekannt';
+      const customerName = knownCustomerName(stringArg(args, 'customerName', 'customer_name', 'name'));
       const customerPhone = await resolveCallerPhone(body, args, ctx.callId);
       const preferredTime = (args.preferredTime as string | undefined) ?? (args.time as string | undefined) ?? '';
       const staff = await resolveCalendarStaffForTool(ctx.orgId, args);
@@ -1271,10 +1471,36 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       const approval = await canBookForCustomerApproval({
         tenantId: ctx.tenantId ?? ctx.orgId,
         orgId: ctx.orgId,
-        customerName,
+        customerName: customerName ?? undefined,
         customerPhone,
       });
-      if (!approval.allowed) {
+      if (!booleanArg(args, 'confirmed')) {
+        result = {
+          ok: false,
+          status: 'confirmation_required',
+          error: 'CONFIRMATION_REQUIRED',
+          instruction: 'Buche noch nicht. Wiederhole Datum, Uhrzeit, Service und Name kurz und frage ausdruecklich nach Ja. Rufe calendar.book erst danach mit confirmed=true auf.',
+          customerName,
+          customerPhone,
+          preferredTime,
+          preferredStylist: staff.matchedName ?? (teamMode ? 'Beliebiger freier Mitarbeiter' : staff.requested),
+          staffId: staff.staffId,
+          service,
+        };
+      } else if (!customerName) {
+        result = {
+          ok: false,
+          status: 'customer_name_required',
+          error: 'CUSTOMER_NAME_REQUIRED',
+          instruction: 'Buche noch nicht. Frage zuerst nach dem Namen und bestaetige danach Slot, Service und Name noch einmal.',
+          customerName,
+          customerPhone,
+          preferredTime,
+          preferredStylist: staff.matchedName ?? (teamMode ? 'Beliebiger freier Mitarbeiter' : staff.requested),
+          staffId: staff.staffId,
+          service,
+        };
+      } else if (!approval.allowed) {
         result = {
           ok: false,
           status: 'customer_approval_required',
@@ -1328,7 +1554,22 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         const resultStylist = assignedStaffName ?? (teamMode ? 'Beliebiger freier Mitarbeiter' : staff.requested);
 
         if (!booking.ok) {
-          try {
+          if (isPastSlotError(booking.error)) {
+            result = {
+              ok: false,
+              status: 'past_time_rejected',
+              error: 'PAST_SLOT',
+              fallback: false,
+              instruction: 'Der gewuenschte Termin liegt in der Vergangenheit. Keine Buchung und kein Fallback-Ticket fuer diesen Slot erstellen; frage nach einem zukuenftigen Datum.',
+              customerName,
+              customerPhone,
+              preferredTime,
+              preferredStylist: resultStylist,
+              staffId: assignedStaffId,
+              service,
+            };
+          } else {
+            try {
             const ticket = await createTicket({
               tenantId: ctx.tenantId ?? ctx.orgId,
               source: 'phone',
@@ -1351,7 +1592,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
                 });
 
             result = {
-              ok: true,
+              ok: false,
               status: 'fallback_ticket_created',
               fallback: true,
               ticketId: ticket.id,
@@ -1363,7 +1604,9 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
               partial: booking.partial ?? false,
               smsSent: sms.ok,
               smsError: sms.ok ? null : sms.error,
+              deliveryInstruction: sms.ok ? 'SMS-Bestaetigung darf erwaehnt werden.' : 'Keine SMS-Bestaetigung behaupten; smsSent ist false.',
               message: 'Kalenderbuchung fehlgeschlagen, Rueckruf-Ticket wurde erstellt.',
+              instruction: 'Behaupte nicht, dass der Termin gebucht wurde. Sage kurz, dass der Kalender die Buchung nicht bestaetigt hat und dass ein Rueckruf-Ticket erstellt wurde.',
               customerName,
               customerPhone: ticket.customer_phone,
               preferredTime,
@@ -1371,7 +1614,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
               staffId: assignedStaffId,
               service,
             };
-          } catch (e: unknown) {
+            } catch (e: unknown) {
             const code = (e as { code?: string })?.code;
             req.log.error(
               {
@@ -1398,6 +1641,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
               staffId: assignedStaffId,
               service,
             };
+            }
           }
         } else {
           const sms = await sendBookingConfirmationSms({
@@ -1419,6 +1663,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
             error: booking.error ?? null,
             smsSent: sms.ok,
             smsError: sms.ok ? null : sms.error,
+            deliveryInstruction: sms.ok ? 'SMS-Bestaetigung darf erwaehnt werden.' : 'Keine SMS-Bestaetigung behaupten; smsSent ist false.',
             customerName,
             customerPhone,
             preferredTime,
@@ -1657,8 +1902,10 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           sourceCallId: ctx.callId,
         });
         result.instruction = result.ok
-          ? 'Sage kurz, dass der Termin verschoben wurde. Bei partial=true: sage, dass das Team intern noch einmal nachfasst.'
-          : 'Behaupte nicht, dass der Termin verschoben wurde. Biete alternative Zeiten oder Rueckruf an.';
+          ? 'Sage kurz, dass der Termin verschoben wurde.'
+          : result.status === 'reschedule_needs_review'
+            ? 'Behaupte nicht, dass die Verschiebung vollstaendig erledigt ist. Sage, dass der neue Termin intern vorgemerkt ist, aber das Team die alte Buchung/externen Kalender noch prueft und nachfasst.'
+            : 'Behaupte nicht, dass der Termin verschoben wurde. Biete alternative Zeiten oder Rueckruf an.';
       }
     }
 
@@ -1853,6 +2100,71 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       } as Parameters<typeof appendTraceEvent>[0]);
       return result;
     }
+  });
+
+  // ── demo.recording_declined ────────────────────────────────────────────
+  // Website demo agents are not tenant-owned and therefore cannot use the
+  // signed tenant+agent tool URL. This endpoint accepts a separate HMAC in
+  // the demo tool URL, verifies the caller's agent_id is a known demo agent,
+  // and writes the same recording_declined_calls flag consumed by call_ended.
+  app.post('/retell/tools/demo.recording_declined', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!verifyDemoRecordingToolRequest(req as RawBodyRequest)) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const body = req.body as RetellEventBody;
+    const args = retellArgs(body);
+    const callId = getRetellCallId(body, args);
+    const agentId = getRetellAgentId(body, args);
+    if (!callId || callId === 'retell') {
+      req.log.warn({ agentId }, 'demo.recording_declined: no call_id in body');
+      return reply.status(400).send({ ok: false, error: 'CALL_ID_REQUIRED' });
+    }
+    if (!agentId) {
+      req.log.warn({ callId }, 'demo.recording_declined: no agent_id in body');
+      return reply.status(400).send({ ok: false, error: 'AGENT_ID_REQUIRED' });
+    }
+
+    const templateId = await readDemoCallTemplate(agentId);
+    if (!templateId) {
+      req.log.warn({ callId, agentId }, 'demo.recording_declined: unknown demo agent');
+      return reply.status(403).send({ ok: false, error: 'UNKNOWN_DEMO_AGENT' });
+    }
+    if (!pool) {
+      req.log.error({ callId, agentId, templateId }, 'demo.recording_declined: pool unavailable');
+      return reply.status(503).send({ ok: false, error: 'STORAGE_UNAVAILABLE' });
+    }
+
+    try {
+      await pool.query(
+        `INSERT INTO recording_declined_calls (call_id, org_id, tenant_id)
+         VALUES ($1, NULL, $2)
+         ON CONFLICT (call_id) DO NOTHING`,
+        [callId, `demo:${templateId}`],
+      );
+    } catch (err) {
+      req.log.error(
+        { err: (err as Error).message, callId, agentId, templateId },
+        'demo.recording_declined: storage failed',
+      );
+      return reply.status(503).send({
+        ok: false,
+        error: 'STORAGE_UNAVAILABLE',
+        message: 'Konnte den Widerspruch nicht speichern. Bitte beende den Demo-Anruf.',
+      });
+    }
+
+    await appendTraceEvent({
+      type: 'tool_call',
+      sessionId: callId,
+      tenantId: `demo:${templateId}`,
+      agentId,
+      tool: 'demo.recording_declined',
+      input: args,
+      at: now(),
+    } as Parameters<typeof appendTraceEvent>[0]);
+
+    return { ok: true };
   });
 
   // ── recording_declined ─────────────────────────────────────────────────

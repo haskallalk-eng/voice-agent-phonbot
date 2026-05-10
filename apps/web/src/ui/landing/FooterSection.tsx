@@ -73,7 +73,7 @@ export function FooterSection({ onShowLegal, onGoToContact }: FooterSectionProps
               rel="noopener"
               className="text-white/75 hover:text-white/95 transition-colors underline decoration-white/30 hover:decoration-orange-400/60"
             >
-              Hans Ulrich Waier
+              Hassieb Kalla
             </a>
             {' (Einzelunternehmer) · Alle Rechte vorbehalten'}
           </p>

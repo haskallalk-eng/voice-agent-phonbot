@@ -154,7 +154,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   //   true  → full disclosure (KI + recording + decline-path with recording.declined-tool)
   //   false → KI-only disclosure (no recording line — would be a false promise)
   // Default true is preserved for backward-compat with all existing customers.
-  const recordingActive = cfg.recordCalls !== false; // undefined → legacy true
+  const recordingActive = cfg.recordCalls !== false && cfg.dataRetentionDays !== 0; // undefined → legacy true
 
   parts.push('');
   if (recordingActive) {
@@ -288,6 +288,8 @@ export function buildAgentInstructions(cfg: AgentConfig) {
     parts.push('Wenn Personen-Kalender existieren und der Anrufer keinen Wunsch hat ("egal", "beliebig", "wer frei ist"), gib preferredStylist="beliebig" weiter. Rate nicht selbst, welcher Mitarbeiter passt; das Kalender-Tool weist deterministisch eine freie passende Person zu. Wenn keine Person angelegt ist, gilt der allgemeine Kalender fuer den Salon/Friseur als Ganzes.');
   }
   if (calendarBookEnabled) {
+    parts.push('Rufe calendar.book nur auf, nachdem der Anrufer exakt Name, Service, Datum und Uhrzeit bestaetigt hat. Setze confirmed=true nur bei dieser ausdruecklichen Bestaetigung; ein unklares "ja" nach mehreren Optionen reicht nicht.');
+    parts.push('Wenn Datum/Uhrzeit in der Vergangenheit liegen oder das Jahr widerspruechlich ist (z.B. 2025 obwohl heute 2026 ist), rufe calendar.book NICHT auf. Frage nach einem zukuenftigen Datum.');
     parts.push('Wenn eine Terminbuchung technisch fehlschlaegt, behaupte NIEMALS der Termin sei gebucht. Sage kurz, dass du den Terminwunsch als Rueckruf-Ticket aufgenommen hast und jemand den Termin bestaetigt.');
     parts.push('Bestaetige einen Termin nur, wenn calendar.book mit ok=true/status=confirmed geantwortet hat.');
   } else {

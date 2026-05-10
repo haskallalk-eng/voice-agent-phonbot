@@ -24,6 +24,7 @@ const InsightsPage = lazy(() => import('./InsightsPage.js').then((m) => ({ defau
 const ChipyCopilot = lazy(() => import('../components/ChipyCopilot.js').then((m) => ({ default: m.ChipyCopilot })));
 const AdminPage = lazy(() => import('./AdminPage.js').then((m) => ({ default: m.AdminPage })));
 const ResetPasswordPage = lazy(() => import('./ResetPasswordPage.js').then((m) => ({ default: m.ResetPasswordPage })));
+const VerifyEmailPage = lazy(() => import('./VerifyEmailPage.js').then((m) => ({ default: m.VerifyEmailPage })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -532,6 +533,18 @@ function AppGate() {
 }
 
 export function App() {
+  // E-mail verification: standalone page, no auth provider needed
+  const isVerifyEmailRoute = window.location.pathname === '/verify-email' || window.location.pathname.startsWith('/verify-email/');
+  if (isVerifyEmailRoute) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<FullPageLoading />}>
+          <VerifyEmailPage />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
   // Password reset: standalone page, no auth provider needed
   if (window.location.pathname === '/reset-password') {
     return (

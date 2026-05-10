@@ -779,6 +779,23 @@ async function runMigrationBody() {
   await pool.query(`alter table tickets add column if not exists session_id text;`);
   await pool.query(`alter table tickets add column if not exists reason text;`);
   await pool.query(`
+    WITH ranked AS (
+      SELECT id,
+             ROW_NUMBER() OVER (
+               PARTITION BY org_id, source, session_id, COALESCE(reason, '')
+               ORDER BY updated_at DESC, created_at DESC, id DESC
+             ) AS rn
+      FROM tickets
+      WHERE source = 'phone'
+        AND session_id IS NOT NULL
+        AND org_id IS NOT NULL
+    )
+    DELETE FROM tickets t
+    USING ranked r
+    WHERE t.id = r.id
+      AND r.rn > 1;
+  `);
+  await pool.query(`
     CREATE UNIQUE INDEX IF NOT EXISTS tickets_phone_session_reason_uniq
       ON tickets(org_id, source, session_id, (COALESCE(reason, '')))
       WHERE source = 'phone' AND session_id IS NOT NULL AND org_id IS NOT NULL;
@@ -993,6 +1010,7 @@ async function runMigrationBody() {
       id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       org_id       UUID NOT NULL,
       call_id      TEXT NOT NULL UNIQUE,
+      agent_id     TEXT,
       direction    TEXT NOT NULL DEFAULT 'inbound',
       transcript   TEXT NOT NULL,
       duration_sec INT,
@@ -1009,7 +1027,17 @@ async function runMigrationBody() {
       created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  await pool.query(`ALTER TABLE call_transcripts ADD COLUMN IF NOT EXISTS agent_id TEXT;`);
+  await pool.query(`
+    UPDATE call_transcripts ct
+       SET agent_id = rc.agent_id
+      FROM recording_consents rc
+     WHERE ct.call_id = rc.call_id
+       AND ct.agent_id IS NULL
+       AND rc.agent_id IS NOT NULL;
+  `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_transcripts_org ON call_transcripts(org_id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_transcripts_org_agent ON call_transcripts(org_id, agent_id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_transcripts_industry ON call_transcripts(industry);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_transcripts_score ON call_transcripts(score);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_transcripts_created ON call_transcripts(created_at DESC);`);
@@ -1025,6 +1053,78 @@ async function runMigrationBody() {
     CREATE INDEX IF NOT EXISTS idx_transcripts_org_industry_null
     ON call_transcripts(org_id)
     WHERE industry IS NULL OR industry = '';
+  `);
+
+  // Retell keeps its own copy of call data while data_storage_setting is
+  // "everything". Track every retained call so our scheduler can delete the
+  // Retell-side audio/transcript/logs when the customer-configured retention
+  // window expires, including calls that never produced a local transcript row.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS retell_call_retention (
+      call_id           TEXT PRIMARY KEY,
+      org_id            UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      agent_id          TEXT,
+      delete_after      TIMESTAMPTZ NOT NULL,
+      retell_deleted_at TIMESTAMPTZ,
+      delete_error      TEXT,
+      attempts          INT NOT NULL DEFAULT 0,
+      created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS retell_call_retention_due_idx
+    ON retell_call_retention(delete_after)
+    WHERE retell_deleted_at IS NULL;
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS retell_call_retention_org_agent_idx ON retell_call_retention(org_id, agent_id);`);
+  await pool.query(`COMMENT ON TABLE retell_call_retention IS 'Tracks Retell-hosted call data deletion deadlines for customer-configured audio/transcript retention.';`);
+  await pool.query(`
+    WITH config_retention AS (
+       SELECT org_id,
+              data->>'retellAgentId' AS agent_id,
+              updated_at,
+              CASE
+                WHEN data->>'recordCalls' = 'false' THEN 0
+                WHEN COALESCE(data->>'dataRetentionDays', '') ~ '^[0-9]+$'
+                  THEN LEAST(GREATEST((data->>'dataRetentionDays')::int, 0), 365)
+                ELSE 30
+              END AS days
+         FROM agent_configs
+        WHERE org_id IS NOT NULL
+          AND data->>'retellAgentId' IS NOT NULL
+       UNION ALL
+       SELECT org_id,
+              data->>'retellCallbackAgentId' AS agent_id,
+              updated_at,
+              CASE
+                WHEN data->>'recordCalls' = 'false' THEN 0
+                WHEN COALESCE(data->>'dataRetentionDays', '') ~ '^[0-9]+$'
+                  THEN LEAST(GREATEST((data->>'dataRetentionDays')::int, 0), 365)
+                ELSE 30
+              END AS days
+         FROM agent_configs
+        WHERE org_id IS NOT NULL
+          AND data->>'retellCallbackAgentId' IS NOT NULL
+     ),
+     retention AS (
+       SELECT DISTINCT ON (org_id, agent_id) org_id, agent_id, days
+         FROM config_retention
+        ORDER BY org_id, agent_id, updated_at DESC
+     )
+    INSERT INTO retell_call_retention (call_id, org_id, agent_id, delete_after, created_at)
+    SELECT ct.call_id,
+           ct.org_id,
+           COALESCE(ct.agent_id, rc.agent_id),
+           ct.created_at + (COALESCE(r.days, 90) * INTERVAL '1 day'),
+           ct.created_at
+      FROM call_transcripts ct
+      JOIN orgs o ON o.id = ct.org_id
+      LEFT JOIN recording_consents rc ON rc.call_id = ct.call_id
+      LEFT JOIN retention r
+        ON r.org_id = ct.org_id
+       AND r.agent_id = COALESCE(ct.agent_id, rc.agent_id)
+     ON CONFLICT (call_id) DO NOTHING;
   `);
 
   // ── Satisfaction signals columns (added in learning v2) ───────────────────
@@ -1101,7 +1201,7 @@ async function runMigrationBody() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_training_org ON training_examples(org_id);`);
 
   // ── DSGVO Art. 5 retention comment on call_transcripts ─────────────────
-  await pool.query(`COMMENT ON TABLE call_transcripts IS 'DSGVO Art. 5: 90-day retention policy. Rows older than 90 days are purged daily by cleanupOldTranscripts().';`);
+  await pool.query(`COMMENT ON TABLE call_transcripts IS 'DSGVO Art. 5: retention follows agent_configs.dataRetentionDays (default 30 days, 0 = delete immediately); orphaned legacy rows are capped at 90 days by cleanupOldTranscripts().';`);
 
   // Retrofit FK on call_transcripts (added org_id originally without cascade)
   await pool.query(`
@@ -1125,15 +1225,85 @@ async function runMigrationBody() {
 }
 
 /**
- * DSGVO Art. 5 — Data minimisation: delete call transcripts older than 90 days.
+ * DSGVO Art. 5 — Data minimisation: delete call transcripts according to the
+ * owning agent config. dataRetentionDays=0 deletes immediately; absent legacy
+ * settings default to 30 days. Orphaned legacy rows stay capped at 90 days.
  * Called on startup and then every 24 hours via setInterval in index.ts.
  */
 export async function cleanupOldTranscripts(): Promise<number> {
   if (!pool) return 0;
   const res = await pool.query(
-    `DELETE FROM call_transcripts WHERE created_at < NOW() - INTERVAL '90 days'`,
+    `WITH config_retention AS (
+       SELECT org_id,
+              data->>'retellAgentId' AS agent_id,
+              updated_at,
+              CASE
+                WHEN data->>'recordCalls' = 'false' THEN 0
+                WHEN COALESCE(data->>'dataRetentionDays', '') ~ '^[0-9]+$'
+                  THEN LEAST(GREATEST((data->>'dataRetentionDays')::int, 0), 365)
+                ELSE 30
+              END AS days
+         FROM agent_configs
+        WHERE org_id IS NOT NULL
+          AND data->>'retellAgentId' IS NOT NULL
+       UNION ALL
+       SELECT org_id,
+              data->>'retellCallbackAgentId' AS agent_id,
+              updated_at,
+              CASE
+                WHEN data->>'recordCalls' = 'false' THEN 0
+                WHEN COALESCE(data->>'dataRetentionDays', '') ~ '^[0-9]+$'
+                  THEN LEAST(GREATEST((data->>'dataRetentionDays')::int, 0), 365)
+                ELSE 30
+              END AS days
+         FROM agent_configs
+        WHERE org_id IS NOT NULL
+          AND data->>'retellCallbackAgentId' IS NOT NULL
+     ),
+     retention AS (
+       SELECT DISTINCT ON (org_id, agent_id) org_id, agent_id, days
+         FROM config_retention
+        ORDER BY org_id, agent_id, updated_at DESC
+     ),
+     transcript_agents AS (
+       SELECT ct.id,
+              ct.org_id,
+              COALESCE(ct.agent_id, rc.agent_id) AS agent_id,
+              ct.created_at
+         FROM call_transcripts ct
+         LEFT JOIN recording_consents rc ON rc.call_id = ct.call_id
+     ),
+     configured_deleted AS (
+       DELETE FROM call_transcripts ct
+       USING transcript_agents ta,
+             retention r
+       WHERE ct.id = ta.id
+         AND ta.org_id = r.org_id
+         AND ta.agent_id = r.agent_id
+         AND (
+           r.days = 0
+           OR ta.created_at < NOW() - (r.days * INTERVAL '1 day')
+         )
+       RETURNING 1
+     ),
+     orphan_deleted AS (
+       DELETE FROM call_transcripts ct
+       USING transcript_agents ta
+       WHERE ct.id = ta.id
+         AND NOT EXISTS (
+           SELECT 1
+             FROM retention r
+            WHERE r.org_id = ta.org_id
+              AND r.agent_id = ta.agent_id
+         )
+         AND ta.created_at < NOW() - INTERVAL '90 days'
+       RETURNING 1
+     )
+     SELECT
+       (SELECT COUNT(*) FROM configured_deleted) +
+       (SELECT COUNT(*) FROM orphan_deleted) AS deleted`,
   );
-  return (res as { rowCount?: number }).rowCount ?? 0;
+  return Number(res.rows[0]?.deleted ?? 0);
 }
 
 /**

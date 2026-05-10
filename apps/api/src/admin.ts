@@ -4,10 +4,14 @@ import bcrypt from 'bcrypt';
 import { pool } from './db.js';
 import { log } from './logger.js';
 import { TEMPLATES } from './templates.js';
-import { DEMO_END_INSTRUCTIONS, DEFAULT_SALES_PROMPT, flushDemoAgentCache, bustSalesPromptCache } from './demo.js';
+import { DEMO_END_INSTRUCTIONS, DEMO_SAFETY_OVERLAY, DEFAULT_SALES_PROMPT, ensurePhonbotProductFacts, flushDemoAgentCache, bustSalesPromptCache } from './demo.js';
 import { PLATFORM_BASELINE_PROMPT, bustPlatformBaselineCache } from './platform-baseline.js';
 import { OUTBOUND_BASELINE_PROMPT, bustOutboundBaselineCache } from './outbound-baseline.js';
 import { sendSignupLinkEmail } from './email.js';
+import { buildAgentInstructions } from './agent-instructions.js';
+import { buildPromptQaReport, type PromptEvalSource } from './prompt-eval.js';
+import { humanMeetingUrl } from './sms.js';
+import { getDefaultRetellLlmModel } from './retell.js';
 
 /**
  * Audit-Round-8 (Codex M07-MEDIUM-C): admin cross-org reads are intentional
@@ -33,6 +37,99 @@ async function recordAdminRead(
      VALUES ($1, $2, $3, $4, $5)`,
     [adminEmail, route, JSON.stringify(paramsForAudit), resultCount, req.ip ?? null],
   ).catch((err: Error) => log.warn({ err: err.message, route, adminEmail }, 'admin: audit-log insert failed'));
+}
+
+type PromptOverrideRow = {
+  epilogue: string;
+  basePrompt: string | null;
+  updatedAt: string;
+  updatedBy: string | null;
+};
+
+async function loadPromptOverrides(): Promise<Map<string, PromptOverrideRow>> {
+  const overrides = new Map<string, PromptOverrideRow>();
+  if (!pool) return overrides;
+  const overridesRes = await pool.query(
+    `SELECT template_id, epilogue, base_prompt, updated_at, updated_by
+       FROM demo_prompt_overrides`,
+  );
+  for (const row of overridesRes.rows as Array<{ template_id: string; epilogue: string; base_prompt: string | null; updated_at: Date; updated_by: string | null }>) {
+    overrides.set(row.template_id, {
+      epilogue: row.epilogue,
+      basePrompt: row.base_prompt,
+      updatedAt: row.updated_at.toISOString(),
+      updatedBy: row.updated_by,
+    });
+  }
+  return overrides;
+}
+
+function buildDashboardPromptQaSource(platformPrompt: string): PromptEvalSource {
+  const dashboardConfig = {
+    tenantId: 'prompt-qa',
+    name: 'Chipy',
+    language: 'de',
+    voice: 'prompt-qa',
+    businessName: 'Phonbot Testbetrieb',
+    businessDescription: 'Lokaler Dienstleister mit Terminbuchung, Kundenmodul, Rueckruf, Tickets und Kalenderanbindung.',
+    address: 'Musterstrasse 1, 10115 Berlin',
+    openingHours: 'Mo-Fr 09:00-18:00, Sa 10:00-14:00',
+    servicesText: 'Beratung, Ersttermin, Folgetermin, Rueckruf, Support',
+    services: [
+      { id: 'consulting', name: 'Beratung', duration: '30 min', bufferMinutes: 5 },
+      { id: 'support', name: 'Support-Termin', duration: '45 min', bufferMinutes: 5 },
+    ],
+    systemPrompt: 'Du bist eine freundliche Telefonassistenz fuer {{businessName}}. Ziel: Termine buchen, verschieben und absagen, Fragen beantworten, Tickets erfassen und fehlende Details einzeln abfragen. Halte Antworten kurz, natuerlich und gesprochen.',
+    selectedRoles: ['reception', 'support'],
+    customPromptAddition: '',
+    roleBlockOverrides: {},
+    sectionTextOverrides: {},
+    tools: ['customer.lookup', 'customer.upsert', 'calendar.findSlots', 'calendar.book', 'calendar.findBookings', 'calendar.cancel', 'calendar.reschedule', 'ticket.create'],
+    fallback: {
+      enabled: true,
+      reason: 'Allgemeine Uebergabe',
+      reasons: [
+        {
+          id: 'human_requested',
+          label: 'Mensch verlangt',
+          reason: 'Mensch angefordert',
+          enabled: true,
+          priority: 'high',
+          instruction: 'Wenn der Anrufer klar mit einem Menschen sprechen will, zuerst live weiterleiten. Wenn niemand erreichbar ist, Rueckruf-Ticket erstellen.',
+        },
+        {
+          id: 'urgent_or_emergency',
+          label: 'Dringend / Notfall',
+          reason: 'dringendes Anliegen',
+          enabled: true,
+          priority: 'urgent',
+          instruction: 'Bei Gefahr, akutem Problem oder Notfall sofort eskalieren und keine langen Nachfragen stellen.',
+        },
+      ],
+    },
+    industry: 'prompt-qa',
+    recordCalls: true,
+    dataRetentionDays: 30,
+    customerModule: {
+      enabled: true,
+      allowBookingWithoutApproval: false,
+      questions: [
+        { id: 'name', label: 'Name', prompt: 'Name des Kunden', enabled: true, required: true },
+        { id: 'phone', label: 'Telefon', prompt: 'Telefonnummer fuer Rueckfragen', enabled: true, required: true },
+      ],
+    },
+  } as Parameters<typeof buildAgentInstructions>[0];
+  const instructions = buildAgentInstructions(dashboardConfig);
+  return {
+    id: 'dashboard-preview-baseline',
+    label: 'Dashboard-Agent: Baseline + Rollen + Tools',
+    kind: 'dashboard',
+    prompt: `${platformPrompt}\n\n${instructions}`,
+    notes: [
+      'Statischer Admin-Dry-Run auf Basis von buildAgentInstructions().',
+      'Keine Retell-/Kalender-/SMS-/CRM-Aktion wird ausgefuehrt.',
+    ],
+  };
 }
 
 // Admin login accepts either:
@@ -302,6 +399,87 @@ export async function registerAdmin(app: FastifyInstance) {
     return { calls: res.rows };
   });
 
+  // ── GET /admin/demo-meetings ──────────────────────────────────────────────
+  // Follow-up queue for demo visitors who asked to speak with a real Phonbot
+  // team member. Uses structured post-call extraction, with a conservative
+  // text fallback so older calls from before the field existed are still found.
+  app.get('/admin/demo-meetings', {
+    ...auth,
+    config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!pool) return reply.status(503).send({ error: 'DB not configured' });
+    const q = z.object({
+      limit: z.coerce.number().int().min(1).max(200).default(100),
+      status: z.enum(['open', 'contacted', 'scheduled', 'done', 'ignored', 'all']).default('open'),
+    }).safeParse(req.query);
+    if (!q.success) return reply.status(400).send({ error: 'Invalid query', details: q.error.flatten() });
+
+    const where: string[] = [
+      `(
+        wants_human_meeting IN ('ja', 'yes')
+        OR (
+          wants_human_meeting IS NULL
+          AND (
+            intent_summary ILIKE '%mensch%'
+            OR intent_summary ILIKE '%mitarbeiter%'
+            OR intent_summary ILIKE '%beratung%'
+            OR intent_summary ILIKE '%rueckruf%'
+            OR intent_summary ILIKE '%rückruf%'
+            OR transcript ILIKE '%mensch%'
+            OR transcript ILIKE '%mitarbeiter%'
+          )
+        )
+      )`,
+    ];
+    const args: unknown[] = [];
+    if (q.data.status !== 'all') {
+      args.push(q.data.status);
+      where.push(`human_meeting_status = $${args.length}`);
+    }
+    args.push(q.data.limit);
+    const res = await pool.query(
+      `SELECT id, created_at, call_id, template_id, duration_sec,
+              caller_name, caller_email, caller_phone, intent_summary,
+              wants_human_meeting, human_meeting_time, human_meeting_channel,
+              human_meeting_status, human_meeting_notes,
+              signup_link_email_sent_at, signup_link_sms_sent_at,
+              promoted_lead_id, promoted_at,
+              LEFT(transcript, 4000) AS transcript_excerpt
+         FROM demo_calls
+        WHERE ${where.join(' AND ')}
+        ORDER BY created_at DESC
+        LIMIT $${args.length}`,
+      args,
+    );
+    void recordAdminRead(req, '/admin/demo-meetings', res.rows.length, q.data);
+    return { items: res.rows, meetingUrl: humanMeetingUrl() };
+  });
+
+  app.patch('/admin/demo-meetings/:id', {
+    ...auth,
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!pool) return reply.status(503).send({ error: 'DB not configured' });
+    const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
+    if (!params.success) return reply.status(400).send({ error: 'Invalid id' });
+    const body = z.object({
+      status: z.enum(['open', 'contacted', 'scheduled', 'done', 'ignored']),
+      notes: z.string().max(1000).optional(),
+    }).safeParse(req.body ?? {});
+    if (!body.success) return reply.status(400).send({ error: 'Invalid body', details: body.error.flatten() });
+
+    const res = await pool.query(
+      `UPDATE demo_calls
+          SET human_meeting_status = $2,
+              human_meeting_notes = COALESCE($3, human_meeting_notes)
+        WHERE id = $1
+        RETURNING id`,
+      [params.data.id, body.data.status, body.data.notes ?? null],
+    );
+    if (!res.rowCount) return reply.status(404).send({ error: 'Demo meeting not found' });
+    return { ok: true };
+  });
+
   // ── POST /admin/demo-calls/:id/promote ────────────────────────────────────
   // Move a demo_calls row into crm_leads. Caller's email is required (the CRM
   // table makes it NOT NULL); when the demo only captured a phone, the admin
@@ -373,19 +551,7 @@ export async function registerAdmin(app: FastifyInstance) {
   app.get('/admin/demo-prompts', { ...auth }, async (_req: FastifyRequest, reply: FastifyReply) => {
     if (!pool) return reply.status(503).send({ error: 'DB not configured' });
 
-    const overridesRes = await pool.query(
-      `SELECT template_id, epilogue, base_prompt, updated_at, updated_by
-         FROM demo_prompt_overrides`,
-    );
-    const overrides = new Map<string, { epilogue: string; basePrompt: string | null; updatedAt: string; updatedBy: string | null }>();
-    for (const row of overridesRes.rows as Array<{ template_id: string; epilogue: string; base_prompt: string | null; updated_at: Date; updated_by: string | null }>) {
-      overrides.set(row.template_id, {
-        epilogue: row.epilogue,
-        basePrompt: row.base_prompt,
-        updatedAt: row.updated_at.toISOString(),
-        updatedBy: row.updated_by,
-      });
-    }
+    const overrides = await loadPromptOverrides();
 
     return {
       defaults: {
@@ -411,6 +577,72 @@ export async function registerAdmin(app: FastifyInstance) {
         })),
       },
     };
+  });
+
+  // ── GET /admin/prompt-qa ─────────────────────────────────────────────────
+  // Static dry-run contract suite: 1000+ generated prompt/tool/STT/TTS/E2E cases
+  // against the live admin prompt sources. It deliberately never calls Retell,
+  // OpenAI, calendars, SMS, CRM, or webhooks. This is for prompt manager /
+  // prompt architect visibility, not a production action runner.
+  app.get('/admin/prompt-qa', {
+    ...auth,
+    config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+  }, async (req: FastifyRequest) => {
+    const overrides = await loadPromptOverrides();
+    const platformPrompt = overrides.get('__platform__')?.epilogue ?? PLATFORM_BASELINE_PROMPT;
+    const outboundPrompt = overrides.get('__outbound__')?.epilogue ?? OUTBOUND_BASELINE_PROMPT;
+    const salesPrompt = ensurePhonbotProductFacts(overrides.get('__sales__')?.epilogue ?? DEFAULT_SALES_PROMPT);
+    const globalDemoEpilogue = ensurePhonbotProductFacts(overrides.get('__global__')?.epilogue ?? DEMO_END_INSTRUCTIONS);
+      const model = getDefaultRetellLlmModel();
+
+    const sources: PromptEvalSource[] = [
+      {
+        id: 'platform-baseline',
+        label: 'Plattform-Baseline fuer Inbound',
+        kind: 'platform',
+        prompt: platformPrompt,
+        notes: ['Prefix fuer Demo-Agents und zahlende Kundenagenten beim Deploy.'],
+      },
+      buildDashboardPromptQaSource(platformPrompt),
+      {
+        id: 'outbound-baseline',
+        label: 'Outbound-Baseline',
+        kind: 'outbound',
+        prompt: outboundPrompt,
+        notes: ['Prefix fuer aktive Rueckrufe und Sales-Callback-Agenten.'],
+      },
+      {
+        id: 'sales-callback',
+        label: 'Phonbot Sales-Callback',
+        kind: 'sales',
+        prompt: `${outboundPrompt}\n\n${salesPrompt}`,
+        notes: ['Outbound-Baseline plus Sales-Prompt fuer Website-Leads.'],
+      },
+    ];
+
+    for (const template of TEMPLATES) {
+      const override = overrides.get(template.id);
+      const basePrompt = override?.basePrompt ?? template.prompt;
+      const epilogue = override?.epilogue || globalDemoEpilogue;
+      sources.push({
+        id: `demo-${template.id}`,
+        label: `Website-Demo: ${template.name}`,
+        kind: 'demo',
+        prompt: `${platformPrompt}\n\n${basePrompt}${ensurePhonbotProductFacts(epilogue)}${DEMO_SAFETY_OVERLAY}`,
+        notes: [
+          'Zusammensetzung entspricht getOrCreateDemoAgent(): Plattform-Baseline + Branchenprompt + Demo-Epilog + Safety-Overlay.',
+          'Nur end_call ist in der Website-Demo als Retell-Tool verfuegbar.',
+        ],
+      });
+    }
+
+    const report = buildPromptQaReport({ sources, model });
+    void recordAdminRead(req, '/admin/prompt-qa', report.overall.failedCases, {
+      sourceCount: sources.length,
+      caseBank: report.caseBank.totalCases,
+      runMode: report.runMode,
+    });
+    return report;
   });
 
   // ── PUT /admin/demo-prompts/:scope ────────────────────────────────────────
@@ -1041,7 +1273,7 @@ export async function registerAdmin(app: FastifyInstance) {
     const planPrices: Record<string, number> = {
       free: 0,
       nummer: 8.99,
-      starter: 79,
+      starter: 89,
       pro: 179,
       agency: 349,
     };

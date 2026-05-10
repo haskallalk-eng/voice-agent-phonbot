@@ -234,7 +234,7 @@ describe('auth flow (TEST-01)', () => {
     expect(res?.userId).toBe('user-1');
     const orgInsert = mockQuery.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO orgs'));
     expect(orgInsert).toBeDefined();
-    expect(orgInsert?.[1]).toEqual(expect.arrayContaining(['Paid Org', 'cus_paid_123', 'starter', 'year', 360]));
+    expect(orgInsert?.[1]).toEqual(expect.arrayContaining(['Paid Org', 'cus_paid_123', 'starter', 'year', 300]));
   });
 
   // Edge-case: password over 72 bytes rejected (D5 guard)

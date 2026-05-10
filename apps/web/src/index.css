@@ -498,3 +498,24 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 .chipy-sparkle-delay {
   animation-delay: 0.15s;
 }
+
+@keyframes consent-nudge {
+  0%, 100% { transform: translateX(0); }
+  16% { transform: translateX(-7px); }
+  32% { transform: translateX(7px); }
+  48% { transform: translateX(-5px); }
+  64% { transform: translateX(5px); }
+  80% { transform: translateX(-2px); }
+}
+
+.consent-nudge {
+  animation: consent-nudge 0.5s ease both;
+  border-color: rgba(249, 115, 22, 0.65) !important;
+  box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.28), 0 0 28px rgba(249, 115, 22, 0.16);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .consent-nudge {
+    animation: none;
+  }
+}

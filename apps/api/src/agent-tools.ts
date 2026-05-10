@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { createTicket } from './tickets.js';
 import type { readConfig } from './agent-config.js';
-import { appendTraceEvent } from './traces.js';
 import {
   findFreeSlots,
   findFreeSlotsForAnyStaff,
@@ -42,6 +41,7 @@ const BookArgsSchema = z.object({
   preferredTime: z.string().min(1),
   service: z.string().min(1),
   preferredStylist: z.string().min(1).optional(),
+  confirmed: z.boolean().optional().default(false),
   notes: z.string().min(1).optional(),
 });
 
@@ -84,6 +84,27 @@ function normalizeFallbackReasonValue(reason: string | null | undefined): string
   const trimmed = reason?.trim();
   if (!trimmed || trimmed === 'handoff') return DEFAULT_FALLBACK_REASON;
   return trimmed;
+}
+
+function calendarSlotLookupOk(source: string): boolean {
+  return !/(^|:|\+)past-date($|\+)|service-not-offered|calendar-unavailable/.test(source);
+}
+
+function calendarSlotInstruction(source: string, fallbackInstruction: string): string {
+  if (/(^|:|\+)past-date($|\+)/.test(source)) {
+    return 'Das gewuenschte Datum liegt in der Vergangenheit. Keine Zeiten vorschlagen und nach einem zukuenftigen Datum fragen.';
+  }
+  if (source.includes('service-not-offered')) {
+    return 'Der gewuenschte Service wird von dieser Person/diesem Betrieb nicht angeboten. Nicht buchen; Alternative oder Rueckruf anbieten.';
+  }
+  if (source.includes('calendar-unavailable')) {
+    return 'Der Kalender ist gerade nicht sicher pruefbar. Keine Zeiten erfinden; Rueckruf- oder Terminwunsch-Ticket anbieten.';
+  }
+  return fallbackInstruction;
+}
+
+function isPastSlotError(error: unknown): boolean {
+  return typeof error === 'string' && error.includes('PAST_SLOT');
 }
 
 export function getEnabledKnownTools(cfg: AgentConfig): KnownToolName[] {
@@ -132,18 +153,19 @@ export function getOpenAITools(cfg: AgentConfig) {
     tools.push({
       type: 'function',
       name: sanitizeToolName('calendar.book'),
-      description: 'Create a booking after the user confirmed a slot and service. Mention SMS confirmation only when the result returns smsSent=true.',
+      description: 'Create a booking only after the caller explicitly confirmed the exact future date/time, service, and customer name. Mention SMS confirmation only when the result returns smsSent=true.',
       parameters: {
         type: 'object',
         properties: {
-          customerName: { type: 'string' },
+          customerName: { type: 'string', description: 'Confirmed caller/customer name. Do not use "unknown".' },
           customerPhone: { type: 'string' },
-          preferredTime: { type: 'string', description: 'Confirmed slot/time.' },
+          preferredTime: { type: 'string', description: 'Confirmed future slot/time, never a past date.' },
           service: { type: 'string', description: 'Booked service.' },
           preferredStylist: { type: 'string', description: 'Requested staff member/stylist name. Use "beliebig" when the caller has no staff preference.' },
+          confirmed: { type: 'boolean', description: 'True only after the caller explicitly confirmed exact future date/time, service, and name in the latest turn.' },
           notes: { type: 'string' },
         },
-        required: ['preferredTime', 'service'],
+        required: ['customerName', 'preferredTime', 'service', 'confirmed'],
         additionalProperties: false,
       },
     });
@@ -346,18 +368,39 @@ export async function executeKnownTool(input: {
             staffId: staff.staffId,
           });
       return {
-        ok: true,
+        ok: calendarSlotLookupOk(result.source),
         source: result.source,
         slots: result.slots,
         service: args.service ?? null,
         preferredStylist: staff.matchedName ?? (teamMode ? 'Beliebiger freier Mitarbeiter' : staff.requested),
         staffId: staff.staffId,
-        ...(teamMode ? { instruction: 'Biete diese Zeiten als Team-Termine an. Der konkrete Mitarbeiter wird beim Buchen automatisch nach Verfuegbarkeit zugewiesen.' } : {}),
+        instruction: calendarSlotInstruction(
+          result.source,
+          teamMode
+            ? 'Biete diese Zeiten als Team-Termine an. Der konkrete Mitarbeiter wird beim Buchen automatisch nach Verfuegbarkeit zugewiesen.'
+            : 'Nenne maximal drei passende Optionen in einem kurzen Satz. Wenn keine Slots vorhanden sind, erfinde keine Zeiten.',
+        ),
       };
     }
 
     case 'calendar.book': {
       const args = BookArgsSchema.parse(input.args ?? {});
+      if (!args.confirmed) {
+        return {
+          ok: false,
+          status: 'confirmation_required',
+          error: 'CONFIRMATION_REQUIRED',
+          instruction: 'Buche noch nicht. Wiederhole Datum, Uhrzeit, Service und Name kurz und frage ausdruecklich nach Ja. Rufe calendar.book erst danach mit confirmed=true auf.',
+        };
+      }
+      if (!args.customerName || /^(unbekannt|unknown|anonymous|kunde|kundin|gast)$/i.test(args.customerName.trim())) {
+        return {
+          ok: false,
+          status: 'customer_name_required',
+          error: 'CUSTOMER_NAME_REQUIRED',
+          instruction: 'Buche noch nicht. Frage zuerst nach dem Namen und bestaetige danach Slot, Service und Name noch einmal.',
+        };
+      }
       const staff = await resolveStaffByName(input.tenantId, args.preferredStylist);
       const teamMode = staff.staffModeActive && !staff.staffId && (!staff.requested || staff.anyStaff);
       if (staff.staffModeActive && !staff.staffId && staff.requested && !staff.anyStaff) {
@@ -394,6 +437,19 @@ export async function executeKnownTool(input: {
       const assignedStaffName = 'assignedStaffName' in result ? result.assignedStaffName ?? null : staff.matchedName ?? staff.requested;
       const resultStylist = assignedStaffName ?? (teamMode ? 'Beliebiger freier Mitarbeiter' : staff.requested);
       if (!result.ok) {
+        if (isPastSlotError(result.error)) {
+          return {
+            ok: false,
+            status: 'past_time_rejected',
+            error: 'PAST_SLOT',
+            fallback: false,
+            instruction: 'Der gewuenschte Termin liegt in der Vergangenheit. Keine Buchung und kein Fallback-Ticket fuer diesen Slot erstellen; frage nach einem zukuenftigen Datum.',
+            preferredTime: args.preferredTime,
+            service: args.service,
+            preferredStylist: resultStylist,
+            staffId: assignedStaffId,
+          };
+        }
         // Fallback: create ticket when calendar unavailable
         const ticket = await createTicket({
           tenantId: input.tenantId,
@@ -413,16 +469,19 @@ export async function executeKnownTool(input: {
           service: args.service,
         });
         return {
-          ok: true,
+          ok: false,
+          status: 'fallback_ticket_created',
           fallback: true,
           ticketId: ticket.id,
           chipyBookingId: result.chipyBookingId,
           partial: result.partial ?? false,
           smsSent: sms.ok,
           smsError: sms.ok ? null : sms.error,
+          deliveryInstruction: sms.ok ? 'SMS-Bestaetigung darf erwaehnt werden.' : 'Keine SMS-Bestaetigung behaupten; smsSent ist false.',
           preferredStylist: resultStylist,
           staffId: assignedStaffId,
-          message: 'Terminwunsch als Ticket gespeichert.',
+          message: 'Kalenderbuchung fehlgeschlagen, Rueckruf-Ticket wurde erstellt.',
+          instruction: 'Behaupte nicht, dass der Termin gebucht wurde. Sage kurz, dass der Kalender die Buchung nicht bestaetigt hat und dass ein Rueckruf-Ticket erstellt wurde.',
         };
       }
       const sms = await sendBookingConfirmationSms({
@@ -440,6 +499,7 @@ export async function executeKnownTool(input: {
         status: 'confirmed',
         smsSent: sms.ok,
         smsError: sms.ok ? null : sms.error,
+        deliveryInstruction: sms.ok ? 'SMS-Bestaetigung darf erwaehnt werden.' : 'Keine SMS-Bestaetigung behaupten; smsSent ist false.',
         ...args,
         preferredStylist: resultStylist,
         staffId: assignedStaffId,
@@ -534,8 +594,10 @@ export async function executeKnownTool(input: {
       return {
         ...result,
         instruction: result.ok
-          ? 'Sage kurz, dass der Termin verschoben wurde. Wenn partial=true, sage dass das Team intern noch einmal nachfasst.'
-          : 'Behaupte nicht, dass der Termin verschoben wurde. Biete alternative Zeiten oder Rueckruf an.',
+          ? 'Sage kurz, dass der Termin verschoben wurde.'
+          : result.status === 'reschedule_needs_review'
+            ? 'Behaupte nicht, dass die Verschiebung vollstaendig erledigt ist. Sage, dass der neue Termin intern vorgemerkt ist, aber das Team die alte Buchung/externen Kalender noch prueft und nachfasst.'
+            : 'Behaupte nicht, dass der Termin verschoben wurde. Biete alternative Zeiten oder Rueckruf an.',
       };
     }
 

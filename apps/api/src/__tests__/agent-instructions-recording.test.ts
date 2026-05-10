@@ -71,6 +71,19 @@ describe('buildAgentInstructions: recording disclosure', () => {
   });
 });
 
+describe('buildAgentInstructions: retention storage toggle', () => {
+  it('dataRetentionDays=0 treats audio/transcript storage as disabled', () => {
+    const cfg = baseCfg({ recordCalls: true, dataRetentionDays: 0 });
+    const out = buildAgentInstructions(cfg);
+    const tools = buildRetellTools(cfg, 'https://example.test');
+
+    expect(out).toContain('KI-Hinweis');
+    expect(out).not.toContain('Aufzeichnungshinweis');
+    expect(out).not.toContain('recording_declined');
+    expect(tools.map((tool) => tool.name)).not.toContain('recording_declined');
+  });
+});
+
 describe('buildAgentInstructions: agent-builder toggles', () => {
   it('respects disabled calendar tools in the prompt', () => {
     const out = buildAgentInstructions(baseCfg({ tools: ['ticket.create'] }));
@@ -92,6 +105,15 @@ describe('buildAgentInstructions: agent-builder toggles', () => {
     expect(out).toContain('calendar.reschedule');
     expect(out).toContain('confirmed=true');
     expect(out).not.toContain('Ich kann den Termin nicht direkt');
+  });
+
+  it('requires explicit confirmation and customer name in the booking tool schema', () => {
+    const tools = buildRetellTools(baseCfg({ tools: ['calendar.findSlots', 'calendar.book'] }), 'https://example.test');
+    const booking = tools.find((tool) => tool.name === 'calendar_book');
+    const parameters = booking?.parameters as { required?: string[]; properties?: Record<string, unknown> } | undefined;
+
+    expect(parameters?.required).toEqual(expect.arrayContaining(['customerName', 'preferredTime', 'service', 'confirmed']));
+    expect(parameters?.properties?.confirmed).toMatchObject({ type: 'boolean' });
   });
 });
 

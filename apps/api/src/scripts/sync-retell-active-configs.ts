@@ -19,6 +19,9 @@ type AgentConfigRow = {
 };
 
 const execute = process.argv.includes('--execute');
+if (execute && !process.env.WEBHOOK_BASE_URL) {
+  throw new Error('WEBHOOK_BASE_URL is required when executing Retell sync; refusing to publish placeholder tool URLs.');
+}
 
 const { pool } = await import('../db.js');
 const { deployToRetell } = await import('../agent-config.js');

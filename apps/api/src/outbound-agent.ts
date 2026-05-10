@@ -139,6 +139,24 @@ export async function migrateOutbound() {
   // retry sees the timestamp set and skips a doppelt-Send.
   await pool.query(`ALTER TABLE demo_calls ADD COLUMN IF NOT EXISTS signup_link_email_sent_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE demo_calls ADD COLUMN IF NOT EXISTS signup_link_sms_sent_at TIMESTAMPTZ`);
+  // Demo visitors can ask to speak with a human Phonbot team member. Retell's
+  // post-call analysis stores the request here so admins have a dedicated
+  // follow-up queue instead of hunting through transcripts.
+  await pool.query(`ALTER TABLE demo_calls ADD COLUMN IF NOT EXISTS wants_human_meeting TEXT`);
+  await pool.query(`ALTER TABLE demo_calls ADD COLUMN IF NOT EXISTS human_meeting_time TEXT`);
+  await pool.query(`ALTER TABLE demo_calls ADD COLUMN IF NOT EXISTS human_meeting_channel TEXT`);
+  await pool.query(`ALTER TABLE demo_calls ADD COLUMN IF NOT EXISTS human_meeting_status TEXT NOT NULL DEFAULT 'open'`);
+  await pool.query(`ALTER TABLE demo_calls ADD COLUMN IF NOT EXISTS human_meeting_notes TEXT`);
+  // Website demo consent evidence: /demo/call stores this immediately after
+  // Retell returns call_id, before any audio starts. The hashes avoid keeping
+  // raw IP/user-agent while preserving an Art. 7 DSGVO audit trail.
+  await pool.query(`ALTER TABLE demo_calls ADD COLUMN IF NOT EXISTS privacy_consent_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE demo_calls ADD COLUMN IF NOT EXISTS privacy_consent_version TEXT`);
+  await pool.query(`ALTER TABLE demo_calls ADD COLUMN IF NOT EXISTS privacy_consent_notice_hash TEXT`);
+  await pool.query(`ALTER TABLE demo_calls ADD COLUMN IF NOT EXISTS privacy_consent_source TEXT`);
+  await pool.query(`ALTER TABLE demo_calls ADD COLUMN IF NOT EXISTS privacy_consent_user_agent_hash TEXT`);
+  await pool.query(`ALTER TABLE demo_calls ADD COLUMN IF NOT EXISTS privacy_consent_ip_hash TEXT`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS demo_calls_human_meeting_idx ON demo_calls(human_meeting_status, created_at DESC) WHERE wants_human_meeting IN ('ja', 'yes')`);
 
   // Audit-Round-9 H3: durable agent_id → template_id mapping.
   // Redis (demo_agent_meta:v4:*) is the fast-path lookup but expires on

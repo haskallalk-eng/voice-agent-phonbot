@@ -24,7 +24,21 @@ else
 fi
 docker compose up -d
 
-# 3. Show status
+# 3. Keep existing Retell agents on the current signed tool URL contract.
+# A normal API deploy can change tool schemas or auth query params; without
+# this sync, old Retell LLM tool URLs may continue calling stale endpoints.
+if [ "${SKIP_RETELL_SYNC:-}" != "1" ]; then
+  api_container="$(docker compose ps -q api)"
+  if [ -n "$api_container" ]; then
+    if ! docker exec "$api_container" sh -lc 'test -n "$WEBHOOK_BASE_URL"'; then
+      echo "ERROR: WEBHOOK_BASE_URL is missing inside the api container; refusing to sync Retell URLs." >&2
+      exit 1
+    fi
+    docker exec "$api_container" node apps/api/dist/scripts/sync-retell-active-configs.js --execute
+  fi
+fi
+
+# 4. Show status
 docker compose ps
 echo ""
 echo "=== Deploy complete ==="

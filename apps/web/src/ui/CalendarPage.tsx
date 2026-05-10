@@ -222,6 +222,11 @@ type CalendarBooking = ChipyBooking & {
   groupedBookings?: CalendarBooking[];
 };
 
+function initialCalendarView(): CalendarViewMode {
+  if (typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches) return 'day';
+  return 'week';
+}
+
 const TEAM_BOOKING_COLORS = ['#F97316', '#06B6D4', '#22C55E', '#A855F7', '#F59E0B', '#EC4899', '#14B8A6'];
 
 function colorHash(value: string): number {
@@ -433,8 +438,8 @@ function BookingModal({
   if (typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)' }}>
-      <div className="w-full max-w-md rounded-2xl border border-white/10 p-6 space-y-5" style={{ background: '#14141F' }} role="dialog" aria-modal="true" aria-labelledby="booking-modal-title">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overscroll-contain" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)' }}>
+      <div className="w-full max-w-md max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl border border-white/10 p-6 space-y-5 shadow-[0_28px_90px_rgba(0,0,0,0.55)]" style={{ background: '#14141F' }} role="dialog" aria-modal="true" aria-labelledby="booking-modal-title">
         <div className="flex items-center justify-between">
           <div>
             <h3 id="booking-modal-title" className="text-base font-bold text-white">Neuer Termin</h3>
@@ -561,8 +566,8 @@ function BookingDetailsModal({
   if (typeof document === 'undefined') return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(8px)' }}>
-      <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-white/10 shadow-[0_32px_120px_rgba(0,0,0,0.62)]" style={{ background: '#14141F' }} role="dialog" aria-modal="true" aria-labelledby="booking-details-title">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overscroll-contain" style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(8px)' }}>
+      <div className="w-full max-w-lg max-h-[calc(100vh-2rem)] overflow-y-auto rounded-3xl border border-white/10 shadow-[0_32px_120px_rgba(0,0,0,0.62)]" style={{ background: '#14141F' }} role="dialog" aria-modal="true" aria-labelledby="booking-details-title">
         <div className="relative border-b border-white/8 p-5">
           <span className="absolute inset-x-0 top-0 h-1" style={{ background: `linear-gradient(90deg, ${accent}, rgba(6,182,212,0.7))` }} />
           <div className="flex items-start justify-between gap-4">
@@ -2251,7 +2256,7 @@ function StaffPanel({
   const [staffExternalEvents, setStaffExternalEvents] = useState<ExternalCalendarEvent[]>([]);
   const [selectedStaffDay, setSelectedStaffDay] = useState<Date | null>(null);
   const [showStaffAddBooking, setShowStaffAddBooking] = useState(false);
-  const [staffCalendarView, setStaffCalendarView] = useState<CalendarViewMode>('week');
+  const [staffCalendarView, setStaffCalendarView] = useState<CalendarViewMode>(initialCalendarView);
   const [staffWeekStart, setStaffWeekStart] = useState(startOfWeek(new Date()));
   const [staffViewDay, setStaffViewDay] = useState(new Date());
   const [selectedStaffBooking, setSelectedStaffBooking] = useState<CalendarBooking | null>(null);
@@ -2706,7 +2711,7 @@ export function CalendarPage({
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [showAddBooking, setShowAddBooking] = useState(false);
   const [selectedCalendarBooking, setSelectedCalendarBooking] = useState<CalendarBooking | null>(null);
-  const [calendarView, setCalendarView] = useState<CalendarViewMode>('week');
+  const [calendarView, setCalendarView] = useState<CalendarViewMode>(initialCalendarView);
   const [calendarWeekStart, setCalendarWeekStart] = useState(startOfWeek(new Date()));
   const [calendarViewDay, setCalendarViewDay] = useState(new Date());
   const staffModeActive = staffCount > 0;
@@ -2753,18 +2758,32 @@ export function CalendarPage({
   const loadChipy = useCallback(async () => {
     const from = isoDate(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1));
     const to = isoDate(new Date(new Date().getFullYear(), new Date().getMonth() + 3, 0));
+    const warnings: string[] = [];
     try {
+      setCalendarError(null);
       const [chipy, bkgs, ext, staffRes] = await Promise.all([
         getChipyCalendar(),
         getChipyBookings(from, to),
-        getExternalCalendarEvents(from, to).catch(() => ({ events: [] as ExternalCalendarEvent[] })),
-        getCalendarStaff().catch(() => ({ staff: [] as CalendarStaff[] })),
+        getExternalCalendarEvents(from, to).catch(() => {
+          warnings.push('Externe Betriebskalender konnten nicht geladen werden.');
+          return { events: [] as ExternalCalendarEvent[] };
+        }),
+        getCalendarStaff().catch(() => {
+          warnings.push('Mitarbeiterkalender konnten nicht geladen werden.');
+          return { staff: [] as CalendarStaff[] };
+        }),
       ]);
       const staff = staffRes.staff ?? [];
       const team = await Promise.all(staff.map(async (member) => {
         const [staffBkgs, staffExt] = await Promise.all([
-          getStaffChipyBookings(member.id, from, to).catch(() => ({ bookings: [] as ChipyBooking[] })),
-          getStaffExternalCalendarEvents(member.id, from, to).catch(() => ({ events: [] as ExternalCalendarEvent[] })),
+          getStaffChipyBookings(member.id, from, to).catch(() => {
+            warnings.push(`Termine von ${member.name} konnten nicht geladen werden.`);
+            return { bookings: [] as ChipyBooking[] };
+          }),
+          getStaffExternalCalendarEvents(member.id, from, to).catch(() => {
+            warnings.push(`Externe Kalender von ${member.name} konnten nicht geladen werden.`);
+            return { events: [] as ExternalCalendarEvent[] };
+          }),
         ]);
         return {
           member,
@@ -2780,6 +2799,9 @@ export function CalendarPage({
       setStaffCount(staff.length);
       setTeamBookings(team.flatMap((item) => item.bookings).sort((a, b) => a.slot_time.localeCompare(b.slot_time)));
       setTeamExternalEvents(team.flatMap((item) => item.externalEvents));
+      if (warnings.length) {
+        setCalendarError([...new Set(warnings)].join(' '));
+      }
     } catch (e: unknown) {
       setCalendarError((e instanceof Error ? e.message : null) ?? 'Kalenderdaten konnten nicht geladen werden');
     }

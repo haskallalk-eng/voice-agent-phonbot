@@ -13,9 +13,9 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02
 
 const PLANS = [
   { id: 'nummer', name: 'Nummer', price: 899, description: '70 Min/Mo, 1 Agent, 1 Telefonnummer' },
-  { id: 'starter', name: 'Starter', price: 7900, description: '360 Min/Mo, 1 Agent, 1 Telefonnummer' },
-  { id: 'pro', name: 'Professional', price: 17900, description: '1.000 Min/Mo, 3 Agents, 3 Telefonnummern' },
-  { id: 'agency', name: 'Agency', price: 34900, description: '2.400 Min/Mo, 10 Agents, 10 Telefonnummern' },
+  { id: 'starter', name: 'Starter', price: 8900, description: '300 Min/Mo, 1 Agent, 1 Telefonnummer' },
+  { id: 'pro', name: 'Professional', price: 17900, description: '900 Min/Mo, 3 Agents, 3 Telefonnummern' },
+  { id: 'agency', name: 'Agency', price: 34900, description: '2.000 Min/Mo, 10 Agents, 10 Telefonnummern' },
 ];
 
 async function main() {

@@ -114,6 +114,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
   const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [demoConsent, setDemoConsent] = useState(false);
+  const [consentNudge, setConsentNudge] = useState(false);
   // Symmetric 6-card layout (2026-04-25): mit dem 6. Template (Mein Agent)
   // gehen 2+3 nicht mehr sauber auf — der zweite slice(2) wäre 4 Karten in
   // einem 3-Spalten-Grid → 3+1 hängt asymmetrisch. Wir konsolidieren auf
@@ -127,6 +128,9 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
   // page-readers never see or interact with Cloudflare.
   const turnstileHandleRef = useRef<TurnstileHandle>(null);
   const clientRef = useRef<RetellWebClient | null>(null);
+  const consentRef = useRef<HTMLLabelElement | null>(null);
+  const consentInputRef = useRef<HTMLInputElement | null>(null);
+  const consentNudgeTimerRef = useRef<number | null>(null);
   // Last agent message — set on every transcript update from Retell, read in
   // the call_ended handler to decide whether to play a forwarding ringback.
   const lastAgentMessageRef = useRef<string>('');
@@ -134,12 +138,25 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
 
   const isInCall = callState === 'connecting' || callState === 'active' || callState === 'ended' || callState === 'error';
 
+  function nudgeDemoConsent(templateId: string) {
+    setActiveTemplate(templateId);
+    setError('Bitte bestätige zuerst den Demo-Datenschutzhinweis.');
+    setCallState('idle');
+    if (consentNudgeTimerRef.current) clearTimeout(consentNudgeTimerRef.current);
+    setConsentNudge(false);
+    window.setTimeout(() => setConsentNudge(true), 0);
+    consentNudgeTimerRef.current = window.setTimeout(() => setConsentNudge(false), 560);
+    queueMicrotask(() => {
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      consentRef.current?.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'center' });
+      consentInputRef.current?.focus({ preventScroll: true });
+    });
+  }
+
   async function handleTemplateClick(templateId: string) {
     if (callState === 'active' || callState === 'connecting') return;
     if (!demoConsent) {
-      setActiveTemplate(templateId);
-      setError('Bitte bestätige zuerst den Demo-Datenschutzhinweis.');
-      setCallState('idle');
+      nudgeDemoConsent(templateId);
       return;
     }
     setActiveTemplate(templateId);
@@ -254,6 +271,10 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
   const handleTemplateClickRef = useRef(handleTemplateClick);
   useEffect(() => { handleTemplateClickRef.current = handleTemplateClick; });
 
+  useEffect(() => () => {
+    if (consentNudgeTimerRef.current) clearTimeout(consentNudgeTimerRef.current);
+  }, []);
+
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
     const triggerFromUrl = () => {
@@ -319,10 +340,16 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
                 </div>
               ))}
             </div>
-            <label className="mx-auto mb-8 flex max-w-2xl items-start gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left text-xs text-white/45">
+            <label
+              ref={consentRef}
+              onAnimationEnd={() => setConsentNudge(false)}
+              className={`mx-auto mb-8 flex max-w-2xl items-start gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left text-xs text-white/45 ${consentNudge ? 'consent-nudge' : ''}`}
+            >
               <input
+                ref={consentInputRef}
                 type="checkbox"
                 checked={demoConsent}
+                aria-describedby={error?.startsWith('Bitte best') ? 'demo-consent-error' : undefined}
                 onChange={(e) => {
                   setDemoConsent(e.target.checked);
                   if (e.target.checked && error?.startsWith('Bitte best')) setError(null);
@@ -330,11 +357,15 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
                 className="mt-0.5 accent-orange-500"
               />
               <span>
-                Ich bin einverstanden, dass diese Demo als Audio/Transkript verarbeitet und bis zu 90 Tage zur Demo-Qualität und Lead-Bearbeitung gespeichert wird. Der Agent weist zu Beginn zusätzlich auf KI und Aufzeichnung hin.
+                Ich bin einverstanden, dass diese Demo als Audio/Transkript verarbeitet und bis zu 90 Tage zur Demo-Qualität und Lead-Bearbeitung gespeichert wird.
               </span>
             </label>
             {error && (
-              <div className="mx-auto mb-8 max-w-2xl rounded-xl border border-orange-400/25 bg-orange-400/[0.08] px-4 py-3 text-left text-sm text-orange-100">
+              <div
+                id="demo-consent-error"
+                role="alert"
+                className="mx-auto mb-8 max-w-2xl rounded-xl border border-orange-400/25 bg-orange-400/[0.08] px-4 py-3 text-left text-sm text-orange-100"
+              >
                 {error}
                 {activeTemplate && (
                   <span className="mt-1 block text-xs text-orange-100/70">
