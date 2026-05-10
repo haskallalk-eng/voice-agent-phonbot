@@ -2,7 +2,7 @@
 // Run after `pnpm --filter @vas/web build`.
 import fs from 'node:fs';
 import path from 'node:path';
-import { SITE, CORE_INDUSTRY_PAGES, SEO_NICHE_PAGES, SUPPORT_PAGES, ALL_SEO_PAGE_SLUGS } from './seo-pages.mjs';
+import { SITE, TODAY, CORE_INDUSTRY_PAGES, SEO_NICHE_PAGES, SUPPORT_PAGES, ALL_SEO_PAGE_SLUGS } from './seo-pages.mjs';
 import { BLOG_INDEX, BLOG_POSTS, blogUrl } from './blog-posts.mjs';
 
 const DIST = path.resolve('apps/web/dist');
@@ -19,6 +19,8 @@ const PRODUCT_TRUTH = {
   nummerPlanPattern: /70\s+(Minuten|Min)\s*(pro\s*Monat|\/\s*Monat)/i,
   forbiddenAiDocPatterns: [
     { pattern: /Stand:\s*April\s+2026/i, label: 'stale April 2026 pricing date' },
+    { pattern: /ab\s+79\s*€/i, label: 'stale 79 Euro entry price' },
+    { pattern: /ab\s+79\s*EUR/i, label: 'stale 79 EUR entry price' },
     { pattern: /\|\s*Nummer\s*\|\s*8,99\s*€\s*\|\s*70\s*(\||\s)/i, label: 'stale Nummer 70-minute table row' },
     { pattern: /100\s+(Gesamt-Freiminuten|einmalig|Minuten-Gesamtguthaben|Freiminuten)/i, label: 'stale Nummer 100-minute one-time copy' },
     { pattern: /haftungsbeschr/i, label: 'stale legal entity form' },
@@ -32,6 +34,15 @@ function fail(msg) {
 
 function warn(msg) {
   warnings.push(msg);
+}
+
+function germanDate(isoDate) {
+  return new Intl.DateTimeFormat('de-DE', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${isoDate}T00:00:00Z`));
 }
 
 function read(rel) {
@@ -241,16 +252,33 @@ function checkSitemapAndRobots() {
   }
 }
 
+function checkIndexNow() {
+  const key = fs.existsSync('.indexnow-key') ? fs.readFileSync('.indexnow-key', 'utf8').trim() : '';
+  if (!/^[a-zA-Z0-9-]{8,128}$/.test(key)) fail('IndexNow key missing or invalid');
+  const keyFile = read(`${key}.txt`).trim();
+  if (keyFile !== key) fail(`IndexNow key file ${key}.txt mismatch`);
+}
+
 function checkProductTruthDrift() {
   const root = read('index.html');
   const llms = read('llms.txt');
   const llmsFull = read('llms-full.txt');
   const ai = read('ai.txt');
+  const readme = fs.existsSync('README.md') ? fs.readFileSync('README.md', 'utf8') : '';
 
   const rootGraph = graphItems(jsonLdBlocks(root));
   const organization = rootGraph.find((item) => item['@type'] === 'Organization');
   if (organization?.legalName !== PRODUCT_TRUTH.legalName) {
     fail(`Root: legalName drift (${organization?.legalName ?? 'missing'})`);
+  }
+  if ('parentOrganization' in organization) {
+    fail('Root: Phonbot Organization should not declare a parentOrganization while legal entity is an individual proprietor');
+  }
+  if (organization?.privacyPolicy !== `${SITE}/datenschutz/`) {
+    fail(`Root: privacyPolicy should use canonical slash URL (${organization?.privacyPolicy ?? 'missing'})`);
+  }
+  if (organization?.termsOfService !== `${SITE}/agb/`) {
+    fail(`Root: termsOfService should use canonical slash URL (${organization?.termsOfService ?? 'missing'})`);
   }
 
   const software = rootGraph.find((item) => item['@type'] === 'SoftwareApplication');
@@ -261,6 +289,7 @@ function checkProductTruthDrift() {
   }
 
   const truthCheckedDocs = {
+    'README.md': readme,
     'index.html': root,
     'llms.txt': llms,
     'llms-full.txt': llmsFull,
@@ -276,6 +305,11 @@ function checkProductTruthDrift() {
 
   for (const [rel, content] of Object.entries({ 'llms.txt': llms, 'llms-full.txt': llmsFull, 'ai.txt': ai })) {
     if (!content.includes(PRODUCT_TRUTH.legalName)) fail(`${rel}: legal entity truth missing`);
+  }
+
+  const expectedDate = germanDate(TODAY);
+  if (!llms.includes(expectedDate) || !llmsFull.includes(expectedDate)) {
+    fail(`LLM docs update date drift; expected ${expectedDate} for current SEO release ${TODAY}`);
   }
 
   for (const [rel, content] of Object.entries({ 'llms.txt': llms, 'llms-full.txt': llmsFull })) {
@@ -360,6 +394,7 @@ if (!fs.existsSync(DIST)) {
   checkNiches();
 checkLegal();
 checkSitemapAndRobots();
+checkIndexNow();
 checkProductTruthDrift();
 checkSitemapDrift();
 checkCanonicalRedirectConfig();

@@ -48,5 +48,14 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Generate SEO pages
+        run: pnpm seo:generate
+
+      - name: Verify generated SEO artifacts are committed
+        run: git diff --exit-code -- apps/web/public
+
       - name: Build Web
         run: cd apps/web && pnpm build
+
+      - name: Audit SEO artifact
+        run: pnpm seo:audit
