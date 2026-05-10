@@ -1086,7 +1086,7 @@ const PRIORITY_LABELS: Record<NonNullable<FallbackReasonConfig['priority']>, str
 };
 
 const LEGACY_FALLBACK_INSTRUCTIONS: Record<string, string> = {
-  human_requested: 'Wenn der Anrufer klar mit einem Menschen sprechen will, nicht diskutieren: Rueckruf-Ticket oder konfigurierte Weiterleitung.',
+  human_requested: 'Wenn der Anrufer klar mit einem Menschen sprechen will, nicht diskutieren: Rückruf-Ticket oder konfigurierte Weiterleitung.',
   urgent_or_emergency: 'Bei Gefahr, Schmerzen, Ausfall oder akutem Problem sofort als dringend markieren und keine langen Nachfragen stellen.',
 };
 

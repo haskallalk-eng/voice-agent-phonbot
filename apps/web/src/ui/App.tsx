@@ -25,6 +25,7 @@ const ChipyCopilot = lazy(() => import('../components/ChipyCopilot.js').then((m)
 const AdminPage = lazy(() => import('./AdminPage.js').then((m) => ({ default: m.AdminPage })));
 const ResetPasswordPage = lazy(() => import('./ResetPasswordPage.js').then((m) => ({ default: m.ResetPasswordPage })));
 const VerifyEmailPage = lazy(() => import('./VerifyEmailPage.js').then((m) => ({ default: m.VerifyEmailPage })));
+const SalesPage = lazy(() => import('./SalesPage.js').then((m) => ({ default: m.SalesPage })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -564,6 +565,16 @@ export function App() {
       <ErrorBoundary>
         <Suspense fallback={<FullPageLoading />}>
           <AdminPage />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
+  if (window.location.pathname.toLowerCase() === '/vertrieb') {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<FullPageLoading />}>
+          <SalesPage />
         </Suspense>
       </ErrorBoundary>
     );

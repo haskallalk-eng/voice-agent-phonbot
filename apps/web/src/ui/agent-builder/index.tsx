@@ -520,7 +520,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
                   Schritt {index + 1}
                 </span>
               </span>
-              {t.id === 'behavior' && pendingSuggestions > 0 && (
+              {t.id === 'identity' && pendingSuggestions > 0 && (
                 <span
                   aria-label={`${pendingSuggestions} Vorschlag${pendingSuggestions === 1 ? '' : 'e'} wartet`}
                   title={`${pendingSuggestions} neue${pendingSuggestions === 1 ? 'r' : ''} Vorschlag${pendingSuggestions === 1 ? '' : 'e'}`}
@@ -565,55 +565,50 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
           </div>
 
       {tab === 'identity' && (
-        <IdentityTab
-          config={config}
-          voices={voices}
-          voicesLoading={voicesLoading}
-          voiceDropdownOpen={voiceDropdownOpen}
-          voiceDropdownRef={voiceDropdownRef}
-          onUpdate={update}
-          onVoiceDropdownToggle={() => setVoiceDropdownOpen((v) => !v)}
-          onVoiceSelect={(id) => { update({ voice: id }); setVoiceDropdownOpen(false); }}
-          onVoiceCloned={(newVoice) => {
-            setVoices((prev) => {
-              const filtered = prev.filter((v) => v.voice_id !== newVoice.voice_id);
-              return [newVoice, ...filtered];
-            });
-            update({ voice: newVoice.voice_id });
-          }}
-        />
+        <>
+          <IdentityTab
+            config={config}
+            voices={voices}
+            voicesLoading={voicesLoading}
+            voiceDropdownOpen={voiceDropdownOpen}
+            voiceDropdownRef={voiceDropdownRef}
+            onUpdate={update}
+            onVoiceDropdownToggle={() => setVoiceDropdownOpen((v) => !v)}
+            onVoiceSelect={(id) => { update({ voice: id }); setVoiceDropdownOpen(false); }}
+            onVoiceCloned={(newVoice) => {
+              setVoices((prev) => {
+                const filtered = prev.filter((v) => v.voice_id !== newVoice.voice_id);
+                return [newVoice, ...filtered];
+              });
+              update({ voice: newVoice.voice_id });
+            }}
+          />
+          <BehaviorTab
+            config={config}
+            activePromptSections={activePromptSections}
+            onUpdate={update}
+            onTogglePromptSection={togglePromptSection}
+            onSetActivePromptSections={setActivePromptSections}
+            onNavigateTab={(route) => {
+              if (route === 'behavior') {
+                setTab('identity');
+                return;
+              }
+              const KNOWN = new Set(['identity', 'knowledge', 'capabilities', 'privacy', 'technical', 'webhooks', 'preview']);
+              if (KNOWN.has(route)) setTab(route as typeof tab);
+            }}
+            onConfigRefresh={async () => {
+              await loadConfig({ resetView: false });
+              void getInsights()
+                .then((d) => setPendingSuggestions(d.suggestions.filter((s) => s.status === 'pending').length))
+                .catch(() => {});
+            }}
+          />
+        </>
       )}
 
       {tab === 'knowledge' && (
         <KnowledgeTab config={config} onUpdate={update} />
-      )}
-
-      {tab === 'behavior' && (
-        <BehaviorTab
-          config={config}
-          activePromptSections={activePromptSections}
-          onUpdate={update}
-          onTogglePromptSection={togglePromptSection}
-          onSetActivePromptSections={setActivePromptSections}
-          onNavigateTab={(route) => {
-            // Suggestion banner asked us to send the user to another tab
-            // (e.g. to fill in opening hours). We only honor a whitelist
-            // of known tab ids to stay resilient to backend-side typos.
-            const KNOWN = new Set(['identity', 'knowledge', 'behavior', 'capabilities', 'privacy', 'technical', 'webhooks', 'preview']);
-            if (KNOWN.has(route)) setTab(route as typeof tab);
-          }}
-          onConfigRefresh={async () => {
-            // Re-read agent config so the TextArea shows the server-side
-            // prompt change a suggestion apply just made. Also refresh the
-            // sidebar badge count. Keep the user in edit-mode — the default
-            // list-jump in loadConfig() would otherwise yank them out of
-            // the tab they were just working in.
-            await loadConfig({ resetView: false });
-            void getInsights()
-              .then((d) => setPendingSuggestions(d.suggestions.filter((s) => s.status === 'pending').length))
-              .catch(() => {});
-          }}
-        />
       )}
 
       {tab === 'capabilities' && (
@@ -774,9 +769,10 @@ Call ${callAgo} · live ${ageStr}`
 
   if (hasData) {
     const ms = measuredMs as number;
-    // E2E-Skala: typisch 800-1500 ms.
-    if (ms < 900) { latencyLabel = 'Schnell'; latencyColor = 'text-green-400 bg-green-500/10 border-green-500/25'; }
-    else if (ms < 1300) { latencyLabel = 'Normal'; latencyColor = 'text-white/65 bg-white/5 border-white/15'; }
+    // E2E voice preview: below ~1.8s feels snappy, 1.8-3s is usable,
+    // above that callers perceive the bot as slow.
+    if (ms < 1800) { latencyLabel = 'Schnell'; latencyColor = 'text-green-400 bg-green-500/10 border-green-500/25'; }
+    else if (ms < 3000) { latencyLabel = 'Normal'; latencyColor = 'text-white/65 bg-white/5 border-white/15'; }
     else { latencyLabel = 'Langsam'; latencyColor = 'text-yellow-400 bg-yellow-500/10 border-yellow-500/25'; }
   }
 

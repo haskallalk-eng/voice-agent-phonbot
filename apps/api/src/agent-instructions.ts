@@ -230,12 +230,13 @@ export function buildAgentInstructions(cfg: AgentConfig) {
     parts.push(`Angebotene Services: ${cfg.servicesText.trim()}`);
   }
 
-  // ── Custom vocabulary (terms + meaning + usage context) ─────────────
+  // ── Custom vocabulary (terms + pronunciation + meaning + usage context) ─
   // Old configs stored this as `string[]` (term-only); new configs hold
-  // `{term, explanation?, context?}`. Accept both transparently.
+  // `{term, pronunciation?, explanation?, context?}`. Accept both transparently.
   const vocabRaw = (cfg as Record<string, unknown>).customVocabulary;
   if (Array.isArray(vocabRaw) && vocabRaw.length > 0) {
     const vocabLines: string[] = [];
+    let hasPronunciationHints = false;
     for (const item of vocabRaw) {
       if (typeof item === 'string') {
         const t = item.trim();
@@ -243,20 +244,28 @@ export function buildAgentInstructions(cfg: AgentConfig) {
         continue;
       }
       if (item && typeof item === 'object' && 'term' in item) {
-        const v = item as { term?: unknown; explanation?: unknown; context?: unknown };
+        const v = item as { term?: unknown; pronunciation?: unknown; explanation?: unknown; context?: unknown };
         const term = typeof v.term === 'string' ? v.term.trim() : '';
         if (!term) continue;
+        const pronunciation = typeof v.pronunciation === 'string' ? v.pronunciation.trim() : '';
         const exp = typeof v.explanation === 'string' ? v.explanation.trim() : '';
         const ctx = typeof v.context === 'string' ? v.context.trim() : '';
         const bits: string[] = [`- ${term}`];
+        if (pronunciation) {
+          hasPronunciationHints = true;
+          bits.push(`(Aussprache: ${pronunciation})`);
+        }
         if (exp) bits.push(`= ${exp}`);
         if (ctx) bits.push(`(Kontext: ${ctx})`);
         vocabLines.push(bits.join(' '));
       }
     }
     if (vocabLines.length > 0) {
+      const pronunciationRule = hasPronunciationHints
+        ? '\nWenn eine Aussprache-Hilfe vorhanden ist, nutze sie beim Sprechen. Sage die Aussprache-Hilfe nicht als Erklärung vor, außer der Anrufer fragt danach.'
+        : '';
       parts.push(
-        `Spezielle Begriffe — diese Wörter korrekt aussprechen, ihre Bedeutung kennen und im richtigen Kontext einsetzen:\n${vocabLines.join('\n')}`,
+        `Spezielle Begriffe — diese Wörter korrekt aussprechen, ihre Bedeutung kennen und im richtigen Kontext einsetzen:\n${vocabLines.join('\n')}${pronunciationRule}`,
       );
     }
   }
@@ -273,6 +282,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push('Bleibe immer kurz, gesprochen und praxisnah. Maximal 2 Sätze pro Antwort.');
   if (calendarFindSlotsEnabled) {
     parts.push('Bei verfuegbaren Terminen: Nenne maximal drei Uhrzeiten auf einmal, gruppiert nach Tag. Lies niemals eine lange Liste einzelner Uhrzeiten vor. Frage danach, welche Option passt.');
+    parts.push('Sprich Terminzeiten immer natuerlich: "Dienstag um elf Uhr fuenfzehn", nicht "11:15", nicht "12.05.2026" und keine Bullet-Liste mit technischen Uhrzeiten.');
   } else {
     parts.push('Kalender-Suche ist fuer diesen Agenten deaktiviert. Erfinde keine freien Zeiten und behaupte nicht, du haettest den Kalender geprueft.');
   }
@@ -292,6 +302,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
     parts.push('Wenn Datum/Uhrzeit in der Vergangenheit liegen oder das Jahr widerspruechlich ist (z.B. 2025 obwohl heute 2026 ist), rufe calendar.book NICHT auf. Frage nach einem zukuenftigen Datum.');
     parts.push('Wenn eine Terminbuchung technisch fehlschlaegt, behaupte NIEMALS der Termin sei gebucht. Sage kurz, dass du den Terminwunsch als Rueckruf-Ticket aufgenommen hast und jemand den Termin bestaetigt.');
     parts.push('Bestaetige einen Termin nur, wenn calendar.book mit ok=true/status=confirmed geantwortet hat.');
+    parts.push('Nach erfolgreicher Buchung: wiederhole Service, Datum, Uhrzeit und Name kurz, erwaehne SMS nur bei smsSent=true, frage knapp ob noch etwas offen ist, und verabschiede dich freundlich. Nicht abrupt mit nur "bis dann" beenden.');
   } else {
     parts.push('Terminbuchung ist fuer diesen Agenten deaktiviert. Sage nicht, dass ein Termin fest gebucht wurde; nimm den Wunsch nur als Notiz oder Rueckruf auf.');
   }

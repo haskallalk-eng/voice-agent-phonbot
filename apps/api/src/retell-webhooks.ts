@@ -333,13 +333,17 @@ function isCallbackSafePhone(phone: string): boolean {
   return allowed.some((prefix) => phone.startsWith(prefix));
 }
 
-function compactRetellSlots(slots: string[]): { slots: string[]; allSlotsCount: number; moreCount: number; instruction: string } {
-  const visible = slots.slice(0, 6);
+function compactRetellSlots(slots: string[]): { slots: string[]; spokenOptionsText: string; allSlotsCount: number; moreCount: number; instruction: string } {
+  const visible = slots.slice(0, 3);
+  const spokenOptionsText = visible.length
+    ? `Sag diese Optionen in einem Satz: ${visible.join(' oder ')}.`
+    : 'Keine freien Zeiten gefunden.';
   return {
     slots: visible,
+    spokenOptionsText,
     allSlotsCount: slots.length,
     moreCount: Math.max(0, slots.length - visible.length),
-    instruction: 'Nenne maximal drei passende Optionen in einem kurzen Satz, nicht jede Uhrzeit einzeln. Wenn mehr Slots vorhanden sind, sage dass es weitere Zeiten gibt.',
+    instruction: 'Nutze spokenOptionsText als Sprechvorlage. Nenne keine Bullet-Liste und keine technische Schreibweise wie "11:00", "11:15" oder "12.05.2026". Sprich Zeiten natuerlich, z.B. "Dienstag um elf Uhr fuenfzehn". Wenn moreCount > 0, sage nur kurz, dass es noch weitere Zeiten gibt.',
   };
 }
 
@@ -1390,10 +1394,11 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
               service: args.service as string | undefined,
               staffId: staff.staffId,
             });
+        const compactSlots = compactRetellSlots(slotResult.slots);
         result = {
           ok: calendarSlotLookupOk(slotResult.source),
           source: slotResult.source,
-          ...compactRetellSlots(slotResult.slots),
+          ...compactSlots,
           service: args.service ?? null,
           range: args.range ?? null,
           preferredTime: args.preferredTime ?? null,
@@ -1401,9 +1406,10 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           staffId: staff.staffId,
           instruction: calendarSlotInstruction(
             slotResult.source,
-            teamMode
-              ? 'Biete diese Zeiten als Team-Termine an. Der konkrete Mitarbeiter wird beim Buchen automatisch nach Verfuegbarkeit zugewiesen.'
-              : compactRetellSlots(slotResult.slots).instruction,
+            [
+              compactSlots.instruction,
+              teamMode ? 'Biete diese Zeiten als Team-Termine an. Der konkrete Mitarbeiter wird beim Buchen automatisch nach Verfuegbarkeit zugewiesen.' : null,
+            ].filter(Boolean).join(' '),
           ),
         };
       }

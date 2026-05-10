@@ -10,10 +10,13 @@ const REQUEST_TIMEOUT = 30_000;
 // AuthProvider bootstrap + refreshAccessToken below). Fixes F-01 / F-02.
 let _accessToken: string | null = null;
 let _adminToken: string | null = null;
+let _salesToken: string | null = null;
 export function setAccessToken(t: string | null): void { _accessToken = t; }
 export function getAccessToken(): string | null { return _accessToken; }
 export function setAdminToken(t: string | null): void { _adminToken = t; }
 export function getAdminToken(): string | null { return _adminToken; }
+export function setSalesToken(t: string | null): void { _salesToken = t; }
+export function getSalesToken(): string | null { return _salesToken; }
 
 const AUTH_CHANNEL_NAME = 'phonbot-auth';
 const REFRESH_LOCK_TIMEOUT = 5_000;
@@ -379,6 +382,7 @@ export type CallRoutingRule = {
 
 export type VocabularyTerm = {
   term: string;            // "Balayage"
+  pronunciation?: string;  // "Balla-jaa-sch" / IPA / phonetic hint for TTS
   explanation?: string;    // "französische Färbetechnik mit fließenden Übergängen"
   context?: string;        // "Wenn ein Kunde nach modernen Strähnchen fragt — meist Frauen 25+"
 };
@@ -503,9 +507,9 @@ export type AgentConfig = {
   interruptionSensitivity?: number; // 0 – 1
   enableBackchannel?: boolean;
   // Domain-specific terms the AI should pronounce, recognise, and explain
-  // correctly. Each entry can carry a short explanation + a usage context
-  // ("when to use it / for whom"). Older configs may still hold plain
-  // strings — readers fall back to `{term: x}` for those.
+  // correctly. Each entry can carry a pronunciation hint, short explanation,
+  // and usage context ("when to use it / for whom"). Older configs may still
+  // hold plain strings — readers fall back to `{term: x}` for those.
   customVocabulary?: Array<string | VocabularyTerm>;
   enableDtmf?: boolean;
   interruptionMode?: 'allow' | 'hold' | 'block';
@@ -1173,7 +1177,7 @@ export type AgentStats = {
   lastCallAt: number | null;
   /** The LLM model currently configured on the agent (e.g. 'gpt-4o-mini'). */
   modelName?: string | null;
-  /** Retell's baseline latency for that model (matches their UI). */
+  /** Retell-style baseline latency estimate for that model. */
   modelBaselineMs?: number | null;
   /** Real llm.p50 from the last ended call — shown in tooltip. */
   measuredLlmMs?: number | null;
@@ -1617,6 +1621,232 @@ export function adminDeleteLead(id: string) {
   return adminRequest<{ ok: boolean }>(`/admin/leads/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
+}
+
+// --- Sales / Vertrieb ---
+
+function salesAuthHeader(): Record<string, string> {
+  return _salesToken ? { authorization: `Bearer ${_salesToken}` } : {};
+}
+
+async function salesRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: {
+      ...(init?.body ? { 'content-type': 'application/json' } : {}),
+      ...salesAuthHeader(),
+      ...init?.headers,
+    },
+    signal: init?.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new ApiError(res.status, res.statusText, body);
+  }
+  return res.json() as Promise<T>;
+}
+
+export type SalesRep = {
+  id: string;
+  name: string;
+  email: string;
+  active?: boolean;
+  must_change_password?: boolean;
+  mustChangePassword?: boolean;
+  mode: 'auto' | 'semi' | 'self';
+  commission_booker_pct?: number;
+  commission_closer_pct?: number;
+  last_login_at?: string | null;
+  hot_leads?: number;
+  closed_leads?: number;
+};
+
+export type SalesLead = {
+  id: string;
+  created_at: string;
+  company_name: string;
+  contact_name: string | null;
+  contact_role: string | null;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  address: string | null;
+  city: string | null;
+  industry: string;
+  source: string;
+  source_url: string | null;
+  need_score: number;
+  need_reasons: string[];
+  status: 'new' | 'called' | 'hot' | 'converted' | 'do_not_call';
+  last_called_at: string | null;
+  next_callable_at: string | null;
+  last_testlink_sent_at: string | null;
+};
+
+export type SalesHotLead = {
+  id: string;
+  created_at: string;
+  lead_id: string | null;
+  customer_name: string;
+  customer_company: string;
+  customer_email: string | null;
+  customer_phone: string | null;
+  customer_address: string | null;
+  appointment_type: 'phone' | 'video' | 'field';
+  slot_time: string;
+  duration_minutes: number;
+  booked_by_rep_id: string | null;
+  owner_rep_id: string | null;
+  claimed_by_rep_id: string | null;
+  booked_by_name?: string | null;
+  claimed_by_name?: string | null;
+  handoff_mode: 'auto' | 'semi' | 'self';
+  status: 'scheduled' | 'in_progress' | 'contract_pending' | 'failed' | 'closed' | 'cancelled';
+  notes: string | null;
+  close_data: Record<string, unknown>;
+  closed_at: string | null;
+};
+
+export type SalesTester = {
+  id: string;
+  name: string;
+  email: string | null;
+  created_at: string;
+  plan: string;
+  minutes_used: number;
+  minutes_limit: number;
+  remaining_minutes: number;
+  due: boolean;
+};
+
+export function salesLogin(email: string, password: string) {
+  return salesRequest<{ token: string; rep: SalesRep }>('/sales/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export function salesChangePassword(currentPassword: string, newPassword: string) {
+  return salesRequest<{ ok: boolean; token: string }>('/sales/password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
+export function salesDashboard() {
+  return salesRequest<{ stats: { coldOpen: number; hotOpen: number; closed: number; commissionPct: number }; commissions: Array<{ role: string; percent: number; status: string; count: number }> }>('/sales/dashboard');
+}
+
+export function salesGenerateLeads(input: { industry: string; city: string; limit: number }) {
+  return salesRequest<{ ok: boolean; found: number; inserted: number; source: string }>('/sales/leads/generate', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function salesGetLeads(params: { industry?: string; city?: string; minScore?: number; limit?: number; offset?: number }) {
+  const qs = new URLSearchParams();
+  if (params.industry) qs.set('industry', params.industry);
+  if (params.city) qs.set('city', params.city);
+  if (params.minScore) qs.set('minScore', String(params.minScore));
+  if (params.limit) qs.set('limit', String(params.limit));
+  if (params.offset) qs.set('offset', String(params.offset));
+  const q = qs.toString();
+  return salesRequest<{ items: SalesLead[] }>(`/sales/leads${q ? `?${q}` : ''}`);
+}
+
+export function salesGetLead(id: string) {
+  return salesRequest<{ lead: SalesLead }>(`/sales/leads/${encodeURIComponent(id)}`);
+}
+
+export function salesUpdateLead(id: string, input: { email?: string; phone?: string }) {
+  return salesRequest<{ ok: boolean; lead: SalesLead }>(`/sales/leads/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export function salesSendTestLink(id: string, contactBasis: 'explicit_request' | 'existing_business_relation' | 'manual_one_to_one_context') {
+  return salesRequest<{ ok: boolean }>(`/sales/leads/${encodeURIComponent(id)}/send-testlink`, {
+    method: 'POST',
+    body: JSON.stringify({ contactBasis, confirm: true }),
+  });
+}
+
+export function salesMarkCalled(id: string) {
+  return salesRequest<{ ok: boolean }>(`/sales/leads/${encodeURIComponent(id)}/called`, { method: 'POST', body: '{}' });
+}
+
+export function salesDeleteLead(id: string) {
+  return salesRequest<{ ok: boolean }>(`/sales/leads/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export function salesBookLead(id: string, input: { appointmentType: SalesHotLead['appointment_type']; slotTime: string; durationMinutes: number; notes?: string; handoffMode?: SalesHotLead['handoff_mode'] }) {
+  return salesRequest<{ ok: boolean; hotLead: SalesHotLead }>(`/sales/leads/${encodeURIComponent(id)}/book`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function salesGetHotLeads(params?: { from?: string; to?: string; status?: string }) {
+  const qs = new URLSearchParams();
+  if (params?.from) qs.set('from', params.from);
+  if (params?.to) qs.set('to', params.to);
+  if (params?.status) qs.set('status', params.status);
+  const q = qs.toString();
+  return salesRequest<{ items: SalesHotLead[] }>(`/sales/hot-leads${q ? `?${q}` : ''}`);
+}
+
+export function salesClaimHotLead(id: string) {
+  return salesRequest<{ ok: boolean }>(`/sales/hot-leads/${encodeURIComponent(id)}/claim`, { method: 'POST', body: '{}' });
+}
+
+export function salesFailHotLead(id: string) {
+  return salesRequest<{ ok: boolean }>(`/sales/hot-leads/${encodeURIComponent(id)}/fail`, { method: 'POST', body: '{}' });
+}
+
+export function salesCloseHotLead(id: string, input: { planId: string; billingInterval: 'month' | 'year'; legalConfirmedByCustomer: boolean; notes?: string }) {
+  return salesRequest<{ ok: boolean; hotLead: SalesHotLead }>(`/sales/hot-leads/${encodeURIComponent(id)}/close`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function salesGetTesters() {
+  return salesRequest<{ items: SalesTester[] }>('/sales/testers');
+}
+
+export function salesGetMessages() {
+  return salesRequest<{ items: Array<{ id: string; created_at: string; text: string; anonymized: boolean }> }>('/sales/messages');
+}
+
+export function adminGetSalesReps() {
+  return adminRequest<{ items: SalesRep[] }>('/admin/sales/reps');
+}
+
+export function adminCreateSalesRep(input: { name: string; email: string; temporaryPassword: string; mode: SalesRep['mode'] }) {
+  return adminRequest<{ ok: boolean; rep: SalesRep }>('/admin/sales/reps', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function adminUpdateSalesRep(id: string, input: { name?: string; active?: boolean; mode?: SalesRep['mode'] }) {
+  return adminRequest<{ ok: boolean }>(`/admin/sales/reps/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export function adminResetSalesRepPassword(id: string, temporaryPassword: string) {
+  return adminRequest<{ ok: boolean }>(`/admin/sales/reps/${encodeURIComponent(id)}/reset-password`, {
+    method: 'POST',
+    body: JSON.stringify({ temporaryPassword }),
+  });
+}
+
+export function adminGetSalesHotLeads() {
+  return adminRequest<{ items: SalesHotLead[] }>('/admin/sales/hot-leads');
 }
 
 export type AdminMetrics = {

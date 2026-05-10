@@ -8,6 +8,7 @@ import { sendPasswordResetEmail, sendVerificationEmail, sendWelcomeEmail } from 
 import { stripe, PLANS, type PlanId } from './billing.js';
 import { insertLegalAcceptance } from './legal.js';
 import { isPlausiblePhone, toE164 } from '@vas/shared';
+import { attributeSalesConversionForEmail } from './sales.js';
 
 // Per-user brute-force counter. The route-level rate-limit is per-IP (5–10/min);
 // a botnet of 100 IPs against one email easily slips through. We add a Redis-
@@ -340,6 +341,7 @@ async function materializePendingRegistration(opts: {
 
     await client.query('DELETE FROM pending_registrations WHERE id = $1', [p.id]);
     await client.query('COMMIT');
+    attributeSalesConversionForEmail(p.email, orgId, opts.stripeCustomerId).catch(() => {});
     return { userId: user.id, orgId, email: p.email, role: user.role };
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});

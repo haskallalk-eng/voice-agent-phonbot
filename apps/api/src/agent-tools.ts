@@ -28,52 +28,58 @@ function sanitizeToolName(name: string): string {
 }
 export type KnownToolName = z.infer<typeof KnownToolNameSchema>;
 
+const OptionalNonEmptyString = z.preprocess((value) => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : undefined;
+}, z.string().min(1).optional());
+
 const FindSlotsArgsSchema = z.object({
-  service: z.string().min(1).optional(),
-  range: z.string().min(1).optional(),
-  preferredTime: z.string().min(1).optional(),
-  preferredStylist: z.string().min(1).optional(),
+  service: OptionalNonEmptyString,
+  range: OptionalNonEmptyString,
+  preferredTime: OptionalNonEmptyString,
+  preferredStylist: OptionalNonEmptyString,
 });
 
 const BookArgsSchema = z.object({
-  customerName: z.string().min(1).optional(),
-  customerPhone: z.string().min(1).optional(),
+  customerName: OptionalNonEmptyString,
+  customerPhone: OptionalNonEmptyString,
   preferredTime: z.string().min(1),
   service: z.string().min(1),
-  preferredStylist: z.string().min(1).optional(),
+  preferredStylist: OptionalNonEmptyString,
   confirmed: z.boolean().optional().default(false),
-  notes: z.string().min(1).optional(),
+  notes: OptionalNonEmptyString,
 });
 
 const FindBookingsArgsSchema = z.object({
-  bookingId: z.string().min(1).optional(),
-  customerName: z.string().min(1).optional(),
-  customerPhone: z.string().min(1).optional(),
-  currentTime: z.string().min(1).optional(),
-  service: z.string().min(1).optional(),
-  preferredStylist: z.string().min(1).optional(),
+  bookingId: OptionalNonEmptyString,
+  customerName: OptionalNonEmptyString,
+  customerPhone: OptionalNonEmptyString,
+  currentTime: OptionalNonEmptyString,
+  service: OptionalNonEmptyString,
+  preferredStylist: OptionalNonEmptyString,
 });
 
 const CancelBookingArgsSchema = FindBookingsArgsSchema.extend({
   confirmed: z.boolean().optional().default(false),
-  reason: z.string().min(1).optional(),
+  reason: OptionalNonEmptyString,
 });
 
 const RescheduleBookingArgsSchema = FindBookingsArgsSchema.extend({
   newTime: z.string().min(1),
-  newService: z.string().min(1).optional(),
-  newPreferredStylist: z.string().min(1).optional(),
+  newService: OptionalNonEmptyString,
+  newPreferredStylist: OptionalNonEmptyString,
   confirmed: z.boolean().optional().default(false),
-  reason: z.string().min(1).optional(),
+  reason: OptionalNonEmptyString,
 });
 
 const TicketCreateArgsSchema = z.object({
-  customerName: z.string().min(1).optional(),
+  customerName: OptionalNonEmptyString,
   customerPhone: z.string().min(1),
-  preferredTime: z.string().min(1).optional(),
-  service: z.string().min(1).optional(),
-  notes: z.string().min(1).optional(),
-  reason: z.string().min(1).optional(),
+  preferredTime: OptionalNonEmptyString,
+  service: OptionalNonEmptyString,
+  notes: OptionalNonEmptyString,
+  reason: OptionalNonEmptyString,
 });
 
 type AgentConfig = Awaited<ReturnType<typeof readConfig>>;

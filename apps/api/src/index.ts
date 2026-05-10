@@ -39,6 +39,7 @@ import { registerLearningApi } from './learning-api.js';
 import { registerTrainingExport } from './training-export.js';
 import { registerContact } from './contact.js';
 import { registerAdmin } from './admin.js';
+import { registerSales, migrateSales } from './sales.js';
 import { setBgLogger } from './logger.js';
 
 initSentry();
@@ -221,9 +222,10 @@ await registerLearningApi(app);
 await registerTrainingExport(app);
 await registerContact(app);
 await registerAdmin(app);
+await registerSales(app);
 
 // Additional migrations
-for (const fn of [migratePhone, migrateCalendar, migrateOutbound]) {
+for (const fn of [migratePhone, migrateCalendar, migrateOutbound, migrateSales]) {
   try { await fn(); } catch (e) { app.log.error({ err: (e as Error).message }, `Migration failed: ${fn.name}`); }
 }
 
