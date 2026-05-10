@@ -100,7 +100,9 @@ www.{$DOMAIN:phonbot.de} {
 
     # Google Search Console should always see XML here. The slash variant is a
     # common manual-submission mistake and otherwise returns an HTML 404.
-    redir /sitemap.xml/ /sitemap.xml 301
+    handle /sitemap.xml/ {
+        redir * /sitemap.xml 301
+    }
     handle /sitemap.xml {
         header >Content-Type "application/xml; charset=utf-8"
         reverse_proxy web:80
