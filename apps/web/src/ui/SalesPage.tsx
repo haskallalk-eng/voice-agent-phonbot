@@ -32,6 +32,8 @@ type Tab = 'cold' | 'hot' | 'tester' | 'messages';
 type DashboardStats = { coldOpen: number; hotOpen: number; closed: number; commissionPct: number };
 
 const DEFAULT_PASSWORD = 'phonbotvertrieb123';
+const LEAD_PAGE_SIZE = 30;
+const RESEARCH_BATCH_SIZE = 80;
 
 function glassClass(extra = '') {
   return `rounded-3xl border border-white/10 bg-white/[0.045] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-2xl ${extra}`;
@@ -314,13 +316,29 @@ export function SalesPage() {
   const [minScore, setMinScore] = useState(3);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [researching, setResearching] = useState(false);
+  const [autoResearch, setAutoResearch] = useState(true);
+  const [researchStatus, setResearchStatus] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [selectedLead, setSelectedLead] = useState<SalesLead | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const loadingLeadsRef = useRef(false);
+  const generatingLeadsRef = useRef(false);
   const offsetRef = useRef(0);
+  const researchOffsetRef = useRef(0);
+  const emptyResearchRunsRef = useRef(0);
+  const researchExhaustedRef = useRef(false);
 
   const mustChangePassword = Boolean(rep?.mustChangePassword ?? rep?.must_change_password);
+
+  function resetLeadCursor() {
+    offsetRef.current = 0;
+    researchOffsetRef.current = 0;
+    emptyResearchRunsRef.current = 0;
+    researchExhaustedRef.current = false;
+    setHasMore(true);
+    setResearchStatus(null);
+  }
 
   const expireSalesSession = useCallback(() => {
     clearSalesSession();
@@ -332,9 +350,15 @@ export function SalesPage() {
     setMessages([]);
     setSelectedLead(null);
     offsetRef.current = 0;
+    researchOffsetRef.current = 0;
+    emptyResearchRunsRef.current = 0;
+    researchExhaustedRef.current = false;
     setHasMore(true);
     setLoading(false);
+    setResearching(false);
     loadingLeadsRef.current = false;
+    generatingLeadsRef.current = false;
+    setResearchStatus(null);
     setToast(null);
     setSessionNotice('Sitzung abgelaufen. Bitte melde dich neu an.');
   }, []);
@@ -353,22 +377,24 @@ export function SalesPage() {
   }, [expireSalesSession, rep]);
 
   const loadLeads = useCallback(async (reset = false) => {
-    if (!rep || loadingLeadsRef.current) return;
+    if (!rep || loadingLeadsRef.current) return null;
     loadingLeadsRef.current = true;
     setLoading(true);
     try {
       const nextOffset = reset ? 0 : offsetRef.current;
-      const res = await salesGetLeads({ industry, city, minScore, limit: 30, offset: nextOffset });
+      const res = await salesGetLeads({ industry, city, minScore, limit: LEAD_PAGE_SIZE, offset: nextOffset });
       setLeads(prev => reset ? res.items : [...prev, ...res.items]);
       const updatedOffset = nextOffset + res.items.length;
       offsetRef.current = updatedOffset;
-      setHasMore(res.items.length === 30);
+      setHasMore(res.items.length === LEAD_PAGE_SIZE);
+      return res.items.length;
     } catch (err) {
       if (isUnauthorizedError(err)) {
         expireSalesSession();
-        return;
+        return null;
       }
       setToast(parseError(err));
+      return null;
     } finally {
       loadingLeadsRef.current = false;
       setLoading(false);
@@ -385,10 +411,60 @@ export function SalesPage() {
     });
   }, [expireSalesSession]);
 
+  const researchMoreLeads = useCallback(async (manual = false) => {
+    if (!rep || generatingLeadsRef.current) return null;
+    if (!manual && (!autoResearch || researchExhaustedRef.current)) return null;
+    generatingLeadsRef.current = true;
+    setResearching(true);
+    setResearchStatus(manual ? 'Suche weitere Betriebe...' : 'Scrolle erkannt: neue Betriebe werden automatisch recherchiert...');
+    try {
+      const currentOffset = researchOffsetRef.current;
+      const r = await salesGenerateLeads({ industry, city, limit: RESEARCH_BATCH_SIZE, offset: currentOffset });
+      researchOffsetRef.current = currentOffset + RESEARCH_BATCH_SIZE;
+
+      if (r.found === 0) {
+        researchExhaustedRef.current = true;
+        setHasMore(false);
+        setResearchStatus('Fuer diese Suche liefert OpenStreetMap gerade keine weiteren Betriebe mit Telefonnummer.');
+        return 0;
+      }
+
+      if (r.inserted === 0) {
+        emptyResearchRunsRef.current += 1;
+        if (emptyResearchRunsRef.current >= 2) {
+          researchExhaustedRef.current = true;
+          setResearchStatus('Keine neuen eindeutigen Betriebe mehr gefunden. Andere Stadt oder Branche bringt mehr.');
+        } else {
+          setResearchStatus('Diese Runde war schon bekannt. Beim Weiter-Scrollen pruefe ich die naechsten Treffer.');
+        }
+      } else {
+        emptyResearchRunsRef.current = 0;
+        setResearchStatus(`${r.inserted} neue Betriebe aus ${r.source} gespeichert.`);
+      }
+
+      offsetRef.current = 0;
+      return await loadLeads(true);
+    } catch (err) {
+      if (isUnauthorizedError(err)) {
+        expireSalesSession();
+        return null;
+      }
+      setToast(parseError(err));
+      setResearchStatus('Recherche konnte gerade nicht nachlegen. Der manuelle Button versucht es erneut.');
+      return null;
+    } finally {
+      generatingLeadsRef.current = false;
+      setResearching(false);
+    }
+  }, [autoResearch, city, expireSalesSession, industry, loadLeads, rep]);
+
   useEffect(() => {
     if (!rep || mustChangePassword) return;
     refreshDashboard();
-    void loadLeads(true);
+    void (async () => {
+      const loaded = await loadLeads(true);
+      if (loaded === 0 && autoResearch) await researchMoreLeads(false);
+    })();
     refreshHot();
     salesGetTesters().then((r) => setTesters(r.items)).catch((err) => {
       if (isUnauthorizedError(err)) expireSalesSession();
@@ -396,18 +472,20 @@ export function SalesPage() {
     salesGetMessages().then((r) => setMessages(r.items)).catch((err) => {
       if (isUnauthorizedError(err)) expireSalesSession();
     });
-  }, [expireSalesSession, loadLeads, mustChangePassword, refreshDashboard, refreshHot, rep]);
+  }, [autoResearch, expireSalesSession, loadLeads, mustChangePassword, refreshDashboard, refreshHot, rep, researchMoreLeads]);
 
   useEffect(() => {
     if (!rep || mustChangePassword || tab !== 'cold') return;
     const el = sentinelRef.current;
     if (!el) return;
     const observer = new IntersectionObserver((entries) => {
-      if (entries[0]?.isIntersecting && hasMore && !loading) void loadLeads(false);
+      if (!entries[0]?.isIntersecting || loading || researching) return;
+      if (hasMore) void loadLeads(false);
+      else void researchMoreLeads(false);
     }, { rootMargin: '500px' });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [hasMore, loadLeads, loading, mustChangePassword, rep, tab]);
+  }, [hasMore, loadLeads, loading, mustChangePassword, rep, researchMoreLeads, researching, tab]);
 
   const hotByType = useMemo(() => ({
     phone: hotLeads.filter(h => h.appointment_type === 'phone'),
@@ -472,32 +550,38 @@ export function SalesPage() {
               <section>
                 <div className={glassClass('mb-4 p-4')}>
                   <div className="grid gap-3 md:grid-cols-[1fr_1fr_160px_auto]">
-                    <select value={industry} onChange={(e) => { setIndustry(e.target.value); offsetRef.current = 0; }} className="rounded-2xl border border-white/10 bg-[#101018] px-4 py-3 text-sm">
+                    <select value={industry} onChange={(e) => { setIndustry(e.target.value); resetLeadCursor(); }} className="rounded-2xl border border-white/10 bg-[#101018] px-4 py-3 text-sm">
                       <option value="friseur">Friseure</option>
                       <option value="kosmetik">Kosmetik</option>
                       <option value="restaurant">Restaurants</option>
                     </select>
-                    <input value={city} onChange={(e) => { setCity(e.target.value); offsetRef.current = 0; }} placeholder="Stadt" className="rounded-2xl border border-white/10 bg-[#101018] px-4 py-3 text-sm" />
-                    <select value={minScore} onChange={(e) => { setMinScore(Number(e.target.value)); offsetRef.current = 0; }} className="rounded-2xl border border-white/10 bg-[#101018] px-4 py-3 text-sm">
+                    <input value={city} onChange={(e) => { setCity(e.target.value); resetLeadCursor(); }} placeholder="Stadt" className="rounded-2xl border border-white/10 bg-[#101018] px-4 py-3 text-sm" />
+                    <select value={minScore} onChange={(e) => { setMinScore(Number(e.target.value)); resetLeadCursor(); }} className="rounded-2xl border border-white/10 bg-[#101018] px-4 py-3 text-sm">
                       {[1, 2, 3, 4, 5].map(v => <option key={v} value={v}>ab Bedarf {v}</option>)}
                     </select>
-                    <button onClick={async () => {
-                      setLoading(true);
-                      try {
-                        const r = await salesGenerateLeads({ industry, city, limit: 40 });
-                        setToast(`${r.inserted} neue Leads aus ${r.source} gespeichert.`);
-                        offsetRef.current = 0;
-                        await loadLeads(true);
-                      } catch (err) {
-                        setToast(parseError(err));
-                      } finally {
-                        setLoading(false);
-                      }
-                    }} className="rounded-2xl px-4 py-3 text-sm font-bold" style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)' }}>
-                      Liste generieren
+                    <button disabled={loading || researching} onClick={() => void researchMoreLeads(true)} className="rounded-2xl px-4 py-3 text-sm font-bold disabled:opacity-50" style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)' }}>
+                      {researching ? 'Recherchiere...' : 'Nachlegen'}
                     </button>
                   </div>
-                  <p className="mt-3 text-xs leading-relaxed text-white/40">Quelle: OpenStreetMap/Overpass. E-Mail-Versand ist bewusst mit Kontaktgrund-Gate geschützt, damit keine Massenmail-Falle entsteht.</p>
+                  <div className="mt-3 flex flex-col gap-3 text-xs leading-relaxed text-white/40 sm:flex-row sm:items-center sm:justify-between">
+                    <p>Quelle: OpenStreetMap/Overpass. Beim Scrollen werden automatisch weitere Betriebe nachgelegt; der Button ist nur ein schneller manueller Push.</p>
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-white/55">
+                      <input
+                        type="checkbox"
+                        checked={autoResearch}
+                        onChange={(e) => {
+                          setAutoResearch(e.target.checked);
+                          if (e.target.checked) {
+                            researchExhaustedRef.current = false;
+                            setResearchStatus(null);
+                          }
+                        }}
+                        className="h-4 w-4 accent-orange-500"
+                      />
+                      Auto-Recherche beim Scrollen
+                    </label>
+                  </div>
+                  {researchStatus && <p className="mt-3 rounded-2xl border border-cyan-400/15 bg-cyan-400/10 px-4 py-3 text-xs text-cyan-100/75">{researchStatus}</p>}
                 </div>
 
                 <div className="grid gap-3">
@@ -519,7 +603,8 @@ export function SalesPage() {
                     </button>
                   ))}
                   <div ref={sentinelRef} className="h-10" />
-                  {loading && <p className="text-center text-sm text-white/35">Lade nach...</p>}
+                  {(loading || researching) && <p className="text-center text-sm text-white/35">{researching ? 'Recherchiere neue Betriebe...' : 'Lade nach...'}</p>}
+                  {!loading && !researching && leads.length === 0 && <p className="py-8 text-center text-sm text-white/25">Noch keine passenden Leads. Auto-Recherche startet, sobald diese Ansicht aktiv ist.</p>}
                 </div>
               </section>
             )}

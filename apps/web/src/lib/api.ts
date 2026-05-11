@@ -1761,8 +1761,8 @@ export function salesDashboard() {
   return salesRequest<{ stats: { coldOpen: number; hotOpen: number; closed: number; commissionPct: number }; commissions: Array<{ role: string; percent: number; status: string; count: number }> }>('/sales/dashboard');
 }
 
-export function salesGenerateLeads(input: { industry: string; city: string; limit: number }) {
-  return salesRequest<{ ok: boolean; found: number; inserted: number; source: string }>('/sales/leads/generate', {
+export function salesGenerateLeads(input: { industry: string; city: string; limit: number; offset?: number }) {
+  return salesRequest<{ ok: boolean; found: number; inserted: number; source: string; offset?: number; nextOffset?: number }>('/sales/leads/generate', {
     method: 'POST',
     body: JSON.stringify(input),
   });

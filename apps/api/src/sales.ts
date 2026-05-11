@@ -222,11 +222,11 @@ type OsmElement = {
   tags?: Record<string, string>;
 };
 
-const INDUSTRY_OSM: Record<string, { label: string; filter: string }> = {
-  friseur: { label: 'Friseure', filter: '["shop"="hairdresser"]' },
-  barber: { label: 'Barber', filter: '["shop"="hairdresser"]' },
-  kosmetik: { label: 'Kosmetikstudios', filter: '["shop"="beauty"]' },
-  restaurant: { label: 'Restaurants', filter: '["amenity"="restaurant"]' },
+const INDUSTRY_OSM: Record<string, { label: string; filters: string[] }> = {
+  friseur: { label: 'Friseure', filters: ['["shop"="hairdresser"]'] },
+  barber: { label: 'Barber', filters: ['["shop"="hairdresser"]'] },
+  kosmetik: { label: 'Kosmetikstudios', filters: ['["shop"="beauty"]', '["shop"="cosmetics"]', '["craft"="beautician"]'] },
+  restaurant: { label: 'Restaurants', filters: ['["amenity"="restaurant"]', '["amenity"="cafe"]', '["amenity"="fast_food"]'] },
 };
 
 function leadScore(input: { phone: string | null; email: string | null; website: string | null; tags: Record<string, string> }): { score: number; reasons: string[] } {
@@ -260,19 +260,24 @@ function osmAddress(tags: Record<string, string>): string | null {
   return parts.length ? parts.join(', ') : null;
 }
 
-async function fetchOsmLeads(industry: string, city: string, limit: number) {
+async function fetchOsmLeads(industry: string, city: string, limit: number, offset = 0) {
   const spec = INDUSTRY_OSM[industry] ?? INDUSTRY_OSM.friseur!;
   const safeCity = city.replace(/["\\]/g, '').slice(0, 80);
-  const capped = Math.min(Math.max(limit * 2, 20), 100);
+  const cappedLimit = Math.min(Math.max(limit, 5), 80);
+  const safeOffset = Math.min(Math.max(offset, 0), 1000);
+  const fetchLimit = Math.min(Math.max(safeOffset + cappedLimit * 4, 80), 500);
+  const branches = spec.filters.flatMap((filter) => [
+    `      node${filter}(area.searchArea);`,
+    `      way${filter}(area.searchArea);`,
+    `      relation${filter}(area.searchArea);`,
+  ]).join('\n');
   const query = `
-    [out:json][timeout:18];
+    [out:json][timeout:24];
     area["name"="${safeCity}"]["boundary"="administrative"]->.searchArea;
     (
-      node${spec.filter}(area.searchArea);
-      way${spec.filter}(area.searchArea);
-      relation${spec.filter}(area.searchArea);
+${branches}
     );
-    out center ${capped};
+    out center ${fetchLimit};
   `;
   const body = new URLSearchParams({ data: query });
   const res = await fetch('https://overpass-api.de/api/interpreter', {
@@ -283,7 +288,7 @@ async function fetchOsmLeads(industry: string, city: string, limit: number) {
   });
   if (!res.ok) throw new Error(`Overpass ${res.status}`);
   const json = await res.json() as { elements?: OsmElement[] };
-  return (json.elements ?? []).map((el) => {
+  const leads = (json.elements ?? []).map((el) => {
     const tags = el.tags ?? {};
     const company = tags.name?.trim();
     if (!company) return null;
@@ -311,6 +316,7 @@ async function fetchOsmLeads(industry: string, city: string, limit: number) {
       needReasons: reasons,
     };
   }).filter((v): v is NonNullable<typeof v> => Boolean(v));
+  return leads.slice(safeOffset, safeOffset + cappedLimit);
 }
 
 async function insertCommission(hotLeadId: string, repId: string | null | undefined, role: 'booker' | 'closer', percent: number, extras: { orgId?: string | null; stripeCustomerId?: string | null; stripeSubscriptionId?: string | null } = {}) {
@@ -424,10 +430,11 @@ export async function registerSales(app: FastifyInstance) {
       industry: z.string().min(2).max(40).default('friseur'),
       city: z.string().min(2).max(80).default('Berlin'),
       limit: z.coerce.number().int().min(5).max(80).default(30),
+      offset: z.coerce.number().int().min(0).max(1000).default(0),
     }).safeParse(req.body);
     if (!parsed.success) return reply.status(400).send({ error: 'Invalid input' });
     await pool.query(`DELETE FROM sales_leads WHERE status IN ('new','called') AND NULLIF(btrim(phone), '') IS NULL`);
-    const found = await fetchOsmLeads(parsed.data.industry, parsed.data.city, parsed.data.limit);
+    const found = await fetchOsmLeads(parsed.data.industry, parsed.data.city, parsed.data.limit, parsed.data.offset);
     let inserted = 0;
     for (const lead of found) {
       const markers = leadMarkers({ email: lead.email, phone: lead.phone, website: lead.website, company_name: lead.companyName });
@@ -449,7 +456,7 @@ export async function registerSales(app: FastifyInstance) {
       );
       if (res.rowCount) inserted += 1;
     }
-    return { ok: true, found: found.length, inserted, source: 'OpenStreetMap / Overpass' };
+    return { ok: true, found: found.length, inserted, source: 'OpenStreetMap / Overpass', offset: parsed.data.offset, nextOffset: parsed.data.offset + parsed.data.limit };
   });
 
   app.get('/sales/leads', { ...salesAuth }, async (req, reply) => {
