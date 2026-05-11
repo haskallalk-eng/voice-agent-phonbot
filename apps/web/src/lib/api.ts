@@ -18,6 +18,27 @@ export function getAdminToken(): string | null { return _adminToken; }
 export function setSalesToken(t: string | null): void { _salesToken = t; }
 export function getSalesToken(): string | null { return _salesToken; }
 
+export const SALES_AUTH_EXPIRED_EVENT = 'phonbot-sales-auth-expired';
+
+export function clearSalesSession(): void {
+  _salesToken = null;
+  try {
+    sessionStorage.removeItem('phonbot_sales_token');
+    sessionStorage.removeItem('phonbot_sales_rep');
+  } catch {
+    // Storage can be unavailable in strict browser contexts.
+  }
+}
+
+function notifySalesAuthExpired(): void {
+  clearSalesSession();
+  try {
+    window.dispatchEvent(new CustomEvent(SALES_AUTH_EXPIRED_EVENT));
+  } catch {
+    // Non-browser test/runtime context.
+  }
+}
+
 const AUTH_CHANNEL_NAME = 'phonbot-auth';
 const REFRESH_LOCK_TIMEOUT = 5_000;
 const REFRESH_CLAIM_SETTLE = 50;
@@ -1641,6 +1662,9 @@ async function salesRequest<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.text();
+    if (res.status === 401 && path !== '/sales/login' && path !== '/sales/password') {
+      notifySalesAuthExpired();
+    }
     throw new ApiError(res.status, res.statusText, body);
   }
   return res.json() as Promise<T>;

@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PhonbotBrand } from './FoxLogo.js';
 import { IconCalendar, IconCalls, IconInsights, IconPhone, IconStar, IconTickets } from './PhonbotIcons.js';
 import {
+  ApiError,
+  SALES_AUTH_EXPIRED_EVENT,
+  clearSalesSession,
   setSalesToken,
   salesBookLead,
   salesChangePassword,
@@ -43,6 +46,10 @@ function parseError(err: unknown): string {
   return 'Aktion fehlgeschlagen';
 }
 
+function isUnauthorizedError(err: unknown): boolean {
+  return err instanceof ApiError ? err.isUnauthorized : Boolean(err && typeof err === 'object' && (err as { status?: unknown }).status === 401);
+}
+
 function ScorePill({ score }: { score: number }) {
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-orange-400/25 bg-orange-500/10 px-2.5 py-1 text-xs font-bold text-orange-100">
@@ -52,7 +59,7 @@ function ScorePill({ score }: { score: number }) {
   );
 }
 
-function LoginOverlay({ onLogin }: { onLogin: (rep: SalesRep) => void }) {
+function LoginOverlay({ onLogin, notice }: { onLogin: (rep: SalesRep) => void; notice?: string | null }) {
   const [email, setEmail] = useState('info@mindrails.de');
   const [password, setPassword] = useState(DEFAULT_PASSWORD);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +89,7 @@ function LoginOverlay({ onLogin }: { onLogin: (rep: SalesRep) => void }) {
           <PhonbotBrand size="md" />
           <p className="mt-3 text-sm text-white/45">Vertriebler-Login</p>
         </div>
+        {notice && <p className="mb-4 rounded-2xl border border-orange-500/20 bg-orange-500/10 px-4 py-3 text-sm text-orange-100">{notice}</p>}
         <div className="space-y-3">
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.16em] text-white/35">E-Mail</span>
@@ -282,9 +290,19 @@ export function SalesPage() {
   const [rep, setRep] = useState<SalesRep | null>(() => {
     const token = sessionStorage.getItem('phonbot_sales_token');
     const raw = sessionStorage.getItem('phonbot_sales_rep');
-    if (token) setSalesToken(token);
-    return raw ? JSON.parse(raw) as SalesRep : null;
+    if (!token || !raw) {
+      clearSalesSession();
+      return null;
+    }
+    try {
+      setSalesToken(token);
+      return JSON.parse(raw) as SalesRep;
+    } catch {
+      clearSalesSession();
+      return null;
+    }
   });
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('cold');
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [leads, setLeads] = useState<SalesLead[]>([]);
@@ -294,48 +312,91 @@ export function SalesPage() {
   const [industry, setIndustry] = useState('friseur');
   const [city, setCity] = useState('Berlin');
   const [minScore, setMinScore] = useState(3);
-  const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [selectedLead, setSelectedLead] = useState<SalesLead | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadingLeadsRef = useRef(false);
+  const offsetRef = useRef(0);
 
   const mustChangePassword = Boolean(rep?.mustChangePassword ?? rep?.must_change_password);
 
+  const expireSalesSession = useCallback(() => {
+    clearSalesSession();
+    setRep(null);
+    setStats(null);
+    setLeads([]);
+    setHotLeads([]);
+    setTesters([]);
+    setMessages([]);
+    setSelectedLead(null);
+    offsetRef.current = 0;
+    setHasMore(true);
+    setLoading(false);
+    loadingLeadsRef.current = false;
+    setToast(null);
+    setSessionNotice('Sitzung abgelaufen. Bitte melde dich neu an.');
+  }, []);
+
+  useEffect(() => {
+    const onExpired = () => expireSalesSession();
+    window.addEventListener(SALES_AUTH_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(SALES_AUTH_EXPIRED_EVENT, onExpired);
+  }, [expireSalesSession]);
+
   const refreshDashboard = useCallback(() => {
     if (!rep) return;
-    salesDashboard().then((r) => setStats(r.stats)).catch(() => {});
-  }, [rep]);
+    salesDashboard().then((r) => setStats(r.stats)).catch((err) => {
+      if (isUnauthorizedError(err)) expireSalesSession();
+    });
+  }, [expireSalesSession, rep]);
 
   const loadLeads = useCallback(async (reset = false) => {
-    if (!rep || loading) return;
+    if (!rep || loadingLeadsRef.current) return;
+    loadingLeadsRef.current = true;
     setLoading(true);
     try {
-      const nextOffset = reset ? 0 : offset;
+      const nextOffset = reset ? 0 : offsetRef.current;
       const res = await salesGetLeads({ industry, city, minScore, limit: 30, offset: nextOffset });
       setLeads(prev => reset ? res.items : [...prev, ...res.items]);
-      setOffset(nextOffset + res.items.length);
+      const updatedOffset = nextOffset + res.items.length;
+      offsetRef.current = updatedOffset;
       setHasMore(res.items.length === 30);
     } catch (err) {
+      if (isUnauthorizedError(err)) {
+        expireSalesSession();
+        return;
+      }
       setToast(parseError(err));
     } finally {
+      loadingLeadsRef.current = false;
       setLoading(false);
     }
-  }, [city, industry, loading, minScore, offset, rep]);
+  }, [city, expireSalesSession, industry, minScore, rep]);
 
   const refreshHot = useCallback(() => {
-    salesGetHotLeads({}).then((r) => setHotLeads(r.items)).catch((err) => setToast(parseError(err)));
-  }, []);
+    salesGetHotLeads({}).then((r) => setHotLeads(r.items)).catch((err) => {
+      if (isUnauthorizedError(err)) {
+        expireSalesSession();
+        return;
+      }
+      setToast(parseError(err));
+    });
+  }, [expireSalesSession]);
 
   useEffect(() => {
     if (!rep || mustChangePassword) return;
     refreshDashboard();
     void loadLeads(true);
     refreshHot();
-    salesGetTesters().then((r) => setTesters(r.items)).catch(() => {});
-    salesGetMessages().then((r) => setMessages(r.items)).catch(() => {});
-  }, [rep, mustChangePassword]);
+    salesGetTesters().then((r) => setTesters(r.items)).catch((err) => {
+      if (isUnauthorizedError(err)) expireSalesSession();
+    });
+    salesGetMessages().then((r) => setMessages(r.items)).catch((err) => {
+      if (isUnauthorizedError(err)) expireSalesSession();
+    });
+  }, [expireSalesSession, loadLeads, mustChangePassword, refreshDashboard, refreshHot, rep]);
 
   useEffect(() => {
     if (!rep || mustChangePassword || tab !== 'cold') return;
@@ -354,7 +415,7 @@ export function SalesPage() {
     field: hotLeads.filter(h => h.appointment_type === 'field'),
   }), [hotLeads]);
 
-  if (!rep) return <LoginOverlay onLogin={setRep} />;
+  if (!rep) return <LoginOverlay notice={sessionNotice} onLogin={(nextRep) => { setSessionNotice(null); setRep(nextRep); }} />;
 
   return (
     <div className="min-h-screen bg-[#0A0A0F] px-4 py-5 text-white sm:px-6">
@@ -411,13 +472,13 @@ export function SalesPage() {
               <section>
                 <div className={glassClass('mb-4 p-4')}>
                   <div className="grid gap-3 md:grid-cols-[1fr_1fr_160px_auto]">
-                    <select value={industry} onChange={(e) => { setIndustry(e.target.value); setOffset(0); }} className="rounded-2xl border border-white/10 bg-[#101018] px-4 py-3 text-sm">
+                    <select value={industry} onChange={(e) => { setIndustry(e.target.value); offsetRef.current = 0; }} className="rounded-2xl border border-white/10 bg-[#101018] px-4 py-3 text-sm">
                       <option value="friseur">Friseure</option>
                       <option value="kosmetik">Kosmetik</option>
                       <option value="restaurant">Restaurants</option>
                     </select>
-                    <input value={city} onChange={(e) => { setCity(e.target.value); setOffset(0); }} placeholder="Stadt" className="rounded-2xl border border-white/10 bg-[#101018] px-4 py-3 text-sm" />
-                    <select value={minScore} onChange={(e) => { setMinScore(Number(e.target.value)); setOffset(0); }} className="rounded-2xl border border-white/10 bg-[#101018] px-4 py-3 text-sm">
+                    <input value={city} onChange={(e) => { setCity(e.target.value); offsetRef.current = 0; }} placeholder="Stadt" className="rounded-2xl border border-white/10 bg-[#101018] px-4 py-3 text-sm" />
+                    <select value={minScore} onChange={(e) => { setMinScore(Number(e.target.value)); offsetRef.current = 0; }} className="rounded-2xl border border-white/10 bg-[#101018] px-4 py-3 text-sm">
                       {[1, 2, 3, 4, 5].map(v => <option key={v} value={v}>ab Bedarf {v}</option>)}
                     </select>
                     <button onClick={async () => {
@@ -425,7 +486,7 @@ export function SalesPage() {
                       try {
                         const r = await salesGenerateLeads({ industry, city, limit: 40 });
                         setToast(`${r.inserted} neue Leads aus ${r.source} gespeichert.`);
-                        setOffset(0);
+                        offsetRef.current = 0;
                         await loadLeads(true);
                       } catch (err) {
                         setToast(parseError(err));
@@ -548,7 +609,7 @@ export function SalesPage() {
           onClose={() => setSelectedLead(null)}
           onChanged={() => {
             setSelectedLead(null);
-            setOffset(0);
+            offsetRef.current = 0;
             void loadLeads(true);
             refreshDashboard();
             refreshHot();
