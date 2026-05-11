@@ -10,6 +10,95 @@ export const BLOG_INDEX = {
 
 export const BLOG_POSTS = [
   {
+    slug: 'rufweiterleitung-einrichten-typische-fehler',
+    title: 'Rufweiterleitung einrichten: 9 typische Fehler vor dem KI-Testanruf',
+    description: 'Welche Fehler kleine Unternehmen bei Rufweiterleitung, KI-Telefonnummer, Testanruf und Fallback vermeiden sollten, bevor Phonbot live geht.',
+    headline: 'Rufweiterleitung einrichten: die typischen Fehler, die vor dem ersten echten Anruf auffallen sollten.',
+    datePublished: '2026-05-11',
+    dateModified: TODAY,
+    category: 'Telefonie',
+    readingMinutes: 7,
+    primaryKeyword: 'Rufweiterleitung einrichten',
+    secondaryKeywords: ['Rufweiterleitung KI Telefon', 'KI Telefonnummer Testanruf', 'Telefonweiterleitung Fehler'],
+    intent: 'Praktische Setup-Intention fuer Betriebe, die ihre bestehende Nummer behalten und Anrufe sicher an einen KI-Telefonassistenten weiterleiten wollen.',
+    reviewedBy: 'Phonbot SEO/Superhirn',
+    summary: 'Eine Rufweiterleitung ist schnell aktiviert, aber nicht automatisch sauber. Vor dem Livegang muessen Zielnummer, Weiterleitungsart, Testanruf, Ansage, Kalender, Tickets, Datenschutz und Rueckfallweg einmal aus Kundensicht geprueft werden.',
+    sections: [
+      {
+        heading: 'Warum Rufweiterleitung oft an Kleinigkeiten scheitert',
+        paragraphs: [
+          'Viele Betriebe wollen ihre bestehende Telefonnummer behalten. Das ist sinnvoll, weil diese Nummer bereits auf Google, Website, Fahrzeug, Rechnung, Visitenkarte und in Kundendaten steht. Die KI bekommt deshalb meist eine eigene Zielnummer, waehrend die bekannte Nummer per Rufweiterleitung dorthin uebergibt.',
+          'Der technische Schritt wirkt einfach: Nummer eintragen, Weiterleitung aktivieren, fertig. In der Praxis entstehen Probleme aber selten beim Eintragen der Nummer selbst. Sie entstehen, wenn niemand testet, wann die Weiterleitung greift, welche Nummer beim Agenten ankommt, ob der Agent zur Branche passt und ob Kalender oder Ticket wirklich funktionieren.',
+        ],
+      },
+      {
+        heading: 'Fehler 1: sofort weiterleiten, obwohl das Team noch ans Telefon soll',
+        paragraphs: [
+          'Eine sofortige Weiterleitung ist nur richtig, wenn wirklich jeder Anruf zuerst beim KI-Agenten landen soll. Viele Betriebe wollen aber nur einen Auffangmodus: bei Besetzt, nach einigen Sekunden, ausserhalb der Oeffnungszeiten oder wenn niemand abnimmt.',
+          'Vor dem Aktivieren sollte deshalb klar sein, welcher Modus gewuenscht ist. Sonst beantwortet die KI ploetzlich Anrufe, die eigentlich noch beim Team landen sollten. Das ist kein KI-Problem, sondern eine falsch gesetzte Telefonregel.',
+        ],
+      },
+      {
+        heading: 'Fehler 2: kein echter Testanruf aus Kundensicht',
+        paragraphs: [
+          'Ein Test im Dashboard reicht nicht immer. Wichtig ist ein echter Anruf von einem normalen Telefon, so wie spaeter ein Kunde anruft. Dabei sollte man pruefen, ob der Agent richtig begruesst, ob er die Branche erkennt, ob er Unterbrechungen akzeptiert und ob er keine internen Tool-Namen ausspricht.',
+          'Der Testanruf sollte auch einmal absichtlich schief laufen: Kunde nennt eine falsche E-Mail, korrigiert die Uhrzeit, fragt nach Datenschutz oder will abbrechen. Genau diese Faelle zeigen, ob der Agent robust genug fuer Live-Telefonie ist.',
+        ],
+      },
+      {
+        heading: 'Fehler 3: die falsche Zielnummer oder alte Agent-Version nutzen',
+        paragraphs: [
+          'Wenn ein Agent neu deployed wurde, koennen alte Testnummern, alte Retell-Agenten oder alte Weiterleitungsziele noch auf eine fruehere Konfiguration zeigen. Dann klingt der Agent anders als erwartet oder nutzt alte Tools.',
+          'Vor dem Livegang sollte die aktuell hinterlegte Phonbot-Nummer mit dem Dashboard und dem letzten Agent-Deploy abgeglichen werden. Erst wenn der Testanruf wirklich den aktuellen Agenten erreicht, gehoert die Weiterleitung auf die Geschaeftsnummer.',
+        ],
+      },
+      {
+        heading: 'Fehler 4: Kalender und Tickets nicht mit der Weiterleitung testen',
+        paragraphs: [
+          'Ein Agent kann sprachlich gut wirken und trotzdem funktional unsicher sein. Entscheidend ist, ob er bei einem echten weitergeleiteten Anruf Termine nur nach freien Slots bucht, Absagen oder Verschiebungen korrekt behandelt und Tickets nicht doppelt anlegt.',
+          'Wenn Kalender, Mitarbeiterkalender oder Rueckruf-Tickets verbunden sind, gehoeren sie in den Test. Der Agent darf nie behaupten, ein Termin sei gebucht, verschoben oder storniert, wenn das Tool keinen erfolgreichen Rueckgabewert geliefert hat.',
+        ],
+      },
+      {
+        heading: 'Fehler 5: Datenschutztext klingt richtig, passt aber nicht zur Einstellung',
+        paragraphs: [
+          'Der Agent sollte nicht mehr versprechen, als technisch eingestellt ist. Wenn Audio und Transkript nicht dauerhaft gespeichert werden, darf das klar gesagt werden. Wenn eine Aufzeichnung oder Auswertung aktiv ist, braucht der Anrufer eine passende Information und gegebenenfalls Einwilligung.',
+          'Wichtig ist die Produktwahrheit: Einstellungen fuer Aufzeichnung, Transkript, Aufbewahrung und anonymisierte Muster muessen zum Prompt passen. Ein Datenschutzsatz, der gut klingt, aber nicht zur Konfiguration passt, ist gefaehrlicher als eine kurze ehrliche Erklaerung.',
+        ],
+      },
+      {
+        heading: 'Fehler 6: keine Rueckfallregel bei Stoerung',
+        paragraphs: [
+          'Telefonie, Kalender, KI-Modell und externe Tools koennen langsam antworten oder kurz ausfallen. Deshalb braucht der Agent einen ruhigen Rueckfallweg: Rueckruf aufnehmen, menschliche Uebergabe anbieten oder sagen, dass die Buchung gerade nicht bestaetigt werden kann.',
+          'Schlecht ist eine Antwort wie "Das ist erledigt", wenn die Funktion nicht erfolgreich war. Gut ist: "Ich kann das gerade nicht sicher eintragen. Ich nehme Ihren Rueckrufwunsch auf und leite ihn weiter."',
+        ],
+      },
+      {
+        heading: 'Fehler 7: Minuten und Plan nicht zum echten Anrufvolumen pruefen',
+        paragraphs: [
+          'Der Nummer-Plan ist ein guenstiger Einstieg mit eigener KI-Telefonnummer und 70 Minuten pro Monat. Fuer echte operative Anrufannahme ist aber oft ein groesserer Plan sinnvoll, weil Testanrufe, echte Kundenfragen und laengere Buchungsdialoge Minuten verbrauchen.',
+          'Vor dem Livegang sollte man grob schaetzen, wie viele Anrufe pro Woche realistisch sind. Wenn der Agent jeden Tag mehrere Gespraeche fuehren soll, ist Starter oder hoeher meist der praktischere Rahmen als nur eine technische Nummer.',
+        ],
+      },
+    ],
+    checklist: [
+      'Aktuelle Phonbot-Zielnummer aus dem Dashboard kopieren und alte Testziele entfernen.',
+      'Weiterleitungsart bewusst waehlen: sofort, bei Besetzt, nach Zeit oder ausserhalb der Oeffnungszeiten.',
+      'Mindestens einen echten Testanruf von einem normalen Telefon machen.',
+      'Im Test Terminbuchung, Terminverschiebung, Absage, Rueckruf und Fehlersituation pruefen.',
+      'Prompt und Datenschutztext gegen die echten Speicher- und Aufzeichnungseinstellungen abgleichen.',
+      'Rueckfallweg fuer Timeout, leeres Kalenderergebnis und Tool-Fehler definieren.',
+      'Nach dem ersten Live-Anruf im Dashboard kontrollieren, ob Ticket, Kalender und Benachrichtigung stimmen.',
+    ],
+    faq: [
+      ['Welche Rufweiterleitung ist fuer einen KI-Telefonassistenten am besten?', 'Das haengt vom Betrieb ab. Wenn die KI alle Anrufe annehmen soll, passt sofortige Weiterleitung. Wenn das Team zuerst rangehen soll, sind Weiterleitung bei Besetzt, nach Zeit oder ausserhalb der Oeffnungszeiten meist besser.'],
+      ['Muss ich meine bestehende Telefonnummer ersetzen?', 'Nein. Meist bleibt die bestehende Nummer sichtbar und leitet technisch auf die Phonbot-Zielnummer weiter.'],
+      ['Wie teste ich die Rufweiterleitung richtig?', 'Rufe von einem normalen Telefon die echte Geschaeftsnummer an, nicht nur die KI-Zielnummer. Pruefe Begruessung, Branche, Datenschutzhinweis, Kalender- oder Ticketfunktion und den Rueckfallweg bei Fehlern.'],
+      ['Was soll der Agent sagen, wenn ein Tool nicht funktioniert?', 'Er sollte keine Aktion erfinden. Richtig ist eine kurze Erklaerung, dass die Eintragung gerade nicht sicher bestaetigt werden kann, plus Rueckruf oder menschliche Uebergabe.'],
+    ],
+    related: ['kontakt', 'branchen', 'selbststaendig'],
+  },
+  {
     slug: 'ki-anrufannahme-handwerker-notdienst-tickets',
     title: 'KI-Anrufannahme fuer Handwerker: Notdienst-Tickets statt Chaos',
     description: 'Wie Handwerksbetriebe Baustellenanrufe, Notdienst-Faelle und Rueckrufwuensche mit einem KI-Telefonassistenten sauber strukturieren.',
