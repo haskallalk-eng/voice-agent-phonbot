@@ -1852,6 +1852,66 @@ function timeBlockOverlaps(block: ChipyBlock, startMin: number, endMin: number):
   return rangesOverlap(startMin, endMin, blockStart, blockEnd);
 }
 
+type ChipySlotAvailability =
+  | { ok: true }
+  | {
+      ok: false;
+      error: 'CHIPY_DAY_BLOCKED' | 'CHIPY_CLOSED_DAY' | 'OUTSIDE_OPENING_HOURS' | 'TOO_CLOSE_TO_CLOSING' | 'CHIPY_SLOT_BUSY';
+      scheduleStart?: string;
+      scheduleEnd?: string;
+      latestStart?: string;
+    };
+
+function minutesToClock(minutes: number): string {
+  const h = Math.floor(minutes / 60).toString().padStart(2, '0');
+  const m = (minutes % 60).toString().padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+function evaluateChipySlotAvailability(
+  schedule: ChipySchedule,
+  blocks: string[],
+  timeBlocks: ChipyBlock[],
+  slotTime: Date,
+  timing: BookingTiming = DEFAULT_BOOKING_TIMING,
+): ChipySlotAvailability {
+  const safeTiming = normalizeBookingTiming(timing);
+  const dateStr = localDateKey(slotTime);
+  if (blocks.includes(dateStr)) return { ok: false, error: 'CHIPY_DAY_BLOCKED' };
+
+  const localParts = berlinParts(slotTime);
+  const localDow = new Date(Date.UTC(localParts.year, localParts.month - 1, localParts.day)).getUTCDay().toString();
+  const dayConfig = schedule[localDow] ?? DEFAULT_CHIPPY_SCHEDULE[localDow];
+  if (!dayConfig?.enabled) return { ok: false, error: 'CHIPY_CLOSED_DAY' };
+
+  const startMin = clockMinutes(localTimeKey(slotTime));
+  const scheduleStart = clockMinutes(dayConfig.start);
+  const scheduleEnd = clockMinutes(dayConfig.end);
+  if (startMin === null || scheduleStart === null || scheduleEnd === null) {
+    return { ok: false, error: 'OUTSIDE_OPENING_HOURS' };
+  }
+  const latestStart = scheduleEnd - (safeTiming.durationMinutes + safeTiming.bufferMinutes);
+  const base = {
+    scheduleStart: minutesToClock(scheduleStart),
+    scheduleEnd: minutesToClock(scheduleEnd),
+    latestStart: minutesToClock(Math.max(scheduleStart, latestStart)),
+  };
+  if (startMin < scheduleStart || startMin >= scheduleEnd) {
+    return { ok: false, error: 'OUTSIDE_OPENING_HOURS', ...base };
+  }
+  if (latestStart < scheduleStart || startMin > latestStart) {
+    return { ok: false, error: 'TOO_CLOSE_TO_CLOSING', ...base };
+  }
+
+  const endMin = startMin + safeTiming.durationMinutes + safeTiming.bufferMinutes;
+  const dayBlocks = timeBlocks.filter((b) => b.date === dateStr);
+  if (dayBlocks.some((b) => timeBlockOverlaps(b, startMin, endMin))) {
+    return { ok: false, error: 'CHIPY_SLOT_BUSY', ...base };
+  }
+
+  return { ok: true };
+}
+
 function generateChipySlots(
   schedule: ChipySchedule,
   blocks: string[],
@@ -2044,23 +2104,17 @@ async function isChipySlotAvailable(
   timing: BookingTiming = DEFAULT_BOOKING_TIMING,
 ): Promise<boolean> {
   const { schedule, blocks, timeBlocks } = await getChipySchedule(orgId, staffId);
-  const dateStr = localDateKey(slotTime);
-  if (blocks.includes(dateStr)) return false;
+  return evaluateChipySlotAvailability(schedule, blocks, timeBlocks, slotTime, timing).ok;
+}
 
-  const localParts = berlinParts(slotTime);
-  const localDow = new Date(Date.UTC(localParts.year, localParts.month - 1, localParts.day)).getUTCDay().toString();
-  const dayConfig = schedule[localDow] ?? DEFAULT_CHIPPY_SCHEDULE[localDow];
-  if (!dayConfig?.enabled) return false;
-
-  const timeStr = localTimeKey(slotTime);
-  if (timeStr < dayConfig.start.slice(0, 5) || timeStr >= dayConfig.end.slice(0, 5)) return false;
-  const startMin = clockMinutes(timeStr);
-  const endMin = startMin === null ? null : startMin + timing.durationMinutes + timing.bufferMinutes;
-  const scheduleEnd = clockMinutes(dayConfig.end);
-  if (startMin === null || endMin === null || scheduleEnd === null || endMin > scheduleEnd) return false;
-
-  const dayBlocks = timeBlocks.filter((b) => b.date === dateStr);
-  return !dayBlocks.some((b) => timeBlockOverlaps(b, startMin, endMin));
+async function getChipySlotAvailability(
+  orgId: string,
+  slotTime: Date,
+  staffId?: string | null,
+  timing: BookingTiming = DEFAULT_BOOKING_TIMING,
+): Promise<ChipySlotAvailability> {
+  const { schedule, blocks, timeBlocks } = await getChipySchedule(orgId, staffId);
+  return evaluateChipySlotAvailability(schedule, blocks, timeBlocks, slotTime, timing);
 }
 
 function normalizeSourceCallId(sourceCallId: string | undefined): string | null {
@@ -2975,8 +3029,13 @@ export async function bookSlot(
     durationMinutes: opts.durationMinutes,
     bufferMinutes: opts.bufferMinutes,
   });
-  if (!(await isChipySlotAvailable(orgId, slotTime, staffId, timing))) {
-    return { ok: false, error: `Chipy slot unavailable: ${opts.time}` };
+  const chipyAvailability = await getChipySlotAvailability(orgId, slotTime, staffId, timing);
+  if (!chipyAvailability.ok) {
+    const details = [
+      chipyAvailability.scheduleEnd ? `closes=${chipyAvailability.scheduleEnd}` : null,
+      chipyAvailability.latestStart ? `latestStart=${chipyAvailability.latestStart}` : null,
+    ].filter(Boolean).join(' ');
+    return { ok: false, error: details ? `${chipyAvailability.error}: ${details}` : chipyAvailability.error };
   }
 
   for (const conn of connections) {
@@ -3179,6 +3238,22 @@ export async function bookSlotForAnyStaff(
   }
 
   const candidates = await rankAvailableStaffForSlot(orgId, eligibleStaff, slotTime, timing);
+  if (candidates.length === 0) {
+    const checks = await Promise.all(
+      eligibleStaff.map((member) => getChipySlotAvailability(orgId, slotTime, member.id, timing).catch(() => null)),
+    );
+    const firstKnown = checks.find((check): check is Exclude<ChipySlotAvailability, { ok: true }> => Boolean(check && !check.ok));
+    if (firstKnown) {
+      const details = [
+        firstKnown.scheduleEnd ? `closes=${firstKnown.scheduleEnd}` : null,
+        firstKnown.latestStart ? `latestStart=${firstKnown.latestStart}` : null,
+      ].filter(Boolean).join(' ');
+      return {
+        ok: false,
+        error: details ? `${firstKnown.error}: ${details}` : firstKnown.error,
+      };
+    }
+  }
   const errors: string[] = [];
   for (const member of candidates) {
     const result = await bookSlot(orgId, { ...opts, staffId: member.id, ...timing });

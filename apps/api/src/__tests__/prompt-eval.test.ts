@@ -20,6 +20,7 @@ const { buildPromptConversationFlowScenarios, buildPromptEvalCases, buildPromptL
 const { DEMO_END_INSTRUCTIONS, DEMO_SAFETY_OVERLAY, DEFAULT_SALES_PROMPT, ensurePhonbotProductFacts } = await import('../demo.js');
 const { OUTBOUND_BASELINE_PROMPT, ensureOutboundSafetyKernel } = await import('../outbound-baseline.js');
 const { ensurePlatformSafetyKernel } = await import('../platform-baseline.js');
+const { TEMPLATES } = await import('../templates.js');
 
 describe('prompt eval dry-run harness', () => {
   it('builds at least 1000 dry-run prompt/function cases with specialized simulation agents', () => {
@@ -93,12 +94,27 @@ describe('prompt eval dry-run harness', () => {
 
     expect(DEMO_END_INSTRUCTIONS).toContain('Demo simulieren');
     expect(DEMO_END_INSTRUCTIONS).toContain('Fragen zu Phonbot beantworten');
+    expect(DEMO_END_INSTRUCTIONS).toContain('Hi, mein Name ist Chipy. Mit wem spreche ich?');
+    expect(DEMO_END_INSTRUCTIONS).toContain('Dieses Gespraech wird zur Qualitaetssicherung gespeichert');
+    expect(DEMO_END_INSTRUCTIONS).toContain('Ein Geschaeft, das um 18 Uhr schliesst, kann keinen Termin um 18 Uhr starten');
+    expect(DEMO_END_INSTRUCTIONS).toContain('Demo-Terminbestaetigung');
+    expect(DEMO_END_INSTRUCTIONS).toContain('Vermische diese beiden Preiswelten nie');
     expect(failures.some((failure) => failure.ruleId === 'demo-layered-entry')).toBe(false);
     expect(failures.some((failure) => failure.ruleId === 'phonbot-questions-answer-all')).toBe(false);
     expect(failures.some((failure) => failure.ruleId === 'past-date-block')).toBe(false);
     expect(failures.some((failure) => failure.ruleId === 'demo-simulation-labels')).toBe(false);
     expect(DEMO_END_INSTRUCTIONS).toContain('recording_declined');
     expect(DEMO_SAFETY_OVERLAY).toContain('simuliere die Weiterleitung');
+  });
+
+  it('keeps curated demo templates supplied with safe demo standard prices', () => {
+    const pricedTemplates = ['hairdresser', 'tradesperson', 'cleaning', 'restaurant', 'auto', 'solo'];
+
+    for (const id of pricedTemplates) {
+      const template = TEMPLATES.find((item) => item.id === id);
+      expect(template?.prompt).toContain('Demo-Standardpreise');
+      expect(template?.prompt).toMatch(/Euro/i);
+    }
   });
 
   it('keeps the sales callback prompt on current test-minutes and verified link delivery', () => {

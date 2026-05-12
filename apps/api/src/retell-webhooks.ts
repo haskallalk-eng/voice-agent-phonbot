@@ -45,7 +45,7 @@ import { getCall, deleteCall } from './retell.js';
 import { trackRetellCallRetention } from './retell-retention.js';
 import { fireInboundWebhooks } from './inbound-webhooks.js';
 import { sendBookingConfirmationSms, sendTicketAckSms } from './sms.js';
-import { readDemoCallTemplate, maybeSendDemoSignupLink, demoRecordingDeclinedToolSignature, isKnownSalesCallbackAgent } from './demo.js';
+import { readDemoCallTemplate, maybeSendDemoSignupLink, maybeSendDemoBookingConfirmation, demoRecordingDeclinedToolSignature, isKnownSalesCallbackAgent } from './demo.js';
 import { redactPII } from './pii.js';
 import { RECORDING_CONSENT_PROMPT_VERSION } from './agent-instructions.js';
 import { log } from './logger.js';
@@ -586,6 +586,25 @@ function knownCustomerName(value: string | undefined): string | null {
 
 function isPastSlotError(error: unknown): boolean {
   return typeof error === 'string' && error.includes('PAST_SLOT');
+}
+
+function isNormalSlotUnavailableError(error: unknown): boolean {
+  if (typeof error !== 'string') return false;
+  return /OUTSIDE_OPENING_HOURS|TOO_CLOSE_TO_CLOSING|CHIPY_CLOSED_DAY|CHIPY_DAY_BLOCKED|CHIPY_SLOT_BUSY|No available staff|requested slot is busy/i.test(error);
+}
+
+function slotUnavailableInstruction(error: unknown): string {
+  const text = typeof error === 'string' ? error : '';
+  if (text.includes('TOO_CLOSE_TO_CLOSING')) {
+    return 'Der Termin ist zu nah an der Schliesszeit. Nicht buchen und kein Ticket als Ersatz erstellen. Erklaere kurz: Die Leistung muss voll in die Oeffnungszeit passen. Biete eine fruehere Uhrzeit oder einen anderen Tag an.';
+  }
+  if (text.includes('OUTSIDE_OPENING_HOURS') || text.includes('CHIPY_CLOSED_DAY')) {
+    return 'Der Termin liegt ausserhalb der Oeffnungszeiten. Nicht buchen und kein Ticket als Ersatz erstellen. Biete eine passende Zeit innerhalb der Oeffnungszeiten an.';
+  }
+  if (text.includes('CHIPY_DAY_BLOCKED')) {
+    return 'Der Tag ist gesperrt. Nicht buchen und kein Ticket als Ersatz erstellen. Biete einen anderen Tag an.';
+  }
+  return 'Der Slot ist nicht frei. Nicht buchen und kein Ticket als Ersatz erstellen. Suche mit calendar_find_slots nach alternativen freien Zeiten.';
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -1295,6 +1314,9 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
               maybeSendDemoSignupLink(callId, extracted, req.log).catch((err: Error) =>
                 req.log.warn({ err: err.message, callId }, 'maybeSendDemoSignupLink (call_ended) failed'),
               );
+              maybeSendDemoBookingConfirmation(callId, extracted, req.log).catch((err: Error) =>
+                req.log.warn({ err: err.message, callId }, 'maybeSendDemoBookingConfirmation (call_ended) failed'),
+              );
             }
           }
         }
@@ -1407,6 +1429,9 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           // RETURNING) so a doppelt-fire across both branches is harmless.
           maybeSendDemoSignupLink(callId, extracted, req.log).catch((err: Error) =>
             req.log.warn({ err: err.message, callId }, 'maybeSendDemoSignupLink (call_analyzed) failed'),
+          );
+          maybeSendDemoBookingConfirmation(callId, extracted, req.log).catch((err: Error) =>
+            req.log.warn({ err: err.message, callId }, 'maybeSendDemoBookingConfirmation (call_analyzed) failed'),
           );
         }
       }
@@ -1851,6 +1876,20 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
               error: 'PAST_SLOT',
               fallback: false,
               instruction: 'Der gewuenschte Termin liegt in der Vergangenheit. Keine Buchung und kein Fallback-Ticket fuer diesen Slot erstellen; frage nach einem zukuenftigen Datum.',
+              customerName,
+              customerPhone,
+              preferredTime,
+              preferredStylist: resultStylist,
+              staffId: assignedStaffId,
+              service,
+            };
+          } else if (isNormalSlotUnavailableError(booking.error)) {
+            result = {
+              ok: false,
+              status: 'slot_unavailable',
+              error: booking.error ?? 'SLOT_UNAVAILABLE',
+              fallback: false,
+              instruction: slotUnavailableInstruction(booking.error),
               customerName,
               customerPhone,
               preferredTime,

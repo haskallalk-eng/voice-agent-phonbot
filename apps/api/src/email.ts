@@ -291,6 +291,47 @@ export async function sendSignupLinkEmail(opts: { toEmail: string; name?: string
   return send(opts.toEmail, 'Dein Phonbot-Testlink', text, html);
 }
 
+export async function sendDemoBookingConfirmationEmail(opts: {
+  toEmail: string;
+  name?: string | null;
+  service?: string | null;
+  preferredTime?: string | null;
+}): Promise<EmailSendResult> {
+  const safeName = opts.name ? escapeHtml(opts.name) : null;
+  const safeService = escapeHtml((opts.service ?? '').replace(/\s+/g, ' ').trim() || 'Terminwunsch');
+  const safeTime = escapeHtml((opts.preferredTime ?? '').replace(/\s+/g, ' ').trim() || 'ohne feste Uhrzeit');
+  const signupUrl = `${APP_URL}/login`;
+  const meetingUrl = process.env.PHONBOT_MEETING_URL?.trim()
+    || process.env.SALES_MEETING_URL?.trim()
+    || `${APP_URL}/kontakt/`;
+  const html = brandedEmail({
+    title: 'Deine Demo-Terminbestätigung',
+    body: `
+      <p style="margin:0 0 12px 0;">${safeName ? `Hallo <strong style="color:#fff;">${safeName}</strong>,` : 'Hallo,'}</p>
+      <p style="margin:0 0 16px 0;">Chipy hat in der Website-Demo diesen Terminwunsch simuliert aufgenommen:</p>
+      <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;margin:0 0 16px 0;text-align:left;">
+        <p style="margin:0 0 6px 0;color:#fff;font-weight:700;">${safeService}</p>
+        <p style="margin:0;color:rgba(255,255,255,0.65);">${safeTime}</p>
+      </div>
+      <p style="margin:0 0 16px 0;color:rgba(255,255,255,0.5);font-size:13px;">Wichtig: Das war eine Simulation und keine echte Buchung bei einem Geschäft.</p>
+      <p style="margin:0;color:rgba(255,255,255,0.6);font-size:13px;">Wenn du Phonbot selbst testen oder mit uns sprechen willst, nutze die Links unten.</p>
+    `,
+    cta: { label: 'Phonbot kostenlos testen', url: signupUrl },
+    footer: `Menschliches Team: ${meetingUrl}`,
+  });
+  const text = [
+    'Deine Demo-Terminbestätigung',
+    '',
+    `Terminwunsch: ${(opts.service ?? '').trim() || 'Terminwunsch'}`,
+    `Zeit: ${(opts.preferredTime ?? '').trim() || 'ohne feste Uhrzeit'}`,
+    '',
+    'Wichtig: Das war eine Simulation und keine echte Buchung bei einem Geschäft.',
+    `Testlink: ${signupUrl}`,
+    `Menschliches Team: ${meetingUrl}`,
+  ].join('\n');
+  return send(opts.toEmail, 'Deine Demo-Terminbestätigung', text, html);
+}
+
 export async function sendSalesTestLinkEmail(opts: {
   toEmail: string;
   companyName: string;
