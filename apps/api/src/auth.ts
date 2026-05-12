@@ -216,7 +216,20 @@ function normalizeSignupPhone(input: string): { phone: string; phoneNormalized: 
 type LoginIdentifier =
   | { kind: 'email'; email: string; phoneNormalized: null; lockKey: string }
   | { kind: 'phone'; email: null; phoneNormalized: string; lockKey: string }
+  | { kind: 'orgName'; email: null; phoneNormalized: null; orgName: string; orgSlug: string | null; lockKey: string }
   | { kind: 'invalid'; email: null; phoneNormalized: null; lockKey: string };
+
+function normalizeOrgLoginSlug(input: string): string | null {
+  const slug = input
+    .trim()
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 100);
+  return slug.length >= 2 ? slug : null;
+}
 
 function normalizeLoginIdentifier(input: string): LoginIdentifier {
   const raw = input.trim();
@@ -232,6 +245,12 @@ function normalizeLoginIdentifier(input: string): LoginIdentifier {
   const e164 = toE164(raw);
   if (e164 && isPlausiblePhone(e164)) {
     return { kind: 'phone', email: null, phoneNormalized: e164, lockKey: `phone:${e164}` };
+  }
+
+  const orgName = lower.replace(/\s+/g, ' ').slice(0, 120);
+  const orgSlug = normalizeOrgLoginSlug(raw);
+  if (orgName.length >= 3 && orgSlug) {
+    return { kind: 'orgName', email: null, phoneNormalized: null, orgName, orgSlug, lockKey: `org:${orgName}` };
   }
 
   return { kind: 'invalid', email: null, phoneNormalized: null, lockKey: `invalid:${lower.slice(0, 120)}` };
@@ -709,12 +728,20 @@ export async function registerAuth(app: FastifyInstance) {
          AND (
            ($1::text IS NOT NULL AND u.email = $1)
            OR ($2::text IS NOT NULL AND u.phone_normalized = $2)
+           OR ($3::text IS NOT NULL AND LOWER(o.name) = $3)
+           OR ($4::text IS NOT NULL AND o.slug = $4)
          )
-       LIMIT 1`,
-      [loginIdentifier.email, loginIdentifier.phoneNormalized],
+       ORDER BY CASE WHEN u.role = 'owner' THEN 0 ELSE 1 END, u.created_at
+       LIMIT 2`,
+      [
+        loginIdentifier.email,
+        loginIdentifier.phoneNormalized,
+        loginIdentifier.kind === 'orgName' ? loginIdentifier.orgName : null,
+        loginIdentifier.kind === 'orgName' ? loginIdentifier.orgSlug : null,
+      ],
     );
 
-    if (result.rowCount === 0) {
+    if (result.rowCount !== 1) {
       // Still record under the supplied identifier so a probe of unknown users
       // can't bypass the counter by varying user-base.
       await recordLoginFailure(loginIdentifier.lockKey);

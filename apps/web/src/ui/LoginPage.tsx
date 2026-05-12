@@ -264,18 +264,18 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
 
               <div>
                 <label className="block text-xs font-medium text-white/60 mb-1.5 uppercase tracking-wide">
-                  {mode === 'login' ? 'E-Mail oder Telefonnummer' : 'E-Mail'}
+                  {mode === 'login' ? 'E-Mail, Telefonnummer oder Login-Name' : 'E-Mail'}
                 </label>
                 <input
                   type={mode === 'login' ? 'text' : 'email'}
-                  placeholder={mode === 'login' ? 'du@beispiel.de oder 0176 12345678' : 'du@beispiel.de'}
+                  placeholder={mode === 'login' ? 'coifeur jimmy, E-Mail oder 0176 12345678' : 'du@beispiel.de'}
                   autoComplete={mode === 'login' ? 'username' : 'email'}
                   className={`w-full rounded-xl bg-white/5 border px-4 py-2.5 text-sm text-white placeholder-white/30
                     focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${errors.email ? 'border-red-500/60' : 'border-white/10'}`}
                   {...register('email', {
-                    required: mode === 'login' ? 'E-Mail oder Telefonnummer ist erforderlich' : 'E-Mail ist erforderlich',
+                    required: mode === 'login' ? 'E-Mail, Telefonnummer oder Login-Name ist erforderlich' : 'E-Mail ist erforderlich',
                     validate: (value) => {
-                      if (mode === 'login') return value.trim().length >= 3 || 'Bitte gib E-Mail oder Telefonnummer ein.';
+                      if (mode === 'login') return value.trim().length >= 3 || 'Bitte gib E-Mail, Telefonnummer oder Login-Name ein.';
                       return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()) || 'Bitte gib eine gueltige E-Mail-Adresse ein.';
                     },
                   })}
