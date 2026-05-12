@@ -70,6 +70,55 @@ function getTwilioClient() {
   return twilio(sid, token);
 }
 
+let cachedTwilioSipTrunkSid: string | null | undefined;
+
+function normalizeSipDomain(input?: string | null): string | null {
+  const trimmed = input?.trim();
+  if (!trimmed) return null;
+  return trimmed
+    .replace(/^sip:/i, '')
+    .replace(/^https?:\/\//i, '')
+    .split(/[/?#;]/)[0]
+    ?.toLowerCase() ?? null;
+}
+
+async function resolveTwilioSipTrunkSid(client = getTwilioClient()): Promise<string> {
+  if (cachedTwilioSipTrunkSid) return cachedTwilioSipTrunkSid;
+
+  const configured = process.env.TWILIO_SIP_TRUNK_SID?.trim();
+  if (configured) {
+    cachedTwilioSipTrunkSid = configured;
+    return configured;
+  }
+
+  const expectedDomain = normalizeSipDomain(process.env.SIP_TERMINATION_URI);
+  const trunks = await ((client as any).trunking?.v1?.trunks?.list?.({ limit: 50 }) ?? Promise.resolve([]));
+  const matched = trunks.find((trunk: { sid?: string; domainName?: string; friendlyName?: string }) => {
+    const domainMatches = expectedDomain && normalizeSipDomain(trunk.domainName) === expectedDomain;
+    const nameMatches = /retell/i.test(trunk.friendlyName ?? '');
+    return domainMatches || nameMatches;
+  });
+  const sid = matched?.sid;
+  if (!sid) throw new Error('TWILIO_SIP_TRUNK_SID not configured and no Retell SIP trunk was found');
+  cachedTwilioSipTrunkSid = sid;
+  return sid;
+}
+
+async function routeTwilioNumberToSipTrunk(phoneNumber: string, orgId?: string): Promise<void> {
+  const client = getTwilioClient();
+  const trunkSid = await resolveTwilioSipTrunkSid(client);
+  const incoming = await client.incomingPhoneNumbers.list({ phoneNumber, limit: 1 });
+  const number = incoming[0];
+  if (!number?.sid) throw new Error(`Twilio number ${phoneNumber} not found in account`);
+  if ((number as { trunkSid?: string | null }).trunkSid === trunkSid) return;
+  await client.incomingPhoneNumbers(number.sid).update({
+    trunkSid,
+    voiceUrl: '',
+    voiceMethod: 'POST',
+  } as any);
+  log.info({ number: phoneNumber, orgId, trunkSid }, '[phone] Routed Twilio number to SIP trunk');
+}
+
 // ── Phone-prefix whitelist (anti-toll-fraud) ─────────────────────────────────
 // Any route that initiates a real outbound Twilio call on a user-supplied number
 // MUST validate it against this list. Without this, an authenticated user can
@@ -495,7 +544,11 @@ async function runAutoProvisionBody(
   // Get org's deployed Retell agent ID (may be null if customer hasn't
   // deployed yet — then number is bought + parked, gets bound on next deploy).
   const configRes = await client.query(
-    `SELECT data FROM agent_configs WHERE org_id = $1 LIMIT 1`,
+    `SELECT data
+       FROM agent_configs
+      WHERE org_id = $1
+      ORDER BY (data->>'retellAgentId' IS NULL), updated_at DESC
+      LIMIT 1`,
     [orgId],
   );
   const agentId = configRes.rows[0]?.data?.retellAgentId ?? null;
@@ -581,6 +634,16 @@ async function runAutoProvisionBody(
       ).catch((err: Error) => log.warn({ err: err.message, poolNumberId: free.id }, '[phone] auto-provision pool rollback failed'));
       return;
     }
+    try {
+      await routeTwilioNumberToSipTrunk(free.number, orgId);
+    } catch (err) {
+      await client.query(
+        `UPDATE phone_numbers SET org_id = NULL, agent_id = NULL WHERE id = $1`,
+        [free.id],
+      ).catch((rollbackErr: Error) => log.warn({ err: rollbackErr.message, poolNumberId: free.id }, '[phone] auto-provision pool rollback failed'));
+      log.error({ err: err instanceof Error ? err.message : String(err), number: free.number, orgId }, '[phone] auto-provision: Twilio SIP routing failed');
+      return;
+    }
     log.info({ number: free.number, orgId, source: 'pool' }, '[phone] Auto-provisioned for org');
     return;
   }
@@ -641,6 +704,13 @@ async function runAutoProvisionBody(
     // Continue — number is bought, save it even without Retell ID. The
     // user gets a number in their dashboard; reverse-diff sweep will catch
     // it later if Retell never picks it up.
+  }
+
+  try {
+    await routeTwilioNumberToSipTrunk(purchasedNumber, orgId);
+  } catch (e: unknown) {
+    log.error({ err: e instanceof Error ? e.message : String(e), number: purchasedNumber, orgId }, '[phone] auto-provision: Twilio SIP routing failed');
+    return;
   }
 
   // Save to DB
@@ -1033,6 +1103,24 @@ export async function registerPhone(app: FastifyInstance) {
       });
     }
 
+    try {
+      await routeTwilioNumberToSipTrunk(purchasedNumber, orgId);
+    } catch (e: unknown) {
+      if (poolNumberId) {
+        await pool.query(
+          `UPDATE phone_numbers SET org_id = NULL, agent_id = NULL WHERE id = $1`,
+          [poolNumberId],
+        ).catch((err: Error) => log.warn({ err: err.message, poolNumberId }, '[phone/provision] pool rollback failed'));
+      }
+      req.log.error(
+        { error: e instanceof Error ? e.message : String(e), number: purchasedNumber },
+        '[phone/provision] Twilio SIP routing failed',
+      );
+      return reply.status(503).send({
+        error: 'Twilio konnte die Nummer aktuell nicht mit dem SIP-Trunk verbinden. Bitte versuche es in einigen Minuten erneut.',
+      });
+    }
+
     // Save or update DB.
     //
     // MEDIUM-A (Codex, DSGVO!): beim Pool-Reuse müssen customer_number und
@@ -1186,7 +1274,11 @@ export async function registerPhone(app: FastifyInstance) {
 
     // Get the org's deployed agent ID for inbound routing
     const configRes = await pool.query(
-      `SELECT data FROM agent_configs WHERE org_id = $1 LIMIT 1`,
+      `SELECT data
+         FROM agent_configs
+        WHERE org_id = $1
+        ORDER BY (data->>'retellAgentId' IS NULL), updated_at DESC
+        LIMIT 1`,
       [orgId],
     );
     const agentId = configRes.rows[0]?.data?.retellAgentId ?? null;
@@ -1194,6 +1286,7 @@ export async function registerPhone(app: FastifyInstance) {
     // Import the number into Retell
     try {
       const result = await retellImportPhoneNumber(number, agentId);
+      await routeTwilioNumberToSipTrunk(number, orgId);
 
       // Upsert into phone_numbers table. ON CONFLICT (number) DO UPDATE only
       // if the existing row already belongs to this org (idempotent re-import).

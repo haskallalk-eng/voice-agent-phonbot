@@ -1581,15 +1581,26 @@ export async function registerAgentConfig(app: FastifyInstance) {
     return toClientConfig(cfg);
   });
 
-  // Read config (default = first for org, or specific by ?tenantId=).
-  // Ownership enforced via readConfig(tenantId, orgId) — returns an empty default
-  // when the tenantId belongs to a different org (prevents config-leak by
-  // iterating tenantIds).
+  // Read config. With ?tenantId= we return that owned agent. Without it, return
+  // the org's newest deployed agent (or newest draft) before falling back to the
+  // legacy tenant_id=orgId default. This keeps migrated/multi-agent accounts out
+  // of onboarding when their default row no longer exists.
   app.get('/agent-config', { ...auth }, async (req: FastifyRequest) => {
     const { orgId } = req.user as JwtPayload;
     const query = req.query as Record<string, string>;
-    const tenantId = query.tenantId ?? orgId;
-    return toClientConfig(await readConfig(tenantId, orgId));
+    if (query.tenantId) return toClientConfig(await readConfig(query.tenantId, orgId));
+    if (pool) {
+      const res = await pool.query(
+        `SELECT data
+           FROM agent_configs
+          WHERE org_id = $1 OR tenant_id = $1::text
+          ORDER BY (data->>'retellAgentId' IS NULL), updated_at DESC
+          LIMIT 1`,
+        [orgId],
+      );
+      if (res.rows[0]?.data) return toClientConfig(parseAgentConfig(res.rows[0].data));
+    }
+    return toClientConfig(await readConfig(orgId, orgId));
   });
 
   app.get('/agent-config/webhooks-health', { ...auth }, async (req: FastifyRequest) => {
