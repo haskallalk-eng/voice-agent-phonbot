@@ -98,6 +98,16 @@ describe('buildAgentInstructions: agent-builder toggles', () => {
     expect(out).not.toContain('Hauptsprache: Englisch');
   });
 
+  it('adds a spoken opening-hours version instead of letting agents say weekday abbreviations', () => {
+    const out = buildAgentInstructions(baseCfg({
+      openingHours: 'Mo-Fr 09:00-18:00, Sa 09:00-14:00',
+    }));
+
+    expect(out).toContain('Öffnungszeiten (technische Struktur, nicht vorlesen)');
+    expect(out).toContain('Sprechfassung für Anrufer: Montag bis Freitag neun Uhr bis achtzehn Uhr, Samstag neun Uhr bis vierzehn Uhr');
+    expect(out).toContain('Sage nie Abkuerzungen wie "Mo-Fr"');
+  });
+
   it('describes direct cancel and reschedule flow when booking tools are enabled', () => {
     const out = buildAgentInstructions(baseCfg({ tools: ['calendar.findSlots', 'calendar.book', 'ticket.create'] }));
     expect(out).toContain('calendar_find_bookings');

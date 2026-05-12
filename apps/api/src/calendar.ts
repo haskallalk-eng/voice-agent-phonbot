@@ -1962,6 +1962,24 @@ function minuteWord(minute: number): string {
   return NUMBER_WORDS[minute] ?? minute.toString();
 }
 
+const SPOKEN_WEEKDAY_ABBREVIATIONS: Record<string, string> = {
+  Mo: 'Montag',
+  Di: 'Dienstag',
+  Mi: 'Mittwoch',
+  Do: 'Donnerstag',
+  Fr: 'Freitag',
+  Sa: 'Samstag',
+  So: 'Sonntag',
+};
+
+function expandSpokenWeekdayAbbreviations(label: string): string {
+  return label
+    .replace(/\b(Mo|Di|Mi|Do|Fr|Sa|So)\s*[-–]\s*(Mo|Di|Mi|Do|Fr|Sa|So)\b/g, (_match, from: string, to: string) =>
+      `${SPOKEN_WEEKDAY_ABBREVIATIONS[from] ?? from} bis ${SPOKEN_WEEKDAY_ABBREVIATIONS[to] ?? to}`,
+    )
+    .replace(/\b(Mo|Di|Mi|Do|Fr|Sa|So)\b/g, (day) => SPOKEN_WEEKDAY_ABBREVIATIONS[day] ?? day);
+}
+
 export function formatSpokenClockTime(value: string | Date | { hour: number; minute?: number }): string {
   let hour: number;
   let minute: number;
@@ -1989,13 +2007,13 @@ export function formatSpokenClockTime(value: string | Date | { hour: number; min
 
 export function formatSpokenSlotLabel(slot: string | Date): string {
   if (typeof slot === 'string' && /\b\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}\b/.test(slot)) {
-    return slot.replace(/\b(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})\b/g, (_match, h1: string, m1: string, h2: string, m2: string) =>
+    return expandSpokenWeekdayAbbreviations(slot).replace(/\b(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})\b/g, (_match, h1: string, m1: string, h2: string, m2: string) =>
       `${formatSpokenClockTime(`${h1}:${m1}`)} bis ${formatSpokenClockTime(`${h2}:${m2}`)}`,
     );
   }
   const date = slot instanceof Date ? slot : parseSlotTime(slot);
   if (!date) {
-    return String(slot)
+    return expandSpokenWeekdayAbbreviations(String(slot))
       .replace(/\b(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})\b/g, (_match, h1: string, m1: string, h2: string, m2: string) =>
         `${formatSpokenClockTime(`${h1}:${m1}`)} bis ${formatSpokenClockTime(`${h2}:${m2}`)}`,
       )

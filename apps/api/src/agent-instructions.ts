@@ -116,9 +116,61 @@ function appendFallbackInstructions(parts: string[], cfg: AgentConfig, ticketCre
  * Parse structured opening hours and determine open/closed status.
  * Expected format: "Mo-Fr 09:00-18:00, Sa 10:00-14:00" or free-text.
  */
+const OPENING_HOUR_WEEKDAYS: Record<string, string> = {
+  Mo: 'Montag',
+  Di: 'Dienstag',
+  Mi: 'Mittwoch',
+  Do: 'Donnerstag',
+  Fr: 'Freitag',
+  Sa: 'Samstag',
+  So: 'Sonntag',
+};
+
+const OPENING_HOUR_NUMBER_WORDS = [
+  'null', 'eins', 'zwei', 'drei', 'vier', 'fünf', 'sechs', 'sieben', 'acht', 'neun',
+  'zehn', 'elf', 'zwölf', 'dreizehn', 'vierzehn', 'fünfzehn', 'sechzehn',
+  'siebzehn', 'achtzehn', 'neunzehn', 'zwanzig', 'einundzwanzig', 'zweiundzwanzig',
+  'dreiundzwanzig', 'vierundzwanzig', 'fünfundzwanzig', 'sechsundzwanzig',
+  'siebenundzwanzig', 'achtundzwanzig', 'neunundzwanzig', 'dreißig',
+  'einunddreißig', 'zweiunddreißig', 'dreiunddreißig', 'vierunddreißig',
+  'fünfunddreißig', 'sechsunddreißig', 'siebenunddreißig', 'achtunddreißig',
+  'neununddreißig', 'vierzig', 'einundvierzig', 'zweiundvierzig', 'dreiundvierzig',
+  'vierundvierzig', 'fünfundvierzig', 'sechsundvierzig', 'siebenundvierzig',
+  'achtundvierzig', 'neunundvierzig', 'fünfzig', 'einundfünfzig',
+  'zweiundfünfzig', 'dreiundfünfzig', 'vierundfünfzig', 'fünfundfünfzig',
+  'sechsundfünfzig', 'siebenundfünfzig', 'achtundfünfzig', 'neunundfünfzig',
+] as const;
+
+function formatOpeningHourClock(hourText: string, minuteText: string): string {
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const hourWord = OPENING_HOUR_NUMBER_WORDS[hour] ?? hourText;
+  if (minute === 0) return `${hourWord} Uhr`;
+  const minuteWord = OPENING_HOUR_NUMBER_WORDS[minute] ?? minuteText;
+  if (minute < 10) return `${hourWord} Uhr null ${minuteWord}`;
+  return `${hourWord} Uhr ${minuteWord}`;
+}
+
+function formatOpeningHoursForSpeech(openingHours: string): string {
+  return openingHours
+    .replace(/\b(Mo|Di|Mi|Do|Fr|Sa|So)\s*[-–]\s*(Mo|Di|Mi|Do|Fr|Sa|So)\b/g, (_match, from: string, to: string) =>
+      `${OPENING_HOUR_WEEKDAYS[from] ?? from} bis ${OPENING_HOUR_WEEKDAYS[to] ?? to}`,
+    )
+    .replace(/\b(Mo|Di|Mi|Do|Fr|Sa|So)\b/g, (day) => OPENING_HOUR_WEEKDAYS[day] ?? day)
+    .replace(/\b(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})\b/g, (_match, h1: string, m1: string, h2: string, m2: string) =>
+      `${formatOpeningHourClock(h1, m1)} bis ${formatOpeningHourClock(h2, m2)}`,
+    )
+    .replace(/\b(\d{1,2}):(\d{2})\b/g, (_match, hour: string, minute: string) => formatOpeningHourClock(hour, minute))
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function buildOpeningHoursBlock(openingHours: string): string {
   const lines: string[] = [];
-  lines.push(`Öffnungszeiten: ${openingHours.trim()}`);
+  const rawOpeningHours = openingHours.trim();
+  lines.push(`Öffnungszeiten (technische Struktur, nicht vorlesen): ${rawOpeningHours}`);
+  lines.push(`Sprechfassung für Anrufer: ${formatOpeningHoursForSpeech(rawOpeningHours)}`);
+  lines.push('Wenn du Öffnungszeiten nennst, sprich immer die Sprechfassung. Sage nie Abkuerzungen wie "Mo-Fr", "Di-Sa", "Sa" oder technische Zeiten wie "09:00".');
 
   lines.push(`Zeitzone: Europe/Berlin. Nutze die aktuelle Uhrzeit zum Zeitpunkt des Anrufs um festzustellen ob geöffnet oder geschlossen ist.`);
   lines.push(
