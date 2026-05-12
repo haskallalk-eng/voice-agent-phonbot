@@ -176,6 +176,37 @@ describe('auth flow (TEST-01)', () => {
     expect(body.user.id).toBe('user-1');
   });
 
+  it('POST /auth/login accepts a unique organization login name', async () => {
+    mockQuery.mockClear();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: 'Test Org', password: 'securepass123' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.token).toBeDefined();
+    expect(body.user.id).toBe('user-1');
+    const loginQuery = mockQuery.mock.calls.find(([sql]) => String(sql).includes('SELECT u.id, u.email'));
+    expect(loginQuery?.[1]).toEqual([null, null, 'test org', 'test-org']);
+  });
+
+  it('POST /auth/login rejects ambiguous organization names', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rowCount: 2,
+      rows: [
+        { id: 'user-1', password_hash: '$2b$12$mock' },
+        { id: 'user-2', password_hash: '$2b$12$mock' },
+      ],
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: 'Duplicate Salon', password: 'securepass123' },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
   it('POST /auth/login with wrong email returns 401', async () => {
     mockQuery.mockResolvedValueOnce({ rowCount: 0, rows: [] });
     const res = await app.inject({
