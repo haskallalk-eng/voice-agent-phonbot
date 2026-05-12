@@ -15,6 +15,8 @@ import {
   type AdminDemoMeeting,
   type AdminDemoMeetingStatus,
   type AdminDemoPrompts,
+  type AdminPromptQaConversationFlowSourceResult,
+  type AdminPromptQaConversationFocus,
   type AdminPromptQaLayer,
   type AdminPromptQaLiveCallSourceResult,
   type AdminPromptQaReport,
@@ -666,6 +668,15 @@ const LAYER_LABELS: Record<AdminPromptQaLayer, string> = {
   privacy: 'Privacy',
 };
 
+const FLOW_FOCUS_LABELS: Record<AdminPromptQaConversationFocus, string> = {
+  logical_flow: 'Logischer Flow',
+  human_reaction: 'Menschliche Reaktion',
+  intent_switch: 'Zielwechsel',
+  unexpected_question: 'Unerwartete Fragen',
+  context_boundary: 'Kontextgrenze',
+  interruption_repair: 'Unterbrechung',
+};
+
 function qaStatusTone(status: AdminPromptQaStatus): 'green' | 'orange' | 'red' {
   if (status === 'green') return 'green';
   if (status === 'yellow') return 'orange';
@@ -681,7 +692,11 @@ function qaStatusLabel(status: AdminPromptQaStatus): string {
 function PromptQaSourceCard({ source }: { source: AdminPromptQaSourceResult }) {
   const [open, setOpen] = useState(source.status !== 'green');
   const layers = Object.entries(source.layerBreakdown) as Array<[AdminPromptQaLayer, { total: number; passed: number; failed: number }]>;
-  const topFailures = source.failures.slice(0, 6);
+  const severityRank: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+  const layerRank: Record<string, number> = { privacy: 0, tooling: 1, e2e: 2, stt: 3, tts: 4, prompt: 5, latency: 6 };
+  const topFailures = [...source.failures]
+    .sort((a, b) => (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9) || (layerRank[a.layer] ?? 9) - (layerRank[b.layer] ?? 9))
+    .slice(0, 6);
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.035]">
@@ -838,6 +853,71 @@ function PromptQaLiveCallCard({ result }: { result: AdminPromptQaLiveCallSourceR
   );
 }
 
+function PromptQaConversationFlowCard({ result }: { result: AdminPromptQaConversationFlowSourceResult }) {
+  const [open, setOpen] = useState(result.status !== 'green');
+  const focusAreas = Object.entries(result.focusBreakdown)
+    .sort((a, b) => b[1].failed - a[1].failed || b[1].total - a[1].total)
+    .slice(0, 6) as Array<[AdminPromptQaConversationFocus, { total: number; passed: number; failed: number }]>;
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/20">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full px-3 py-3 text-left flex items-center gap-3 flex-wrap hover:bg-white/[0.03] transition-colors rounded-xl"
+      >
+        <Pill tone={qaStatusTone(result.status)}>{qaStatusLabel(result.status)}</Pill>
+        <span className="text-sm font-semibold text-white">{result.label}</span>
+        <span className="text-xs text-white/35">{result.kind}</span>
+        <span className="ml-auto text-sm font-semibold text-white">{result.score.toFixed(1)}%</span>
+        <span className={result.failedRuns ? 'text-xs text-red-300' : 'text-xs text-emerald-300'}>
+          {result.passedRuns}/{result.applicableRuns} Flows bestanden
+        </span>
+      </button>
+
+      {open && (
+        <div className="px-3 pb-3 space-y-3">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {focusAreas.map(([focus, stats]) => (
+              <div key={focus} className="rounded-lg border border-white/10 bg-white/[0.035] px-3 py-2 text-xs">
+                <p className="text-white/35 truncate">{FLOW_FOCUS_LABELS[focus]}</p>
+                <p className="text-white/80">{stats.passed}/{stats.total}</p>
+                {stats.failed > 0 && <p className="text-red-300/90">{stats.failed} offen</p>}
+              </div>
+            ))}
+          </div>
+
+          {result.highestRiskFailures.length > 0 ? (
+            <div className="space-y-2">
+              {result.highestRiskFailures.slice(0, 4).map((failure) => (
+                <div key={failure.scenarioId} className="rounded-lg border border-orange-500/15 bg-orange-500/5 px-3 py-2 text-xs space-y-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Pill tone={failure.severity === 'critical' || failure.severity === 'high' ? 'red' : 'orange'}>{failure.severity}</Pill>
+                    <Pill tone="gray">{FLOW_FOCUS_LABELS[failure.focus]}</Pill>
+                    <span className="text-white/80 font-medium">{failure.title}</span>
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-black/20 p-2 space-y-1">
+                    {failure.transcriptPreview.slice(0, 4).map((line) => (
+                      <p key={line} className="text-white/45">{line}</p>
+                    ))}
+                  </div>
+                  <p className="text-white/65">Soll: {failure.expectedAgentBehavior}</p>
+                  <p className="text-white/45">Bewertung: {failure.evaluationCriteria.join(' / ')}</p>
+                  <p className="text-red-200/75">Fehlende Regeln: {failure.missingRuleIds.join(', ')}</p>
+                  {failure.recommendations[0] && <p className="text-orange-100/80">{failure.recommendations[0]}</p>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-200/80">
+              Keine offenen Gespraechsfluss-Failures fuer diese Quelle.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PromptQaTab() {
   const [report, setReport] = useState<AdminPromptQaReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -862,13 +942,20 @@ export function PromptQaTab() {
   const liveCallSources = liveCall?.sourceResults
     .filter((source) => filter === 'all' || source.status === filter)
     .sort((a, b) => b.criticalFailures - a.criticalFailures || a.score - b.score || b.failedRuns - a.failedRuns) ?? [];
+  const conversationFlow = report.conversationFlowDryRun;
+  const conversationFlowSources = conversationFlow?.sourceResults
+    .filter((source) => filter === 'all' || source.status === filter)
+    .sort((a, b) => b.criticalFailures - a.criticalFailures || a.score - b.score || b.failedRuns - a.failedRuns) ?? [];
+  const adversarialLoop = report.adversarialLoop;
+  const releaseStatus = adversarialLoop?.releaseRecommendation ?? report.overall.status;
+  const realCallResearch = report.realCallResearch;
 
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 space-y-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h2 className="text-lg font-semibold text-white">Prompt QA: {report.caseBank.totalCases}-Fall Dry-Run</h2>
+              <h2 className="text-lg font-semibold text-white">Prompt QA: {report.caseBank.totalCases}-Fall Prompt-Coverage-Dry-Run</h2>
             <p className="text-sm text-white/45 mt-1">
               Mehrere simulierte Tester-Agenten pruefen Website-Demo, Dashboard-Prompt, Sales und Baselines. Es werden keine echten Calls, Termine, SMS, CRM-Aktionen oder Retell-Deploys ausgefuehrt.
             </p>
@@ -883,11 +970,11 @@ export function PromptQaTab() {
 
         <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
           <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
-            <p className="text-xs text-white/35">Gesamtstatus</p>
-            <p className="mt-1"><Pill tone={qaStatusTone(report.overall.status)}>{qaStatusLabel(report.overall.status)}</Pill></p>
+            <p className="text-xs text-white/35">Live-Release</p>
+            <p className="mt-1"><Pill tone={qaStatusTone(releaseStatus)}>{qaStatusLabel(releaseStatus)}</Pill></p>
           </div>
           <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
-            <p className="text-xs text-white/35">Score</p>
+            <p className="text-xs text-white/35">Prompt-Coverage</p>
             <p className="text-xl font-semibold text-white">{report.overall.score.toFixed(1)}%</p>
           </div>
           <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3">
@@ -927,6 +1014,120 @@ export function PromptQaTab() {
           ))}
         </div>
       </div>
+
+      {adversarialLoop && (
+        <div className="rounded-2xl border border-orange-500/20 bg-gradient-to-br from-orange-500/[0.08] to-cyan-500/[0.04] p-4 space-y-4">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <h3 className="text-sm font-semibold text-white">Adversarial Loop: Prompt-Coverage-Gate</h3>
+              <p className="text-sm text-white/50 mt-1">
+                Störfall-Agenten, Human-Judge, Prompt-Verbesserer, Reviewer, Repeat-Critic und Criticality-Auditor pruefen den Prompt als Schleife.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                <p className="text-white/35">Dry-Run-Wert</p>
+                <p className="text-xl font-semibold text-white">{adversarialLoop.measuredConfidencePercent.toFixed(1)}%</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                <p className="text-white/35">Release</p>
+                <p><Pill tone={qaStatusTone(adversarialLoop.releaseRecommendation)}>{qaStatusLabel(adversarialLoop.releaseRecommendation)}</Pill></p>
+              </div>
+            </div>
+          </div>
+
+          <p className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/60">
+            {adversarialLoop.confidenceMeaning}
+          </p>
+          <p className="rounded-xl border border-orange-500/20 bg-black/20 px-3 py-2 text-xs text-orange-100/80">
+            {adversarialLoop.stopReason}
+          </p>
+
+          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-2">
+            {adversarialLoop.stages.map((stage) => (
+              <div key={stage.id} className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-xs space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-white">{stage.name}</span>
+                  <Pill tone="gray">{stage.ownerAgent}</Pill>
+                </div>
+                <p className="text-white/55">{stage.purpose}</p>
+                <p className="text-cyan-100/60">{stage.output}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="space-y-2">
+            <h4 className="text-xs font-semibold text-white/70">P0/P1 Muss-Gates</h4>
+            <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-2">
+              {adversarialLoop.criticalGates.map((gate) => (
+                <div key={gate.id} className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-xs space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Pill tone={qaStatusTone(gate.status)}>{qaStatusLabel(gate.status)}</Pill>
+                    <span className="font-semibold text-white/85">{gate.label}</span>
+                  </div>
+                  <p className="text-white/50">{gate.evidence}</p>
+                  {gate.redIfMissing && <p className="text-red-200/70">Fehlt dieses Gate, ist der Loop rot.</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {realCallResearch && (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 space-y-4">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <h3 className="text-sm font-semibold text-white">Research-Agent: echte Call-Signale</h3>
+              <p className="text-sm text-white/50 mt-1">
+                Nutzt nur read-only Signalquellen fuer Edge-Case-Findung. Keine Transkripte werden hier ausgespielt, keine produktiven Aktionen.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                <p className="text-white/35">Modus</p>
+                <p className="text-white font-semibold">{realCallResearch.mode}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                <p className="text-white/35">Signale</p>
+                <p className="text-white font-semibold">{realCallResearch.totalSignals.toLocaleString('de-DE')}</p>
+              </div>
+            </div>
+          </div>
+
+          <p className="rounded-xl border border-cyan-500/15 bg-black/20 px-3 py-2 text-xs text-cyan-100/70">
+            {realCallResearch.note}
+          </p>
+
+          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-2">
+            {realCallResearch.sources.map((source) => (
+              <div key={source.id} className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-xs space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-white/85">{source.label}</span>
+                  <Pill tone={source.safeReadOnly ? 'green' : 'red'}>{source.safeReadOnly ? 'read-only' : 'block'}</Pill>
+                </div>
+                <p className="text-lg font-semibold text-white">{source.availableRows.toLocaleString('de-DE')}</p>
+                <p className="text-white/50">{source.signal}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-3">
+            <div className="rounded-xl border border-orange-500/15 bg-orange-500/5 px-3 py-3 text-xs space-y-2">
+              <h4 className="font-semibold text-orange-100">Edge-Case-Hints</h4>
+              {realCallResearch.edgeCaseHints.slice(0, 6).map((hint) => (
+                <p key={hint} className="text-orange-100/75">{hint}</p>
+              ))}
+            </div>
+            <div className="rounded-xl border border-red-500/15 bg-red-500/5 px-3 py-3 text-xs space-y-2">
+              <h4 className="font-semibold text-red-100">Verbotene Aktionen im QA-Loop</h4>
+              {realCallResearch.forbiddenActions.slice(0, 6).map((action) => (
+                <p key={action} className="text-red-100/70">{action}</p>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {liveCall && (
         <div className="rounded-2xl border border-cyan-500/15 bg-cyan-500/[0.045] p-4 space-y-4">
@@ -969,6 +1170,51 @@ export function PromptQaTab() {
 
           <div className="space-y-2">
             {liveCallSources.map((source) => <PromptQaLiveCallCard key={source.sourceId} result={source} />)}
+          </div>
+        </div>
+      )}
+
+      {conversationFlow && (
+        <div className="rounded-2xl border border-orange-500/15 bg-orange-500/[0.045] p-4 space-y-4">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <h3 className="text-sm font-semibold text-white">Gespraechsfluss-Dry-Run: {conversationFlow.totalRuns} Mehrturn-Flows</h3>
+              <p className="text-sm text-white/50 mt-1">
+                Prueft, ob der Prompt logische Dialoge, Zielwechsel, unerwartete Fragen, Kontextgrenzen und menschliche Reparaturregeln abdeckt. Keine echten Modellantworten.
+              </p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                <p className="text-white/35">Flows</p>
+                <p className="text-white font-semibold">{conversationFlow.totalRuns}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                <p className="text-white/35">Echte Calls</p>
+                <p className="text-emerald-300 font-semibold">{conversationFlow.actualCallsPlaced}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                <p className="text-white/35">Modell</p>
+                <p className="text-white font-semibold">{conversationFlow.liveModelSimulation}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-2">
+            {conversationFlow.families.map((family) => (
+              <div key={family.id} className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs">
+                <p className="text-white/35">{FLOW_FOCUS_LABELS[family.focus]}</p>
+                <p className="text-white/80 truncate">{family.title}</p>
+                <p className="text-orange-100/60">{family.runs} Varianten</p>
+              </div>
+            ))}
+          </div>
+
+          <p className="rounded-xl border border-orange-500/15 bg-black/20 px-3 py-2 text-xs text-orange-100/75">
+            {conversationFlow.note}
+          </p>
+
+          <div className="space-y-2">
+            {conversationFlowSources.map((source) => <PromptQaConversationFlowCard key={source.sourceId} result={source} />)}
           </div>
         </div>
       )}

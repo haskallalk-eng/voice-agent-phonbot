@@ -161,7 +161,7 @@ export function TestConsole({ onNavigate }: { onNavigate?: (page: Page) => void 
         <div className="flex items-start justify-between mb-8">
           <div>
             <h1 className="text-2xl font-bold text-white">Test Console</h1>
-            <p className="text-sm text-white/40 mt-1">Teste deinen Agent mit einem Live-Anruf</p>
+            <p className="text-sm text-white/40 mt-1">Teste deinen Agent mit einem sicheren Dry-Run-Anruf</p>
           </div>
           {logs.length > 0 && (
             <button onClick={() => setLogs([])}
@@ -237,7 +237,10 @@ export function TestConsole({ onNavigate }: { onNavigate?: (page: Page) => void 
                 </div>
                 {isDeployed ? (
                   <>
-                    <p className="text-sm text-white/50 mb-6">Bereit zum Testen</p>
+                    <p className="text-sm text-white/50 mb-2">Bereit zum Testen</p>
+                    <p className="mb-6 max-w-sm text-center text-xs leading-relaxed text-white/32">
+                      Buchungen, Tickets, SMS und externe Aktionen laufen hier im Testmodus und werden nicht produktiv ausgefuehrt.
+                    </p>
                     <button
                       onClick={startCall}
                       className="flex items-center gap-3 rounded-full px-8 py-3.5 text-sm font-semibold text-white transition-all hover:scale-105 active:scale-95 cursor-pointer"

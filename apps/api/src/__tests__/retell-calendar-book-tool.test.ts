@@ -12,6 +12,7 @@ const mockSendBookingConfirmationSms = vi.fn();
 const mockReadConfig = vi.fn();
 const mockLookupCustomer = vi.fn();
 const mockUpsertCustomer = vi.fn();
+const mockGetCall = vi.fn();
 
 vi.mock('../db.js', () => ({
   pool: { query: mockQuery },
@@ -54,6 +55,15 @@ vi.mock('../sms.js', () => ({
   sendTicketAckSms: mockSendTicketAckSms,
 }));
 
+vi.mock('../retell.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../retell.js')>();
+  return {
+    ...actual,
+    getCall: mockGetCall,
+    deleteCall: vi.fn(),
+  };
+});
+
 const { registerRetellWebhooks } = await import('../retell-webhooks.js');
 
 const SECRET = 'retell-calendar-book-test';
@@ -81,6 +91,7 @@ async function postCalendarBook(args: Record<string, unknown>) {
       url: signedUrl('/retell/tools/calendar.book'),
       payload: {
         _retell_call_id: 'call-1',
+        from_number: '+4917612345678',
         args,
       },
     });
@@ -102,6 +113,13 @@ describe('Retell calendar.book tool contract', () => {
     mockReadConfig.mockReset();
     mockLookupCustomer.mockReset();
     mockUpsertCustomer.mockReset();
+    mockGetCall.mockReset();
+    mockGetCall.mockResolvedValue({
+      call_id: 'call-1',
+      agent_id: 'agent-real',
+      from_number: '+4917612345678',
+      call_status: 'ongoing',
+    });
 
     mockReadConfig.mockResolvedValue({});
     mockLookupCustomer.mockResolvedValue({ ok: true, status: 'not_found', customer: null });
@@ -161,6 +179,42 @@ describe('Retell calendar.book tool contract', () => {
     expect(mockCreateTicket).not.toHaveBeenCalled();
   });
 
+  it('refuses to book when preferred time is missing', async () => {
+    const res = await postCalendarBook({
+      customerName: 'Max Mustermann',
+      customerPhone: '+4917612345678',
+      service: 'Beratung',
+      confirmed: true,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      ok: false,
+      status: 'preferred_time_required',
+      error: 'PREFERRED_TIME_REQUIRED',
+    });
+    expect(mockBookSlot).not.toHaveBeenCalled();
+    expect(mockCreateTicket).not.toHaveBeenCalled();
+  });
+
+  it('refuses to book when service is missing', async () => {
+    const res = await postCalendarBook({
+      customerName: 'Max Mustermann',
+      customerPhone: '+4917612345678',
+      preferredTime: '10.05.2026 10 Uhr',
+      confirmed: true,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      ok: false,
+      status: 'service_required',
+      error: 'SERVICE_REQUIRED',
+    });
+    expect(mockBookSlot).not.toHaveBeenCalled();
+    expect(mockCreateTicket).not.toHaveBeenCalled();
+  });
+
   it('rejects past slots without creating a fallback ticket', async () => {
     mockBookSlot.mockResolvedValue({ ok: false, error: 'PAST_SLOT' });
 
@@ -208,9 +262,9 @@ describe('Retell calendar.book tool contract', () => {
       ok: false,
       status: 'fallback_ticket_created',
       fallback: true,
-      ticketId: 'ticket-1',
       smsSent: false,
       deliveryInstruction: 'Keine SMS-Bestaetigung behaupten; smsSent ist false.',
     });
+    expect(JSON.stringify(res.json())).not.toContain('ticket-1');
   });
 });

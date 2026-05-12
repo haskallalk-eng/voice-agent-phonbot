@@ -34,6 +34,16 @@ describe('deriveTechnicalRuntimeSettings', () => {
     expect(runtime.enableBackchannel).toBe(true);
     expect(runtime.allowUserDtmf).toBe(true);
   });
+
+  it('keeps every voice mode interruptible for stop and no signals', () => {
+    const runtime = deriveTechnicalRuntimeSettings({
+      interruptionMode: 'block',
+      interruptionSensitivity: 0,
+    });
+
+    expect(runtime.interruptionModeLabel).toBe('Ruhig');
+    expect(runtime.interruptionSensitivity).toBe(0.35);
+  });
 });
 
 describe('formatCallDuration', () => {

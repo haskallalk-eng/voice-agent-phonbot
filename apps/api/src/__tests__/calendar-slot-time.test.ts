@@ -16,7 +16,7 @@ vi.mock('../logger.js', () => {
   };
 });
 
-const { parseSlotTime, bookSlot, findFreeSlots } = await import('../calendar.js');
+const { parseSlotTime, bookSlot, findFreeSlots, formatSpokenClockTime, formatSpokenSlotLabel } = await import('../calendar.js');
 
 function berlinTime(date: Date | null): string {
   expect(date).not.toBeNull();
@@ -49,6 +49,16 @@ describe('calendar slot time parsing', () => {
 
     expect(parsed).not.toBeNull();
     expect(parsed!.getTime()).toBeLessThan(Date.now());
+  });
+
+  it('treats "naechsten Donnerstag" as the following week, not tomorrow', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-06T10:00:00.000Z')); // Mittwoch in Berlin
+
+    const parsed = parseSlotTime('naechsten Donnerstag um 09:00');
+
+    expect(new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' }).format(parsed!)).toBe('2026-05-14');
+    expect(berlinTime(parsed)).toBe('09:00');
   });
 
   it('rejects absolute German dates in the past before any booking side effect', async () => {
@@ -86,5 +96,22 @@ describe('calendar slot time parsing', () => {
       month: '2-digit',
       day: '2-digit',
     }).format(parsed!)).toBe('12.05.2026');
+  });
+
+  it('normalizes appointment times for German speech', () => {
+    expect(formatSpokenClockTime('09:00')).toBe('neun Uhr');
+    expect(formatSpokenClockTime('10:05')).toBe('zehn Uhr null fünf');
+    expect(formatSpokenClockTime('11:15')).toBe('elf Uhr fünfzehn');
+    expect(formatSpokenClockTime('14:30')).toBe('vierzehn Uhr dreißig');
+  });
+
+  it('builds spoken slot labels without technical dates or missing minute zeros', () => {
+    expect(formatSpokenSlotLabel('Dienstag 12. Mai 2026 um 10 Uhr 05')).toBe(
+      'Dienstag, zwölfter Mai um zehn Uhr null fünf',
+    );
+    expect(formatSpokenSlotLabel('Dienstag 12. Mai 2026 um 09 Uhr')).toBe(
+      'Dienstag, zwölfter Mai um neun Uhr',
+    );
+    expect(formatSpokenSlotLabel('Mo-Fr 09:00-18:00')).toBe('Mo-Fr neun Uhr bis achtzehn Uhr');
   });
 });

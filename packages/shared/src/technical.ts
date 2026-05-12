@@ -54,9 +54,9 @@ export const TECHNICAL_MODE_PRESETS: Record<InterruptionMode, TechnicalModePrese
   },
   block: {
     mode: 'block',
-    label: 'Ohne Unterbrechung',
-    description: 'Unterbricht kaum und klingt am kontrolliertesten.',
-    interruptionSensitivity: 0,
+    label: 'Ruhig',
+    description: 'Spricht kontrollierter, bleibt aber fuer Stopp- und Nein-Signale unterbrechbar.',
+    interruptionSensitivity: 0.35,
     responsiveness: 1,
     enableBackchannel: false,
   },
@@ -70,6 +70,7 @@ const MIN_CALL_DURATION_SECONDS = 60;
 const MAX_CALL_DURATION_SECONDS = 14_400;
 const MIN_TUNING = 0;
 const MAX_TUNING = 1;
+const MIN_INTERRUPTIBLE_SENSITIVITY = 0.35;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -93,7 +94,7 @@ export function deriveTechnicalRuntimeSettings(input: TechnicalConfigInput): Der
   );
   const interruptionSensitivity = clamp(
     pickNumber(input.interruptionSensitivity, preset.interruptionSensitivity),
-    MIN_TUNING,
+    MIN_INTERRUPTIBLE_SENSITIVITY,
     MAX_TUNING,
   );
   const responsiveness = clamp(
