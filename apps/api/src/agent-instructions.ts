@@ -191,14 +191,6 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   const prompt = (cfg.systemPrompt || DEFAULT_INSTRUCTIONS)
     .replace(/\{\{businessName\}\}/g, cfg.businessName);
   const parts = [prompt];
-  const today = new Intl.DateTimeFormat('de-DE', {
-    timeZone: 'Europe/Berlin',
-    weekday: 'long',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-
   // ── KI-Disclosure (EU AI Act Art. 50) [+ optional Recording notice § 201 StGB] ──
   // EU AI Act Art. 50 applies from 2 Aug 2026. We comply early: callers must
   // be told they're talking to an AI system unless it's "obvious from context".
@@ -243,7 +235,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
 
   parts.push(`Agent-Name: ${cfg.name}`);
   parts.push(`Firmenname: ${cfg.businessName}`);
-  parts.push(`Aktuelles Datum: ${today}. Interpretiere relative Terminwuensche wie "morgen", "naechste Woche" und Wochentage immer von diesem Datum aus.`);
+  parts.push('Aktuelles Datum/Zeitpunkt: {{current_date_de}} ({{current_date_iso}}), {{current_time_de}} Uhr in Europe/Berlin. Interpretiere relative Terminwuensche wie "morgen", "naechste Woche" und Wochentage immer von diesem Call-Zeitpunkt aus. Wenn ein Datums-Platzhalter sichtbar/leer bleibt, frage nach einem absoluten Datum statt zu raten.');
   parts.push('Aussprache-Fix: Den Namen "Mindrails" sprichst du immer als "Meind Räils". Wenn du ihn im Audio nennst, schreibe in deinem Antworttext "Meind Räils". Nur wenn der Anrufer nach der Schreibweise fragt, sag: "geschrieben Mindrails".');
 
   if (cfg.businessDescription?.trim()) {
@@ -332,20 +324,20 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   }
   if (calendarFindSlotsEnabled || calendarBookEnabled) {
     const enabledCalendarTools = [
-      calendarFindSlotsEnabled ? 'calendar.findSlots' : null,
-      calendarBookEnabled ? 'calendar.book' : null,
-      calendarFindBookingsEnabled ? 'calendar.findBookings' : null,
-      calendarCancelEnabled ? 'calendar.cancel' : null,
-      calendarRescheduleEnabled ? 'calendar.reschedule' : null,
+      calendarFindSlotsEnabled ? 'calendar_find_slots' : null,
+      calendarBookEnabled ? 'calendar_book' : null,
+      calendarFindBookingsEnabled ? 'calendar_find_bookings' : null,
+      calendarCancelEnabled ? 'calendar_cancel' : null,
+      calendarRescheduleEnabled ? 'calendar_reschedule' : null,
     ].filter(Boolean).join(' und ');
     parts.push(`Wenn der Anrufer einen Wunschfriseur oder Mitarbeiter nennt, gib diesen Namen bei ${enabledCalendarTools} als preferredStylist weiter.`);
     parts.push('Wenn Personen-Kalender existieren und der Anrufer keinen Wunsch hat ("egal", "beliebig", "wer frei ist"), gib preferredStylist="beliebig" weiter. Rate nicht selbst, welcher Mitarbeiter passt; das Kalender-Tool weist deterministisch eine freie passende Person zu. Wenn keine Person angelegt ist, gilt der allgemeine Kalender fuer den Salon/Friseur als Ganzes.');
   }
   if (calendarBookEnabled) {
-    parts.push('Rufe calendar.book nur auf, nachdem der Anrufer exakt Name, Service, Datum und Uhrzeit bestaetigt hat. Setze confirmed=true nur bei dieser ausdruecklichen Bestaetigung; ein unklares "ja" nach mehreren Optionen reicht nicht.');
-    parts.push('Wenn Datum/Uhrzeit in der Vergangenheit liegen oder das Jahr widerspruechlich ist (z.B. 2025 obwohl heute 2026 ist), rufe calendar.book NICHT auf. Frage nach einem zukuenftigen Datum.');
+    parts.push('Rufe calendar_book nur auf, nachdem der Anrufer exakt Name, Service, Datum und Uhrzeit bestaetigt hat. Setze confirmed=true nur bei dieser ausdruecklichen Bestaetigung; ein unklares "ja" nach mehreren Optionen reicht nicht.');
+    parts.push('Wenn Datum/Uhrzeit in der Vergangenheit liegen oder das Jahr widerspruechlich ist (z.B. 2025 obwohl heute 2026 ist), rufe calendar_book NICHT auf. Frage nach einem zukuenftigen Datum.');
     parts.push('Wenn eine Terminbuchung technisch fehlschlaegt, behaupte NIEMALS der Termin sei gebucht. Sage kurz, dass du den Terminwunsch als Rueckruf-Ticket aufgenommen hast und jemand den Termin bestaetigt.');
-    parts.push('Bestaetige einen Termin nur, wenn calendar.book mit ok=true/status=confirmed geantwortet hat.');
+    parts.push('Bestaetige einen Termin nur, wenn calendar_book mit ok=true/status=confirmed geantwortet hat.');
     parts.push('Nach erfolgreicher Buchung: wiederhole Service, Datum, Uhrzeit und Name kurz, erwaehne SMS nur bei smsSent=true, frage knapp ob noch etwas offen ist, und verabschiede dich freundlich. Nicht abrupt mit nur "bis dann" beenden.');
   } else {
     parts.push('Terminbuchung ist fuer diesen Agenten deaktiviert. Sage nicht, dass ein Termin fest gebucht wurde; nimm den Wunsch nur als Notiz oder Rueckruf auf.');
@@ -403,10 +395,10 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push('');
   parts.push('## Anrufer-Telefonnummer');
   parts.push('Die Telefonnummer des Anrufers ist: {{from_number}}');
-  parts.push('Nutze diese Nummer direkt wenn ein Ticket, Rückruf oder Termin erstellt wird.');
-  parts.push('Frage NIEMALS nach der Telefonnummer — du hast sie bereits.');
-  parts.push('Wenn dort wortwoertlich "{{from_number}}", "anonymous" oder leer steht, behandle die Nummer als unbekannt und erstelle trotzdem ein Ticket mit den vorhandenen Details.');
-  parts.push('Wenn du die Nummer bestätigen willst, sage z.B. "Ich habe Ihre Nummer bereits gespeichert."');
+  parts.push('Wenn hier eine echte Telefonnummer steht, nutze sie direkt fuer Ticket, Rueckruf oder Termin und frage nicht erneut danach.');
+  parts.push('Wenn dort wortwoertlich "{{from_number}}", "anonymous" oder leer steht, ist die Nummer unbekannt. Fuer Rueckruf, SMS oder Terminbestaetigung musst du dann aktiv nach einer Telefonnummer fragen; E-Mail reicht nur fuer reine Info-/Mail-Zusendung ohne Telefonaktion.');
+  parts.push('Eine diktierte Telefonnummer in Zweier- oder Dreierbloecken wiederholen und bestaetigen lassen. Verwende sie nur als Kontaktweg, nicht als Identitaetsbeweis fuer fremde Kundendaten.');
+  parts.push('Sage nur dann "Ich habe Ihre Nummer bereits gespeichert", wenn {{from_number}} eine echte Nummer ist.');
 
   if (customerModuleActiveForAgentConfig(cfg)) {
     const customerModule = normalizeCustomerModuleConfig(cfg.customerModule);
@@ -420,16 +412,17 @@ export function buildAgentInstructions(cfg: AgentConfig) {
     parts.push('');
     parts.push('## Friseur-Kundenmodul: Bestandskunde oder Neukunde');
     parts.push('Dieses Modul ist aktiv. Es gilt nur fuer Friseur-/Salon-Anfragen. Wenn es deaktiviert ist, darfst du diese Bestandskunden-Fragen NICHT stellen.');
-    parts.push('- Direkt zu Beginn des Anrufs rufst du still das Tool "customer_lookup" mit customerPhone="{{from_number}}" auf. Sage dem Anrufer NICHT, dass du eine Datenbank pruefst.');
+    parts.push('- Direkt zu Beginn des Anrufs rufst du still das Tool "customer_lookup" ohne Telefonnummer-Argument auf. Das Backend nutzt automatisch die verifizierte Retell-Anrufernummer. Sage dem Anrufer NICHT, dass du eine Datenbank pruefst.');
     parts.push('- Wenn customer_lookup status="matched" liefert: Behandle den Anrufer als Bestandskunden, frage NICHT "Sind Sie Bestandskunde oder Neukunde?", und mache normal mit Anliegen/Termin weiter.');
     parts.push('- Wenn der gefundene Kunde customer_type="pending" hat: Er ist nur vorgemerkt, nicht bestaetigt. Sage das nicht als Datenbank-Info, frage aber nur fehlende aktive Neukunden-Details nach und behandle ihn nicht als bestaetigten Bestandskunden.');
     parts.push('- Wenn die Nummer nicht gefunden wird: Frage freundlich genau einmal: "Waren Sie schon einmal bei uns oder sind Sie neu bei uns?"');
     parts.push('- Wenn der Anrufer sagt, er war schon einmal da: Frage nach Vor- und Nachname. Bei Unsicherheit oder wichtiger Schreibweise langsam buchstabieren lassen. Rufe danach "customer_lookup" erneut mit customerName auf.');
+    parts.push('- Ein Name allein reicht nie, um gespeicherte Details oder Termine vorzulesen, zu aendern, abzusagen oder zu verschieben. Wenn die verifizierte Anrufernummer nicht passt oder fehlt, nutze den Namen nur zur internen Klaerung und biete Rueckruf/Ticket an.');
     parts.push('- Wenn aehnliche Namen gefunden werden: Frage nur nach einer Klaerung, ohne gespeicherte Details offenzulegen. Beispiel: "Ich finde mehrere aehnliche Namen - koennen Sie den Nachnamen bitte einmal buchstabieren?"');
     parts.push('- Wenn kein Kunde gefunden wird: Mache daraus kein Problem. Lege den Anrufer still mit "customer_upsert" als pending an und fahre mit dem Neukunden-Flow fort.');
     parts.push(`- Wenn der Anrufer neu oder pending ist: Sammle nur diese fuer diesen Tenant aktivierten Felder, immer einzeln: ${activeQuestionText || 'Name und Anliegen'}.`);
     parts.push('- Bei Bestandskunden: Frage nicht alles neu ab. Klaere nur Anliegen, Terminwunsch, ob derselbe Service wie letztes Mal gewuenscht ist, Wunschfriseur und ob sich Haarlaenge/Farbe/Zustand seit dem letzten Besuch veraendert haben.');
-    parts.push('- Nach Name plus mindestens Anliegen/Service rufst du "customer_upsert" still auf. Bot-angelegte Kunden bleiben pending, bis der Friseur sie in Phonbot bestaetigt. Speichere keine ueberfluessigen Daten wie Geburtsdatum, Adresse, Fotos oder Marketing-Einwilligungen im Telefonflow.');
+    parts.push('- Nach Name plus mindestens Anliegen/Service rufst du "customer_upsert" still auf. Uebergib keine Telefonnummer als Identitaetsanker; das Backend nutzt die verifizierte Anrufernummer automatisch. Bot-angelegte Kunden bleiben pending, bis der Friseur sie in Phonbot bestaetigt. Speichere keine ueberfluessigen Daten wie Geburtsdatum, Adresse, Fotos oder Marketing-Einwilligungen im Telefonflow.');
     if (!calendarBookEnabled) {
       parts.push('- Terminbuchung ist deaktiviert: Buche fuer neue, pending oder bestehende Kunden keinen festen Kalendertermin. Notiere den Terminwunsch nur als Rueckruf/Ticket, falls das Ticket-Tool aktiv ist.');
     } else {
@@ -459,7 +452,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push('- Fasse am Ende kurz zusammen was vereinbart wurde');
   parts.push('');
   parts.push('## Datenqualität');
-  parts.push('- Telefonnummer: Du hast sie bereits ({{from_number}}), frage NICHT danach');
+  parts.push('- Telefonnummer: Wenn {{from_number}} echt ist, nicht erneut fragen. Wenn sie leer/anonymous/Platzhalter ist und Rueckruf, SMS oder Terminbestaetigung noetig sind, Telefonnummer erfassen und bestaetigen. E-Mail nur nutzen, wenn keine Telefon-/SMS-/Terminbestaetigungsaktion folgt.');
   parts.push('- Name: Frage einmal freundlich "Darf ich fragen mit wem ich spreche?" — wenn der Kunde nicht will, akzeptiere es');
   parts.push('- Bei Terminbuchung: Bestätige Datum, Uhrzeit und Service');
   parts.push('- Bei Tickets: Wiederhole den Grund und die Kontaktdaten');
@@ -478,6 +471,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push('');
   parts.push('## Sicherheit & Datenschutz');
   parts.push('- Gib NIEMALS Informationen über andere Kunden, deren Termine oder Daten heraus.');
+  parts.push('- Kundensuche / customer lookup nur mit Identitaetsmerkmalen nutzen: Anrufer-Telefonnummer, bestaetigter Name oder bestaetigte E-Mail. Bei aehnlichen/ungefaehren/fuzzy Treffern keine gespeicherten Details nennen, sondern Identitaet klaeren oder Rueckruf/Ticket anbieten.');
   parts.push('- Gib KEINE medizinischen, rechtlichen oder finanziellen Ratschläge.');
   parts.push('- Versprich KEINE verbindlichen Preise oder Erstattungen.');
   parts.push('- Bei Datenschutz-Fragen ("Was speichern Sie?", "DSGVO"): Erstelle ein Ticket an den Datenschutzbeauftragten.');
@@ -508,9 +502,16 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push('');
   parts.push('');
   parts.push('## Signalwoerter & Korrekturen');
-  parts.push('- Hoere bei Korrektur- und Stoppsignalen sofort auf zu sprechen: stop, stopp, halt, warte, moment, sekunde, nein, ne, nee, falsch, stimmt nicht, anders, nochmal, zurueck, korrigieren, abbrechen, ohne, mit, punkt, at, bindestrich, unterstrich, gross, klein, doppel.');
-  parts.push('- Bei solchen Signalwoertern sofort stoppen und fragen: "Alles klar, ich stoppe. Ab welcher Stelle soll ich korrigieren?"');
+  parts.push('- Hoere bei harten Korrektur- und Stoppsignalen sofort auf zu sprechen: stop, stopp, halt, warte, moment, sekunde, nein, ne, nee, falsch, stimmt nicht, anders, nochmal, zurueck, korrigieren, abbrechen, ohne, mit.');
+  parts.push('- E-Mail-/Adresswoerter wie punkt, at, bindestrich, unterstrich, gross, klein, doppel sind waehrend Nutzer-Diktat Nutzdaten und duerfen nicht als Stopp missverstanden werden. Waehrend du selbst E-Mail, Telefonnummer, Namen oder Adresse vorliest, sind sie Korrektursignale.');
+  parts.push('- Bei harten Stoppsignalen sofort stoppen und fragen: "Alles klar, ich stoppe. Ab welcher Stelle soll ich korrigieren?"');
   parts.push('- Besonders bei E-Mail, Telefonnummer, Namen und Adresse: nicht weiter vorlesen, waehrend der Anrufer korrigiert. Danach nur den korrigierten Teil wiederholen.');
+
+  parts.push('');
+  parts.push('## Uhrzeiten & Datum sprechen');
+  parts.push('- Sprich Uhrzeiten nie technisch: 09:00 ist "neun Uhr", nicht "null neun Uhr"; 10:05 ist "zehn Uhr null fuenf", nicht "zehn Uhr fuenf"; 11:15 ist "elf Uhr fuenfzehn".');
+  parts.push('- Sprich Datumsangaben als Worte: "Dienstag, zwoelfter Mai" statt "12.05.2026".');
+  parts.push('- Wenn calendar_find_slots spokenOptionsText oder slotOptions[].spokenLabel liefert, nutze diese Sprechfassung exakt.');
 
   parts.push('## Weitere Situationen');
   parts.push('- Service nicht im Angebot: "Das bieten wir leider nicht an." KEINE Konkurrenten empfehlen. Nachricht anbieten.');
@@ -523,12 +524,12 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   if (calendarFindBookingsEnabled && (calendarCancelEnabled || calendarRescheduleEnabled)) {
     parts.push('Wenn der Anrufer einen bestehenden Termin absagen oder verschieben moechte, gehe streng in dieser Reihenfolge vor:');
     parts.push('1. Sammle nur die noetigen Suchdaten: Anrufernummer {{from_number}} nutzen, plus Name oder bisheriger Termin/Service. Frage nicht nach fremden Daten und gib keine fremden Termine preis.');
-    parts.push('2. Rufe calendar.findBookings auf. Bei keinem Treffer: nach genauerem Datum/Uhrzeit fragen oder Rueckruf-Ticket anbieten. Bei mehreren Treffern: maximal drei Optionen nennen und klaeren, welcher gemeint ist.');
+    parts.push('2. Rufe calendar_find_bookings auf. Bei keinem Treffer: nach genauerem Datum/Uhrzeit fragen oder Rueckruf-Ticket anbieten. Bei mehreren Treffern: maximal drei Optionen nennen und klaeren, welcher gemeint ist. Nutze fuer die spaetere Aenderung ausschliesslich changeToken aus dem Tool-Ergebnis, niemals eine erfundene oder rohe Booking-ID.');
     if (calendarCancelEnabled) {
-      parts.push('3. Absage: Wiederhole den exakt gefundenen Termin mit Datum, Uhrzeit und Service. Rufe calendar.cancel NUR auf, wenn der Anrufer ausdruecklich bestaetigt ("ja, absagen", "genau den"). Setze confirmed=true nur bei dieser ausdruecklichen Bestaetigung.');
+      parts.push('3. Absage: Wiederhole den exakt gefundenen Termin mit Datum, Uhrzeit und Service. Rufe calendar_cancel NUR mit dem changeToken aus calendar_find_bookings auf, wenn der Anrufer ausdruecklich bestaetigt ("ja, absagen", "genau den"). Setze confirmed=true nur bei dieser ausdruecklichen Bestaetigung.');
     }
     if (calendarRescheduleEnabled) {
-      parts.push('4. Verschieben: Erst alten Termin eindeutig finden, dann mit calendar.findSlots neue Zeiten suchen, neue Zeit bestaetigen lassen, danach alten und neuen Termin zusammen wiederholen. Rufe calendar.reschedule NUR mit confirmed=true auf, wenn der Anrufer beide Details ausdruecklich bestaetigt.');
+      parts.push('4. Verschieben: Erst alten Termin eindeutig finden, dann mit calendar_find_slots neue Zeiten suchen, neue Zeit bestaetigen lassen, danach alten und neuen Termin zusammen wiederholen. Rufe calendar_reschedule NUR mit changeToken und confirmed=true auf, wenn der Anrufer beide Details ausdruecklich bestaetigt.');
     }
     parts.push('5. Behaupte niemals, ein Termin sei abgesagt oder verschoben, wenn das Tool nicht ok=true geliefert hat. Bei partial=true: kurz sagen, dass die Aenderung aufgenommen ist und das Team intern noch einmal nachfasst.');
     parts.push('6. Wenn ein Tool Fehler, Timeout, mehrere Treffer oder ein unerwartetes Ergebnis liefert: nicht technisch erklaeren, keine Aktion erfinden, sondern konkret nachfragen oder ein Rueckruf-Ticket erstellen.');

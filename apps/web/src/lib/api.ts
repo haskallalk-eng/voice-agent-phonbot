@@ -2028,6 +2028,13 @@ export function adminFlushDemoCache() {
 export type AdminPromptQaLayer = 'prompt' | 'latency' | 'stt' | 'tts' | 'e2e' | 'tooling' | 'privacy';
 export type AdminPromptQaSeverity = 'low' | 'medium' | 'high' | 'critical';
 export type AdminPromptQaStatus = 'green' | 'yellow' | 'red';
+export type AdminPromptQaConversationFocus =
+  | 'logical_flow'
+  | 'human_reaction'
+  | 'intent_switch'
+  | 'unexpected_question'
+  | 'context_boundary'
+  | 'interruption_repair';
 
 export type AdminPromptQaSimulationAgent = {
   id: string;
@@ -2080,6 +2087,82 @@ export type AdminPromptQaLiveCallSourceResult = {
   highestRiskFailures: AdminPromptQaLiveCallFailure[];
 };
 
+export type AdminPromptQaConversationFlowFailure = {
+  scenarioId: string;
+  family: string;
+  focus: AdminPromptQaConversationFocus;
+  layer: AdminPromptQaLayer;
+  severity: AdminPromptQaSeverity;
+  title: string;
+  transcriptPreview: string[];
+  expectedAgentBehavior: string;
+  evaluationCriteria: string[];
+  missingRuleIds: string[];
+  recommendations: string[];
+  risk: string;
+};
+
+export type AdminPromptQaConversationFlowSourceResult = {
+  sourceId: string;
+  label: string;
+  kind: 'platform' | 'demo' | 'dashboard' | 'outbound' | 'sales';
+  totalScenarioBank: number;
+  applicableRuns: number;
+  passedRuns: number;
+  failedRuns: number;
+  criticalFailures: number;
+  score: number;
+  status: AdminPromptQaStatus;
+  focusBreakdown: Record<AdminPromptQaConversationFocus, { total: number; passed: number; failed: number }>;
+  highestRiskFailures: AdminPromptQaConversationFlowFailure[];
+};
+
+export type AdminPromptQaLoopStage = {
+  id: string;
+  name: string;
+  ownerAgent: string;
+  purpose: string;
+  output: string;
+};
+
+export type AdminPromptQaCriticalGate = {
+  id: string;
+  label: string;
+  status: AdminPromptQaStatus;
+  evidence: string;
+  redIfMissing: boolean;
+};
+
+export type AdminPromptQaAdversarialLoop = {
+  targetConfidencePercent: 98;
+  measuredConfidencePercent: number;
+  confidenceMeaning: string;
+  releaseRecommendation: AdminPromptQaStatus;
+  stopReason: string;
+  stages: AdminPromptQaLoopStage[];
+  criticalGates: AdminPromptQaCriticalGate[];
+  reviewerAgents: string[];
+};
+
+export type AdminPromptQaRealCallResearchSource = {
+  id: string;
+  label: string;
+  safeReadOnly: true;
+  availableRows: number;
+  signal: string;
+};
+
+export type AdminPromptQaRealCallResearch = {
+  mode: 'read_only_db' | 'not_run_no_db' | 'not_run_error';
+  available: boolean;
+  sampledAt: string;
+  totalSignals: number;
+  sources: AdminPromptQaRealCallResearchSource[];
+  edgeCaseHints: string[];
+  forbiddenActions: string[];
+  note: string;
+};
+
 export type AdminPromptQaSourceResult = {
   id: string;
   label: string;
@@ -2114,7 +2197,7 @@ export type AdminPromptQaReport = {
     layers: Record<AdminPromptQaLayer, number>;
   };
   liveCallDryRun?: {
-    totalRuns: 1000;
+    totalRuns: number;
     dryRunOnly: true;
     liveModelSimulation: 'not_run';
     actualCallsPlaced: 0;
@@ -2122,6 +2205,17 @@ export type AdminPromptQaReport = {
     note: string;
     sourceResults: AdminPromptQaLiveCallSourceResult[];
   };
+  conversationFlowDryRun?: {
+    totalRuns: number;
+    dryRunOnly: true;
+    liveModelSimulation: 'not_run';
+    actualCallsPlaced: 0;
+    families: Array<{ id: string; title: string; focus: AdminPromptQaConversationFocus; runs: number }>;
+    note: string;
+    sourceResults: AdminPromptQaConversationFlowSourceResult[];
+  };
+  realCallResearch?: AdminPromptQaRealCallResearch;
+  adversarialLoop?: AdminPromptQaAdversarialLoop;
   overall: {
     sources: number;
     applicableCases: number;

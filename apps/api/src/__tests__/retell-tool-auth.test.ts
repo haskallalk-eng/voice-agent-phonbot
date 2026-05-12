@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockQuery = vi.fn();
 const mockAppendTraceEvent = vi.fn(async () => {});
+const mockGetCall = vi.fn();
 
 vi.mock('../db.js', () => ({
   pool: { query: mockQuery },
@@ -12,6 +13,15 @@ vi.mock('../db.js', () => ({
 vi.mock('../traces.js', () => ({
   appendTraceEvent: mockAppendTraceEvent,
 }));
+
+vi.mock('../retell.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../retell.js')>();
+  return {
+    ...actual,
+    getCall: mockGetCall,
+    deleteCall: vi.fn(),
+  };
+});
 
 const { registerRetellWebhooks } = await import('../retell-webhooks.js');
 
@@ -36,6 +46,13 @@ describe('Retell tool authentication', () => {
     process.env.RETELL_TOOL_AUTH_SECRET = SECRET;
     mockQuery.mockReset();
     mockAppendTraceEvent.mockClear();
+    mockGetCall.mockReset();
+    mockGetCall.mockResolvedValue({
+      call_id: 'call-1',
+      agent_id: 'agent-real',
+      from_number: '+491701234567',
+      call_status: 'ongoing',
+    });
   });
 
   it('rejects body-only agent_id on mutating tool endpoints', async () => {
@@ -79,6 +96,73 @@ describe('Retell tool authentication', () => {
     expect(res.statusCode).toBe(403);
     expect(res.json()).toEqual({ error: 'tool tenant mismatch', code: 'SIGNED_AGENT_REQUIRED' });
     expect(mockQuery).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('rejects signed mutating tool calls without a live Retell call id', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ org_id: 'org-1' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ tenant_id: 'tenant-1', org_id: 'org-1' }], rowCount: 1 });
+
+    const app = Fastify({ logger: false });
+    await registerRetellWebhooks(app);
+    await app.ready();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: signedUrl('/retell/tools/calendar.book', 'tenant-1', 'agent-real'),
+      payload: {
+        _retell_agent_id: 'agent-real',
+        args: {
+          customerName: 'Test Kunde',
+          customerPhone: '+4915111111111',
+          preferredTime: 'Mo 10:00',
+          service: 'Test',
+          confirmed: true,
+        },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ ok: false, error: 'CALL_ID_REQUIRED' });
+    expect(mockAppendTraceEvent).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('rejects signed mutating tool calls for ended Retell calls', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ org_id: 'org-1' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ tenant_id: 'tenant-1', org_id: 'org-1' }], rowCount: 1 });
+    mockGetCall.mockResolvedValueOnce({
+      call_id: 'call-ended',
+      agent_id: 'agent-real',
+      from_number: '+491701234567',
+      call_status: 'ended',
+      end_timestamp: Date.now(),
+    });
+
+    const app = Fastify({ logger: false });
+    await registerRetellWebhooks(app);
+    await app.ready();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: signedUrl('/retell/tools/calendar.book', 'tenant-1', 'agent-real'),
+      payload: {
+        _retell_call_id: 'call-ended',
+        _retell_agent_id: 'agent-real',
+        args: {
+          customerName: 'Test Kunde',
+          customerPhone: '+4915111111111',
+          preferredTime: 'Mo 10:00',
+          service: 'Test',
+          confirmed: true,
+        },
+      },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ ok: false, error: 'CALL_NOT_ACTIVE' });
     await app.close();
   });
 

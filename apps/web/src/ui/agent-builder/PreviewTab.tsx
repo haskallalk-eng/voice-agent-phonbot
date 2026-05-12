@@ -149,9 +149,9 @@ export function PreviewTab({ config, preview, voices, deploying, onDeploy, onPre
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-100/45">Technische Vorschau</p>
-              <h3 className="mt-1 text-base font-semibold text-white">Prompt und Tools der aktiven Version</h3>
+              <h3 className="mt-1 text-base font-semibold text-white">Runtime-Prompt und Retell-Tools</h3>
               <p className="mt-1 text-xs leading-relaxed text-white/38">
-                Wenn eine Einstellung im Builder korrekt greift, muss sie hier im Laufzeit-Prompt auftauchen.
+                Diese Vorschau kombiniert Plattform-Kernel, Agent-Anweisungen und die Tool-Beschreibungen, die beim Deploy sichtbar sind.
               </p>
             </div>
             <button

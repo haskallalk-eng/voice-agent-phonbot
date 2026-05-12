@@ -7,6 +7,7 @@ import { encrypt as encryptToken, decrypt as decryptToken } from './crypto.js';
 import { redis } from './redis.js';
 import { log } from './logger.js';
 import crypto from 'node:crypto';
+import { toE164 } from '@vas/shared';
 
 // CAL-04: every outbound HTTP to Google/Microsoft/Cal.com goes through this
 // helper so a hung upstream can't pin a Fastify worker indefinitely. 10s is
@@ -1333,6 +1334,102 @@ const GERMAN_WEEKDAY_INDEX: Record<string, number> = {
 };
 const GERMAN_WEEKDAY_PATTERN = /\b(sonntag|montag|dienstag|mittwoch|donnerstag|freitag|samstag|so|mo|di|mi|do|fr|sa)\b/;
 const MONTH_LABELS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'] as const;
+const NUMBER_WORDS = [
+  'null',
+  'eins',
+  'zwei',
+  'drei',
+  'vier',
+  'fünf',
+  'sechs',
+  'sieben',
+  'acht',
+  'neun',
+  'zehn',
+  'elf',
+  'zwölf',
+  'dreizehn',
+  'vierzehn',
+  'fünfzehn',
+  'sechzehn',
+  'siebzehn',
+  'achtzehn',
+  'neunzehn',
+  'zwanzig',
+  'einundzwanzig',
+  'zweiundzwanzig',
+  'dreiundzwanzig',
+  'vierundzwanzig',
+  'fünfundzwanzig',
+  'sechsundzwanzig',
+  'siebenundzwanzig',
+  'achtundzwanzig',
+  'neunundzwanzig',
+  'dreißig',
+  'einunddreißig',
+  'zweiunddreißig',
+  'dreiunddreißig',
+  'vierunddreißig',
+  'fünfunddreißig',
+  'sechsunddreißig',
+  'siebenunddreißig',
+  'achtunddreißig',
+  'neununddreißig',
+  'vierzig',
+  'einundvierzig',
+  'zweiundvierzig',
+  'dreiundvierzig',
+  'vierundvierzig',
+  'fünfundvierzig',
+  'sechsundvierzig',
+  'siebenundvierzig',
+  'achtundvierzig',
+  'neunundvierzig',
+  'fünfzig',
+  'einundfünfzig',
+  'zweiundfünfzig',
+  'dreiundfünfzig',
+  'vierundfünfzig',
+  'fünfundfünfzig',
+  'sechsundfünfzig',
+  'siebenundfünfzig',
+  'achtundfünfzig',
+  'neunundfünfzig',
+] as const;
+const ORDINAL_DAY_WORDS = [
+  '',
+  'erster',
+  'zweiter',
+  'dritter',
+  'vierter',
+  'fünfter',
+  'sechster',
+  'siebter',
+  'achter',
+  'neunter',
+  'zehnter',
+  'elfter',
+  'zwölfter',
+  'dreizehnter',
+  'vierzehnter',
+  'fünfzehnter',
+  'sechzehnter',
+  'siebzehnter',
+  'achtzehnter',
+  'neunzehnter',
+  'zwanzigster',
+  'einundzwanzigster',
+  'zweiundzwanzigster',
+  'dreiundzwanzigster',
+  'vierundzwanzigster',
+  'fünfundzwanzigster',
+  'sechsundzwanzigster',
+  'siebenundzwanzigster',
+  'achtundzwanzigster',
+  'neunundzwanzigster',
+  'dreißigster',
+  'einunddreißigster',
+] as const;
 const MONTH_INDEX: Record<string, number> = {
   januar: 1,
   februar: 2,
@@ -1414,10 +1511,7 @@ export function parseSlotTime(slot: string): Date | null {
   const relativeMatch = normalized.match(/\b(heute|morgen|uebermorgen)\b/);
   if (relativeMatch) {
     const daysAhead = relativeMatch[1] === 'heute' ? 0 : relativeMatch[1] === 'morgen' ? 1 : 2;
-    const result = new Date(now);
-    result.setDate(now.getDate() + daysAhead);
-    result.setHours(time.hour, time.minute, 0, 0);
-    return result;
+    return addBerlinDays(now, daysAhead, time);
   }
 
   const dayMatch = normalized.match(GERMAN_WEEKDAY_PATTERN);
@@ -1426,13 +1520,17 @@ export function parseSlotTime(slot: string): Date | null {
   const targetDay = GERMAN_WEEKDAY_INDEX[dayMatch[1]!];
   if (targetDay === undefined) return null;
 
-  const result = new Date(now);
-  result.setHours(time.hour, time.minute, 0, 0);
-
-  let daysAhead = targetDay - now.getDay();
-  if (daysAhead < 0 || (daysAhead === 0 && result <= now)) daysAhead += 7;
-  result.setDate(result.getDate() + daysAhead);
-
+  let daysAhead = targetDay - berlinDayIndex(now);
+  const explicitNextWeek = /\bnaechst(?:e|en|er|es)?\b/.test(normalized);
+  let result = addBerlinDays(now, daysAhead, time);
+  if (daysAhead < 0 || (daysAhead === 0 && result <= now)) {
+    daysAhead += 7;
+    result = addBerlinDays(now, daysAhead, time);
+  }
+  if (explicitNextWeek && daysAhead < 7) {
+    daysAhead += 7;
+    result = addBerlinDays(now, daysAhead, time);
+  }
   return result;
 }
 
@@ -1560,6 +1658,16 @@ interface ChipyDaySchedule {
   enabled: boolean;
   start: string; // "09:00"
   end: string;   // "17:00"
+}
+
+function addBerlinDays(date: Date, days: number, time?: { hour: number; minute: number }): Date {
+  const parts = berlinParts(date);
+  return berlinLocalTimeToDate(parts.year, parts.month, parts.day + days, time?.hour ?? 12, time?.minute ?? 0);
+}
+
+function berlinDayIndex(date: Date): number {
+  const parts = berlinParts(date);
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay();
 }
 
 type ChipySchedule = Record<string, ChipyDaySchedule>; // key = "0".."6" (day of week)
@@ -1802,16 +1910,8 @@ function requestedDateKey(opts: { date?: string; range?: string; service?: strin
   const now = new Date();
 
   if (/\bheute\b/.test(normalized)) return localDateKey(now);
-  if (/\buebermorgen\b/.test(normalized)) {
-    const date = new Date(now);
-    date.setDate(now.getDate() + 2);
-    return localDateKey(date);
-  }
-  if (/\bmorgen\b/.test(normalized)) {
-    const date = new Date(now);
-    date.setDate(now.getDate() + 1);
-    return localDateKey(date);
-  }
+  if (/\buebermorgen\b/.test(normalized)) return localDateKey(addBerlinDays(now, 2));
+  if (/\bmorgen\b/.test(normalized)) return localDateKey(addBerlinDays(now, 1));
 
   const isoDate = raw.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
   if (isoDate) {
@@ -1830,12 +1930,10 @@ function requestedDateKey(opts: { date?: string; range?: string; service?: strin
     const targetDay = GERMAN_WEEKDAY_INDEX[dayMatch[1]!];
     if (targetDay === undefined) return null;
 
-    const date = new Date(now);
-    date.setHours(12, 0, 0, 0);
-    let daysAhead = targetDay - now.getDay();
+    let daysAhead = targetDay - berlinDayIndex(now);
     if (daysAhead < 0) daysAhead += 7;
-    date.setDate(now.getDate() + daysAhead);
-    return localDateKey(date);
+    if (/\bnaechst(?:e|en|er|es)?\b/.test(normalized) && daysAhead < 7) daysAhead += 7;
+    return localDateKey(addBerlinDays(now, daysAhead));
   }
 
   return null;
@@ -1853,6 +1951,64 @@ function localDateKey(date: Date): string {
 function localTimeKey(date: Date): string {
   const parts = berlinParts(date);
   return `${parts.hour.toString().padStart(2, '0')}:${parts.minute.toString().padStart(2, '0')}`;
+}
+
+function hourWord(hour: number): string {
+  if (hour === 1) return 'ein';
+  return NUMBER_WORDS[hour] ?? hour.toString();
+}
+
+function minuteWord(minute: number): string {
+  return NUMBER_WORDS[minute] ?? minute.toString();
+}
+
+export function formatSpokenClockTime(value: string | Date | { hour: number; minute?: number }): string {
+  let hour: number;
+  let minute: number;
+  if (value instanceof Date) {
+    const parts = berlinParts(value);
+    hour = parts.hour;
+    minute = parts.minute;
+  } else if (typeof value === 'string') {
+    const parsed = clockMinutes(value);
+    if (parsed === null) return value;
+    hour = Math.floor(parsed / 60);
+    minute = parsed % 60;
+  } else {
+    hour = value.hour;
+    minute = value.minute ?? 0;
+  }
+
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return typeof value === 'string' ? value : '';
+  }
+  if (minute === 0) return `${hourWord(hour)} Uhr`;
+  if (minute < 10) return `${hourWord(hour)} Uhr null ${minuteWord(minute)}`;
+  return `${hourWord(hour)} Uhr ${minuteWord(minute)}`;
+}
+
+export function formatSpokenSlotLabel(slot: string | Date): string {
+  if (typeof slot === 'string' && /\b\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}\b/.test(slot)) {
+    return slot.replace(/\b(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})\b/g, (_match, h1: string, m1: string, h2: string, m2: string) =>
+      `${formatSpokenClockTime(`${h1}:${m1}`)} bis ${formatSpokenClockTime(`${h2}:${m2}`)}`,
+    );
+  }
+  const date = slot instanceof Date ? slot : parseSlotTime(slot);
+  if (!date) {
+    return String(slot)
+      .replace(/\b(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})\b/g, (_match, h1: string, m1: string, h2: string, m2: string) =>
+        `${formatSpokenClockTime(`${h1}:${m1}`)} bis ${formatSpokenClockTime(`${h2}:${m2}`)}`,
+      )
+      .replace(/\b(\d{1,2}):(\d{2})\b/g, (_match, h: string, m: string) =>
+        formatSpokenClockTime(`${h}:${m}`),
+      );
+  }
+
+  const parts = berlinParts(date);
+  const dow = new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6;
+  const day = ORDINAL_DAY_WORDS[parts.day] ?? `${parts.day}.`;
+  const month = MONTH_LABELS[parts.month - 1] ?? '';
+  return `${FULL_DAY_LABELS[dow]}, ${day} ${month} um ${formatSpokenClockTime({ hour: parts.hour, minute: parts.minute })}`;
 }
 
 function formatSlotLabel(date: Date): string {
@@ -2121,6 +2277,48 @@ async function claimChipyBooking(
   }
 }
 
+async function findStaffBookingBySourceCall(
+  orgId: string,
+  sourceCallId: string | undefined,
+  slotTime: Date,
+  service: string,
+): Promise<{
+  id: string;
+  staffId: string | null;
+  staffName: string | null;
+  externalRefs: ExternalBookingRefs;
+} | null> {
+  if (!pool) return null;
+  const normalizedCallId = normalizeSourceCallId(sourceCallId);
+  if (!normalizedCallId) return null;
+  const res = await pool.query<{
+    id: string;
+    staff_id: string | null;
+    staff_name: string | null;
+    external_refs: unknown;
+  }>(
+    `SELECT b.id, b.staff_id, s.name AS staff_name, b.external_refs
+       FROM staff_chipy_bookings b
+       LEFT JOIN calendar_staff s
+         ON s.org_id = b.org_id AND s.id = b.staff_id
+      WHERE b.org_id = $1
+        AND b.source_call_id = $2
+        AND abs(extract(epoch from (b.slot_time - $3::timestamptz))) < 1
+        AND coalesce(b.service, '') = coalesce($4, '')
+      ORDER BY b.created_at ASC
+      LIMIT 1`,
+    [orgId, normalizedCallId, slotTime.toISOString(), service || ''],
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    staffId: row.staff_id,
+    staffName: row.staff_name,
+    externalRefs: parseExternalBookingRefs(row.external_refs),
+  };
+}
+
 async function loadChipyExternalRefs(
   orgId: string,
   bookingId: string | undefined,
@@ -2199,6 +2397,14 @@ async function deleteChipyBooking(orgId: string, bookingId: string | undefined, 
 }
 
 // ── Cal.com helpers ───────────────────────────────────────────────────────────
+
+async function chipyBookingStillExists(orgId: string, bookingId: string | undefined, staffId?: string | null): Promise<boolean> {
+  if (!pool || !bookingId) return false;
+  const res = staffId
+    ? await pool.query(`SELECT 1 FROM staff_chipy_bookings WHERE id = $1 AND org_id = $2 AND staff_id = $3`, [bookingId, orgId, staffId])
+    : await pool.query(`SELECT 1 FROM chipy_bookings WHERE id = $1 AND org_id = $2`, [bookingId, orgId]);
+  return (res.rowCount ?? 0) > 0;
+}
 
 const CALCOM_API_VERSION = '2026-02-25';
 const CALCOM_SLOTS_API_VERSION = '2024-09-04';
@@ -2940,6 +3146,19 @@ export async function bookSlotForAnyStaff(
     durationMinutes: opts.durationMinutes,
     bufferMinutes: opts.bufferMinutes,
   });
+  const reusedStaffBooking = await findStaffBookingBySourceCall(orgId, opts.sourceCallId, slotTime, opts.service);
+  if (reusedStaffBooking) {
+    return {
+      ok: true,
+      eventId: reusedStaffBooking.id,
+      bookingId: reusedStaffBooking.id,
+      chipyBookingId: reusedStaffBooking.id,
+      externalResults: Object.values(reusedStaffBooking.externalRefs).map((item) => ({ ...item, reused: true })),
+      partial: Object.values(reusedStaffBooking.externalRefs).some((item) => !item.ok),
+      assignedStaffId: reusedStaffBooking.staffId,
+      assignedStaffName: reusedStaffBooking.staffName,
+    };
+  }
 
   const candidates = await rankAvailableStaffForSlot(orgId, eligibleStaff, slotTime, timing);
   const errors: string[] = [];
@@ -3061,24 +3280,30 @@ type CalendarBookingRow = {
 };
 
 export type CalendarBookingSummary = {
-  bookingId: string;
-  staffId: string | null;
-  staffName: string | null;
-  customerName: string;
-  customerPhoneMasked: string;
+  bookingId?: string;
+  changeToken?: string;
+  staffId?: string | null;
+  staffName?: string | null;
+  customerName?: string;
+  customerPhoneMasked?: string;
   service: string | null;
   startAt: string;
   label: string;
+  spokenLabel: string;
 };
 
 type BookingChangeLookupOpts = {
   bookingId?: string;
+  changeToken?: string;
   staffId?: string | null;
   customerPhone?: string;
   customerName?: string;
   currentTime?: string;
   service?: string;
   limit?: number;
+  identityVerified?: boolean;
+  sourceCallId?: string;
+  allowDirectBookingId?: boolean;
 };
 
 type ExternalCancellationResult = {
@@ -3160,15 +3385,22 @@ function phoneDigits(value: string | null | undefined): string {
 }
 
 function phoneLooksUsable(value: string | null | undefined): boolean {
-  return phoneDigits(value).length >= 6;
+  return phoneDigits(value).length >= 7;
+}
+
+function canonicalIdentityPhone(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  const e164 = toE164(trimmed);
+  if (e164) return e164;
+  const digits = phoneDigits(trimmed);
+  return digits.length >= 7 && digits.length <= 15 ? digits : null;
 }
 
 function phoneMatches(stored: string | null | undefined, input: string | null | undefined): boolean {
-  const a = phoneDigits(stored);
-  const b = phoneDigits(input);
-  if (a.length < 6 || b.length < 6) return false;
-  const take = Math.min(10, a.length, b.length);
-  return a.endsWith(b.slice(-take)) || b.endsWith(a.slice(-take));
+  const a = canonicalIdentityPhone(stored);
+  const b = canonicalIdentityPhone(input);
+  return Boolean(a && b && a === b);
 }
 
 function maskPhone(value: string | null | undefined): string {
@@ -3180,18 +3412,97 @@ function bookingStart(row: CalendarBookingRow): Date {
   return row.slot_time instanceof Date ? row.slot_time : new Date(row.slot_time);
 }
 
-function bookingSummary(row: CalendarBookingRow): CalendarBookingSummary {
-  const start = bookingStart(row);
-  return {
+const BOOKING_CHANGE_TOKEN_TTL_MS = 15 * 60 * 1000;
+
+function calendarChangeTokenSecret(): string {
+  const secret = process.env.CALENDAR_CHANGE_TOKEN_SECRET || process.env.RETELL_TOOL_AUTH_SECRET || process.env.JWT_SECRET || '';
+  if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error('CALENDAR_CHANGE_TOKEN_SECRET or RETELL_TOOL_AUTH_SECRET is required in production');
+  }
+  return secret || 'dev-calendar-change-token';
+}
+
+function bookingChangeTokenKey(): Buffer {
+  return crypto.createHash('sha256').update(calendarChangeTokenSecret()).digest();
+}
+
+function signBookingChangeToken(payload: Record<string, unknown>): string {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', bookingChangeTokenKey(), iv);
+  cipher.setAAD(Buffer.from('calendar-booking-change-token:v2'));
+  const ciphertext = Buffer.concat([
+    cipher.update(JSON.stringify(payload), 'utf8'),
+    cipher.final(),
+  ]);
+  const tag = cipher.getAuthTag();
+  return `v2.${iv.toString('base64url')}.${ciphertext.toString('base64url')}.${tag.toString('base64url')}`;
+}
+
+function verifyBookingChangeToken(
+  token: string | undefined,
+  expected: { orgId: string; callId?: string; callerPhone?: string },
+): { bookingId: string } | null {
+  if (!token) return null;
+  try {
+    const [version, ivRaw, ciphertextRaw, tagRaw] = token.split('.');
+    if (version !== 'v2' || !ivRaw || !ciphertextRaw || !tagRaw) return null;
+    const decipher = crypto.createDecipheriv('aes-256-gcm', bookingChangeTokenKey(), Buffer.from(ivRaw, 'base64url'));
+    decipher.setAAD(Buffer.from('calendar-booking-change-token:v2'));
+    decipher.setAuthTag(Buffer.from(tagRaw, 'base64url'));
+    const plaintext = Buffer.concat([
+      decipher.update(Buffer.from(ciphertextRaw, 'base64url')),
+      decipher.final(),
+    ]).toString('utf8');
+    const payload = JSON.parse(plaintext) as {
+      orgId?: string;
+      bookingId?: string;
+      callId?: string | null;
+      callerDigits?: string;
+      exp?: number;
+    };
+    if (payload.orgId !== expected.orgId) return null;
+    if (!payload.bookingId || typeof payload.bookingId !== 'string') return null;
+    if (typeof payload.exp !== 'number' || payload.exp < Date.now()) return null;
+    if (payload.callId && expected.callId && payload.callId !== expected.callId) return null;
+    const expectedPhone = canonicalIdentityPhone(expected.callerPhone);
+    if (payload.callerDigits && expectedPhone && payload.callerDigits !== expectedPhone) return null;
+    if (payload.callerDigits && !expectedPhone) return null;
+    return { bookingId: payload.bookingId };
+  } catch {
+    return null;
+  }
+}
+
+function createBookingChangeToken(orgId: string, row: CalendarBookingRow, opts: BookingChangeLookupOpts): string | undefined {
+  if (!opts.identityVerified || !phoneLooksUsable(opts.customerPhone)) return undefined;
+  return signBookingChangeToken({
+    orgId,
     bookingId: row.id,
-    staffId: row.staff_id,
-    staffName: row.staff_name,
-    customerName: row.customer_name,
-    customerPhoneMasked: maskPhone(row.customer_phone),
+    callId: opts.sourceCallId ?? null,
+    callerDigits: canonicalIdentityPhone(opts.customerPhone),
+    exp: Date.now() + BOOKING_CHANGE_TOKEN_TTL_MS,
+  });
+}
+
+function bookingSummary(row: CalendarBookingRow, opts: { includePrivate?: boolean; changeToken?: string } = {}): CalendarBookingSummary {
+  const start = bookingStart(row);
+  const summary: CalendarBookingSummary = {
     service: row.service,
     startAt: start.toISOString(),
     label: formatSlotLabel(start),
+    spokenLabel: formatSpokenSlotLabel(start),
   };
+  if (opts.changeToken) summary.changeToken = opts.changeToken;
+  if (opts.includePrivate) {
+    summary.bookingId = row.id;
+    summary.staffId = row.staff_id;
+    summary.staffName = row.staff_name;
+    summary.customerName = row.customer_name;
+    summary.customerPhoneMasked = maskPhone(row.customer_phone);
+  } else if (row.staff_name) {
+    summary.staffName = row.staff_name;
+  }
+  return summary;
 }
 
 function bookingMatchesTime(row: CalendarBookingRow, wanted: string | undefined): boolean {
@@ -3219,13 +3530,7 @@ function bookingMatchesCustomerName(stored: string | null | undefined, wanted: s
 }
 
 function hasBookingLookupSelector(opts: BookingChangeLookupOpts): boolean {
-  const hasName = normalizeLookupText(opts.customerName).length >= 2;
-  const hasNarrowing = Boolean(opts.currentTime?.trim() || normalizeLookupText(opts.service));
-  return Boolean(
-    opts.bookingId?.trim()
-    || phoneLooksUsable(opts.customerPhone)
-    || (hasName && hasNarrowing)
-  );
+  return Boolean(opts.identityVerified && phoneLooksUsable(opts.customerPhone));
 }
 
 async function listFutureChipyBookings(orgId: string): Promise<CalendarBookingRow[]> {
@@ -3297,7 +3602,16 @@ export async function findChipyBookingsForChange(
       instruction: 'Frage nach Name und Terminzeit oder nutze die Anrufernummer. Gib keine fremden Terminlisten preis.',
     };
   }
-  const matches = filterBookingsForChange(await listFutureChipyBookings(orgId), opts).map(bookingSummary);
+  if (!opts.identityVerified || !phoneLooksUsable(opts.customerPhone)) {
+    return {
+      ok: true,
+      status: 'needs_more_data',
+      matches: [],
+      instruction: 'Klaere zuerst die Identitaet ueber die verifizierte Anrufernummer oder erstelle ein Rueckruf-Ticket. Gib keine fremden Termine preis.',
+    };
+  }
+  const matches = filterBookingsForChange(await listFutureChipyBookings(orgId), { ...opts, limit: Math.min(opts.limit ?? 3, 3) })
+    .map((row) => bookingSummary(row, { changeToken: createBookingChangeToken(orgId, row, opts) }));
   if (matches.length === 0) {
     return {
       ok: true,
@@ -3322,23 +3636,29 @@ export async function findChipyBookingsForChange(
   };
 }
 
-function mutationAllowedForBooking(row: CalendarBookingRow, opts: BookingChangeLookupOpts): boolean {
-  if (opts.bookingId?.trim() && opts.bookingId.trim() === row.id) return true;
-  if (phoneMatches(row.customer_phone, opts.customerPhone)) return true;
-  const hasName = normalizeLookupText(opts.customerName).length >= 2 && bookingMatchesCustomerName(row.customer_name, opts.customerName);
-  const hasNarrowing = Boolean(opts.currentTime?.trim() || normalizeLookupText(opts.service));
-  return hasName && hasNarrowing;
-}
-
 async function resolveSingleBookingForMutation(
   orgId: string,
   opts: BookingChangeLookupOpts,
 ): Promise<{ ok: true; row: CalendarBookingRow } | { ok: false; status: string; matches?: CalendarBookingSummary[]; error: string }> {
-  const matches = filterBookingsForChange(await listFutureChipyBookings(orgId), { ...opts, limit: 8 });
+  const verifiedToken = verifyBookingChangeToken(opts.changeToken, {
+    orgId,
+    callId: opts.sourceCallId,
+    callerPhone: opts.customerPhone,
+  });
+  const directBookingId = opts.allowDirectBookingId ? opts.bookingId : undefined;
+  const effectiveBookingId = verifiedToken?.bookingId ?? directBookingId;
+  if (!effectiveBookingId) {
+    return { ok: false, status: 'verification_required', error: 'BOOKING_CHANGE_TOKEN_REQUIRED' };
+  }
+
+  const matches = filterBookingsForChange(await listFutureChipyBookings(orgId), {
+    ...opts,
+    bookingId: effectiveBookingId,
+    limit: 8,
+  });
   if (matches.length === 0) return { ok: false, status: 'not_found', error: 'BOOKING_NOT_FOUND' };
-  if (matches.length > 1) return { ok: false, status: 'multiple_matches', matches: matches.map(bookingSummary), error: 'MULTIPLE_BOOKINGS_MATCH' };
+  if (matches.length > 1) return { ok: false, status: 'multiple_matches', matches: matches.map((row) => bookingSummary(row)), error: 'MULTIPLE_BOOKINGS_MATCH' };
   const row = matches[0]!;
-  if (!mutationAllowedForBooking(row, opts)) return { ok: false, status: 'verification_required', error: 'BOOKING_VERIFICATION_REQUIRED' };
   return { ok: true, row };
 }
 
@@ -3424,10 +3744,31 @@ export async function cancelChipyBookingForChange(
   const row = resolved.row;
   return withChipyBookingLock(orgId, row.id, async () => {
     try {
+      const stillExists = await chipyBookingStillExists(orgId, row.id, row.staff_id);
+      if (!stillExists) {
+        return {
+          ok: true,
+          status: 'cancelled',
+          booking: bookingSummary(row),
+          externalResults: [],
+          partial: false,
+        };
+      }
       const refs = parseExternalBookingRefs(row.external_refs);
       const externalResults = await cancelExternalRefs(orgId, row.staff_id, refs, opts.reason ?? 'Customer requested cancellation by phone');
       const deleted = await deleteChipyBooking(orgId, row.id, row.staff_id);
       if (!deleted) {
+        const existsAfterDelete = await chipyBookingStillExists(orgId, row.id, row.staff_id);
+        if (!existsAfterDelete) {
+          const partial = externalResults.some((item) => !item.ok);
+          return {
+            ok: true,
+            status: partial ? 'cancelled_partial' : 'cancelled',
+            booking: bookingSummary(row),
+            externalResults,
+            partial,
+          };
+        }
         return { ok: false, status: 'failed', booking: bookingSummary(row), externalResults, partial: true, error: 'CHIPY_DELETE_FAILED' };
       }
       const partial = externalResults.some((item) => !item.ok);
@@ -3465,8 +3806,6 @@ export async function rescheduleChipyBookingForChange(
   ok: boolean;
   status: 'rescheduled' | 'reschedule_needs_review' | 'book_failed' | 'not_found' | 'multiple_matches' | 'verification_required';
   oldBooking?: CalendarBookingSummary;
-  newBookingId?: number | string;
-  newChipyBookingId?: string;
   matches?: CalendarBookingSummary[];
   externalResults?: ExternalCancellationResult[];
   partial?: boolean;
@@ -3504,6 +3843,7 @@ export async function rescheduleChipyBookingForChange(
 
   const cancelled = await cancelChipyBookingForChange(orgId, {
     bookingId: old.id,
+    allowDirectBookingId: true,
     customerPhone: old.customer_phone,
     reason: opts.reason ?? 'Customer requested reschedule by phone',
   });
@@ -3512,8 +3852,6 @@ export async function rescheduleChipyBookingForChange(
     ok: !needsReview,
     status: needsReview ? 'reschedule_needs_review' : 'rescheduled',
     oldBooking: bookingSummary(old),
-    newBookingId: booked.bookingId,
-    newChipyBookingId: booked.chipyBookingId,
     externalResults: cancelled.externalResults,
     partial: needsReview,
     error: cancelled.ok ? booked.error : cancelled.error,
@@ -4431,6 +4769,7 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
     if (!pool) return reply.send({ ok: true });
     const cancelled = await cancelChipyBookingForChange(orgId, {
       bookingId: params.data.bookingId,
+      allowDirectBookingId: true,
       staffId,
       reason: 'Dashboard deletion',
     });
@@ -4563,6 +4902,7 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
     if (!pool) return reply.send({ ok: true });
     const cancelled = await cancelChipyBookingForChange(orgId, {
       bookingId: id,
+      allowDirectBookingId: true,
       reason: 'Dashboard deletion',
     });
     if (!cancelled.ok) {

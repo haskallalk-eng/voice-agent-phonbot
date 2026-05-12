@@ -24,6 +24,7 @@ import { createTicket, mergeTicketMetadata } from './tickets.js';
 import { appendTraceEvent } from './traces.js';
 import { reconcileMinutes, DEFAULT_CALL_RESERVE_MINUTES } from './usage.js';
 import { pool } from './db.js';
+import { redis } from './redis.js';
 import {
   findFreeSlots,
   findFreeSlotsForAnyStaff,
@@ -32,6 +33,7 @@ import {
   findChipyBookingsForChange,
   cancelChipyBookingForChange,
   rescheduleChipyBookingForChange,
+  formatSpokenSlotLabel,
 } from './calendar.js';
 import { triggerCallback, readConfig } from './agent-config.js';
 import { executeIntegrationCall, type ApiIntegration } from './api-integrations.js';
@@ -43,7 +45,7 @@ import { getCall, deleteCall } from './retell.js';
 import { trackRetellCallRetention } from './retell-retention.js';
 import { fireInboundWebhooks } from './inbound-webhooks.js';
 import { sendBookingConfirmationSms, sendTicketAckSms } from './sms.js';
-import { readDemoCallTemplate, maybeSendDemoSignupLink, demoRecordingDeclinedToolSignature } from './demo.js';
+import { readDemoCallTemplate, maybeSendDemoSignupLink, demoRecordingDeclinedToolSignature, isKnownSalesCallbackAgent } from './demo.js';
 import { redactPII } from './pii.js';
 import { RECORDING_CONSENT_PROMPT_VERSION } from './agent-instructions.js';
 import { log } from './logger.js';
@@ -234,6 +236,14 @@ interface RetellCallData {
   to_number?: string;
 }
 
+type VerifiedRetellCallContext = {
+  callId: string;
+  agentId?: string;
+  callerPhone: string;
+  call: Record<string, unknown>;
+  testMode: boolean;
+};
+
 function retellArgs(body: RetellEventBody): Record<string, unknown> {
   return (body?.args ?? body ?? {}) as Record<string, unknown>;
 }
@@ -254,7 +264,7 @@ function getRetellAgentId(body: RetellEventBody, args = retellArgs(body)): strin
 
 function getRetellCallId(body: RetellEventBody, args = retellArgs(body)): string | undefined {
   const call = getRetellCall(body) as Record<string, unknown>;
-  const value = args._retell_call_id ?? body._retell_call_id ?? call.call_id;
+  const value = body._retell_call_id ?? call.call_id ?? args._retell_call_id;
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
@@ -281,33 +291,42 @@ function stringField(source: unknown, keys: string[]): string {
   return firstStringValue(...keys.map((key) => record[key]));
 }
 
+const RETELL_PHONE_KEYS = [
+  'customerPhone',
+  'customer_phone',
+  'customer_phone_number',
+  'customerNumber',
+  'customer_number',
+  'phone',
+  'phoneNumber',
+  'phone_number',
+  'callerPhone',
+  'caller_phone',
+  'callerNumber',
+  'caller_number',
+  'fromNumber',
+  'from_number',
+  'caller',
+  'ani',
+];
+
 function getCallerPhone(body: RetellEventBody, args = retellArgs(body)): string {
   const call = getRetellCall(body) as Record<string, unknown>;
-  const phoneKeys = [
-    'customerPhone',
-    'customer_phone',
-    'customer_phone_number',
-    'customerNumber',
-    'customer_number',
-    'phone',
-    'phoneNumber',
-    'phone_number',
-    'callerPhone',
-    'caller_phone',
-    'callerNumber',
-    'caller_number',
-    'fromNumber',
-    'from_number',
-    'caller',
-    'ani',
-  ];
 
   return firstStringValue(
-    stringField(args, phoneKeys),
-    stringField(args.customer, phoneKeys),
-    stringField(args.contact, phoneKeys),
-    stringField(body, phoneKeys),
-    stringField(call, phoneKeys),
+    stringField(args, RETELL_PHONE_KEYS),
+    stringField(args.customer, RETELL_PHONE_KEYS),
+    stringField(args.contact, RETELL_PHONE_KEYS),
+    stringField(body, RETELL_PHONE_KEYS),
+    stringField(call, RETELL_PHONE_KEYS),
+  );
+}
+
+function getRetellProvidedCallerPhone(body: RetellEventBody): string {
+  const call = getRetellCall(body) as Record<string, unknown>;
+  return firstStringValue(
+    stringField(body, RETELL_PHONE_KEYS),
+    stringField(call, RETELL_PHONE_KEYS),
   );
 }
 
@@ -324,8 +343,194 @@ async function resolveCallerPhone(body: RetellEventBody, args: Record<string, un
   }
 }
 
+async function resolveVerifiedCallerPhone(body: RetellEventBody, callId?: string): Promise<string> {
+  if (!callId || callId === 'retell') return '';
+
+  try {
+    const call = await getCall(callId);
+    return stringField(call, ['from_number', 'fromNumber', 'caller_number', 'callerNumber', 'phone', 'phoneNumber']);
+  } catch {
+    return '';
+  }
+}
+
 function ticketPhoneOrUnknown(phone: string): string {
   return phone.trim() || 'unknown';
+}
+
+function retellCallEnded(call: Record<string, unknown>): boolean {
+  const endedAt = call.end_timestamp ?? call.endTimestamp ?? call.end_time ?? call.endTime;
+  if (typeof endedAt === 'number' && endedAt > 0) return true;
+  if (typeof endedAt === 'string' && Number(endedAt) > 0) return true;
+  const status = stringField(call, ['call_status', 'callStatus', 'status']).toLowerCase();
+  if (!status) return false;
+  return /(ended|complete|completed|failed|error|hangup|disconnected|not_connected)/i.test(status);
+}
+
+async function isTestConsoleCall(callId: string, call: Record<string, unknown>): Promise<boolean> {
+  const metadata = call.metadata && typeof call.metadata === 'object' && !Array.isArray(call.metadata)
+    ? call.metadata as Record<string, unknown>
+    : {};
+  if (metadata.phonbot_test_console === 'true' || metadata.phonbotTestConsole === true) return true;
+  if (!redis?.isOpen) return false;
+  const marker = await redis.get(`retell_test_call:${callId}`).catch(() => null);
+  return Boolean(marker);
+}
+
+async function verifyLiveToolCall(
+  reply: FastifyReply,
+  ctx: { callId?: string; agentId?: string },
+  tool: string,
+): Promise<VerifiedRetellCallContext | null> {
+  if (!ctx.callId || ctx.callId === 'retell') {
+    log.warn({ tool, agentId: ctx.agentId }, 'retell tool refused without live call id');
+    reply.status(400).send({
+      ok: false,
+      error: 'CALL_ID_REQUIRED',
+      instruction: 'Die Aktion wurde nicht ausgefuehrt, weil kein aktiver Anrufkontext verifiziert werden konnte. Behaupte nicht, dass etwas erledigt wurde.',
+    });
+    return null;
+  }
+
+  let call: Record<string, unknown>;
+  try {
+    call = (await getCall(ctx.callId)) as Record<string, unknown>;
+  } catch (err) {
+    log.warn({ err: err instanceof Error ? err.message : String(err), tool, callId: ctx.callId, agentId: ctx.agentId }, 'retell tool refused because call could not be verified');
+    reply.status(403).send({
+      ok: false,
+      error: 'CALL_VERIFICATION_FAILED',
+      instruction: 'Die Aktion wurde nicht ausgefuehrt, weil der aktive Anruf nicht verifiziert werden konnte. Behaupte nicht, dass etwas erledigt wurde.',
+    });
+    return null;
+  }
+
+  const callAgentId = stringField(call, ['agent_id', 'agentId']);
+  if (ctx.agentId && callAgentId && callAgentId !== ctx.agentId) {
+    log.warn({ tool, callId: ctx.callId, signedAgentId: ctx.agentId, callAgentId }, 'retell tool refused because call agent did not match signed agent');
+    reply.status(403).send({
+      ok: false,
+      error: 'CALL_AGENT_MISMATCH',
+      instruction: 'Die Aktion wurde nicht ausgefuehrt, weil der Anruf nicht zu diesem Agenten passt. Behaupte nicht, dass etwas erledigt wurde.',
+    });
+    return null;
+  }
+  if (retellCallEnded(call)) {
+    log.warn({ tool, callId: ctx.callId, agentId: ctx.agentId, status: stringField(call, ['call_status', 'callStatus', 'status']) }, 'retell tool refused because call is not active');
+    reply.status(403).send({
+      ok: false,
+      error: 'CALL_NOT_ACTIVE',
+      instruction: 'Die Aktion wurde nicht ausgefuehrt, weil der Anruf nicht mehr aktiv ist. Behaupte nicht, dass etwas erledigt wurde.',
+    });
+    return null;
+  }
+
+  return {
+    callId: ctx.callId,
+    agentId: callAgentId || ctx.agentId,
+    callerPhone: stringField(call, ['from_number', 'fromNumber', 'caller_number', 'callerNumber', 'phone', 'phoneNumber']),
+    call,
+    testMode: await isTestConsoleCall(ctx.callId, call),
+  };
+}
+
+function safeTraceInput(args: Record<string, unknown>): Record<string, unknown> {
+  const keys = Object.keys(args).filter((key) => !key.startsWith('_')).sort();
+  return {
+    argKeys: keys,
+    confirmed: typeof args.confirmed === 'boolean' ? args.confirmed : undefined,
+    hasCustomerName: Boolean(stringArg(args, 'customerName', 'customer_name', 'name')),
+    hasCustomerPhone: Boolean(stringArg(args, 'customerPhone', 'customer_phone', 'phone')),
+    hasEmail: Boolean(stringArg(args, 'email')),
+    hasBookingId: Boolean(stringArg(args, 'bookingId', 'booking_id')),
+    hasChangeToken: Boolean(stringArg(args, 'changeToken', 'change_token')),
+    hasNotes: Boolean(stringArg(args, 'notes', 'reason')),
+  };
+}
+
+function safeTraceOutput(result: Record<string, unknown>): Record<string, unknown> {
+  const matches = Array.isArray(result.matches) ? result.matches : undefined;
+  const externalResults = Array.isArray(result.externalResults) ? result.externalResults : undefined;
+  return {
+    ok: typeof result.ok === 'boolean' ? result.ok : undefined,
+    status: typeof result.status === 'string' ? result.status : undefined,
+    error: typeof result.error === 'string' ? result.error.slice(0, 80).replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]').replace(/\+?\d[\d\s()./-]{6,}\d/g, '[phone]') : undefined,
+    fallback: typeof result.fallback === 'boolean' ? result.fallback : undefined,
+    partial: typeof result.partial === 'boolean' ? result.partial : undefined,
+    reused: typeof result.reused === 'boolean' ? result.reused : undefined,
+    smsSent: typeof result.smsSent === 'boolean' ? result.smsSent : undefined,
+    callbackScheduled: typeof result.callbackScheduled === 'boolean' ? result.callbackScheduled : undefined,
+    matchCount: matches?.length,
+    candidateCount: typeof result.candidateCount === 'number' ? result.candidateCount : undefined,
+    externalResultCount: externalResults?.length,
+  };
+}
+
+function sanitizeToolResultForModel(result: Record<string, unknown>): Record<string, unknown> {
+  const cleanString = (value: unknown, max = 500): string | undefined => {
+    if (typeof value !== 'string') return undefined;
+    return value
+      .slice(0, max)
+      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]')
+      .replace(/\+?\d[\d\s()./-]{6,}\d/g, '[phone]');
+  };
+  const out: Record<string, unknown> = {};
+  for (const key of ['ok', 'partial', 'fallback', 'reused', 'smsSent', 'callbackScheduled']) {
+    if (typeof result[key] === 'boolean') out[key] = result[key];
+  }
+  for (const key of ['status', 'matchType', 'error', 'message', 'instruction', 'deliveryInstruction', 'source', 'service', 'preferredTime', 'preferredStylist']) {
+    const value = cleanString(result[key], key === 'instruction' || key === 'message' ? 800 : 220);
+    if (value) out[key] = value;
+  }
+  if (result.customer && typeof result.customer === 'object' && !Array.isArray(result.customer)) {
+    const customer = result.customer as Record<string, unknown>;
+    out.customer = {
+      customerType: cleanString(customer.customerType, 80),
+      status: cleanString(customer.status, 80),
+      lastSeenAt: typeof customer.lastSeenAt === 'string' ? customer.lastSeenAt.slice(0, 80) : undefined,
+    };
+  }
+  if (Array.isArray(result.externalResults)) out.externalResultCount = result.externalResults.length;
+  if (typeof result.externalResultCount === 'number') out.externalResultCount = result.externalResultCount;
+  if (typeof result.candidateCount === 'number') out.candidateCount = result.candidateCount;
+  if (typeof result.allSlotsCount === 'number') out.allSlotsCount = result.allSlotsCount;
+  if (typeof result.moreCount === 'number') out.moreCount = result.moreCount;
+  if (Array.isArray(result.slots)) out.slots = result.slots.filter((slot): slot is string => typeof slot === 'string').slice(0, 6);
+  if (Array.isArray(result.slotOptions)) {
+    out.slotOptions = result.slotOptions.slice(0, 6).map((item) => {
+      const option = item as Record<string, unknown>;
+      return {
+        slot: cleanString(option.slot, 80),
+        spokenLabel: cleanString(option.spokenLabel, 120),
+      };
+    });
+  }
+  const spokenOptionsText = cleanString(result.spokenOptionsText, 500);
+  if (spokenOptionsText) out.spokenOptionsText = spokenOptionsText;
+  if (Array.isArray(result.matches)) {
+    out.matches = result.matches.slice(0, 3).map((item) => {
+      const match = item as Record<string, unknown>;
+      return {
+        changeToken: cleanString(match.changeToken, 1000),
+        service: cleanString(match.service, 160),
+        startAt: cleanString(match.startAt, 80),
+        label: cleanString(match.label, 160),
+        spokenLabel: cleanString(match.spokenLabel, 160),
+        staffName: cleanString(match.staffName, 160),
+      };
+    });
+    out.matchCount = result.matches.length;
+  }
+  return out;
+}
+
+function testModeDryRunResult(action: string): Record<string, unknown> {
+  return {
+    ok: false,
+    status: 'test_mode_dry_run',
+    fallback: false,
+    instruction: `Testkonsole: ${action} wurde nicht echt ausgefuehrt. Sage klar, dass dies nur ein Test war und keine produktive Aktion erstellt, geaendert, gesendet oder geloescht wurde.`,
+  };
 }
 
 function isCallbackSafePhone(phone: string): boolean {
@@ -333,17 +538,26 @@ function isCallbackSafePhone(phone: string): boolean {
   return allowed.some((prefix) => phone.startsWith(prefix));
 }
 
-function compactRetellSlots(slots: string[]): { slots: string[]; spokenOptionsText: string; allSlotsCount: number; moreCount: number; instruction: string } {
+function compactRetellSlots(slots: string[]): {
+  slots: string[];
+  slotOptions: Array<{ slot: string; spokenLabel: string }>;
+  spokenOptionsText: string;
+  allSlotsCount: number;
+  moreCount: number;
+  instruction: string;
+} {
   const visible = slots.slice(0, 3);
+  const slotOptions = visible.map((slot) => ({ slot, spokenLabel: formatSpokenSlotLabel(slot) }));
   const spokenOptionsText = visible.length
-    ? `Sag diese Optionen in einem Satz: ${visible.join(' oder ')}.`
+    ? `Sag exakt diese Sprechfassung in einem Satz: ${slotOptions.map((slot) => slot.spokenLabel).join(' oder ')}.`
     : 'Keine freien Zeiten gefunden.';
   return {
     slots: visible,
+    slotOptions,
     spokenOptionsText,
     allSlotsCount: slots.length,
     moreCount: Math.max(0, slots.length - visible.length),
-    instruction: 'Nutze spokenOptionsText als Sprechvorlage. Nenne keine Bullet-Liste und keine technische Schreibweise wie "11:00", "11:15" oder "12.05.2026". Sprich Zeiten natuerlich, z.B. "Dienstag um elf Uhr fuenfzehn". Wenn moreCount > 0, sage nur kurz, dass es noch weitere Zeiten gibt.',
+    instruction: 'Nutze spokenOptionsText oder slotOptions[].spokenLabel als Sprechvorlage. Nenne keine Bullet-Liste und keine technische Schreibweise wie "09:00", "10:05" oder "12.05.2026". Wichtig: 09:00 heisst "neun Uhr"; 10:05 heisst "zehn Uhr null fuenf". Wenn moreCount > 0, sage nur kurz, dass es noch weitere Zeiten gibt.',
   };
 }
 
@@ -557,21 +771,29 @@ function booleanArg(args: Record<string, unknown>, key: string): boolean {
 }
 
 function customerLookupToolView(result: Awaited<ReturnType<typeof lookupCustomer>>): Record<string, unknown> {
-  const publicCustomer = (customer: NonNullable<typeof result.customer>, score?: number) => ({
-    id: customer.id,
-    fullName: customer.full_name,
+  const safeCustomer = (customer: NonNullable<typeof result.customer>) => ({
     customerType: customer.customer_type,
     status: customer.status,
     lastSeenAt: customer.last_seen_at ?? null,
-    ...(score !== undefined ? { score } : {}),
   });
+
+  if (result.matchType === 'name' || result.status === 'candidates') {
+    return {
+      ok: result.ok,
+      status: result.status === 'matched' ? 'identity_required' : result.status,
+      matchType: result.matchType ?? 'name',
+      candidateCount: result.candidates?.length ?? (result.customer ? 1 : 0),
+      instruction:
+        'Aehnliche oder per Name gefundene Kundendaten wurden aus Datenschutzgruenden nicht offengelegt. Ein Name allein reicht nie; klaere die Identitaet ueber verifizierte Anrufer-Telefonnummer oder separat bestaetigten Kontakt. Nenne keine gespeicherten Details.',
+    };
+  }
 
   return {
     ok: result.ok,
     status: result.status,
     matchType: result.matchType,
-    customer: result.customer ? publicCustomer(result.customer) : undefined,
-    candidates: result.candidates?.map((candidate) => publicCustomer(candidate, candidate.score)),
+    customer: result.customer ? safeCustomer(result.customer) : undefined,
+    candidateCount: result.candidates?.length ?? 0,
     instruction: result.instruction,
   };
 }
@@ -648,12 +870,17 @@ async function canBookForCustomerApproval(params: {
 }): Promise<{ allowed: boolean; instruction?: string }> {
   const module = await getCustomerModuleForTool(params.tenantId, params.orgId);
   if (!params.orgId || !module.active || module.customerModule.allowBookingWithoutApproval !== false) return { allowed: true };
+  if (!params.customerPhone?.trim()) {
+    return {
+      allowed: false,
+      instruction: 'Kundenmodul-Einstellung: Termine ohne Freigabe ist aus. Ohne verifizierte Anrufernummer darf kein Bestandskundenstatus angenommen werden; erstelle nur ein Rueckruf-/Terminwunsch-Ticket.',
+    };
+  }
   const match = await lookupCustomer({
     orgId: params.orgId,
     phone: params.customerPhone,
-    name: params.customerName,
   });
-  if (match.customer?.customer_type === 'existing') return { allowed: true };
+  if (match.matchType === 'phone' && match.customer?.customer_type === 'existing') return { allowed: true };
   return {
     allowed: false,
     instruction: 'Kundenmodul-Einstellung: Termine ohne Freigabe ist aus. Buche keinen festen Termin fuer neue oder pending Kunden; erstelle nur ein Rueckruf-/Terminwunsch-Ticket.',
@@ -1204,6 +1431,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const args = retellArgs(body);
     const ctx = await getToolOrgContext(req, body, args);
     if (rejectToolContext(reply, ctx, 'customer.lookup')) return;
+    const liveCall = await verifyLiveToolCall(reply, ctx, 'customer.lookup');
+    if (!liveCall) return;
 
     await appendTraceEvent({
       type: 'tool_call',
@@ -1211,7 +1440,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       tenantId: ctx.orgId ?? undefined,
       agentId: ctx.agentId ?? undefined,
       tool: 'customer.lookup',
-      input: args,
+      input: safeTraceInput(args),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
@@ -1224,7 +1453,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         instruction: 'Kundenmodul ist nicht aktiv. Stelle keine Bestandskunden-/Neukundenfrage und nutze den normalen Flow.',
       };
     } else {
-      const phone = stringArg(args, 'customerPhone', 'customer_phone', 'phone', 'from_number') ?? await resolveCallerPhone(body, args, ctx.callId);
+      const phone = liveCall.callerPhone;
       const name = stringArg(args, 'customerName', 'customer_name', 'name');
       result = customerLookupToolView(await lookupCustomer({ orgId: ctx.orgId, phone, name }));
     }
@@ -1235,11 +1464,11 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       tenantId: ctx.orgId ?? undefined,
       agentId: ctx.agentId ?? undefined,
       tool: 'customer.lookup',
-      output: result,
+      output: safeTraceOutput(result),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
-    return result;
+    return sanitizeToolResultForModel(result);
   });
 
   // --- customer.upsert ---
@@ -1252,6 +1481,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const args = retellArgs(body);
     const ctx = await getToolOrgContext(req, body, args);
     if (rejectToolContext(reply, ctx, 'customer.upsert')) return;
+    const liveCall = await verifyLiveToolCall(reply, ctx, 'customer.upsert');
+    if (!liveCall) return;
 
     await appendTraceEvent({
       type: 'tool_call',
@@ -1259,11 +1490,14 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       tenantId: ctx.orgId ?? undefined,
       agentId: ctx.agentId ?? undefined,
       tool: 'customer.upsert',
-      input: args,
+      input: safeTraceInput(args),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
     let result: Record<string, unknown>;
+    if (liveCall.testMode) {
+      result = testModeDryRunResult('customer_upsert');
+    } else {
     const moduleForUpsert = await getCustomerModuleForTool(ctx.tenantId, ctx.orgId);
     if (!ctx.orgId || !moduleForUpsert.active) {
       result = {
@@ -1280,13 +1514,15 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           instruction: 'Frage erst nach dem Namen, dann rufe customer_upsert erneut auf.',
         };
       } else {
-        const customerPhone = stringArg(args, 'customerPhone', 'customer_phone', 'phone') ?? await resolveCallerPhone(body, args, ctx.callId);
+        const customerPhone = liveCall.callerPhone;
+        const claimedPhone = stringArg(args, 'customerPhone', 'customer_phone', 'phone');
         const activeDetails = getActiveCustomerDetailsKeys(moduleForUpsert.customerModule);
         const customFieldsRaw = args.customFields;
         const customFields = customFieldsRaw && typeof customFieldsRaw === 'object' && !Array.isArray(customFieldsRaw)
           ? Object.fromEntries(Object.entries(customFieldsRaw as Record<string, unknown>).filter(([, value]) => typeof value === 'string' && value.trim()))
           : undefined;
         const details: Record<string, unknown> = { source: 'retell-tool' };
+        if (claimedPhone && claimedPhone !== customerPhone) details.claimedPhone = redactPII(claimedPhone).slice(0, 120);
         if (activeDetails.has('service')) details.service = stringArg(args, 'service');
         if (activeDetails.has('preferredTime')) details.preferredTime = stringArg(args, 'preferredTime', 'preferred_time', 'time');
         if (activeDetails.has('preferredStylist')) details.preferredStylist = stringArg(args, 'preferredStylist', 'preferred_stylist');
@@ -1307,10 +1543,10 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         result = {
           ok: true,
           status: row ? 'saved' : 'not_persisted',
-          customerId: row?.id ?? null,
           instruction: 'Kundendaten wurden still aktualisiert. Sage nicht, dass ein Datenbankeintrag erstellt wurde; fahre normal im Gespraech fort.',
         };
       }
+    }
     }
 
     await appendTraceEvent({
@@ -1319,11 +1555,11 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       tenantId: ctx.orgId ?? undefined,
       agentId: ctx.agentId ?? undefined,
       tool: 'customer.upsert',
-      output: result,
+      output: safeTraceOutput(result),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
-    return result;
+    return sanitizeToolResultForModel(result);
   });
 
   // --- calendar.findSlots ---
@@ -1339,6 +1575,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const args = retellArgs(body);
     const ctx = await getToolOrgContext(req, body, args);
     if (rejectToolContext(reply, ctx, 'calendar.findSlots')) return;
+    const liveCall = await verifyLiveToolCall(reply, ctx, 'calendar.findSlots');
+    if (!liveCall) return;
 
     await appendTraceEvent({
       type: 'tool_call',
@@ -1346,7 +1584,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       tenantId: ctx.orgId ?? undefined,
       agentId: ctx.agentId ?? undefined,
       tool: 'calendar.findSlots',
-      input: args,
+      input: safeTraceInput(args),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
@@ -1359,6 +1597,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       preferredTime?: unknown;
       preferredStylist?: unknown;
       staffId?: string | null;
+      slotOptions?: Array<{ slot: string; spokenLabel: string }>;
+      spokenOptionsText?: string;
       allSlotsCount?: number;
       moreCount?: number;
       instruction?: string;
@@ -1433,11 +1673,11 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       tenantId: ctx.orgId ?? undefined,
       agentId: ctx.agentId ?? undefined,
       tool: 'calendar.findSlots',
-      output: result,
+      output: safeTraceOutput(result),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
-    return result;
+    return sanitizeToolResultForModel(result);
   });
 
   // --- calendar.book ---
@@ -1453,6 +1693,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const args = retellArgs(body);
     const ctx = await getToolOrgContext(req, body, args);
     if (rejectToolContext(reply, ctx, 'calendar.book')) return;
+    const liveCall = await verifyLiveToolCall(reply, ctx, 'calendar.book');
+    if (!liveCall) return;
 
     await appendTraceEvent({
       type: 'tool_call',
@@ -1460,15 +1702,18 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       tenantId: ctx.orgId ?? undefined,
       agentId: ctx.agentId ?? undefined,
       tool: 'calendar.book',
-      input: args,
+      input: safeTraceInput(args),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
     let result: Record<string, unknown>;
 
-    if (ctx.orgId) {
+    if (liveCall.testMode) {
+      result = testModeDryRunResult('calendar_book');
+    } else if (ctx.orgId) {
       const customerName = knownCustomerName(stringArg(args, 'customerName', 'customer_name', 'name'));
-      const customerPhone = await resolveCallerPhone(body, args, ctx.callId);
+      const verifiedCustomerPhone = liveCall.callerPhone;
+      const customerPhone = verifiedCustomerPhone || stringArg(args, 'customerPhone', 'customer_phone', 'phone') || '';
       const preferredTime = (args.preferredTime as string | undefined) ?? (args.time as string | undefined) ?? '';
       const staff = await resolveCalendarStaffForTool(ctx.orgId, args);
       const teamMode = staff.staffModeActive && !staff.staffId && (!staff.requested || staff.anyStaff);
@@ -1478,14 +1723,14 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         tenantId: ctx.tenantId ?? ctx.orgId,
         orgId: ctx.orgId,
         customerName: customerName ?? undefined,
-        customerPhone,
+        customerPhone: verifiedCustomerPhone,
       });
       if (!booleanArg(args, 'confirmed')) {
         result = {
           ok: false,
           status: 'confirmation_required',
           error: 'CONFIRMATION_REQUIRED',
-          instruction: 'Buche noch nicht. Wiederhole Datum, Uhrzeit, Service und Name kurz und frage ausdruecklich nach Ja. Rufe calendar.book erst danach mit confirmed=true auf.',
+          instruction: 'Buche noch nicht. Wiederhole Datum, Uhrzeit, Service und Name kurz und frage ausdruecklich nach Ja. Rufe calendar_book erst danach mit confirmed=true auf.',
           customerName,
           customerPhone,
           preferredTime,
@@ -1499,6 +1744,45 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           status: 'customer_name_required',
           error: 'CUSTOMER_NAME_REQUIRED',
           instruction: 'Buche noch nicht. Frage zuerst nach dem Namen und bestaetige danach Slot, Service und Name noch einmal.',
+          customerName,
+          customerPhone,
+          preferredTime,
+          preferredStylist: staff.matchedName ?? (teamMode ? 'Beliebiger freier Mitarbeiter' : staff.requested),
+          staffId: staff.staffId,
+          service,
+        };
+      } else if (!preferredTime.trim()) {
+        result = {
+          ok: false,
+          status: 'preferred_time_required',
+          error: 'PREFERRED_TIME_REQUIRED',
+          instruction: 'Buche noch nicht. Frage nach dem gewuenschten Datum und der Uhrzeit und bestaetige danach Slot, Service und Name noch einmal.',
+          customerName,
+          customerPhone,
+          preferredTime,
+          preferredStylist: staff.matchedName ?? (teamMode ? 'Beliebiger freier Mitarbeiter' : staff.requested),
+          staffId: staff.staffId,
+          service,
+        };
+      } else if (!service.trim()) {
+        result = {
+          ok: false,
+          status: 'service_required',
+          error: 'SERVICE_REQUIRED',
+          instruction: 'Buche noch nicht. Frage zuerst nach der gewuenschten Leistung und bestaetige danach Slot, Service und Name noch einmal.',
+          customerName,
+          customerPhone,
+          preferredTime,
+          preferredStylist: staff.matchedName ?? (teamMode ? 'Beliebiger freier Mitarbeiter' : staff.requested),
+          staffId: staff.staffId,
+          service,
+        };
+      } else if (!customerPhone.trim()) {
+        result = {
+          ok: false,
+          status: 'contact_required',
+          error: 'CONTACT_REQUIRED',
+          instruction: 'Buche noch nicht. Frage nach einer Telefonnummer fuer die Terminbestaetigung und bestaetige danach Slot, Service, Name und Telefonnummer noch einmal.',
           customerName,
           customerPhone,
           preferredTime,
@@ -1695,13 +1979,13 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       };
     }
 
-    if (ctx.orgId) {
+    if (ctx.orgId && !liveCall.testMode) {
       await maybeUpsertCustomerFromTool({
         tenantId: ctx.tenantId ?? ctx.orgId,
         orgId: ctx.orgId,
         callId: ctx.callId,
         customerName: (result.customerName as string | undefined) ?? (args.customerName as string | undefined),
-        customerPhone: (result.customerPhone as string | undefined) ?? await resolveCallerPhone(body, args, ctx.callId),
+        customerPhone: liveCall.callerPhone,
         customerType: 'pending',
         details: {
           service: result.service,
@@ -1721,11 +2005,11 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       tenantId: ctx.orgId ?? undefined,
       agentId: ctx.agentId ?? undefined,
       tool: 'calendar.book',
-      output: result,
+      output: safeTraceOutput(result),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
-    return result;
+    return sanitizeToolResultForModel(result);
   });
 
   // --- calendar.findBookings ---
@@ -1738,6 +2022,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const args = retellArgs(body);
     const ctx = await getToolOrgContext(req, body, args);
     if (rejectToolContext(reply, ctx, 'calendar.findBookings')) return;
+    const liveCall = await verifyLiveToolCall(reply, ctx, 'calendar.findBookings');
+    if (!liveCall) return;
     if (!ctx.orgId) {
       req.log.warn({ agentId: ctx.agentId }, 'retell calendar.findBookings: unknown agent_id, refusing');
       return reply.status(403).send({ error: 'unknown agent' });
@@ -1749,18 +2035,21 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       tenantId: ctx.orgId,
       agentId: ctx.agentId,
       tool: 'calendar.findBookings',
-      input: args,
+      input: safeTraceInput(args),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
     const staff = await resolveCalendarStaffForTool(ctx.orgId, args);
+    const customerPhone = liveCall.callerPhone;
     const result = await findChipyBookingsForChange(ctx.orgId, {
-      bookingId: stringArg(args, 'bookingId', 'booking_id'),
+      changeToken: stringArg(args, 'changeToken', 'change_token'),
       staffId: staff.staffId,
       customerName: stringArg(args, 'customerName', 'customer_name'),
-      customerPhone: await resolveCallerPhone(body, args, ctx.callId),
+      customerPhone,
       currentTime: stringArg(args, 'currentTime', 'current_time', 'preferredTime', 'preferred_time', 'time'),
       service: stringArg(args, 'service'),
+      sourceCallId: ctx.callId,
+      identityVerified: Boolean(customerPhone),
     });
 
     await appendTraceEvent({
@@ -1769,11 +2058,11 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       tenantId: ctx.orgId,
       agentId: ctx.agentId,
       tool: 'calendar.findBookings',
-      output: result,
+      output: safeTraceOutput(result),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
-    return result;
+    return sanitizeToolResultForModel(result);
   });
 
   // --- calendar.cancel ---
@@ -1786,6 +2075,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const args = retellArgs(body);
     const ctx = await getToolOrgContext(req, body, args);
     if (rejectToolContext(reply, ctx, 'calendar.cancel')) return;
+    const liveCall = await verifyLiveToolCall(reply, ctx, 'calendar.cancel');
+    if (!liveCall) return;
     if (!ctx.orgId) {
       req.log.warn({ agentId: ctx.agentId }, 'retell calendar.cancel: unknown agent_id, refusing');
       return reply.status(403).send({ error: 'unknown agent' });
@@ -1797,29 +2088,33 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       tenantId: ctx.orgId,
       agentId: ctx.agentId,
       tool: 'calendar.cancel',
-      input: args,
+      input: safeTraceInput(args),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
     let result: Record<string, unknown>;
-    if (!booleanArg(args, 'confirmed')) {
+    if (liveCall.testMode) {
+      result = testModeDryRunResult('calendar_cancel');
+    } else if (!booleanArg(args, 'confirmed')) {
       result = {
         ok: false,
         status: 'confirmation_required',
         error: 'CONFIRMATION_REQUIRED',
-        instruction: 'Wiederhole den gefundenen Termin kurz und frage ausdruecklich, ob er wirklich abgesagt werden soll. Rufe danach erst calendar.cancel mit confirmed=true auf.',
+        instruction: 'Wiederhole den gefundenen Termin kurz und frage ausdruecklich, ob er wirklich abgesagt werden soll. Rufe danach erst calendar_cancel mit changeToken und confirmed=true auf.',
       };
     } else {
       const staff = await resolveCalendarStaffForTool(ctx.orgId, args);
+      const customerPhone = liveCall.callerPhone;
       result = await cancelChipyBookingForChange(ctx.orgId, {
-        bookingId: stringArg(args, 'bookingId', 'booking_id'),
+        changeToken: stringArg(args, 'changeToken', 'change_token'),
         staffId: staff.staffId,
         customerName: stringArg(args, 'customerName', 'customer_name'),
-        customerPhone: await resolveCallerPhone(body, args, ctx.callId),
+        customerPhone,
         currentTime: stringArg(args, 'currentTime', 'current_time', 'preferredTime', 'preferred_time', 'time'),
         service: stringArg(args, 'service'),
         reason: stringArg(args, 'reason', 'notes'),
         sourceCallId: ctx.callId,
+        identityVerified: Boolean(customerPhone),
       });
       result.instruction = result.ok
         ? 'Sage kurz, dass der Termin abgesagt wurde. Bei partial=true: sage, dass das Team intern noch einmal nachfasst.'
@@ -1832,11 +2127,11 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       tenantId: ctx.orgId,
       agentId: ctx.agentId,
       tool: 'calendar.cancel',
-      output: result,
+      output: safeTraceOutput(result),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
-    return result;
+    return sanitizeToolResultForModel(result);
   });
 
   // --- calendar.reschedule ---
@@ -1849,6 +2144,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const args = retellArgs(body);
     const ctx = await getToolOrgContext(req, body, args);
     if (rejectToolContext(reply, ctx, 'calendar.reschedule')) return;
+    const liveCall = await verifyLiveToolCall(reply, ctx, 'calendar.reschedule');
+    if (!liveCall) return;
     if (!ctx.orgId) {
       req.log.warn({ agentId: ctx.agentId }, 'retell calendar.reschedule: unknown agent_id, refusing');
       return reply.status(403).send({ error: 'unknown agent' });
@@ -1860,18 +2157,20 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       tenantId: ctx.orgId,
       agentId: ctx.agentId,
       tool: 'calendar.reschedule',
-      input: args,
+      input: safeTraceInput(args),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
     let result: Record<string, unknown>;
     const newTime = stringArg(args, 'newTime', 'new_time', 'newPreferredTime', 'new_preferred_time');
-    if (!booleanArg(args, 'confirmed')) {
+    if (liveCall.testMode) {
+      result = testModeDryRunResult('calendar_reschedule');
+    } else if (!booleanArg(args, 'confirmed')) {
       result = {
         ok: false,
         status: 'confirmation_required',
         error: 'CONFIRMATION_REQUIRED',
-        instruction: 'Bestaetige alten Termin und neue Uhrzeit in einem Satz und frage ausdruecklich nach Ja. Rufe danach erst calendar.reschedule mit confirmed=true auf.',
+        instruction: 'Bestaetige alten Termin und neue Uhrzeit in einem Satz und frage ausdruecklich nach Ja. Rufe danach erst calendar_reschedule mit changeToken und confirmed=true auf.',
       };
     } else if (!newTime) {
       result = {
@@ -1893,11 +2192,12 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           instruction: 'Der neue Wunschmitarbeiter wurde nicht gefunden. Frage nach einem anderen Mitarbeiter oder ob ein beliebiger freier Mitarbeiter passt.',
         };
       } else {
+        const customerPhone = liveCall.callerPhone;
         result = await rescheduleChipyBookingForChange(ctx.orgId, {
-          bookingId: stringArg(args, 'bookingId', 'booking_id'),
+          changeToken: stringArg(args, 'changeToken', 'change_token'),
           staffId: currentStaff.staffId,
           customerName: stringArg(args, 'customerName', 'customer_name'),
-          customerPhone: await resolveCallerPhone(body, args, ctx.callId),
+          customerPhone,
           currentTime: stringArg(args, 'currentTime', 'current_time', 'preferredTime', 'preferred_time', 'time'),
           service: stringArg(args, 'service'),
           newTime,
@@ -1906,6 +2206,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
           newAnyStaff: newStaff.staffModeActive && newStaff.anyStaff,
           reason: stringArg(args, 'reason', 'notes'),
           sourceCallId: ctx.callId,
+          identityVerified: Boolean(customerPhone),
         });
         result.instruction = result.ok
           ? 'Sage kurz, dass der Termin verschoben wurde.'
@@ -1921,11 +2222,11 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       tenantId: ctx.orgId,
       agentId: ctx.agentId,
       tool: 'calendar.reschedule',
-      output: result,
+      output: safeTraceOutput(result),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
-    return result;
+    return sanitizeToolResultForModel(result);
   });
 
   // --- ticket.create ---
@@ -1941,6 +2242,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const args = retellArgs(body);
     const ctx = await getToolOrgContext(req, body, args);
     if (rejectToolContext(reply, ctx, 'ticket.create')) return;
+    const liveCall = await verifyLiveToolCall(reply, ctx, 'ticket.create');
+    if (!liveCall) return;
 
     // Resolve tenantId from the agent_id in the request. Refuse when we can't
     // map — previously we silently fell back to tenantId='demo', which caused
@@ -1962,9 +2265,23 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       tenantId: orgId ?? undefined,
       agentId: agentId ?? undefined,
       tool: 'ticket.create',
-      input: args,
+      input: safeTraceInput(args),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
+
+    if (liveCall.testMode) {
+      const result = testModeDryRunResult('ticket_create');
+      await appendTraceEvent({
+        type: 'tool_result',
+        sessionId: callId,
+        tenantId: orgId ?? undefined,
+        agentId: agentId ?? undefined,
+        tool: 'ticket.create',
+        output: safeTraceOutput(result),
+        at: now(),
+      } as Parameters<typeof appendTraceEvent>[0]);
+      return sanitizeToolResultForModel(result);
+    }
 
     try {
       const preferredTime = args.preferredTime as string | undefined;
@@ -1980,7 +2297,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         sessionId: callId,
         reason,
         customerName: args.customerName as string | undefined,
-        customerPhone: ticketPhoneOrUnknown(await resolveCallerPhone(body, args, callId)),
+        customerPhone: ticketPhoneOrUnknown(liveCall.callerPhone || (args.customerPhone as string | undefined) || ''),
         preferredTime,
         service: args.service as string | undefined,
         notes: args.notes as string | undefined,
@@ -2071,11 +2388,11 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         tenantId: orgId ?? undefined,
         agentId: agentId ?? undefined,
         tool: 'ticket.create',
-        output: result,
+        output: safeTraceOutput(result),
         at: now(),
       } as Parameters<typeof appendTraceEvent>[0]);
 
-      return result;
+      return sanitizeToolResultForModel(result);
     } catch (e: unknown) {
       const code = (e as { code?: string })?.code;
       const result = {
@@ -2101,10 +2418,10 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         tenantId: orgId ?? undefined,
         agentId: agentId ?? undefined,
         tool: 'ticket.create',
-        output: result,
+        output: safeTraceOutput(result),
         at: now(),
       } as Parameters<typeof appendTraceEvent>[0]);
-      return result;
+      return sanitizeToolResultForModel(result);
     }
   });
 
@@ -2132,12 +2449,15 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     }
 
     const templateId = await readDemoCallTemplate(agentId);
+    const salesCallback = templateId ? false : await isKnownSalesCallbackAgent(agentId);
     if (!templateId) {
-      req.log.warn({ callId, agentId }, 'demo.recording_declined: unknown demo agent');
-      return reply.status(403).send({ ok: false, error: 'UNKNOWN_DEMO_AGENT' });
+      if (!salesCallback) {
+        req.log.warn({ callId, agentId }, 'demo.recording_declined: unknown demo/sales agent');
+        return reply.status(403).send({ ok: false, error: 'UNKNOWN_DEMO_AGENT' });
+      }
     }
     if (!pool) {
-      req.log.error({ callId, agentId, templateId }, 'demo.recording_declined: pool unavailable');
+      req.log.error({ callId, agentId, templateId, salesCallback }, 'demo.recording_declined: pool unavailable');
       return reply.status(503).send({ ok: false, error: 'STORAGE_UNAVAILABLE' });
     }
 
@@ -2146,11 +2466,11 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         `INSERT INTO recording_declined_calls (call_id, org_id, tenant_id)
          VALUES ($1, NULL, $2)
          ON CONFLICT (call_id) DO NOTHING`,
-        [callId, `demo:${templateId}`],
+        [callId, templateId ? `demo:${templateId}` : 'demo:sales-callback'],
       );
     } catch (err) {
       req.log.error(
-        { err: (err as Error).message, callId, agentId, templateId },
+        { err: (err as Error).message, callId, agentId, templateId, salesCallback },
         'demo.recording_declined: storage failed',
       );
       return reply.status(503).send({
@@ -2163,10 +2483,10 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     await appendTraceEvent({
       type: 'tool_call',
       sessionId: callId,
-      tenantId: `demo:${templateId}`,
+      tenantId: templateId ? `demo:${templateId}` : 'demo:sales-callback',
       agentId,
       tool: 'demo.recording_declined',
-      input: args,
+      input: safeTraceInput(args),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
@@ -2229,7 +2549,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       tenantId: orgId ?? undefined,
       agentId: agentId ?? undefined,
       tool: 'recording.declined',
-      input: args,
+      input: safeTraceInput(args),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
@@ -2256,6 +2576,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const args = retellArgs(body);
     const ctx = await getToolOrgContext(req, body, args);
     if (rejectToolContext(reply, ctx, 'external.call')) return;
+    const liveCall = await verifyLiveToolCall(reply, ctx, 'external.call');
+    if (!liveCall) return;
     const callId = ctx.callId;
     const agentId = ctx.agentId;
 
@@ -2302,6 +2624,20 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
+    if (liveCall.testMode) {
+      const result = testModeDryRunResult('external_call');
+      await appendTraceEvent({
+        type: 'tool_result',
+        sessionId: callId,
+        tenantId: orgId,
+        agentId: agentId ?? undefined,
+        tool: `external:${integration.name}${endpoint ? `:${endpoint.name}` : ''}`,
+        output: safeTraceOutput(result),
+        at: now(),
+      } as Parameters<typeof appendTraceEvent>[0]);
+      return sanitizeToolResultForModel(result);
+    }
+
     const result = await executeIntegrationCall({
       integration,
       endpoint,
@@ -2319,6 +2655,6 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
-    return result;
+    return sanitizeToolResultForModel(result as Record<string, unknown>);
   });
 }

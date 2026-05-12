@@ -129,7 +129,7 @@ Wenn er Aufzeichnung/Speicherung/Verarbeitung ablehnt oder widerruft: sofort kei
 
 ## Voice-Verhalten in Demo-Tests
 - Bei Stille nach ca. 3 Sekunden: "Ich hab dich gerade akustisch nicht verstanden - kannst du das nochmal sagen?"
-- Bei "stop/stopp/halt/warte/nein/falsch/moment/nochmal/zurueck/punkt/at/bindestrich/unterstrich/gross/klein/doppel" sofort stoppen: "Alles klar, ich stoppe. Ab welcher Stelle korrigieren wir?"
+- Bei harten Stoppsignalen wie "stop/stopp/halt/warte/nein/falsch/moment/nochmal/zurueck" sofort stoppen: "Alles klar, ich stoppe. Ab welcher Stelle korrigieren wir?" E-Mail-Woerter wie punkt/at/bindestrich/gross/klein/doppel sind waehrend Nutzer-Diktat Inhalt und nur waehrend deiner eigenen Ruecklesung Korrektursignale.
 - E-Mail in kurzen Teilen klaeren: vor dem @, dann Domain. Kein ganzes Buchstabieralphabet. Bei zwei Korrekturen, Frust oder SMS-Wunsch: E-Mail abbrechen und Telefon/SMS nutzen.
 - Telefonnummern in Zweier- oder Dreierbloecken wiederholen.
 
@@ -151,7 +151,7 @@ export const DEMO_SAFETY_OVERLAY = `
 Diese Regeln gelten immer, auch wenn andere Demo-Anweisungen aelter sind:
 
 1. Wenn der Anrufer zuerst spricht oder waehrend deiner Antwort reinredet, stoppst du sofort und reagierst auf den Inhalt. Starte die Begruessung oder das Buchstabieren nicht von vorne.
-2. Bei "stop", "stopp", "halt", "warte", "nein", "nee", "ne", "hallo", "falsch", "moment", "sekunde", "nochmal", "zurueck", "punkt", "at", "bindestrich", "unterstrich", "gross", "klein" oder "doppel" stoppst du mitten im Satz. Sage nur kurz: "Alles klar, ich stoppe." Danach hoerst du zu oder fragst: "Ab welcher Stelle korrigieren wir?"
+2. Bei harten Stoppsignalen wie "stop", "stopp", "halt", "warte", "nein", "nee", "ne", "hallo", "falsch", "moment", "sekunde", "nochmal" oder "zurueck" stoppst du mitten im Satz. Sage nur kurz: "Alles klar, ich stoppe." Danach hoerst du zu oder fragst: "Ab welcher Stelle korrigieren wir?" E-Mail-Woerter wie punkt, at, bindestrich, unterstrich, gross, klein oder doppel sind waehrend Nutzer-Diktat Inhalt und nur waehrend deiner eigenen Ruecklesung Korrektursignale.
 3. E-Mail-Adressen werden kurz und plain bestaetigt, nicht mit dem kompletten Buchstabieralphabet. Wenn der Anrufer zweimal korrigiert, genervt wirkt oder SMS verlangt, brich die E-Mail-Erfassung ab und nutze die bestaetigte Telefonnummer/SMS.
 4. Wenn eine E-Mail bestritten, korrigiert oder abgebrochen wurde, darfst du sie nicht fuer den Testlink wiederholen und nicht als richtig bezeichnen.
 5. Diese Website-Demo hat kein echtes Kalender-Tool. Sage niemals, dass ein Termin verbindlich gebucht, fest eingetragen oder im Kalender gespeichert wurde. Erlaubt ist nur: "Ich habe deinen Terminwunsch fuer diese Demo simuliert aufgenommen."
@@ -163,6 +163,8 @@ Diese Regeln gelten immer, auch wenn andere Demo-Anweisungen aelter sind:
 11. Der erste Agentensatz nennt Chipy als KI-Telefonassistenz und bietet zwei Wege an: Branchen-Demo simulieren oder Fragen zu Phonbot beantworten. Der Anrufer darf jederzeit zwischen beiden Wegen wechseln.
 12. Jede Termin-, Ticket- oder Weiterleitungsbestaetigung in dieser Website-Demo muss "Demo", "simuliert" oder "Simulation" enthalten. Bei Weiterleitung: "Ich simuliere die Weiterleitung jetzt und beende die Demo." Niemals eine echte Durchstellung behaupten.
 13. Wenn der Anrufer der Demo-Aufzeichnung oder Audio/Transkript-Verarbeitung widerspricht, rufe intern recording_declined auf. Nach erfolgreichem Tool-Response keine weiteren Daten sammeln, kurz entschuldigen und den Demo-Call beenden.
+14. Alle Branchen-Beispiele sind in der Website-Demo Rollenspiel. Formulierungen wie "eingetragen", "Auftrag erstellt", "gebucht", "gesendet" oder "weitergeleitet" sind nur erlaubt, wenn du sie direkt als Demo/Simulation markierst. Wenn ein Branchenprompt verbindlicher klingt, gilt immer: simuliert, nicht echt.
+15. Nach einer Phonbot-Nebenfrage kehrst du nicht automatisch in den alten Demo-Schritt zurueck. Frage kurz: "Willst du mit der Demo weitermachen oder bei Phonbot bleiben?"
 `;
 
 // Retell post-call analysis — fields the model extracts from the transcript
@@ -177,6 +179,7 @@ const DEMO_POST_CALL_FIELDS: PostCallAnalysisField[] = [
   // (maybeSendDemoSignupLink). Only "ja" triggers a send — "nein" or "unklar"
   // remains opt-out by default. Visitor never gets unsolicited mail.
   { type: 'enum', name: 'wants_signup_link', description: 'Hat der Anrufer am Ende EXPLIZIT bestätigt dass er den Phonbot-Testlink per E-Mail / SMS bekommen will? "ja" nur wenn Chipy gefragt hat UND der Anrufer klar zugestimmt hat. "nein" wenn Anrufer ablehnt oder nichts dazu gesagt hat. "unklar" nur wenn das Gespräch abrupt endete (z.B. Verbindung weg).', choices: ['ja', 'nein', 'unklar'] },
+  { type: 'enum', name: 'signup_link_channel', description: 'Welcher Versandkanal wurde fuer den Testlink eindeutig bestaetigt? sms wenn SMS/Telefon gewuenscht wurde, email wenn E-Mail eindeutig bestaetigt wurde, both nur wenn der Anrufer ausdruecklich beide will, none wenn kein Kanal klar bestaetigt wurde. Wenn der Anrufer SMS statt E-Mail verlangt oder die E-Mail abbricht/korrigiert, sms waehlen.', choices: ['sms', 'email', 'both', 'none'] },
   { type: 'enum', name: 'wants_human_meeting', description: 'Hat der Anrufer ausdruecklich gewuenscht, mit einem menschlichen Phonbot-Mitarbeiter zu sprechen oder einen echten Beratungstermin mit Phonbot/Mindrails zu vereinbaren? "ja" nur bei klarem Wunsch. "nein" wenn nicht erwaehnt oder abgelehnt. "unklar" bei mehrdeutiger Aussage.', choices: ['ja', 'nein', 'unklar'] },
   { type: 'string', name: 'human_meeting_time', description: 'Vom Anrufer genanntes bevorzugtes Zeitfenster fuer das Gespraech mit einem menschlichen Phonbot-Mitarbeiter, z.B. "morgen Vormittag" oder "Dienstag 14 Uhr". Leer lassen, wenn nicht genannt.' },
   { type: 'enum', name: 'human_meeting_channel', description: 'Bevorzugter Rueckmeldekanal fuer den menschlichen Phonbot-Termin. phone wenn Telefon/Rueckruf/SMS, email wenn Mail, unknown wenn nicht klar.', choices: ['phone', 'email', 'unknown'] },
@@ -195,7 +198,7 @@ import { sendSignupLinkSms, signupLinkUrl } from './sms.js';
 // doesn't create duplicate Retell agents. Falls back to in-memory Map when Redis down.
 // H6: Cap in-memory maps to prevent OOM when Redis is unavailable.
 const CACHE_TTL_SEC = 24 * 60 * 60;
-const DEMO_AGENT_CACHE_VERSION = 'v14';
+const DEMO_AGENT_CACHE_VERSION = 'v15';
 const MAX_DEMO_AGENTS = 1000;
 const inMemDemoAgents = new Map<string, { agentId: string; createdAt: number }>();
 
@@ -304,8 +307,19 @@ export async function maybeSendDemoSignupLink(
   }
   const phone = (extracted.caller_phone as string | undefined)?.trim() || null;
   const name = (extracted.caller_name as string | undefined)?.trim() || null;
+  const channelRaw = (extracted.signup_link_channel as string | undefined)?.toLowerCase().trim() ?? '';
+  const channel = channelRaw === 'sms' || channelRaw === 'email' || channelRaw === 'both' || channelRaw === 'none'
+    ? channelRaw
+    : 'none';
+  const sendEmail = Boolean(email && (channel === 'email' || channel === 'both'));
+  const sendSms = Boolean(phone && (channel === 'sms' || channel === 'both'));
 
-  if (email) {
+  if (!sendEmail && !sendSms) {
+    logger.warn({ callId, channel, hasEmail: Boolean(email), hasPhone: Boolean(phone) }, 'demo signup-link suppressed because no confirmed reachable channel was extracted');
+    return;
+  }
+
+  if (sendEmail && email) {
     const claim = await pool.query(
       `UPDATE demo_calls SET signup_link_email_sent_at = now()
        WHERE call_id = $1 AND signup_link_email_sent_at IS NULL
@@ -328,7 +342,7 @@ export async function maybeSendDemoSignupLink(
     }
   }
 
-  if (phone) {
+  if (sendSms && phone) {
     const claim = await pool.query(
       `UPDATE demo_calls SET signup_link_sms_sent_at = now()
        WHERE call_id = $1 AND signup_link_sms_sent_at IS NULL
@@ -430,7 +444,7 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
       const removed = await redis.del(SALES_AGENT_KEY);
       flushed += typeof removed === 'number' ? removed : 0;
       // Clean up previous versions on the way past.
-      await redis.del(['sales_agent:phonbot:v3', 'sales_agent:phonbot:v4', 'sales_agent:phonbot:v5', 'sales_agent:phonbot:v6', 'sales_agent:phonbot:v7', 'sales_agent:phonbot:v8', 'sales_agent:phonbot:v9', 'sales_agent:phonbot:v10', 'sales_agent:phonbot:v11']).catch(() => {});
+      await redis.del(['sales_agent:phonbot:v3', 'sales_agent:phonbot:v4', 'sales_agent:phonbot:v5', 'sales_agent:phonbot:v6', 'sales_agent:phonbot:v7', 'sales_agent:phonbot:v8', 'sales_agent:phonbot:v9', 'sales_agent:phonbot:v10', 'sales_agent:phonbot:v11', 'sales_agent:phonbot:v12']).catch(() => {});
     } catch {
       /* non-critical */
     }
@@ -443,6 +457,7 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
     // Local `r` capture so the closure's type-narrowing survives.
     const r = redis;
     for (const pattern of [
+      'demo_agent:v15:*', 'demo_agent_meta:v15:*',
       'demo_agent:v14:*', 'demo_agent_meta:v14:*',
       'demo_agent:v13:*', 'demo_agent_meta:v13:*',
       'demo_agent:v12:*', 'demo_agent_meta:v12:*',
@@ -611,7 +626,7 @@ AKTUELLE PFLICHTKORREKTUREN (haben Vorrang vor allen Beispielen und alten Retell
 - Behaupte Link-Versand nur, wenn die jeweilige Variable es bestaetigt: E-Mail nur bei {{signup_email_sent}} = true, SMS nur bei {{signup_sms_sent}} = true. Wenn beides false ist, nenne nur den direkten Link {{signup_link}} und entschuldige dich kurz.
 
 REGELN:
-- Wenn der Anrufer der Aufzeichnung widerspricht, entschuldige dich kurz und beende den Demo-Anruf freundlich.
+- Wenn der Angerufene der Aufzeichnung, Speicherung oder Audio-/Transkript-Verarbeitung widerspricht: keine weiteren Daten sammeln, intern recording_declined aufrufen, danach kurz entschuldigen und den Anruf freundlich beenden.
 - Sprich auf Deutsch, natürlich und locker — du bist kein Callcenter-Bot
 - Max 2-3 Sätze pro Antwort, lass den Gesprächspartner reden
 - Sei ehrlich: wenn Phonbot für jemanden keinen Sinn macht, sag das
@@ -662,8 +677,17 @@ async function loadSalesPrompt(): Promise<string> {
 // (anti-hallucination). Web-call + sales-call now inject current_date_de /
 // current_weekday_de / current_time_de via retell_llm_dynamic_variables.
 let salesAgentIdMem: string | null = null;
-const SALES_AGENT_KEY = 'sales_agent:phonbot:v12';
+const SALES_AGENT_KEY = 'sales_agent:phonbot:v13';
 let pendingSalesCreate: Promise<string> | null = null;
+
+export async function isKnownSalesCallbackAgent(agentId: string): Promise<boolean> {
+  if (!agentId) return false;
+  if (redis?.isOpen) {
+    const cached = await redis.get(SALES_AGENT_KEY).catch(() => null);
+    return cached === agentId;
+  }
+  return salesAgentIdMem === agentId;
+}
 
 export async function getOrCreateSalesAgent(): Promise<string> {
   // Audit-Round-11 MED (Codex): mirror the demo-agent dedup. Without this,
@@ -702,9 +726,14 @@ export async function getOrCreateSalesAgent(): Promise<string> {
     // baseline carries DSGVO-Widerspruch + KI-Identifikation + DIN-5009 etc.
     const outboundBaseline = await loadOutboundBaseline();
     const salesPrompt = await loadSalesPrompt();
+    const webhookBase = process.env.WEBHOOK_BASE_URL?.replace(/\/$/, '');
+    const salesTools = [
+      DEMO_END_CALL_TOOL,
+      buildDemoRecordingDeclinedTool(webhookBase),
+    ].filter((tool): tool is RetellTool => Boolean(tool));
     const llm = await createLLM({
       generalPrompt: `${outboundBaseline}\n\n${salesPrompt}`,
-      tools: [DEMO_END_CALL_TOOL],
+      tools: salesTools,
       model,
     });
 

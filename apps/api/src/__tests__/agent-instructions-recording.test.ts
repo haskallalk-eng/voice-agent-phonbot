@@ -89,7 +89,7 @@ describe('buildAgentInstructions: agent-builder toggles', () => {
     const out = buildAgentInstructions(baseCfg({ tools: ['ticket.create'] }));
     expect(out).toContain('Kalender-Suche ist fuer diesen Agenten deaktiviert');
     expect(out).toContain('Terminbuchung ist fuer diesen Agenten deaktiviert');
-    expect(out).not.toContain('Bestaetige einen Termin nur, wenn calendar.book');
+    expect(out).not.toContain('Bestaetige einen Termin nur, wenn calendar_book');
   });
 
   it('uses the configured main language label', () => {
@@ -100,9 +100,10 @@ describe('buildAgentInstructions: agent-builder toggles', () => {
 
   it('describes direct cancel and reschedule flow when booking tools are enabled', () => {
     const out = buildAgentInstructions(baseCfg({ tools: ['calendar.findSlots', 'calendar.book', 'ticket.create'] }));
-    expect(out).toContain('calendar.findBookings');
-    expect(out).toContain('calendar.cancel');
-    expect(out).toContain('calendar.reschedule');
+    expect(out).toContain('calendar_find_bookings');
+    expect(out).toContain('calendar_cancel');
+    expect(out).toContain('calendar_reschedule');
+    expect(out).toContain('changeToken');
     expect(out).toContain('confirmed=true');
     expect(out).not.toContain('Ich kann den Termin nicht direkt');
   });

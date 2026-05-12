@@ -1,5 +1,32 @@
+function normalizeSpokenPhoneInput(input: string): string {
+  const digitWords: Record<string, string> = {
+    null: '0',
+    nul: '0',
+    eins: '1',
+    ein: '1',
+    eine: '1',
+    zwei: '2',
+    zwo: '2',
+    drei: '3',
+    vier: '4',
+    fuenf: '5',
+    funf: '5',
+    fünf: '5',
+    sechs: '6',
+    sieben: '7',
+    acht: '8',
+    neun: '9',
+  };
+  return input
+    .replace(/\bplus\b/gi, '+')
+    .replace(/\b(null|nul|eins|ein|eine|zwei|zwo|drei|vier|fuenf|funf|fünf|sechs|sieben|acht|neun)\b/gi, (word) => {
+      const key = word.toLowerCase();
+      return digitWords[key] ?? word;
+    });
+}
+
 export function normalizePhoneLight(input: string): { digits: string; normalized: string } {
-  const trimmed = input.trim();
+  const trimmed = normalizeSpokenPhoneInput(input).trim();
   // Keep leading + if present, otherwise just digits.
   const hasPlus = trimmed.startsWith('+');
   const digits = trimmed.replace(/\D/g, '');
@@ -83,7 +110,7 @@ export function isPlausiblePhone(input: string): boolean {
  *  - Anything else                → null.
  */
 export function toE164(input: string): string | null {
-  const trimmed = input.trim();
+  const trimmed = normalizeSpokenPhoneInput(input).trim();
   if (!trimmed) return null;
   const hasPlus = trimmed.startsWith('+');
   const digits = trimmed.replace(/\D/g, '');

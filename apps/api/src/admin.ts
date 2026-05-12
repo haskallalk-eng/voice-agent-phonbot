@@ -5,11 +5,11 @@ import { pool } from './db.js';
 import { log } from './logger.js';
 import { TEMPLATES } from './templates.js';
 import { DEMO_END_INSTRUCTIONS, DEMO_SAFETY_OVERLAY, DEFAULT_SALES_PROMPT, ensurePhonbotProductFacts, flushDemoAgentCache, bustSalesPromptCache } from './demo.js';
-import { PLATFORM_BASELINE_PROMPT, bustPlatformBaselineCache } from './platform-baseline.js';
-import { OUTBOUND_BASELINE_PROMPT, bustOutboundBaselineCache } from './outbound-baseline.js';
+import { PLATFORM_BASELINE_PROMPT, bustPlatformBaselineCache, ensurePlatformSafetyKernel } from './platform-baseline.js';
+import { OUTBOUND_BASELINE_PROMPT, bustOutboundBaselineCache, ensureOutboundSafetyKernel } from './outbound-baseline.js';
 import { sendSignupLinkEmail } from './email.js';
 import { buildAgentInstructions } from './agent-instructions.js';
-import { buildPromptQaReport, type PromptEvalSource } from './prompt-eval.js';
+import { buildPromptQaReport, type PromptEvalSource, type PromptQaRealCallResearch } from './prompt-eval.js';
 import { humanMeetingUrl } from './sms.js';
 import { getDefaultRetellLlmModel } from './retell.js';
 
@@ -130,6 +130,165 @@ function buildDashboardPromptQaSource(platformPrompt: string): PromptEvalSource 
       'Keine Retell-/Kalender-/SMS-/CRM-Aktion wird ausgefuehrt.',
     ],
   };
+}
+
+async function countRows(sql: string): Promise<number> {
+  if (!pool) return 0;
+  const res = await pool.query(sql).catch(() => null);
+  if (!res) return 0;
+  return Number(res.rows[0]?.cnt ?? 0);
+}
+
+async function buildPromptQaRealCallResearch(): Promise<PromptQaRealCallResearch> {
+  const sampledAt = new Date().toISOString();
+  const forbiddenActions = [
+    'Keine Retell-Webhooks synthetisch feuern.',
+    'Keine Demo-Calls promoten.',
+    'Keine Learning-Decisions apply/correct/reject schreiben.',
+    'Keine /learning/apply-, /outbound/suggestions/apply- oder Retell-Tool-POSTs ausloesen.',
+    'Keine SMS, E-Mail, Kalender-, CRM- oder Zahlungsaktionen starten.',
+  ];
+
+  if (!pool) {
+    return {
+      mode: 'not_run_no_db',
+      available: false,
+      sampledAt,
+      totalSignals: 0,
+      sources: [],
+      edgeCaseHints: [
+        'Keine DB konfiguriert; Report nutzt nur kuratierte synthetische Edge-Case-Familien.',
+      ],
+      forbiddenActions,
+      note: 'Real-Call-Research ist read-only und laeuft nur, wenn die DB verfuegbar ist.',
+    };
+  }
+
+  try {
+    const [
+      transcriptCount,
+      demoCallCount,
+      analysisCount,
+      promptSuggestionCount,
+      templateLearningCount,
+      learningCorrectionCount,
+      outboundCallCount,
+      outboundSuggestionCount,
+    ] = await Promise.all([
+      countRows(`SELECT COUNT(*) AS cnt FROM call_transcripts WHERE transcript IS NOT NULL AND transcript <> ''`),
+      countRows(`SELECT COUNT(*) AS cnt FROM demo_calls WHERE transcript IS NOT NULL AND transcript <> ''`),
+      countRows(`SELECT COUNT(*) AS cnt FROM call_analyses`),
+      countRows(`SELECT COUNT(*) AS cnt FROM prompt_suggestions`),
+      countRows(`SELECT COUNT(*) AS cnt FROM template_learnings`),
+      countRows(`SELECT COUNT(*) AS cnt FROM learning_corrections`),
+      countRows(`SELECT COUNT(*) AS cnt FROM outbound_calls WHERE transcript IS NOT NULL AND transcript <> ''`),
+      countRows(`SELECT COUNT(*) AS cnt FROM outbound_suggestions`),
+    ]);
+
+    const edgeCaseRows = await pool.query(
+      `SELECT issue_summary AS hint
+         FROM prompt_suggestions
+        WHERE issue_summary IS NOT NULL AND issue_summary <> ''
+        ORDER BY created_at DESC
+        LIMIT 8`,
+    ).catch(() => null);
+    const correctionRows = await pool.query(
+      `SELECT summary AS hint
+         FROM learning_corrections
+        WHERE summary IS NOT NULL AND summary <> ''
+        ORDER BY created_at DESC
+        LIMIT 8`,
+    ).catch(() => null);
+
+    const edgeCaseHints = [
+      ...(edgeCaseRows?.rows ?? []).map((row) => String(row.hint)),
+      ...(correctionRows?.rows ?? []).map((row) => String(row.hint)),
+    ].slice(0, 12);
+
+    const sources = [
+      {
+        id: 'call_transcripts',
+        label: 'Echte Retell-Transkripte',
+        safeReadOnly: true as const,
+        availableRows: transcriptCount,
+        signal: 'Produktive Inbound/Outbound-Transkripte fuer Shadow-Eval und Failure-Cluster.',
+      },
+      {
+        id: 'demo_calls',
+        label: 'Website-Demo-Calls',
+        safeReadOnly: true as const,
+        availableRows: demoCallCount,
+        signal: 'Echte Demo-Edge-Cases mit Barge-in, E-Mail, Testlink, Demo-Fragen und menschlichem Meeting-Wunsch.',
+      },
+      {
+        id: 'call_analyses',
+        label: 'Call-Analysen',
+        safeReadOnly: true as const,
+        availableRows: analysisCount,
+        signal: 'Scores, Bad Moments, Outcomes und Zufriedenheitssignale.',
+      },
+      {
+        id: 'prompt_suggestions',
+        label: 'Prompt-Suggestions',
+        safeReadOnly: true as const,
+        availableRows: promptSuggestionCount,
+        signal: 'Automatisch erkannte Prompt-Failures aus schlechten Momenten.',
+      },
+      {
+        id: 'template_learnings',
+        label: 'Template-Learnings',
+        safeReadOnly: true as const,
+        availableRows: templateLearningCount,
+        signal: 'Cross-Org Pattern-Learnings nur aus freigegebenen/anonymisierten Mustern.',
+      },
+      {
+        id: 'learning_corrections',
+        label: 'Admin-Korrekturen',
+        safeReadOnly: true as const,
+        availableRows: learningCorrectionCount,
+        signal: 'Goldwert fuer Meta-Lernen: originaler Vorschlag, korrigierter Text und Grund.',
+      },
+      {
+        id: 'outbound_calls',
+        label: 'Outbound/Sales-Calls',
+        safeReadOnly: true as const,
+        availableRows: outboundCallCount,
+        signal: 'Sales- und Rueckruf-Transkripte fuer Outbound-Flow, Einwand und Opt-out.',
+      },
+      {
+        id: 'outbound_suggestions',
+        label: 'Outbound-Suggestions',
+        safeReadOnly: true as const,
+        availableRows: outboundSuggestionCount,
+        signal: 'Echte Outbound-Verbesserungsvorschlaege aus Gespraechsauswertung.',
+      },
+    ];
+
+    const totalSignals = sources.reduce((sum, source) => sum + source.availableRows, 0);
+    return {
+      mode: 'read_only_db',
+      available: true,
+      sampledAt,
+      totalSignals,
+      sources,
+      edgeCaseHints: edgeCaseHints.length > 0
+        ? edgeCaseHints
+        : ['Noch keine konkreten Suggestion-/Correction-Hints vorhanden; nutze vorhandene Transkripte/Analysen fuer Shadow-Eval.'],
+      forbiddenActions,
+      note: 'Nur read-only Zaehler und kurze Learning-Hints. Keine Transkripte werden im Admin-Prompt-QA-Report ausgegeben, keine produktiven Aktionen werden gestartet.',
+    };
+  } catch (err) {
+    return {
+      mode: 'not_run_error',
+      available: false,
+      sampledAt,
+      totalSignals: 0,
+      sources: [],
+      edgeCaseHints: [`Real-Call-Research konnte nicht gelesen werden: ${(err as Error).message}`],
+      forbiddenActions,
+      note: 'Fehler beim read-only DB-Sampling; synthetische QA bleibt nutzbar.',
+    };
+  }
 }
 
 // Admin login accepts either:
@@ -589,8 +748,8 @@ export async function registerAdmin(app: FastifyInstance) {
     config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
   }, async (req: FastifyRequest) => {
     const overrides = await loadPromptOverrides();
-    const platformPrompt = overrides.get('__platform__')?.epilogue ?? PLATFORM_BASELINE_PROMPT;
-    const outboundPrompt = overrides.get('__outbound__')?.epilogue ?? OUTBOUND_BASELINE_PROMPT;
+    const platformPrompt = ensurePlatformSafetyKernel(overrides.get('__platform__')?.epilogue ?? PLATFORM_BASELINE_PROMPT);
+    const outboundPrompt = ensureOutboundSafetyKernel(overrides.get('__outbound__')?.epilogue ?? OUTBOUND_BASELINE_PROMPT);
     const salesPrompt = ensurePhonbotProductFacts(overrides.get('__sales__')?.epilogue ?? DEFAULT_SALES_PROMPT);
     const globalDemoEpilogue = ensurePhonbotProductFacts(overrides.get('__global__')?.epilogue ?? DEMO_END_INSTRUCTIONS);
       const model = getDefaultRetellLlmModel();
@@ -636,7 +795,10 @@ export async function registerAdmin(app: FastifyInstance) {
       });
     }
 
-    const report = buildPromptQaReport({ sources, model });
+    const report = {
+      ...buildPromptQaReport({ sources, model }),
+      realCallResearch: await buildPromptQaRealCallResearch(),
+    };
     void recordAdminRead(req, '/admin/prompt-qa', report.overall.failedCases, {
       sourceCount: sources.length,
       caseBank: report.caseBank.totalCases,

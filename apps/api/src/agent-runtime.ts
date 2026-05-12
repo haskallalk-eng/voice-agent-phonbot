@@ -2,6 +2,7 @@ import { readConfig } from './agent-config.js';
 import { appendTraceEvent } from './traces.js';
 import { executeKnownTool, getOpenAITools } from './agent-tools.js';
 import { buildAgentInstructions } from './agent-instructions.js';
+import { loadPlatformBaseline } from './platform-baseline.js';
 import { pushMessage, getMessages } from './session-store.js';
 
 function now() {
@@ -58,14 +59,92 @@ function normalizeText(data: OpenAIResponse): string {
 function toolGuidance() {
   return [
     'Tool usage rules:',
-    '- Use calendar.findSlots before proposing specific appointment times.',
-    '- Use calendar.book only after the user confirms a slot + service.',
-    '- Use calendar.findBookings before canceling or rescheduling an existing appointment.',
-    '- Use calendar.cancel/calendar.reschedule only after the exact existing appointment and requested change were explicitly confirmed.',
-    '- If user wants a callback or handoff, use ticket.create and confirm the phone number.',
-    '- Do not claim a booking unless calendar.book succeeded.',
+    '- Use calendar_find_slots before proposing specific appointment times.',
+    '- For appointment options, use spokenOptionsText or slotOptions[].spokenLabel from calendar_find_slots. Never speak technical time strings; say 09:00 as "neun Uhr" and 10:05 as "zehn Uhr null fuenf".',
+    '- Use calendar_book only after the user explicitly confirms the exact future date/time, service, and customer name in the latest turn. If multiple options were offered, a vague "yes", "okay", or "passt" is not enough; ask which option.',
+    '- Use calendar_find_bookings before canceling or rescheduling an existing appointment.',
+    '- Use calendar_cancel/calendar_reschedule only with changeToken from calendar_find_bookings and only after the exact existing appointment and requested change were explicitly confirmed.',
+    '- If user wants a callback or handoff, use ticket_create only after a verified from_number exists or the user provided and confirmed one contact channel.',
+    '- Do not claim a booking unless calendar_book succeeded.',
     '- Mention SMS confirmation only when the tool result contains smsSent=true.',
   ].join('\n');
+}
+
+function safeTraceInput(args: Record<string, unknown>): Record<string, unknown> {
+  const keys = Object.keys(args).filter((key) => !key.startsWith('_')).sort();
+  return {
+    argKeys: keys,
+    confirmed: typeof args.confirmed === 'boolean' ? args.confirmed : undefined,
+    hasCustomerName: typeof args.customerName === 'string' && args.customerName.trim().length > 0,
+    hasCustomerPhone: typeof args.customerPhone === 'string' && args.customerPhone.trim().length > 0,
+    hasEmail: typeof args.email === 'string' && args.email.trim().length > 0,
+    hasChangeToken: typeof args.changeToken === 'string' && args.changeToken.trim().length > 0,
+    hasNotes: typeof args.notes === 'string' && args.notes.trim().length > 0,
+  };
+}
+
+function safeTraceOutput(result: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ok: typeof result.ok === 'boolean' ? result.ok : undefined,
+    status: typeof result.status === 'string' ? result.status : undefined,
+    error: typeof result.error === 'string' ? result.error.slice(0, 80).replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]').replace(/\+?\d[\d\s()./-]{6,}\d/g, '[phone]') : undefined,
+    fallback: typeof result.fallback === 'boolean' ? result.fallback : undefined,
+    partial: typeof result.partial === 'boolean' ? result.partial : undefined,
+    reused: typeof result.reused === 'boolean' ? result.reused : undefined,
+    smsSent: typeof result.smsSent === 'boolean' ? result.smsSent : undefined,
+    matchCount: Array.isArray(result.matches) ? result.matches.length : undefined,
+    externalResultCount: Array.isArray(result.externalResults) ? result.externalResults.length : undefined,
+  };
+}
+
+function sanitizeToolOutputForModel(result: Record<string, unknown>): Record<string, unknown> {
+  const cleanString = (value: unknown, max = 500): string | undefined => {
+    if (typeof value !== 'string') return undefined;
+    return value
+      .slice(0, max)
+      .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]')
+      .replace(/\+?\d[\d\s()./-]{6,}\d/g, '[phone]');
+  };
+  const out: Record<string, unknown> = {};
+  for (const key of ['ok', 'partial', 'fallback', 'reused', 'smsSent', 'callbackScheduled']) {
+    if (typeof result[key] === 'boolean') out[key] = result[key];
+  }
+  for (const key of ['status', 'error', 'message', 'instruction', 'deliveryInstruction', 'source', 'service', 'preferredTime', 'preferredStylist']) {
+    const value = cleanString(result[key], key === 'instruction' || key === 'message' ? 800 : 220);
+    if (value) out[key] = value;
+  }
+  if (Array.isArray(result.externalResults)) out.externalResultCount = result.externalResults.length;
+  if (typeof result.externalResultCount === 'number') out.externalResultCount = result.externalResultCount;
+  if (typeof result.candidateCount === 'number') out.candidateCount = result.candidateCount;
+  if (typeof result.allSlotsCount === 'number') out.allSlotsCount = result.allSlotsCount;
+  if (typeof result.moreCount === 'number') out.moreCount = result.moreCount;
+  if (Array.isArray(result.slots)) out.slots = result.slots.filter((slot): slot is string => typeof slot === 'string').slice(0, 6);
+  if (Array.isArray(result.slotOptions)) {
+    out.slotOptions = result.slotOptions.slice(0, 6).map((item) => {
+      const option = item as Record<string, unknown>;
+      return {
+        slot: cleanString(option.slot, 80),
+        spokenLabel: cleanString(option.spokenLabel, 120),
+      };
+    });
+  }
+  const spokenOptionsText = cleanString(result.spokenOptionsText, 500);
+  if (spokenOptionsText) out.spokenOptionsText = spokenOptionsText;
+  if (Array.isArray(result.matches)) {
+    out.matches = result.matches.slice(0, 3).map((item) => {
+      const match = item as Record<string, unknown>;
+      return {
+        changeToken: cleanString(match.changeToken, 1000),
+        service: cleanString(match.service, 160),
+        startAt: cleanString(match.startAt, 80),
+        label: cleanString(match.label, 160),
+        spokenLabel: cleanString(match.spokenLabel, 160),
+        staffName: cleanString(match.staffName, 160),
+      };
+    });
+    out.matchCount = result.matches.length;
+  }
+  return out;
 }
 
 const OPENAI_API = 'https://api.openai.com/v1/responses';
@@ -92,7 +171,8 @@ export async function runAgentTurn(input: {
   }
 
   const tools = getOpenAITools(cfg);
-  const instructions = [buildAgentInstructions(cfg), toolGuidance()].join('\n\n');
+  const platformBaseline = await loadPlatformBaseline();
+  const instructions = [platformBaseline, buildAgentInstructions(cfg), toolGuidance()].join('\n\n');
   const model = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
 
   // 1) Store user message
@@ -149,7 +229,7 @@ export async function runAgentTurn(input: {
 
         await appendTraceEvent({
           type: 'tool_call', sessionId: input.sessionId, tenantId: input.tenantId,
-          tool: toolName, input: toolArgs, at: now(),
+          tool: toolName, input: safeTraceInput(toolArgs), at: now(),
         } as Parameters<typeof appendTraceEvent>[0]);
 
         const result = await executeKnownTool({
@@ -161,9 +241,11 @@ export async function runAgentTurn(input: {
           cfg,
         });
 
+        const modelResult = sanitizeToolOutputForModel(result as Record<string, unknown>);
+
         await appendTraceEvent({
           type: 'tool_result', sessionId: input.sessionId, tenantId: input.tenantId,
-          tool: toolName, output: result, at: now(),
+          tool: toolName, output: safeTraceOutput(modelResult), at: now(),
         } as Parameters<typeof appendTraceEvent>[0]);
 
         // Add the function call + result to input for next round
@@ -171,12 +253,12 @@ export async function runAgentTurn(input: {
         apiInput.push({
           type: 'function_call_output',
           call_id: call?.call_id ?? call?.id,
-          output: JSON.stringify(result),
+          output: JSON.stringify(modelResult),
         });
 
         // Also persist tool interaction in session store
         await pushMessage(input.sessionId, input.tenantId, {
-          role: 'tool', name: toolName, content: JSON.stringify(result),
+          role: 'tool', name: toolName, content: JSON.stringify(modelResult),
         });
       }
 

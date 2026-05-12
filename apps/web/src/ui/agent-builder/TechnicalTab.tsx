@@ -84,7 +84,7 @@ export function TechnicalTab({ config, onUpdate }: TechnicalTabProps) {
             >
               <option value="allow">Natürlich - leicht unterbrechbar</option>
               <option value="hold">Kurz halten - etwas kontrollierter</option>
-              <option value="block">Ohne Unterbrechung - am ruhigsten</option>
+              <option value="block">Ruhig - Stop/Nein bleibt aktiv</option>
             </Select>
           </Field>
 
@@ -96,7 +96,7 @@ export function TechnicalTab({ config, onUpdate }: TechnicalTabProps) {
           <Slider
             value={runtime.responsiveness}
             onChange={(v) => onUpdate({ responsiveness: v })}
-            min={0}
+            min={0.35}
             max={1}
             step={0.05}
             label="Reaktionsgeschwindigkeit"

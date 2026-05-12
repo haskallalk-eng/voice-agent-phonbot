@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 import type { JwtPayload } from './auth.js';
 import { pool } from './db.js';
+import { redis } from './redis.js';
 import { buildAgentInstructions } from './agent-instructions.js';
 import { tryReserveMinutes, DEFAULT_CALL_RESERVE_MINUTES } from './usage.js';
 import { invalidateOrgIdCache } from './org-id-cache.js';
@@ -763,7 +764,7 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
       name: 'recording_declined',
       description: 'Call this once when the caller refuses consent to audio/transcript storage. Then continue helping normally; do not end the call just because recording was declined.',
       url: `${webhookBaseUrl}/retell/tools/recording.declined?${signedQuery}`,
-      execution_message_description: 'Markiere für Löschung.',
+      execution_message_description: 'Ich respektiere den Widerspruch.',
       parameters: { type: 'object', properties: {} },
     });
   }
@@ -774,7 +775,6 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
     const customCustomerQuestions = getCustomCustomerQuestions(config.customerModule);
     const upsertProperties: Record<string, unknown> = {
       customerName: { type: 'string' },
-      customerPhone: { type: 'string', description: 'Caller phone number. Optional when Retell provides from_number.' },
       email: { type: 'string' },
       customerType: { type: 'string', enum: ['pending'], description: 'Always pending for bot-created customers; the salon confirms existing customers later in Phonbot.' },
       notes: { type: 'string' },
@@ -796,12 +796,11 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
     tools.push({
       type: 'custom',
       name: 'customer_lookup',
-      description: 'Silent customer lookup for hairdresser agents. Use at the beginning of an inbound call with the caller phone number, and later with a spelled name if phone did not match. Do not mention the lookup to the caller.',
+      description: 'Silent customer lookup for hairdresser agents. Call at the beginning of an inbound call without passing a phone number; the backend uses the verified Retell caller number automatically. Later pass only a spelled customerName for internal disambiguation. A name alone is never enough to reveal, change, cancel, or reschedule stored customer data. Do not mention the lookup to the caller.',
       url: `${webhookBaseUrl}/retell/tools/customer.lookup?${signedQuery}`,
       parameters: {
         type: 'object',
         properties: {
-          customerPhone: { type: 'string', description: 'Caller phone number. Prefer Retell from_number when available.' },
           customerName: { type: 'string', description: 'Full customer name, especially when the caller claims to be an existing customer but the number did not match.' },
         },
       },
@@ -823,9 +822,9 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
     tools.push({
       type: 'custom',
       name: 'calendar_find_slots',
-      description: 'Find available appointment slots. Present at most three options to the caller in natural spoken German. Use spokenOptionsText from the tool result when present; never read technical times like 11:00 aloud.',
+      description: 'Find available appointment slots. Present at most three options to the caller in natural spoken German. Use spokenOptionsText or slotOptions[].spokenLabel from the tool result when present; never read technical times like 09:00, 10:05 or 12.05.2026 aloud.',
       url: `${webhookBaseUrl}/retell/tools/calendar.findSlots?${signedQuery}`,
-      execution_message_description: 'Searching for available slots…',
+      execution_message_description: 'Ich pruefe freie Zeiten...',
       parameters: {
         type: 'object',
         properties: {
@@ -844,13 +843,13 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
       name: 'calendar_book',
       description: 'Create a booking only after the caller explicitly confirmed the exact future date/time, service, and customer name. Mention SMS confirmation only when the result returns smsSent=true.',
       url: `${webhookBaseUrl}/retell/tools/calendar.book?${signedQuery}`,
-      execution_message_description: 'Booking your appointment…',
+      execution_message_description: 'Ich buche den Termin...',
       parameters: {
         type: 'object',
         required: ['customerName', 'preferredTime', 'service', 'confirmed'],
         properties: {
           customerName: { type: 'string', description: 'Confirmed caller/customer name. Do not use "unknown".' },
-          customerPhone: { type: 'string', description: 'Caller phone number. Optional when Retell provides from_number.' },
+          customerPhone: { type: 'string', description: 'Callback/contact number only if explicitly dictated by the caller; not used for identity verification.' },
           preferredTime: { type: 'string', description: 'Confirmed future slot/time, never a past date.' },
           service: { type: 'string', description: 'Booked service.' },
           preferredStylist: { type: 'string', description: 'Requested staff member/stylist name. Use "beliebig" when the caller has no staff preference.' },
@@ -865,15 +864,14 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
     tools.push({
       type: 'custom',
       name: 'calendar_find_bookings',
-      description: 'Find an existing future appointment before cancellation or rescheduling. Use caller phone, name, current appointment time, or bookingId to narrow the match. Do not reveal unrelated customer data.',
+      description: 'Find an existing future appointment before cancellation or rescheduling. The backend uses the verified caller phone automatically. Use name, current appointment time, or service only to narrow the verified caller match. Return changeToken must be used for cancellation/reschedule. Do not reveal unrelated customer data.',
       url: `${webhookBaseUrl}/retell/tools/calendar.findBookings?${signedQuery}`,
       execution_message_description: 'Suche den bestehenden Termin...',
       parameters: {
         type: 'object',
         properties: {
-          bookingId: { type: 'string', description: 'Booking id returned by a previous findBookings call.' },
+          changeToken: { type: 'string', description: 'Short-lived change token returned by calendar_find_bookings. Never invent it.' },
           customerName: { type: 'string' },
-          customerPhone: { type: 'string', description: 'Caller phone number. Optional when Retell provides from_number.' },
           currentTime: { type: 'string', description: 'Current appointment date/time as stated by the caller.' },
           service: { type: 'string' },
           preferredStylist: { type: 'string', description: 'Current staff member/stylist if known.' },
@@ -888,14 +886,13 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
       name: 'calendar_cancel',
       description: 'Cancel an existing appointment only after calendar_find_bookings identified the appointment and the caller explicitly confirmed the exact cancellation.',
       url: `${webhookBaseUrl}/retell/tools/calendar.cancel?${signedQuery}`,
-      execution_message_description: 'Sage den Termin ab...',
+      execution_message_description: 'Ich storniere den Termin...',
       parameters: {
         type: 'object',
         required: ['confirmed'],
         properties: {
-          bookingId: { type: 'string', description: 'Booking id returned by calendar_find_bookings.' },
+          changeToken: { type: 'string', description: 'Short-lived change token returned by calendar_find_bookings. Required to change a booking.' },
           customerName: { type: 'string' },
-          customerPhone: { type: 'string', description: 'Caller phone number. Optional when Retell provides from_number.' },
           currentTime: { type: 'string' },
           service: { type: 'string' },
           preferredStylist: { type: 'string' },
@@ -917,9 +914,8 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
         type: 'object',
         required: ['newTime', 'confirmed'],
         properties: {
-          bookingId: { type: 'string', description: 'Booking id returned by calendar_find_bookings.' },
+          changeToken: { type: 'string', description: 'Short-lived change token returned by calendar_find_bookings. Required to change a booking.' },
           customerName: { type: 'string' },
-          customerPhone: { type: 'string', description: 'Caller phone number. Optional when Retell provides from_number.' },
           currentTime: { type: 'string', description: 'Current appointment date/time.' },
           service: { type: 'string' },
           preferredStylist: { type: 'string', description: 'Current staff member/stylist if known.' },
@@ -937,9 +933,9 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
     tools.push({
       type: 'custom',
       name: 'ticket_create',
-      description: 'Create a callback or transfer-fallback ticket when the user needs human follow-up. Mention SMS only when the result returns smsSent=true.',
+      description: 'Create a callback or transfer-fallback ticket only when the user needs human follow-up and either a verified from_number exists or the caller provided and confirmed one contact channel. If neither is known, ask one short contact question before calling. Mention SMS only when the result returns smsSent=true.',
       url: `${webhookBaseUrl}/retell/tools/ticket.create?${signedQuery}`,
-      execution_message_description: 'Creating your callback request…',
+      execution_message_description: 'Ich nehme den Rueckruf auf...',
       parameters: {
         type: 'object',
         properties: {
@@ -1271,6 +1267,12 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
       voiceId: preparedConfig.voice,
       language,
       llmId: preparedConfig.retellCallbackLlmId,
+      voiceSpeed: technical.voiceSpeed,
+      responsiveness: technical.responsiveness,
+      maxCallDurationMs: technical.maxCallDurationMs,
+      interruptionSensitivity: technical.interruptionSensitivity,
+      enableBackchannel: technical.enableBackchannel,
+      allowUserDtmf: technical.allowUserDtmf,
       dataStorageSetting,
       dataStorageRetentionDays,
     }));
@@ -1297,7 +1299,7 @@ function buildCallbackPrompt(config: AgentConfig): string {
       '',
       'Start the conversation in that language with the meaning of: "Hello {{customer_name}}, this is {{agent_name}} from {{business_name}}. I am calling you back about: {{callback_reason}}. Can I help you now?"',
       'Keep responses short and clear. Ask only one question at a time.',
-      'If you can book an appointment, do it directly. If not, create a new ticket.',
+      'This callback agent has no live booking or ticket tools. If an appointment, cancellation, reschedule, or ticket is needed, collect the essential details and say the team will confirm it. Never claim something was booked, changed, cancelled, or created unless a tool explicitly confirms it.',
       'End the call politely once everything is resolved.',
     ].join('\n');
   }
@@ -1312,7 +1314,7 @@ function buildCallbackPrompt(config: AgentConfig): string {
     '',
     'Beginne das Gespräch mit: "Hallo {{customer_name}}, hier ist {{agent_name}} von {{business_name}}. Ich rufe Sie zurück bezüglich: {{callback_reason}}. Kann ich Ihnen jetzt helfen?"',
     'Halte Antworten kurz und klar. Stelle nur eine Frage auf einmal.',
-    'Wenn du einen Termin buchen kannst, tue es direkt. Wenn nicht, erstelle ein neues Ticket.',
+    'Dieser Rueckruf-Agent hat keine Live-Buchungs- oder Ticket-Tools. Wenn ein Termin, eine Absage, eine Verschiebung oder ein Ticket noetig ist, sammle die wichtigsten Angaben und sage, dass das Team es bestaetigt. Behaupte niemals, etwas gebucht, geaendert, abgesagt oder erstellt zu haben, wenn kein Tool es bestaetigt hat.',
     'Beende das Gespräch freundlich wenn alles geklärt ist.',
   ].join('\n');
 }
@@ -1339,6 +1341,7 @@ async function ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise
   const callbackDataStorage: 'everything' | 'basic_attributes_only' =
     config.recordCalls === false || config.dataRetentionDays === 0 ? 'basic_attributes_only' : 'everything';
   const callbackDataStorageRetentionDays = retellDataStorageRetentionDays(config);
+  const technical = deriveTechnicalRuntimeSettings(config as Parameters<typeof deriveTechnicalRuntimeSettings>[0]);
 
   if (!callbackLlmId) {
     // Outbound flow (we call THE CUSTOMER'S customer back): prepend the
@@ -1380,6 +1383,12 @@ async function ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise
       llmId: callbackLlmId,
       voiceId: config.voice,
       language,
+      voiceSpeed: technical.voiceSpeed,
+      responsiveness: technical.responsiveness,
+      maxCallDurationMs: technical.maxCallDurationMs,
+      interruptionSensitivity: technical.interruptionSensitivity,
+      enableBackchannel: technical.enableBackchannel,
+      allowUserDtmf: technical.allowUserDtmf,
       dataStorageSetting: callbackDataStorage,
       dataStorageRetentionDays: callbackDataStorageRetentionDays,
     });
@@ -1390,6 +1399,12 @@ async function ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise
       llmId: callbackLlmId,
       voiceId: config.voice,
       language,
+      voiceSpeed: technical.voiceSpeed,
+      responsiveness: technical.responsiveness,
+      maxCallDurationMs: technical.maxCallDurationMs,
+      interruptionSensitivity: technical.interruptionSensitivity,
+      enableBackchannel: technical.enableBackchannel,
+      allowUserDtmf: technical.allowUserDtmf,
       dataStorageSetting: callbackDataStorage,
       dataStorageRetentionDays: callbackDataStorageRetentionDays,
     });
@@ -1690,9 +1705,19 @@ export async function registerAgentConfig(app: FastifyInstance) {
     const requestedTenantId = typeof query.tenantId === 'string' ? query.tenantId.trim() : '';
     const config = await readConfig(requestedTenantId || orgId, orgId);
     const promptConfig = await withCalendarOpeningHoursForPrompt(config, orgId);
+    const platformBaseline = await loadPlatformBaseline();
+    const webhookBase = process.env.WEBHOOK_BASE_URL?.replace(/\/$/, '') || 'https://preview.invalid';
+    const retellTools = buildRetellTools(promptConfig, webhookBase);
+    const toolDescriptions = retellTools
+      .map((tool) => `- ${tool.name}: ${tool.description ?? 'Keine Beschreibung.'}`)
+      .join('\n');
     return {
-      instructions: buildAgentInstructions(promptConfig),
-      tools: config.tools,
+      instructions: [
+        platformBaseline,
+        buildAgentInstructions(promptConfig),
+        toolDescriptions ? `## Retell-Tool-Descriptions\n${toolDescriptions}` : '',
+      ].filter(Boolean).join('\n\n'),
+      tools: retellTools.map((tool) => tool.name),
       fallback: config.fallback,
     };
   });
@@ -2148,7 +2173,15 @@ export async function registerAgentConfig(app: FastifyInstance) {
     }
     const call = await createWebCall(config.retellAgentId, {
       dynamicVariables: buildBerlinDynamicVariables(),
+      metadata: {
+        phonbot_test_console: 'true',
+        org_id: orgId,
+        tenant_id: config.tenantId,
+      },
     });
+    if (redis?.isOpen && call.call_id) {
+      await redis.set(`retell_test_call:${call.call_id}`, JSON.stringify({ orgId, tenantId: config.tenantId }), { EX: 2 * 60 * 60 }).catch(() => {});
+    }
     return { ok: true, ...call };
   });
 
