@@ -160,9 +160,17 @@ describe('prompt eval dry-run harness', () => {
     expect(hardened).toContain('Memory und Zustimmung');
     expect(hardened).toContain('09:00 -> "neun Uhr"');
     expect(hardened).toContain('10:05 -> "zehn Uhr null fuenf"');
+    expect(hardened).toContain('Mo-Fr -> "Montag bis Freitag"');
+    expect(hardened).toContain('Di-Sa -> "Dienstag bis Samstag"');
     expect(hardened).toContain('customer lookup');
     expect(hardened).toContain('Identitaetsmerkmale');
     expect(hardened).toContain('aehnlichen/ungefaehren/fuzzy');
+
+    const report = buildPromptQaReport({
+      sources: [{ id: 'platform', label: 'Platform', kind: 'platform', prompt: hardened }],
+      model: 'gpt-4o-mini',
+    });
+    expect(report.sources[0]?.failures.some((failure) => failure.ruleId === 'spoken-weekday-normalization')).toBe(false);
   });
 
   it('rehardens marker-bearing platform overrides when newer identity rules are missing', () => {

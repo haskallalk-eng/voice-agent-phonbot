@@ -112,6 +112,7 @@ describe('calendar slot time parsing', () => {
     expect(formatSpokenSlotLabel('Dienstag 12. Mai 2026 um 09 Uhr')).toBe(
       'Dienstag, zwölfter Mai um neun Uhr',
     );
-    expect(formatSpokenSlotLabel('Mo-Fr 09:00-18:00')).toBe('Mo-Fr neun Uhr bis achtzehn Uhr');
+    expect(formatSpokenSlotLabel('Mo-Fr 09:00-18:00')).toBe('Montag bis Freitag neun Uhr bis achtzehn Uhr');
+    expect(formatSpokenSlotLabel('Di-Sa 11:30-14:30')).toBe('Dienstag bis Samstag elf Uhr dreißig bis vierzehn Uhr dreißig');
   });
 });
