@@ -139,6 +139,8 @@ export async function migrateOutbound() {
   // retry sees the timestamp set and skips a doppelt-Send.
   await pool.query(`ALTER TABLE demo_calls ADD COLUMN IF NOT EXISTS signup_link_email_sent_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE demo_calls ADD COLUMN IF NOT EXISTS signup_link_sms_sent_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE demo_calls ADD COLUMN IF NOT EXISTS demo_booking_confirmation_email_sent_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE demo_calls ADD COLUMN IF NOT EXISTS demo_booking_confirmation_sms_sent_at TIMESTAMPTZ`);
   // Demo visitors can ask to speak with a human Phonbot team member. Retell's
   // post-call analysis stores the request here so admins have a dedicated
   // follow-up queue instead of hunting through transcripts.

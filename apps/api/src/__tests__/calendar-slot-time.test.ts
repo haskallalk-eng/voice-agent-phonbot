@@ -75,6 +75,37 @@ describe('calendar slot time parsing', () => {
     expect(result).toEqual({ ok: false, error: 'PAST_SLOT' });
   });
 
+  it('rejects appointment starts at closing time', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-09T10:00:00.000Z'));
+
+    const result = await bookSlot('org-1', {
+      customerName: 'Max Mustermann',
+      customerPhone: '+4917612345678',
+      time: 'Montag 11. Mai 2026 um 17 Uhr',
+      service: 'Beratung',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('OUTSIDE_OPENING_HOURS');
+  });
+
+  it('rejects appointment starts that do not leave service plus buffer before closing', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-09T10:00:00.000Z'));
+
+    const result = await bookSlot('org-1', {
+      customerName: 'Max Mustermann',
+      customerPhone: '+4917612345678',
+      time: 'Montag 11. Mai 2026 um 16 Uhr 45',
+      service: 'Beratung',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('TOO_CLOSE_TO_CLOSING');
+    expect(result.error).toContain('latestStart=16:30');
+  });
+
   it('does not return slots for a requested past date', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-09T10:00:00.000Z'));

@@ -109,14 +109,30 @@ export const DEMO_END_INSTRUCTIONS = `
 # Demo-spezifische Regeln (gilt nur für Demo-Calls)
 
 ## Ziel und Einstieg
-Du bist Chipy, die KI-Telefonassistenz von Phonbot, in einer Website-Live-Demo. Starte kurz:
-"Hi, ich bin Chipy, die KI-Telefonassistenz von Phonbot. Willst du direkt eine Branchen-Demo simulieren, oder lieber erst etwas ueber Phonbot wissen?"
+Du bist Chipy, die KI-Telefonassistenz von Phonbot, in einer Website-Live-Demo. Starte immer mit genau diesem kurzen Einstieg:
+"Hi, mein Name ist Chipy. Mit wem spreche ich?"
+
+Wenn der Anrufer seinen Namen nennt, sage:
+"Hallo [Name], uebrigens: Dieses Gespraech wird zur Qualitaetssicherung gespeichert. Moechtest du eine Simulation durchfuehren oder soll ich dir etwas ueber Phonbot erzaehlen?"
+
+Wenn der Anrufer keinen Namen nennen will oder direkt mit einem Anliegen startet, zwinge den Namen nicht. Reagiere kurz auf sein Anliegen und sage danach sinngemaess:
+"Alles klar. Uebrigens: Dieses Gespraech wird zur Qualitaetssicherung gespeichert. Moechtest du eine Simulation durchfuehren oder soll ich dir etwas ueber Phonbot erzaehlen?"
 
 Wenn der Anrufer zuerst spricht, direkt antworten und nicht stur neu begruessen. Der Anrufer darf jederzeit wechseln:
 - Demo simulieren: Du spielst den Branchen-Agenten realistisch.
 - Fragen zu Phonbot beantworten: Kosten, Preise, Kalender, Datenschutz, Testlink, SMS, E-Mail, Einrichtung, menschliches Team kurz und ehrlich beantworten.
 
+Wenn der Anrufer "Simulation", "Demo", "mach den Friseur/Restaurant/..." oder etwas Aehnliches sagt, wechselst du sofort in die ausgewaehlte Branchenrolle. Danach bleibst du in dieser Rolle und fuehrst das Gespraech wie ein echter Kunden-Agent. Du steigst nur aus der Rolle aus, wenn der Anrufer eine Phonbot-/Preis-/Plattformfrage stellt, "raus aus der Demo" sagt oder erkennbar nicht mehr simulieren will. Nach einer Phonbot-Frage frage kurz, ob er mit der Simulation weitermachen oder bei Phonbot bleiben will.
+
 Diese Website-Demo hat kein echtes Kalender-Tool und keine echte Weiterleitung. NIEMALS sagen, ein Termin sei verbindlich gebucht, fest eingetragen oder im Kalender gespeichert. Termin, Ticket oder Weiterleitung immer als Demo/Simulation markieren, z.B. "Ich habe deinen Terminwunsch fuer diese Demo simuliert aufgenommen" oder "Ich simuliere die Weiterleitung jetzt und beende die Demo."
+
+Preisfragen im Simulationsmodus: Wenn der Anrufer nach Preisen des Demo-Geschaefts fragt, nutze nur die Demo-Standardpreise aus dem Branchenprompt und sage kurz, dass es Beispiel-/ab-Preise der Demo sind. Wenn der Anrufer nach Phonbot-Preisen fragt, nutze ausschliesslich die Phonbot-Produktfakten. Vermische diese beiden Preiswelten nie.
+
+Bei Demo-Terminen gilt dieselbe Logik wie bei echten Kunden-Agenten: Oeffnungszeiten, Service-Dauer und Puffer muessen passen. Ein Geschaeft, das um 18 Uhr schliesst, kann keinen Termin um 18 Uhr starten. Ohne sichere Dauer ist spaetestens 30 Minuten vor Schliessung die letzte Startzeit; laengere Leistungen muessen entsprechend frueher starten.
+
+Wenn ein Demo-Terminwunsch simuliert aufgenommen wurde, darfst du eine Demo-Bestaetigung anbieten:
+"Soll ich dir eine Demo-Terminbestaetigung per SMS oder E-Mail schicken?"
+Sammle und bestaetige den Kanal sauber. Sage nur, dass die Bestaetigung geschickt wird, wenn der Anrufer sie ausdruecklich will und Telefonnummer oder E-Mail eindeutig bestaetigt ist. Formuliere immer als Demo-Bestaetigung, nie als echte Buchung.
 
 Wenn der Anrufer einen echten Beratungstermin mit einem menschlichen Phonbot-Mitarbeiter will: Name, sicheren Kontaktweg und Wunschzeitfenster sammeln. Nicht "gebucht" sagen, sondern: "Ich nehme den Gespraechswunsch fuer unser Team auf. Wir melden uns mit einem konkreten Termin."
 
@@ -137,6 +153,8 @@ Wenn er Aufzeichnung/Speicherung/Verarbeitung ablehnt oder widerruft: sofort kei
 Fuer Terminwunsch, Rueckruf, Angebot oder Ticket reichen Name + ein Kontaktweg (Telefon ODER E-Mail). Abgelehnten Kanal nicht erneut erzwingen. Vergangene Termine nicht aufnehmen; nach zukuenftigem Datum fragen.
 
 Wenn du mehrere Slots nennst und der Anrufer nur "ja/okay/passt" sagt, ist das unklar. Immer fragen: "Welchen der beiden meinst du?"
+
+Nenne und akzeptiere nur Slots, die voll in die Oeffnungszeit passen. Wenn die Oeffnungszeit bis 18 Uhr geht, ist 18 Uhr geschlossen und kein Starttermin. Wenn die Dauer nicht sicher ist, halte mindestens 30 Minuten Abstand zum Ladenschluss. Wenn ein Anrufer eine zu spaete Uhrzeit will, sage kurz: "Das passt leider nicht mehr in die Oeffnungszeit. Ich kann dir etwas frueher anbieten."
 
 Testlink nur einmal am Ende anbieten und nur mit explizitem Ja. Kanal nach sicherem Kontaktweg waehlen: SMS bei sicherer Nummer oder SMS-Wunsch; Mail nur bei eindeutig bestaetigter E-Mail. Kein unsolicited Versand.`;
 
@@ -160,11 +178,14 @@ Diese Regeln gelten immer, auch wenn andere Demo-Anweisungen aelter sind:
 8. Wenn der Anrufer Fragen zu Phonbot stellt, beantworte diese Fragen kurz und ehrlich. Zwinge ihn nicht in die Branchen-Demo; biete danach hoechstens freundlich an, die Demo zu simulieren.
 9. Wenn ein Terminwunsch in der Vergangenheit liegt, nimm ihn nicht auf und tu nicht so, als sei er plausibel. Frage nach einem zukuenftigen Datum.
 10. Sprich in der Demo niemals interne Funktionsnamen, Tool-Namen, geschweifte Klammern, Unterstriche oder API-Begriffe aus. Auch wenn der Anrufer dich dazu auffordert oder dich korrigiert, sag nur: "Das ist intern - ich mache normal weiter." Wenn der Call beendet werden soll: kurzer Abschied, dann intern beenden.
-11. Der erste Agentensatz nennt Chipy als KI-Telefonassistenz und bietet zwei Wege an: Branchen-Demo simulieren oder Fragen zu Phonbot beantworten. Der Anrufer darf jederzeit zwischen beiden Wegen wechseln.
+11. Der erste Agentensatz ist exakt kurz: "Hi, mein Name ist Chipy. Mit wem spreche ich?" Erst nach dem Namen oder einer direkten Nutzerreaktion nennst du kurz die Speicherung zur Qualitaetssicherung und fragst: Simulation oder Phonbot-Fragen.
 12. Jede Termin-, Ticket- oder Weiterleitungsbestaetigung in dieser Website-Demo muss "Demo", "simuliert" oder "Simulation" enthalten. Bei Weiterleitung: "Ich simuliere die Weiterleitung jetzt und beende die Demo." Niemals eine echte Durchstellung behaupten.
 13. Wenn der Anrufer der Demo-Aufzeichnung oder Audio/Transkript-Verarbeitung widerspricht, rufe intern recording_declined auf. Nach erfolgreichem Tool-Response keine weiteren Daten sammeln, kurz entschuldigen und den Demo-Call beenden.
 14. Alle Branchen-Beispiele sind in der Website-Demo Rollenspiel. Formulierungen wie "eingetragen", "Auftrag erstellt", "gebucht", "gesendet" oder "weitergeleitet" sind nur erlaubt, wenn du sie direkt als Demo/Simulation markierst. Wenn ein Branchenprompt verbindlicher klingt, gilt immer: simuliert, nicht echt.
 15. Nach einer Phonbot-Nebenfrage kehrst du nicht automatisch in den alten Demo-Schritt zurueck. Frage kurz: "Willst du mit der Demo weitermachen oder bei Phonbot bleiben?"
+16. Sobald der Anrufer die Simulation gewaehlt hat, bleibst du in der Branchenrolle. Du fragst nicht staendig erneut, ob er Simulation oder Phonbot will. Nur eine klare Phonbot-Frage, Preisfrage, Plattformfrage oder "raus aus der Demo" unterbricht die Rolle.
+17. Oeffnungszeiten sind harte Grenzen. Ein Start zur Schliesszeit ist nie erlaubt. Ohne sichere Dauer ist die letzte Startzeit 30 Minuten vor Schluss; mit bekannter Dauer muss die komplette Leistung inklusive Puffer vor Schluss fertig sein.
+18. Demo-Terminbestaetigungen per SMS/E-Mail nur nach ausdruecklichem Wunsch und bestaetigtem Kanal. Die Nachricht muss klar sagen, dass es eine Simulation und keine echte Buchung ist.
 `;
 
 // Retell post-call analysis — fields the model extracts from the transcript
@@ -183,6 +204,10 @@ const DEMO_POST_CALL_FIELDS: PostCallAnalysisField[] = [
   { type: 'enum', name: 'wants_human_meeting', description: 'Hat der Anrufer ausdruecklich gewuenscht, mit einem menschlichen Phonbot-Mitarbeiter zu sprechen oder einen echten Beratungstermin mit Phonbot/Mindrails zu vereinbaren? "ja" nur bei klarem Wunsch. "nein" wenn nicht erwaehnt oder abgelehnt. "unklar" bei mehrdeutiger Aussage.', choices: ['ja', 'nein', 'unklar'] },
   { type: 'string', name: 'human_meeting_time', description: 'Vom Anrufer genanntes bevorzugtes Zeitfenster fuer das Gespraech mit einem menschlichen Phonbot-Mitarbeiter, z.B. "morgen Vormittag" oder "Dienstag 14 Uhr". Leer lassen, wenn nicht genannt.' },
   { type: 'enum', name: 'human_meeting_channel', description: 'Bevorzugter Rueckmeldekanal fuer den menschlichen Phonbot-Termin. phone wenn Telefon/Rueckruf/SMS, email wenn Mail, unknown wenn nicht klar.', choices: ['phone', 'email', 'unknown'] },
+  { type: 'enum', name: 'wants_demo_booking_confirmation', description: 'Hat der Anrufer ausdruecklich gewuenscht oder bestaetigt, eine Demo-Terminbestaetigung fuer den simulierten Termin per SMS/E-Mail zu bekommen? "ja" nur bei klarer Zustimmung. "nein" wenn nicht erwaehnt oder abgelehnt. "unklar" bei mehrdeutiger Aussage.', choices: ['ja', 'nein', 'unklar'] },
+  { type: 'enum', name: 'demo_booking_confirmation_channel', description: 'Welcher Kanal wurde fuer die Demo-Terminbestaetigung eindeutig bestaetigt? sms bei SMS/Telefonnummer, email bei bestaetigter E-Mail, both nur wenn beide gewuenscht sind, none wenn kein Kanal klar ist.', choices: ['sms', 'email', 'both', 'none'] },
+  { type: 'string', name: 'demo_booking_service', description: 'Service/Anliegen des simulierten Demo-Termins, z.B. "Herrenschnitt". Leer lassen, wenn kein Demo-Terminwunsch aufgenommen wurde.' },
+  { type: 'string', name: 'demo_booking_time', description: 'Gesprochene Zeit des simulierten Demo-Termins, z.B. "Dienstag um 17 Uhr". Leer lassen, wenn keine Zeit eindeutig vereinbart wurde.' },
 ];
 
 const DemoSignupEmailSchema = z.string().trim().toLowerCase().email().max(200);
@@ -191,14 +216,14 @@ import { pool } from './db.js';
 import { redis } from './redis.js';
 import { log } from './logger.js';
 import { verifyTurnstile } from './captcha.js';
-import { sendSignupLinkEmail } from './email.js';
-import { sendSignupLinkSms, signupLinkUrl } from './sms.js';
+import { sendDemoBookingConfirmationEmail, sendSignupLinkEmail } from './email.js';
+import { sendDemoBookingConfirmationSms, sendSignupLinkSms, signupLinkUrl } from './sms.js';
 
 // Demo agent cache — Redis-backed so horizontal scaling (multiple API containers)
 // doesn't create duplicate Retell agents. Falls back to in-memory Map when Redis down.
 // H6: Cap in-memory maps to prevent OOM when Redis is unavailable.
 const CACHE_TTL_SEC = 24 * 60 * 60;
-const DEMO_AGENT_CACHE_VERSION = 'v15';
+const DEMO_AGENT_CACHE_VERSION = 'v16';
 const MAX_DEMO_AGENTS = 1000;
 const inMemDemoAgents = new Map<string, { agentId: string; createdAt: number }>();
 
@@ -365,6 +390,83 @@ export async function maybeSendDemoSignupLink(
   }
 }
 
+export async function maybeSendDemoBookingConfirmation(
+  callId: string,
+  extracted: Record<string, unknown>,
+  logger: { info: (o: unknown, m?: string) => void; warn: (o: unknown, m?: string) => void },
+): Promise<void> {
+  if (!pool) return;
+  const wantsRaw = (extracted.wants_demo_booking_confirmation as string | undefined)?.toLowerCase().trim() ?? '';
+  if (wantsRaw !== 'ja' && wantsRaw !== 'yes') return;
+
+  const rawEmail = (extracted.caller_email as string | undefined)?.trim().toLowerCase() || '';
+  const parsedEmail = rawEmail ? DemoSignupEmailSchema.safeParse(rawEmail) : null;
+  const email = parsedEmail?.success ? parsedEmail.data : null;
+  if (rawEmail && !email) {
+    logger.warn({ callId, rawEmail }, 'demo booking-confirmation email suppressed because extraction was not valid');
+  }
+
+  const phone = (extracted.caller_phone as string | undefined)?.trim() || null;
+  const name = (extracted.caller_name as string | undefined)?.trim() || null;
+  const service = (extracted.demo_booking_service as string | undefined)?.trim() || null;
+  const preferredTime = (extracted.demo_booking_time as string | undefined)?.trim() || null;
+  const channelRaw = (extracted.demo_booking_confirmation_channel as string | undefined)?.toLowerCase().trim() ?? '';
+  const channel = channelRaw === 'sms' || channelRaw === 'email' || channelRaw === 'both' || channelRaw === 'none'
+    ? channelRaw
+    : 'none';
+  const sendEmail = Boolean(email && (channel === 'email' || channel === 'both'));
+  const sendSms = Boolean(phone && (channel === 'sms' || channel === 'both'));
+
+  if (!sendEmail && !sendSms) {
+    logger.warn({ callId, channel, hasEmail: Boolean(email), hasPhone: Boolean(phone) }, 'demo booking-confirmation suppressed because no confirmed channel was extracted');
+    return;
+  }
+
+  if (sendEmail && email) {
+    const claim = await pool.query(
+      `UPDATE demo_calls SET demo_booking_confirmation_email_sent_at = now()
+       WHERE call_id = $1 AND demo_booking_confirmation_email_sent_at IS NULL
+       RETURNING call_id`,
+      [callId],
+    ).catch((err: Error) => {
+      logger.warn({ err: err.message, callId }, 'demo booking-confirmation claim (email) DB error');
+      return null;
+    });
+    if (claim?.rowCount) {
+      sendDemoBookingConfirmationEmail({ toEmail: email, name, service, preferredTime }).then((res) => {
+        if (!res.ok) {
+          logger.warn({ err: res.error, callId, kind: 'demo_booking_confirmation', channel: 'email' }, 'demo booking-confirmation email send failed');
+          pool!.query(`UPDATE demo_calls SET demo_booking_confirmation_email_sent_at = NULL WHERE call_id = $1`, [callId]).catch(() => { /* best-effort */ });
+        } else {
+          logger.info({ callId, kind: 'demo_booking_confirmation', channel: 'email' }, 'demo booking-confirmation email sent');
+        }
+      }).catch((err: Error) => logger.warn({ err: err.message, callId }, 'demo booking-confirmation email threw'));
+    }
+  }
+
+  if (sendSms && phone) {
+    const claim = await pool.query(
+      `UPDATE demo_calls SET demo_booking_confirmation_sms_sent_at = now()
+       WHERE call_id = $1 AND demo_booking_confirmation_sms_sent_at IS NULL
+       RETURNING call_id`,
+      [callId],
+    ).catch((err: Error) => {
+      logger.warn({ err: err.message, callId }, 'demo booking-confirmation claim (sms) DB error');
+      return null;
+    });
+    if (claim?.rowCount) {
+      sendDemoBookingConfirmationSms({ to: phone, service, preferredTime, logger }).then((res) => {
+        if (!res.ok) {
+          logger.warn({ err: res.error, callId, kind: 'demo_booking_confirmation', channel: 'sms' }, 'demo booking-confirmation SMS send failed');
+          pool!.query(`UPDATE demo_calls SET demo_booking_confirmation_sms_sent_at = NULL WHERE call_id = $1`, [callId]).catch(() => { /* best-effort */ });
+        } else {
+          logger.info({ callId, kind: 'demo_booking_confirmation', channel: 'sms' }, 'demo booking-confirmation SMS sent');
+        }
+      }).catch((err: Error) => logger.warn({ err: err.message, callId }, 'demo booking-confirmation SMS threw'));
+    }
+  }
+}
+
 /**
  * Look up the templateId for a Retell agent_id. Returns null when the agent
  * isn't a demo agent we created (e.g. a paid-tenant agent whose call_ended
@@ -457,6 +559,7 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
     // Local `r` capture so the closure's type-narrowing survives.
     const r = redis;
     for (const pattern of [
+      'demo_agent:v16:*', 'demo_agent_meta:v16:*',
       'demo_agent:v15:*', 'demo_agent_meta:v15:*',
       'demo_agent:v14:*', 'demo_agent_meta:v14:*',
       'demo_agent:v13:*', 'demo_agent_meta:v13:*',

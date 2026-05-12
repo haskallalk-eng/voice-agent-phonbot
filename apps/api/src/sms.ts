@@ -151,6 +151,33 @@ export async function sendBookingConfirmationSms(opts: {
   });
 }
 
+export function buildDemoBookingConfirmationSmsBody(opts: {
+  service?: string | null;
+  preferredTime?: string | null;
+}): string {
+  const service = compact(opts.service) || 'Terminwunsch';
+  const time = compact(opts.preferredTime);
+  const details = time ? `${service}, ${time}` : service;
+  return `Hi, hier ist Chipy von Phonbot nochmal. Deine Demo-Terminbestaetigung: ${details}. Das war eine Simulation, keine echte Buchung. Testlink: ${signupLinkUrl()} Menschliches Team: ${humanMeetingUrl()}`;
+}
+
+export async function sendDemoBookingConfirmationSms(opts: {
+  to: string | null | undefined;
+  service?: string | null;
+  preferredTime?: string | null;
+  logger?: SmsLogger;
+}): Promise<SmsSendResult> {
+  return sendSms({
+    to: opts.to,
+    kind: 'demo_booking_confirmation',
+    body: buildDemoBookingConfirmationSmsBody({
+      service: opts.service,
+      preferredTime: opts.preferredTime,
+    }),
+    logger: opts.logger,
+  });
+}
+
 export async function sendTicketAckSms(opts: {
   to: string | null | undefined;
   businessName?: string | null;

@@ -822,7 +822,7 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
     tools.push({
       type: 'custom',
       name: 'calendar_find_slots',
-      description: 'Find available appointment slots. Present at most three options to the caller in natural spoken German. Use spokenOptionsText or slotOptions[].spokenLabel from the tool result when present; never read technical times like 09:00, 10:05 or 12.05.2026 aloud.',
+      description: 'Find available appointment slots. The backend only returns slots where the requested service duration plus buffer fits before closing time. Present at most three options to the caller in natural spoken German. Use spokenOptionsText or slotOptions[].spokenLabel from the tool result when present; never read technical times like 09:00, 10:05 or 12.05.2026 aloud.',
       url: `${webhookBaseUrl}/retell/tools/calendar.findSlots?${signedQuery}`,
       execution_message_description: 'Ich pruefe freie Zeiten...',
       parameters: {
@@ -841,7 +841,7 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
     tools.push({
       type: 'custom',
       name: 'calendar_book',
-      description: 'Create a booking only after the caller explicitly confirmed the exact future date/time, service, and customer name. Mention SMS confirmation only when the result returns smsSent=true.',
+      description: 'Create a booking only after the caller explicitly confirmed the exact future date/time, service, and customer name. Do not book at closing time or too close before closing; the full service duration plus buffer must fit inside opening hours. Mention SMS confirmation only when the result returns smsSent=true.',
       url: `${webhookBaseUrl}/retell/tools/calendar.book?${signedQuery}`,
       execution_message_description: 'Ich buche den Termin...',
       parameters: {

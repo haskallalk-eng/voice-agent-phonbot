@@ -53,6 +53,9 @@ vi.mock('../tickets.js', () => ({
 vi.mock('../sms.js', () => ({
   sendBookingConfirmationSms: mockSendBookingConfirmationSms,
   sendTicketAckSms: mockSendTicketAckSms,
+  sendSignupLinkSms: vi.fn(),
+  sendDemoBookingConfirmationSms: vi.fn(),
+  signupLinkUrl: vi.fn(() => 'https://phonbot.de/login'),
 }));
 
 vi.mock('../retell.js', async (importOriginal) => {
@@ -235,6 +238,29 @@ describe('Retell calendar.book tool contract', () => {
       error: 'PAST_SLOT',
       fallback: false,
     });
+  });
+
+  it('does not create fallback tickets for normal slot unavailability', async () => {
+    mockBookSlot.mockResolvedValue({ ok: false, error: 'TOO_CLOSE_TO_CLOSING: closes=18:00 latestStart=17:30' });
+
+    const res = await postCalendarBook({
+      customerName: 'Max Mustermann',
+      customerPhone: '+4917612345678',
+      preferredTime: '12.05.2026 18 Uhr',
+      service: 'Beratung',
+      confirmed: true,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(mockBookSlot).toHaveBeenCalledTimes(1);
+    expect(mockCreateTicket).not.toHaveBeenCalled();
+    expect(mockSendTicketAckSms).not.toHaveBeenCalled();
+    expect(res.json()).toMatchObject({
+      ok: false,
+      status: 'slot_unavailable',
+      fallback: false,
+    });
+    expect(res.json().instruction).toContain('zu nah an der Schliesszeit');
   });
 
   it('keeps failed calendar booking plus fallback ticket as ok=false', async () => {

@@ -564,6 +564,7 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push('- Sprich Uhrzeiten nie technisch: 09:00 ist "neun Uhr", nicht "null neun Uhr"; 10:05 ist "zehn Uhr null fuenf", nicht "zehn Uhr fuenf"; 11:15 ist "elf Uhr fuenfzehn".');
   parts.push('- Sprich Datumsangaben als Worte: "Dienstag, zwoelfter Mai" statt "12.05.2026".');
   parts.push('- Wenn calendar_find_slots spokenOptionsText oder slotOptions[].spokenLabel liefert, nutze diese Sprechfassung exakt.');
+  parts.push('- Bei Terminen muss die komplette Leistung inklusive Puffer vor Ladenschluss fertig sein. Wenn um 18 Uhr geschlossen wird, ist 18 Uhr kein buchbarer Start. Ohne sichere Dauer gilt: letzter Start spaetestens 30 Minuten vor Schluss; bei laengerer Leistung entsprechend frueher.');
 
   parts.push('## Weitere Situationen');
   parts.push('- Service nicht im Angebot: "Das bieten wir leider nicht an." KEINE Konkurrenten empfehlen. Nachricht anbieten.');
