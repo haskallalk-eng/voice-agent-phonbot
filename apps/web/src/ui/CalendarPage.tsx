@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   getCalendarStatus, connectCalcom, disconnectCalendar,
@@ -9,7 +9,7 @@ import {
   getCalendarStaff,
   getStaffChipyCalendar, addStaffChipyBlock, removeStaffChipyBlock,
   getStaffChipyBookings, createStaffChipyBooking, deleteStaffChipyBooking,
-  getCustomers, getAgentConfig,
+  getCustomers, getAgentConfig, ApiError,
 } from '../lib/api.js';
 import type { CalendarProvider, CalendarStatus, CalendarStaff, ChipySchedule, ChipyBlock, ChipyBooking, ChipyBookingInput, ChipyBookingDeleteResult, ChipyBookingWriteResult, ExternalCalendarEvent, Customer, ServiceItem } from '../lib/api.js';
 import { FoxLogo } from './FoxLogo.js';
@@ -157,6 +157,12 @@ function serviceLabelsToOptions(labels: string[] | null | undefined): CalendarSe
 
 function bookingDateKey(booking: ChipyBooking): string {
   return isoDate(new Date(booking.slot_time));
+}
+
+function friendlyError(e: unknown, fallback: string) {
+  if (e instanceof ApiError) return e.userMessage || fallback;
+  if (e instanceof Error) return e.message.replace(/^API \d+:\s*/, '') || fallback;
+  return fallback;
 }
 
 function bookingDuration(booking: ChipyBooking): number {
@@ -400,6 +406,7 @@ function BookingModal({
   const [bufferMinutes, setBufferMinutes] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submitLockRef = useRef(false);
 
   const dateStr = isoDate(date);
   const serviceListId = `service-options-${dateStr}`;
@@ -414,7 +421,9 @@ function BookingModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (loading || submitLockRef.current) return;
     if (!name) return;
+    submitLockRef.current = true;
     setLoading(true);
     setError(null);
     try {
@@ -430,8 +439,9 @@ function BookingModal({
       });
       onSave(res.booking, res);
     } catch (e: unknown) {
-      setError((e instanceof Error ? e.message : null) ?? 'Fehler beim Speichern');
+      setError(friendlyError(e, 'Termin konnte nicht angelegt werden. Bitte wähle eine andere Uhrzeit.'));
       setLoading(false);
+      submitLockRef.current = false;
     }
   }
 
@@ -493,7 +503,11 @@ function BookingModal({
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Optionale Hinweise…"
               className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-orange-500/40 resize-none" />
           </div>
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && (
+            <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-100">
+              {error}
+            </p>
+          )}
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={onClose}
               className="flex-1 py-2.5 rounded-xl border border-white/10 text-sm text-white/50 hover:text-white hover:border-white/20 transition-all">
