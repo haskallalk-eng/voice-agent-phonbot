@@ -152,6 +152,16 @@ interface ChipyBookingState {
   external_refs: unknown;
 }
 
+interface ManualBookingState extends ChipyBookingState {
+  slot_time: Date | string;
+  customer_name: string | null;
+  customer_phone: string | null;
+  service: string | null;
+  notes: string | null;
+  duration_minutes: number | string | null;
+  buffer_minutes: number | string | null;
+}
+
 type CalendarStaff = {
   id: string;
   org_id: string;
@@ -2252,6 +2262,47 @@ function externalBookingKey(conn: CalendarConnection): string {
   return `${conn.provider}:${conn.id}`;
 }
 
+function optionalBookingText(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function isSameManualBooking(
+  row: {
+    customer_name?: string | null;
+    customer_phone?: string | null;
+    service?: string | null;
+    notes?: string | null;
+    duration_minutes?: number | string | null;
+    buffer_minutes?: number | string | null;
+  },
+  opts: { customerName: string; customerPhone: string; service: string; notes?: string },
+  timing: BookingTiming,
+): boolean {
+  return (
+    optionalBookingText(row.customer_name) === optionalBookingText(opts.customerName) &&
+    optionalBookingText(row.customer_phone) === optionalBookingText(opts.customerPhone) &&
+    optionalBookingText(row.service) === optionalBookingText(opts.service) &&
+    optionalBookingText(row.notes) === optionalBookingText(opts.notes) &&
+    Number(row.duration_minutes ?? DEFAULT_BOOKING_TIMING.durationMinutes) === timing.durationMinutes &&
+    Number(row.buffer_minutes ?? DEFAULT_BOOKING_TIMING.bufferMinutes) === timing.bufferMinutes
+  );
+}
+
+function bookingWriteErrorMessage(error: string | undefined, staffScoped: boolean): string {
+  if (error === 'PAST_SLOT') return 'Diese Uhrzeit liegt in der Vergangenheit. Bitte wähle einen zukünftigen Termin.';
+  if (error?.includes('slot overlaps existing booking') || error?.includes('slot already booked')) {
+    return staffScoped
+      ? 'Bei diesem Mitarbeiter ist diese Uhrzeit schon belegt. Bitte wähle eine freie Uhrzeit oder öffne den Termin im Kalender.'
+      : 'Diese Uhrzeit ist schon belegt. Bitte wähle eine freie Uhrzeit oder öffne den Termin im Kalender.';
+  }
+  if (error?.startsWith('Service not offered by staff')) {
+    return 'Diese Leistung ist bei diesem Mitarbeiter nicht hinterlegt. Bitte wähle eine passende Leistung oder einen anderen Mitarbeiter.';
+  }
+  if (error?.startsWith('Cannot parse time')) return 'Diese Uhrzeit konnte nicht gelesen werden. Bitte wähle den Termin erneut aus.';
+  return 'Dieser Zeitraum ist nicht frei. Bitte wähle eine andere Uhrzeit.';
+}
+
 async function claimChipyBooking(
   orgId: string,
   opts: { customerName: string; customerPhone: string; service: string; notes?: string; sourceCallId?: string },
@@ -2273,14 +2324,14 @@ async function claimChipyBooking(
     await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [scope]);
 
     const overlapSql = staffId
-      ? `SELECT id, source_call_id, external_refs, slot_time
+      ? `SELECT id, source_call_id, external_refs, slot_time, customer_name, customer_phone, service, notes, duration_minutes, buffer_minutes
            FROM staff_chipy_bookings
           WHERE org_id = $1
             AND staff_id = $2
             AND slot_time < $4::timestamptz
             AND (slot_time + ((duration_minutes + buffer_minutes) * interval '1 minute')) > $3::timestamptz
           LIMIT 1`
-      : `SELECT id, source_call_id, external_refs, slot_time
+      : `SELECT id, source_call_id, external_refs, slot_time, customer_name, customer_phone, service, notes, duration_minutes, buffer_minutes
            FROM chipy_bookings
           WHERE org_id = $1
             AND slot_time < $3::timestamptz
@@ -2289,11 +2340,15 @@ async function claimChipyBooking(
     const overlapParams = staffId
       ? [orgId, staffId, slotTime.toISOString(), slotEnd.toISOString()]
       : [orgId, slotTime.toISOString(), slotEnd.toISOString()];
-    const overlap = await client.query<ChipyBookingState & { slot_time: Date | string }>(overlapSql, overlapParams);
+    const overlap = await client.query<ManualBookingState>(overlapSql, overlapParams);
     const existingRow = overlap.rows[0];
     if (existingRow) {
       const existingStart = existingRow.slot_time instanceof Date ? existingRow.slot_time : new Date(existingRow.slot_time);
       if (sourceCallId && existingRow.source_call_id === sourceCallId && Math.abs(existingStart.getTime() - slotTime.getTime()) < 1000) {
+        await client.query('COMMIT');
+        return { ok: true, id: existingRow.id, externalRefs: parseExternalBookingRefs(existingRow.external_refs), reused: true };
+      }
+      if (!sourceCallId && Math.abs(existingStart.getTime() - slotTime.getTime()) < 1000 && isSameManualBooking(existingRow, opts, safeTiming)) {
         await client.query('COMMIT');
         return { ok: true, id: existingRow.id, externalRefs: parseExternalBookingRefs(existingRow.external_refs), reused: true };
       }
@@ -4841,7 +4896,7 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
       bufferMinutes: parsed.data.buffer_minutes,
     });
     if (!booked.ok || !booked.chipyBookingId) {
-      return reply.status(409).send({ error: booked.error ?? 'Dieser Zeitraum ist nicht frei. Bitte waehle einen anderen Slot.', code: 'SLOT_TAKEN' });
+      return reply.status(409).send({ error: bookingWriteErrorMessage(booked.error, true), code: 'SLOT_TAKEN' });
     }
     const res = await pool.query(
       `SELECT id, customer_name, customer_phone, service, notes, slot_time, duration_minutes, buffer_minutes, created_at
@@ -4977,7 +5032,7 @@ setTimeout(function(){window.location.href = ${JSON.stringify(appUrl)} + '?calen
       bufferMinutes: parsed.data.buffer_minutes,
     });
     if (!booked.ok || !booked.chipyBookingId) {
-      return reply.status(409).send({ error: booked.error ?? 'Dieser Zeitraum ist nicht frei. Bitte waehle einen anderen Slot.', code: 'SLOT_TAKEN' });
+      return reply.status(409).send({ error: bookingWriteErrorMessage(booked.error, false), code: 'SLOT_TAKEN' });
     }
     const res = await pool.query(
       `SELECT id, customer_name, customer_phone, service, notes, slot_time, duration_minutes, buffer_minutes, created_at
