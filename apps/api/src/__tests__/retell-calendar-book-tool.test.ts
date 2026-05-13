@@ -240,6 +240,92 @@ describe('Retell calendar.book tool contract', () => {
     });
   });
 
+  it('matches a slightly misheard preferred stylist before booking', async () => {
+    mockSendBookingConfirmationSms.mockResolvedValue({ ok: false, error: 'SMS_DISABLED' });
+    mockBookSlot.mockResolvedValue({ ok: true, bookingId: 'booking-1', chipyBookingId: 'booking-1' });
+    mockQuery.mockImplementation(async (sql: unknown) => {
+      const text = String(sql);
+      if (text.includes('SELECT org_id FROM agent_configs WHERE tenant_id')) {
+        return { rows: [{ org_id: 'org-1' }], rowCount: 1 };
+      }
+      if (text.includes('FROM agent_configs') && text.includes("data->>'retellAgentId'")) {
+        return { rows: [{ tenant_id: 'tenant-1', org_id: 'org-1' }], rowCount: 1 };
+      }
+      if (text.includes('FROM calendar_staff')) {
+        return {
+          rows: [
+            { id: 'staff-dean', name: 'Dean' },
+            { id: 'staff-lea', name: 'Lea' },
+          ],
+          rowCount: 2,
+        };
+      }
+      if (text.includes('SELECT name FROM orgs')) {
+        return { rows: [{ name: 'Phonbot Test' }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+
+    const res = await postCalendarBook({
+      customerName: 'Max Mustermann',
+      customerPhone: '+4917612345678',
+      preferredTime: '20.05.2026 10 Uhr',
+      service: 'Herrenschnitt',
+      preferredStylist: 'Dien',
+      confirmed: true,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      ok: true,
+      status: 'confirmed',
+      preferredStylist: 'Dean',
+    });
+    expect(mockBookSlot).toHaveBeenCalledWith('org-1', expect.objectContaining({ staffId: 'staff-dean' }));
+  });
+
+  it('returns available staff names instead of failing opaquely when preferred stylist is missing', async () => {
+    mockQuery.mockImplementation(async (sql: unknown) => {
+      const text = String(sql);
+      if (text.includes('SELECT org_id FROM agent_configs WHERE tenant_id')) {
+        return { rows: [{ org_id: 'org-1' }], rowCount: 1 };
+      }
+      if (text.includes('FROM agent_configs') && text.includes("data->>'retellAgentId'")) {
+        return { rows: [{ tenant_id: 'tenant-1', org_id: 'org-1' }], rowCount: 1 };
+      }
+      if (text.includes('FROM calendar_staff')) {
+        return {
+          rows: [
+            { id: 'staff-hassieb', name: 'Hassieb' },
+            { id: 'staff-lena', name: 'Lena' },
+          ],
+          rowCount: 2,
+        };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+
+    const res = await postCalendarBook({
+      customerName: 'Max Mustermann',
+      customerPhone: '+4917612345678',
+      preferredTime: '20.05.2026 10 Uhr',
+      service: 'Herrenschnitt',
+      preferredStylist: 'Dean',
+      confirmed: true,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      ok: false,
+      status: 'staff_not_found',
+      error: 'STAFF_NOT_FOUND',
+      preferredStylist: 'Dean',
+      availableStaffNames: ['Hassieb', 'Lena'],
+    });
+    expect(res.json().instruction).toContain('Dean finde ich hier nicht als aktiven Mitarbeiter');
+    expect(mockBookSlot).not.toHaveBeenCalled();
+  });
+
   it('does not create fallback tickets for normal slot unavailability', async () => {
     mockBookSlot.mockResolvedValue({ ok: false, error: 'TOO_CLOSE_TO_CLOSING: closes=18:00 latestStart=17:30' });
 

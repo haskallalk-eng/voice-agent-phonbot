@@ -150,6 +150,13 @@ function sanitizeKnownToolResultForModel(result: Record<string, unknown>): Recor
   if (typeof result.candidateCount === 'number') out.candidateCount = result.candidateCount;
   if (typeof result.allSlotsCount === 'number') out.allSlotsCount = result.allSlotsCount;
   if (typeof result.moreCount === 'number') out.moreCount = result.moreCount;
+  if (Array.isArray(result.availableStaffNames)) {
+    out.availableStaffNames = result.availableStaffNames
+      .filter((name): name is string => typeof name === 'string')
+      .map((name) => cleanString(name, 80))
+      .filter(Boolean)
+      .slice(0, 8);
+  }
   if (Array.isArray(result.slots)) out.slots = result.slots.filter((slot): slot is string => typeof slot === 'string').slice(0, 6);
   if (Array.isArray(result.slotOptions)) {
     out.slotOptions = result.slotOptions.slice(0, 6).map((item) => {
@@ -336,6 +343,95 @@ export function getOpenAITools(cfg: AgentConfig) {
   return tools;
 }
 
+type StaffResolution = {
+  staffId: string | null;
+  requested: string | null;
+  matchedName: string | null;
+  staffModeActive: boolean;
+  anyStaff: boolean;
+  availableStaffNames: string[];
+};
+
+type StaffRow = { id: string; name: string };
+
+function normalizeStaffLookupName(value: string | null | undefined): string {
+  return (value ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ß/g, 'ss')
+    .replace(/\b(bei|zu|zur|zum|mit|von|vom|frau|herr|friseur|friseurin|stylist|stylistin|mitarbeiter|mitarbeiterin)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function staffEditDistance(a: string, b: string): number {
+  if (Math.abs(a.length - b.length) > 2) return 99;
+  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i += 1) {
+    let last = prev[0] ?? 0;
+    prev[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const old = prev[j] ?? 0;
+      const deletion = prev[j] ?? 0;
+      const insertion = prev[j - 1] ?? 0;
+      prev[j] = a[i - 1] === b[j - 1]
+        ? last
+        : Math.min(last + 1, deletion + 1, insertion + 1);
+      last = old;
+    }
+  }
+  return prev[b.length] ?? 99;
+}
+
+function staffMatchScore(requested: string, candidate: string): number | null {
+  const req = normalizeStaffLookupName(requested);
+  const cand = normalizeStaffLookupName(candidate);
+  if (!req || !cand) return null;
+  if (req === cand) return 0;
+  if (cand.startsWith(req) || req.startsWith(cand)) return 1;
+  if (cand.includes(req) || req.includes(cand)) return 2;
+  const reqTokens = req.split(' ');
+  const candTokens = cand.split(' ');
+  if (reqTokens.some((token) => token.length >= 3 && candTokens.includes(token))) return 3;
+  const maxLen = Math.max(req.length, cand.length);
+  const distance = staffEditDistance(req, cand);
+  if (maxLen <= 5 && distance <= 1) return 4;
+  if (maxLen <= 10 && distance <= 2) return 5;
+  return null;
+}
+
+function bestStaffMatch(activeStaff: StaffRow[], requested: string): StaffRow | null {
+  let bestRow: StaffRow | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  let bestIndex = Number.POSITIVE_INFINITY;
+  activeStaff.forEach((row, index) => {
+    const score = staffMatchScore(requested, row.name);
+    if (score === null) return;
+    if (score < bestScore || (score === bestScore && index < bestIndex)) {
+      bestRow = row;
+      bestScore = score;
+      bestIndex = index;
+    }
+  });
+  return bestRow;
+}
+
+function staffNotFoundInstruction(requested: string | null, availableStaffNames: string[], action: 'find' | 'book' | 'change'): string {
+  const available = availableStaffNames.length ? ` Verfuegbare Mitarbeiter: ${availableStaffNames.join(', ')}.` : '';
+  const base = requested
+    ? `Sage kurz: "${requested} finde ich hier nicht als aktiven Mitarbeiter."${available}`
+    : `Es gibt Mitarbeiter-Kalender.${available}`;
+  if (action === 'book') {
+    return `${base} Buche nicht auf einen unbekannten Namen. Frage, ob einer der genannten Mitarbeiter passt oder ob ein beliebiger freier Mitarbeiter passt; wenn ja, rufe calendar_book danach erneut mit preferredStylist="beliebig" oder dem bestaetigten Namen auf.`;
+  }
+  if (action === 'change') {
+    return `${base} Frage nach dem genauen Mitarbeiter oder arbeite ohne Mitarbeiterfilter mit Name, Telefonnummer und Terminzeit weiter.`;
+  }
+  return `${base} Frage, ob einer der genannten Mitarbeiter passt oder ob eine beliebige freie Person passt; wenn ja, rufe calendar_find_slots danach erneut mit preferredStylist="beliebig" oder dem bestaetigten Namen auf.`;
+}
+
 function normalizeIncomingToolName(name: string): KnownToolName | null {
   switch (name) {
     case 'calendar.findSlots':
@@ -362,43 +458,23 @@ function normalizeIncomingToolName(name: string): KnownToolName | null {
   }
 }
 
-async function resolveStaffByName(orgId: string, requested: string | undefined): Promise<{ staffId: string | null; requested: string | null; matchedName: string | null; staffModeActive: boolean; anyStaff: boolean }> {
+async function resolveStaffByName(orgId: string, requested: string | undefined): Promise<StaffResolution> {
   const name = requested?.trim() ?? '';
   const activeStaff = pool
-    ? (await pool.query<{ id: string; name: string }>(
+    ? (await pool.query<StaffRow>(
         `SELECT id, name FROM calendar_staff WHERE org_id = $1 AND active = true ORDER BY sort_order, name`,
         [orgId],
       )).rows
     : [];
   const staffModeActive = activeStaff.length > 0;
+  const availableStaffNames = activeStaff.map((staff) => staff.name).filter(Boolean).slice(0, 12);
   const anyStaff = /^(egal|beliebig|irgendwer|wer frei ist|wer gerade frei ist|kein wunsch|keine praferenz|keine präferenz|any|anyone)$/i.test(name);
   if (anyStaff) {
-    return { staffId: null, requested: name || null, matchedName: null, staffModeActive, anyStaff: true };
+    return { staffId: null, requested: name || null, matchedName: null, staffModeActive, anyStaff: true, availableStaffNames };
   }
-  if (!name || name.length < 2 || !pool) return { staffId: null, requested: name || null, matchedName: null, staffModeActive, anyStaff: false };
-  const byName = await pool.query<{ id: string; name: string }>(
-    `SELECT id, name
-       FROM calendar_staff
-      WHERE org_id = $1
-        AND active = true
-        AND (
-          lower(name) = lower($2)
-          OR lower(name) LIKE lower($2) || '%'
-          OR lower(name) LIKE '%' || lower($2) || '%'
-          OR lower($2) LIKE '%' || lower(name) || '%'
-        )
-      ORDER BY
-        CASE
-          WHEN lower(name) = lower($2) THEN 0
-          WHEN lower(name) LIKE lower($2) || '%' THEN 1
-          ELSE 2
-        END,
-        sort_order,
-        name
-      LIMIT 1`,
-    [orgId, name],
-  );
-  return { staffId: byName.rows[0]?.id ?? null, requested: name, matchedName: byName.rows[0]?.name ?? null, staffModeActive, anyStaff: false };
+  if (!name || name.length < 2 || !pool) return { staffId: null, requested: name || null, matchedName: null, staffModeActive, anyStaff: false, availableStaffNames };
+  const matched = bestStaffMatch(activeStaff, name);
+  return { staffId: matched?.id ?? null, requested: name, matchedName: matched?.name ?? null, staffModeActive, anyStaff: false, availableStaffNames };
 }
 
 export async function executeKnownTool(input: {
@@ -421,9 +497,8 @@ export async function executeKnownTool(input: {
           service: args.service ?? null,
           preferredStylist: staff.requested,
           staffId: null,
-          instruction: staff.requested
-            ? 'Der Wunschfriseur wurde nicht eindeutig gefunden. Frage kurz nach einem anderen Mitarbeiter oder ob ein beliebiger verfuegbarer Mitarbeiter passt.'
-            : 'Es gibt Personen-Kalender. Frage nach Wunschfriseur oder ob eine beliebige verfuegbare Person passt.',
+          availableStaffNames: staff.availableStaffNames,
+          instruction: staffNotFoundInstruction(staff.requested, staff.availableStaffNames, 'find'),
         };
       }
       const teamMode = staff.staffModeActive && !staff.staffId;
@@ -486,11 +561,10 @@ export async function executeKnownTool(input: {
           ok: false,
           status: staff.requested ? 'staff_not_found' : 'staff_required',
           error: staff.requested ? 'STAFF_NOT_FOUND' : 'STAFF_REQUIRED',
-          instruction: staff.requested
-            ? 'Buche nicht ohne Person. Frage kurz nach einem anderen Mitarbeiter oder ob eine beliebige verfuegbare Person passt.'
-            : 'Buche nicht ohne Person. Frage nach Wunschfriseur oder ob eine beliebige verfuegbare Person passt.',
+          instruction: staffNotFoundInstruction(staff.requested, staff.availableStaffNames, 'book'),
           preferredStylist: staff.requested,
           staffId: null,
+          availableStaffNames: staff.availableStaffNames,
         };
       }
       const result = teamMode
@@ -592,8 +666,9 @@ export async function executeKnownTool(input: {
           ok: false,
           status: 'staff_not_found',
           error: 'STAFF_NOT_FOUND',
-          instruction: 'Frage nach dem genauen Mitarbeiter oder nutze Name plus Terminzeit, ohne fremde Termine preiszugeben.',
+          instruction: staffNotFoundInstruction(staff.requested, staff.availableStaffNames, 'change'),
           preferredStylist: staff.requested,
+          availableStaffNames: staff.availableStaffNames,
         };
       }
       return sanitizeKnownToolResultForModel(await findChipyBookingsForChange(input.tenantId, {
@@ -652,7 +727,9 @@ export async function executeKnownTool(input: {
           ok: false,
           status: 'staff_not_found',
           error: 'STAFF_NOT_FOUND',
-          instruction: 'Der neue Wunschmitarbeiter wurde nicht gefunden. Frage nach einem anderen Mitarbeiter oder ob ein beliebiger freier Mitarbeiter passt.',
+          instruction: staffNotFoundInstruction(newStaff.requested, newStaff.availableStaffNames, 'book'),
+          preferredStylist: newStaff.requested,
+          availableStaffNames: newStaff.availableStaffNames,
         };
       }
       const result = await rescheduleChipyBookingForChange(input.tenantId, {
