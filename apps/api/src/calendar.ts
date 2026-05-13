@@ -2303,6 +2303,33 @@ function bookingWriteErrorMessage(error: string | undefined, staffScoped: boolea
   return 'Dieser Zeitraum ist nicht frei. Bitte wähle eine andere Uhrzeit.';
 }
 
+async function findReusableManualBooking(
+  orgId: string,
+  opts: { customerName: string; customerPhone: string; service: string; notes?: string; sourceCallId?: string },
+  slotTime: Date,
+  staffId: string | null,
+  timing: BookingTiming,
+): Promise<ManualBookingState | null> {
+  if (!pool) return null;
+  const sourceCallId = normalizeSourceCallId(opts.sourceCallId);
+  const query = staffId
+    ? `SELECT id, source_call_id, external_refs, slot_time, customer_name, customer_phone, service, notes, duration_minutes, buffer_minutes
+         FROM staff_chipy_bookings
+        WHERE org_id = $1 AND staff_id = $2 AND slot_time = $3::timestamptz
+        LIMIT 1`
+    : `SELECT id, source_call_id, external_refs, slot_time, customer_name, customer_phone, service, notes, duration_minutes, buffer_minutes
+         FROM chipy_bookings
+        WHERE org_id = $1 AND slot_time = $2::timestamptz
+        LIMIT 1`;
+  const params = staffId ? [orgId, staffId, slotTime.toISOString()] : [orgId, slotTime.toISOString()];
+  const existing = await pool.query<ManualBookingState>(query, params);
+  const row = existing.rows[0];
+  if (!row) return null;
+  if (sourceCallId && row.source_call_id === sourceCallId) return row;
+  if (!sourceCallId && isSameManualBooking(row, opts, timing)) return row;
+  return null;
+}
+
 async function claimChipyBooking(
   orgId: string,
   opts: { customerName: string; customerPhone: string; service: string; notes?: string; sourceCallId?: string },
@@ -3084,35 +3111,49 @@ export async function bookSlot(
     durationMinutes: opts.durationMinutes,
     bufferMinutes: opts.bufferMinutes,
   });
+  let chipyBooking: { id?: string; externalRefs: ExternalBookingRefs; reused: boolean } | null = null;
   const chipyAvailability = await getChipySlotAvailability(orgId, slotTime, staffId, timing);
   if (!chipyAvailability.ok) {
-    const details = [
-      chipyAvailability.scheduleEnd ? `closes=${chipyAvailability.scheduleEnd}` : null,
-      chipyAvailability.latestStart ? `latestStart=${chipyAvailability.latestStart}` : null,
-    ].filter(Boolean).join(' ');
-    return { ok: false, error: details ? `${chipyAvailability.error}: ${details}` : chipyAvailability.error };
-  }
-
-  for (const conn of connections) {
-    const available = await isExternalSlotAvailable(conn, orgId, slotTime, timing).catch((err: Error) => ({
-      ok: false,
-      error: err.message,
-    }));
-    if (!available.ok) {
-      return {
-        ok: false,
-        error: `External calendar unavailable: ${conn.provider}: ${available.error ?? 'requested slot is busy'}`,
-      };
+    if (chipyAvailability.error === 'CHIPY_SLOT_BUSY') {
+      const reusable = await findReusableManualBooking(orgId, opts, slotTime, staffId, timing);
+      if (reusable) {
+        chipyBooking = {
+          id: reusable.id,
+          externalRefs: parseExternalBookingRefs(reusable.external_refs),
+          reused: true,
+        };
+      }
+    }
+    if (!chipyBooking) {
+      const details = [
+        chipyAvailability.scheduleEnd ? `closes=${chipyAvailability.scheduleEnd}` : null,
+        chipyAvailability.latestStart ? `latestStart=${chipyAvailability.latestStart}` : null,
+      ].filter(Boolean).join(' ');
+      return { ok: false, error: details ? `${chipyAvailability.error}: ${details}` : chipyAvailability.error };
     }
   }
 
-  let chipyBooking: { id?: string; externalRefs: ExternalBookingRefs; reused: boolean };
-  try {
-    const claimed = await claimChipyBooking(orgId, opts, slotTime, staffId, timing);
-    if (!claimed.ok) return { ok: false, error: claimed.error };
-    chipyBooking = claimed;
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? `Chipy booking failed: ${e.message}` : 'Chipy booking failed' };
+  if (!chipyBooking) {
+    for (const conn of connections) {
+      const available = await isExternalSlotAvailable(conn, orgId, slotTime, timing).catch((err: Error) => ({
+        ok: false,
+        error: err.message,
+      }));
+      if (!available.ok) {
+        return {
+          ok: false,
+          error: `External calendar unavailable: ${conn.provider}: ${available.error ?? 'requested slot is busy'}`,
+        };
+      }
+    }
+
+    try {
+      const claimed = await claimChipyBooking(orgId, opts, slotTime, staffId, timing);
+      if (!claimed.ok) return { ok: false, error: claimed.error };
+      chipyBooking = claimed;
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? `Chipy booking failed: ${e.message}` : 'Chipy booking failed' };
+    }
   }
 
   // No external calendars — book directly into Chipy
