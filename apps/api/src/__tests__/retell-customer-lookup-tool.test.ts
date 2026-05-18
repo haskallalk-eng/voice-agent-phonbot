@@ -205,4 +205,23 @@ describe('Retell customer.lookup privacy contract', () => {
     expect(JSON.stringify(body)).not.toContain('cust-saved');
     expect(body.customerId).toBeUndefined();
   });
+
+  it('returns a recoverable instruction when customer.upsert receives an invalid email', async () => {
+    const validationError = new Error('Invalid email') as Error & { issues?: Array<{ path: string[] }> };
+    validationError.name = 'ZodError';
+    validationError.issues = [{ path: ['email'] }];
+    mockUpsertCustomer.mockRejectedValue(validationError);
+
+    const res = await postCustomerTool('/retell/tools/customer.upsert', {
+      customerName: 'Max Mustermann',
+      email: 'max at',
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+
+    expect(body.ok).toBe(false);
+    expect(body.error).toBe('INVALID_CUSTOMER_EMAIL');
+    expect(body.status).toBe('invalid_customer_email');
+    expect(body.instruction).toContain('E-Mail');
+  });
 });

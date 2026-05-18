@@ -31,7 +31,7 @@ import { loadPlatformBaseline } from './platform-baseline.js';
 import { loadOutboundBaseline } from './outbound-baseline.js';
 import { deriveTechnicalRuntimeSettings, toE164 } from '@vas/shared';
 import { log } from './logger.js';
-import { normalizeKnowledgeSources, storeKnowledgePdf, syncRetellKnowledgeBase } from './knowledge.js';
+import { normalizeKnowledgeSources, storeKnowledgePdf, syncRetellKnowledgeBase, toRetellKbConfig } from './knowledge.js';
 import {
   buildIntegrationTools,
   mergeAndEncryptIntegrations,
@@ -50,6 +50,7 @@ import {
   getCustomCustomerQuestions,
   normalizeCustomerModuleConfig,
 } from './customers.js';
+import { buildCurrentDateDynamicVariables } from './time-context.js';
 
 const AGENT_STATS_CACHE_TTL_MS = 10_000;
 const agentStatsCache = new Map<string, { expiresAt: number; value?: unknown; promise?: Promise<unknown> }>();
@@ -83,24 +84,7 @@ function normalizeFallbackReasonValue(reason: string | null | undefined): string
 }
 
 function buildBerlinDynamicVariables(now = new Date()): Record<string, string> {
-  const dateFmt = new Intl.DateTimeFormat('de-DE', {
-    timeZone: 'Europe/Berlin',
-    weekday: 'long',
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  });
-  const timeFmt = new Intl.DateTimeFormat('de-DE', {
-    timeZone: 'Europe/Berlin',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-  return {
-    current_date_de: dateFmt.format(now),
-    current_date_iso: new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' }).format(now),
-    current_weekday_de: new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', weekday: 'long' }).format(now),
-    current_time_de: timeFmt.format(now),
-  };
+  return buildCurrentDateDynamicVariables(now);
 }
 
 const DEFAULT_FALLBACK_REASONS: DefaultFallbackReason[] = [
@@ -775,7 +759,7 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
     const customCustomerQuestions = getCustomCustomerQuestions(config.customerModule);
     const upsertProperties: Record<string, unknown> = {
       customerName: { type: 'string' },
-      email: { type: 'string' },
+      email: { type: 'string', description: 'Optional customer email. Spoken German forms like "max punkt mueller at gmail punkt com" are accepted by the backend, but only call this after confirming the normalized address with the caller.' },
       customerType: { type: 'string', enum: ['pending'], description: 'Always pending for bot-created customers; the salon confirms existing customers later in Phonbot.' },
       notes: { type: 'string' },
     };
@@ -1130,6 +1114,9 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
   const technical = deriveTechnicalRuntimeSettings(preparedConfig as Parameters<typeof deriveTechnicalRuntimeSettings>[0]);
   const knowledgeBaseId = (preparedConfig as Record<string, unknown>).retellKnowledgeBaseId as string | undefined;
   const knowledgeBaseIds = knowledgeBaseId ? [knowledgeBaseId] : [];
+  const kbConfig = knowledgeBaseIds.length
+    ? toRetellKbConfig((preparedConfig as Record<string, unknown>).knowledgeRetrieval)
+    : undefined;
   const model = getDefaultRetellLlmModel();
   const LANG_MAP: Record<string, string> = {
     de: 'de-DE', en: 'en-US', fr: 'fr-FR', es: 'es-ES',
@@ -1171,6 +1158,7 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
         modelHighPriority: true,
         modelTemperature: technical.modelTemperature,
         knowledgeBaseIds,
+        kbConfig,
       }),
       retellUpdateAgent(agentId, {
         name: preparedConfig.name,
@@ -1198,6 +1186,7 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
       modelHighPriority: true,
       modelTemperature: technical.modelTemperature,
       knowledgeBaseIds,
+      kbConfig,
     });
     const agent = await retellCreateAgent({
       name: preparedConfig.name,
@@ -1228,6 +1217,7 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
       modelHighPriority: true,
       modelTemperature: technical.modelTemperature,
       knowledgeBaseIds,
+      kbConfig,
     });
     llmId = llm.llm_id;
     const agent = await retellCreateAgent({

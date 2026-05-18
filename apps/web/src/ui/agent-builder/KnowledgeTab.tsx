@@ -11,6 +11,7 @@ export interface KnowledgeTabProps {
 export function KnowledgeTab({ config, onUpdate }: KnowledgeTabProps) {
   const sources = config.knowledgeSources ?? [];
   const vocab = readVocabulary(config);
+  const retrieval = config.knowledgeRetrieval ?? { mode: 'balanced', topK: 3, filterScore: 0.6 };
 
   return (
     <>
@@ -18,6 +19,40 @@ export function KnowledgeTab({ config, onUpdate }: KnowledgeTabProps) {
       <p className="text-sm text-white/50 mb-4">
         Eigene Texte und Website-URLs werden beim Speichern/Aktivieren als Wissensbasis mit dem Agenten verbunden.
       </p>
+
+      <div className="mb-4 rounded-xl border border-white/[0.08] bg-white/[0.025] p-3">
+        <p className="text-xs uppercase tracking-wider text-white/35 mb-2">Abruf-Genauigkeit</p>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { mode: 'strict', label: 'Streng', hint: 'weniger Treffer, weniger Risiko' },
+            { mode: 'balanced', label: 'Balance', hint: 'Standard fuer Voice' },
+            { mode: 'broad', label: 'Breit', hint: 'mehr Treffer bei langen FAQs' },
+          ].map((item) => (
+            <button
+              key={item.mode}
+              type="button"
+              onClick={() => onUpdate({
+                knowledgeRetrieval: {
+                  mode: item.mode as 'strict' | 'balanced' | 'broad',
+                  ...(item.mode === 'strict'
+                    ? { topK: 2, filterScore: 0.72 }
+                    : item.mode === 'broad'
+                      ? { topK: 5, filterScore: 0.48 }
+                      : { topK: 3, filterScore: 0.6 }),
+                },
+              })}
+              className={`rounded-lg border px-3 py-2 text-left transition-colors cursor-pointer ${
+                retrieval.mode === item.mode
+                  ? 'border-orange-300/50 bg-orange-300/10 text-white'
+                  : 'border-white/10 bg-black/10 text-white/55 hover:text-white/80 hover:border-white/20'
+              }`}
+            >
+              <span className="block text-xs font-medium">{item.label}</span>
+              <span className="block text-[10px] text-white/35 mt-0.5">{item.hint}</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
       {sources.length > 0 && (
         <div className="space-y-2 mb-4">

@@ -158,7 +158,7 @@ export function buildDemoBookingConfirmationSmsBody(opts: {
   const service = compact(opts.service) || 'Terminwunsch';
   const time = compact(opts.preferredTime);
   const details = time ? `${service}, ${time}` : service;
-  return `Hi, hier ist Chipy von Phonbot nochmal. Deine Demo-Terminbestaetigung: ${details}. Das war eine Simulation, keine echte Buchung. Testlink: ${signupLinkUrl()} Menschliches Team: ${humanMeetingUrl()}`;
+  return `Hi, hier ist Chipy von Phonbot nochmal. Deine Demo-Terminbestaetigung: ${details}. Das war eine Simulation, keine echte Buchung.`;
 }
 
 export async function sendDemoBookingConfirmationSms(opts: {

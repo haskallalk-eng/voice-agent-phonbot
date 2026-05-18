@@ -2,6 +2,13 @@ import crypto from 'node:crypto';
 import { createKnowledgeBase, deleteKnowledgeBase } from './retell.js';
 import { pool } from './db.js';
 import { isPrivateHost, isPrivateResolved, isBlockedPort } from './ssrf-guard.js';
+import {
+  customerModuleActiveForAgentConfig,
+  getActiveCustomerQuestions,
+  normalizeCustomerModuleConfig,
+  type CustomerModuleConfig,
+} from './customers.js';
+import { chipyScheduleToOpeningHours } from './opening-hours-sync.js';
 
 export type KnowledgeSource = {
   id: string;
@@ -15,6 +22,21 @@ export type KnowledgeSource = {
   sha256?: string;
   status?: 'pending' | 'indexed' | 'error';
   error?: string;
+  category?: string;
+  allowedUse?: string;
+  sourceOfTruth?: string;
+  owner?: string;
+  verifiedAt?: string;
+  expiresAt?: string;
+  fetchedAt?: string;
+  lastIndexedAt?: string;
+  contentHash?: string;
+  etag?: string;
+  lastModified?: string;
+  sitemapLastmod?: string;
+  containsPii?: boolean;
+  reviewStatus?: string;
+  risk?: string;
 };
 
 export type KnowledgeText = { title: string; text: string };
@@ -31,6 +53,8 @@ type KnowledgeFileRef = Omit<KnowledgeFile, 'data'>;
 export type PrepareKnowledgeOptions = {
   requirePdfBytes?: boolean;
   loadPdfFile?: (source: KnowledgeSource) => Promise<KnowledgeFile | null>;
+  includeCanonicalBusinessFacts?: boolean;
+  canonicalBusinessFacts?: CanonicalBusinessFactOptions;
 };
 
 export type KnowledgePayload = {
@@ -41,9 +65,42 @@ export type KnowledgePayload = {
   signature: string | null;
 };
 
+export type KnowledgeRetrievalMode = 'strict' | 'balanced' | 'broad';
+
+export type KnowledgeRetrievalSettings = {
+  mode: KnowledgeRetrievalMode;
+  topK: number;
+  filterScore: number;
+};
+
+export const DEFAULT_KNOWLEDGE_RETRIEVAL: KnowledgeRetrievalSettings = {
+  mode: 'balanced',
+  topK: 3,
+  filterScore: 0.6,
+};
+
+export type CanonicalBusinessFactStaff = {
+  name?: unknown;
+  role?: unknown;
+  services?: unknown;
+};
+
+export type CanonicalBusinessFactOptions = {
+  now?: Date | string;
+  staff?: CanonicalBusinessFactStaff[];
+  openingHoursSchedule?: unknown;
+  staffSchedules?: Array<{ name?: unknown; schedule?: unknown }>;
+};
+
 const MAX_SOURCES = 25;
 const MAX_TEXT_CHARS = 50000;
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
+
+const KNOWLEDGE_RETRIEVAL_PRESETS: Record<KnowledgeRetrievalMode, Omit<KnowledgeRetrievalSettings, 'mode'>> = {
+  strict: { topK: 2, filterScore: 0.72 },
+  balanced: { topK: 3, filterScore: 0.6 },
+  broad: { topK: 5, filterScore: 0.48 },
+};
 
 function compact(input: string | null | undefined): string {
   return (input ?? '').replace(/\s+/g, ' ').trim();
@@ -52,6 +109,239 @@ function compact(input: string | null | undefined): string {
 function truncate(input: string, max: number): string {
   const text = input.trim();
   return text.length > max ? `${text.slice(0, max - 3).trim()}...` : text;
+}
+
+function asRecord(input: unknown): Record<string, unknown> | null {
+  return input && typeof input === 'object' && !Array.isArray(input) ? input as Record<string, unknown> : null;
+}
+
+function cleanFact(input: unknown, max = 600): string {
+  return typeof input === 'string' ? truncate(compact(input), max) : '';
+}
+
+function cleanFactList(input: unknown, maxItems = 20): string[] {
+  if (!Array.isArray(input)) return [];
+  const out: string[] = [];
+  for (const item of input) {
+    const text = cleanFact(item, 160);
+    if (text) out.push(text);
+    if (out.length >= maxItems) break;
+  }
+  return out;
+}
+
+function pushFact(lines: string[], label: string, value: unknown, max = 600): void {
+  const text = cleanFact(value, max);
+  if (text) lines.push(`${label}: ${text}`);
+}
+
+function formatServiceFact(input: unknown): string | null {
+  const service = asRecord(input);
+  if (!service) return null;
+  const name = cleanFact(service.name, 120);
+  if (!name) return null;
+  const parts: string[] = [name];
+  const price = cleanFact(service.price, 30);
+  const priceUpTo = cleanFact(service.priceUpTo, 30);
+  if (price) {
+    if (service.priceFrom === true) parts.push(`ab ${price} Euro`);
+    else if (priceUpTo) parts.push(`${price}-${priceUpTo} Euro`);
+    else parts.push(`${price} Euro`);
+  }
+  const duration = cleanFact(service.duration, 40);
+  if (duration) parts.push(duration);
+  const tag = cleanFact(service.tag, 30);
+  if (tag) parts.push(tag);
+  const description = cleanFact(service.description, 240);
+  if (description) parts.push(description);
+  return parts.join(' | ');
+}
+
+function formatVocabularyFact(input: unknown): string | null {
+  if (typeof input === 'string') return cleanFact(input, 160) || null;
+  const item = asRecord(input);
+  if (!item) return null;
+  const term = cleanFact(item.term, 120);
+  if (!term) return null;
+  const parts = [term];
+  const explanation = cleanFact(item.explanation, 220);
+  const context = cleanFact(item.context, 180);
+  if (explanation) parts.push(`= ${explanation}`);
+  if (context) parts.push(`Kontext: ${context}`);
+  return parts.join(' | ');
+}
+
+function formatStaffFact(input: unknown): string | null {
+  const staff = asRecord(input);
+  if (!staff) return null;
+  const name = cleanFact(staff.name, 120);
+  if (!name) return null;
+  const parts = [name];
+  const role = cleanFact(staff.role, 100);
+  if (role) parts.push(role);
+  const services = cleanFactList(staff.services, 20);
+  if (services.length > 0) parts.push(`Leistungen: ${services.join(', ')}`);
+  return parts.join(' | ');
+}
+
+function formatScheduleFact(input: unknown): string {
+  const schedule = asRecord(input);
+  if (!schedule) return '';
+  try {
+    return cleanFact(chipyScheduleToOpeningHours(schedule as Record<string, { enabled: boolean; start: string; end: string }>), 700);
+  } catch {
+    return '';
+  }
+}
+
+function normalizeIso(input: Date | string | undefined): string {
+  if (input instanceof Date) return input.toISOString();
+  if (typeof input === 'string' && input.trim()) {
+    const parsed = new Date(input);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+  return new Date().toISOString();
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+export function normalizeKnowledgeRetrievalSettings(input: unknown): KnowledgeRetrievalSettings {
+  const raw = input && typeof input === 'object' ? input as Record<string, unknown> : {};
+  const rawMode = typeof raw.mode === 'string' ? raw.mode : DEFAULT_KNOWLEDGE_RETRIEVAL.mode;
+  const mode: KnowledgeRetrievalMode = rawMode === 'strict' || rawMode === 'broad' ? rawMode : 'balanced';
+  const preset = KNOWLEDGE_RETRIEVAL_PRESETS[mode];
+  return {
+    mode,
+    topK: Math.round(clampNumber(raw.topK, 1, 8, preset.topK)),
+    filterScore: Number(clampNumber(raw.filterScore, 0.2, 0.9, preset.filterScore).toFixed(2)),
+  };
+}
+
+export function toRetellKbConfig(input: unknown): { top_k: number; filter_score: number } {
+  const normalized = normalizeKnowledgeRetrievalSettings(input);
+  return { top_k: normalized.topK, filter_score: normalized.filterScore };
+}
+
+export function buildCanonicalBusinessFacts(
+  config: Record<string, unknown>,
+  options: CanonicalBusinessFactOptions = {},
+): KnowledgeSource | null {
+  const factLines: string[] = [];
+
+  pushFact(factLines, 'Betrieb', config.businessName, 180);
+  pushFact(factLines, 'Beschreibung', config.businessDescription, 900);
+  pushFact(factLines, 'Branche', config.industry, 80);
+  pushFact(factLines, 'Adresse', config.address, 300);
+  pushFact(factLines, 'Oeffnungszeiten', config.openingHours, 700);
+  const structuredSchedule = formatScheduleFact(options.openingHoursSchedule);
+  if (structuredSchedule) factLines.push(`Betriebskalender: ${structuredSchedule}`);
+
+  const services = Array.isArray(config.services)
+    ? config.services.map(formatServiceFact).filter((line): line is string => Boolean(line)).slice(0, 40)
+    : [];
+  if (services.length > 0) {
+    factLines.push('Leistungen:');
+    factLines.push(...services.map((line) => `- ${line}`));
+  } else {
+    pushFact(factLines, 'Leistungen', config.servicesText, 1200);
+  }
+
+  const vocab = Array.isArray(config.customVocabulary)
+    ? config.customVocabulary.map(formatVocabularyFact).filter((line): line is string => Boolean(line)).slice(0, 40)
+    : [];
+  if (vocab.length > 0) {
+    factLines.push('Spezielle Begriffe:');
+    factLines.push(...vocab.map((line) => `- ${line}`));
+  }
+
+  const staffFacts = Array.isArray(options.staff)
+    ? options.staff.map(formatStaffFact).filter((line): line is string => Boolean(line)).slice(0, 40)
+    : [];
+  if (staffFacts.length > 0) {
+    factLines.push('Mitarbeiter:');
+    factLines.push(...staffFacts.map((line) => `- ${line}`));
+  }
+
+  const staffScheduleFacts = Array.isArray(options.staffSchedules)
+    ? options.staffSchedules
+      .map((item) => {
+        const name = cleanFact(item?.name, 120);
+        const schedule = formatScheduleFact(item?.schedule);
+        return name && schedule ? `${name}: ${schedule}` : '';
+      })
+      .filter(Boolean)
+      .slice(0, 40)
+    : [];
+  if (staffScheduleFacts.length > 0) {
+    factLines.push('Mitarbeiterkalender:');
+    factLines.push(...staffScheduleFacts.map((line) => `- ${line}`));
+  }
+
+  const customerModule = asRecord(config.customerModule) as CustomerModuleConfig | null;
+  if (customerModuleActiveForAgentConfig({
+    industry: cleanFact(config.industry, 80) || undefined,
+    customerModule: customerModule ?? undefined,
+  })) {
+    const normalized = normalizeCustomerModuleConfig(customerModule ?? undefined);
+    const questions = getActiveCustomerQuestions(normalized)
+      .map((q) => {
+        const label = cleanFact(q.label, 120);
+        if (!label) return '';
+        const prompt = cleanFact(q.prompt, 180);
+        const condition = cleanFact(q.condition, 120);
+        const suffix = [prompt, condition ? `Bedingung: ${condition}` : ''].filter(Boolean).join(' | ');
+        return suffix ? `${label} (${suffix})` : label;
+      })
+      .filter(Boolean)
+      .slice(0, 24);
+    if (questions.length > 0) {
+      factLines.push('Kundenaufnahme:');
+      factLines.push(`- Modul aktiv: ${normalized.allowBookingWithoutApproval === false ? 'Termine neuer/pending Kunden nur mit Freigabe' : 'Terminbuchung neuer/pending Kunden nach Bestaetigung erlaubt'}`);
+      factLines.push(...questions.map((line) => `- ${line}`));
+    }
+  }
+
+  const aliases = cleanFactList(config.businessAliases, 10);
+  if (aliases.length > 0) {
+    factLines.push('Namensvarianten:');
+    factLines.push(...aliases.map((line) => `- ${line}`));
+  }
+
+  if (factLines.length === 0) return null;
+  const includesCalendarTables = Boolean(
+    structuredSchedule || staffFacts.length > 0 || staffScheduleFacts.length > 0,
+  );
+  const containsPersonalData = staffFacts.length > 0 || staffScheduleFacts.length > 0;
+
+  const content = truncate([
+    'Quelle: Phonbot Datenbank / verifizierte Betriebsdaten.',
+    'Nutzung: Nur zur Beantwortung von Faktenfragen und zur korrekten Gespraechsfuehrung verwenden. Kritische Aktionen brauchen weiterhin Tool-Erfolg und Bestaetigung.',
+    ...factLines,
+  ].join('\n'), MAX_TEXT_CHARS);
+  const now = normalizeIso(options.now);
+
+  return {
+    id: 'db_canonical_business_facts',
+    type: 'text',
+    name: 'Phonbot Business Fakten',
+    content,
+    status: 'indexed',
+    category: 'verified_facts',
+    allowedUse: 'agent_facts',
+    sourceOfTruth: includesCalendarTables ? 'agent_configs.data+calendar_tables' : 'agent_configs.data',
+    owner: 'tenant',
+    verifiedAt: now,
+    fetchedAt: now,
+    lastIndexedAt: now,
+    contentHash: crypto.createHash('sha256').update(content).digest('hex'),
+    containsPii: containsPersonalData,
+    reviewStatus: 'approved',
+    risk: containsPersonalData ? 'medium' : 'low',
+  };
 }
 
 function sourceTitle(src: KnowledgeSource, fallback: string): string {
@@ -211,6 +501,13 @@ export async function prepareKnowledgePayload(
   const files: KnowledgeFile[] = [];
   const fileRefs: KnowledgeFileRef[] = [];
 
+  if (options.includeCanonicalBusinessFacts !== false) {
+    const canonicalFacts = buildCanonicalBusinessFacts(config, options.canonicalBusinessFacts);
+    if (canonicalFacts) {
+      texts.push({ title: sourceTitle(canonicalFacts, 'Phonbot Business Fakten'), text: canonicalFacts.content });
+    }
+  }
+
   for (const raw of rawSources.slice(0, MAX_SOURCES)) {
     if (!raw || typeof raw !== 'object') continue;
     const src = raw as KnowledgeSource;
@@ -329,13 +626,51 @@ function knowledgeBaseName(config: Record<string, unknown>): string {
   return truncate(rawName.replace(/[^\p{L}\p{N}\s._-]+/gu, ''), 38) || 'Phonbot Wissen';
 }
 
+async function loadCanonicalBusinessFactContext(orgId?: string): Promise<CanonicalBusinessFactOptions> {
+  if (!pool || !orgId) return {};
+  try {
+    const [staffRes, scheduleRes, staffScheduleRes] = await Promise.all([
+      pool.query<{ name: string | null; role: string | null; services: string[] | null }>(
+        `SELECT name, role, services
+         FROM calendar_staff
+         WHERE org_id = $1 AND active = true
+         ORDER BY sort_order, name
+         LIMIT 40`,
+        [orgId],
+      ),
+      pool.query<{ schedule: unknown }>(
+        `SELECT schedule FROM chipy_schedules WHERE org_id = $1 LIMIT 1`,
+        [orgId],
+      ),
+      pool.query<{ name: string | null; schedule: unknown }>(
+        `SELECT cs.name, scs.schedule
+         FROM staff_chipy_schedules scs
+         JOIN calendar_staff cs ON cs.id = scs.staff_id AND cs.org_id = scs.org_id
+         WHERE scs.org_id = $1 AND cs.active = true
+         ORDER BY cs.sort_order, cs.name
+         LIMIT 40`,
+        [orgId],
+      ),
+    ]);
+    return {
+      staff: staffRes.rows.map((row) => ({ name: row.name, role: row.role, services: row.services })),
+      openingHoursSchedule: scheduleRes.rows[0]?.schedule,
+      staffSchedules: staffScheduleRes.rows.map((row) => ({ name: row.name, schedule: row.schedule })),
+    };
+  } catch {
+    return {};
+  }
+}
+
 export async function syncRetellKnowledgeBase<T extends Record<string, unknown>>(config: T, orgId?: string): Promise<T> {
   const tenantId = typeof config.tenantId === 'string' ? config.tenantId : '';
+  const canonicalBusinessFacts = await loadCanonicalBusinessFactContext(orgId);
   const payload = await prepareKnowledgePayload(config, {
     requirePdfBytes: true,
     loadPdfFile: orgId && tenantId
       ? (source) => loadStoredKnowledgePdf(orgId, tenantId, source)
       : undefined,
+    canonicalBusinessFacts,
   });
   const previousId = typeof config.retellKnowledgeBaseId === 'string' ? config.retellKnowledgeBaseId : '';
   const previousSignature = typeof config.knowledgeBaseSignature === 'string' ? config.knowledgeBaseSignature : '';

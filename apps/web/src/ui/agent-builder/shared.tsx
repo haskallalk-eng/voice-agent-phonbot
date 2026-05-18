@@ -417,6 +417,7 @@ export const DEFAULT_CONFIG_VALUES: Partial<AgentConfig> = {
   recordCalls: true,
   dataRetentionDays: 30,
   knowledgeSources: [],
+  knowledgeRetrieval: { mode: 'balanced', topK: 3, filterScore: 0.6 },
   extractedVariables: [],
   inboundWebhooks: [],
   callRoutingRules: [],

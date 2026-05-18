@@ -39,10 +39,10 @@ export const TECHNICAL_MODE_PRESETS: Record<InterruptionMode, TechnicalModePrese
   allow: {
     mode: 'allow',
     label: 'Natuerlich',
-    description: 'Laesst den Anrufer leicht dazwischenreden und reagiert direkt.',
-    interruptionSensitivity: 0.8,
-    responsiveness: 1,
-    enableBackchannel: true,
+    description: 'Laesst klare Stopps zu, bleibt aber ruhiger bei Hintergrundgeraeuschen.',
+    interruptionSensitivity: 0.75,
+    responsiveness: 0.8,
+    enableBackchannel: false,
   },
   hold: {
     mode: 'hold',

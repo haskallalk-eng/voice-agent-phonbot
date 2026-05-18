@@ -5,6 +5,8 @@
  * Our dashboard creates/updates Retell resources through this module.
  */
 
+import { buildCurrentDateDynamicVariables } from './time-context.js';
+
 const RETELL_API = 'https://api.retellai.com';
 const DEFAULT_RETELL_LLM_MODEL = 'gpt-5.4-mini';
 
@@ -279,14 +281,16 @@ function defaultInterruption(): number {
   return v;
 }
 function defaultBackchannel(): boolean {
-  return process.env.RETELL_AGENT_BACKCHANNEL !== 'false';
+  const raw = process.env.RETELL_AGENT_BACKCHANNEL;
+  if (raw === undefined || raw === '') return false;
+  return raw === 'true';
 }
 
 function defaultReminderTriggerMs(): number {
   const raw = process.env.RETELL_AGENT_REMINDER_TRIGGER_MS;
-  if (raw === undefined || raw === '') return 3_000;
+  if (raw === undefined || raw === '') return 5_500;
   const v = Number(raw);
-  if (!Number.isFinite(v) || v < 1_000) return 3_000;
+  if (!Number.isFinite(v) || v < 1_000) return 5_500;
   return v;
 }
 
@@ -719,7 +723,10 @@ export async function createWebCall(
   // Inject per-call temporal awareness + any caller-supplied vars. Without
   // this, the LLM has no idea what "today" or "tomorrow" maps to and either
   // hallucinates or refuses to book — known Retell-community pattern.
-  if (opts?.dynamicVariables) body.retell_llm_dynamic_variables = opts.dynamicVariables;
+  body.retell_llm_dynamic_variables = {
+    ...buildCurrentDateDynamicVariables(),
+    ...(opts?.dynamicVariables ?? {}),
+  };
   if (opts?.metadata) body.metadata = opts.metadata;
   return retellRequest('/v2/create-web-call', {
     method: 'POST',
@@ -744,7 +751,12 @@ export async function registerCall(config: {
   agentId: string;
   fromNumber: string;
   toNumber: string;
+  dynamicVariables?: Record<string, string>;
 }): Promise<RegisterCallResponse> {
+  const dynamicVariables = {
+    ...buildCurrentDateDynamicVariables(),
+    ...(config.dynamicVariables ?? {}),
+  };
   return retellRequest('/v2/register-call', {
     method: 'POST',
     body: JSON.stringify({
@@ -754,6 +766,7 @@ export async function registerCall(config: {
       sample_rate: 8000,
       from_number: config.fromNumber,
       to_number: config.toNumber,
+      retell_llm_dynamic_variables: dynamicVariables,
     }),
   });
 }
@@ -782,6 +795,10 @@ export async function createPhoneCall(config: {
   metadata?: Record<string, string>;
   dynamicVariables?: Record<string, string>;
 }): Promise<PhoneCallResponse> {
+  const dynamicVariables = {
+    ...buildCurrentDateDynamicVariables(),
+    ...(config.dynamicVariables ?? {}),
+  };
   return retellRequest('/v2/create-phone-call', {
     method: 'POST',
     body: JSON.stringify({
@@ -789,7 +806,7 @@ export async function createPhoneCall(config: {
       to_number: config.toNumber,
       from_number: config.fromNumber,
       metadata: config.metadata,
-      retell_llm_dynamic_variables: config.dynamicVariables,
+      retell_llm_dynamic_variables: dynamicVariables,
     }),
   });
 }

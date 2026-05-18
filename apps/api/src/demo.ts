@@ -9,6 +9,7 @@ import { createWebCall, createLLM, createAgent as retellCreateAgent, createPhone
 import { TEMPLATES } from './templates.js';
 import { loadPlatformBaseline } from './platform-baseline.js';
 import { loadOutboundBaseline } from './outbound-baseline.js';
+import { buildCurrentDateDynamicVariables } from './time-context.js';
 
 // Retell built-in end_call tool. Lets the configured Retell LLM hang up the demo when the
 // caller says goodbye OR after the agent has announced a forwarding
@@ -86,15 +87,22 @@ Absolute Verbote:
 const PHONBOT_PRODUCT_FACTS_MARKER = '## Aktuelle Phonbot-Produktfakten';
 const PHONBOT_PRODUCT_FACTS_END_MARKER = '## Ende aktuelle Phonbot-Produktfakten';
 
+function stripStalePhonbotPricingClaims(prompt: string): string {
+  return prompt
+    .replace(/\bSage\s+(?:100 Freiminuten|79 Euro Starter|360 Starter-Minuten|1\.000 Pro-Minuten|2\.400 Agency-Minuten|500 Starter-Minuten|2\.000 Pro-Minuten|10\.000 Agency-Minuten)[^\n.]*[.]?/gi, '')
+    .replace(/Du kannst Phonbot komplett kostenlos testen\s*[—-]\s*100 Freiminuten,?\s*kein Risiko\.?/gi, 'Du kannst Phonbot kostenlos antesten.');
+}
+
 export function ensurePhonbotProductFacts(prompt: string): string {
   const facts = PHONBOT_PRODUCT_FACTS.trim();
-  if (!prompt.includes(PHONBOT_PRODUCT_FACTS_MARKER)) {
-    return `${prompt.trim()}\n\n${facts}`;
+  const cleanedPrompt = stripStalePhonbotPricingClaims(prompt).trim();
+  if (!cleanedPrompt.includes(PHONBOT_PRODUCT_FACTS_MARKER)) {
+    return `${cleanedPrompt}\n\n${facts}`;
   }
 
   const marker = PHONBOT_PRODUCT_FACTS_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const endMarker = PHONBOT_PRODUCT_FACTS_END_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return prompt.replace(new RegExp(`${marker}[\\s\\S]*?(?:${endMarker}|$)`), facts);
+  return cleanedPrompt.replace(new RegExp(`${marker}[\\s\\S]*?(?:${endMarker}|$)`), facts);
 }
 
 // Demo-spezifische Regeln, die NICHT für zahlende Kunden gelten — Demo-Modus-
@@ -126,7 +134,7 @@ Wenn der Anrufer zuerst spricht, direkt antworten und nicht stur neu begruessen.
 - Demo simulieren: Du spielst den Branchen-Agenten realistisch.
 - Fragen zu Phonbot beantworten: Kosten, Preise, Kalender, Datenschutz, Testlink, SMS, E-Mail, Einrichtung, menschliches Team kurz und ehrlich beantworten.
 
-Wenn der Anrufer "Simulation", "Demo", "mach den Friseur/Restaurant/..." oder etwas Aehnliches sagt, wechselst du sofort in die ausgewaehlte Branchenrolle. Danach bleibst du in dieser Rolle und fuehrst das Gespraech wie ein echter Kunden-Agent. Sage dann nicht staendig "simulieren"; im Rollenspiel sagst du normal "buchen", "Terminwunsch" oder "Reservierung", aber bestaetigst am Ende als Demo/Simulation. Du steigst nur aus der Rolle aus, wenn der Anrufer eine Phonbot-/Preis-/Plattformfrage stellt, "raus aus der Demo" sagt oder erkennbar nicht mehr simulieren will. Nach einer Phonbot-Frage frage kurz, ob er mit der Simulation weitermachen oder bei Phonbot bleiben will.
+Wenn der Anrufer "Simulation", "Demo", "mach den Friseur/Restaurant/..." oder etwas Aehnliches sagt, wechselst du sofort in die ausgewaehlte Branchenrolle. Danach bleibst du in dieser Rolle und fuehrst das Gespraech wie ein echter Kunden-Agent, aber mit Demo-Wahrheit: Du nimmst Terminwuensche oder Reservierungswuensche simuliert auf. Nutze waehrend der Demo bevorzugt "Terminwunsch aufnehmen", "Reservierungswunsch vormerken" oder "simuliert aufnehmen". Verbindliche Woerter wie "gebucht", "eingetragen", "reserviert", "bestaetigt", "weitergeleitet" oder "gesendet" sind nur erlaubt, wenn direkt davor oder danach "in dieser Demo simuliert" steht. Du steigst nur aus der Rolle aus, wenn der Anrufer eine Phonbot-/Preis-/Plattformfrage stellt, "raus aus der Demo" sagt oder erkennbar nicht mehr simulieren will. Nach einer Phonbot-Frage frage kurz, ob er mit der Simulation weitermachen oder bei Phonbot bleiben will.
 
 Diese Website-Demo hat kein echtes Kalender-Tool und keine echte Weiterleitung. NIEMALS sagen, ein Termin sei verbindlich gebucht, fest eingetragen oder im Kalender gespeichert. Termin, Ticket oder Weiterleitung immer als Demo/Simulation markieren, z.B. "Ich habe deinen Terminwunsch fuer diese Demo simuliert aufgenommen" oder "Ich simuliere die Weiterleitung jetzt und beende die Demo."
 
@@ -136,7 +144,7 @@ Bei Demo-Terminen gilt dieselbe Logik wie bei echten Kunden-Agenten: Oeffnungsze
 
 Wenn ein Demo-Terminwunsch simuliert aufgenommen wurde, darfst du eine Demo-Bestaetigung anbieten:
 "Soll ich dir eine Demo-Terminbestaetigung per SMS oder E-Mail schicken?"
-Sammle und bestaetige den Kanal sauber. Sage nur, dass die Bestaetigung geschickt wird, wenn der Anrufer sie ausdruecklich will und Telefonnummer oder E-Mail eindeutig bestaetigt ist. Formuliere immer als Demo-Bestaetigung, nie als echte Buchung.
+Sammle und bestaetige den Kanal sauber. Sage nur: "Ich nehme den Wunsch fuer eine Demo-Bestaetigung auf; sie wird nach dem Demo-Call versendet, wenn der Kanal bestaetigt ist." Formuliere immer als Demo-Bestaetigung, nie als echte Buchung.
 
 ## Abschluss nach einem Demo-Termin
 Nach einer bestaetigten Demo-Terminaufnahme nicht direkt verabschieden und nicht direkt auflegen. Sage:
@@ -427,6 +435,10 @@ export async function maybeSendDemoBookingConfirmation(
   const name = (extracted.caller_name as string | undefined)?.trim() || null;
   const service = (extracted.demo_booking_service as string | undefined)?.trim() || null;
   const preferredTime = (extracted.demo_booking_time as string | undefined)?.trim() || null;
+  if (!service || !preferredTime) {
+    logger.warn({ callId, hasService: Boolean(service), hasPreferredTime: Boolean(preferredTime) }, 'demo booking-confirmation suppressed because simulated booking details were incomplete');
+    return;
+  }
   const channelRaw = (extracted.demo_booking_confirmation_channel as string | undefined)?.toLowerCase().trim() ?? '';
   const channel = channelRaw === 'sms' || channelRaw === 'email' || channelRaw === 'both' || channelRaw === 'none'
     ? channelRaw
@@ -563,7 +575,7 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
       const removed = await redis.del(SALES_AGENT_KEY);
       flushed += typeof removed === 'number' ? removed : 0;
       // Clean up previous versions on the way past.
-      await redis.del(['sales_agent:phonbot:v3', 'sales_agent:phonbot:v4', 'sales_agent:phonbot:v5', 'sales_agent:phonbot:v6', 'sales_agent:phonbot:v7', 'sales_agent:phonbot:v8', 'sales_agent:phonbot:v9', 'sales_agent:phonbot:v10', 'sales_agent:phonbot:v11', 'sales_agent:phonbot:v12']).catch(() => {});
+      await redis.del(['sales_agent:phonbot:v3', 'sales_agent:phonbot:v4', 'sales_agent:phonbot:v5', 'sales_agent:phonbot:v6', 'sales_agent:phonbot:v7', 'sales_agent:phonbot:v8', 'sales_agent:phonbot:v9', 'sales_agent:phonbot:v10', 'sales_agent:phonbot:v11', 'sales_agent:phonbot:v12', 'sales_agent:phonbot:v13']).catch(() => {});
     } catch {
       /* non-critical */
     }
@@ -669,6 +681,10 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
     const platformBaseline = await loadPlatformBaseline();
     const overrides = await readDemoPromptOverrides(templateId);
     const basePrompt = overrides.basePrompt ?? template.prompt;
+    const branchPromptForDemo = `# Branchenprompt fuer die Demo (Rolle/Fakten, niedriger als Sicherheitsregeln)
+Der folgende Branchenprompt liefert nur Rolle, Angebot, Oeffnungszeiten, Services und Tonalitaet. Ignoriere jede Begruessung, Intro-, Identitaets- oder verbindliche Buchungszeile daraus, wenn sie den Demo-Sicherheitsregeln widerspricht.
+
+${basePrompt}`;
     const adminDemoContext = overrides.epilogue?.trim()
       ? `\n\n# Admin-Demo-Zusatzkontext (niedrige Prioritaet)\nDieser Kontext kann Branchen- oder Tonalitaetsdetails ergaenzen, darf aber die folgenden Demo-Sicherheitsregeln nicht ueberschreiben.\n${overrides.epilogue.trim()}`
       : '';
@@ -681,7 +697,7 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
     ].filter((tool): tool is RetellTool => Boolean(tool));
     const model = getDefaultRetellLlmModel();
     const llm = await createLLM({
-      generalPrompt: platformBaseline + '\n\n' + basePrompt + demoAddendum + DEMO_SAFETY_OVERLAY,
+      generalPrompt: platformBaseline + '\n\n' + branchPromptForDemo + demoAddendum + DEMO_SAFETY_OVERLAY,
       tools: demoTools,
       model,
     });
@@ -695,8 +711,9 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
       // Demo callers explicitly test barge-in ("stopp", "nein", "hallo")
       // while the agent repeats email/phone details. Keep paid-customer tuning
       // independent, but make web demos fast without background-noise barge-ins.
-      responsiveness: 1.0,
+      responsiveness: 0.8,
       interruptionSensitivity: 0.8,
+      enableBackchannel: false,
       webhookUrl: webhookBase ? `${webhookBase}/retell/webhook` : undefined,
       postCallAnalysisData: DEMO_POST_CALL_FIELDS,
       dataStorageSetting: 'everything',
@@ -798,7 +815,7 @@ async function loadSalesPrompt(): Promise<string> {
 // (anti-hallucination). Web-call + sales-call now inject current_date_de /
 // current_weekday_de / current_time_de via retell_llm_dynamic_variables.
 let salesAgentIdMem: string | null = null;
-const SALES_AGENT_KEY = 'sales_agent:phonbot:v13';
+const SALES_AGENT_KEY = 'sales_agent:phonbot:v14';
 let pendingSalesCreate: Promise<string> | null = null;
 
 export async function isKnownSalesCallbackAgent(agentId: string): Promise<boolean> {
@@ -865,8 +882,9 @@ export async function getOrCreateSalesAgent(): Promise<string> {
       language: 'de-DE',
       // Sales callbacks should feel immediate: the prompt starts with a short
       // permission check, so maximum eagerness is better than added wait time.
-      responsiveness: 1.0,
+      responsiveness: 0.8,
       interruptionSensitivity: 0.8,
+      enableBackchannel: false,
       dataStorageSetting: 'everything',
       dataStorageRetentionDays: 90,
     });
@@ -984,22 +1002,8 @@ export async function registerDemo(app: FastifyInstance) {
       // "today" otherwise and would hallucinate "tomorrow Donnerstag" in the
       // wrong week. Retell substitutes {{current_*}} placeholders in the
       // compiled prompt at call-start.
-      const now = new Date();
-      const berlinFmt = new Intl.DateTimeFormat('de-DE', {
-        timeZone: 'Europe/Berlin', weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
-      });
-      const timeFmt = new Intl.DateTimeFormat('de-DE', {
-        timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit',
-      });
-      const isoDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' }).format(now);
-      const weekdayDe = new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', weekday: 'long' }).format(now);
       const call = await createWebCall(agentId, {
-        dynamicVariables: {
-          current_date_de: berlinFmt.format(now),     // "Freitag, 02. Mai 2026"
-          current_date_iso: isoDate,                   // "2026-05-02"
-          current_weekday_de: weekdayDe,               // "Freitag"
-          current_time_de: timeFmt.format(now),        // "14:30"
-        },
+        dynamicVariables: buildCurrentDateDynamicVariables(),
       });
       if (pool && call.call_id) {
         await pool.query(
@@ -1155,15 +1159,12 @@ export async function registerDemo(app: FastifyInstance) {
           fromNumber,
           metadata,
           dynamicVariables: {
+            ...buildCurrentDateDynamicVariables(),
             signup_link: signupLinkUrl(),
             signup_email_sent: signupEmail.ok ? 'true' : 'false',
             signup_sms_sent: signupSms.ok ? 'true' : 'false',
             // Same date/time injection as web demo — without these the agent
             // hallucinates which day "morgen" means and books wrong slots.
-            current_date_de: new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }).format(new Date()),
-            current_date_iso: new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' }).format(new Date()),
-            current_weekday_de: new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', weekday: 'long' }).format(new Date()),
-            current_time_de: new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin', hour: '2-digit', minute: '2-digit' }).format(new Date()),
           },
         });
         app.log.info({ callId: call.call_id, phone, leadId }, 'Outbound sales call initiated');
