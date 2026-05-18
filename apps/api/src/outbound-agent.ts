@@ -20,6 +20,7 @@ import { triggerBridgeCall } from './twilio-openai-bridge.js';
 import { verifyTurnstile } from './captcha.js';
 import { sendSignupLinkEmail } from './email.js';
 import { sendSignupLinkSms, signupLinkUrl } from './sms.js';
+import { loadOutboundBaseline } from './outbound-baseline.js';
 
 // ── DB Migration ─────────────────────────────────────────────────────────────
 
@@ -357,7 +358,7 @@ Statt direkt auf den Abschluss zu drängen, baue eine Ja-Leiter:
 "Das verstehe ich — was genau meinen Sie mit zu teuer? Im Vergleich wozu?" → Lass den Kunden den Wert selbst erklären. Dann: "Was würde eine verpasste Kundenanfrage in Ihrem Geschäft kosten?"
 
 **Bei "Kein Interesse":**
-"Ich verstehe. Darf ich fragen — ist es das Thema generell oder war das was ich gesagt habe nicht relevant für Sie?" → Qualifiziere erneut oder qualifiziere ab.
+Akzeptiere sofort. Keine Nachfrage, kein Argument. "Verstanden, ich notiere, dass Sie nicht mehr kontaktiert werden moechten. Einen schoenen Tag." Dann Anruf beenden.
 
 **Bei "Schicken Sie Infos":**
 "Das mache ich gerne. Damit ich Ihnen wirklich relevante Infos schicke — was ist für Sie aktuell die größte Herausforderung bei der Erreichbarkeit?" → Qualifiziere vor dem Info-Versand.
@@ -459,13 +460,14 @@ export async function triggerSalesCall(params: {
   const orgName = (orgRes.rows[0]?.name as string | undefined) ?? 'Phonbot';
   const agentName = (cfgRes.rows[0]?.agent_name as string | undefined) ?? 'Alex';
 
-  // Render prompt with call-specific variables
-  const prompt = cfg.prompt
+  // Render prompt with call-specific variables and prepend the non-negotiable outbound safety baseline.
+  const renderedPrompt = cfg.prompt
     .replace(/\{\{contact_name\}\}/g, params.contactName ?? 'dort')
     .replace(/\{\{to_number\}\}/g, params.toNumber)
     .replace(/\{\{agent_name\}\}/g, agentName)
     .replace(/\{\{business_name\}\}/g, orgName)
     .replace(/\{\{campaign_context\}\}/g, params.campaignContext ?? params.campaign ?? `KI-Telefonagent ${orgName}`);
+  const prompt = `${await loadOutboundBaseline()}\n\n${renderedPrompt}`;
 
   // Save outbound record before calling
   const recordRes = await pool.query(

@@ -376,6 +376,27 @@ export type KnowledgeSource = {
   sha256?: string;
   status?: 'pending' | 'indexed' | 'error';
   error?: string;
+  category?: string;
+  allowedUse?: string;
+  sourceOfTruth?: string;
+  owner?: string;
+  verifiedAt?: string;
+  expiresAt?: string;
+  fetchedAt?: string;
+  lastIndexedAt?: string;
+  contentHash?: string;
+  etag?: string;
+  lastModified?: string;
+  sitemapLastmod?: string;
+  containsPii?: boolean;
+  reviewStatus?: string;
+  risk?: string;
+};
+
+export type KnowledgeRetrievalSettings = {
+  mode: 'strict' | 'balanced' | 'broad';
+  topK?: number;
+  filterScore?: number;
 };
 
 export type ExtractedVariable = {
@@ -518,6 +539,7 @@ export type AgentConfig = {
 
   // Knowledge sources
   knowledgeSources?: KnowledgeSource[];
+  knowledgeRetrieval?: KnowledgeRetrievalSettings;
 
   // Voice & behavior
   speakingSpeed?: number;        // 0.5 – 2.0

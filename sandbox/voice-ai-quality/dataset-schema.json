@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Phonbot Voice AI Evaluation Case",
+  "type": "object",
+  "required": [
+    "id",
+    "domain",
+    "language",
+    "scenario",
+    "input",
+    "expected",
+    "riskTags"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "domain": {
+      "type": "string",
+      "enum": [
+        "demo",
+        "inbound",
+        "outbound",
+        "agent_builder",
+        "stt",
+        "rag"
+      ]
+    },
+    "industry": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "language": {
+      "type": "string"
+    },
+    "scenario": {
+      "type": "string"
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "transcript": {
+          "type": "string"
+        },
+        "audioRef": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "knowledgeRefs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "toolState": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    },
+    "expected": {
+      "type": "object",
+      "properties": {
+        "mustSay": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "mustNotSay": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "allowedTools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "forbiddenTools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dataToConfirm": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "successCriteria": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "riskTags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "latency",
+          "hallucination",
+          "tool_misuse",
+          "privacy",
+          "stt_error",
+          "rag_wrong_context",
+          "outdated_fact",
+          "dnc",
+          "booking",
+          "payment",
+          "legal",
+          "interruption"
+        ]
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "maxE2eLatencyMs": {
+          "type": "number"
+        },
+        "maxKbLatencyMs": {
+          "type": "number"
+        },
+        "minTaskScore": {
+          "type": "number"
+        },
+        "maxWer": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

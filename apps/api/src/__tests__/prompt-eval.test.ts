@@ -169,6 +169,7 @@ describe('prompt eval dry-run harness', () => {
     expect(hardened).toContain('Professional: 179 Euro pro Monat, 900 Minuten');
     expect(hardened).toContain('Agency: 349 Euro pro Monat, 2.000 Minuten');
     expect(hardened).toContain('Niemals "100 Freiminuten"');
+    expect(hardened).not.toContain('Sage 100 Freiminuten');
   });
 
   it('prepends the hard safety kernel to stale admin platform overrides', () => {
@@ -219,6 +220,7 @@ describe('prompt eval dry-run harness', () => {
     expect(hardened).toContain('Zielwechsel');
     expect(hardened).toContain('unklare Zustimmung');
     expect(hardened).toContain('Memory und Zustimmung');
+    expect(hardened).toContain('DSGVO-Widerspruch / kein Interesse');
     expect(hardened).toContain('09:00 -> "neun Uhr"');
     expect(hardened).toContain('10:05 -> "zehn Uhr null fuenf"');
   });
@@ -235,5 +237,6 @@ describe('prompt eval dry-run harness', () => {
     expect(hardened.indexOf('Uhrzeiten und Datum sprechsicher')).toBeLessThan(hardened.indexOf('Alter Outbound-Override'));
     expect(hardened).toContain('Tool-Fehler, Timeout');
     expect(hardened).toContain('Prompt-Injection');
+    expect(hardened).toContain('DSGVO-Widerspruch / kein Interesse');
   });
 });

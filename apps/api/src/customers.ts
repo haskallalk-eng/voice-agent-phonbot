@@ -219,6 +219,47 @@ function normalizeCustomerPhone(input: string | null | undefined): string | null
   return normalized.slice(0, 64);
 }
 
+export function normalizeSpokenEmail(input: string | null | undefined): string | null {
+  const raw = (input ?? '').trim();
+  if (!raw) return null;
+
+  let value = raw
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[<>()\[\]{}"']/g, ' ')
+    .replace(/\bgee\s+em\s+ex\b/g, 'gmx')
+    .replace(/\bg\s*m\s*x\b/g, 'gmx')
+    .replace(/\bgee\s*mail\b/g, 'gmail')
+    .replace(/\bg\s*mail\b/g, 'gmail')
+    .replace(/\bat\s*zeichen\b/g, 'atzeichen')
+    .replace(/\bat-zeichen\b/g, 'atzeichen');
+
+  const replacements: Array<[RegExp, string]> = [
+    [/\b(?:at|aet|aett|atzeichen|klammeraffe)\b/g, '@'],
+    [/\b(?:punkt|dot)\b/g, '.'],
+    [/\b(?:bindestrich|minus|strich)\b/g, '-'],
+    [/\b(?:unterstrich|underscore)\b/g, '_'],
+    [/\bplus\b/g, '+'],
+  ];
+  for (const [pattern, replacement] of replacements) {
+    value = value.replace(pattern, replacement);
+  }
+
+  value = value
+    .replace(/\s*([@._+\-])\s*/g, '$1')
+    .replace(/\s+/g, '')
+    .replace(/\.{2,}/g, '.')
+    .replace(/@{2,}/g, '@')
+    .replace(/^\.+|\.+$/g, '');
+
+  return value || null;
+}
+
+function normalizeEmailInput(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  return normalizeSpokenEmail(value);
+}
+
 function levenshtein(a: string, b: string): number {
   if (a === b) return 0;
   if (!a.length) return b.length;
@@ -317,7 +358,7 @@ export async function customerModuleStatus(orgId: string, userId?: string): Prom
 const CustomerInput = z.object({
   fullName: z.string().min(1).max(200),
   phone: z.string().max(80).optional().nullable(),
-  email: z.string().email().max(200).optional().nullable(),
+  email: z.preprocess(normalizeEmailInput, z.string().email().max(200).optional().nullable()),
   customerType: z.enum(['new', 'existing', 'unknown', 'pending']).optional().default('unknown'),
   notes: z.string().max(2000).optional().nullable(),
   sourceCallId: z.string().max(200).optional().nullable(),

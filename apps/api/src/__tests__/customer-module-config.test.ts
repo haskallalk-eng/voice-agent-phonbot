@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildAgentInstructions } from '../agent-instructions.js';
-import { normalizeCustomerModuleConfig } from '../customers.js';
+import { normalizeCustomerModuleConfig, normalizeSpokenEmail } from '../customers.js';
 
 type ConfigArg = Parameters<typeof buildAgentInstructions>[0];
 
@@ -67,5 +67,11 @@ describe('customer module question config', () => {
     } as Partial<ConfigArg>));
 
     expect(out).toContain('Vorbehandlung (wenn Farbe, Blondierung oder Dauerwelle relevant ist): Frage gezielt nach alter Farbe oder Blondierung.');
+  });
+
+  it('normalizes common spoken German email forms before validation', () => {
+    expect(normalizeSpokenEmail('Max Punkt Mueller at gmail punkt com')).toBe('max.mueller@gmail.com');
+    expect(normalizeSpokenEmail('info at-zeichen salon bindestrich test punkt de')).toBe('info@salon-test.de');
+    expect(normalizeSpokenEmail('kontakt bei beispiel punkt de')).toBe('kontaktbeibeispiel.de');
   });
 });

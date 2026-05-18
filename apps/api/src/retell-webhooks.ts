@@ -1631,21 +1631,41 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         if (activeDetails.has('hairHistory')) details.hairHistory = stringArg(args, 'hairHistory', 'hair_history');
         if (activeDetails.has('allergies')) details.allergies = stringArg(args, 'allergies');
         if (customFields && Object.keys(customFields).length) details.customFields = customFields;
-        const row = await upsertCustomer({
-          orgId: ctx.orgId,
-          fullName: customerName,
-          phone: customerPhone,
-          email: stringArg(args, 'email'),
-          customerType: 'pending',
-          notes: stringArg(args, 'notes'),
-          sourceCallId: ctx.callId,
-          details,
-        });
-        result = {
-          ok: true,
-          status: row ? 'saved' : 'not_persisted',
-          instruction: 'Kundendaten wurden still aktualisiert. Sage nicht, dass ein Datenbankeintrag erstellt wurde; fahre normal im Gespraech fort.',
-        };
+        try {
+          const row = await upsertCustomer({
+            orgId: ctx.orgId,
+            fullName: customerName,
+            phone: customerPhone,
+            email: stringArg(args, 'email'),
+            customerType: 'pending',
+            notes: stringArg(args, 'notes'),
+            sourceCallId: ctx.callId,
+            details,
+          });
+          result = {
+            ok: true,
+            status: row ? 'saved' : 'not_persisted',
+            instruction: 'Kundendaten wurden still aktualisiert. Sage nicht, dass ein Datenbankeintrag erstellt wurde; fahre normal im Gespraech fort.',
+          };
+        } catch (err) {
+          const validation = err instanceof Error && err.name === 'ZodError';
+          const issues = (err as { issues?: Array<{ path?: Array<string | number> }> }).issues ?? [];
+          const emailValidation = validation && issues.some((issue) => issue.path?.[0] === 'email');
+          req.log.warn(
+            { err: err instanceof Error ? err.message : String(err), orgId: ctx.orgId, callId: ctx.callId },
+            'retell customer.upsert failed',
+          );
+          result = {
+            ok: false,
+            status: validation ? (emailValidation ? 'invalid_customer_email' : 'invalid_customer_data') : 'upsert_failed',
+            error: validation ? (emailValidation ? 'INVALID_CUSTOMER_EMAIL' : 'INVALID_CUSTOMER_DATA') : 'CUSTOMER_UPSERT_FAILED',
+            instruction: validation
+              ? emailValidation
+                ? 'Speichere noch nicht. Die E-Mail ist noch unsicher oder unvollstaendig. Frage die E-Mail gezielt nochmal ab, normalisiere sie hoerbar und lass sie bestaetigen.'
+                : 'Speichere noch nicht. Klaere die unsicheren Kundendaten einzeln, besonders Name, Telefonnummer oder E-Mail.'
+              : 'Kundendaten konnten gerade nicht sicher gespeichert werden. Behaupte nicht, dass sie gespeichert wurden; fahre mit dem Anliegen fort oder erstelle bei Bedarf ein Ticket.',
+          };
+        }
       }
     }
     }

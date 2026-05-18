@@ -76,6 +76,14 @@ function brandedEmail(opts: { title: string; body: string; cta?: { label: string
 </body></html>`;
 }
 
+export function displayGreetingName(name: string | null | undefined): string | null {
+  const compact = (name ?? '').replace(/\s+/g, ' ').trim();
+  if (!compact) return null;
+  if (/^\[.*\]$/.test(compact) || /^\{\{.*\}\}$/.test(compact)) return null;
+  if (/^(name|kunde|kundin|gast|unknown|unbekannt|anonymous|anonym|test|demo)$/i.test(compact)) return null;
+  return compact.slice(0, 80);
+}
+
 // Resend SDK uses undici with a ~300s default — way too long for a Fastify handler
 // awaiting a verification mail. Race the send against a 10s timer.
 //
@@ -275,17 +283,18 @@ export async function sendSignupAbandonedEmail(opts: {
 }
 
 export async function sendSignupLinkEmail(opts: { toEmail: string; name?: string | null }): Promise<EmailSendResult> {
-  const safeName = opts.name ? escapeHtml(opts.name) : null;
+  const displayName = displayGreetingName(opts.name);
+  const safeName = displayName ? escapeHtml(displayName) : null;
   const signupUrl = `${APP_URL}/login`;
   const html = brandedEmail({
     title: 'Dein Phonbot-Testlink',
     body: `
       <p style="margin:0 0 12px 0;">${safeName ? `Hey <strong style="color:#fff;">${safeName}</strong>,` : 'Hey,'}</p>
-      <p style="margin:0 0 16px 0;">hier ist der Link, den Chipy dir im Demo-Rückruf angekündigt hat. Du kannst Phonbot kostenlos testen und deinen ersten Telefonagenten einrichten.</p>
+      <p style="margin:0 0 16px 0;">hier ist der Link, den Chipy dir im Demo-Gespräch angekündigt hat. Du kannst Phonbot kostenlos testen und deinen ersten Telefonagenten einrichten.</p>
       <p style="margin:0;color:rgba(255,255,255,0.5);font-size:13px;">Der Test startet direkt im Dashboard. Keine Kreditkarte nötig.</p>
     `,
     cta: { label: 'Phonbot kostenlos testen', url: signupUrl },
-    footer: 'Demo-Rückruf angefordert · Phonbot',
+    footer: 'Auf phonbot.de angefordert · Phonbot',
   });
   const text = `Dein Phonbot-Testlink: ${signupUrl}\n\nDu kannst Phonbot kostenlos testen und deinen ersten Telefonagenten einrichten.`;
   return send(opts.toEmail, 'Dein Phonbot-Testlink', text, html);
@@ -297,13 +306,10 @@ export async function sendDemoBookingConfirmationEmail(opts: {
   service?: string | null;
   preferredTime?: string | null;
 }): Promise<EmailSendResult> {
-  const safeName = opts.name ? escapeHtml(opts.name) : null;
+  const displayName = displayGreetingName(opts.name);
+  const safeName = displayName ? escapeHtml(displayName) : null;
   const safeService = escapeHtml((opts.service ?? '').replace(/\s+/g, ' ').trim() || 'Terminwunsch');
   const safeTime = escapeHtml((opts.preferredTime ?? '').replace(/\s+/g, ' ').trim() || 'ohne feste Uhrzeit');
-  const signupUrl = `${APP_URL}/login`;
-  const meetingUrl = process.env.PHONBOT_MEETING_URL?.trim()
-    || process.env.SALES_MEETING_URL?.trim()
-    || `${APP_URL}/kontakt/`;
   const html = brandedEmail({
     title: 'Deine Demo-Terminbestätigung',
     body: `
@@ -314,10 +320,8 @@ export async function sendDemoBookingConfirmationEmail(opts: {
         <p style="margin:0;color:rgba(255,255,255,0.65);">${safeTime}</p>
       </div>
       <p style="margin:0 0 16px 0;color:rgba(255,255,255,0.5);font-size:13px;">Wichtig: Das war eine Simulation und keine echte Buchung bei einem Geschäft.</p>
-      <p style="margin:0;color:rgba(255,255,255,0.6);font-size:13px;">Wenn du Phonbot selbst testen oder mit uns sprechen willst, nutze die Links unten.</p>
     `,
-    cta: { label: 'Phonbot kostenlos testen', url: signupUrl },
-    footer: `Menschliches Team: ${meetingUrl}`,
+    footer: 'Demo-Terminbestätigung · keine echte Buchung',
   });
   const text = [
     'Deine Demo-Terminbestätigung',
@@ -326,8 +330,6 @@ export async function sendDemoBookingConfirmationEmail(opts: {
     `Zeit: ${(opts.preferredTime ?? '').trim() || 'ohne feste Uhrzeit'}`,
     '',
     'Wichtig: Das war eine Simulation und keine echte Buchung bei einem Geschäft.',
-    `Testlink: ${signupUrl}`,
-    `Menschliches Team: ${meetingUrl}`,
   ].join('\n');
   return send(opts.toEmail, 'Deine Demo-Terminbestätigung', text, html);
 }

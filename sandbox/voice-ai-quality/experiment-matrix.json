@@ -1,0 +1,112 @@
+{
+  "version": "2026-05-17",
+  "principle": "Compare one variable at a time. No production calls, no real tools.",
+  "tracks": [
+    {
+      "id": "rag-retell-kb",
+      "question": "Does Retell Knowledge Base improve factual answers without unacceptable latency?",
+      "variants": [
+        {
+          "id": "A-current-no-extra-rag",
+          "description": "Current prompt and customer config without additional curated KB"
+        },
+        {
+          "id": "B-retell-kb-current",
+          "description": "Current Retell KB via knowledgeSources, top_k 3, filter_score 0.6"
+        },
+        {
+          "id": "C-retell-kb-curated-facts",
+          "description": "Only atomic verified facts: services, prices, policies, FAQ"
+        },
+        {
+          "id": "D-retell-kb-stricter-threshold",
+          "description": "Curated facts with higher filter_score and lower top_k"
+        }
+      ],
+      "primaryMetrics": [
+        "answer_fact_accuracy",
+        "hallucination_rate",
+        "latency.knowledge_base.p50",
+        "latency.e2e.p50"
+      ]
+    },
+    {
+      "id": "prompt-vs-finetune",
+      "question": "Can a shorter prompt plus hard backend rules beat the current long prompt?",
+      "variants": [
+        {
+          "id": "A-current-prompt",
+          "description": "Current baseline + customer prompt"
+        },
+        {
+          "id": "B-layered-short-prompt",
+          "description": "Short prompt with only behavior rules; facts in RAG; hard rules in backend"
+        },
+        {
+          "id": "C-sft-style-model",
+          "description": "Future supervised fine-tuned model trained on approved PII-redacted examples"
+        },
+        {
+          "id": "D-dpo-tool-discipline",
+          "description": "Future preference-tuned model with chosen/rejected tool-discipline pairs"
+        }
+      ],
+      "primaryMetrics": [
+        "tool_success_truthfulness",
+        "interruption_handling",
+        "email_capture_accuracy",
+        "average_response_tokens",
+        "latency.llm.p50"
+      ]
+    },
+    {
+      "id": "stt-normalization",
+      "question": "Is the main quality bottleneck STT, postprocessing, or prompt behavior?",
+      "variants": [
+        {
+          "id": "A-retell-transcript",
+          "description": "Current Retell transcript"
+        },
+        {
+          "id": "B-openai-transcribe-sidecar",
+          "description": "Offline sidecar transcript with gpt-4o-transcribe on the same audio"
+        },
+        {
+          "id": "C-retell-plus-normalizer",
+          "description": "Current transcript plus deterministic email/phone/date/name normalizers"
+        },
+        {
+          "id": "D-provider-or-custom-stt",
+          "description": "Only after enough labeled audio shows provider-level WER is the bottleneck"
+        }
+      ],
+      "primaryMetrics": [
+        "email_field_accuracy",
+        "phone_field_accuracy",
+        "stop_word_detection",
+        "date_time_accuracy",
+        "wer"
+      ]
+    }
+  ],
+  "promotionGates": {
+    "rag": [
+      "Fact accuracy improves by at least 10 percent relative",
+      "No increase in critical hallucinations",
+      "KB p50 latency under 250 ms or e2e p50 unchanged within 100 ms",
+      "No prompt-injection success from retrieved content"
+    ],
+    "fineTune": [
+      "At least 300 approved PII-redacted examples",
+      "Holdout test set is not used in training",
+      "Tool-truthfulness improves or stays perfect",
+      "Latency and cost are measured against the same prompt length"
+    ],
+    "customStt": [
+      "At least 5 hours of consented German phone audio with corrected transcripts",
+      "Provider comparison shows STT, not prompt, is the bottleneck",
+      "Stop/Nein detection improves without false interruptions from background noise",
+      "PII retention and deletion path is documented"
+    ]
+  }
+}

@@ -32,6 +32,41 @@ describe('createPhoneCall', () => {
     expect(body).not.toHaveProperty('agent_id');
     expect(body.from_number).toBe('+4930123456');
     expect(body.to_number).toBe('+491701234567');
+    expect(body.retell_llm_dynamic_variables).toMatchObject({
+      model_under_test: 'gpt-4.1-mini',
+    });
+    expect((body.retell_llm_dynamic_variables as Record<string, unknown>).current_date_iso).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+describe('registerCall', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it('injects date context into BYOT Retell calls', async () => {
+    vi.stubEnv('RETELL_API_KEY', 'key_test');
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({
+      call_id: 'call_1',
+      access_token: 'token_1',
+    }), { status: 201, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { registerCall } = await import('../retell.js');
+    await registerCall({
+      agentId: 'agent_test',
+      fromNumber: '+4930123456',
+      toNumber: '+491701234567',
+      dynamicVariables: { flow: 'twilio' },
+    });
+
+    const init = fetchMock.mock.calls[0]?.[1];
+    const body = JSON.parse(init!.body as string) as Record<string, unknown>;
+    expect(body.agent_id).toBe('agent_test');
+    expect(body.retell_llm_dynamic_variables).toMatchObject({ flow: 'twilio' });
+    expect((body.retell_llm_dynamic_variables as Record<string, unknown>).date_lookup_de).toContain('heute:');
+    expect((body.retell_llm_dynamic_variables as Record<string, unknown>).day_after_tomorrow_date_iso).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });
 

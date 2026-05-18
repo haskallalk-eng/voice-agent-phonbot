@@ -7,9 +7,9 @@ describe('deriveTechnicalRuntimeSettings', () => {
     expect(runtime.interruptionMode).toBe('allow');
     expect(runtime.interruptionModeLabel).toBe('Natuerlich');
     expect(runtime.modelTemperature).toBe(0.3);
-    expect(runtime.interruptionSensitivity).toBe(0.8);
-    expect(runtime.responsiveness).toBe(1);
-    expect(runtime.enableBackchannel).toBe(true);
+    expect(runtime.interruptionSensitivity).toBe(0.75);
+    expect(runtime.responsiveness).toBe(0.8);
+    expect(runtime.enableBackchannel).toBe(false);
     expect(runtime.allowUserDtmf).toBe(false);
   });
 
