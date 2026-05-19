@@ -1208,8 +1208,9 @@ export type AgentStats = {
     tts: number | null;
     asr: number | null;
     e2e: number | null;
+    knowledge_base?: number | null;
   };
-  recentLatencyMs?: Record<'llm' | 'tts' | 'asr' | 'e2e', {
+  recentLatencyMs?: Record<'llm' | 'tts' | 'asr' | 'e2e' | 'knowledge_base', {
     p50: number | null;
     p95: number | null;
     avg: number | null;

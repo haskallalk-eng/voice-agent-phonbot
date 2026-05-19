@@ -43,6 +43,7 @@ import { PLANS, type PlanId } from './billing.js';
 import { invalidateInboundWebhooksCache } from './inbound-webhooks.js';
 import { isVoiceAllowedForOrg } from './voice-ownership.js';
 import { shortenRetellRetentionForAgentConfig } from './retell-retention.js';
+import { summarizeRecentCallLatency } from './latency-stats.js';
 import {
   customerModuleActiveForAgentConfig,
   customerModuleStatus,
@@ -1817,60 +1818,9 @@ export async function registerAgentConfig(app: FastifyInstance) {
         } catch { /* keep null */ }
       }
 
-      const endedCalls = calls
-        .filter((c) => c.call_status === 'ended')
-        .sort((a, b) => (b.end_timestamp ?? b.start_timestamp ?? 0) - (a.end_timestamp ?? a.start_timestamp ?? 0));
-      const latest = endedCalls[0];
-      const latencyToMs = (v: unknown): number | null => {
-        if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) return null;
-        // Retell has exposed latency as seconds-like floats on some surfaces
-        // and millisecond-like integers on others. Normalize both so 1.2 and
-        // 1200 mean the same thing in our UI.
-        return Math.round(v < 60 ? v * 1000 : v);
-      };
-      const percentile = (values: number[], p: number): number | null => {
-        if (!values.length) return null;
-        const sorted = [...values].sort((a, b) => a - b);
-        const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
-        return sorted[index] ?? null;
-      };
-      const latencyMetric = (key: 'llm' | 'tts' | 'asr' | 'e2e') => {
-        const values: number[] = [];
-        for (const call of endedCalls) {
-          const raw = call.latency?.[key];
-          const rawValues = Array.isArray(raw?.values) ? raw.values : [];
-          if (rawValues.length) {
-            for (const value of rawValues) {
-              const ms = latencyToMs(value);
-              if (ms != null) values.push(ms);
-            }
-          } else {
-            const ms = latencyToMs(raw?.p50);
-            if (ms != null) values.push(ms);
-          }
-        }
-        if (!values.length) return null;
-        const sum = values.reduce((acc, value) => acc + value, 0);
-        return {
-          p50: percentile(values, 50),
-          p95: percentile(values, 95),
-          avg: Math.round(sum / values.length),
-          samples: values.length,
-          latestP50: latencyToMs(latest?.latency?.[key]?.p50),
-        };
-      };
-
-      const recentLatencyMs = {
-        llm: latencyMetric('llm'),
-        tts: latencyMetric('tts'),
-        asr: latencyMetric('asr'),
-        e2e: latencyMetric('e2e'),
-      };
-
-      const llm = recentLatencyMs.llm?.latestP50 ?? recentLatencyMs.llm?.p50 ?? null;
-      const tts = recentLatencyMs.tts?.latestP50 ?? recentLatencyMs.tts?.p50 ?? null;
-      const asr = recentLatencyMs.asr?.latestP50 ?? recentLatencyMs.asr?.p50 ?? null;
-      const e2e = recentLatencyMs.e2e?.latestP50 ?? recentLatencyMs.e2e?.p50 ?? null;
+      const latencySummary = summarizeRecentCallLatency(calls);
+      const { endedCalls, latest, recentLatencyMs } = latencySummary;
+      const { llm, tts, asr, e2e, knowledge_base: knowledgeBase } = latencySummary.breakdownMs;
       const turnsInCall = latest?.latency?.e2e?.values?.length ?? 0;
 
       // Primary = measured E2E p50 when available; this is what callers feel.
@@ -1886,7 +1836,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
         sampleSize: recentLatencyMs.e2e?.samples ?? recentLatencyMs.llm?.samples ?? (primary != null ? 1 : 0),
         latencyMs: primary,
         latencySource: source === 'measured' ? 'values' : source === 'model-baseline' ? 'p50' : 'none',
-        breakdownMs: { llm, tts, asr, e2e },
+        breakdownMs: { llm, tts, asr, e2e, knowledge_base: knowledgeBase },
         recentLatencyMs,
         turnsInCall,
         lastCallAt: latest?.end_timestamp ?? null,
