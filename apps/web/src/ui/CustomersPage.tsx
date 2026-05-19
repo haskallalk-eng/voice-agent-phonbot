@@ -624,7 +624,7 @@ function BusinessInfoPanel({
   );
 }
 
-function StaffPanel({ config }: { config: AgentConfig | null }) {
+function StaffPanel({ config, onConfigSaved }: { config: AgentConfig | null; onConfigSaved: (config: AgentConfig) => void }) {
   const [staff, setStaff] = useState<CalendarStaff[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -691,6 +691,24 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
     return () => { cancelled = true; };
   }, [selected?.id, defaultHoursText]);
 
+  async function refreshActiveKnowledge(successMessage: string) {
+    if (!config?.retellAgentId) {
+      setNotice(`${successMessage} Beim nächsten Deploy nutzt Chipy diese Daten.`);
+      return;
+    }
+
+    try {
+      const saved = (await deployAgentConfig(config)).config;
+      onConfigSaved(saved);
+      setNotice(`${successMessage} Aktive Knowledge Base und Agent-Prompt wurden aktualisiert.`);
+    } catch (e: unknown) {
+      setNotice(`${successMessage} Die Daten sind gespeichert.`);
+      setError(e instanceof Error
+        ? `Aktive Knowledge Base konnte nicht automatisch aktualisiert werden: ${e.message}`
+        : 'Aktive Knowledge Base konnte nicht automatisch aktualisiert werden.');
+    }
+  }
+
   async function handleCreateStaff(e: React.FormEvent) {
     e.preventDefault();
     if (!newName.trim()) return;
@@ -718,7 +736,7 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
       setSelectedId(res.staff.id);
       setNewName('');
       setNewRole('');
-      setNotice(defaultHoursSaved
+      await refreshActiveKnowledge(defaultHoursSaved
         ? 'Mitarbeiter angelegt. Leistungen und Arbeitszeiten wurden aus dem Betrieb übernommen.'
         : canSaveDefaultHours
           ? 'Mitarbeiter angelegt. Leistungen wurden übernommen; Arbeitszeiten konnten nicht automatisch gespeichert werden. Bitte einmal manuell speichern.'
@@ -742,7 +760,7 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
         services: serviceItemsToStaffStrings(staffServices),
       });
       setStaff((prev) => prev.map((member) => member.id === selected.id ? { ...member, ...res.staff } : member));
-      setNotice('Mitarbeiterprofil gespeichert. Der Agent nutzt diese Zuordnung beim nächsten Deploy/Speichern.');
+      await refreshActiveKnowledge('Mitarbeiterprofil gespeichert.');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Mitarbeiterprofil konnte nicht gespeichert werden.');
     } finally {
@@ -761,7 +779,7 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
     setNotice(null);
     try {
       await saveStaffChipySchedule(selected.id, openingHoursToChipySchedule(hoursText));
-      setNotice('Arbeitszeiten gespeichert. Termine und Tagesansicht bleiben im Kalender-Modul.');
+      await refreshActiveKnowledge('Arbeitszeiten gespeichert. Termine und Tagesansicht bleiben im Kalender-Modul.');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Arbeitszeiten konnten nicht gespeichert werden.');
     } finally {
@@ -783,7 +801,7 @@ function StaffPanel({ config }: { config: AgentConfig | null }) {
         setSelectedId(next[0]?.id ?? null);
         return next;
       });
-      setNotice('Mitarbeiter gelöscht.');
+      await refreshActiveKnowledge('Mitarbeiter gelöscht.');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Mitarbeiter konnte nicht gelöscht werden.');
     } finally {
@@ -1173,7 +1191,6 @@ export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | 
 
   useEffect(() => {
     void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -1227,6 +1244,15 @@ export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | 
       const nextConfig: AgentConfig = { ...config, ...normalizedPatch };
       const nextServices = deriveBusinessServiceLabels(nextConfig);
       const shouldSyncStaffServices = serviceLabelListChanged(previousServices, nextServices);
+      let staffSync: { total: number; saved: number; failed: number } | null = null;
+      let staffSyncErrored = false;
+      if (shouldSyncStaffServices) {
+        try {
+          staffSync = await syncBusinessServicesToAllStaff(nextServices);
+        } catch {
+          staffSyncErrored = true;
+        }
+      }
       const saved = config.retellAgentId
         ? (await deployAgentConfig(nextConfig)).config
         : await saveAgentConfig(nextConfig);
@@ -1235,20 +1261,17 @@ export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | 
         ? 'Betriebsinfos gespeichert und im aktiven Agent aktualisiert.'
         : 'Betriebsinfos gespeichert. Beim Deploy nutzt Chipy diese Daten.';
 
-      if (shouldSyncStaffServices) {
-        try {
-          const staffSync = await syncBusinessServicesToAllStaff(nextServices);
-          if (staffSync.failed > 0) {
-            setNotice(baseMessage);
-            setError(`Betriebsservices gespeichert, aber ${staffSync.failed} von ${staffSync.total} Mitarbeiterprofilen konnten nicht aktualisiert werden.`);
-          } else if (staffSync.total > 0) {
-            setNotice(`${baseMessage} ${staffSync.saved} Mitarbeiterprofil${staffSync.saved === 1 ? '' : 'e'} mit Betriebsservices aktualisiert.`);
-          } else {
-            setNotice(baseMessage);
-          }
-        } catch {
+      if (staffSyncErrored) {
+        setNotice(baseMessage);
+        setError('Betriebsservices gespeichert, aber die Mitarbeiterprofile konnten nicht automatisch aktualisiert werden.');
+      } else if (staffSync) {
+        if (staffSync.failed > 0) {
           setNotice(baseMessage);
-          setError('Betriebsservices gespeichert, aber die Mitarbeiterprofile konnten nicht automatisch aktualisiert werden.');
+          setError(`Betriebsservices gespeichert, aber ${staffSync.failed} von ${staffSync.total} Mitarbeiterprofilen konnten nicht aktualisiert werden.`);
+        } else if (staffSync.total > 0) {
+          setNotice(`${baseMessage} ${staffSync.saved} Mitarbeiterprofil${staffSync.saved === 1 ? '' : 'e'} mit Betriebsservices aktualisiert.`);
+        } else {
+          setNotice(baseMessage);
         }
       } else {
         setNotice(baseMessage);
@@ -1470,7 +1493,7 @@ export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | 
       )}
 
       {activeTab === 'mitarbeiter' && (
-        <StaffPanel config={config} />
+        <StaffPanel config={config} onConfigSaved={setConfig} />
       )}
 
       {activeTab === 'kunden' && (
