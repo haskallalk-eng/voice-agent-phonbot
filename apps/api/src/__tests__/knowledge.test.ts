@@ -457,6 +457,31 @@ describe('knowledge sources', () => {
     expect(source?.content).not.toContain('owner@example.com');
   });
 
+  it('keeps live, private, and operational modules out of canonical RAG facts', () => {
+    const source = buildCanonicalBusinessFacts({
+      businessName: 'Studio Allowlist',
+      services: [{ id: 'svc_1', name: 'Beratung', duration: '20 min' }],
+      calls: [{ transcript: 'Kunde sagt geheime Details', recordingUrl: 'https://recordings.test/call.mp3' }],
+      callTranscripts: [{ text: 'Rohtranskript mit Telefonnummer 017612345678' }],
+      bookings: [{ customer_name: 'Erika Termin', slot_time: '2026-06-01T10:00:00Z' }],
+      calendarBlocks: [{ date: '2026-06-02', reason: 'Krankheit intern' }],
+      stripe: { invoiceId: 'in_123', paymentIntent: 'pi_123', card: '4242424242424242' },
+      salesLeads: [{ companyName: 'Lead GmbH', phone: '+4917612345678', notes: 'Pipeline geheim' }],
+      staffPrivateNotes: [{ name: 'Lena', phone: '+491701234567', note: 'privat' }],
+      logs: [{ message: 'Authorization: Bearer secret-token' }],
+    });
+
+    expect(source?.content).toContain('Studio Allowlist');
+    expect(source?.content).toContain('Beratung');
+    expect(source?.content).not.toContain('Rohtranskript');
+    expect(source?.content).not.toContain('recordings.test');
+    expect(source?.content).not.toContain('Erika Termin');
+    expect(source?.content).not.toContain('Krankheit intern');
+    expect(source?.content).not.toContain('4242424242424242');
+    expect(source?.content).not.toContain('Lead GmbH');
+    expect(source?.content).not.toContain('secret-token');
+  });
+
   it('injects canonical business facts into the Retell payload without persisting them as user sources', async () => {
     const payload = await prepareKnowledgePayload({
       businessName: 'Studio Beispiel',
