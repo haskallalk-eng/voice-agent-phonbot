@@ -700,6 +700,7 @@ function AgentStatsRow({
   const breakdownStr = bk
     ? [
         bk.llm != null ? `LLM ${bk.llm}` : null,
+        bk.knowledge_base != null ? `KB ${bk.knowledge_base}` : null,
         bk.tts != null ? `TTS ${bk.tts}` : null,
         bk.asr != null ? `ASR ${bk.asr}` : null,
         bk.e2e != null ? `E2E ${bk.e2e}` : null,
@@ -737,9 +738,9 @@ function AgentStatsRow({
     ageSec < 60 ? `vor ${ageSec} s` :
     `vor ${Math.round(ageSec / 60)} min`;
 
-  let latencyLabel = '—';
+  let latencyLabel = '-';
   let latencyColor = 'text-white/50 bg-white/5 border-white/10';
-  // "vor X" relative to the actual call timestamp — shown in tooltip only.
+  // "vor X" relative to the actual call timestamp, shown in tooltip only.
   let callAgo = '';
   if (stats?.lastCallAt) {
     const diffSec = Math.max(0, Math.round((Date.now() - stats.lastCallAt) / 1000));
@@ -752,19 +753,23 @@ function AgentStatsRow({
   const modelLine = stats?.modelName ? `Modell: ${stats.modelName}` : '';
   const measured = stats?.measuredLlmMs;
   const recent = stats?.recentLatencyMs;
+  const knowledgeLine = recent?.knowledge_base?.p50 != null
+    ? `Knowledge Base: p50 ${recent.knowledge_base.p50} ms - p95 ${recent.knowledge_base.p95 ?? '-'} ms - ${recent.knowledge_base.samples} Samples`
+    : 'Knowledge Base: -';
   const recentLine = recent?.e2e?.p50 != null
-    ? `Recent E2E: p50 ${recent.e2e.p50} ms · p95 ${recent.e2e.p95 ?? '—'} ms · ${recent.e2e.samples} Samples`
-    : 'Recent E2E: —';
+    ? `Recent E2E: p50 ${recent.e2e.p50} ms - p95 ${recent.e2e.p95 ?? '-'} ms - ${recent.e2e.samples} Samples`
+    : 'Recent E2E: -';
   const measuredLine = measured != null
     ? `Gemessen letzter Call: ${measured} ms (LLM p50)`
-    : 'Gemessen letzter Call: — (noch kein Call)';
+    : 'Gemessen letzter Call: - (noch kein Call)';
   const latencyTip = hasData
-    ? `${stats?.latencySource === 'values' ? 'Gemessene E2E-Latenz' : 'Modell-Baseline für dieses Modell'}
+    ? `${stats?.latencySource === 'values' ? 'Gemessene E2E-Latenz' : 'Modell-Baseline fuer dieses Modell'}
 ${modelLine}
 ${recentLine}
+${knowledgeLine}
 ${measuredLine}
 ${breakdownStr ? `Breakdown: ${breakdownStr}` : ''}
-Call ${callAgo} · live ${ageStr}`
+Call ${callAgo} - live ${ageStr}`
     : '';
 
   if (hasData) {
@@ -778,12 +783,12 @@ Call ${callAgo} · live ${ageStr}`
 
   // Outer tooltip: short. Everything else lives on each chip.
   const outerTip = hasData
-    ? `Live-System · ${ageStr} · klick zum Aktualisieren`
+    ? `Live-System - ${ageStr} - klick zum Aktualisieren`
     : stats?.error === 'not_deployed'
-      ? 'Agent noch nicht aktiviert — Zahl erscheint sobald der erste echte Call lief.'
+      ? 'Agent noch nicht aktiviert - Zahl erscheint sobald der erste echte Call lief.'
       : stats?.error === 'retell_unreachable'
-        ? 'Live-System gerade nicht erreichbar — wird automatisch weiter versucht, klick für sofortigen Retry.'
-        : 'Noch keine Latenz-Daten — erscheint sobald der erste Call ausgewertet ist.';
+        ? 'Live-System gerade nicht erreichbar - wird automatisch weiter versucht, klick fuer sofortigen Retry.'
+        : 'Noch keine Latenz-Daten - erscheint sobald der erste Call ausgewertet ist.';
 
   return (
     <div

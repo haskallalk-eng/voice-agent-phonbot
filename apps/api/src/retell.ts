@@ -61,6 +61,8 @@ function getApiKey(): string {
 // 15s timeout on every Retell call — prevents server-wide hang on API outage
 // (would otherwise cascade into Fastify worker saturation + Stripe webhook retries).
 const RETELL_TIMEOUT_MS = 15_000;
+const DEFAULT_KB_READY_TIMEOUT_MS = 45_000;
+const DEFAULT_KB_READY_INTERVAL_MS = 2_000;
 
 async function retellRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${RETELL_API}${path}`, {
@@ -249,6 +251,38 @@ export async function createKnowledgeBase(config: {
   if (config.urls?.length) form.append('enable_auto_refresh', String(config.enableAutoRefresh ?? true));
 
   return retellFormRequest('/create-knowledge-base', form);
+}
+
+export async function getKnowledgeBase(knowledgeBaseId: string): Promise<RetellKnowledgeBase> {
+  return retellRequest(`/get-knowledge-base/${encodeURIComponent(knowledgeBaseId)}`);
+}
+
+function sleep(ms: number): Promise<void> {
+  return ms <= 0 ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function envMilliseconds(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+export async function waitForKnowledgeBaseComplete(
+  knowledgeBaseId: string,
+  opts: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<RetellKnowledgeBase> {
+  const timeoutMs = opts.timeoutMs ?? envMilliseconds('RETELL_KB_READY_TIMEOUT_MS', DEFAULT_KB_READY_TIMEOUT_MS);
+  const intervalMs = opts.intervalMs ?? envMilliseconds('RETELL_KB_READY_INTERVAL_MS', DEFAULT_KB_READY_INTERVAL_MS);
+  const startedAt = Date.now();
+
+  for (;;) {
+    const kb = await getKnowledgeBase(knowledgeBaseId);
+    if (kb.status === 'complete') return kb;
+    if (kb.status === 'error') throw new Error(`RETELL_KB_ERROR:${knowledgeBaseId}`);
+    if (Date.now() - startedAt >= timeoutMs) throw new Error(`RETELL_KB_NOT_READY:${knowledgeBaseId}:${kb.status}`);
+    await sleep(intervalMs);
+  }
 }
 
 export async function deleteKnowledgeBase(knowledgeBaseId: string): Promise<void> {

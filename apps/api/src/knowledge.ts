@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { createKnowledgeBase, deleteKnowledgeBase } from './retell.js';
+import { createKnowledgeBase, deleteKnowledgeBase, waitForKnowledgeBaseComplete } from './retell.js';
 import { pool } from './db.js';
 import { isPrivateHost, isPrivateResolved, isBlockedPort } from './ssrf-guard.js';
 import {
@@ -9,6 +9,7 @@ import {
   type CustomerModuleConfig,
 } from './customers.js';
 import { chipyScheduleToOpeningHours } from './opening-hours-sync.js';
+import { ocrPdfWithOpenAI, type KnowledgeOcrResult } from './knowledge-ocr.js';
 
 export type KnowledgeSource = {
   id: string;
@@ -37,6 +38,9 @@ export type KnowledgeSource = {
   containsPii?: boolean;
   reviewStatus?: string;
   risk?: string;
+  autoRefresh?: boolean;
+  ocrStatus?: 'completed' | 'failed';
+  ocrEngine?: string;
 };
 
 export type KnowledgeText = { title: string; text: string };
@@ -53,8 +57,22 @@ type KnowledgeFileRef = Omit<KnowledgeFile, 'data'>;
 export type PrepareKnowledgeOptions = {
   requirePdfBytes?: boolean;
   loadPdfFile?: (source: KnowledgeSource) => Promise<KnowledgeFile | null>;
+  ocrPdfFile?: (file: KnowledgeFile, source: KnowledgeSource) => Promise<KnowledgeOcrResult>;
+  inspectUrlContent?: boolean;
+  fetchUrlContent?: (url: string) => Promise<KnowledgeUrlContentResult>;
   includeCanonicalBusinessFacts?: boolean;
   canonicalBusinessFacts?: CanonicalBusinessFactOptions;
+  now?: Date | string;
+};
+
+export type KnowledgeUrlContentResult = {
+  finalUrl?: string;
+  contentType?: string;
+  text: string;
+  etag?: string | null;
+  lastModified?: string | null;
+} | {
+  error: string;
 };
 
 export type KnowledgePayload = {
@@ -62,6 +80,7 @@ export type KnowledgePayload = {
   texts: KnowledgeText[];
   urls: string[];
   files: KnowledgeFile[];
+  enableAutoRefresh: boolean;
   signature: string | null;
 };
 
@@ -95,6 +114,10 @@ export type CanonicalBusinessFactOptions = {
 const MAX_SOURCES = 25;
 const MAX_TEXT_CHARS = 50000;
 const MAX_PDF_BYTES = 50 * 1024 * 1024;
+const MAX_URL_SNAPSHOT_CHARS = 50000;
+const MAX_URL_SCAN_BYTES = 300000;
+const URL_FETCH_TIMEOUT_MS = 8000;
+const MAX_URL_REDIRECTS = 3;
 
 const KNOWLEDGE_RETRIEVAL_PRESETS: Record<KnowledgeRetrievalMode, Omit<KnowledgeRetrievalSettings, 'mode'>> = {
   strict: { topK: 2, filterScore: 0.72 },
@@ -207,6 +230,83 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, n));
+}
+
+const APPROVED_REVIEW_STATUSES = new Set(['approved', 'verified']);
+const BLOCKED_SOURCE_RISKS = new Set(['high', 'critical']);
+const ALLOWED_KNOWLEDGE_USES = new Set(['agent_facts', 'customer_faq', 'voice_agent', 'public_faq']);
+
+const KNOWLEDGE_PII_PATTERNS = [
+  /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/,
+  /\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]){10,30}\b/i,
+  /\b(0?[1-9]|[12]\d|3[01])[./](0?[1-9]|1[0-2])[./](19\d{2}|20[0-2]\d)\b/,
+  /\b(?:\d[\s-]?){13,19}\b/,
+];
+
+const EMBEDDED_CONTENT_PII_PATTERNS = [
+  /\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]){10,30}\b/i,
+  /\b(0?[1-9]|[12]\d|3[01])[./](0?[1-9]|1[0-2])[./](19\d{2}|20[0-2]\d)\b/,
+  /\b(?:\d[\s-]?){13,19}\b/,
+  /\b(?:api[_ -]?key|secret|bearer\s+token|password|passwort)\b/i,
+  /\b(?:kundenliste|customer\s+list|stammkunde|patientenliste)\b/i,
+];
+
+const KNOWLEDGE_INJECTION_PATTERNS = [
+  /\bignore\s+(?:all\s+)?(?:previous|above|system|developer)\s+instructions?\b/i,
+  /\bdisregard\s+(?:all\s+)?(?:previous|above|system|developer)\s+instructions?\b/i,
+  /\breveal\s+(?:the\s+)?system\s+prompt\b/i,
+  /\bshow\s+(?:the\s+)?system\s+prompt\b/i,
+  /\b(?:call|use|invoke|trigger)\s+(?:the\s+)?(?:tool|function|api)\b/i,
+  /\b(?:calendar|customer|stripe|billing|ticket)\.(?:book|cancel|reschedule|delete|upsert|create|refund|charge)\b/i,
+];
+
+function parseTime(input: unknown): number | null {
+  if (input instanceof Date) return Number.isNaN(input.getTime()) ? null : input.getTime();
+  if (typeof input !== 'string' || !input.trim()) return null;
+  const parsed = new Date(input);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+}
+
+function containsKnowledgePii(text: string): boolean {
+  return KNOWLEDGE_PII_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function containsEmbeddedSensitiveData(text: string): boolean {
+  return EMBEDDED_CONTENT_PII_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function containsPromptInjection(text: string): boolean {
+  return KNOWLEDGE_INJECTION_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function sourcePolicyError(src: KnowledgeSource, textForScanning: string, now: Date | string | undefined): string | null {
+  const expiresAt = parseTime(src.expiresAt);
+  const nowMs = parseTime(now) ?? Date.now();
+  if (expiresAt != null && expiresAt <= nowMs) return 'SOURCE_EXPIRED';
+
+  const reviewStatus = compact(src.reviewStatus).toLowerCase();
+  if (reviewStatus && !APPROVED_REVIEW_STATUSES.has(reviewStatus)) return 'SOURCE_REVIEW_REQUIRED';
+
+  const risk = compact(src.risk).toLowerCase();
+  if (BLOCKED_SOURCE_RISKS.has(risk)) return 'SOURCE_RISK_TOO_HIGH';
+
+  const allowedUse = compact(src.allowedUse).toLowerCase();
+  if (allowedUse && !ALLOWED_KNOWLEDGE_USES.has(allowedUse)) return 'SOURCE_USE_NOT_ALLOWED';
+
+  if (src.containsPii === true) return 'PII_DETECTED';
+  if (textForScanning && containsPromptInjection(textForScanning)) return 'PROMPT_INJECTION_DETECTED';
+  if (textForScanning && containsKnowledgePii(textForScanning)) return 'PII_DETECTED';
+  return null;
+}
+
+function rejectedSource(src: KnowledgeSource, error: string): KnowledgeSource {
+  return { ...src, status: 'error', error };
+}
+
+function embeddedContentPolicyError(textForScanning: string): string | null {
+  if (textForScanning && containsPromptInjection(textForScanning)) return 'PROMPT_INJECTION_DETECTED';
+  if (textForScanning && containsEmbeddedSensitiveData(textForScanning)) return 'PII_DETECTED';
+  return null;
 }
 
 export function normalizeKnowledgeRetrievalSettings(input: unknown): KnowledgeRetrievalSettings {
@@ -348,7 +448,12 @@ function sourceTitle(src: KnowledgeSource, fallback: string): string {
   return truncate(compact(src.name) || fallback, 120);
 }
 
-function stableSignature(texts: KnowledgeText[], urls: string[], files: KnowledgeFileRef[]): string | null {
+function stableSignature(
+  texts: KnowledgeText[],
+  urls: string[],
+  files: KnowledgeFileRef[],
+  enableAutoRefresh: boolean,
+): string | null {
   if (texts.length === 0 && urls.length === 0 && files.length === 0) return null;
   return crypto
     .createHash('sha256')
@@ -356,8 +461,18 @@ function stableSignature(texts: KnowledgeText[], urls: string[], files: Knowledg
       texts: texts.map((t) => ({ title: t.title, text: t.text })),
       urls,
       files: files.map((f) => ({ filename: f.filename, sha256: f.sha256, sizeBytes: f.sizeBytes })),
+      enableAutoRefresh,
     }))
     .digest('hex');
+}
+
+function contentHash(text: string): string {
+  return crypto.createHash('sha256').update(text).digest('hex');
+}
+
+function nowIso(now: Date | string | undefined): string {
+  const parsed = parseTime(now);
+  return new Date(parsed ?? Date.now()).toISOString();
 }
 
 function sanitizeFilename(input: string | null | undefined): string {
@@ -406,6 +521,129 @@ async function validateKnowledgeUrl(raw: string): Promise<{ ok: true; url: strin
   } catch {
     return { ok: false, error: 'INVALID_URL' };
   }
+}
+
+function isTextLikeContentType(contentType: string): boolean {
+  const type = contentType.split(';')[0]?.trim().toLowerCase() ?? '';
+  return type.startsWith('text/')
+    || type === 'application/json'
+    || type === 'application/ld+json'
+    || type === 'application/xml'
+    || type === 'application/xhtml+xml'
+    || type.endsWith('+json')
+    || type.endsWith('+xml');
+}
+
+async function readResponseTextWithLimit(res: Response, maxBytes: number): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+  const reader = res.body?.getReader();
+  if (!reader) {
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.byteLength > maxBytes) return { ok: false, error: 'URL_CONTENT_TOO_LARGE' };
+    return { ok: true, text: new TextDecoder('utf-8', { fatal: false }).decode(bytes) };
+  }
+
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      return { ok: false, error: 'URL_CONTENT_TOO_LARGE' };
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { ok: true, text: new TextDecoder('utf-8', { fatal: false }).decode(bytes) };
+}
+
+async function fetchKnowledgeUrlContent(url: string, redirects = 0): Promise<KnowledgeUrlContentResult> {
+  if (redirects > MAX_URL_REDIRECTS) return { error: 'URL_TOO_MANY_REDIRECTS' };
+  const checked = await validateKnowledgeUrl(url);
+  if (!checked.ok) return { error: checked.error };
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), URL_FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(checked.url, {
+      method: 'GET',
+      redirect: 'manual',
+      signal: controller.signal,
+      headers: {
+        accept: 'text/html,text/plain,application/json,application/xml;q=0.9,*/*;q=0.1',
+        'user-agent': 'PhonbotKnowledgeScanner/1.0',
+      },
+    });
+
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get('location');
+      if (!location) return { error: 'URL_REDIRECT_WITHOUT_LOCATION' };
+      return fetchKnowledgeUrlContent(new URL(location, checked.url).toString(), redirects + 1);
+    }
+
+    if (!res.ok) return { error: 'URL_FETCH_FAILED' };
+    const contentType = res.headers.get('content-type') ?? 'text/html';
+    if (!isTextLikeContentType(contentType)) return { error: 'URL_CONTENT_UNSUPPORTED' };
+
+    const body = await readResponseTextWithLimit(res, MAX_URL_SCAN_BYTES);
+    if (!body.ok) return { error: body.error };
+    return {
+      finalUrl: checked.url,
+      contentType,
+      text: body.text,
+      etag: res.headers.get('etag'),
+      lastModified: res.headers.get('last-modified'),
+    };
+  } catch (err) {
+    return { error: err instanceof Error && err.name === 'AbortError' ? 'URL_FETCH_TIMEOUT' : 'URL_FETCH_FAILED' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>');
+}
+
+function snapshotTextFromUrlContent(raw: string, contentType = ''): string {
+  const type = contentType.toLowerCase();
+  const stripped = type.includes('html') || /<\/?[a-z][\s\S]*>/i.test(raw)
+    ? raw
+      .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<noscript\b[\s\S]*?<\/noscript>/gi, ' ')
+      .replace(/<!--[\s\S]*?-->/g, ' ')
+      .replace(/<[^>]+>/g, ' ')
+    : raw;
+  return truncate(decodeHtmlEntities(stripped).replace(/\s+/g, ' '), MAX_URL_SNAPSHOT_CHARS);
+}
+
+function extractPdfScanText(data: Buffer | Uint8Array): string {
+  const buffer = Buffer.from(data);
+  const utf8 = buffer.toString('utf8');
+  const latin1 = buffer.toString('latin1');
+  return truncate(`${utf8}\n${latin1}`.replace(/[^\x09\x0a\x0d\x20-\x7e\u00a0-\u017f]+/g, ' '), MAX_TEXT_CHARS);
+}
+
+function hasReadablePdfScanText(text: string): boolean {
+  const words = text
+    .match(/\b[\p{L}]{3,}\b/gu)
+    ?.filter((word) => !['pdf', 'obj', 'endobj', 'stream', 'endstream', 'xref', 'trailer'].includes(word.toLowerCase())) ?? [];
+  return words.length > 0;
 }
 
 export async function storeKnowledgePdf(input: {
@@ -500,6 +738,7 @@ export async function prepareKnowledgePayload(
   const urls: string[] = [];
   const files: KnowledgeFile[] = [];
   const fileRefs: KnowledgeFileRef[] = [];
+  const enableAutoRefresh = false;
 
   if (options.includeCanonicalBusinessFacts !== false) {
     const canonicalFacts = buildCanonicalBusinessFacts(config, options.canonicalBusinessFacts);
@@ -512,6 +751,14 @@ export async function prepareKnowledgePayload(
     if (!raw || typeof raw !== 'object') continue;
     const src = raw as KnowledgeSource;
     if (!src.id || !src.type) continue;
+    const scanText = src.type === 'text'
+      ? `${src.name}\n${src.content ?? ''}`
+      : `${src.name}\n${src.url ?? src.content ?? ''}`;
+    const policyError = sourcePolicyError(src, scanText, options.now);
+    if (policyError) {
+      sources.push(rejectedSource(src, policyError));
+      continue;
+    }
 
     if (src.type === 'text') {
       const text = truncate((src.content ?? '').trim(), MAX_TEXT_CHARS);
@@ -531,6 +778,51 @@ export async function prepareKnowledgePayload(
         sources.push({ ...src, status: 'error', error: checked.error });
         continue;
       }
+
+      if (options.inspectUrlContent) {
+        const fetched = options.fetchUrlContent
+          ? await options.fetchUrlContent(checked.url)
+          : await fetchKnowledgeUrlContent(checked.url);
+        if ('error' in fetched) {
+          sources.push({ ...src, url: checked.url, content: checked.url, status: 'error', error: fetched.error });
+          continue;
+        }
+
+        const finalChecked = await validateKnowledgeUrl(fetched.finalUrl || checked.url);
+        if (!finalChecked.ok) {
+          sources.push({ ...src, url: checked.url, content: checked.url, status: 'error', error: finalChecked.error });
+          continue;
+        }
+
+        const snapshot = snapshotTextFromUrlContent(fetched.text, fetched.contentType);
+        if (!snapshot) {
+          sources.push({ ...src, url: finalChecked.url, content: finalChecked.url, status: 'error', error: 'URL_EMPTY' });
+          continue;
+        }
+
+        const embeddedPolicyError = embeddedContentPolicyError(`${src.name}\n${finalChecked.url}\n${fetched.text}\n${snapshot}`);
+        if (embeddedPolicyError) {
+          sources.push(rejectedSource({ ...src, url: finalChecked.url, content: finalChecked.url }, embeddedPolicyError));
+          continue;
+        }
+
+        const title = sourceTitle(src, finalChecked.host);
+        texts.push({ title, text: snapshot });
+        sources.push({
+          ...src,
+          name: title,
+          url: finalChecked.url,
+          content: finalChecked.url,
+          status: 'indexed',
+          error: undefined,
+          fetchedAt: nowIso(options.now),
+          contentHash: contentHash(snapshot),
+          etag: compact(fetched.etag ?? undefined) || undefined,
+          lastModified: compact(fetched.lastModified ?? undefined) || undefined,
+        });
+        continue;
+      }
+
       urls.push(checked.url);
       sources.push({
         ...src,
@@ -591,6 +883,56 @@ export async function prepareKnowledgePayload(
         sha256: loaded.sha256,
         data: loaded.data,
       };
+      const pdfScanText = extractPdfScanText(loaded.data);
+      const pdfReviewStatus = compact(src.reviewStatus).toLowerCase();
+      if (!hasReadablePdfScanText(pdfScanText) && !APPROVED_REVIEW_STATUSES.has(pdfReviewStatus)) {
+        if (options.ocrPdfFile) {
+          const ocr = await options.ocrPdfFile(file, { ...src, name: filename, content: filename, fileId, sha256 });
+          if ('error' in ocr) {
+            sources.push(rejectedSource({ ...src, name: filename, content: filename, fileId, sha256, ocrStatus: 'failed' }, ocr.error));
+            continue;
+          }
+
+          const ocrText = truncate(ocr.text, MAX_TEXT_CHARS);
+          if (!hasReadablePdfScanText(ocrText)) {
+            sources.push(rejectedSource({ ...src, name: filename, content: filename, fileId, sha256, ocrStatus: 'failed', ocrEngine: ocr.engine }, 'OCR_EMPTY'));
+            continue;
+          }
+
+          const ocrPolicyError = embeddedContentPolicyError(`${src.name}\n${filename}\n${ocrText}`);
+          if (ocrPolicyError) {
+            sources.push(rejectedSource({ ...src, name: filename, content: filename, fileId, sha256, ocrStatus: 'completed', ocrEngine: ocr.engine }, ocrPolicyError));
+            continue;
+          }
+
+          const ocrTitle = `${filename} OCR`;
+          texts.push({ title: ocrTitle, text: ocrText });
+          sources.push({
+            ...src,
+            name: filename,
+            content: filename,
+            fileId,
+            sha256,
+            sizeBytes: file.sizeBytes,
+            mimeType: file.mimeType,
+            status: 'indexed',
+            error: undefined,
+            ocrStatus: 'completed',
+            ocrEngine: ocr.engine,
+            fetchedAt: nowIso(options.now),
+            contentHash: contentHash(ocrText),
+          });
+          continue;
+        }
+
+        sources.push(rejectedSource({ ...src, name: filename, content: filename, fileId, sha256 }, 'PDF_REVIEW_REQUIRED'));
+        continue;
+      }
+      const pdfPolicyError = embeddedContentPolicyError(`${src.name}\n${filename}\n${pdfScanText}`);
+      if (pdfPolicyError) {
+        sources.push(rejectedSource({ ...src, name: filename, content: filename, fileId, sha256 }, pdfPolicyError));
+        continue;
+      }
       files.push(file);
       fileRefs.push({ filename, mimeType: file.mimeType, sizeBytes: file.sizeBytes, sha256: file.sha256 });
       sources.push({
@@ -607,7 +949,7 @@ export async function prepareKnowledgePayload(
     }
   }
 
-  return { sources, texts, urls, files, signature: stableSignature(texts, urls, fileRefs) };
+  return { sources, texts, urls, files, enableAutoRefresh, signature: stableSignature(texts, urls, fileRefs, enableAutoRefresh) };
 }
 
 export async function normalizeKnowledgeSources<T extends Record<string, unknown>>(config: T): Promise<T> {
@@ -667,9 +1009,11 @@ export async function syncRetellKnowledgeBase<T extends Record<string, unknown>>
   const canonicalBusinessFacts = await loadCanonicalBusinessFactContext(orgId);
   const payload = await prepareKnowledgePayload(config, {
     requirePdfBytes: true,
+    inspectUrlContent: true,
     loadPdfFile: orgId && tenantId
       ? (source) => loadStoredKnowledgePdf(orgId, tenantId, source)
       : undefined,
+    ocrPdfFile: ocrPdfWithOpenAI,
     canonicalBusinessFacts,
   });
   const previousId = typeof config.retellKnowledgeBaseId === 'string' ? config.retellKnowledgeBaseId : '';
@@ -697,17 +1041,24 @@ export async function syncRetellKnowledgeBase<T extends Record<string, unknown>>
     texts: payload.texts,
     urls: payload.urls,
     files: payload.files,
-    enableAutoRefresh: payload.urls.length > 0,
+    enableAutoRefresh: payload.enableAutoRefresh,
   });
+  let readyKb;
+  try {
+    readyKb = await waitForKnowledgeBaseComplete(kb.knowledge_base_id);
+  } catch (err) {
+    await Promise.resolve(deleteKnowledgeBase(kb.knowledge_base_id)).catch(() => {});
+    throw err;
+  }
 
-  if (previousId && previousId !== kb.knowledge_base_id) {
+  if (previousId && previousId !== readyKb.knowledge_base_id) {
     await deleteKnowledgeBase(previousId).catch(() => {});
   }
 
   return {
     ...config,
     knowledgeSources: payload.sources,
-    retellKnowledgeBaseId: kb.knowledge_base_id,
+    retellKnowledgeBaseId: readyKb.knowledge_base_id,
     knowledgeBaseSignature: payload.signature,
   } as T;
 }
