@@ -19,7 +19,7 @@ const DEMO_END_CALL_TOOL: RetellTool = {
   type: 'end_call',
   name: 'end_call',
   description:
-    'Beende den Anruf erst, wenn (a) der Anrufer sich verabschiedet — "tschüss", "ciao", "danke das war\'s", "auf wiederhören" — ODER (b) du gerade angekündigt hast, dass du in dieser Website-Demo eine Weiterleitung nur simulierst ("Ich simuliere die Weiterleitung jetzt und beende die Demo"). Nicht direkt nach Terminwunsch, Buchungsbestätigung oder Testlink-Angebot beenden. Nach einem Termin erst fragen: "Kann ich noch etwas für dich tun?" Wenn nein: Testlink einmal anbieten, schönen Tag wünschen, auf die Verabschiedung hören, kurz zurückgrüßen und dann diese Funktion aufrufen.',
+    'Beende den Anruf erst, wenn (a) der letzte Nutzer-Turn eine echte Verabschiedung ist — "tschüss", "ciao", "danke das war\'s", "auf wiederhören" — ODER (b) du gerade angekündigt hast, dass du in dieser Website-Demo eine Weiterleitung nur simulierst ("Ich simuliere die Weiterleitung jetzt und beende die Demo"). Nicht direkt nach Terminwunsch, Buchungsbestätigung, Testlink-Angebot, "okay", "ja", "was", "hallo", Unterbrechung, Frage, Korrektur oder neuem Anliegen beenden. Der letzte Nutzer-Turn gewinnt: Wenn dort noch Inhalt, Widerspruch, Frage oder Unsicherheit steht, darfst du NICHT end_call aufrufen und NICHT "Tschüss" sagen. Nach einem Termin erst fragen: "Kann ich noch etwas für dich tun?" Wenn nein: Testlink einmal anbieten, schönen Tag wünschen, auf die Verabschiedung hören, kurz zurückgrüßen und dann diese Funktion aufrufen.',
 };
 
 export const DEMO_PRIVACY_NOTICE_VERSION = 'demo-audio-transcript-90d-2026-05-10';
@@ -211,6 +211,7 @@ Diese Regeln gelten immer, auch wenn andere Demo-Anweisungen aelter sind:
 19. Der im Einstieg genannte Name bleibt der Name fuer die Buchung. Frage ihn nicht erneut ab. Bei unsicherer Erkennung korrigiere konkret: "Ich habe X verstanden, stimmt das?"
 20. Sage "ich bin Chipy" oder "von Phonbot" nur einmal pro Call, ausser der Anrufer fragt explizit danach. Kein zweites Intro nach Moduswechseln.
 21. Nach einer Demo-Terminaufnahme nicht auflegen. Erst fragen: "Kann ich noch etwas fuer dich tun?" Bei nein Testlink einmal anbieten, dann schoenen Tag wuenschen, auf eine Verabschiedung hoeren und erst danach end_call.
+22. Der letzte Nutzer-Turn gewinnt: Wenn der letzte Nutzer-Turn eine Frage, Unterbrechung, Korrektur, Kritik, ein neues Anliegen oder ein unklares Fortsetzungssignal enthaelt (z.B. "Okay", "Ja", "Ja, was", "hallo", "aber", "warte", "moment", "was meinst du"), gilt: end_call ist gesperrt. Antworte dann auf den Inhalt oder frage kurz nach; sage nicht "Tschuess" und lege nicht auf.
 `;
 
 // Retell post-call analysis — fields the model extracts from the transcript
@@ -248,7 +249,7 @@ import { sendDemoBookingConfirmationSms, sendSignupLinkSms, signupLinkUrl } from
 // doesn't create duplicate Retell agents. Falls back to in-memory Map when Redis down.
 // H6: Cap in-memory maps to prevent OOM when Redis is unavailable.
 const CACHE_TTL_SEC = 24 * 60 * 60;
-const DEMO_AGENT_CACHE_VERSION = 'v17';
+const DEMO_AGENT_CACHE_VERSION = 'v18';
 const MAX_DEMO_AGENTS = 1000;
 const inMemDemoAgents = new Map<string, { agentId: string; createdAt: number }>();
 
@@ -588,6 +589,7 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
     // Local `r` capture so the closure's type-narrowing survives.
     const r = redis;
     for (const pattern of [
+      'demo_agent:v18:*', 'demo_agent_meta:v18:*',
       'demo_agent:v17:*', 'demo_agent_meta:v17:*',
       'demo_agent:v16:*', 'demo_agent_meta:v16:*',
       'demo_agent:v15:*', 'demo_agent_meta:v15:*',

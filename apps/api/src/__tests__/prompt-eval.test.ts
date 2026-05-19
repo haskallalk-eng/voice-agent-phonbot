@@ -112,6 +112,12 @@ describe('prompt eval dry-run harness', () => {
     expect(DEMO_SAFETY_OVERLAY).toContain('Kein zweites Intro nach Moduswechseln');
   });
 
+  it('blocks premature demo hangups after barge-in, questions, or unclear continuation signals', () => {
+    expect(DEMO_SAFETY_OVERLAY).toContain('end_call ist gesperrt');
+    expect(DEMO_SAFETY_OVERLAY).toContain('Ja, was');
+    expect(DEMO_SAFETY_OVERLAY).toContain('Der letzte Nutzer-Turn gewinnt');
+  });
+
   it('keeps curated demo templates supplied with safe demo standard prices', () => {
     const pricedTemplates = ['hairdresser', 'tradesperson', 'cleaning', 'restaurant', 'auto', 'solo'];
 
