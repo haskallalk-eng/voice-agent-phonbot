@@ -64,8 +64,8 @@ function stripLeadingEmoji(text, inlineSize = 14) {
 
 const OUT_DIR = path.resolve('apps/web/public');
 const FULL_AGENT_STARTER_PRICE = '89';
-const DEMO_PHONE_HREF = 'tel:+493075937169';
-const DEMO_PHONE_LABEL = '+49 30 75937169';
+const DEMO_PHONE_HREF = 'tel:+493075937286';
+const DEMO_PHONE_LABEL = '+49 30 75937286';
 
 const BRANCHEN = [
   {

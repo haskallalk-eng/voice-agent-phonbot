@@ -13,7 +13,7 @@ Phonbot richtet sich an **Friseursalons, Handwerksbetriebe, Reinigungsfirmen, Ga
 - Setup-Zeit: unter 2 Minuten
 - Datenschutz: DSGVO-fokussiert · AVV verfügbar · Hosting Deutschland/EU · Telefonie/KI-Subprozessoren teils USA mit SCC/DPF
 - Integration: Google Calendar, Microsoft Outlook, Cal.com, Twilio
-- Kontakt: info@phonbot.de · +49 30 75937169
+- Kontakt: info@phonbot.de · +49 30 75937286
 
 ## Pläne und Preise (Stand: 20. Mai 2026)
 

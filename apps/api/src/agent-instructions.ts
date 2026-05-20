@@ -315,7 +315,6 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   parts.push(`Agent-Name: ${cfg.name}`);
   parts.push(`Firmenname: ${cfg.businessName}`);
   parts.push('Aktuelles Datum/Zeitpunkt: {{current_date_de}} ({{current_date_iso}}), {{current_time_de}} Uhr in Europe/Berlin. Interpretiere relative Terminwuensche wie "morgen", "naechste Woche" und Wochentage immer von diesem Call-Zeitpunkt aus. Wenn ein Datums-Platzhalter sichtbar/leer bleibt, frage nach einem absoluten Datum statt zu raten.');
-  parts.push('Aussprache-Fix: Den Namen "Mindrails" sprichst du immer als "Meind Räils". Wenn du ihn im Audio nennst, schreibe in deinem Antworttext "Meind Räils". Nur wenn der Anrufer nach der Schreibweise fragt, sag: "geschrieben Mindrails".');
 
   if (cfg.businessDescription?.trim()) {
     parts.push(`Beschreibung: ${cfg.businessDescription.trim()}`);
@@ -362,6 +361,12 @@ export function buildAgentInstructions(cfg: AgentConfig) {
   // Old configs stored this as `string[]` (term-only); new configs hold
   // `{term, pronunciation?, explanation?, context?}`. Accept both transparently.
   const vocabItems = collectVocabularyPromptItems((cfg as Record<string, unknown>).customVocabulary);
+  const needsMindrailsPronunciation =
+    vocabularyKey(cfg.businessName) === 'mindrails' ||
+    vocabItems.some((item) => vocabularyKey(item.term) === 'mindrails');
+  if (needsMindrailsPronunciation) {
+    parts.push('Aussprache-Fix: Den Namen "Mindrails" sprichst du immer als "Meind Räils". Wenn du ihn im Audio nennst, schreibe in deinem Antworttext "Meind Räils". Nur wenn der Anrufer nach der Schreibweise fragt, sag: "geschrieben Mindrails".');
+  }
   if (vocabItems.length > 0) {
     const vocabLines: string[] = [];
     let hasPronunciationHints = false;

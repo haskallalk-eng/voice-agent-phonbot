@@ -237,7 +237,7 @@ Gesamtlatenz End-to-End (Anrufer spricht → Agent antwortet): **~800-900 ms**.
 ## 11. Kontakt & Impressum
 
 - **E-Mail**: info@phonbot.de
-- **Telefon**: +49 30 75937169
+- **Telefon**: +49 30 75937286
 - **Web**: https://phonbot.de/
 - **Support**: 24h E-Mail-Response (Starter), 4h (Pro), dediziert (Agency)
 

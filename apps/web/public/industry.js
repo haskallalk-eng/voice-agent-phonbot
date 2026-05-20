@@ -1,9 +1,9 @@
-/**
+﻿/**
  * Shared JS for legacy static industry landing pages.
  * Public demos are telephone-first: demo buttons open the real demo number.
  */
 
-const DEMO_PHONE_HREF = 'tel:+493075937169';
+const DEMO_PHONE_HREF = 'tel:+493075937286';
 
 function $(sel, ctx) {
   return (ctx || document).querySelector(sel);

@@ -7,8 +7,8 @@ import { SITE, TODAY, CORE_INDUSTRY_PAGES, SEO_NICHE_PAGES, ALL_INDUSTRY_PAGES }
 
 const OUT_DIR = path.resolve('apps/web/public');
 const FULL_AGENT_STARTER_PRICE = '89';
-const DEMO_PHONE_HREF = 'tel:+493075937169';
-const DEMO_PHONE_LABEL = '+49 30 75937169';
+const DEMO_PHONE_HREF = 'tel:+493075937286';
+const DEMO_PHONE_LABEL = '+49 30 75937286';
 
 const germanPairs = [
   ['fuer', 'für'], ['Fuer', 'Für'], ['Oeff', 'Öff'], ['oeff', 'öff'], ['Foerder', 'Förder'], ['foerder', 'förder'],
@@ -336,12 +336,12 @@ function contactJsonLd() {
         name: 'Phonbot',
         url: `${SITE}/`,
         email: 'info@phonbot.de',
-        telephone: '+49-30-75937169',
+        telephone: '+49-30-75937286',
         contactPoint: {
           '@type': 'ContactPoint',
           contactType: 'customer support',
           email: 'info@phonbot.de',
-          telephone: '+49-30-75937169',
+          telephone: '+49-30-75937286',
           areaServed: 'DE',
           availableLanguage: ['German', 'English'],
         },
@@ -373,7 +373,7 @@ ${NAV_HTML}
     <div class="wrap">
       <div class="grid">
         <article class="card"><h3>E-Mail</h3><p><a href="mailto:info@phonbot.de">info@phonbot.de</a></p></article>
-        <article class="card"><h3>Telefon</h3><p><a href="tel:+493075937169">+49 30 75937169</a></p></article>
+        <article class="card"><h3>Telefon</h3><p><a href="tel:+493075937286">+49 30 75937286</a></p></article>
         <article class="card"><h3>Typische Fragen</h3><p>Preise, Einrichtung, DSGVO, Rufweiterleitung, Kalender-Sync und passende Branchen-Templates.</p></article>
       </div>
     </div>
