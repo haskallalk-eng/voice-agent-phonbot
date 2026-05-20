@@ -4,7 +4,7 @@ import bcrypt from 'bcrypt';
 import { pool } from './db.js';
 import { log } from './logger.js';
 import { TEMPLATES } from './templates.js';
-import { DEMO_END_INSTRUCTIONS, DEMO_SAFETY_OVERLAY, DEFAULT_SALES_PROMPT, ensurePhonbotProductFacts, flushDemoAgentCache, bustSalesPromptCache } from './demo.js';
+import { DEMO_END_INSTRUCTIONS, DEFAULT_SALES_PROMPT, buildDemoGeneralPrompt, ensurePhonbotProductFacts, flushDemoAgentCache, bustSalesPromptCache } from './demo.js';
 import { PLATFORM_BASELINE_PROMPT, bustPlatformBaselineCache, ensurePlatformSafetyKernel } from './platform-baseline.js';
 import { OUTBOUND_BASELINE_PROMPT, bustOutboundBaselineCache, ensureOutboundSafetyKernel } from './outbound-baseline.js';
 import { sendSignupLinkEmail } from './email.js';
@@ -751,7 +751,7 @@ export async function registerAdmin(app: FastifyInstance) {
     const platformPrompt = ensurePlatformSafetyKernel(overrides.get('__platform__')?.epilogue ?? PLATFORM_BASELINE_PROMPT);
     const outboundPrompt = ensureOutboundSafetyKernel(overrides.get('__outbound__')?.epilogue ?? OUTBOUND_BASELINE_PROMPT);
     const salesPrompt = ensurePhonbotProductFacts(overrides.get('__sales__')?.epilogue ?? DEFAULT_SALES_PROMPT);
-    const globalDemoEpilogue = ensurePhonbotProductFacts(overrides.get('__global__')?.epilogue ?? DEMO_END_INSTRUCTIONS);
+    const globalDemoEpilogue = overrides.get('__global__')?.epilogue ?? null;
       const model = getDefaultRetellLlmModel();
 
     const sources: PromptEvalSource[] = [
@@ -774,7 +774,7 @@ export async function registerAdmin(app: FastifyInstance) {
         id: 'sales-callback',
         label: 'Phonbot Sales-Callback',
         kind: 'sales',
-        prompt: `${outboundPrompt}\n\n${salesPrompt}`,
+        prompt: ensureOutboundSafetyKernel(`${outboundPrompt}\n\n${salesPrompt}`),
         notes: ['Outbound-Baseline plus Sales-Prompt fuer Website-Leads.'],
       },
     ];
@@ -782,15 +782,18 @@ export async function registerAdmin(app: FastifyInstance) {
     for (const template of TEMPLATES) {
       const override = overrides.get(template.id);
       const basePrompt = override?.basePrompt ?? template.prompt;
-      const epilogue = override?.epilogue || globalDemoEpilogue;
+      const epilogue = [globalDemoEpilogue, override?.epilogue]
+        .map((part) => part?.trim())
+        .filter((part): part is string => Boolean(part))
+        .join('\n\n');
       sources.push({
         id: `demo-${template.id}`,
         label: `Website-Demo: ${template.name}`,
         kind: 'demo',
-        prompt: `${platformPrompt}\n\n${basePrompt}${ensurePhonbotProductFacts(epilogue)}${DEMO_SAFETY_OVERLAY}`,
+        prompt: buildDemoGeneralPrompt({ platformBaseline: platformPrompt, basePrompt, epilogue }),
         notes: [
           'Zusammensetzung entspricht getOrCreateDemoAgent(): Plattform-Baseline + Branchenprompt + Demo-Epilog + Safety-Overlay.',
-          'Nur end_call ist in der Website-Demo als Retell-Tool verfuegbar.',
+          'Website-Demo nutzt end_call und recording_declined, wenn WEBHOOK_BASE_URL verfuegbar ist.',
         ],
       });
     }
@@ -1253,15 +1256,19 @@ export async function registerAdmin(app: FastifyInstance) {
         );
 
         if (isApplying && scope && (scope === 'systemic' || scope === 'both')) {
-          // Append to the global demo epilogue. Idempotent per (sourceKind, sourceId)
-          // via the marker line; if the same source is applied twice (e.g. apply
+          // Append systemic learnings to the correct demo epilogue. Template
+          // learnings stay scoped to their template; prompt_suggestions without
+          // a template remain global. Idempotent per (sourceKind, sourceId) via
+          // the marker line; if the same source is applied twice (e.g. apply
           // then correct), the marker block is replaced rather than re-appended.
+          const targetTemplateId = sourceKind === 'template_learning' && templateId ? templateId : '__global__';
           const marker = `<!-- learning:${sourceKind}:${sourceId} -->`;
           const block = `\n\n${marker}\n${textToApply.trim()}`;
           const existing = await client.query(
-            `SELECT epilogue FROM demo_prompt_overrides WHERE template_id = '__global__' FOR UPDATE`,
+            `SELECT epilogue FROM demo_prompt_overrides WHERE template_id = $1 FOR UPDATE`,
+            [targetTemplateId],
           );
-          const current = existing.rowCount ? (existing.rows[0].epilogue as string) : DEMO_END_INSTRUCTIONS;
+          const current = existing.rowCount ? (existing.rows[0].epilogue as string) : '';
           // Strip any prior block for this source (pattern: marker + everything
           // up to the next marker or EOF). Using a non-greedy lookahead keeps
           // sibling blocks intact.
@@ -1272,12 +1279,12 @@ export async function registerAdmin(app: FastifyInstance) {
           const next = stripped + block;
           await client.query(
             `INSERT INTO demo_prompt_overrides (template_id, epilogue, updated_by)
-             VALUES ('__global__', $1, $2)
+             VALUES ($1, $2, $3)
              ON CONFLICT (template_id) DO UPDATE SET
                epilogue   = EXCLUDED.epilogue,
                updated_at = now(),
                updated_by = EXCLUDED.updated_by`,
-            [next, adminEmail ?? null],
+            [targetTemplateId, next, adminEmail ?? null],
           );
           systemicApplied = true;
           needsFlush = true;

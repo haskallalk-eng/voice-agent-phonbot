@@ -20,6 +20,7 @@ import {
   getLLM as retellGetLlm,
   deleteAgent as retellDeleteAgent,
   deleteLLM as retellDeleteLlm,
+  deleteKnowledgeBase as retellDeleteKnowledgeBase,
   updatePhoneNumber as retellUpdatePhoneNumber,
   DEFAULT_VOICE_ID,
   getDefaultRetellLlmModel,
@@ -28,7 +29,8 @@ import {
 } from './retell.js';
 import { triggerBridgeCall } from './twilio-openai-bridge.js';
 import { loadPlatformBaseline } from './platform-baseline.js';
-import { loadOutboundBaseline } from './outbound-baseline.js';
+import { ensureOutboundSafetyKernel, loadOutboundBaseline } from './outbound-baseline.js';
+import { buildInboundEndCallToolDescription } from './end-call-policy.js';
 import { deriveTechnicalRuntimeSettings, toE164 } from '@vas/shared';
 import { log } from './logger.js';
 import { normalizeKnowledgeSources, storeKnowledgePdf, syncRetellKnowledgeBase, toRetellKbConfig } from './knowledge.js';
@@ -421,6 +423,24 @@ async function loadOwnedConfigRow(
   return { data: parseAgentConfig(res.rows[0].data), exists: true };
 }
 
+async function withAgentDeployLock<T>(orgId: string, tenantId: string, fn: () => Promise<T>): Promise<T> {
+  if (!pool || process.env.NODE_ENV === 'test') return fn();
+  const client = await pool.connect();
+  let locked = false;
+  const lockA = `agent-config:deploy:${orgId}`;
+  const lockB = tenantId;
+  try {
+    await client.query('SELECT pg_advisory_lock(hashtext($1), hashtext($2))', [lockA, lockB]);
+    locked = true;
+    return await fn();
+  } finally {
+    if (locked) {
+      await client.query('SELECT pg_advisory_unlock(hashtext($1), hashtext($2))', [lockA, lockB]).catch(() => {});
+    }
+    client.release();
+  }
+}
+
 /**
  * Returns true if the tenantId is unclaimed (no row yet) or already owned by orgId.
  * Prevents hostile tenantId-takeover via PUT before the real owner created a row.
@@ -727,6 +747,7 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
   const tools: RetellTool[] = [];
   const enabled = expandCalendarToolSet(config.tools);
   const signedQuery = buildToolAuthQuery(config.tenantId, config.retellAgentId);
+  const recordingDeclineToolAvailable = config.recordCalls !== false && config.dataRetentionDays !== 0;
 
   // Retell's built-in end_call tool — must be explicitly registered
   // (not auto-available). Lets the LLM hang up cleanly, which is
@@ -734,7 +755,7 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
   tools.push({
     type: 'end_call',
     name: 'end_call',
-    description: 'End the call only when the conversation is naturally over, the caller asks to hang up, spam/abuse policy requires it, or a configured hangup rule applies. Do not use only because recording was declined.',
+    description: buildInboundEndCallToolDescription(recordingDeclineToolAvailable),
   });
 
   // Custom tool: caller refused recording. Webhook flags the call for
@@ -743,7 +764,7 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
   // Only registered when recording is actually active — otherwise the tool
   // is irreführend (would-be-no-op since nothing is recorded). PrivacyTab's
   // `recordCalls` toggle drives this.
-  if (config.recordCalls !== false && config.dataRetentionDays !== 0) {
+  if (recordingDeclineToolAvailable) {
     tools.push({
       type: 'custom',
       name: 'recording_declined',
@@ -874,7 +895,7 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
       execution_message_description: 'Ich storniere den Termin...',
       parameters: {
         type: 'object',
-        required: ['confirmed'],
+        required: ['changeToken', 'confirmed'],
         properties: {
           changeToken: { type: 'string', description: 'Short-lived change token returned by calendar_find_bookings. Required to change a booking.' },
           customerName: { type: 'string' },
@@ -897,7 +918,7 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
       execution_message_description: 'Verschiebe den Termin...',
       parameters: {
         type: 'object',
-        required: ['newTime', 'confirmed'],
+        required: ['changeToken', 'newTime', 'confirmed'],
         properties: {
           changeToken: { type: 'string', description: 'Short-lived change token returned by calendar_find_bookings. Required to change a booking.' },
           customerName: { type: 'string' },
@@ -926,7 +947,9 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
         properties: {
           customerName: { type: 'string' },
           customerPhone: { type: 'string', description: 'Callback phone number. Optional when Retell provides from_number.' },
+          customerPhoneConfirmed: { type: 'boolean', description: 'True only when the caller explicitly dictated and confirmed this customerPhone during the current call. Not needed when Retell provides from_number.' },
           preferredTime: { type: 'string' },
+          callbackRequested: { type: 'boolean', description: 'True only when the caller explicitly asked to be called back immediately and confirmed that callback.' },
           service: { type: 'string' },
           notes: { type: 'string' },
           reason: { type: 'string', description: fallbackReasonDescription(config) },
@@ -1099,7 +1122,14 @@ function buildPostCallAnalysisData(config: AgentConfig): PostCallAnalysisField[]
 
 export async function deployToRetell(config: AgentConfig, orgId?: string): Promise<AgentConfig> {
   if (orgId) await enforceVoiceAllowedForOrg(orgId, config);
+  const previousKnowledgeBaseId = typeof (config as Record<string, unknown>).retellKnowledgeBaseId === 'string'
+    ? (config as Record<string, unknown>).retellKnowledgeBaseId as string
+    : '';
   const preparedConfig = await syncRetellKnowledgeBase(config as unknown as Record<string, unknown>, orgId) as AgentConfig;
+  const preparedKnowledgeBaseId = typeof (preparedConfig as Record<string, unknown>).retellKnowledgeBaseId === 'string'
+    ? (preparedConfig as Record<string, unknown>).retellKnowledgeBaseId as string
+    : '';
+  try {
   const webhookBase = getWebhookBaseUrl();
   // Platform-Baseline-Prefix: admin-edited quality floor (spelling alphabet,
   // end-call rules, promise-discipline) that applies to every Phonbot agent —
@@ -1248,7 +1278,7 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
     if (preparedConfig.retellCallbackLlmId) {
       const outboundBaseline = await loadOutboundBaseline();
       callbackUpdates.push(updateLLM(preparedConfig.retellCallbackLlmId, {
-        generalPrompt: `${outboundBaseline}\n\n${buildCallbackPrompt(preparedConfig)}`,
+        generalPrompt: ensureOutboundSafetyKernel(`${outboundBaseline}\n\n${buildCallbackPrompt(preparedConfig)}`),
         model,
         modelHighPriority: true,
       }));
@@ -1271,6 +1301,21 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
   }
 
   return { ...preparedConfig, retellLlmId: llmId, retellAgentId: agentId };
+  } catch (err) {
+    if (preparedKnowledgeBaseId && preparedKnowledgeBaseId !== previousKnowledgeBaseId) {
+      await retellDeleteKnowledgeBase(preparedKnowledgeBaseId).catch((cleanupErr: Error) => {
+        log.warn(
+          {
+            err: cleanupErr.message,
+            orgId,
+            knowledgeBaseId: preparedKnowledgeBaseId,
+          },
+          'deployToRetell: new Retell KB cleanup failed after deploy error',
+        );
+      });
+    }
+    throw err;
+  }
 }
 
 /**
@@ -1315,7 +1360,7 @@ function buildCallbackPrompt(config: AgentConfig): string {
  * Creates them on first call, then caches the IDs in agent_configs.
  * Returns the (possibly updated) config.
  */
-async function ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise<AgentConfig> {
+async function _ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise<AgentConfig> {
   const model = getDefaultRetellLlmModel();
   const LANG_MAP: Record<string, string> = {
     de: 'de-DE', en: 'en-US', fr: 'fr-FR', es: 'es-ES',
@@ -1341,7 +1386,7 @@ async function ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise
     // wrong here — outbound has fundamentally different rules.
     const outboundBaseline = await loadOutboundBaseline();
     const llm = await createLLM({
-      generalPrompt: `${outboundBaseline}\n\n${buildCallbackPrompt(config)}`,
+      generalPrompt: ensureOutboundSafetyKernel(`${outboundBaseline}\n\n${buildCallbackPrompt(config)}`),
       tools: [],
       model,
       modelHighPriority: true,
@@ -1357,7 +1402,7 @@ async function ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise
     // log and continue, the customer's previous prompt remains active.
     const outboundBaseline = await loadOutboundBaseline();
     await updateLLM(callbackLlmId, {
-      generalPrompt: `${outboundBaseline}\n\n${buildCallbackPrompt(config)}`,
+        generalPrompt: ensureOutboundSafetyKernel(`${outboundBaseline}\n\n${buildCallbackPrompt(config)}`),
       model,
       modelHighPriority: true,
     }).catch((err: Error) => {
@@ -1408,6 +1453,45 @@ async function ensureCallbackAgent(config: AgentConfig, orgId?: string): Promise
   }
 
   return config;
+}
+
+async function cleanupRetellDeployAfterPersistFailure(args: {
+  previous: Partial<AgentConfig>;
+  deployed: AgentConfig;
+  orgId: string;
+  tenantId: string;
+  warn: (obj: Record<string, unknown>, msg: string) => void;
+}): Promise<void> {
+  const previous = args.previous as Record<string, unknown>;
+  const deployed = args.deployed as unknown as Record<string, unknown>;
+  const previousKbId = typeof previous.retellKnowledgeBaseId === 'string' ? previous.retellKnowledgeBaseId : '';
+  const currentKbId = typeof deployed.retellKnowledgeBaseId === 'string' ? deployed.retellKnowledgeBaseId : '';
+
+  if (previous.retellAgentId || previous.retellLlmId) {
+    await deployToRetell(parseAgentConfig(args.previous), args.orgId).catch((err: Error) => {
+      args.warn({ err: err.message, orgId: args.orgId, tenantId: args.tenantId }, 'agent-config/deploy: rollback to previous Retell config failed after DB save error');
+    });
+  }
+
+  const cleanupTasks: Promise<unknown>[] = [];
+  if (currentKbId && currentKbId !== previousKbId) cleanupTasks.push(retellDeleteKnowledgeBase(currentKbId));
+  if (!previous.retellAgentId && typeof deployed.retellAgentId === 'string') cleanupTasks.push(retellDeleteAgent(deployed.retellAgentId));
+  if (!previous.retellCallbackAgentId && typeof deployed.retellCallbackAgentId === 'string') cleanupTasks.push(retellDeleteAgent(deployed.retellCallbackAgentId));
+  if (!previous.retellLlmId && typeof deployed.retellLlmId === 'string') cleanupTasks.push(retellDeleteLlm(deployed.retellLlmId));
+  if (!previous.retellCallbackLlmId && typeof deployed.retellCallbackLlmId === 'string') cleanupTasks.push(retellDeleteLlm(deployed.retellCallbackLlmId));
+
+  const cleanup = await Promise.allSettled(cleanupTasks);
+  const failures = cleanup.filter((item): item is PromiseRejectedResult => item.status === 'rejected');
+  if (failures.length) {
+    args.warn(
+      {
+        orgId: args.orgId,
+        tenantId: args.tenantId,
+        failures: failures.map((item) => item.reason instanceof Error ? item.reason.message : String(item.reason)),
+      },
+      'agent-config/deploy: Retell cleanup failed after DB save error',
+    );
+  }
 }
 
 /**
@@ -1473,7 +1557,7 @@ export async function triggerCallback(params: {
 
     const customerName = params.customerName ?? 'Kunde';
     const reason = params.reason ?? 'Rückruf';
-    const prompt = `Du bist ${config.name}, ein KI-Telefonassistent von ${config.businessName}. Du rufst ${customerName} zurück.
+    const legacyCallbackPrompt = `Du bist ${config.name}, ein KI-Telefonassistent von ${config.businessName}. Du rufst ${customerName} zurück.
 
 Grund des Rückrufs: ${reason}${params.service ? `\nService/Bereich: ${params.service}` : ''}
 
@@ -1484,6 +1568,8 @@ REGELN:
 - Sprich natürlich Deutsch, professionell und hilfsbereit
 - Maximal 2-3 kurze Sätze pro Antwort
 - Kläre das Anliegen vollständig bevor du das Gespräch beendest`;
+    const outboundBaseline = await loadOutboundBaseline();
+    const prompt = ensureOutboundSafetyKernel(`${outboundBaseline}\n\n${legacyCallbackPrompt}`);
 
     const result = await triggerBridgeCall({
       toNumber: params.customerPhone,
@@ -1878,6 +1964,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
       throw err;
     }
 
+    return withAgentDeployLock(orgId, tenantId, async () => {
     const existing = await loadOwnedConfigRow(tenantId, orgId);
     const serverIds = existing.exists ? existing.data : {} as Partial<AgentConfig>;
     const body = parseAgentConfig({
@@ -1910,6 +1997,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
       if (e.statusCode === 409) return reply.status(409).send({ error: e.message });
       throw err;
     }
+    });
   });
 
   // Deploy config to Retell AI (save + sync).
@@ -1932,8 +2020,10 @@ export async function registerAgentConfig(app: FastifyInstance) {
       throw err;
     }
 
+    return withAgentDeployLock(orgId, tenantId, async () => {
     const existing = await loadOwnedConfigRow(tenantId, orgId);
     const serverIds = existing.exists ? existing.data : {} as Partial<AgentConfig>;
+    await enforcePlanAgentLimitOnCreate(orgId, tenantId);
     const body = parseAgentConfig({
       ...rawWithServerFlags,
       tenantId,
@@ -1962,6 +2052,13 @@ export async function registerAgentConfig(app: FastifyInstance) {
       saved = await writeConfig(deployed, orgId, userId);
     } catch (err) {
       const e = err as Error & { statusCode?: number; details?: { limit?: number } };
+      await cleanupRetellDeployAfterPersistFailure({
+        previous: serverIds,
+        deployed,
+        orgId,
+        tenantId,
+        warn: (obj, msg) => req.log.warn(obj, msg),
+      });
       if (e.message === 'AGENTS_LIMIT_REACHED') {
         return reply.status(403).send({
           error: 'AGENTS_LIMIT_REACHED',
@@ -1982,7 +2079,19 @@ export async function registerAgentConfig(app: FastifyInstance) {
     // new agent on the next webhook call instead of serving from cache.
     if (saved.retellAgentId) invalidateOrgIdCache(saved.retellAgentId);
     if (saved.retellCallbackAgentId) invalidateOrgIdCache(saved.retellCallbackAgentId);
+    const previousKbId = typeof (serverIds as Record<string, unknown>).retellKnowledgeBaseId === 'string'
+      ? (serverIds as Record<string, unknown>).retellKnowledgeBaseId as string
+      : '';
+    const currentKbId = typeof (saved as unknown as Record<string, unknown>).retellKnowledgeBaseId === 'string'
+      ? (saved as unknown as Record<string, unknown>).retellKnowledgeBaseId as string
+      : '';
+    if (previousKbId && previousKbId !== currentKbId) {
+      retellDeleteKnowledgeBase(previousKbId).catch((err: Error) =>
+        req.log.warn({ err: err.message, orgId, tenantId, previousKbId, currentKbId }, 'agent-config/deploy: old Retell KB cleanup failed'),
+      );
+    }
     return { ok: true, config: toClientConfig(saved), retellAgentId: saved.retellAgentId, retellLlmId: saved.retellLlmId };
+    });
   });
 
   // Delete an agent config
@@ -1990,9 +2099,11 @@ export async function registerAgentConfig(app: FastifyInstance) {
     const { orgId, userId } = req.user as JwtPayload;
     const { tenantId } = req.params as { tenantId: string };
     if (!pool) return reply.status(503).send({ error: 'Database not configured' });
+    const dbPool = pool;
 
+    return withAgentDeployLock(orgId, tenantId, async () => {
     // Verify the agent belongs to this org
-    const check = await pool.query(
+    const check = await dbPool.query(
       `SELECT data, updated_at FROM agent_configs WHERE tenant_id = $1 AND org_id = $2`,
       [tenantId, orgId],
     );
@@ -2008,7 +2119,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
       if (!body?.password) return reply.status(400).send({ error: 'password_required', message: 'Bitte Passwort eingeben um diesen Agent zu löschen.' });
 
       // Verify password
-      const userRow = await pool.query(`SELECT password_hash FROM users WHERE id = $1`, [userId]);
+      const userRow = await dbPool.query(`SELECT password_hash FROM users WHERE id = $1`, [userId]);
       const hash = userRow.rows[0]?.password_hash;
       if (!hash) return reply.status(403).send({ error: 'Passwort konnte nicht verifiziert werden.' });
 
@@ -2022,10 +2133,12 @@ export async function registerAgentConfig(app: FastifyInstance) {
       .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
     const retellLlmIds = [data.retellLlmId, data.retellCallbackLlmId]
       .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
+    const retellKnowledgeBaseIds = [data.retellKnowledgeBaseId]
+      .filter((id): id is string => typeof id === 'string' && id.trim().length > 0);
 
     let connectedNumbers: string[] = [];
     if (retellAgentIds.length) {
-      const numbers = await pool.query(
+      const numbers = await dbPool.query(
         `SELECT number FROM phone_numbers WHERE org_id = $1 AND agent_id = ANY($2::text[])`,
         [orgId, retellAgentIds],
       );
@@ -2034,20 +2147,13 @@ export async function registerAgentConfig(app: FastifyInstance) {
         .filter((n): n is string => typeof n === 'string' && n.trim().length > 0);
     }
 
-    // Delete local state first so the UI cannot keep routing new calls to a
-    // removed agent. External Retell cleanup is best-effort but logged loudly;
-    // the orphan-cleanup script can safely retry anything that fails here.
-    await pool.query(`DELETE FROM agent_configs WHERE tenant_id = $1 AND org_id = $2`, [tenantId, orgId]);
-    if (retellAgentIds.length) {
-      await pool.query(
-        `UPDATE phone_numbers SET agent_id = NULL WHERE org_id = $1 AND agent_id = ANY($2::text[])`,
-        [orgId, retellAgentIds],
-      );
-    }
-
+    // External cleanup runs before deleting the durable row so a failed Retell
+    // cleanup keeps the IDs available for a safe retry instead of stranding a
+    // knowledge base or LLM that is no longer referenced anywhere.
     const cleanup = await Promise.allSettled([
       ...connectedNumbers.map((number) => retellUpdatePhoneNumber(number, { inboundAgentId: null })),
       ...retellAgentIds.map((id) => retellDeleteAgent(id)),
+      ...retellKnowledgeBaseIds.map((id) => retellDeleteKnowledgeBase(id)),
     ]);
     cleanup.push(...await Promise.allSettled(retellLlmIds.map((id) => retellDeleteLlm(id))));
     const cleanupFailed = cleanup.filter((r) => r.status === 'rejected').length;
@@ -2063,9 +2169,19 @@ export async function registerAgentConfig(app: FastifyInstance) {
         },
         'agent-config/delete: Retell cleanup partially failed',
       );
+      return reply.status(502).send({ ok: false, cleanupFailed, error: 'RETELL_CLEANUP_FAILED' });
+    }
+
+    await dbPool.query(`DELETE FROM agent_configs WHERE tenant_id = $1 AND org_id = $2`, [tenantId, orgId]);
+    if (retellAgentIds.length) {
+      await dbPool.query(
+        `UPDATE phone_numbers SET agent_id = NULL WHERE org_id = $1 AND agent_id = ANY($2::text[])`,
+        [orgId, retellAgentIds],
+      );
     }
 
     return { ok: true, cleanupFailed };
+    });
   });
 
   // Create a web call for testing (requires deployed agent)

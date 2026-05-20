@@ -735,10 +735,17 @@ export async function updatePhoneNumber(
   if (config.outboundAgentId !== undefined) body.outbound_agent_id = config.outboundAgentId;
   if (config.inboundAgentId !== undefined) body.inbound_agent_id = config.inboundAgentId;
 
-  await retellRequest(`/update-phone-number/${encodeURIComponent(phoneNumber)}`, {
+  const res = await fetch(`${RETELL_API}/update-phone-number/${encodeURIComponent(phoneNumber)}`, {
     method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${getApiKey()}`,
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(RETELL_TIMEOUT_MS),
   });
+  if (res.status === 404) return;
+  if (!res.ok) throw new Error(`Retell API ${res.status}: ${await res.text()}`);
 }
 
 // --- Web Call (for test console) ---

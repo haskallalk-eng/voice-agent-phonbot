@@ -1,4 +1,7 @@
 import crypto from 'node:crypto';
+import dns from 'node:dns';
+import http, { type IncomingMessage } from 'node:http';
+import https from 'node:https';
 import { createKnowledgeBase, deleteKnowledgeBase, waitForKnowledgeBaseComplete } from './retell.js';
 import { pool } from './db.js';
 import { isPrivateHost, isPrivateResolved, isBlockedPort } from './ssrf-guard.js';
@@ -241,9 +244,13 @@ const KNOWLEDGE_PII_PATTERNS = [
   /\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]){10,30}\b/i,
   /\b(0?[1-9]|[12]\d|3[01])[./](0?[1-9]|1[0-2])[./](19\d{2}|20[0-2]\d)\b/,
   /\b(?:\d[\s-]?){13,19}\b/,
+  /\b(?:kundenliste|customer\s+list|stammkunde|patientenliste)\b/i,
+  /\b(?:\+?\d[\d\s()./-]{6,}\d)\b/,
+  /\b(?:strasse|straße|str\.|weg|platz|allee|gasse|ring)\s+\d+[a-z]?\b/i,
 ];
 
 const EMBEDDED_CONTENT_PII_PATTERNS = [
+  ...KNOWLEDGE_PII_PATTERNS,
   /\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]){10,30}\b/i,
   /\b(0?[1-9]|[12]\d|3[01])[./](0?[1-9]|1[0-2])[./](19\d{2}|20[0-2]\d)\b/,
   /\b(?:\d[\s-]?){13,19}\b/,
@@ -251,14 +258,43 @@ const EMBEDDED_CONTENT_PII_PATTERNS = [
   /\b(?:kundenliste|customer\s+list|stammkunde|patientenliste)\b/i,
 ];
 
+const CANONICAL_FACTS_SENSITIVE_PATTERNS = [
+  /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/,
+  /\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]){10,30}\b/i,
+  /\b(?:api[_ -]?key|secret|bearer\s+token|password|passwort)\b/i,
+  /\b(?:kundenliste|customer\s+list|stammkunde|patientenliste|patient|geburtsdatum)\b/i,
+];
+
 const KNOWLEDGE_INJECTION_PATTERNS = [
   /\bignore\s+(?:all\s+)?(?:previous|above|system|developer)\s+instructions?\b/i,
   /\bdisregard\s+(?:all\s+)?(?:previous|above|system|developer)\s+instructions?\b/i,
+  /\bignoriere\s+(?:alle\s+)?(?:vorherigen|bisherigen|obigen|system|entwickler)[\w\s-]{0,40}anweisungen\b/i,
+  /\bvergiss\s+(?:alle\s+)?(?:vorherigen|bisherigen|obigen)[\w\s-]{0,40}anweisungen\b/i,
+  /\bueberschreibe\s+(?:die\s+)?(?:system|entwickler|plattform)[\w\s-]{0,40}regeln\b/i,
+  /\bÃ¼berschreibe\s+(?:die\s+)?(?:system|entwickler|plattform)[\w\s-]{0,40}regeln\b/i,
   /\breveal\s+(?:the\s+)?system\s+prompt\b/i,
   /\bshow\s+(?:the\s+)?system\s+prompt\b/i,
+  /\b(?:zeige|nenne|verrate)\s+(?:den\s+)?systemprompt\b/i,
   /\b(?:call|use|invoke|trigger)\s+(?:the\s+)?(?:tool|function|api)\b/i,
+  /\b(?:rufe|nutze|verwende|starte|trigger)\s+(?:das\s+)?(?:tool|funktion|api)\b/i,
   /\b(?:calendar|customer|stripe|billing|ticket)\.(?:book|cancel|reschedule|delete|upsert|create|refund|charge)\b/i,
+  /(?:^|[^\p{L}\p{N}_])(?:ue|ü)berschreibe\s+(?:die\s+)?(?:system|entwickler|plattform)[\p{L}\p{N}\s_-]{0,40}regeln/iu,
 ];
+
+const SENSITIVE_URL_QUERY_KEYS = new Set([
+  'access_token',
+  'auth',
+  'code',
+  'key',
+  'password',
+  'secret',
+  'signature',
+  'sig',
+  'token',
+  'x-amz-credential',
+  'x-amz-security-token',
+  'x-amz-signature',
+]);
 
 function parseTime(input: unknown): number | null {
   if (input instanceof Date) return Number.isNaN(input.getTime()) ? null : input.getTime();
@@ -276,7 +312,17 @@ function containsEmbeddedSensitiveData(text: string): boolean {
 }
 
 function containsPromptInjection(text: string): boolean {
-  return KNOWLEDGE_INJECTION_PATTERNS.some((pattern) => pattern.test(text));
+  const normalized = text
+    .normalize('NFKC')
+    .replace(/Ã¼|ÃƒÂ¼/g, 'ü')
+    .replace(/Ã¶|ÃƒÂ¶/g, 'ö')
+    .replace(/Ã¤|ÃƒÂ¤/g, 'ä')
+    .replace(/ÃŸ|ÃƒÅ¸/g, 'ß');
+  return KNOWLEDGE_INJECTION_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+function containsCanonicalSensitiveData(text: string): boolean {
+  return CANONICAL_FACTS_SENSITIVE_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 function sourcePolicyError(src: KnowledgeSource, textForScanning: string, now: Date | string | undefined): string | null {
@@ -307,6 +353,16 @@ function embeddedContentPolicyError(textForScanning: string): string | null {
   if (textForScanning && containsPromptInjection(textForScanning)) return 'PROMPT_INJECTION_DETECTED';
   if (textForScanning && containsEmbeddedSensitiveData(textForScanning)) return 'PII_DETECTED';
   return null;
+}
+
+function canonicalFactsPolicyError(textForScanning: string): string | null {
+  if (textForScanning && containsPromptInjection(textForScanning)) return 'PROMPT_INJECTION_DETECTED';
+  if (textForScanning && containsCanonicalSensitiveData(textForScanning)) return 'PII_DETECTED';
+  return null;
+}
+
+function externalOcrProcessorAllowed(): boolean {
+  return process.env.NODE_ENV !== 'production' || process.env.KNOWLEDGE_OCR_ALLOW_EXTERNAL_PROCESSOR === 'true';
 }
 
 export function normalizeKnowledgeRetrievalSettings(input: unknown): KnowledgeRetrievalSettings {
@@ -513,6 +569,13 @@ async function validateKnowledgeUrl(raw: string): Promise<{ ok: true; url: strin
   try {
     const url = parseKnowledgeUrl(raw);
     if (url.protocol !== 'https:' && url.protocol !== 'http:') return { ok: false, error: 'BAD_PROTOCOL' };
+    if (url.username || url.password) return { ok: false, error: 'URL_CREDENTIALS_NOT_ALLOWED' };
+    for (const key of url.searchParams.keys()) {
+      const normalizedKey = key.trim().toLowerCase();
+      if (SENSITIVE_URL_QUERY_KEYS.has(normalizedKey) || normalizedKey.startsWith('x-amz-')) {
+        return { ok: false, error: 'URL_SENSITIVE_QUERY' };
+      }
+    }
     if (isBlockedPort(url.port)) return { ok: false, error: 'BLOCKED_PORT' };
     if (isPrivateHost(url.hostname)) return { ok: false, error: 'PRIVATE_HOST' };
     if (await isPrivateResolved(url.hostname)) return { ok: false, error: 'PRIVATE_HOST' };
@@ -534,35 +597,88 @@ function isTextLikeContentType(contentType: string): boolean {
     || type.endsWith('+xml');
 }
 
-async function readResponseTextWithLimit(res: Response, maxBytes: number): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
-  const reader = res.body?.getReader();
-  if (!reader) {
-    const bytes = new Uint8Array(await res.arrayBuffer());
-    if (bytes.byteLength > maxBytes) return { ok: false, error: 'URL_CONTENT_TOO_LARGE' };
-    return { ok: true, text: new TextDecoder('utf-8', { fatal: false }).decode(bytes) };
-  }
-
+async function readIncomingMessageWithLimit(
+  res: IncomingMessage,
+  maxBytes: number,
+): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
   const chunks: Uint8Array[] = [];
   let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (!value) continue;
-    total += value.byteLength;
+  for await (const chunk of res) {
+    const bytes = typeof chunk === 'string' ? Buffer.from(chunk) : Buffer.from(chunk as Buffer);
+    total += bytes.byteLength;
     if (total > maxBytes) {
-      await reader.cancel().catch(() => {});
+      res.destroy();
       return { ok: false, error: 'URL_CONTENT_TOO_LARGE' };
     }
-    chunks.push(value);
+    chunks.push(bytes);
   }
+  return { ok: true, text: new TextDecoder('utf-8', { fatal: false }).decode(Buffer.concat(chunks, total)) };
+}
 
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return { ok: true, text: new TextDecoder('utf-8', { fatal: false }).decode(bytes) };
+type NodeKnowledgeResponse = {
+  statusCode: number;
+  headers: IncomingMessage['headers'];
+  text?: string;
+};
+
+function guardedLookup(
+  hostname: string,
+  _options: unknown,
+  callback: (err: NodeJS.ErrnoException | null, address: string, family: number) => void,
+): void {
+  dns.lookup(hostname, { all: true, verbatim: true }, (err, addresses) => {
+    if (err) {
+      callback(err, '', 4);
+      return;
+    }
+    const address = addresses.find((item) => !isPrivateHost(item.address));
+    if (!address) {
+      const blocked = Object.assign(new Error('PRIVATE_HOST'), { code: 'PRIVATE_HOST' }) as NodeJS.ErrnoException;
+      callback(blocked, '', 4);
+      return;
+    }
+    callback(null, address.address, address.family);
+  });
+}
+
+function fetchKnowledgeUrlViaGuardedLookup(checkedUrl: string): Promise<NodeKnowledgeResponse> {
+  return new Promise((resolve, reject) => {
+    const url = new URL(checkedUrl);
+    const client = url.protocol === 'https:' ? https : http;
+    const req = client.request({
+      protocol: url.protocol,
+      hostname: url.hostname,
+      port: url.port || undefined,
+      path: `${url.pathname}${url.search}`,
+      method: 'GET',
+      headers: {
+        accept: 'text/html,text/plain,application/json,application/xml;q=0.9,*/*;q=0.1',
+        'user-agent': 'PhonbotKnowledgeScanner/1.0',
+      },
+      lookup: guardedLookup,
+      timeout: URL_FETCH_TIMEOUT_MS,
+    }, async (res) => {
+      try {
+        const statusCode = res.statusCode ?? 0;
+        if (statusCode >= 300 && statusCode < 400) {
+          res.resume();
+          resolve({ statusCode, headers: res.headers });
+          return;
+        }
+        const body = await readIncomingMessageWithLimit(res, MAX_URL_SCAN_BYTES);
+        if (!body.ok) {
+          reject(new Error(body.error));
+          return;
+        }
+        resolve({ statusCode, headers: res.headers, text: body.text });
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on('timeout', () => req.destroy(new Error('URL_FETCH_TIMEOUT')));
+    req.on('error', reject);
+    req.end();
+  });
 }
 
 async function fetchKnowledgeUrlContent(url: string, redirects = 0): Promise<KnowledgeUrlContentResult> {
@@ -570,42 +686,34 @@ async function fetchKnowledgeUrlContent(url: string, redirects = 0): Promise<Kno
   const checked = await validateKnowledgeUrl(url);
   if (!checked.ok) return { error: checked.error };
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), URL_FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(checked.url, {
-      method: 'GET',
-      redirect: 'manual',
-      signal: controller.signal,
-      headers: {
-        accept: 'text/html,text/plain,application/json,application/xml;q=0.9,*/*;q=0.1',
-        'user-agent': 'PhonbotKnowledgeScanner/1.0',
-      },
-    });
+    const res = await fetchKnowledgeUrlViaGuardedLookup(checked.url);
 
-    if (res.status >= 300 && res.status < 400) {
-      const location = res.headers.get('location');
+    if (res.statusCode >= 300 && res.statusCode < 400) {
+      const rawLocation = res.headers.location;
+      const location = Array.isArray(rawLocation) ? rawLocation[0] : rawLocation;
       if (!location) return { error: 'URL_REDIRECT_WITHOUT_LOCATION' };
       return fetchKnowledgeUrlContent(new URL(location, checked.url).toString(), redirects + 1);
     }
 
-    if (!res.ok) return { error: 'URL_FETCH_FAILED' };
-    const contentType = res.headers.get('content-type') ?? 'text/html';
+    if (res.statusCode < 200 || res.statusCode >= 300) return { error: 'URL_FETCH_FAILED' };
+    const rawContentType = res.headers['content-type'];
+    const contentType = (Array.isArray(rawContentType) ? rawContentType[0] : rawContentType) ?? 'text/html';
     if (!isTextLikeContentType(contentType)) return { error: 'URL_CONTENT_UNSUPPORTED' };
 
-    const body = await readResponseTextWithLimit(res, MAX_URL_SCAN_BYTES);
-    if (!body.ok) return { error: body.error };
+    if (res.text == null) return { error: 'URL_EMPTY' };
     return {
       finalUrl: checked.url,
       contentType,
-      text: body.text,
-      etag: res.headers.get('etag'),
-      lastModified: res.headers.get('last-modified'),
+      text: res.text,
+      etag: Array.isArray(res.headers.etag) ? res.headers.etag[0] : res.headers.etag,
+      lastModified: Array.isArray(res.headers['last-modified']) ? res.headers['last-modified'][0] : res.headers['last-modified'],
     };
   } catch (err) {
-    return { error: err instanceof Error && err.name === 'AbortError' ? 'URL_FETCH_TIMEOUT' : 'URL_FETCH_FAILED' };
-  } finally {
-    clearTimeout(timer);
+    if (err instanceof Error && err.message === 'URL_FETCH_TIMEOUT') return { error: 'URL_FETCH_TIMEOUT' };
+    if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'PRIVATE_HOST') return { error: 'PRIVATE_HOST' };
+    if (err instanceof Error && err.message === 'URL_CONTENT_TOO_LARGE') return { error: 'URL_CONTENT_TOO_LARGE' };
+    return { error: 'URL_FETCH_FAILED' };
   }
 }
 
@@ -639,11 +747,32 @@ function extractPdfScanText(data: Buffer | Uint8Array): string {
   return truncate(`${utf8}\n${latin1}`.replace(/[^\x09\x0a\x0d\x20-\x7e\u00a0-\u017f]+/g, ' '), MAX_TEXT_CHARS);
 }
 
+function pdfActiveContentPolicyError(data: Buffer | Uint8Array): string | null {
+  const raw = Buffer.from(data).toString('latin1');
+  if (/\/(?:JavaScript|JS|OpenAction|AA|Launch|EmbeddedFile|Filespec|RichMedia|XFA)\b/i.test(raw)) {
+    return 'PDF_ACTIVE_CONTENT_NOT_ALLOWED';
+  }
+  return null;
+}
+
 function hasReadablePdfScanText(text: string): boolean {
+  const structuralWords = new Set([
+    'pdf', 'obj', 'endobj', 'stream', 'endstream', 'xref', 'trailer',
+    'type', 'catalog', 'pages', 'page', 'kids', 'count', 'length', 'filter',
+    'flatedecode', 'mediabox', 'resources', 'font', 'procset', 'contents',
+    'metadata', 'creator', 'producer', 'creationdate', 'moddate',
+  ]);
   const words = text
     .match(/\b[\p{L}]{3,}\b/gu)
-    ?.filter((word) => !['pdf', 'obj', 'endobj', 'stream', 'endstream', 'xref', 'trailer'].includes(word.toLowerCase())) ?? [];
-  return words.length > 0;
+    ?.map((word) => word.toLowerCase())
+    .filter((word) => !structuralWords.has(word)) ?? [];
+  const uniqueWords = new Set(words);
+  return words.length >= 20 && uniqueWords.size >= 8;
+}
+
+function hasUsableOcrText(text: string): boolean {
+  const words = text.match(/\b[\p{L}\p{N}]{2,}\b/gu) ?? [];
+  return words.length >= 5 && text.trim().length >= 20;
 }
 
 export async function storeKnowledgePdf(input: {
@@ -743,7 +872,12 @@ export async function prepareKnowledgePayload(
   if (options.includeCanonicalBusinessFacts !== false) {
     const canonicalFacts = buildCanonicalBusinessFacts(config, options.canonicalBusinessFacts);
     if (canonicalFacts) {
-      texts.push({ title: sourceTitle(canonicalFacts, 'Phonbot Business Fakten'), text: canonicalFacts.content });
+      const canonicalPolicyError = canonicalFactsPolicyError(canonicalFacts.content);
+      if (canonicalPolicyError) {
+        sources.push(rejectedSource(canonicalFacts, canonicalPolicyError));
+      } else {
+        texts.push({ title: sourceTitle(canonicalFacts, 'Phonbot Business Fakten'), text: canonicalFacts.content });
+      }
     }
   }
 
@@ -753,7 +887,9 @@ export async function prepareKnowledgePayload(
     if (!src.id || !src.type) continue;
     const scanText = src.type === 'text'
       ? `${src.name}\n${src.content ?? ''}`
-      : `${src.name}\n${src.url ?? src.content ?? ''}`;
+      : src.type === 'url'
+        ? `${src.name}`
+        : `${src.name}\n${src.url ?? src.content ?? ''}`;
     const policyError = sourcePolicyError(src, scanText, options.now);
     if (policyError) {
       sources.push(rejectedSource(src, policyError));
@@ -800,7 +936,7 @@ export async function prepareKnowledgePayload(
           continue;
         }
 
-        const embeddedPolicyError = embeddedContentPolicyError(`${src.name}\n${finalChecked.url}\n${fetched.text}\n${snapshot}`);
+        const embeddedPolicyError = embeddedContentPolicyError(`${src.name}\n${fetched.text}\n${snapshot}`);
         if (embeddedPolicyError) {
           sources.push(rejectedSource({ ...src, url: finalChecked.url, content: finalChecked.url }, embeddedPolicyError));
           continue;
@@ -883,10 +1019,23 @@ export async function prepareKnowledgePayload(
         sha256: loaded.sha256,
         data: loaded.data,
       };
+      const activeContentError = pdfActiveContentPolicyError(loaded.data);
+      if (activeContentError) {
+        sources.push(rejectedSource({ ...src, name: filename, content: filename, fileId, sha256 }, activeContentError));
+        continue;
+      }
       const pdfScanText = extractPdfScanText(loaded.data);
-      const pdfReviewStatus = compact(src.reviewStatus).toLowerCase();
-      if (!hasReadablePdfScanText(pdfScanText) && !APPROVED_REVIEW_STATUSES.has(pdfReviewStatus)) {
+      const pdfPolicyError = embeddedContentPolicyError(`${src.name}\n${filename}\n${pdfScanText}`);
+      if (pdfPolicyError) {
+        sources.push(rejectedSource({ ...src, name: filename, content: filename, fileId, sha256 }, pdfPolicyError));
+        continue;
+      }
+      if (!hasReadablePdfScanText(pdfScanText)) {
         if (options.ocrPdfFile) {
+          if (!externalOcrProcessorAllowed()) {
+            sources.push(rejectedSource({ ...src, name: filename, content: filename, fileId, sha256 }, 'PDF_OCR_PROCESSOR_NOT_ENABLED'));
+            continue;
+          }
           const ocr = await options.ocrPdfFile(file, { ...src, name: filename, content: filename, fileId, sha256 });
           if ('error' in ocr) {
             sources.push(rejectedSource({ ...src, name: filename, content: filename, fileId, sha256, ocrStatus: 'failed' }, ocr.error));
@@ -894,14 +1043,14 @@ export async function prepareKnowledgePayload(
           }
 
           const ocrText = truncate(ocr.text, MAX_TEXT_CHARS);
-          if (!hasReadablePdfScanText(ocrText)) {
-            sources.push(rejectedSource({ ...src, name: filename, content: filename, fileId, sha256, ocrStatus: 'failed', ocrEngine: ocr.engine }, 'OCR_EMPTY'));
-            continue;
-          }
-
           const ocrPolicyError = embeddedContentPolicyError(`${src.name}\n${filename}\n${ocrText}`);
           if (ocrPolicyError) {
             sources.push(rejectedSource({ ...src, name: filename, content: filename, fileId, sha256, ocrStatus: 'completed', ocrEngine: ocr.engine }, ocrPolicyError));
+            continue;
+          }
+
+          if (!hasUsableOcrText(ocrText)) {
+            sources.push(rejectedSource({ ...src, name: filename, content: filename, fileId, sha256, ocrStatus: 'failed', ocrEngine: ocr.engine }, 'OCR_EMPTY'));
             continue;
           }
 
@@ -928,13 +1077,9 @@ export async function prepareKnowledgePayload(
         sources.push(rejectedSource({ ...src, name: filename, content: filename, fileId, sha256 }, 'PDF_REVIEW_REQUIRED'));
         continue;
       }
-      const pdfPolicyError = embeddedContentPolicyError(`${src.name}\n${filename}\n${pdfScanText}`);
-      if (pdfPolicyError) {
-        sources.push(rejectedSource({ ...src, name: filename, content: filename, fileId, sha256 }, pdfPolicyError));
-        continue;
-      }
-      files.push(file);
-      fileRefs.push({ filename, mimeType: file.mimeType, sizeBytes: file.sizeBytes, sha256: file.sha256 });
+      const pdfText = truncate(pdfScanText, MAX_TEXT_CHARS);
+      texts.push({ title: filename, text: pdfText });
+      fileRefs.push({ filename, mimeType: 'text/plain', sizeBytes: Buffer.byteLength(pdfText, 'utf8'), sha256: contentHash(pdfText) });
       sources.push({
         ...src,
         name: filename,
@@ -945,6 +1090,8 @@ export async function prepareKnowledgePayload(
         mimeType: file.mimeType,
         status: 'indexed',
         error: undefined,
+        fetchedAt: nowIso(options.now),
+        contentHash: contentHash(pdfText),
       });
     }
   }
@@ -1020,7 +1167,6 @@ export async function syncRetellKnowledgeBase<T extends Record<string, unknown>>
   const previousSignature = typeof config.knowledgeBaseSignature === 'string' ? config.knowledgeBaseSignature : '';
 
   if (!payload.signature) {
-    if (previousId) await deleteKnowledgeBase(previousId).catch(() => {});
     const next: Record<string, unknown> = { ...config, knowledgeSources: payload.sources };
     delete next.retellKnowledgeBaseId;
     delete next.knowledgeBaseSignature;
@@ -1028,12 +1174,18 @@ export async function syncRetellKnowledgeBase<T extends Record<string, unknown>>
   }
 
   if (previousId && previousSignature === payload.signature) {
-    return {
-      ...config,
-      knowledgeSources: payload.sources,
-      retellKnowledgeBaseId: previousId,
-      knowledgeBaseSignature: previousSignature,
-    } as T;
+    try {
+      await waitForKnowledgeBaseComplete(previousId, { timeoutMs: 5_000, intervalMs: 1_000 });
+      return {
+        ...config,
+        knowledgeSources: payload.sources,
+        retellKnowledgeBaseId: previousId,
+        knowledgeBaseSignature: previousSignature,
+      } as T;
+    } catch {
+      // The stored KB can be manually deleted or left broken after a partial deploy.
+      // Fall through and create a fresh KB from the unchanged payload.
+    }
   }
 
   const kb = await createKnowledgeBase({
@@ -1049,10 +1201,6 @@ export async function syncRetellKnowledgeBase<T extends Record<string, unknown>>
   } catch (err) {
     await Promise.resolve(deleteKnowledgeBase(kb.knowledge_base_id)).catch(() => {});
     throw err;
-  }
-
-  if (previousId && previousId !== readyKb.knowledge_base_id) {
-    await deleteKnowledgeBase(previousId).catch(() => {});
   }
 
   return {

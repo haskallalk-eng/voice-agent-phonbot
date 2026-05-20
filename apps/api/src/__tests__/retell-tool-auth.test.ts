@@ -166,6 +166,64 @@ describe('Retell tool authentication', () => {
     await app.close();
   });
 
+  it('still stores recording decline for an already-ended Retell call', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ org_id: 'org-1' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ tenant_id: 'tenant-1', org_id: 'org-1' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 });
+    mockGetCall.mockResolvedValueOnce({
+      call_id: 'call-ended',
+      agent_id: 'agent-real',
+      from_number: '+491701234567',
+      call_status: 'ended',
+      end_timestamp: Date.now(),
+    });
+
+    const app = Fastify({ logger: false });
+    await registerRetellWebhooks(app);
+    await app.ready();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: signedUrl('/retell/tools/recording.declined', 'tenant-1', 'agent-real'),
+      payload: {
+        _retell_call_id: 'call-ended',
+        _retell_agent_id: 'agent-real',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true });
+    expect(String(mockQuery.mock.calls[2]?.[0])).toContain('INSERT INTO recording_declined_calls');
+    await app.close();
+  });
+
+  it('fail-closes recording decline storage when Retell getCall is temporarily unavailable', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ org_id: 'org-1' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ tenant_id: 'tenant-1', org_id: 'org-1' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 1 });
+    mockGetCall.mockRejectedValueOnce(new Error('retell unavailable'));
+
+    const app = Fastify({ logger: false });
+    await registerRetellWebhooks(app);
+    await app.ready();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: signedUrl('/retell/tools/recording.declined', 'tenant-1', 'agent-real'),
+      payload: {
+        _retell_call_id: 'call-race',
+        _retell_agent_id: 'agent-real',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true });
+    expect(String(mockQuery.mock.calls[2]?.[0])).toContain('INSERT INTO recording_declined_calls');
+    await app.close();
+  });
+
   it('rejects a body agent_id that does not match the signed tool agent', async () => {
     const app = Fastify({ logger: false });
     await registerRetellWebhooks(app);

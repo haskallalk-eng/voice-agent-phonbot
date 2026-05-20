@@ -589,6 +589,20 @@ async function runMigrationBody() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS processed_retell_events_received_idx ON processed_retell_events(received_at);`);
 
+  // Retell custom-tool idempotency. Some tool calls mutate external state
+  // (calendar cancellation/reschedule). Redis/in-memory caches are useful for
+  // fast replay, but a process restart between Retell retries must not execute
+  // the same confirmed action twice.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS retell_tool_results (
+      key        TEXT PRIMARY KEY,
+      result     JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      expires_at TIMESTAMPTZ NOT NULL
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS retell_tool_results_expires_idx ON retell_tool_results(expires_at);`);
+
   // § 201 StGB / Art. 6 DSGVO: when the caller declines recording mid-call,
   // the agent invokes the recording_declined tool. We flag the call here;
   // the call_ended webhook reads the flag, skips transcript persistence,

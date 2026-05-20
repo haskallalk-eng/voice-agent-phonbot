@@ -156,6 +156,9 @@ export type PromptQaCriticalGate = {
 export type PromptQaAdversarialLoop = {
   targetConfidencePercent: 98;
   measuredConfidencePercent: number;
+  rawRunConfidencePercent: number;
+  uniqueCoverageUnits: number;
+  duplicatedDryRunVariants: number;
   confidenceMeaning: string;
   releaseRecommendation: PromptEvalStatus;
   stopReason: string;
@@ -1022,7 +1025,7 @@ const PROMPT_EVAL_RULES: PromptEvalRule[] = [
     severity: 'critical',
     kinds: ['platform', 'demo', 'dashboard', 'outbound', 'sales'],
     requirement: 'Der Agent darf interne Tool-Namen wie end_call nie aussprechen.',
-    requiredAll: [/Tool/i, /end_call|transfer_call|calendar\.book|ticket\.create/i],
+    requiredAll: [/Tool/i, /end[._\s-]?call|transfer[._\s-]?call|transfer[._\s-]?[a-z0-9_+.-]+|calendar[._\s-]?book|calendar[._\s-]?find[_.\s-]?slots|calendar[._\s-]?cancel|calendar[._\s-]?reschedule|ticket[._\s-]?create|recording[._\s-]?declined|customer[._\s-]?lookup|customer[._\s-]?upsert/i],
     requiredAny: [/nicht.*sag/i, /niemals.*sag/i, /keine Sprechtexte/i],
     recommendation: 'Tool-Namen als absolute interne Funktionen markieren: aufrufen, nie als Wort sprechen.',
     promptManagerArea: 'TTS-Tester',
@@ -1653,9 +1656,23 @@ function evaluateAdversarialLoop(args: {
   const liveTotal = args.liveCallDryRun.sourceResults.reduce((sum, source) => sum + source.applicableRuns, 0);
   const flowPassed = args.conversationFlowDryRun.sourceResults.reduce((sum, source) => sum + source.passedRuns, 0);
   const flowTotal = args.conversationFlowDryRun.sourceResults.reduce((sum, source) => sum + source.applicableRuns, 0);
-  const total = staticTotal + liveTotal + flowTotal;
-  const passed = staticPassed + livePassed + flowPassed;
+  const rawTotal = staticTotal + liveTotal + flowTotal;
+  const rawPassed = staticPassed + livePassed + flowPassed;
+  const rawRunConfidencePercent = rawTotal === 0 ? 0 : Math.round((rawPassed / rawTotal) * 1000) / 10;
+  const liveFamilyTotal = args.liveCallDryRun.sourceResults.reduce((sum, source) => sum + Object.keys(source.familyBreakdown).length, 0);
+  const liveFamilyPassed = args.liveCallDryRun.sourceResults.reduce(
+    (sum, source) => sum + Object.values(source.familyBreakdown).filter((bucket) => bucket.total > 0 && bucket.failed === 0).length,
+    0,
+  );
+  const flowFocusTotal = args.conversationFlowDryRun.sourceResults.reduce((sum, source) => sum + Object.values(source.focusBreakdown).filter((bucket) => bucket.total > 0).length, 0);
+  const flowFocusPassed = args.conversationFlowDryRun.sourceResults.reduce(
+    (sum, source) => sum + Object.values(source.focusBreakdown).filter((bucket) => bucket.total > 0 && bucket.failed === 0).length,
+    0,
+  );
+  const total = staticTotal + liveFamilyTotal + flowFocusTotal;
+  const passed = staticPassed + liveFamilyPassed + flowFocusPassed;
   const measuredConfidencePercent = total === 0 ? 0 : Math.round((passed / total) * 1000) / 10;
+  const duplicatedDryRunVariants = Math.max(0, rawTotal - total);
   const criticalFailures =
     args.sources.reduce((sum, source) => sum + source.criticalFailures, 0) +
     args.liveCallDryRun.sourceResults.reduce((sum, source) => sum + source.criticalFailures, 0) +
@@ -1719,7 +1736,7 @@ function evaluateAdversarialLoop(args: {
       id: 'dry_run_98_confidence',
       label: '98%-Dry-Run-Gate',
       status: gateStatus(dryRunGateMet),
-      evidence: `${passed}/${total} statische, livecall-nahe und Mehrturn-Dry-Run-Pruefungen bestanden; kritische Failures: ${criticalFailures}.`,
+      evidence: `${passed}/${total} unabhaengig gewichtete Coverage-Einheiten bestanden; raw duplicated dry-run variants: ${rawPassed}/${rawTotal}; kritische Failures: ${criticalFailures}.`,
       redIfMissing: false,
     },
     {
@@ -1746,7 +1763,10 @@ function evaluateAdversarialLoop(args: {
   return {
     targetConfidencePercent: 98,
     measuredConfidencePercent,
-    confidenceMeaning: 'Gemessen als bestandene statische Prompt-Rules + synthetische Livecall-Runs + Mehrturn-Gespraechsfluss-Runs. Das ist ein Prompt-Coverage-Dry-Run, keine Garantie fuer echte Audio-/STT-/Retell-Performance. Unabhaengige echte Behavior-/Live-Runs: 0.',
+    rawRunConfidencePercent,
+    uniqueCoverageUnits: total,
+    duplicatedDryRunVariants,
+    confidenceMeaning: 'Gemessen als deduplizierte Prompt-Rule-/Livecall-Familien-/Mehrturn-Fokus-Coverage. Die grossen 1000/10000-Zahlen bleiben raw Dry-Run-Varianten und duerfen nicht als echte Modellgespraeche gezaehlt werden. Das ist ein Prompt-Coverage-Dry-Run, keine Garantie fuer echte Audio-/STT-/Retell-Performance. Unabhaengige echte Behavior-/Live-Runs: 0.',
     releaseRecommendation,
     stopReason,
     stages: [

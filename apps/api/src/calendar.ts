@@ -3090,6 +3090,7 @@ export async function bookSlot(
   externalResults?: ExternalBookingResult[];
   partial?: boolean;
   error?: string;
+  reused?: boolean;
 }> {
   const staffId = await assertStaffBelongs(orgId, opts.staffId);
   if (staffId) {
@@ -3158,7 +3159,7 @@ export async function bookSlot(
 
   // No external calendars — book directly into Chipy
   if (connections.length === 0) {
-    return { ok: true, eventId: chipyBooking.id, bookingId: chipyBooking.id, chipyBookingId: chipyBooking.id };
+    return { ok: true, eventId: chipyBooking.id, bookingId: chipyBooking.id, chipyBookingId: chipyBooking.id, reused: chipyBooking.reused };
   }
 
   return withChipyBookingLock(orgId, chipyBooking.id, async () => {
@@ -3264,6 +3265,7 @@ export async function bookSlot(
         bookingId: firstSuccess?.bookingId ?? chipyBooking.id,
         chipyBookingId: chipyBooking.id,
         externalResults: results,
+        reused: chipyBooking.reused,
       };
     }
 
@@ -3275,6 +3277,7 @@ export async function bookSlot(
       partial: failed.length > 0,
       chipyBookingId: chipyBooking.id,
       externalResults: results,
+      reused: chipyBooking.reused,
     };
   }, staffId);
 }
@@ -3299,6 +3302,7 @@ export async function bookSlotForAnyStaff(
   externalResults?: ExternalBookingResult[];
   partial?: boolean;
   error?: string;
+  reused?: boolean;
   assignedStaffId?: string | null;
   assignedStaffName?: string | null;
 }> {
@@ -3328,6 +3332,7 @@ export async function bookSlotForAnyStaff(
       chipyBookingId: reusedStaffBooking.id,
       externalResults: Object.values(reusedStaffBooking.externalRefs).map((item) => ({ ...item, reused: true })),
       partial: Object.values(reusedStaffBooking.externalRefs).some((item) => !item.ok),
+      reused: true,
       assignedStaffId: reusedStaffBooking.staffId,
       assignedStaffName: reusedStaffBooking.staffName,
     };
@@ -3840,11 +3845,10 @@ async function resolveSingleBookingForMutation(
     return { ok: false, status: 'verification_required', error: 'BOOKING_CHANGE_TOKEN_REQUIRED' };
   }
 
-  const matches = filterBookingsForChange(await listFutureChipyBookings(orgId), {
-    ...opts,
-    bookingId: effectiveBookingId,
-    limit: 8,
-  });
+  const lookupOpts: BookingChangeLookupOpts = verifiedToken
+    ? { bookingId: effectiveBookingId, limit: 8, identityVerified: true }
+    : { ...opts, bookingId: effectiveBookingId, limit: 8 };
+  const matches = filterBookingsForChange(await listFutureChipyBookings(orgId), lookupOpts);
   if (matches.length === 0) return { ok: false, status: 'not_found', error: 'BOOKING_NOT_FOUND' };
   if (matches.length > 1) return { ok: false, status: 'multiple_matches', matches: matches.map((row) => bookingSummary(row)), error: 'MULTIPLE_BOOKINGS_MATCH' };
   const row = matches[0]!;

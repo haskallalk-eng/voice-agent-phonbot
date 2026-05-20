@@ -35,4 +35,11 @@ describe('voice prompt guardrails', () => {
     expect(outboundBaselineSource).toContain('keine Nachfrage');
     expect(outboundBaselineSource).toContain('end_call');
   });
+
+  it('keeps sales callback recording-decline recognition after cache flushes', () => {
+    expect(demoSource).toContain('SALES_AGENT_GRACE_TTL_SEC');
+    expect(demoSource).toContain('rememberSalesAgentForGrace(activeSalesAgentId)');
+    expect(demoSource).toContain('sales_agent:phonbot:grace');
+    expect(demoSource).toContain('webhookUrl: webhookBase');
+  });
 });

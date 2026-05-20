@@ -49,6 +49,7 @@ import { readDemoCallTemplate, maybeSendDemoSignupLink, maybeSendDemoBookingConf
 import { redactPII } from './pii.js';
 import { RECORDING_CONSENT_PROMPT_VERSION } from './agent-instructions.js';
 import { log } from './logger.js';
+import { isPlausiblePhone } from '@vas/shared';
 import {
   customerModuleActiveForAgentConfig,
   getActiveCustomerDetailsKeys,
@@ -291,69 +292,6 @@ function stringField(source: unknown, keys: string[]): string {
   return firstStringValue(...keys.map((key) => record[key]));
 }
 
-const RETELL_PHONE_KEYS = [
-  'customerPhone',
-  'customer_phone',
-  'customer_phone_number',
-  'customerNumber',
-  'customer_number',
-  'phone',
-  'phoneNumber',
-  'phone_number',
-  'callerPhone',
-  'caller_phone',
-  'callerNumber',
-  'caller_number',
-  'fromNumber',
-  'from_number',
-  'caller',
-  'ani',
-];
-
-function getCallerPhone(body: RetellEventBody, args = retellArgs(body)): string {
-  const call = getRetellCall(body) as Record<string, unknown>;
-
-  return firstStringValue(
-    stringField(args, RETELL_PHONE_KEYS),
-    stringField(args.customer, RETELL_PHONE_KEYS),
-    stringField(args.contact, RETELL_PHONE_KEYS),
-    stringField(body, RETELL_PHONE_KEYS),
-    stringField(call, RETELL_PHONE_KEYS),
-  );
-}
-
-function getRetellProvidedCallerPhone(body: RetellEventBody): string {
-  const call = getRetellCall(body) as Record<string, unknown>;
-  return firstStringValue(
-    stringField(body, RETELL_PHONE_KEYS),
-    stringField(call, RETELL_PHONE_KEYS),
-  );
-}
-
-async function resolveCallerPhone(body: RetellEventBody, args: Record<string, unknown>, callId?: string): Promise<string> {
-  const fromPayload = getCallerPhone(body, args);
-  if (fromPayload) return fromPayload;
-  if (!callId || callId === 'retell') return '';
-
-  try {
-    const call = await getCall(callId);
-    return stringField(call, ['from_number', 'fromNumber', 'caller_number', 'callerNumber', 'phone', 'phoneNumber']);
-  } catch {
-    return '';
-  }
-}
-
-async function resolveVerifiedCallerPhone(body: RetellEventBody, callId?: string): Promise<string> {
-  if (!callId || callId === 'retell') return '';
-
-  try {
-    const call = await getCall(callId);
-    return stringField(call, ['from_number', 'fromNumber', 'caller_number', 'callerNumber', 'phone', 'phoneNumber']);
-  } catch {
-    return '';
-  }
-}
-
 function ticketPhoneOrUnknown(phone: string): string {
   return phone.trim() || 'unknown';
 }
@@ -432,6 +370,55 @@ async function verifyLiveToolCall(
     call,
     testMode: await isTestConsoleCall(ctx.callId, call),
   };
+}
+
+async function verifyRecordingDeclineToolCall(
+  reply: FastifyReply,
+  ctx: { callId?: string; agentId?: string },
+  tool: string,
+): Promise<VerifiedRetellCallContext | null> {
+  if (!ctx.callId || ctx.callId === 'retell') {
+    log.warn({ tool, agentId: ctx.agentId }, 'retell recording decline refused without call id');
+    reply.status(400).send({
+      ok: false,
+      error: 'CALL_ID_REQUIRED',
+      instruction: 'Der Aufzeichnungswiderspruch wurde nicht gespeichert, weil kein Anrufkontext verifiziert werden konnte.',
+    });
+    return null;
+  }
+
+  try {
+    const call = (await getCall(ctx.callId)) as Record<string, unknown>;
+    const callAgentId = stringField(call, ['agent_id', 'agentId']);
+    if (ctx.agentId && callAgentId && callAgentId !== ctx.agentId) {
+      log.warn({ tool, callId: ctx.callId, signedAgentId: ctx.agentId, callAgentId }, 'recording decline refused because call agent did not match signed agent');
+      reply.status(403).send({
+        ok: false,
+        error: 'CALL_AGENT_MISMATCH',
+        instruction: 'Der Aufzeichnungswiderspruch wurde nicht gespeichert, weil der Anruf nicht zu diesem Agenten passt.',
+      });
+      return null;
+    }
+    return {
+      callId: ctx.callId,
+      agentId: callAgentId || ctx.agentId,
+      callerPhone: stringField(call, ['from_number', 'fromNumber', 'caller_number', 'callerNumber', 'phone', 'phoneNumber']),
+      call,
+      testMode: await isTestConsoleCall(ctx.callId, call),
+    };
+  } catch (err) {
+    // Privacy fail-closed: a caller's withdrawal must survive Retell races
+    // where the call is already ending or getCall is temporarily unavailable.
+    // Tool URL auth + tenant/agent mapping already ran before this helper.
+    log.warn({ err: err instanceof Error ? err.message : String(err), tool, callId: ctx.callId, agentId: ctx.agentId }, 'recording decline stored without live Retell verification');
+    return {
+      callId: ctx.callId,
+      agentId: ctx.agentId,
+      callerPhone: '',
+      call: {},
+      testMode: false,
+    };
+  }
 }
 
 function safeTraceInput(args: Record<string, unknown>): Record<string, unknown> {
@@ -542,7 +529,96 @@ function testModeDryRunResult(action: string): Record<string, unknown> {
 
 function isCallbackSafePhone(phone: string): boolean {
   const allowed = (process.env.ALLOWED_PHONE_PREFIXES ?? '+49,+43,+41').split(',').map((p) => p.trim()).filter(Boolean);
-  return allowed.some((prefix) => phone.startsWith(prefix));
+  return isPlausiblePhone(phone) && allowed.some((prefix) => phone.startsWith(prefix));
+}
+
+const IDEMPOTENT_TOOL_RESULT_TTL_SEC = 30 * 60;
+const inMemToolResults = new Map<string, { expiresAt: number; result: Record<string, unknown> }>();
+
+function pruneToolResultCache(): void {
+  const nowMs = Date.now();
+  for (const [key, value] of inMemToolResults) {
+    if (value.expiresAt <= nowMs) inMemToolResults.delete(key);
+  }
+}
+
+async function readIdempotentToolResult(key: string): Promise<Record<string, unknown> | null> {
+  if (pool) {
+    try {
+      const res = await pool.query<{ result: unknown }>(
+        `SELECT result
+           FROM retell_tool_results
+          WHERE key = $1
+            AND expires_at > now()
+          LIMIT 1`,
+        [key],
+      );
+      const result = res.rows[0]?.result;
+      if (result && typeof result === 'object' && !Array.isArray(result)) {
+        return { ...(result as Record<string, unknown>), reused: true, idempotentReplay: true };
+      }
+    } catch {
+      // Fall through to Redis/in-memory cache. The durable table is a hardening
+      // layer, not a reason to fail a live call if migration is still rolling.
+    }
+  }
+  if (redis?.isOpen) {
+    const raw = await redis.get(key).catch(() => null);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      return { ...parsed, reused: true, idempotentReplay: true };
+    } catch {
+      return null;
+    }
+  }
+  pruneToolResultCache();
+  const cached = inMemToolResults.get(key);
+  return cached ? { ...cached.result, reused: true, idempotentReplay: true } : null;
+}
+
+async function writeIdempotentToolResult(key: string, result: Record<string, unknown>): Promise<void> {
+  if (pool) {
+    try {
+      await pool.query(
+        `INSERT INTO retell_tool_results (key, result, expires_at)
+         VALUES ($1, $2::jsonb, now() + ($3::int * interval '1 second'))
+         ON CONFLICT (key) DO UPDATE
+           SET result = EXCLUDED.result,
+               expires_at = EXCLUDED.expires_at,
+               created_at = now()`,
+        [key, JSON.stringify(result), IDEMPOTENT_TOOL_RESULT_TTL_SEC],
+      );
+      return;
+    } catch {
+      // Fall through to volatile caches if the DB is temporarily unavailable.
+    }
+  }
+  if (redis?.isOpen) {
+    await redis.set(key, JSON.stringify(result), { EX: IDEMPOTENT_TOOL_RESULT_TTL_SEC }).catch(() => {});
+    return;
+  }
+  pruneToolResultCache();
+  inMemToolResults.set(key, { expiresAt: Date.now() + IDEMPOTENT_TOOL_RESULT_TTL_SEC * 1000, result });
+}
+
+async function withIdempotentToolLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const maybePool = pool as (typeof pool & {
+    connect?: () => Promise<{ query: (sql: string, params?: unknown[]) => Promise<unknown>; release: () => void }>;
+  }) | null;
+  if (!key || !maybePool || typeof maybePool.connect !== 'function') return fn();
+
+  const hash = crypto.createHash('sha256').update(key).digest();
+  const lockA = hash.readInt32BE(0);
+  const lockB = hash.readInt32BE(4);
+  const client = await maybePool.connect();
+  try {
+    await client.query('SELECT pg_advisory_lock($1, $2)', [lockA, lockB]);
+    return await fn();
+  } finally {
+    await client.query('SELECT pg_advisory_unlock($1, $2)', [lockA, lockB]).catch(() => {});
+    client.release();
+  }
 }
 
 function compactRetellSlots(slots: string[]): {
@@ -732,6 +808,15 @@ async function forgetProcessedRetellEvent(callId: string | undefined, eventType:
   ).catch((dedupErr: Error) =>
     logger.error({ err: dedupErr.message, callId, eventType }, 'retell dedup rollback failed'),
   );
+}
+
+async function recordingDeclinedCallExists(callId: string | undefined): Promise<boolean> {
+  if (!pool || !callId) return false;
+  const flag = await pool.query(
+    `SELECT 1 FROM recording_declined_calls WHERE call_id = $1 LIMIT 1`,
+    [callId],
+  );
+  return (flag.rowCount ?? 0) > 0;
 }
 
 async function getToolOrgContext(req: FastifyRequest, body: RetellEventBody, args: Record<string, unknown>): Promise<{
@@ -1097,14 +1182,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       // § 201 StGB compliance: caller withdrew recording consent mid-call.
       // We still bill the used minutes (service was rendered) but skip
       // transcript persistence + analysis and DELETE the call from Retell.
-      let recordingDeclined = false;
-      if (dedupCallId && pool) {
-        const flag = await pool.query(
-          `SELECT 1 FROM recording_declined_calls WHERE call_id = $1`,
-          [dedupCallId],
-        );
-        recordingDeclined = (flag.rowCount ?? 0) > 0;
-      }
+      const recordingDeclined = await recordingDeclinedCallExists(dedupCallId);
 
       if (startTs && endTs && agentId) {
         const callDurationMs = Math.max(0, endTs - startTs);
@@ -1435,18 +1513,31 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       }
 
       try {
-      const analysis = (call as RetellCallData & { call_analysis?: Record<string, unknown> }).call_analysis;
-      const extracted = (analysis?.custom_analysis_data as Record<string, unknown> | undefined) ?? null;
-      const orgId = agentId ? await getOrgIdByAgentId(agentId) : null;
-      const demoTemplateId = !orgId && agentId ? await readDemoCallTemplate(agentId) : null;
-      const platformCallback = knownPlatformCallbackRef(call);
-      if (!orgId && !demoTemplateId && !platformCallback.leadId && !platformCallback.outboundRecordId) {
-        req.log.warn({ callId, agentId }, 'call_analyzed from unknown agent ignored');
-        return { ok: true, unknownAgent: true };
-      }
-      const storagePolicy = orgId
-        ? await getTranscriptStoragePolicy(orgId, agentId)
-        : { storeTranscript: true, retentionDays: 30 };
+        if (callId && await recordingDeclinedCallExists(callId)) {
+          try {
+          await deleteRetellCallForPrivacy(callId);
+          req.log.info({ callId }, 'recording_declined → call_analyzed Retell call deleted');
+        } catch (err) {
+          req.log.error(
+            { err: err instanceof Error ? err.message : String(err), callId },
+            'recording_declined → call_analyzed deleteCall failed',
+          );
+          throw err;
+        }
+          return { ok: true, recordingDeclined: true };
+        }
+        const analysis = (call as RetellCallData & { call_analysis?: Record<string, unknown> }).call_analysis;
+        const extracted = (analysis?.custom_analysis_data as Record<string, unknown> | undefined) ?? null;
+        const orgId = agentId ? await getOrgIdByAgentId(agentId) : null;
+        const demoTemplateId = !orgId && agentId ? await readDemoCallTemplate(agentId) : null;
+        const platformCallback = knownPlatformCallbackRef(call);
+        if (!orgId && !demoTemplateId && !platformCallback.leadId && !platformCallback.outboundRecordId) {
+          req.log.warn({ callId, agentId }, 'call_analyzed from unknown agent ignored');
+          return { ok: true, unknownAgent: true };
+        }
+        const storagePolicy = orgId
+          ? await getTranscriptStoragePolicy(orgId, agentId)
+          : { storeTranscript: true, retentionDays: 30 };
 
       if (extracted && callId && orgId && storagePolicy.storeTranscript) {
         await mergeTicketMetadata(callId, orgId, extracted).catch((err: Error) =>
@@ -2068,14 +2159,17 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
             }
           }
         } else {
-          const sms = await sendBookingConfirmationSms({
-            to: customerPhone,
-            businessName,
-            customerName,
-            service,
-            preferredTime,
-            logger: req.log,
-          });
+          const reusedBooking = booking.reused === true;
+          const sms = reusedBooking
+            ? { ok: false, error: 'DUPLICATE_BOOKING' }
+            : await sendBookingConfirmationSms({
+                to: customerPhone,
+                businessName,
+                customerName,
+                service,
+                preferredTime,
+                logger: req.log,
+              });
           result = {
             ok: booking.ok,
             status: booking.ok ? 'confirmed' : 'failed',
@@ -2084,10 +2178,15 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
             chipyBookingId: booking.chipyBookingId ?? null,
             externalResults: booking.externalResults ?? [],
             partial: booking.partial ?? false,
+            reused: reusedBooking,
             error: booking.error ?? null,
             smsSent: sms.ok,
             smsError: sms.ok ? null : sms.error,
-            deliveryInstruction: sms.ok ? 'SMS-Bestaetigung darf erwaehnt werden.' : 'Keine SMS-Bestaetigung behaupten; smsSent ist false.',
+            deliveryInstruction: sms.ok
+              ? 'SMS-Bestaetigung darf erwaehnt werden.'
+              : reusedBooking
+                ? 'Dies war ein Retry derselben Buchung. Keine neue SMS behaupten; sage nur, dass der Termin weiterhin bestaetigt ist.'
+                : 'Keine SMS-Bestaetigung behaupten; smsSent ist false.',
             customerName,
             customerPhone,
             preferredTime,
@@ -2215,50 +2314,66 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       req.log.warn({ agentId: ctx.agentId }, 'retell calendar.cancel: unknown agent_id, refusing');
       return reply.status(403).send({ error: 'unknown agent' });
     }
+    const orgId = ctx.orgId;
 
     await appendTraceEvent({
       type: 'tool_call',
       sessionId: ctx.callId,
-      tenantId: ctx.orgId,
+      tenantId: orgId,
       agentId: ctx.agentId,
       tool: 'calendar.cancel',
       input: safeTraceInput(args),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
-    let result: Record<string, unknown>;
-    if (liveCall.testMode) {
-      result = testModeDryRunResult('calendar_cancel');
-    } else if (!booleanArg(args, 'confirmed')) {
-      result = {
-        ok: false,
-        status: 'confirmation_required',
-        error: 'CONFIRMATION_REQUIRED',
-        instruction: 'Wiederhole den gefundenen Termin kurz und frage ausdruecklich, ob er wirklich abgesagt werden soll. Rufe danach erst calendar_cancel mit changeToken und confirmed=true auf.',
-      };
-    } else {
-      const staff = await resolveCalendarStaffForTool(ctx.orgId, args);
-      const customerPhone = liveCall.callerPhone;
-      result = await cancelChipyBookingForChange(ctx.orgId, {
-        changeToken: stringArg(args, 'changeToken', 'change_token'),
-        staffId: staff.staffId,
-        customerName: stringArg(args, 'customerName', 'customer_name'),
-        customerPhone,
-        currentTime: stringArg(args, 'currentTime', 'current_time', 'preferredTime', 'preferred_time', 'time'),
-        service: stringArg(args, 'service'),
-        reason: stringArg(args, 'reason', 'notes'),
-        sourceCallId: ctx.callId,
-        identityVerified: Boolean(customerPhone),
-      });
-      result.instruction = result.ok
-        ? 'Sage kurz, dass der Termin abgesagt wurde. Bei partial=true: sage, dass das Team intern noch einmal nachfasst.'
-        : 'Behaupte nicht, dass der Termin abgesagt wurde. Frage nach weiteren Details oder erstelle ein Rueckruf-Ticket.';
-    }
+    const cancelChangeToken = stringArg(args, 'changeToken', 'change_token');
+    const cancelIdempotencyKey = booleanArg(args, 'confirmed') && cancelChangeToken
+      ? `retell_tool_result:${orgId}:${ctx.callId}:calendar.cancel:${crypto.createHash('sha256').update(cancelChangeToken).digest('hex')}`
+      : '';
+    const result = await withIdempotentToolLock(cancelIdempotencyKey, async () => {
+      if (cancelIdempotencyKey) {
+        const cachedResult = await readIdempotentToolResult(cancelIdempotencyKey);
+        if (cachedResult) return cachedResult;
+      }
+
+      let computed: Record<string, unknown>;
+      if (liveCall.testMode) {
+        computed = testModeDryRunResult('calendar_cancel');
+      } else if (!booleanArg(args, 'confirmed')) {
+        computed = {
+          ok: false,
+          status: 'confirmation_required',
+          error: 'CONFIRMATION_REQUIRED',
+          instruction: 'Wiederhole den gefundenen Termin kurz und frage ausdruecklich, ob er wirklich abgesagt werden soll. Rufe danach erst calendar_cancel mit changeToken und confirmed=true auf.',
+        };
+      } else {
+        const staff = await resolveCalendarStaffForTool(orgId, args);
+        const customerPhone = liveCall.callerPhone;
+        computed = await cancelChipyBookingForChange(orgId, {
+          changeToken: cancelChangeToken,
+          staffId: staff.staffId,
+          customerName: stringArg(args, 'customerName', 'customer_name'),
+          customerPhone,
+          currentTime: stringArg(args, 'currentTime', 'current_time', 'preferredTime', 'preferred_time', 'time'),
+          service: stringArg(args, 'service'),
+          reason: stringArg(args, 'reason', 'notes'),
+          sourceCallId: ctx.callId,
+          identityVerified: Boolean(customerPhone),
+        });
+        computed.instruction = computed.ok
+          ? 'Sage kurz, dass der Termin abgesagt wurde. Bei partial=true: sage, dass das Team intern noch einmal nachfasst.'
+          : 'Behaupte nicht, dass der Termin abgesagt wurde. Frage nach weiteren Details oder erstelle ein Rueckruf-Ticket.';
+        if (cancelIdempotencyKey && computed.ok === true) {
+          await writeIdempotentToolResult(cancelIdempotencyKey, computed);
+        }
+      }
+      return computed;
+    });
 
     await appendTraceEvent({
       type: 'tool_result',
       sessionId: ctx.callId,
-      tenantId: ctx.orgId,
+      tenantId: orgId,
       agentId: ctx.agentId,
       tool: 'calendar.cancel',
       output: safeTraceOutput(result),
@@ -2284,78 +2399,99 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       req.log.warn({ agentId: ctx.agentId }, 'retell calendar.reschedule: unknown agent_id, refusing');
       return reply.status(403).send({ error: 'unknown agent' });
     }
+    const orgId = ctx.orgId;
 
     await appendTraceEvent({
       type: 'tool_call',
       sessionId: ctx.callId,
-      tenantId: ctx.orgId,
+      tenantId: orgId,
       agentId: ctx.agentId,
       tool: 'calendar.reschedule',
       input: safeTraceInput(args),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
-    let result: Record<string, unknown>;
     const newTime = stringArg(args, 'newTime', 'new_time', 'newPreferredTime', 'new_preferred_time');
-    if (liveCall.testMode) {
-      result = testModeDryRunResult('calendar_reschedule');
-    } else if (!booleanArg(args, 'confirmed')) {
-      result = {
-        ok: false,
-        status: 'confirmation_required',
-        error: 'CONFIRMATION_REQUIRED',
-        instruction: 'Bestaetige alten Termin und neue Uhrzeit in einem Satz und frage ausdruecklich nach Ja. Rufe danach erst calendar_reschedule mit changeToken und confirmed=true auf.',
-      };
-    } else if (!newTime) {
-      result = {
-        ok: false,
-        status: 'new_time_required',
-        error: 'NEW_TIME_REQUIRED',
-        instruction: 'Frage nach der neuen Wunschzeit und pruefe sie mit calendar.findSlots, bevor du verschiebst.',
-      };
-    } else {
-      const currentStaff = await resolveCalendarStaffForTool(ctx.orgId, args);
-      const newStaff = await resolveCalendarStaffForTool(ctx.orgId, {
-        preferredStylist: stringArg(args, 'newPreferredStylist', 'new_preferred_stylist', 'newStaffName', 'new_staff_name'),
-      });
-      if (newStaff.staffModeActive && !newStaff.staffId && newStaff.requested && !newStaff.anyStaff) {
-        result = {
+    const rescheduleChangeToken = stringArg(args, 'changeToken', 'change_token');
+    const rescheduleIdempotencyKey = booleanArg(args, 'confirmed') && rescheduleChangeToken && newTime
+      ? `retell_tool_result:${orgId}:${ctx.callId}:calendar.reschedule:${crypto.createHash('sha256').update(JSON.stringify({
+        changeToken: rescheduleChangeToken,
+        newTime,
+        newService: stringArg(args, 'newService', 'new_service'),
+        newStaff: stringArg(args, 'newPreferredStylist', 'new_preferred_stylist', 'newStaffName', 'new_staff_name'),
+      })).digest('hex')}`
+      : '';
+    const result = await withIdempotentToolLock(rescheduleIdempotencyKey, async () => {
+      if (rescheduleIdempotencyKey) {
+        const cachedResult = await readIdempotentToolResult(rescheduleIdempotencyKey);
+        if (cachedResult) return cachedResult;
+      }
+
+      let computed: Record<string, unknown>;
+      if (liveCall.testMode) {
+        computed = testModeDryRunResult('calendar_reschedule');
+      } else if (!booleanArg(args, 'confirmed')) {
+        computed = {
           ok: false,
-          status: 'staff_not_found',
-          error: 'STAFF_NOT_FOUND',
-          instruction: staffNotFoundInstruction(newStaff.requested, newStaff.availableStaffNames, 'book'),
-          preferredStylist: newStaff.requested,
-          availableStaffNames: newStaff.availableStaffNames,
+          status: 'confirmation_required',
+          error: 'CONFIRMATION_REQUIRED',
+          instruction: 'Bestaetige alten Termin und neue Uhrzeit in einem Satz und frage ausdruecklich nach Ja. Rufe danach erst calendar_reschedule mit changeToken und confirmed=true auf.',
+        };
+      } else if (!newTime) {
+        computed = {
+          ok: false,
+          status: 'new_time_required',
+          error: 'NEW_TIME_REQUIRED',
+          instruction: 'Frage nach der neuen Wunschzeit und pruefe sie mit calendar.findSlots, bevor du verschiebst.',
         };
       } else {
-        const customerPhone = liveCall.callerPhone;
-        result = await rescheduleChipyBookingForChange(ctx.orgId, {
-          changeToken: stringArg(args, 'changeToken', 'change_token'),
-          staffId: currentStaff.staffId,
-          customerName: stringArg(args, 'customerName', 'customer_name'),
-          customerPhone,
-          currentTime: stringArg(args, 'currentTime', 'current_time', 'preferredTime', 'preferred_time', 'time'),
-          service: stringArg(args, 'service'),
-          newTime,
-          newService: stringArg(args, 'newService', 'new_service'),
-          newStaffId: newStaff.staffModeActive && newStaff.requested ? newStaff.staffId : undefined,
-          newAnyStaff: newStaff.staffModeActive && newStaff.anyStaff,
-          reason: stringArg(args, 'reason', 'notes'),
-          sourceCallId: ctx.callId,
-          identityVerified: Boolean(customerPhone),
+        const currentStaff = await resolveCalendarStaffForTool(orgId, args);
+        const newStaff = await resolveCalendarStaffForTool(orgId, {
+          preferredStylist: stringArg(args, 'newPreferredStylist', 'new_preferred_stylist', 'newStaffName', 'new_staff_name'),
         });
-        result.instruction = result.ok
-          ? 'Sage kurz, dass der Termin verschoben wurde.'
-          : result.status === 'reschedule_needs_review'
-            ? 'Behaupte nicht, dass die Verschiebung vollstaendig erledigt ist. Sage, dass der neue Termin intern vorgemerkt ist, aber das Team die alte Buchung/externen Kalender noch prueft und nachfasst.'
-            : 'Behaupte nicht, dass der Termin verschoben wurde. Biete alternative Zeiten oder Rueckruf an.';
+        if (newStaff.staffModeActive && !newStaff.staffId && newStaff.requested && !newStaff.anyStaff) {
+          computed = {
+            ok: false,
+            status: 'staff_not_found',
+            error: 'STAFF_NOT_FOUND',
+            instruction: staffNotFoundInstruction(newStaff.requested, newStaff.availableStaffNames, 'book'),
+            preferredStylist: newStaff.requested,
+            availableStaffNames: newStaff.availableStaffNames,
+          };
+        } else {
+          const customerPhone = liveCall.callerPhone;
+          computed = await rescheduleChipyBookingForChange(orgId, {
+            changeToken: rescheduleChangeToken,
+            staffId: currentStaff.staffId,
+            customerName: stringArg(args, 'customerName', 'customer_name'),
+            customerPhone,
+            currentTime: stringArg(args, 'currentTime', 'current_time', 'preferredTime', 'preferred_time', 'time'),
+            service: stringArg(args, 'service'),
+            newTime,
+            newService: stringArg(args, 'newService', 'new_service'),
+            newStaffId: newStaff.staffModeActive && newStaff.requested ? newStaff.staffId : undefined,
+            newAnyStaff: newStaff.staffModeActive && newStaff.anyStaff,
+            reason: stringArg(args, 'reason', 'notes'),
+            sourceCallId: ctx.callId,
+            identityVerified: Boolean(customerPhone),
+          });
+          computed.instruction = computed.ok
+            ? 'Sage kurz, dass der Termin verschoben wurde.'
+            : computed.status === 'reschedule_needs_review'
+              ? 'Behaupte nicht, dass die Verschiebung vollstaendig erledigt ist. Sage, dass der neue Termin intern vorgemerkt ist, aber das Team die alte Buchung/externen Kalender noch prueft und nachfasst.'
+              : 'Behaupte nicht, dass der Termin verschoben wurde. Biete alternative Zeiten oder Rueckruf an.';
+          if (rescheduleIdempotencyKey && (computed.ok === true || computed.status === 'reschedule_needs_review')) {
+            await writeIdempotentToolResult(rescheduleIdempotencyKey, computed);
+          }
+        }
       }
-    }
+      return computed;
+    });
 
     await appendTraceEvent({
       type: 'tool_result',
       sessionId: ctx.callId,
-      tenantId: ctx.orgId,
+      tenantId: orgId,
       agentId: ctx.agentId,
       tool: 'calendar.reschedule',
       output: safeTraceOutput(result),
@@ -2427,25 +2563,33 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       const reason = typeof args.reason === 'string' && args.reason.trim()
         ? args.reason.trim()
         : (configuredFallbackReason === 'handoff' ? DEFAULT_TICKET_REASON : configuredFallbackReason);
+      const suppliedPhone = stringArg(args, 'customerPhone', 'customer_phone', 'phone');
+      const suppliedPhoneConfirmed = args.customerPhoneConfirmed === true || args.customer_phone_confirmed === true;
+      const ticketPhone = liveCall.callerPhone || (suppliedPhoneConfirmed ? suppliedPhone : '') || '';
       const row = await createTicket({
         tenantId,
         source: 'phone',
         sessionId: callId,
         reason,
         customerName: args.customerName as string | undefined,
-        customerPhone: ticketPhoneOrUnknown(liveCall.callerPhone || (args.customerPhone as string | undefined) || ''),
+        customerPhone: ticketPhoneOrUnknown(ticketPhone),
         preferredTime,
         service: args.service as string | undefined,
         notes: args.notes as string | undefined,
       }, { allowUnverifiedPhone: true });
 
-      // Auto-trigger callback if customer wants immediate callback
-      const isImmediate = !preferredTime
-        || /sofort|jetzt|now|asap|gleich|baldmöglich/i.test(preferredTime);
+      // Auto-trigger only with explicit callback consent. A generic fallback
+      // ticket must never silently dial the caller just because preferredTime
+      // is missing or vague.
+      const callbackRequested = args.callbackRequested === true;
+      const isImmediate = callbackRequested && (
+        !preferredTime || /sofort|jetzt|now|asap|gleich|baldmöglich/i.test(preferredTime)
+      );
       const reusedTicket = row.reused === true;
 
       let callbackResult: { ok: boolean; callId?: string; error?: string } | null = null;
-      if (!reusedTicket && isImmediate && row.customer_phone && isCallbackSafePhone(row.customer_phone)) {
+      const phoneSafeForAutoCallback = Boolean(liveCall.callerPhone) || suppliedPhoneConfirmed;
+      if (!reusedTicket && isImmediate && phoneSafeForAutoCallback && typeof row.customer_phone === 'string' && isCallbackSafePhone(row.customer_phone)) {
         // Fire-and-forget — don't block the agent's response
         callbackResult = await triggerCallback({
           orgId,
@@ -2592,6 +2736,8 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         return reply.status(403).send({ ok: false, error: 'UNKNOWN_DEMO_AGENT' });
       }
     }
+    const declineCall = await verifyRecordingDeclineToolCall(reply, { callId, agentId }, 'demo.recording_declined');
+    if (!declineCall) return;
     if (!pool) {
       req.log.error({ callId, agentId, templateId, salesCallback }, 'demo.recording_declined: pool unavailable');
       return reply.status(503).send({ ok: false, error: 'STORAGE_UNAVAILABLE' });
@@ -2643,13 +2789,19 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const args = retellArgs(body);
     const ctx = await getToolOrgContext(req, body, args);
     if (rejectToolContext(reply, ctx, 'recording.declined')) return;
-    const callId = ctx.callId === 'retell' ? null : ctx.callId;
+    const declineCall = await verifyRecordingDeclineToolCall(reply, ctx, 'recording.declined');
+    if (!declineCall) return;
+    const callId = declineCall.callId;
     const agentId = ctx.agentId;
     const orgId = ctx.orgId;
 
     if (!callId) {
       req.log.warn({ agentId }, 'recording.declined: no call_id in body');
-      return { ok: true };
+      return reply.status(400).send({
+        ok: false,
+        error: 'CALL_ID_REQUIRED',
+        message: 'Konnte den Widerspruch nicht sicher einem Anruf zuordnen. Bitte beende den Anruf.',
+      });
     }
 
     // CRITICAL DSGVO/§201 StGB path: if this insert silently fails, call_ended
@@ -2657,6 +2809,14 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     // explicit withdrawal of consent. We need a HARD error here so Retell + the
     // LLM know the decline was not stored — then the agent can ask the caller
     // to repeat / hang up safely instead of pretending everything is fine.
+    if (!pool) {
+      req.log.error({ callId, orgId }, 'recording.declined: pool unavailable');
+      return reply.status(503).send({
+        ok: false,
+        error: 'STORAGE_UNAVAILABLE',
+        message: 'Konnte den Widerspruch nicht speichern. Bitte beende den Anruf.',
+      });
+    }
     if (pool) {
       try {
         await pool.query(

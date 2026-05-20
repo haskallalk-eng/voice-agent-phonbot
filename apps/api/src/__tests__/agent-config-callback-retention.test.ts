@@ -13,7 +13,10 @@ vi.mock('../logger.js', () => {
 });
 vi.mock('../agent-instructions.js', () => ({ buildAgentInstructions: vi.fn(() => 'agent instructions') }));
 vi.mock('../platform-baseline.js', () => ({ loadPlatformBaseline: vi.fn(async () => 'platform baseline') }));
-vi.mock('../outbound-baseline.js', () => ({ loadOutboundBaseline: vi.fn(async () => 'outbound baseline') }));
+vi.mock('../outbound-baseline.js', () => ({
+  loadOutboundBaseline: vi.fn(async () => 'outbound baseline'),
+  ensureOutboundSafetyKernel: vi.fn((prompt: string) => prompt),
+}));
 vi.mock('../knowledge.js', () => ({
   normalizeKnowledgeSources: vi.fn(async (cfg: unknown) => cfg),
   storeKnowledgePdf: vi.fn(),

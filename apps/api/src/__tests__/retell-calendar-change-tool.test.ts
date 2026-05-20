@@ -9,9 +9,12 @@ const mockFindChipyBookingsForChange = vi.fn();
 const mockCancelChipyBookingForChange = vi.fn();
 const mockRescheduleChipyBookingForChange = vi.fn();
 const mockGetCall = vi.fn();
+const mockLockClientQuery = vi.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [], rowCount: 1 }));
+const mockLockClientRelease = vi.fn();
+const mockConnect = vi.fn(async () => ({ query: mockLockClientQuery, release: mockLockClientRelease }));
 
 vi.mock('../db.js', () => ({
-  pool: { query: mockQuery },
+  pool: { query: mockQuery, connect: mockConnect },
 }));
 
 vi.mock('../traces.js', () => ({
@@ -105,6 +108,9 @@ describe('Retell calendar change tools privacy contract', () => {
     mockCancelChipyBookingForChange.mockReset();
     mockRescheduleChipyBookingForChange.mockReset();
     mockGetCall.mockReset();
+    mockLockClientQuery.mockClear();
+    mockLockClientRelease.mockClear();
+    mockConnect.mockClear();
     mockGetCall.mockResolvedValue({
       call_id: 'call-change-1',
       agent_id: 'agent-real',
@@ -170,6 +176,46 @@ describe('Retell calendar change tools privacy contract', () => {
       sourceCallId: 'call-change-1',
     }));
     expect(mockCancelChipyBookingForChange.mock.calls[0]?.[1]).not.toHaveProperty('bookingId');
+    expect(mockLockClientQuery.mock.calls[0]?.[0]).toContain('pg_advisory_lock');
+    expect(mockLockClientQuery.mock.calls.at(-1)?.[0]).toContain('pg_advisory_unlock');
+  });
+
+  it('replays durable cancel result without mutating twice', async () => {
+    mockQuery.mockImplementation(async (sql: unknown) => {
+      const text = String(sql);
+      if (text.includes('SELECT org_id FROM agent_configs WHERE tenant_id')) {
+        return { rows: [{ org_id: 'org-1' }], rowCount: 1 };
+      }
+      if (text.includes('FROM agent_configs') && text.includes("data->>'retellAgentId'")) {
+        return { rows: [{ tenant_id: 'tenant-1', org_id: 'org-1' }], rowCount: 1 };
+      }
+      if (text.includes('FROM retell_tool_results')) {
+        return {
+          rows: [{
+            result: {
+              ok: true,
+              status: 'cancelled',
+              ticketId: 'cached-cancel',
+            },
+          }],
+          rowCount: 1,
+        };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+
+    const res = await postTool('/retell/tools/calendar.cancel', {
+      confirmed: true,
+      changeToken: 'change-token',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toMatchObject({
+      ok: true,
+      status: 'cancelled',
+      reused: true,
+    });
+    expect(mockCancelChipyBookingForChange).not.toHaveBeenCalled();
   });
 
   it('does not call cancel before explicit confirmation', async () => {
