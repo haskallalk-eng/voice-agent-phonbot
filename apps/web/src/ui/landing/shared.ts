@@ -31,8 +31,8 @@ export const TEMPLATE_PREVIEWS: Record<string, string> = {
   solo: '"Hi, du bist mit Max\' Assistentin verbunden — wie kann ich helfen?"',
 };
 
-export const DEMO_PHONE_NUMBER = '+493075937169';
-export const DEMO_PHONE_LABEL = '+49 30 75937169';
+export const DEMO_PHONE_NUMBER = '+493075937286';
+export const DEMO_PHONE_LABEL = '+49 30 75937286';
 export const DEMO_PHONE_HREF = `tel:${DEMO_PHONE_NUMBER}`;
 
 export const FEATURES: FeatureItem[] = [

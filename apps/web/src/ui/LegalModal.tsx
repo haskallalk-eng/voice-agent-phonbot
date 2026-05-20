@@ -36,7 +36,7 @@ function ImpressumContent() {
       <section>
         <h2 className="text-base font-semibold text-white mb-2">Kontakt</h2>
         <p>
-          Telefon: +49 30 75937169<br />
+          Telefon: +49 30 75937286<br />
           E-Mail: info@phonbot.de<br />
           Web: <a href="https://phonbot.de" className="text-orange-400 hover:text-orange-300 underline">phonbot.de</a>
         </p>
@@ -345,7 +345,7 @@ function DatenschutzContent() {
           Hassieb Kalla (Einzelunternehmer)<br />
           z. Hd. Hassieb Kalla<br />
           Scharnhorststraße 8, 12307 Berlin<br />
-          Telefon: +49 30 75937169<br />
+          Telefon: +49 30 75937286<br />
           E-Mail: info@phonbot.de
         </p>
         <p className="mt-2 text-white/50 text-xs">

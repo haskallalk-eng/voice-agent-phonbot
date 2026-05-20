@@ -35,6 +35,9 @@ if [ "${SKIP_RETELL_SYNC:-}" != "1" ]; then
       exit 1
     fi
     docker exec "$api_container" node apps/api/dist/scripts/sync-retell-active-configs.js --execute
+    if [ "${SKIP_PUBLIC_DEMO_SYNC:-}" != "1" ]; then
+      docker exec "$api_container" node apps/api/dist/scripts/sync-public-demo-phone.js --execute
+    fi
   fi
 fi
 

@@ -256,7 +256,7 @@ ${safeBasePrompt}`;
   return `${input.platformBaseline}\n\n${branchPromptForDemo}${demoAddendum}${DEMO_SAFETY_OVERLAY}`;
 }
 
-const DEMO_POST_CALL_FIELDS: PostCallAnalysisField[] = [
+export const DEMO_POST_CALL_FIELDS: PostCallAnalysisField[] = [
   { type: 'string', name: 'caller_name', description: 'Vollständiger Name des Anrufers, falls genannt. Nur Vorname OK. Leer lassen wenn nicht erwähnt.' },
   { type: 'string', name: 'caller_email', description: 'E-Mail-Adresse des Anrufers in lowercase und voll validiert (max@gmx.de). Nur ausfuellen, wenn sie am Ende eindeutig bestaetigt wurde. Leer lassen, wenn der Anrufer sie korrigiert, bestreitet, abbricht oder SMS statt E-Mail verlangt.' },
   { type: 'string', name: 'caller_phone', description: 'Telefonnummer des Anrufers in E.164-Format (+49…). Leer wenn nicht genannt.' },
@@ -266,7 +266,7 @@ const DEMO_POST_CALL_FIELDS: PostCallAnalysisField[] = [
   // remains opt-out by default. Visitor never gets unsolicited mail.
   { type: 'enum', name: 'wants_signup_link', description: 'Hat der Anrufer am Ende EXPLIZIT bestätigt dass er den Phonbot-Testlink per E-Mail / SMS bekommen will? "ja" nur wenn Chipy gefragt hat UND der Anrufer klar zugestimmt hat. "nein" wenn Anrufer ablehnt oder nichts dazu gesagt hat. "unklar" nur wenn das Gespräch abrupt endete (z.B. Verbindung weg).', choices: ['ja', 'nein', 'unklar'] },
   { type: 'enum', name: 'signup_link_channel', description: 'Welcher Versandkanal wurde fuer den Testlink eindeutig bestaetigt? sms wenn SMS/Telefon gewuenscht wurde, email wenn E-Mail eindeutig bestaetigt wurde, both nur wenn der Anrufer ausdruecklich beide will, none wenn kein Kanal klar bestaetigt wurde. Wenn der Anrufer SMS statt E-Mail verlangt oder die E-Mail abbricht/korrigiert, sms waehlen.', choices: ['sms', 'email', 'both', 'none'] },
-  { type: 'enum', name: 'wants_human_meeting', description: 'Hat der Anrufer ausdruecklich gewuenscht, mit einem menschlichen Phonbot-Mitarbeiter zu sprechen oder einen echten Beratungstermin mit Phonbot/Mindrails zu vereinbaren? "ja" nur bei klarem Wunsch. "nein" wenn nicht erwaehnt oder abgelehnt. "unklar" bei mehrdeutiger Aussage.', choices: ['ja', 'nein', 'unklar'] },
+  { type: 'enum', name: 'wants_human_meeting', description: 'Hat der Anrufer ausdruecklich gewuenscht, mit einem menschlichen Phonbot-Mitarbeiter zu sprechen oder einen echten Beratungstermin mit Phonbot zu vereinbaren? "ja" nur bei klarem Wunsch. "nein" wenn nicht erwaehnt oder abgelehnt. "unklar" bei mehrdeutiger Aussage.', choices: ['ja', 'nein', 'unklar'] },
   { type: 'string', name: 'human_meeting_time', description: 'Vom Anrufer genanntes bevorzugtes Zeitfenster fuer das Gespraech mit einem menschlichen Phonbot-Mitarbeiter, z.B. "morgen Vormittag" oder "Dienstag 14 Uhr". Leer lassen, wenn nicht genannt.' },
   { type: 'enum', name: 'human_meeting_channel', description: 'Bevorzugter Rueckmeldekanal fuer den menschlichen Phonbot-Termin. phone wenn Telefon/Rueckruf/SMS, email wenn Mail, unknown wenn nicht klar.', choices: ['phone', 'email', 'unknown'] },
   { type: 'enum', name: 'wants_demo_booking_confirmation', description: 'Hat der Anrufer ausdruecklich gewuenscht oder bestaetigt, eine Demo-Terminbestaetigung fuer den simulierten Termin per SMS/E-Mail zu bekommen? "ja" nur bei klarer Zustimmung. "nein" wenn nicht erwaehnt oder abgelehnt. "unklar" bei mehrdeutiger Aussage.', choices: ['ja', 'nein', 'unklar'] },
@@ -1060,7 +1060,7 @@ export async function registerDemo(app: FastifyInstance) {
     return reply.status(410).send({
       error: 'phone_demo_only',
       message: 'Die Demo läuft jetzt als echter Telefonanruf oder Rückruf.',
-      phone: '+493075937169',
+      phone: '+493075937286',
       callbackEndpoint: '/demo/callback',
     });
 
