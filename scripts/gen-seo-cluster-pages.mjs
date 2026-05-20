@@ -7,6 +7,8 @@ import { SITE, TODAY, CORE_INDUSTRY_PAGES, SEO_NICHE_PAGES, ALL_INDUSTRY_PAGES }
 
 const OUT_DIR = path.resolve('apps/web/public');
 const FULL_AGENT_STARTER_PRICE = '89';
+const DEMO_PHONE_HREF = 'tel:+493075937169';
+const DEMO_PHONE_LABEL = '+49 30 75937169';
 
 const germanPairs = [
   ['fuer', 'für'], ['Fuer', 'Für'], ['Oeff', 'Öff'], ['oeff', 'öff'], ['Foerder', 'Förder'], ['foerder', 'förder'],
@@ -180,7 +182,7 @@ ${NAV_HTML}
       <p class="eyebrow">${esc(page.eyebrow)}</p>
       <h1>${esc(page.headline)}</h1>
       <p class="lead">${esc(page.intro)}</p>
-      <div class="actions"><a class="btn" href="/?page=register">Kostenlos testen</a><a class="btn secondary" href="/#demo">Chipy live hören</a></div>
+      <div class="actions"><a class="btn" href="/?page=register">Kostenlos testen</a><a class="btn secondary" href="${DEMO_PHONE_HREF}">Chipy live anrufen</a></div>
     </div>
   </header>
   <section>
@@ -363,8 +365,8 @@ ${NAV_HTML}
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Phonbot</a><span>/</span><span>Kontakt</span></nav>
       <p class="eyebrow">Kontakt und Demo</p>
       <h1>Phonbot testen oder eine Frage zur KI-Telefonie klären.</h1>
-      <p class="lead">Wenn du wissen willst, ob Phonbot zu deiner Branche passt, schreib kurz, welche Anrufe automatisiert werden sollen. Für die schnelle Demo kannst du auch direkt den Test im Browser starten.</p>
-      <div class="actions"><a class="btn" href="mailto:info@phonbot.de">info@phonbot.de</a><a class="btn secondary" href="/#demo">Demo starten</a></div>
+      <p class="lead">Wenn du wissen willst, ob Phonbot zu deiner Branche passt, schreib kurz, welche Anrufe automatisiert werden sollen. Für die schnelle Demo kannst du direkt ${DEMO_PHONE_LABEL} anrufen oder einen Rückruf anfordern.</p>
+      <div class="actions"><a class="btn" href="mailto:info@phonbot.de">info@phonbot.de</a><a class="btn secondary" href="${DEMO_PHONE_HREF}">Demo anrufen</a></div>
     </div>
   </header>
   <section>

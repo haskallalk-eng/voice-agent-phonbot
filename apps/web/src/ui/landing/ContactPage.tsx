@@ -34,11 +34,8 @@ export function ContactPage({ onGoToRegister, onGoToLogin, onBack }: Props) {
           window.location.hash = anchor;
           onBack();
         }}
-        onSelectIndustry={(id) => {
-          // Navigate back to landing with ?demo=<id> — DemoSection auto-triggers on mount.
-          const url = new URL(window.location.href);
-          url.searchParams.set('demo', id);
-          window.history.replaceState({}, '', url.toString());
+        onSelectIndustry={() => {
+          window.location.hash = 'demo';
           onBack();
         }}
       />

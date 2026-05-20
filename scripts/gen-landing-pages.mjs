@@ -64,6 +64,8 @@ function stripLeadingEmoji(text, inlineSize = 14) {
 
 const OUT_DIR = path.resolve('apps/web/public');
 const FULL_AGENT_STARTER_PRICE = '89';
+const DEMO_PHONE_HREF = 'tel:+493075937169';
+const DEMO_PHONE_LABEL = '+49 30 75937169';
 
 const BRANCHEN = [
   {
@@ -898,7 +900,7 @@ ${NAV_HTML}
     <p class="subtitle">${d.subtitle}</p>
     <div class="cta-row">
       <a href="/?page=register" class="btn btn-primary">Kostenlos testen</a>
-      <a href="/?demo=${d.templateId}#demo" class="btn btn-ghost">▶ Chipy live hören</a>
+      <a href="${DEMO_PHONE_HREF}" class="btn btn-ghost">${icon('phone', 18)}<span style="margin-left:.5rem">Chipy live anrufen</span></a>
     </div>
     <div class="trust-line">✓ Kostenlos starten · ✓ Sofort einsatzbereit · ✓ DSGVO-fokussiert, AVV verfügbar</div>
   </div>
@@ -917,7 +919,7 @@ ${NAV_HTML}
     </div>
     <p class="dialogue-note">${d.dialogueNote}</p>
     <div style="text-align:center;margin-top:2rem">
-      <a href="/?demo=${d.templateId}#demo" class="btn btn-ghost btn-sm">${icon('phone', 18)}<span style="margin-left:.5rem">Chipy live am Telefon hören</span></a>
+      <a href="${DEMO_PHONE_HREF}" class="btn btn-ghost btn-sm">${icon('phone', 18)}<span style="margin-left:.5rem">Chipy live am Telefon hören: ${DEMO_PHONE_LABEL}</span></a>
     </div>
   </div>
 </section>
@@ -968,7 +970,7 @@ ${disclaimerBlock}
     <p class="section-lead">Registrierung in unter 2 Minuten · Keine Kreditkarte · Monatlich kündbar.</p>
     <div class="cta-row">
       <a href="/?page=register" class="btn btn-primary">Jetzt einrichten</a>
-      <a href="/?demo=${d.templateId}#demo" class="btn btn-ghost">Erst Chipy testen</a>
+      <a href="${DEMO_PHONE_HREF}" class="btn btn-ghost">Erst Chipy anrufen</a>
     </div>
   </div>
 </section>

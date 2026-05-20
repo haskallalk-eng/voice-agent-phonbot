@@ -1049,79 +1049,21 @@ export async function registerDemo(app: FastifyInstance) {
     };
   });
 
-  // POST /demo/call — create a web call with a demo agent (no auth)
-  // Per-IP rate limit (10/h) + global hourly cap + Turnstile CAPTCHA to stop
-  // botnet cost-amplification (each demo call burns OpenAI + Retell spend).
+  // POST /demo/call — legacy browser web-call demo.
+  // Public demos are telephone-first now (direct call or callback). Keep this
+  // route as an explicit tombstone so stale cached frontends cannot still hit
+  // Retell's create-web-call API and surface a confusing 500 to visitors.
   app.post('/demo/call', {
     config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
   }, async (req, reply) => {
-    const parsed = DemoCallBody.safeParse(req.body);
-    if (!parsed.success) {
-      return reply.status(400).send({ error: 'templateId required' });
-    }
-    const { templateId, turnstileToken } = parsed.data;
+    app.log.info({ ip: req.ip }, 'legacy demo/call web demo disabled; use phone demo or callback');
+    return reply.status(410).send({
+      error: 'phone_demo_only',
+      message: 'Die Demo läuft jetzt als echter Telefonanruf oder Rückruf.',
+      phone: '+493075937169',
+      callbackEndpoint: '/demo/callback',
+    });
 
-    // Perf: check the cheap Redis cap FIRST (sub-ms), then the Cloudflare
-    // Turnstile verify (up to 5s network round-trip). On a cap-hit we skip
-    // the Cloudflare call entirely and return 429 faster.
-    const cap = await enforceGlobalDemoCap('call');
-    if (!cap.ok) {
-      app.log.warn({ count: cap.count, limit: DEMO_GLOBAL_HOURLY_CAP }, 'demo/call global hourly cap hit');
-      return reply.status(429).send({ error: 'Demo temporarily unavailable — please try again later.' });
-    }
-
-    // CAPTCHA-Gate (N6). In dev without TURNSTILE_SECRET_KEY this is a no-op;
-    // in prod a missing/invalid token is rejected.
-    const captchaOk = await verifyTurnstile(turnstileToken, req.ip);
-    if (!captchaOk) {
-      app.log.warn({ ip: req.ip }, 'demo/call captcha verification failed');
-      return reply.status(403).send({ error: 'captcha_failed', message: 'Bitte Captcha bestätigen.' });
-    }
-
-    try {
-      const agentId = await getOrCreateDemoAgent(templateId);
-      // Inject current date/time as dynamic variables — the LLM can't know
-      // "today" otherwise and would hallucinate "tomorrow Donnerstag" in the
-      // wrong week. Retell substitutes {{current_*}} placeholders in the
-      // compiled prompt at call-start.
-      const call = await createWebCall(agentId, {
-        dynamicVariables: buildCurrentDateDynamicVariables(),
-      });
-      if (pool && call.call_id) {
-        await pool.query(
-          `INSERT INTO demo_calls (
-             call_id, agent_id, template_id,
-             privacy_consent_at, privacy_consent_version, privacy_consent_notice_hash,
-             privacy_consent_source, privacy_consent_user_agent_hash, privacy_consent_ip_hash
-           )
-           VALUES ($1, $2, $3, now(), $4, $5, 'web-demo', $6, $7)
-           ON CONFLICT (call_id) DO UPDATE SET
-             agent_id                         = COALESCE(demo_calls.agent_id, EXCLUDED.agent_id),
-             template_id                      = COALESCE(demo_calls.template_id, EXCLUDED.template_id),
-             privacy_consent_at               = COALESCE(demo_calls.privacy_consent_at, EXCLUDED.privacy_consent_at),
-             privacy_consent_version          = COALESCE(demo_calls.privacy_consent_version, EXCLUDED.privacy_consent_version),
-             privacy_consent_notice_hash      = COALESCE(demo_calls.privacy_consent_notice_hash, EXCLUDED.privacy_consent_notice_hash),
-             privacy_consent_source           = COALESCE(demo_calls.privacy_consent_source, EXCLUDED.privacy_consent_source),
-             privacy_consent_user_agent_hash  = COALESCE(demo_calls.privacy_consent_user_agent_hash, EXCLUDED.privacy_consent_user_agent_hash),
-             privacy_consent_ip_hash          = COALESCE(demo_calls.privacy_consent_ip_hash, EXCLUDED.privacy_consent_ip_hash)`,
-          [
-            call.call_id,
-            agentId,
-            templateId,
-            DEMO_PRIVACY_NOTICE_VERSION,
-            privacyNoticeHash(),
-            shortHash(String(req.headers['user-agent'] ?? '')),
-            shortHash(req.ip),
-          ],
-        ).catch((err: Error) => {
-          app.log.warn({ err: err.message, callId: call.call_id }, 'demo privacy consent persistence failed');
-        });
-      }
-      return { ok: true, ...call };
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Failed to create demo call';
-      return reply.status(500).send({ error: msg });
-    }
   });
 
   // POST /demo/callback

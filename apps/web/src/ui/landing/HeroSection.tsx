@@ -1,6 +1,6 @@
 import React from 'react';
 import { FoxLogo } from '../FoxLogo.js';
-import { IconBolt, IconPhone, IconStar, IconPlay } from '../PhonbotIcons.js';
+import { IconBolt, IconPhone, IconStar } from '../PhonbotIcons.js';
 
 type HeroSectionProps = {
   onGoToRegister: () => void;
@@ -60,8 +60,8 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 text-base font-semibold text-white/90 rounded-full px-8 py-4 transition-all duration-300 text-center hover:text-white hover:scale-105"
                 style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(12px)' }}
               >
-                <IconPlay size={18} className="opacity-70" />
-                Demo anhören
+                <IconPhone size={18} className="opacity-70" />
+                Demo anrufen
               </button>
             </div>
             {/* Trust line — subtle, no "Keine Kreditkarte" badge */}
@@ -92,7 +92,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
               <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap">
                 <span className="text-xs text-orange-400/70 font-medium flex items-center gap-1 group-hover:text-orange-400 transition-colors">
                   <span className="w-1.5 h-1.5 rounded-full bg-orange-400 breathe inline-block" />
-                  Klick für Live-Demo
+                  Klick für Telefon-Demo
                 </span>
               </div>
             </div>
