@@ -7,7 +7,7 @@ type NavHeaderProps = {
   onGoToLogin: () => void;
   onGoToContact?: () => void;
   /** Called when a branche is chosen from the dropdown. Parent decides how to route
-   *  (e.g. navigate to landing + set ?demo=<id> + scroll to #demo). */
+   *  (for example navigate to landing and scroll to #demo). */
   onSelectIndustry?: (templateId: string) => void;
   /** Called when a nav anchor (demo/features/preise/faq) is clicked. Needed on pages
    *  other than the landing page so in-page `#anchor` hrefs still work — parent

@@ -243,16 +243,20 @@ function DatenschutzContent() {
 
         <h3 className="text-sm font-semibold text-white/90 mt-3 mb-1">Demo-Anrufe auf phonbot.de</h3>
         <p>
-          Wenn Sie auf phonbot.de die Live-Demo eines KI-Telefonassistenten nutzen (Web-Anruf direkt
-          im Browser), starten wir den Demo-Anruf nur nach Bestätigung des Demo-Datenschutzhinweises.
-          Das Gesprächs-Transkript wird zusammen mit aus dem Gespräch extrahierten Kontaktdaten (Name,
-          E-Mail, Telefonnummer — sofern Sie diese im Demo-Gespräch nennen) für bis zu 90 Tage in
-          unserer Datenbank gespeichert. Wir verwenden diese Daten ausschließlich zur Qualitätssicherung
-          der Demo, zur Verbesserung des Sprach-Agenten und — sofern Sie im Demo-Gespräch ein Interesse
-          an unserem Produkt äußern — als Lead, den unser Team manuell bearbeitet. Rechtsgrundlage:
-          Art. 6 Abs. 1 lit. a DSGVO. Sie können der Speicherung jederzeit widersprechen — schreiben Sie
-          uns dazu eine E-Mail an info@phonbot.de mit der Anrufzeit; wir löschen den Datensatz dann
-          manuell.
+          Wenn Sie auf phonbot.de die Live-Demo eines KI-Telefonassistenten nutzen, erfolgt diese als
+          echter Telefonanruf: entweder durch Ihren Direktanruf auf unsere Demo-Nummer oder durch einen
+          von Ihnen angeforderten Rückruf. Beim Direktanruf verarbeitet die Telefonie-Infrastruktur die
+          Verbindungsdaten (insbesondere Rufnummer, Zeitpunkt und Dauer). Der KI-Agent informiert zu
+          Beginn des Gesprächs über KI-Nutzung und Aufzeichnung, soweit eine Aufzeichnung aktiv ist.
+          Gesprächs-Transkript und aus dem Gespräch extrahierte Kontaktdaten (Name, E-Mail,
+          Telefonnummer, Anliegen — sofern Sie diese nennen) werden für bis zu 90 Tage in unserer
+          Datenbank gespeichert. Wir verwenden diese Daten ausschließlich zur Qualitätssicherung der
+          Demo, zur Verbesserung des Sprach-Agenten und — sofern Sie im Demo-Gespräch ein Interesse an
+          unserem Produkt äußern — als Lead, den unser Team manuell bearbeitet. Rechtsgrundlage:
+          Art. 6 Abs. 1 lit. a DSGVO für Aufzeichnung/Lead-Bearbeitung sowie Art. 6 Abs. 1 lit. f DSGVO
+          für den sicheren Betrieb der Telefon-Demo. Sie können der Speicherung jederzeit widersprechen —
+          schreiben Sie uns dazu eine E-Mail an info@phonbot.de mit der Anrufzeit; wir löschen den
+          Datensatz dann manuell.
         </p>
 
         <h3 className="text-sm font-semibold text-white/90 mt-3 mb-1">Demo-Rückrufe von Phonbot</h3>

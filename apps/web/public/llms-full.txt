@@ -32,7 +32,7 @@ Sprachen: Über 30 Sprachen. Native Stimmen u. a. für Deutsch (primär, nativ t
 - Eigene Telefonnummer inklusive
 - Keine Bindung
 
-**Primär-CTAs**: "Kostenlos testen" und "Demo anhören" (Live-Anruf von Phonbot aufs Handy des Besuchers).
+**Primär-CTAs**: "Kostenlos testen" und "Demo anrufen" (Direktanruf auf die Demo-Nummer oder Rückruf von Phonbot aufs Handy des Besuchers).
 
 ## 3. Wie es funktioniert (3 Schritte)
 

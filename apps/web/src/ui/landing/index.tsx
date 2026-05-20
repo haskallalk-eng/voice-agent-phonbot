@@ -66,10 +66,10 @@ function DeferredDemoSection({ onGoToRegister }: { onGoToRegister: () => void })
   if (!loadDemo) {
     return (
       <section id="demo" ref={ref} className="relative z-10 px-6 py-20 max-w-5xl mx-auto ambient-glow-alt ambient-glow text-center">
-        <p className="text-[11px] font-semibold tracking-[0.2em] text-orange-400/60 uppercase mb-4">Live-Demo</p>
-        <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">Chipy live hören</h2>
+        <p className="text-[11px] font-semibold tracking-[0.2em] text-orange-400/60 uppercase mb-4">Telefon-Demo</p>
+        <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">Chipy live anrufen</h2>
         <p className="text-white/50 max-w-2xl mx-auto mb-6">
-          Die Sprachdemo wird erst geladen, wenn du sie wirklich ansehen oder starten möchtest. So bleibt die Startseite schnell.
+          Die Telefon-Demo wird erst geladen, wenn du sie wirklich ansehen möchtest. So bleibt die Startseite schnell.
         </p>
         <button
           type="button"
@@ -172,16 +172,11 @@ export function LandingPage({ onGoToRegister, onGoToLogin, onGoToContact }: Prop
         onGoToLogin={onGoToLogin}
         onGoToContact={onGoToContact}
         activePage="landing"
-        onSelectIndustry={(id) => {
-          // Set ?demo=<id> and jump to the demo section — DemoSection already
-          // picks the param up and auto-triggers the web call, then strips it.
-          const url = new URL(window.location.href);
-          url.searchParams.set('demo', id);
-          window.history.replaceState({}, '', url.toString());
+        onSelectIndustry={() => {
+          // The public demo is telephone-first now: selecting a branch jumps to
+          // the demo block, but never auto-starts a browser web call.
           document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' });
-          // Fire a popstate-ish signal so DemoSection re-reads the URL if it listens,
-          // otherwise a scroll is enough — the param will be read on next mount.
-          window.dispatchEvent(new Event('phonbot:demo-param-updated'));
+          window.location.hash = 'demo';
         }}
       />
 
