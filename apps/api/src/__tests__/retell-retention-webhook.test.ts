@@ -60,6 +60,9 @@ vi.mock('../sms.js', () => ({
 vi.mock('../demo.js', () => ({
   readDemoCallTemplate: vi.fn(async () => null),
   maybeSendDemoSignupLink: vi.fn(async () => {}),
+  maybeSendDemoBookingConfirmation: vi.fn(async () => ({ ok: true })),
+  demoRecordingDeclinedToolSignature: vi.fn(() => 'demo-recording-sig'),
+  isKnownSalesCallbackAgent: vi.fn(async () => false),
 }));
 vi.mock('../pii.js', () => ({ redactPII: (value: string) => value }));
 vi.mock('../agent-instructions.js', () => ({ RECORDING_CONSENT_PROMPT_VERSION: 'test-v1' }));
@@ -321,6 +324,38 @@ describe('Retell lifecycle retention enforcement', () => {
     await app.close();
   });
 
+  it('skips call_analyzed extraction side effects when recording was declined', async () => {
+    mockQuery.mockImplementation(async (sql: unknown, params?: unknown[]) => {
+      const text = String(sql);
+      if (text.includes('processed_retell_events')) {
+        return { rowCount: 1, rows: [{ call_id: params?.[0] ?? 'call-analyzed-1' }] };
+      }
+      if (text.includes('recording_declined_calls')) {
+        return { rowCount: 1, rows: [{ call_id: params?.[0] ?? 'call-analyzed-1' }] };
+      }
+      return { rowCount: 1, rows: [] };
+    });
+    const app = await buildApp();
+    const body = JSON.stringify(callAnalyzedPayload());
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/retell/webhook',
+      headers: {
+        'content-type': 'application/json',
+        'x-retell-signature': signatureFor(body),
+      },
+      payload: body,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true, recordingDeclined: true });
+    expect(mockDeleteCall).toHaveBeenCalledWith('call-analyzed-1');
+    expect(mockMergeTicketMetadata).not.toHaveBeenCalled();
+    expect(mockFireInboundWebhooks).not.toHaveBeenCalled();
+    await app.close();
+  });
+
   it('deletes calls from unknown non-demo agents instead of acknowledging stored Retell data', async () => {
     mockGetOrgIdByAgentId.mockResolvedValueOnce(null);
     mockQuery.mockImplementation(async (sql: unknown, params?: unknown[]) => {
@@ -389,6 +424,9 @@ describe('Retell lifecycle retention enforcement', () => {
       const text = String(sql);
       if (text.includes('processed_retell_events') && text.includes('INSERT INTO')) {
         return { rowCount: 1, rows: [{ call_id: params?.[0] ?? 'call-analyzed-1' }] };
+      }
+      if (text.includes('recording_declined_calls')) {
+        return { rowCount: 0, rows: [] };
       }
       if (text.includes('FROM agent_configs')) {
         throw new Error('database unavailable');

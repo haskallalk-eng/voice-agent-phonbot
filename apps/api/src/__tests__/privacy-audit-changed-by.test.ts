@@ -91,6 +91,7 @@ vi.mock('../platform-baseline.js', () => ({
 
 vi.mock('../outbound-baseline.js', () => ({
   loadOutboundBaseline: vi.fn().mockResolvedValue(''),
+  ensureOutboundSafetyKernel: vi.fn((prompt: string) => prompt),
 }));
 
 vi.mock('../usage.js', () => ({

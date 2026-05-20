@@ -77,11 +77,13 @@ const FindBookingsArgsSchema = z.object({
 });
 
 const CancelBookingArgsSchema = FindBookingsArgsSchema.extend({
+  changeToken: z.string().min(1),
   confirmed: z.boolean().optional().default(false),
   reason: OptionalNonEmptyString,
 });
 
 const RescheduleBookingArgsSchema = FindBookingsArgsSchema.extend({
+  changeToken: z.string().min(1),
   newTime: z.string().min(1),
   newService: OptionalNonEmptyString,
   newPreferredStylist: OptionalNonEmptyString,
@@ -91,7 +93,7 @@ const RescheduleBookingArgsSchema = FindBookingsArgsSchema.extend({
 
 const TicketCreateArgsSchema = z.object({
   customerName: OptionalNonEmptyString,
-  customerPhone: z.string().min(1),
+  customerPhone: OptionalNonEmptyString,
   preferredTime: OptionalNonEmptyString,
   service: OptionalNonEmptyString,
   notes: OptionalNonEmptyString,
@@ -277,7 +279,7 @@ export function getOpenAITools(cfg: AgentConfig) {
       description: 'Cancel an existing appointment only after findBookings identified the appointment and the caller explicitly confirmed the cancellation.',
       parameters: {
         type: 'object',
-        required: ['confirmed'],
+        required: ['changeToken', 'confirmed'],
         properties: {
           changeToken: { type: 'string', description: 'Short-lived change token returned by calendar_find_bookings. Required for changing a booking.' },
           customerName: { type: 'string' },
@@ -300,7 +302,7 @@ export function getOpenAITools(cfg: AgentConfig) {
       description: 'Move an existing appointment to a new slot only after old appointment and new slot were both explicitly confirmed.',
       parameters: {
         type: 'object',
-        required: ['newTime', 'confirmed'],
+        required: ['changeToken', 'newTime', 'confirmed'],
         properties: {
           changeToken: { type: 'string', description: 'Short-lived change token returned by calendar_find_bookings. Required for changing a booking.' },
           customerName: { type: 'string' },
@@ -334,7 +336,6 @@ export function getOpenAITools(cfg: AgentConfig) {
           notes: { type: 'string' },
           reason: { type: 'string', description: fallbackReasonDescription(cfg) },
         },
-        required: ['customerPhone'],
         additionalProperties: false,
       },
     });
@@ -764,17 +765,19 @@ export async function executeKnownTool(input: {
         sessionId: input.sessionId,
         reason: args.reason ?? normalizeFallbackReasonValue(input.cfg.fallback.reason),
         customerName: args.customerName,
-        customerPhone: args.customerPhone,
+        customerPhone: args.customerPhone ?? 'unknown',
         preferredTime: args.preferredTime,
         service: args.service,
         notes: args.notes,
-      });
-      const sms = await sendTicketAckSms({
-        to: row.customer_phone,
-        businessName: input.cfg.businessName,
-        reason: row.reason,
-        service: row.service,
-      });
+      }, { allowUnverifiedPhone: true });
+      const sms = row.customer_phone !== 'unknown'
+        ? await sendTicketAckSms({
+          to: row.customer_phone,
+          businessName: input.cfg.businessName,
+          reason: row.reason,
+          service: row.service,
+        })
+        : { ok: false, error: 'NO_PHONE' };
       return sanitizeKnownToolResultForModel({
         ok: true,
         ticketId: row.id,
@@ -782,6 +785,7 @@ export async function executeKnownTool(input: {
         customerPhone: row.customer_phone,
         smsSent: sms.ok,
         smsError: sms.ok ? null : sms.error,
+        deliveryInstruction: sms.ok ? 'SMS-Bestaetigung darf erwaehnt werden.' : 'Keine SMS-Bestaetigung behaupten; smsSent ist false.',
       });
     }
 

@@ -34,12 +34,7 @@ describe('knowledge base sync lifecycle', () => {
     expect(mocks.deleteKnowledgeBase).not.toHaveBeenCalledWith('kb_old');
   });
 
-  it('sends inspected website sources to Retell as fixed text snapshots instead of auto-refresh URLs', async () => {
-    const originalFetch = global.fetch;
-    global.fetch = vi.fn(async () => new Response(
-      '<html><body><h1>FAQ</h1><p>Starter kostet 89 Euro.</p></body></html>',
-      { headers: { 'content-type': 'text/html' } },
-    ));
+  it('does not delete the old KB during sync before deploy persistence is durable', async () => {
     mocks.createKnowledgeBase.mockResolvedValue({
       knowledge_base_id: 'kb_new',
       knowledge_base_name: 'New KB',
@@ -51,17 +46,59 @@ describe('knowledge base sync lifecycle', () => {
       status: 'complete',
     });
 
-    try {
-      await syncRetellKnowledgeBase({
-        businessName: 'Studio',
-        tenantId: 'tenant_1',
-        knowledgeSources: [
-          { id: 'url_1', type: 'url', name: 'FAQ', content: 'https://example.com/faq' },
-        ],
-      }, 'org_1');
-    } finally {
-      global.fetch = originalFetch;
-    }
+    const synced = await syncRetellKnowledgeBase({
+      businessName: 'Studio',
+      retellKnowledgeBaseId: 'kb_old',
+      knowledgeBaseSignature: 'old_signature',
+    });
+
+    expect(synced.retellKnowledgeBaseId).toBe('kb_new');
+    expect(mocks.deleteKnowledgeBase).not.toHaveBeenCalledWith('kb_old');
+  });
+
+  it('verifies a matching stored KB before reusing it', async () => {
+    mocks.createKnowledgeBase.mockResolvedValue({
+      knowledge_base_id: 'kb_old',
+      knowledge_base_name: 'Old KB',
+      status: 'in_progress',
+    });
+    mocks.waitForKnowledgeBaseComplete.mockResolvedValue({
+      knowledge_base_id: 'kb_old',
+      knowledge_base_name: 'Old KB',
+      status: 'complete',
+    });
+
+    const first = await syncRetellKnowledgeBase<Record<string, unknown>>({ businessName: 'Studio' });
+    const reused = await syncRetellKnowledgeBase({
+      businessName: 'Studio',
+      retellKnowledgeBaseId: 'kb_old',
+      knowledgeBaseSignature: first.knowledgeBaseSignature,
+    });
+
+    expect(reused.retellKnowledgeBaseId).toBe('kb_old');
+    expect(mocks.createKnowledgeBase).toHaveBeenCalledTimes(1);
+    expect(mocks.waitForKnowledgeBaseComplete).toHaveBeenCalledWith('kb_old', { timeoutMs: 5000, intervalMs: 1000 });
+  });
+
+  it('sends knowledge sources to Retell as fixed text snapshots instead of auto-refresh URLs', async () => {
+    mocks.createKnowledgeBase.mockResolvedValue({
+      knowledge_base_id: 'kb_new',
+      knowledge_base_name: 'New KB',
+      status: 'in_progress',
+    });
+    mocks.waitForKnowledgeBaseComplete.mockResolvedValue({
+      knowledge_base_id: 'kb_new',
+      knowledge_base_name: 'New KB',
+      status: 'complete',
+    });
+
+    await syncRetellKnowledgeBase({
+      businessName: 'Studio',
+      tenantId: 'tenant_1',
+      knowledgeSources: [
+        { id: 'txt_1', type: 'text', name: 'FAQ', content: 'Starter kostet 89 Euro.' },
+      ],
+    }, 'org_1');
 
     expect(mocks.createKnowledgeBase).toHaveBeenCalledWith(expect.objectContaining({
       urls: [],

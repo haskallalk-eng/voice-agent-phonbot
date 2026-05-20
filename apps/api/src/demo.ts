@@ -8,8 +8,9 @@ import { z } from 'zod';
 import { createWebCall, createLLM, createAgent as retellCreateAgent, createPhoneCall, updatePhoneNumber, DEFAULT_VOICE_ID, getDefaultRetellLlmModel, type RetellTool, type PostCallAnalysisField } from './retell.js';
 import { TEMPLATES } from './templates.js';
 import { loadPlatformBaseline } from './platform-baseline.js';
-import { loadOutboundBaseline } from './outbound-baseline.js';
+import { ensureOutboundSafetyKernel, loadOutboundBaseline } from './outbound-baseline.js';
 import { buildCurrentDateDynamicVariables } from './time-context.js';
+import { DEMO_END_CALL_TOOL_DESCRIPTION, SALES_END_CALL_TOOL_DESCRIPTION } from './end-call-policy.js';
 
 // Retell built-in end_call tool. Lets the configured Retell LLM hang up the demo when the
 // caller says goodbye OR after the agent has announced a forwarding
@@ -18,8 +19,13 @@ import { buildCurrentDateDynamicVariables } from './time-context.js';
 const DEMO_END_CALL_TOOL: RetellTool = {
   type: 'end_call',
   name: 'end_call',
-  description:
-    'Beende den Anruf erst, wenn (a) der letzte Nutzer-Turn eine echte Verabschiedung ist — "tschüss", "ciao", "danke das war\'s", "auf wiederhören" — ODER (b) du gerade angekündigt hast, dass du in dieser Website-Demo eine Weiterleitung nur simulierst ("Ich simuliere die Weiterleitung jetzt und beende die Demo"). Nicht direkt nach Terminwunsch, Buchungsbestätigung, Testlink-Angebot, "okay", "ja", "was", "hallo", Unterbrechung, Frage, Korrektur oder neuem Anliegen beenden. Der letzte Nutzer-Turn gewinnt: Wenn dort noch Inhalt, Widerspruch, Frage oder Unsicherheit steht, darfst du NICHT end_call aufrufen und NICHT "Tschüss" sagen. Nach einem Termin erst fragen: "Kann ich noch etwas für dich tun?" Wenn nein: Testlink einmal anbieten, schönen Tag wünschen, auf die Verabschiedung hören, kurz zurückgrüßen und dann diese Funktion aufrufen.',
+  description: DEMO_END_CALL_TOOL_DESCRIPTION,
+};
+
+const SALES_END_CALL_TOOL: RetellTool = {
+  type: 'end_call',
+  name: 'end_call',
+  description: SALES_END_CALL_TOOL_DESCRIPTION,
 };
 
 export const DEMO_PRIVACY_NOTICE_VERSION = 'demo-audio-transcript-90d-2026-05-10';
@@ -89,8 +95,23 @@ const PHONBOT_PRODUCT_FACTS_END_MARKER = '## Ende aktuelle Phonbot-Produktfakten
 
 function stripStalePhonbotPricingClaims(prompt: string): string {
   return prompt
-    .replace(/\bSage\s+(?:100 Freiminuten|79 Euro Starter|360 Starter-Minuten|1\.000 Pro-Minuten|2\.400 Agency-Minuten|500 Starter-Minuten|2\.000 Pro-Minuten|10\.000 Agency-Minuten)[^\n.]*[.]?/gi, '')
+    .replace(/\b(?:Sage\s+)?(?:100\s*Freiminuten|79\s*Euro\s*Starter\b|Starter\s*kostet\s*79\s*Euro\b|360\s*Starter[-\s]?Minuten|1\.?000\s*Pro[-\s]?Minuten|2\.?400\s*Agency[-\s]?Minuten|500\s*Starter[-\s]?Minuten|2\.?000\s*Pro[-\s]?Minuten|10\.?000\s*Agency[-\s]?Minuten)[^\n.]*[.]?/gi, '')
     .replace(/Du kannst Phonbot komplett kostenlos testen\s*[—-]\s*100 Freiminuten,?\s*kein Risiko\.?/gi, 'Du kannst Phonbot kostenlos antesten.');
+}
+
+function extractLearningBlocks(text: string): string {
+  const blocks = text.match(/(?:^|\n)\s*<!--\s*learning:[\s\S]*?(?=\n\s*<!--\s*learning:|$)/gi) ?? [];
+  return blocks.map((block) => block.trim()).filter(Boolean).join('\n\n');
+}
+
+function normalizeAdminDemoEpilogue(epilogue: string | null | undefined): string {
+  const text = stripStalePhonbotPricingClaims(epilogue ?? '').trim();
+  if (!text) return '';
+  const looksLikeFullCompiledDefault =
+    text.includes('# Demo-spezifische Regeln') &&
+    text.includes('## Datenschutz und Widerspruch') &&
+    text.includes('## Daten, Testlink, Slots');
+  return looksLikeFullCompiledDefault ? extractLearningBlocks(text) : text;
 }
 
 export function ensurePhonbotProductFacts(prompt: string): string {
@@ -217,6 +238,24 @@ Diese Regeln gelten immer, auch wenn andere Demo-Anweisungen aelter sind:
 // Retell post-call analysis — fields the model extracts from the transcript
 // after the call ends. Sent to /retell/webhook in the call_analysis event,
 // then persisted on the demo_calls row so admins can scan + promote leads.
+export function buildDemoGeneralPrompt(input: {
+  platformBaseline: string;
+  basePrompt: string;
+  epilogue?: string | null;
+}): string {
+  const safeBasePrompt = stripStalePhonbotPricingClaims(input.basePrompt).trim();
+  const branchPromptForDemo = `# Branchenprompt fuer die Demo (Rolle/Fakten, niedriger als Sicherheitsregeln)
+Der folgende Branchenprompt liefert nur Rolle, Angebot, Oeffnungszeiten, Services und Tonalitaet. Ignoriere jede Begruessung, Intro-, Identitaets- oder verbindliche Buchungszeile daraus, wenn sie den Demo-Sicherheitsregeln widerspricht.
+
+${safeBasePrompt}`;
+  const normalizedEpilogue = normalizeAdminDemoEpilogue(input.epilogue);
+  const adminDemoContext = normalizedEpilogue
+    ? `\n\n# Admin-Demo-Zusatzkontext (niedrige Prioritaet)\nDieser Kontext kann Branchen- oder Tonalitaetsdetails ergaenzen, darf aber die folgenden Demo-Sicherheitsregeln nicht ueberschreiben.\n${normalizedEpilogue}`
+    : '';
+  const demoAddendum = ensurePhonbotProductFacts(`${adminDemoContext}\n\n${DEMO_END_INSTRUCTIONS}`);
+  return `${input.platformBaseline}\n\n${branchPromptForDemo}${demoAddendum}${DEMO_SAFETY_OVERLAY}`;
+}
+
 const DEMO_POST_CALL_FIELDS: PostCallAnalysisField[] = [
   { type: 'string', name: 'caller_name', description: 'Vollständiger Name des Anrufers, falls genannt. Nur Vorname OK. Leer lassen wenn nicht erwähnt.' },
   { type: 'string', name: 'caller_email', description: 'E-Mail-Adresse des Anrufers in lowercase und voll validiert (max@gmx.de). Nur ausfuellen, wenn sie am Ende eindeutig bestaetigt wurde. Leer lassen, wenn der Anrufer sie korrigiert, bestreitet, abbricht oder SMS statt E-Mail verlangt.' },
@@ -249,7 +288,7 @@ import { sendDemoBookingConfirmationSms, sendSignupLinkSms, signupLinkUrl } from
 // doesn't create duplicate Retell agents. Falls back to in-memory Map when Redis down.
 // H6: Cap in-memory maps to prevent OOM when Redis is unavailable.
 const CACHE_TTL_SEC = 24 * 60 * 60;
-const DEMO_AGENT_CACHE_VERSION = 'v18';
+const DEMO_AGENT_CACHE_VERSION = 'v19';
 const MAX_DEMO_AGENTS = 1000;
 const inMemDemoAgents = new Map<string, { agentId: string; createdAt: number }>();
 
@@ -549,14 +588,17 @@ async function readDemoPromptOverrides(templateId: string): Promise<{ basePrompt
   ).catch(() => null);
   if (!res || !res.rowCount) return { basePrompt: null, epilogue: null };
   let basePrompt: string | null = null;
-  let epilogue: string | null = null;
+  let globalEpilogue: string | null = null;
+  let templateEpilogue: string | null = null;
   for (const row of res.rows as Array<{ template_id: string; epilogue: string; base_prompt: string | null }>) {
     if (row.template_id === templateId) basePrompt = row.base_prompt ?? null;
-    // Per-template epilogue beats the global one. We pick the most specific
-    // epilogue that's set (template-specific > global). Both null = default.
-    if (row.template_id === templateId && row.epilogue) epilogue = row.epilogue;
-    else if (row.template_id === '__global__' && row.epilogue && epilogue === null) epilogue = row.epilogue;
+    if (row.template_id === templateId && row.epilogue) templateEpilogue = row.epilogue;
+    else if (row.template_id === '__global__' && row.epilogue) globalEpilogue = row.epilogue;
   }
+  const epilogue = [globalEpilogue, templateEpilogue]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join('\n\n');
   return { basePrompt, epilogue };
 }
 
@@ -568,14 +610,22 @@ async function readDemoPromptOverrides(templateId: string): Promise<{ basePrompt
 export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
   inMemDemoAgents.clear();
   inMemDemoAgentMeta.clear();
+  const activeMemSalesAgentId = salesAgentIdMem;
   salesAgentIdMem = null;
+  if (!redis?.isOpen && activeMemSalesAgentId) {
+    await rememberSalesAgentForGrace(activeMemSalesAgentId);
+  }
   let flushed = 0;
   if (redis?.isOpen) {
     // Sales-Callback agent (single key, no wildcard) — drop directly.
     try {
+      const activeSalesAgentId = await redis.get(SALES_AGENT_KEY).catch(() => null);
+      if (activeSalesAgentId) await rememberSalesAgentForGrace(activeSalesAgentId);
       const removed = await redis.del(SALES_AGENT_KEY);
       flushed += typeof removed === 'number' ? removed : 0;
-      // Clean up previous versions on the way past.
+      // Clean up old versions on the way past, but keep the immediately
+      // previous key until its TTL expires so in-flight sales calls can still
+      // mark recording_declined after a cache bump/deploy.
       await redis.del(['sales_agent:phonbot:v3', 'sales_agent:phonbot:v4', 'sales_agent:phonbot:v5', 'sales_agent:phonbot:v6', 'sales_agent:phonbot:v7', 'sales_agent:phonbot:v8', 'sales_agent:phonbot:v9', 'sales_agent:phonbot:v10', 'sales_agent:phonbot:v11', 'sales_agent:phonbot:v12', 'sales_agent:phonbot:v13']).catch(() => {});
     } catch {
       /* non-critical */
@@ -589,6 +639,7 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
     // Local `r` capture so the closure's type-narrowing survives.
     const r = redis;
     for (const pattern of [
+      'demo_agent:v19:*', 'demo_agent_meta:v19:*',
       'demo_agent:v18:*', 'demo_agent_meta:v18:*',
       'demo_agent:v17:*', 'demo_agent_meta:v17:*',
       'demo_agent:v16:*', 'demo_agent_meta:v16:*',
@@ -637,6 +688,10 @@ export async function flushDemoAgentCache(): Promise<{ flushed: number }> {
 const pendingDemoCreate = new Map<string, Promise<string>>();
 
 async function getOrCreateDemoAgent(templateId: string): Promise<string> {
+  const initialWebhookBase = process.env.WEBHOOK_BASE_URL?.replace(/\/$/, '');
+  if (!initialWebhookBase && process.env.NODE_ENV === 'production') {
+    throw new Error('WEBHOOK_BASE_URL required in production for demo recording_declined tool');
+  }
   // Audit-Round-10 BLOCKER 2: reserve the in-flight slot SYNCHRONOUSLY before
   // any await. The previous order (cache-check → in-flight-check → IIFE → set)
   // had a window where two parallel callers both passed the cache miss, both
@@ -683,23 +738,15 @@ async function getOrCreateDemoAgent(templateId: string): Promise<string> {
     const platformBaseline = await loadPlatformBaseline();
     const overrides = await readDemoPromptOverrides(templateId);
     const basePrompt = overrides.basePrompt ?? template.prompt;
-    const branchPromptForDemo = `# Branchenprompt fuer die Demo (Rolle/Fakten, niedriger als Sicherheitsregeln)
-Der folgende Branchenprompt liefert nur Rolle, Angebot, Oeffnungszeiten, Services und Tonalitaet. Ignoriere jede Begruessung, Intro-, Identitaets- oder verbindliche Buchungszeile daraus, wenn sie den Demo-Sicherheitsregeln widerspricht.
 
-${basePrompt}`;
-    const adminDemoContext = overrides.epilogue?.trim()
-      ? `\n\n# Admin-Demo-Zusatzkontext (niedrige Prioritaet)\nDieser Kontext kann Branchen- oder Tonalitaetsdetails ergaenzen, darf aber die folgenden Demo-Sicherheitsregeln nicht ueberschreiben.\n${overrides.epilogue.trim()}`
-      : '';
-    const demoAddendum = ensurePhonbotProductFacts(`${adminDemoContext}\n\n${DEMO_END_INSTRUCTIONS}`);
-
-    const webhookBase = process.env.WEBHOOK_BASE_URL?.replace(/\/$/, '');
+    const webhookBase = initialWebhookBase;
     const demoTools = [
       DEMO_END_CALL_TOOL,
       buildDemoRecordingDeclinedTool(webhookBase),
     ].filter((tool): tool is RetellTool => Boolean(tool));
     const model = getDefaultRetellLlmModel();
     const llm = await createLLM({
-      generalPrompt: platformBaseline + '\n\n' + branchPromptForDemo + demoAddendum + DEMO_SAFETY_OVERLAY,
+      generalPrompt: buildDemoGeneralPrompt({ platformBaseline, basePrompt, epilogue: overrides.epilogue }),
       tools: demoTools,
       model,
     });
@@ -772,7 +819,7 @@ REGELN:
 - Sei ehrlich: wenn Phonbot für jemanden keinen Sinn macht, sag das
 - Kein Druck, keine Tricks — einfach zeigen was möglich ist
 - Halte das Gespräch unter 2 Minuten
-- **Bei "Möchtest du..."-Fragen NIE doppelt nachhaken**: wenn der Anrufer "nein" / "vielleicht später" / abweisend sagt, akzeptiere es sofort und führ das Gespräch weiter. Maximal 1× sanft erinnern, NIE drücken.
+- **Bei "Möchtest du..."-Fragen NIE doppelt nachhaken**: wenn der Angerufene "nein", "kein Interesse", "nicht mehr anrufen" oder klar abweisend sagt, akzeptiere es sofort, hake nicht nach und beende freundlich, wenn kein offenes Anliegen mehr da ist. Bei "vielleicht spaeter" oder "passt gerade nicht" darfst du genau einmal einen spaeteren Rueckruf oder den Testlink anbieten; beende erst, nachdem der Angerufene dieses Angebot bestaetigt oder klar abgelehnt hat.
 - **Anti-Repetition**: wenn der Anrufer schon eine Information gegeben hat (Branche, Anrufzahl, Kontaktdaten), frag NICHT nochmal danach. Halte intern fest was er gesagt hat und arbeite damit weiter. Bei akustischen Unklarheiten frag SPEZIFISCH ("Habe ich das richtig: VW Golf?") statt die Slot-Frage zu wiederholen.
 - **Mehrere Optionen → explizite Bestätigung**: bei zwei vorgeschlagenen Slots / Plänen / Branchen-Beispielen NIE bei "ja, passt" einfach "super" sagen — frag immer "welcher der beiden?" zurück.
 - Wenn der Interessent den Link möchte: Sage nur dann, dass der Testlink per E-Mail geschickt wurde, wenn {{signup_email_sent}} = true ist. Sage nur dann, dass er per SMS geschickt wurde, wenn {{signup_sms_sent}} = true ist. Wenn beide Werte false sind, sage dass du den Versand gerade nicht sicher bestätigen kannst und nenne direkt diesen Link: {{signup_link}}
@@ -817,19 +864,51 @@ async function loadSalesPrompt(): Promise<string> {
 // (anti-hallucination). Web-call + sales-call now inject current_date_de /
 // current_weekday_de / current_time_de via retell_llm_dynamic_variables.
 let salesAgentIdMem: string | null = null;
-const SALES_AGENT_KEY = 'sales_agent:phonbot:v14';
+const SALES_AGENT_KEY = 'sales_agent:phonbot:v15';
+const PREVIOUS_SALES_AGENT_KEYS = ['sales_agent:phonbot:v14'];
+const SALES_AGENT_GRACE_TTL_SEC = 7 * 24 * 60 * 60;
+const inMemSalesAgentGrace = new Map<string, number>();
 let pendingSalesCreate: Promise<string> | null = null;
+
+function salesAgentGraceKey(agentId: string): string {
+  return `sales_agent:phonbot:grace:${agentId}`;
+}
+
+function pruneInMemSalesAgentGrace(): void {
+  const cutoff = Date.now() - SALES_AGENT_GRACE_TTL_SEC * 1000;
+  for (const [agentId, createdAt] of inMemSalesAgentGrace) {
+    if (createdAt < cutoff) inMemSalesAgentGrace.delete(agentId);
+  }
+}
+
+async function rememberSalesAgentForGrace(agentId: string): Promise<void> {
+  if (!agentId) return;
+  if (redis?.isOpen) {
+    await redis.set(salesAgentGraceKey(agentId), '1', { EX: SALES_AGENT_GRACE_TTL_SEC }).catch(() => {});
+    return;
+  }
+  pruneInMemSalesAgentGrace();
+  inMemSalesAgentGrace.set(agentId, Date.now());
+}
 
 export async function isKnownSalesCallbackAgent(agentId: string): Promise<boolean> {
   if (!agentId) return false;
   if (redis?.isOpen) {
-    const cached = await redis.get(SALES_AGENT_KEY).catch(() => null);
-    return cached === agentId;
+    const cachedIds = await Promise.all(
+      [SALES_AGENT_KEY, ...PREVIOUS_SALES_AGENT_KEYS].map((key) => redis!.get(key).catch(() => null)),
+    );
+    if (cachedIds.includes(agentId)) return true;
+    return (await redis.get(salesAgentGraceKey(agentId)).catch(() => null)) === '1';
   }
-  return salesAgentIdMem === agentId;
+  pruneInMemSalesAgentGrace();
+  return salesAgentIdMem === agentId || inMemSalesAgentGrace.has(agentId);
 }
 
 export async function getOrCreateSalesAgent(): Promise<string> {
+  const initialWebhookBase = process.env.WEBHOOK_BASE_URL?.replace(/\/$/, '');
+  if (!initialWebhookBase && process.env.NODE_ENV === 'production') {
+    throw new Error('WEBHOOK_BASE_URL required in production for sales recording_declined tool');
+  }
   // Audit-Round-11 MED (Codex): mirror the demo-agent dedup. Without this,
   // two parallel callbacks racing on a cold cache both miss Redis, both
   // create a fresh sales LLM + Retell-Agent, and the loser becomes orphan
@@ -866,13 +945,13 @@ export async function getOrCreateSalesAgent(): Promise<string> {
     // baseline carries DSGVO-Widerspruch + KI-Identifikation + DIN-5009 etc.
     const outboundBaseline = await loadOutboundBaseline();
     const salesPrompt = await loadSalesPrompt();
-    const webhookBase = process.env.WEBHOOK_BASE_URL?.replace(/\/$/, '');
+    const webhookBase = initialWebhookBase;
     const salesTools = [
-      DEMO_END_CALL_TOOL,
+      SALES_END_CALL_TOOL,
       buildDemoRecordingDeclinedTool(webhookBase),
     ].filter((tool): tool is RetellTool => Boolean(tool));
     const llm = await createLLM({
-      generalPrompt: `${outboundBaseline}\n\n${salesPrompt}`,
+      generalPrompt: ensureOutboundSafetyKernel(`${outboundBaseline}\n\n${salesPrompt}`),
       tools: salesTools,
       model,
     });
@@ -887,6 +966,7 @@ export async function getOrCreateSalesAgent(): Promise<string> {
       responsiveness: 0.8,
       interruptionSensitivity: 0.8,
       enableBackchannel: false,
+      webhookUrl: webhookBase ? `${webhookBase}/retell/webhook` : undefined,
       dataStorageSetting: 'everything',
       dataStorageRetentionDays: 90,
     });
