@@ -122,6 +122,14 @@ describe('prompt eval dry-run harness', () => {
   });
 
   it('keeps end_call tool descriptions mode-specific and positively whitelisted', () => {
+    for (const description of [
+      DEMO_END_CALL_TOOL_DESCRIPTION,
+      SALES_END_CALL_TOOL_DESCRIPTION,
+      buildInboundEndCallToolDescription(true),
+      buildInboundEndCallToolDescription(false),
+    ]) {
+      expect(description.length).toBeLessThanOrEqual(1024);
+    }
     expect(DEMO_END_CALL_TOOL_DESCRIPTION).toContain('Website-Demo');
     expect(DEMO_END_CALL_TOOL_DESCRIPTION).toContain('recording_declined war erfolgreich');
     expect(DEMO_END_CALL_TOOL_DESCRIPTION).toContain('Der letzte Nutzer-Turn gewinnt');

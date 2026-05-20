@@ -29,26 +29,24 @@ export function buildInboundEndCallToolDescription(recordingDeclineToolAvailable
 
 export const DEMO_END_CALL_TOOL_DESCRIPTION =
   [
-    'Beende den Website-Demo-Anruf nur in einem positiven Endfall:',
-    'der letzte Nutzer-Turn ist eindeutig final, z.B. "tschuess", "ciao", "danke das wars", "auf wiederhoeren", "nein danke", "alles gut" oder "das war alles";',
-    'der Nutzer bittet ausdruecklich ums Auflegen;',
-    'du hast einen Demo-Termin sauber simuliert aufgenommen, "Kann ich noch etwas fuer dich tun?" gefragt, den Testlink genau einmal angeboten oder die Ablehnung akzeptiert, final einen schoenen Tag gewuenscht und danach kommt eine Verabschiedung oder kurze Stille;',
-    'du hast ausdruecklich gesagt: "Ich simuliere die Weiterleitung jetzt und beende die Demo";',
-    'oder recording_declined war erfolgreich und du musst die Demo wegen Audio-/Transkript-Widerruf beenden.',
-    'Nicht direkt nach Terminwunsch, Buchungsbestaetigung, Testlink-Angebot, "okay", "ja", "was", "hallo", Unterbrechung, Frage, Korrektur oder neuem Anliegen beenden.',
-    END_CALL_LAST_TURN_BLOCKER,
+    'Website-Demo: Nutze end_call nur bei klarem Endfall.',
+    'Erlaubt: Nutzer verabschiedet sich eindeutig oder bittet ums Auflegen;',
+    'nach Demo-Termin/simulierter Weiterleitung hast du gefragt ob noch etwas offen ist, Testlink einmal angeboten/abgelehnt, final verabschiedet und danach kommt Goodbye oder kurze Stille;',
+    'du hast gesagt: "Ich simuliere die Weiterleitung jetzt und beende die Demo";',
+    'oder recording_declined war erfolgreich und die Demo muss wegen Audio-/Transkript-Widerruf enden.',
+    'Nie nach offenem Terminwunsch, Buchungsbestaetigung, Testlink-Angebot, "okay/ja/was/hallo", Unterbrechung, Frage, Korrektur, Kritik, Unsicherheit oder neuem Anliegen beenden.',
+    'Der letzte Nutzer-Turn gewinnt: Bei neuer/unklarer Nutzerreaktion nicht auflegen, sondern kurz antworten oder nachfragen.',
   ].join(' ');
 
 export const SALES_END_CALL_TOOL_DESCRIPTION =
   [
-    'Beende den Sales-Callback nur in einem positiven Endfall:',
-    'der Angerufene verabschiedet sich eindeutig oder bittet ums Auflegen;',
-    'der Angerufene sagt klar kein Interesse, nicht mehr anrufen, keine Werbung oder widerspricht weiterem Kontakt;',
-    'recording_declined war erfolgreich und der Sales-/Demo-Callback muss beendet werden;',
-    'der naechste Schritt ist bestaetigt oder der Testlink wurde genannt/versendet soweit bestaetigt, du hast gefragt ob noch etwas offen ist, und es gibt kein offenes Anliegen mehr;',
-    'oder der Anruf passt gerade nicht und ein spaeterer Kontakt/Testlink wurde vom Angerufenen bestaetigt oder klar abgelehnt. Nicht beenden, solange dein Rueckruf-/Testlink-Angebot noch als offene Frage im Raum steht.',
-    'Kein weiteres Nachhaken bei Opt-out oder klarem Nein.',
-    END_CALL_LAST_TURN_BLOCKER,
+    'Sales-Callback: Nutze end_call nur bei klarem Endfall.',
+    'Erlaubt: Angerufener verabschiedet sich oder bittet ums Auflegen;',
+    'er sagt klar kein Interesse, nicht mehr anrufen, keine Werbung oder widerspricht weiterem Kontakt;',
+    'recording_declined war erfolgreich und der Callback muss beendet werden;',
+    'naechster Schritt/Testlink ist bestaetigt oder klar abgelehnt und du hast gefragt ob noch etwas offen ist.',
+    'Nicht beenden, solange Rueckruf/Testlink/Termin noch als offene Frage im Raum steht.',
+    'Der letzte Nutzer-Turn gewinnt: Bei Frage, Korrektur, Unterbrechung, unklarem Ja/Okay oder neuem Anliegen nicht auflegen; kurz antworten oder nachfragen.',
   ].join(' ');
 
 export const PLATFORM_END_CALL_POLICY = `## Beenden des Gespraechs

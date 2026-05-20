@@ -102,9 +102,23 @@ describe('buildRetellTools: end_call policy', () => {
     const endCall = tools.find((tool) => tool.name === 'end_call');
 
     expect(endCall?.type).toBe('end_call');
+    expect(endCall?.description?.length).toBeLessThanOrEqual(1024);
     expect(endCall?.description).toContain('clear positive end condition');
     expect(endCall?.description).toContain('Do not end only because recording was declined');
     expect(endCall?.description).toContain('Der letzte Nutzer-Turn gewinnt');
+  });
+
+  it('keeps all registered Retell tool descriptions within provider limits', () => {
+    const tools = buildRetellTools(baseCfg({
+      recordCalls: true,
+      tools: ['calendar.findSlots', 'calendar.book', 'calendar.findBookings', 'calendar.cancel', 'calendar.reschedule', 'ticket.create'],
+    }), 'https://example.test');
+
+    for (const tool of tools) {
+      if (tool.description) {
+        expect(tool.description.length, `${tool.name} description length`).toBeLessThanOrEqual(1024);
+      }
+    }
   });
 });
 
