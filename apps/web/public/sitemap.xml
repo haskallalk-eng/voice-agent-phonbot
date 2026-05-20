@@ -39,12 +39,26 @@
 
   <url>
     <loc>https://phonbot.de/blog/</loc>
-    <lastmod>2026-05-11</lastmod>
+    <lastmod>2026-05-20</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.78</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/blog/" />
     <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/blog/" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/blog/" />
+  </url>
+
+  <url>
+    <loc>https://phonbot.de/blog/ki-telefonassistent-selbststaendige/</loc>
+    <lastmod>2026-05-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.72</priority>
+    <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/blog/ki-telefonassistent-selbststaendige/" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/blog/ki-telefonassistent-selbststaendige/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/blog/ki-telefonassistent-selbststaendige/" />
+    <image:image>
+      <image:loc>https://phonbot.de/og-image.png</image:loc>
+      <image:title>KI-Telefonassistent fuer Selbststaendige: erreichbar bleiben ohne Sekretariat</image:title>
+    </image:image>
   </url>
 
   <url>
