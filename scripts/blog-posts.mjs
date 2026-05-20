@@ -10,6 +10,94 @@ export const BLOG_INDEX = {
 
 export const BLOG_POSTS = [
   {
+    slug: 'ki-telefonassistent-selbststaendige',
+    title: 'KI-Telefonassistent fuer Selbststaendige: erreichbar bleiben ohne Sekretariat',
+    description: 'Wie Solo-Selbststaendige, Coaches und lokale Dienstleister mit Phonbot Anrufe annehmen, Rueckrufe vorbereiten und Termine sicher strukturieren.',
+    headline: 'KI-Telefonassistent fuer Selbststaendige: erreichbar bleiben, ohne dauernd aus der Arbeit gerissen zu werden.',
+    datePublished: '2026-05-20',
+    dateModified: '2026-05-20',
+    category: 'Selbststaendige',
+    readingMinutes: 7,
+    primaryKeyword: 'KI Telefonassistent Selbststaendige',
+    secondaryKeywords: ['Telefonassistent fuer Selbststaendige', 'KI Anrufannahme Freelancer', 'automatische Terminannahme Selbststaendige'],
+    intent: 'Kaufnahe Informationsintention fuer Solo-Selbststaendige, Coaches, Berater und kleine Dienstleister, die professioneller erreichbar sein wollen, ohne sofort Personal einzustellen.',
+    reviewedBy: 'Phonbot SEO/Superhirn',
+    summary: 'Selbststaendige brauchen keinen riesigen Callcenter-Prozess. Sie brauchen eine ruhige Anrufannahme, die Anliegen erkennt, Pflichtdaten sammelt, Termine nur nach Bestaetigung bucht und bei Unsicherheit einen Rueckruf vorbereitet.',
+    sections: [
+      {
+        heading: 'Warum Selbststaendige am Telefon besonders verwundbar sind',
+        paragraphs: [
+          'Wer alleine arbeitet, kann nicht gleichzeitig beraten, behandeln, fahren, verkaufen und jeden Anruf sauber annehmen. Genau in diesen Momenten entstehen aber neue Auftraege: Ein Interessent will einen Termin, ein Bestandskunde hat eine Rueckfrage oder jemand vergleicht gerade mehrere Anbieter.',
+          'Ein KI-Telefonassistent fuer Selbststaendige soll diese Luecke schliessen. Er ist kein Ersatz fuer persoenliche Beratung, sondern ein strukturierter Empfang: Er begruesst den Anrufer, erkennt das Anliegen, sammelt die noetigen Daten und macht aus einem spontanen Anruf einen klaren naechsten Schritt.',
+        ],
+      },
+      {
+        heading: 'Welche Aufgaben Phonbot fuer Solo-Betriebe uebernehmen kann',
+        bullets: [
+          'Anrufe sofort annehmen, wenn du im Termin, unterwegs oder ausserhalb der Oeffnungszeiten bist.',
+          'Name, Rueckrufnummer, Anliegen, Wunschzeit und wichtige Hinweise strukturiert erfassen.',
+          'Terminanfragen vorbereiten oder mit verbundenem Kalender nach freiem Slot buchen.',
+          'Absagen, Verschiebungen und Rueckrufwuensche aufnehmen, ohne doppelte Aktionen zu versprechen.',
+          'Standardfragen zu Leistungen, Ablauf, Oeffnungszeiten und Erreichbarkeit beantworten.',
+          'Bei Unsicherheit oder sensiblen Themen einen menschlichen Rueckruf statt eine falsche Zusage anbieten.',
+        ],
+      },
+      {
+        heading: 'Der wichtigste Unterschied: Aufnahme statt Halluzination',
+        paragraphs: [
+          'Ein Selbststaendigen-Agent darf nicht so tun, als wuesste er alles. Wenn Preise, Leistungen oder freie Zeiten nicht hinterlegt sind, muss er nachfragen, einen Rueckruf vorbereiten oder klar sagen, dass er das nicht sicher bestaetigen kann. Das ist besser als eine schnelle, aber falsche Antwort.',
+          'Besonders bei Terminen gilt: Der Agent sollte erst buchen, wenn Pflichtdaten vorliegen, der freie Slot aus dem Tool kommt und der Anrufer die konkreten Daten bestaetigt hat. Ohne erfolgreiche Tool-Antwort darf er nicht behaupten, der Termin sei eingetragen.',
+        ],
+      },
+      {
+        heading: 'Welche Daten vor einer Aktion wirklich noetig sind',
+        bullets: [
+          'Fuer Rueckruf: Name, Telefonnummer und kurzer Anlass.',
+          'Fuer Terminwunsch: Name, Kontakt, Leistung oder Thema, Datum, Uhrzeit oder Zeitfenster.',
+          'Fuer Buchung: bestaetigter Slot, passende Leistung, Kontaktmoeglichkeit und ausdrueckliche Bestaetigung.',
+          'Fuer Verschiebung oder Absage: sicherer Bezug zum bestehenden Termin, neuer Wunsch oder klare Stornobestaetigung.',
+          'Fuer komplexe Anliegen: genug Kontext fuer eine menschliche Nachbearbeitung, aber keine unnoetigen sensiblen Daten.',
+        ],
+      },
+      {
+        heading: 'Wie die Einrichtung in Phonbot praktisch aussieht',
+        paragraphs: [
+          'Im Phonbot-Dashboard werden Betrieb, Leistungen, Oeffnungszeiten, Mitarbeiter oder Einzelkalender, Wissensbasis und Datenschutzregeln gepflegt. Fuer Selbststaendige ist der Aufbau meist schlanker als bei einem groesseren Team: ein Kalender, klare Leistungen, wenige gute FAQ und ein Rueckrufprozess reichen oft fuer den Anfang.',
+          'Wichtig ist ein echter Testanruf aus Kundensicht. Dabei sollte nicht nur geprueft werden, ob der Agent freundlich klingt. Entscheidend ist, ob er bei Korrekturen stoppt, E-Mail und Telefonnummer vorsichtig bestaetigt, keinen Tool-Namen ausspricht und bei Fehlern ruhig auf Rueckruf oder menschliche Uebergabe wechselt.',
+        ],
+      },
+      {
+        heading: 'Kosten realistisch bewerten',
+        paragraphs: [
+          'Fuer reine Telefon-Anbindung ist eine eigene KI-Telefonnummer der technische Einstieg. Fuer laufende operative Anrufannahme ist ein Plan mit genuegend Minuten sinnvoller. Der Starter-Plan ab 89 EUR pro Monat mit 300 Minuten ist fuer viele kleine Betriebe der realistische Startpunkt, wenn der Agent regelmaessig echte Anrufe annimmt.',
+          'Die Frage ist nicht nur, was der Agent kostet. Entscheidend ist, wie viele Anrufe sonst verloren gehen, wie viel Zeit du im Alltag sparst und ob aus verpassten Anfragen wieder Rueckrufe, Termine oder Auftraege werden.',
+        ],
+      },
+      {
+        heading: 'Grenzen fuer Vertrauen und Datenschutz',
+        paragraphs: [
+          'Ein KI-Telefonassistent sollte keine Rechts-, Medizin-, Finanz- oder Fachberatung erfinden. Er kann Informationen aufnehmen, allgemeine Ablaufe erklaeren und Termine vorbereiten. Wenn es individuell, riskant oder unklar wird, gehoert der Fall zu einem Menschen.',
+          'Auch Datenschutz gehoert in die Einrichtung. Der Agent sollte nur Daten sammeln, die fuer den konkreten Zweck gebraucht werden. Audio, Transkript, Metadaten und Speicherfristen muessen zur echten Konfiguration passen. Eine kurze ehrliche Erklaerung ist besser als ein grosser pauschaler DSGVO-Satz.',
+        ],
+      },
+    ],
+    checklist: [
+      'Die fuenf haeufigsten Anrufgruende notieren und im Agent Builder als klare Regeln abbilden.',
+      'Leistungen, Dauer, Oeffnungszeiten und Rueckrufprozess aktuell halten.',
+      'Kalender nur verbinden, wenn Terminbuchung wirklich getestet wurde.',
+      'Vor Buchung, Verschiebung oder Absage immer konkrete Daten bestaetigen lassen.',
+      'Echte Testanrufe mit Korrekturen, Unterbrechungen und unvollstaendigen Daten machen.',
+      'Nach den ersten Live-Anrufen Tickets, Buchungen und Fehlermeldungen auswerten.',
+    ],
+    faq: [
+      ['Ist ein KI-Telefonassistent fuer Selbststaendige sinnvoll?', 'Ja, wenn regelmaessig Anrufe kommen, waehrend du nicht frei sprechen kannst. Besonders stark ist der Nutzen bei Terminwuenschen, Rueckrufen und wiederkehrenden Standardfragen.'],
+      ['Kann Phonbot Termine fuer mich buchen?', 'Ja, wenn ein Kalender verbunden ist und der Agent alle Pflichtdaten gesammelt hat. Eine Buchung sollte erst nach konkreter Bestaetigung und erfolgreicher Tool-Antwort als erledigt gelten.'],
+      ['Kann ich meine bestehende Telefonnummer behalten?', 'In vielen Faellen ja. Die bestehende Nummer kann technisch per Rufweiterleitung auf die Phonbot-Zielnummer uebergeben werden.'],
+      ['Was passiert, wenn der Agent etwas nicht weiss?', 'Dann soll er nichts erfinden. Er fragt nach, bereitet einen Rueckruf vor oder sagt kurz, dass ein Mensch das klaeren muss.'],
+    ],
+    related: ['selbststaendig', 'kontakt', 'branchen'],
+  },
+  {
     slug: 'rufweiterleitung-einrichten-typische-fehler',
     title: 'Rufweiterleitung einrichten: 9 typische Fehler vor dem KI-Testanruf',
     description: 'Welche Fehler kleine Unternehmen bei Rufweiterleitung, KI-Telefonnummer, Testanruf und Fallback vermeiden sollten, bevor Phonbot live geht.',

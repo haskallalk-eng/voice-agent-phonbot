@@ -4,6 +4,10 @@ import { SITE, TODAY, CORE_INDUSTRY_PAGES, SEO_NICHE_PAGES, SUPPORT_PAGES } from
 import { BLOG_INDEX, BLOG_POSTS, blogUrl } from './blog-posts.mjs';
 
 const OUT = path.resolve('apps/web/public/sitemap.xml');
+const BLOG_LASTMOD = BLOG_POSTS.reduce(
+  (max, post) => post.dateModified > max ? post.dateModified : max,
+  TODAY,
+);
 
 const LEGAL_PAGES = [
   { slug: 'impressum', lastmod: TODAY, changefreq: 'yearly', priority: '0.3' },
@@ -23,7 +27,7 @@ const urls = [
   })),
   {
     loc: `${SITE}/${BLOG_INDEX.slug}/`,
-    lastmod: TODAY,
+    lastmod: BLOG_LASTMOD,
     changefreq: 'weekly',
     priority: '0.78',
   },

@@ -9,6 +9,10 @@ import { SITE, TODAY, ALL_INDUSTRY_PAGES, SUPPORT_PAGES } from './seo-pages.mjs'
 import { BLOG_INDEX, BLOG_POSTS, blogUrl } from './blog-posts.mjs';
 
 const OUT_DIR = path.resolve('apps/web/public/blog');
+const BLOG_LASTMOD = BLOG_POSTS.reduce(
+  (max, post) => post.dateModified > max ? post.dateModified : max,
+  TODAY,
+);
 
 function esc(value) {
   return String(value)
@@ -83,7 +87,7 @@ function indexJsonLd() {
         name: BLOG_INDEX.title,
         description: BLOG_INDEX.description,
         inLanguage: 'de-DE',
-        dateModified: TODAY,
+        dateModified: BLOG_LASTMOD,
         publisher: { '@type': 'Organization', name: 'Phonbot', url: SITE },
         blogPost: BLOG_POSTS.map((post) => ({ '@id': `${blogUrl(post)}#article` })),
       },

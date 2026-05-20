@@ -307,9 +307,13 @@ function checkProductTruthDrift() {
     if (!content.includes(PRODUCT_TRUTH.legalName)) fail(`${rel}: legal entity truth missing`);
   }
 
-  const expectedDate = germanDate(TODAY);
+  const latestPublicContentDate = BLOG_POSTS.reduce(
+    (max, post) => post.dateModified > max ? post.dateModified : max,
+    TODAY,
+  );
+  const expectedDate = germanDate(latestPublicContentDate);
   if (!llms.includes(expectedDate) || !llmsFull.includes(expectedDate)) {
-    fail(`LLM docs update date drift; expected ${expectedDate} for current SEO release ${TODAY}`);
+    fail(`LLM docs update date drift; expected ${expectedDate} for current SEO release ${latestPublicContentDate}`);
   }
 
   for (const [rel, content] of Object.entries({ 'llms.txt': llms, 'llms-full.txt': llmsFull })) {
