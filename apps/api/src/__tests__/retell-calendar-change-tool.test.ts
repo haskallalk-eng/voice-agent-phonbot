@@ -225,7 +225,7 @@ describe('Retell calendar change tools privacy contract', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body)).toMatchObject({ ok: false, status: 'confirmation_required' });
+    expect(JSON.parse(res.body)).toMatchObject({ ok: false, status: 'blocked', error: 'CHANGE_CONFIRMATION_REQUIRED' });
     expect(mockCancelChipyBookingForChange).not.toHaveBeenCalled();
   });
 });
