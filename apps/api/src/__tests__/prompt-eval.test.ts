@@ -22,6 +22,7 @@ const { OUTBOUND_BASELINE_PROMPT, ensureOutboundSafetyKernel } = await import('.
 const { ensurePlatformSafetyKernel } = await import('../platform-baseline.js');
 const { DEMO_END_CALL_TOOL_DESCRIPTION, SALES_END_CALL_TOOL_DESCRIPTION, buildInboundEndCallToolDescription } = await import('../end-call-policy.js');
 const { TEMPLATES } = await import('../templates.js');
+const { PUBLIC_PHONE_DEMO_PROMPT } = await import('../scripts/sync-public-demo-phone.js');
 
 describe('prompt eval dry-run harness', () => {
   it('builds at least 1000 dry-run prompt/function cases with specialized simulation agents', () => {
@@ -119,6 +120,10 @@ describe('prompt eval dry-run harness', () => {
     expect(DEMO_SAFETY_OVERLAY).toContain('end_call ist gesperrt');
     expect(DEMO_SAFETY_OVERLAY).toContain('Ja, was');
     expect(DEMO_SAFETY_OVERLAY).toContain('Der letzte Nutzer-Turn gewinnt');
+    expect(DEMO_SAFETY_OVERLAY).toContain('"Erstmal" ist ein Planungs-/Fuellwort');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Normale Fuellwoerter oder Planungswoerter wie "erstmal"');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Ende niemals direkt nach "erstmal"');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Wenn der Anrufer "fuenf erstmal" sagt');
   });
 
   it('keeps end_call tool descriptions mode-specific and positively whitelisted', () => {
