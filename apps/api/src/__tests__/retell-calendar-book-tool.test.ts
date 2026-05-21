@@ -156,7 +156,7 @@ describe('Retell calendar.book tool contract', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({
       ok: false,
-      status: 'confirmation_required',
+      status: 'blocked',
       error: 'CONFIRMATION_REQUIRED',
     });
     expect(mockBookSlot).not.toHaveBeenCalled();
@@ -193,7 +193,7 @@ describe('Retell calendar.book tool contract', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({
       ok: false,
-      status: 'preferred_time_required',
+      status: 'blocked',
       error: 'PREFERRED_TIME_REQUIRED',
     });
     expect(mockBookSlot).not.toHaveBeenCalled();
@@ -211,7 +211,7 @@ describe('Retell calendar.book tool contract', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({
       ok: false,
-      status: 'service_required',
+      status: 'blocked',
       error: 'SERVICE_REQUIRED',
     });
     expect(mockBookSlot).not.toHaveBeenCalled();

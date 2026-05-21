@@ -49,6 +49,8 @@ import { readDemoCallTemplate, maybeSendDemoSignupLink, maybeSendDemoBookingConf
 import { redactPII } from './pii.js';
 import { RECORDING_CONSENT_PROMPT_VERSION } from './agent-instructions.js';
 import { log } from './logger.js';
+import { evaluateToolPolicy } from './policy-layer.js';
+import { buildCurrentDateDynamicVariables } from './time-context.js';
 import { isPlausiblePhone } from '@vas/shared';
 import {
   customerModuleActiveForAgentConfig,
@@ -419,6 +421,26 @@ async function verifyRecordingDeclineToolCall(
       testMode: false,
     };
   }
+}
+
+function retellPolicyInput(toolName: string, args: Record<string, unknown>, callerPhone?: string | null) {
+  return {
+    toolName,
+    args,
+    callerPhoneVerified: Boolean(callerPhone),
+    callerEmailConfirmed: false,
+    nowIsoDate: buildCurrentDateDynamicVariables().current_date_iso,
+  };
+}
+
+function blockedByPolicyResult(policy: Exclude<ReturnType<typeof evaluateToolPolicy>, { allowed: true }>): Record<string, unknown> {
+  return {
+    ok: false,
+    status: 'blocked',
+    error: policy.code,
+    message: policy.message,
+    instruction: policy.instruction,
+  };
 }
 
 function safeTraceInput(args: Record<string, unknown>): Record<string, unknown> {
@@ -1918,6 +1940,23 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
+    if (!liveCall.testMode) {
+      const policy = evaluateToolPolicy(retellPolicyInput('calendar_book', args, liveCall.callerPhone));
+      if (!policy.allowed) {
+        const blocked = blockedByPolicyResult(policy);
+        await appendTraceEvent({
+          type: 'tool_result',
+          sessionId: ctx.callId,
+          tenantId: ctx.orgId ?? undefined,
+          agentId: ctx.agentId ?? undefined,
+          tool: 'calendar.book',
+          output: safeTraceOutput(blocked),
+          at: now(),
+        } as Parameters<typeof appendTraceEvent>[0]);
+        return sanitizeToolResultForModel(blocked);
+      }
+    }
+
     let result: Record<string, unknown>;
 
     if (liveCall.testMode) {
@@ -2272,6 +2311,23 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
 
+    if (!liveCall.testMode) {
+      const policy = evaluateToolPolicy(retellPolicyInput('calendar_find_bookings', args, liveCall.callerPhone));
+      if (!policy.allowed) {
+        const blocked = blockedByPolicyResult(policy);
+        await appendTraceEvent({
+          type: 'tool_result',
+          sessionId: ctx.callId,
+          tenantId: ctx.orgId,
+          agentId: ctx.agentId,
+          tool: 'calendar.findBookings',
+          output: safeTraceOutput(blocked),
+          at: now(),
+        } as Parameters<typeof appendTraceEvent>[0]);
+        return sanitizeToolResultForModel(blocked);
+      }
+    }
+
     const staff = await resolveCalendarStaffForTool(ctx.orgId, args);
     const customerPhone = liveCall.callerPhone;
     const result = await findChipyBookingsForChange(ctx.orgId, {
@@ -2325,6 +2381,23 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       input: safeTraceInput(args),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
+
+    if (!liveCall.testMode) {
+      const policy = evaluateToolPolicy(retellPolicyInput('calendar_cancel', args, liveCall.callerPhone));
+      if (!policy.allowed) {
+        const blocked = blockedByPolicyResult(policy);
+        await appendTraceEvent({
+          type: 'tool_result',
+          sessionId: ctx.callId,
+          tenantId: orgId,
+          agentId: ctx.agentId,
+          tool: 'calendar.cancel',
+          output: safeTraceOutput(blocked),
+          at: now(),
+        } as Parameters<typeof appendTraceEvent>[0]);
+        return sanitizeToolResultForModel(blocked);
+      }
+    }
 
     const cancelChangeToken = stringArg(args, 'changeToken', 'change_token');
     const cancelIdempotencyKey = booleanArg(args, 'confirmed') && cancelChangeToken
@@ -2410,6 +2483,23 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       input: safeTraceInput(args),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
+
+    if (!liveCall.testMode) {
+      const policy = evaluateToolPolicy(retellPolicyInput('calendar_reschedule', args, liveCall.callerPhone));
+      if (!policy.allowed) {
+        const blocked = blockedByPolicyResult(policy);
+        await appendTraceEvent({
+          type: 'tool_result',
+          sessionId: ctx.callId,
+          tenantId: orgId,
+          agentId: ctx.agentId,
+          tool: 'calendar.reschedule',
+          output: safeTraceOutput(blocked),
+          at: now(),
+        } as Parameters<typeof appendTraceEvent>[0]);
+        return sanitizeToolResultForModel(blocked);
+      }
+    }
 
     const newTime = stringArg(args, 'newTime', 'new_time', 'newPreferredTime', 'new_preferred_time');
     const rescheduleChangeToken = stringArg(args, 'changeToken', 'change_token');
@@ -2540,6 +2630,23 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       input: safeTraceInput(args),
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);
+
+    if (!liveCall.testMode) {
+      const policy = evaluateToolPolicy(retellPolicyInput('ticket_create', args, liveCall.callerPhone));
+      if (!policy.allowed) {
+        const blocked = blockedByPolicyResult(policy);
+        await appendTraceEvent({
+          type: 'tool_result',
+          sessionId: callId,
+          tenantId: orgId ?? undefined,
+          agentId: agentId ?? undefined,
+          tool: 'ticket.create',
+          output: safeTraceOutput(blocked),
+          at: now(),
+        } as Parameters<typeof appendTraceEvent>[0]);
+        return sanitizeToolResultForModel(blocked);
+      }
+    }
 
     if (liveCall.testMode) {
       const result = testModeDryRunResult('ticket_create');

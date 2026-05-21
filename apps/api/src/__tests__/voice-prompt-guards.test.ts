@@ -16,6 +16,12 @@ describe('voice prompt guardrails', () => {
     expect(platformBaselineSource).toContain('niemals nur wegen RAG');
   });
 
+  it('keeps backend policy as final authority for function calls', () => {
+    expect(platformBaselineSource).toContain('Backend policy decides whether a function may run');
+    expect(platformBaselineSource).toContain('blocked or ok=false');
+    expect(platformBaselineSource).toContain('do not claim completion');
+  });
+
   it('requires injected date lookup variables for relative appointment dates', () => {
     expect(platformBaselineSource).toContain('{{current_date_iso}}');
     expect(platformBaselineSource).toContain('{{tomorrow_weekday_de}}');
