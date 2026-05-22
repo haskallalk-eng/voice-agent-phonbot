@@ -34,7 +34,7 @@ export const DEMO_END_CALL_TOOL_DESCRIPTION =
     'nach Demo-Termin/simulierter Weiterleitung hast du gefragt ob noch etwas offen ist, Testlink einmal angeboten/abgelehnt, final verabschiedet und danach kommt Goodbye oder kurze Stille;',
     'du hast gesagt: "Ich simuliere die Weiterleitung jetzt und beende die Demo";',
     'oder recording_declined war erfolgreich und die Demo muss wegen Audio-/Transkript-Widerruf enden.',
-    'Nie nach offenem Terminwunsch, Buchungsbestaetigung, Testlink-Angebot, "okay/ja/erstmal/was/hallo", Unterbrechung, Frage, Korrektur, Kritik, Unsicherheit oder neuem Anliegen beenden.',
+    'Nie nach offenem Terminwunsch, Buchungsbestaetigung, Testlink-Angebot, "okay/ja/erstmal/was/hallo", unhoerbarer Sprache, Unterbrechung, Frage, Korrektur, Kritik, Unsicherheit oder neuem Anliegen beenden.',
     'Der letzte Nutzer-Turn gewinnt: Bei neuer/unklarer Nutzerreaktion nicht auflegen, sondern kurz antworten oder nachfragen.',
   ].join(' ');
 
