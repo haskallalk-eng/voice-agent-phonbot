@@ -124,6 +124,10 @@ describe('prompt eval dry-run harness', () => {
     expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Normale Fuellwoerter oder Planungswoerter wie "erstmal"');
     expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Ende niemals direkt nach "erstmal"');
     expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Wenn der Anrufer "fuenf erstmal" sagt');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Qualitätssicherung');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('acht Euro neunundneunzig');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Wenn Sprache unhörbar ist');
+    expect(DEMO_SAFETY_OVERLAY).toContain('TTS-Aussprache');
   });
 
   it('keeps end_call tool descriptions mode-specific and positively whitelisted', () => {
