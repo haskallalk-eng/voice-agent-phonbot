@@ -13,9 +13,9 @@
   "categories": ["business", "productivity", "communication"],
   "icons": [
     {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/brand/phonbot-crystal-icon-cropped.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ],

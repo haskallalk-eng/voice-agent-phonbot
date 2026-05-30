@@ -15,6 +15,7 @@ import { FooterSection } from './FooterSection.js';
 const DemoSection = React.lazy(() => import('./DemoSection.js').then((m) => ({ default: m.DemoSection })));
 const CallbackSection = React.lazy(() => import('./CallbackSection.js').then((m) => ({ default: m.CallbackSection })));
 const OwlyDemoModal = React.lazy(() => import('../OwlyDemoModal.js').then((m) => ({ default: m.OwlyDemoModal })));
+const CrystalAtmosphere = React.lazy(() => import('./CrystalAtmosphere.js').then((m) => ({ default: m.CrystalAtmosphere })));
 
 function useLoadWhenVisible(rootMargin = '0px') {
   const [load, setLoad] = useState(false);
@@ -150,6 +151,10 @@ export function LandingPage({ onGoToRegister, onGoToLogin, onGoToContact }: Prop
 
   return (
     <div className="noise bg-[#0A0A0F] text-white relative">
+      <Suspense fallback={null}>
+        <CrystalAtmosphere />
+      </Suspense>
+
       {/* Background glow orbs */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" style={{ zIndex: 0 }}>
         <div
