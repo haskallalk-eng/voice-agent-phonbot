@@ -150,17 +150,22 @@ export function FoxEyes({ size = 28, className = '' }: { size?: number; classNam
 /** Phonbot wordmark */
 export function PhonbotBrand({ size = 'md', className = '' }: { size?: 'sm' | 'md' | 'lg'; className?: string }) {
   const cfg = {
-    sm: { s: 'sm' as Size, t: 'text-base', g: 'gap-1.5' },
-    md: { s: 'md' as Size, t: 'text-xl',   g: 'gap-2'   },
-    lg: { s: 'lg' as Size, t: 'text-3xl',  g: 'gap-3'   },
+    sm: { w: 150, h: 42 },
+    md: { w: 200, h: 56 },
+    lg: { w: 280, h: 78 },
   }[size];
   return (
-    <div className={`flex items-center ${cfg.g} ${className}`}>
-      <FoxLogo size={cfg.s} />
-      <span className={`font-black tracking-tight leading-none ${cfg.t}`}>
-        <span className="text-white">Phon</span>
-        <span style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>bot</span>
-      </span>
-    </div>
+    <img
+      src="/brand/phonbot-crystal-wordmark-cropped.png"
+      width={cfg.w}
+      height={cfg.h}
+      alt="Phonbot"
+      className={`block object-contain ${className}`}
+      style={{
+        width: cfg.w,
+        height: cfg.h,
+        filter: 'drop-shadow(0 0 12px rgba(249,115,22,0.24)) drop-shadow(0 0 18px rgba(6,182,212,0.18))',
+      }}
+    />
   );
 }
