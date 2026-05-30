@@ -135,8 +135,7 @@ export function NavHeader({
           </button>
           <button
             onClick={onGoToRegister}
-            className="text-sm font-semibold text-white rounded-full px-5 py-2.5 transition-all duration-300 hover:shadow-[0_0_24px_rgba(249,115,22,0.5)] hover:scale-105 hidden lg:block"
-            style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+            className="crystal-button text-sm font-semibold text-white rounded-full px-5 py-2.5 transition-all duration-300 hover:scale-105 hidden lg:block"
           >
             Kostenlos testen
           </button>
@@ -208,14 +207,13 @@ export function NavHeader({
           <div className="pt-3 flex flex-col gap-2">
             <button
               onClick={() => { setMobileMenuOpen(false); onGoToLogin(); }}
-              className="w-full py-2.5 text-sm text-white/60 rounded-xl border border-white/10 hover:text-white hover:border-white/20 transition-colors"
+              className="crystal-button crystal-button-secondary w-full py-2.5 text-sm text-white/75 rounded-xl hover:text-white transition-all"
             >
               Einloggen
             </button>
             <button
               onClick={() => { setMobileMenuOpen(false); onGoToRegister(); }}
-              className="w-full py-2.5 text-sm font-semibold text-white rounded-xl"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+              className="crystal-button w-full py-2.5 text-sm font-semibold text-white rounded-xl"
             >
               Kostenlos testen
             </button>

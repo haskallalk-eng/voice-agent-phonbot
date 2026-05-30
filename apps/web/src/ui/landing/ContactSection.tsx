@@ -169,11 +169,7 @@ export function ContactSection() {
                     <button
                       type="submit"
                       disabled={state === 'sending' || !email.trim() || !message.trim()}
-                      className="w-full rounded-xl px-6 py-4 text-sm font-semibold text-white disabled:opacity-40 transition-all duration-200 hover:scale-[1.02] cursor-pointer"
-                      style={{
-                        background: 'linear-gradient(135deg, #F97316, #06B6D4)',
-                        boxShadow: '0 4px 24px rgba(249,115,22,0.2)',
-                      }}
+                      className="crystal-button w-full rounded-xl px-6 py-4 text-sm font-semibold text-white disabled:opacity-40 transition-all duration-200 hover:scale-[1.02] cursor-pointer"
                     >
                       {state === 'sending' ? (
                         <span className="flex items-center justify-center gap-2">

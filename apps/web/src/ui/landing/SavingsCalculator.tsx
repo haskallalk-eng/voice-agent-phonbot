@@ -149,11 +149,7 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
             {/* CTA */}
             <button
               onClick={onCTA}
-              className="mt-6 w-full rounded-2xl px-6 py-4 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] cursor-pointer"
-              style={{
-                background: 'linear-gradient(135deg, #F97316, #06B6D4)',
-                boxShadow: '0 4px 24px rgba(249,115,22,0.2)',
-              }}
+              className="crystal-button mt-6 w-full rounded-2xl px-6 py-4 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] cursor-pointer"
             >
               Kostenlos testen
             </button>

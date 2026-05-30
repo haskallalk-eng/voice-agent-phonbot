@@ -121,8 +121,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
 
             <a
               href={DEMO_PHONE_HREF}
-              className="mb-5 flex w-full items-center justify-center gap-3 rounded-2xl px-6 py-5 text-xl font-extrabold text-white transition-all duration-300 hover:scale-[1.01] hover:shadow-[0_0_38px_rgba(249,115,22,0.36)] focus:outline-none focus:ring-2 focus:ring-orange-400/60 sm:text-2xl"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+              className="crystal-button mb-5 flex w-full items-center justify-center gap-3 rounded-2xl px-6 py-5 text-xl font-extrabold text-white transition-all duration-300 hover:scale-[1.01] focus:outline-none focus:ring-2 focus:ring-orange-400/60 sm:text-2xl"
             >
               <IconPhone size={22} className="opacity-85" />
               {DEMO_PHONE_LABEL}
@@ -155,7 +154,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
 
             <a
               href="#callback"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/12 bg-white/[0.06] px-5 py-3 text-sm font-semibold text-white/85 transition-all hover:bg-white/[0.1] hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-300/45"
+              className="crystal-button crystal-button-secondary inline-flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold text-white/85 transition-all hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-300/45"
             >
               <IconPhoneForward size={17} className="text-cyan-200/80" />
               Lieber Rueckruf starten
@@ -194,8 +193,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
           <button
             type="button"
             onClick={onGoToRegister}
-            className="rounded-full px-6 py-3 text-sm font-semibold text-white transition-all duration-300 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-orange-400/50"
-            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}
+            className="crystal-button crystal-button-secondary rounded-full px-6 py-3 text-sm font-semibold text-white transition-all duration-300 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-orange-400/50"
           >
             Eigenen Agent erstellen
           </button>

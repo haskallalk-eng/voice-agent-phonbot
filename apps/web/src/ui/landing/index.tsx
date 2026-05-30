@@ -75,8 +75,7 @@ function DeferredDemoSection({ onGoToRegister }: { onGoToRegister: () => void })
         <button
           type="button"
           onClick={() => setForceLoad(true)}
-          className="rounded-full px-6 py-3 text-sm font-semibold text-white transition-all duration-300 hover:scale-105"
-          style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+          className="crystal-button rounded-full px-6 py-3 text-sm font-semibold text-white transition-all duration-300 hover:scale-105"
         >
           Demo laden
         </button>
@@ -100,8 +99,7 @@ function DeferredCallbackSection() {
         <button
           type="button"
           onClick={() => setLoad(true)}
-          className="rounded-full px-6 py-3 text-sm font-semibold text-white transition-all duration-300 hover:scale-105"
-          style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}
+          className="crystal-button crystal-button-secondary rounded-full px-6 py-3 text-sm font-semibold text-white transition-all duration-300 hover:scale-105"
         >
           Rückruf-Formular laden
         </button>
