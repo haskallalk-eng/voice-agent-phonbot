@@ -204,8 +204,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
           <div className="px-6 pb-8">
             <a
               href={DEMO_PHONE_HREF}
-              className="mb-4 flex w-full items-center justify-center gap-3 rounded-2xl py-3.5 text-base font-bold text-white transition-all hover:scale-[1.02]"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+              className="crystal-button mb-4 flex w-full items-center justify-center gap-3 rounded-2xl py-3.5 text-base font-bold text-white transition-all hover:scale-[1.02]"
             >
               <IconPhone size={20} className="opacity-85" />
               {DEMO_PHONE_LABEL}
@@ -217,7 +216,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
             {onGoToRegister && (
               <button
                 onClick={() => { onClose(); onGoToRegister(); }}
-                className="mt-5 w-full rounded-xl border border-white/10 bg-white/[0.04] py-2.5 text-sm font-semibold text-white/70 transition-all hover:bg-white/[0.08] hover:text-white"
+                className="crystal-button crystal-button-secondary mt-5 w-full rounded-xl py-2.5 text-sm font-semibold text-white/70 transition-all hover:text-white"
               >
                 Eigenen Agent erstellen
               </button>
@@ -286,8 +285,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
                   <button
                     type="submit"
                     disabled={cbLoading}
-                    className="mt-1 w-full rounded-2xl py-3.5 text-sm font-bold text-white transition-all hover:scale-[1.02] disabled:opacity-50"
-                    style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                    className="crystal-button mt-1 w-full rounded-2xl py-3.5 text-sm font-bold text-white transition-all hover:scale-[1.02] disabled:opacity-50"
                   >
                     {cbLoading ? '...' : 'Chipy soll mich anrufen'}
                   </button>

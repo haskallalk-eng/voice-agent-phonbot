@@ -133,8 +133,7 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); pickPlan('free'); }}
-          className="rounded-xl px-6 py-2.5 text-sm font-semibold text-white whitespace-nowrap transition-all duration-200 hover:scale-105 shrink-0"
-          style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}
+          className="crystal-button crystal-button-secondary rounded-xl px-6 py-2.5 text-sm font-semibold text-white whitespace-nowrap transition-all duration-200 hover:scale-105 shrink-0"
         >
           {freePlan.cta}
         </button>
@@ -185,12 +184,7 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); pickPlan(plan.name); }}
-                className="w-full rounded-xl px-6 py-3 font-semibold text-sm transition-all duration-300 hover:scale-[1.02]"
-                style={
-                  isPopular
-                    ? { background: 'linear-gradient(135deg, #F97316, #06B6D4)', color: '#fff' }
-                    : { background: 'rgba(255,255,255,0.07)', color: '#fff', border: '1px solid rgba(255,255,255,0.12)' }
-                }
+                className={`crystal-button w-full rounded-xl px-6 py-3 font-semibold text-sm text-white transition-all duration-300 hover:scale-[1.02] ${isPopular ? '' : 'crystal-button-secondary'}`}
               >
                 {plan.cta}
               </button>
@@ -274,11 +268,7 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); (onGoToContact ?? onGoToRegister)(); }}
-          className="rounded-xl px-8 py-3.5 text-sm font-semibold text-white whitespace-nowrap transition-all duration-300 hover:scale-105 shrink-0 relative z-10"
-          style={{
-            background: 'linear-gradient(135deg, #06B6D4, #F97316)',
-            boxShadow: '0 0 30px rgba(6,182,212,0.3)',
-          }}
+          className="crystal-button rounded-xl px-8 py-3.5 text-sm font-semibold text-white whitespace-nowrap transition-all duration-300 hover:scale-105 shrink-0 relative z-10"
         >
           Kontakt aufnehmen →
         </button>

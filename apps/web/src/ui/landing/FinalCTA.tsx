@@ -24,8 +24,7 @@ export function FinalCTA({ onGoToRegister }: FinalCTAProps) {
         </p>
         <button
           onClick={onGoToRegister}
-          className="relative text-lg font-semibold text-white rounded-full px-10 py-5 transition-all duration-300 hover:shadow-[0_0_50px_rgba(249,115,22,0.6)] hover:scale-105"
-          style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+          className="crystal-button relative text-lg font-semibold text-white rounded-full px-10 py-5 transition-all duration-300 hover:scale-105"
         >
           Kostenlos testen
         </button>

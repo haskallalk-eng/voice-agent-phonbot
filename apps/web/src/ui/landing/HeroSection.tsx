@@ -51,15 +51,13 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
                 onClick={onGoToRegister}
-                className="w-full sm:w-auto text-base font-semibold text-white rounded-full px-8 py-4 transition-all duration-300 hover:shadow-[0_0_40px_rgba(249,115,22,0.5)] hover:scale-105"
-                style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                className="crystal-button w-full sm:w-auto text-base font-semibold text-white rounded-full px-8 py-4 transition-all duration-300 hover:scale-105"
               >
                 Kostenlos testen
               </button>
               <button
                 onClick={onShowDemoModal}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 text-base font-semibold text-white/90 rounded-full px-8 py-4 transition-all duration-300 text-center hover:text-white hover:scale-105"
-                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', backdropFilter: 'blur(12px)' }}
+                className="crystal-button crystal-button-secondary w-full sm:w-auto inline-flex items-center justify-center gap-2 text-base font-semibold text-white/90 rounded-full px-8 py-4 transition-all duration-300 text-center hover:text-white hover:scale-105"
               >
                 <IconPhone size={18} className="opacity-70" />
                 Demo anrufen
