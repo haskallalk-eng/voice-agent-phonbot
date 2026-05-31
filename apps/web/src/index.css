@@ -102,7 +102,7 @@ body {
 body {
   background-color: var(--color-bg);
   color: #fff;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', 'Inter Tight', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -143,6 +143,102 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   -webkit-backdrop-filter: blur(40px);
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.phonbot-landing {
+  font-family: 'Inter', 'Inter Tight', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-feature-settings: "cv02" 1, "cv03" 1, "cv04" 1, "ss01" 1;
+  text-rendering: geometricPrecision;
+}
+
+.phonbot-landing h1,
+.phonbot-landing h2,
+.phonbot-landing h3,
+.phonbot-landing .crystal-button {
+  letter-spacing: 0 !important;
+}
+
+.phonbot-landing h1,
+.phonbot-landing h2 {
+  color: rgba(255, 255, 255, 0.96);
+  font-weight: 950;
+  text-wrap: balance;
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12),
+    0 0 28px rgba(32, 217, 255, 0.12),
+    0 0 42px rgba(255, 91, 10, 0.10);
+}
+
+.phonbot-landing h3 {
+  color: rgba(255, 255, 255, 0.92);
+  font-weight: 850;
+  text-wrap: balance;
+}
+
+.phonbot-landing p,
+.phonbot-landing li,
+.phonbot-landing a,
+.phonbot-landing button {
+  text-wrap: pretty;
+}
+
+.phonbot-landing nav a,
+.phonbot-landing nav button,
+.phonbot-landing header button {
+  font-weight: 700;
+}
+
+.phonbot-landing section > div > p[class*="uppercase"],
+.phonbot-landing p[class*="uppercase"],
+.phonbot-landing span[class*="uppercase"] {
+  color: rgba(255, 220, 190, 0.78);
+  text-shadow:
+    0 0 18px rgba(255, 91, 10, 0.20),
+    0 0 24px rgba(32, 217, 255, 0.12);
+}
+
+.phonbot-landing .bg-clip-text.text-transparent,
+.brand-logo-text {
+  background-image: var(--crystal-gradient) !important;
+  filter:
+    drop-shadow(0 0 10px rgba(255, 91, 10, 0.18))
+    drop-shadow(0 0 12px rgba(32, 217, 255, 0.16));
+}
+
+.phonbot-landing .glass,
+.phonbot-landing .glass-strong {
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.phonbot-landing .crystal-step-card h3,
+.phonbot-landing .crystal-step-card p:first-child,
+.phonbot-landing [class*="rounded-2xl"] h3,
+.phonbot-landing [class*="rounded-2xl"] p[class*="font-bold"],
+.phonbot-landing [class*="rounded-2xl"] p[class*="font-semibold"] {
+  text-shadow:
+    0 0 16px rgba(255, 91, 10, 0.10),
+    0 0 18px rgba(32, 217, 255, 0.08);
+}
+
+.phonbot-landing .crystal-button {
+  font-weight: 850;
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.24),
+    0 0 14px rgba(255, 255, 255, 0.18);
+}
+
+.phonbot-landing .crystal-step-number {
+  font-weight: 950;
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.24),
+    0 0 12px rgba(255, 255, 255, 0.22);
+}
+
+@supports (-webkit-text-stroke: 1px transparent) {
+  .phonbot-landing h1,
+  .phonbot-landing h2 {
+    -webkit-text-stroke: 0.25px rgba(255, 255, 255, 0.20);
+  }
 }
 
 .crystal-button {
