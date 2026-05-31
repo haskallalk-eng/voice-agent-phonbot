@@ -148,7 +148,7 @@ export function LandingPage({ onGoToRegister, onGoToLogin, onGoToContact }: Prop
   }, []);
 
   return (
-    <div className="noise bg-[#0A0A0F] text-white relative">
+    <div className="phonbot-landing noise bg-[#0A0A0F] text-white relative">
       <Suspense fallback={null}>
         <CrystalAtmosphere />
       </Suspense>
