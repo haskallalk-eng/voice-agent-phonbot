@@ -4,8 +4,14 @@
 :root {
   --color-bg: #0A0A0F;
   --color-surface: #0F0F18;
-  --color-primary: #F97316;
-  --color-accent: #06B6D4;
+  --color-primary: #ff5b0a;
+  --color-accent: #20d9ff;
+  --crystal-warm: #ff5b0a;
+  --crystal-amber: #ffb766;
+  --crystal-glass: #f7fbff;
+  --crystal-cyan: #20d9ff;
+  --crystal-blue: #008de6;
+  --crystal-gradient: linear-gradient(112deg, var(--crystal-warm) 0%, var(--crystal-amber) 28%, var(--crystal-glass) 48%, var(--crystal-cyan) 68%, var(--crystal-blue) 100%);
   --color-border: rgba(255, 255, 255, 0.1);
 }
 
@@ -145,13 +151,13 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background:
-    linear-gradient(135deg, rgba(249, 115, 22, 0.82), rgba(6, 182, 212, 0.78)),
+    linear-gradient(112deg, rgba(255, 91, 10, 0.84) 0%, rgba(255, 183, 102, 0.74) 30%, rgba(247, 251, 255, 0.52) 48%, rgba(32, 217, 255, 0.78) 70%, rgba(0, 141, 230, 0.72) 100%),
     rgba(255, 255, 255, 0.08);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.42),
     inset 0 -18px 42px rgba(0, 0, 0, 0.16),
-    0 18px 48px rgba(249, 115, 22, 0.24),
-    0 0 34px rgba(6, 182, 212, 0.18);
+    0 18px 48px rgba(255, 91, 10, 0.24),
+    0 0 34px rgba(32, 217, 255, 0.18);
   backdrop-filter: blur(22px) saturate(1.25);
   -webkit-backdrop-filter: blur(22px) saturate(1.25);
 }
@@ -165,7 +171,7 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   background:
     linear-gradient(115deg, rgba(255, 255, 255, 0.42), transparent 28%, transparent 58%, rgba(255, 255, 255, 0.18)),
     radial-gradient(circle at 22% 0%, rgba(255, 255, 255, 0.34), transparent 30%),
-    radial-gradient(circle at 88% 22%, rgba(6, 182, 212, 0.32), transparent 34%);
+    radial-gradient(circle at 88% 22%, rgba(32, 217, 255, 0.32), transparent 34%);
   opacity: 0.72;
   pointer-events: none;
   transition: opacity 0.28s ease, transform 0.28s ease;
@@ -190,8 +196,8 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.52),
     inset 0 -18px 42px rgba(0, 0, 0, 0.12),
-    0 22px 60px rgba(249, 115, 22, 0.34),
-    0 0 52px rgba(6, 182, 212, 0.25);
+    0 22px 60px rgba(255, 91, 10, 0.34),
+    0 0 52px rgba(32, 217, 255, 0.25);
 }
 
 .crystal-button:hover:not(:disabled)::before {
@@ -219,7 +225,7 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
     inset 0 1px 0 rgba(255, 255, 255, 0.24),
     inset 0 -18px 36px rgba(0, 0, 0, 0.18),
     0 16px 42px rgba(0, 0, 0, 0.24),
-    0 0 28px rgba(6, 182, 212, 0.12);
+    0 0 28px rgba(32, 217, 255, 0.12);
 }
 
 .crystal-button-secondary:hover:not(:disabled) {
@@ -228,10 +234,103 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
     inset 0 1px 0 rgba(255, 255, 255, 0.34),
     inset 0 -18px 36px rgba(0, 0, 0, 0.14),
     0 18px 48px rgba(0, 0, 0, 0.28),
-    0 0 36px rgba(6, 182, 212, 0.18);
+    0 0 36px rgba(32, 217, 255, 0.18);
 }
 
 /* ─── Animations ─── */
+
+.hero-crystal-video {
+  animation: crystal-drop-in 3.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  mix-blend-mode: screen;
+  transform-origin: center center;
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 0%, #000 42%, rgba(0, 0, 0, 0.40) 56%, transparent 70%);
+  mask-image: radial-gradient(ellipse at center, #000 0%, #000 42%, rgba(0, 0, 0, 0.40) 56%, transparent 70%);
+  filter:
+    drop-shadow(0 0 42px rgba(32, 217, 255, 0.22))
+    drop-shadow(0 0 32px rgba(255, 91, 10, 0.18));
+}
+
+.hero-crystal-cutout {
+  filter:
+    drop-shadow(0 0 46px rgba(32, 217, 255, 0.26))
+    drop-shadow(0 0 34px rgba(255, 91, 10, 0.22));
+}
+
+.crystal-step-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 116px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.035)),
+    linear-gradient(112deg, rgba(255, 91, 10, 0.12), rgba(255, 183, 102, 0.06) 36%, rgba(32, 217, 255, 0.10)),
+    rgba(0, 0, 0, 0.44);
+  padding: 14px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -24px 42px rgba(0, 0, 0, 0.18),
+    0 18px 60px rgba(0, 0, 0, 0.42),
+    0 0 34px rgba(32, 217, 255, 0.10);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+}
+
+@media (max-width: 639px) {
+  .crystal-step-card {
+    min-height: 104px;
+    padding: 12px;
+  }
+}
+
+.crystal-step-card::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  background:
+    linear-gradient(112deg, rgba(255, 255, 255, 0.24), transparent 26%, transparent 62%, rgba(255, 255, 255, 0.10)),
+    radial-gradient(circle at 18% 12%, rgba(255, 91, 10, 0.24), transparent 36%),
+    radial-gradient(circle at 88% 20%, rgba(32, 217, 255, 0.22), transparent 38%);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.crystal-step-card::after {
+  content: "";
+  position: absolute;
+  left: -20%;
+  right: -20%;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.52), transparent);
+  opacity: 0.34;
+}
+
+.crystal-step-number {
+  position: relative;
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background:
+    linear-gradient(112deg, rgba(255, 91, 10, 0.88), rgba(255, 183, 102, 0.78) 32%, rgba(247, 251, 255, 0.50) 50%, rgba(32, 217, 255, 0.76) 72%, rgba(0, 141, 230, 0.70)),
+    rgba(255, 255, 255, 0.10);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 900;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    0 0 22px rgba(32, 217, 255, 0.24);
+}
+
+.crystal-steps-shell {
+  animation: crystal-steps-reveal 0.8s cubic-bezier(0.16, 1, 0.3, 1) 3.45s both;
+}
 
 /* Pulsing mic ring */
 @keyframes mic-ring {
@@ -348,6 +447,45 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 
 .glow-pulse {
   animation: glow-pulse 3s ease-in-out infinite;
+}
+
+@keyframes crystal-drop-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-48%) scale(0.92);
+    filter:
+      blur(6px)
+      drop-shadow(0 0 24px rgba(32, 217, 255, 0.12))
+      drop-shadow(0 0 20px rgba(255, 91, 10, 0.12));
+  }
+  58% {
+    opacity: 1;
+    transform: translateY(13%) scale(1.02);
+  }
+  76% {
+    transform: translateY(8%) scale(1);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(10%) scale(1);
+    filter:
+      blur(0)
+      drop-shadow(0 0 42px rgba(32, 217, 255, 0.22))
+      drop-shadow(0 0 32px rgba(255, 91, 10, 0.18));
+  }
+}
+
+@keyframes crystal-steps-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
 }
 
 /* Spin for loading states */
@@ -615,6 +753,14 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .hero-crystal-video {
+    animation: none;
+  }
+
+  .crystal-steps-shell {
+    animation: none;
+  }
+
   .consent-nudge {
     animation: none;
   }
