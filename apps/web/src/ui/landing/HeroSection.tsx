@@ -17,14 +17,14 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
 
   return (
     <>
-      <section className="relative z-10 mx-auto max-w-7xl px-4 pb-12 pt-6 sm:px-6 sm:pt-8">
-        <div className="relative min-h-[1080px] overflow-hidden rounded-[32px] border border-white/10 bg-black/35 px-4 py-5 shadow-[0_40px_160px_rgba(0,0,0,0.45)] sm:min-h-[calc(100svh-96px)] sm:px-8 sm:py-7 lg:min-h-[760px] lg:px-10 lg:py-9">
+      <section className="relative z-10 w-full px-0 pb-12 pt-0">
+        <div className="relative min-h-[1080px] overflow-hidden px-4 py-8 sm:min-h-[calc(100svh-72px)] sm:px-8 sm:py-9 lg:min-h-[790px] lg:px-10 lg:py-10">
           <div className="pointer-events-none absolute -inset-24 bg-[radial-gradient(circle_at_18%_18%,rgba(255,91,10,0.24),transparent_28%),radial-gradient(circle_at_82%_22%,rgba(32,217,255,0.22),transparent_30%),radial-gradient(circle_at_50%_88%,rgba(255,183,102,0.10),transparent_36%)] blur-2xl" />
 
           <button
             type="button"
             onClick={onShowDemoModal}
-            className="group absolute inset-x-3 top-3 bottom-3 overflow-hidden rounded-[28px] bg-transparent text-left transition-transform duration-500 hover:scale-[1.004] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/80 sm:inset-x-5 sm:top-5 sm:bottom-5 lg:inset-x-8 lg:top-8 lg:bottom-8"
+            className="group absolute inset-x-0 top-0 bottom-0 overflow-hidden bg-transparent text-left transition-transform duration-500 hover:scale-[1.002] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/80"
             aria-label="Telefon-Demo öffnen"
           >
             <div className="absolute -inset-20 bg-[radial-gradient(circle_at_30%_36%,rgba(255,91,10,0.40),transparent_30%),radial-gradient(circle_at_52%_40%,rgba(255,247,232,0.10),transparent_28%),radial-gradient(circle_at_70%_42%,rgba(32,217,255,0.36),transparent_34%)] opacity-80 blur-3xl transition-opacity duration-500 group-hover:opacity-100" />
