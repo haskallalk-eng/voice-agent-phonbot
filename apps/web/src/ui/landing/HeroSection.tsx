@@ -24,7 +24,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
           <button
             type="button"
             onClick={onShowDemoModal}
-            className="group absolute inset-x-0 top-0 bottom-0 overflow-hidden bg-transparent text-left transition-transform duration-500 hover:scale-[1.002] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/80"
+            className="group absolute inset-x-0 top-0 bottom-0 overflow-hidden bg-black text-left transition-transform duration-500 hover:scale-[1.002] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/80"
             aria-label="Telefon-Demo öffnen"
           >
             <div className="absolute -inset-20 bg-[radial-gradient(circle_at_30%_36%,rgba(255,91,10,0.40),transparent_30%),radial-gradient(circle_at_52%_40%,rgba(255,247,232,0.10),transparent_28%),radial-gradient(circle_at_70%_42%,rgba(32,217,255,0.36),transparent_34%)] opacity-80 blur-3xl transition-opacity duration-500 group-hover:opacity-100" />
@@ -32,7 +32,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/72" />
 
             <video
-              className="hero-crystal-video absolute inset-0 z-0 h-full w-full object-cover object-center"
+              className="hero-crystal-video absolute inset-0 z-0 h-full w-full object-cover object-center sm:object-contain"
               src="/media/chipy-crystal-reveal.mp4"
               poster="/media/chipy-crystal-reveal-poster.png"
               autoPlay
@@ -42,9 +42,9 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
               preload="auto"
             />
 
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[64%] bg-gradient-to-t from-black via-black/92 to-transparent" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[46%] bg-gradient-to-t from-black via-black/86 to-transparent" />
 
-            <div className="absolute inset-x-4 bottom-4 z-20 flex items-center justify-between gap-4 sm:inset-x-6 sm:bottom-6 lg:inset-x-8 lg:bottom-8">
+            <div className="hidden">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200/70">Chipy Crystal</p>
                 <p className="mt-1 text-sm font-semibold text-white sm:text-base">
