@@ -8,7 +8,18 @@ echo "=== Phonbot Deploy ==="
 # 1. Pull latest code
 git pull origin master
 
-# 2. Build & restart containers
+# 2. Optional Supabase migrations. Keep explicit so a normal hotfix deploy
+# cannot accidentally mutate production schema without the migration URL.
+if [ "${RUN_SUPABASE_MIGRATIONS:-}" = "1" ]; then
+  if [ -z "${MIGRATION_DATABASE_URL:-}" ]; then
+    echo "ERROR: RUN_SUPABASE_MIGRATIONS=1 requires MIGRATION_DATABASE_URL." >&2
+    exit 1
+  fi
+  node scripts/check-supabase-migrations.mjs
+  npx -y supabase db push --db-url "$MIGRATION_DATABASE_URL"
+fi
+
+# 3. Build & restart containers
 #
 # NOTE: --no-cache was here before 2026-04-22. It took the VPS offline
 # (OOM → SSH + Docker killed) because the full rebuild peaks well over
@@ -24,7 +35,7 @@ else
 fi
 docker compose up -d
 
-# 3. Keep existing Retell agents on the current signed tool URL contract.
+# 4. Keep existing Retell agents on the current signed tool URL contract.
 # A normal API deploy can change tool schemas or auth query params; without
 # this sync, old Retell LLM tool URLs may continue calling stale endpoints.
 if [ "${SKIP_RETELL_SYNC:-}" != "1" ]; then
@@ -41,7 +52,7 @@ if [ "${SKIP_RETELL_SYNC:-}" != "1" ]; then
   fi
 fi
 
-# 4. Show status
+# 5. Show status
 docker compose ps
 echo ""
 echo "=== Deploy complete ==="

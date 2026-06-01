@@ -1,3 +1,9 @@
+# Historical Plan - Not Authoritative For Codex
+
+This file is historical background only. For Codex implementation authority,
+use repo-root `AGENTS.md` and `PLANS.md`. If this file conflicts with those
+root files, `AGENTS.md` and `PLANS.md` win.
+
 # Plan (Step-by-step)
 
 ## 0) Product decisions (we must lock early)

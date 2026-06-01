@@ -112,9 +112,9 @@ async function _generateTrainingExamplesImpl(limit: number): Promise<number> {
     // Build messages then redact PII (phone/email/IBAN/CC/address/DOB) before persisting.
     // Training data must be free of customer-identifying info even if export is org-scoped —
     // in case we ever fine-tune + share derived models.
-    const { redactMessages, redactPII } = await import('./pii.js');
+    const { redactForEval, redactMessages } = await import('./pii.js');
     const messages = redactMessages(buildMessages(row.transcript));
-    const safeSystemPrompt = redactPII(row.agent_prompt ?? null);
+    const safeSystemPrompt = redactForEval(row.agent_prompt ?? null);
 
     await pool.query(
       `INSERT INTO training_examples

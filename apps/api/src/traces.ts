@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import { redis } from './redis.js';
+import type { TrustedScope } from './trusted-scope.js';
 
 export const TraceEventSchema = z.object({
   type: z.string().min(1),
@@ -14,6 +15,14 @@ export const TraceEventSchema = z.object({
   // agentId is purely descriptive — lets multi-agent orgs (Pro/Agency plans)
   // see which of their agents made a given tool call. NOT used for isolation.
   agentId: z.string().optional(),
+  orgId: z.string().optional(),
+  tenantScopeId: z.string().optional(),
+  callId: z.string().optional(),
+  provider: z.string().optional(),
+  turnId: z.string().optional(),
+  retrievalEventId: z.string().optional(),
+  scopeSource: z.literal('server').optional(),
+  scopeResolvedFrom: z.string().optional(),
 }).passthrough();
 
 export type TraceEvent = z.infer<typeof TraceEventSchema>;
@@ -45,6 +54,30 @@ function eventsKey(sessionId: string) {
 }
 function tenantKey(sessionId: string) {
   return `traces_tenant:${sessionId}`;
+}
+
+export function traceScopeFields(
+  trustedScope: TrustedScope,
+  options: {
+    provider?: string;
+    turnId?: string | null;
+    retrievalEventId?: string | null;
+  } = {},
+): Pick<TraceEvent, 'tenantId' | 'orgId' | 'tenantScopeId' | 'agentId' | 'callId' | 'provider' | 'turnId' | 'retrievalEventId' | 'scopeSource' | 'scopeResolvedFrom'> {
+  return {
+    // Backward-compatible isolation key. Despite the name, existing trace
+    // storage uses this as org scope and getTraceEvents authorizes by org id.
+    tenantId: trustedScope.orgId,
+    orgId: trustedScope.orgId,
+    tenantScopeId: trustedScope.tenantId,
+    agentId: trustedScope.agentId,
+    callId: trustedScope.callId ?? trustedScope.sessionId,
+    provider: options.provider,
+    turnId: options.turnId ?? undefined,
+    retrievalEventId: options.retrievalEventId ?? undefined,
+    scopeSource: trustedScope.source,
+    scopeResolvedFrom: trustedScope.resolvedFrom,
+  };
 }
 
 async function readSessionTenant(sessionId: string): Promise<string | null> {

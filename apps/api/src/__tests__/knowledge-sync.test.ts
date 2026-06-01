@@ -4,16 +4,24 @@ const mocks = vi.hoisted(() => ({
   createKnowledgeBase: vi.fn(),
   waitForKnowledgeBaseComplete: vi.fn(),
   deleteKnowledgeBase: vi.fn(),
+  protectRetellKnowledgeBaseWindow: vi.fn(),
+  deleteKnowledgeBaseWithRetry: vi.fn(),
 }));
 
 vi.mock('../db.js', () => ({ pool: null }));
 vi.mock('../retell.js', () => mocks);
+vi.mock('../retell-kb-cleanup.js', () => ({
+  protectRetellKnowledgeBaseWindow: mocks.protectRetellKnowledgeBaseWindow,
+  deleteKnowledgeBaseWithRetry: mocks.deleteKnowledgeBaseWithRetry,
+}));
 
 const { syncRetellKnowledgeBase } = await import('../knowledge.js');
 
 describe('knowledge base sync lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.protectRetellKnowledgeBaseWindow.mockResolvedValue(undefined);
+    mocks.deleteKnowledgeBaseWithRetry.mockResolvedValue(undefined);
   });
 
   it('deletes a newly created Retell KB when readiness polling fails and preserves the old KB', async () => {
@@ -30,8 +38,29 @@ describe('knowledge base sync lifecycle', () => {
       knowledgeBaseSignature: 'old_signature',
     })).rejects.toThrow('RETELL_KB_NOT_READY');
 
-    expect(mocks.deleteKnowledgeBase).toHaveBeenCalledWith('kb_new');
-    expect(mocks.deleteKnowledgeBase).not.toHaveBeenCalledWith('kb_old');
+    expect(mocks.deleteKnowledgeBaseWithRetry).toHaveBeenCalledWith('kb_new', expect.objectContaining({
+      knowledgeBaseName: 'New KB',
+    }));
+    expect(mocks.deleteKnowledgeBaseWithRetry).not.toHaveBeenCalledWith('kb_old', expect.anything());
+  });
+
+  it('fails closed and queues cleanup when pending deploy protection cannot be recorded', async () => {
+    mocks.createKnowledgeBase.mockResolvedValue({
+      knowledge_base_id: 'kb_new',
+      knowledge_base_name: 'New KB',
+      status: 'in_progress',
+    });
+    mocks.protectRetellKnowledgeBaseWindow.mockRejectedValueOnce(new Error('db unavailable'));
+
+    await expect(syncRetellKnowledgeBase({
+      businessName: 'Studio',
+      tenantId: 'tenant_1',
+    }, 'org_1')).rejects.toThrow('RETELL_KB_PROTECTION_FAILED');
+
+    expect(mocks.waitForKnowledgeBaseComplete).not.toHaveBeenCalled();
+    expect(mocks.deleteKnowledgeBaseWithRetry).toHaveBeenCalledWith('kb_new', expect.objectContaining({
+      context: expect.objectContaining({ source: 'pending-protection-failed' }),
+    }));
   });
 
   it('does not delete the old KB during sync before deploy persistence is durable', async () => {

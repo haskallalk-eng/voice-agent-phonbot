@@ -116,11 +116,23 @@ export type RetellLLMConfig = {
   general_prompt: string | null;
   general_tools: RetellTool[] | null;
   knowledge_base_ids?: string[] | null;
-  kb_config?: { top_k?: number; filter_score?: number } | null;
+  kb_config?: { top_k?: number; filter_score?: number; knowledge_base_ids?: string[] } | null;
   states: RetellState[] | null;
   starting_state: string | null;
   model: string;
   model_high_priority?: boolean | null;
+  begin_message?: string | null;
+};
+
+export type RetellLLMSummary = Partial<RetellLLMConfig> & {
+  llm_id: string;
+  version?: number;
+  last_modification_timestamp?: number;
+};
+
+export type RetellLLMList = {
+  items: RetellLLMSummary[];
+  hasMore: boolean;
 };
 
 export type RetellTool = {
@@ -149,12 +161,20 @@ export type RetellAgent = {
   fallback_voice_ids?: string[] | null;
   voice_speed?: number;
   language?: string;
+  responsiveness?: number;
+  interruption_sensitivity?: number;
+  enable_dynamic_responsiveness?: boolean;
+  denoising_mode?: RetellDenoisingMode | null;
+  reminder_trigger_ms?: number;
+  reminder_max_count?: number;
 };
 
 export type RetellPhoneNumber = {
   phone_number: string;
   phone_number_pretty: string;
   agent_id: string | null;
+  inbound_agents?: Array<{ agent_id?: string | null; agent_version?: number; weight?: number }> | null;
+  outbound_agents?: Array<{ agent_id?: string | null; agent_version?: number; weight?: number }> | null;
 };
 
 export type RetellKnowledgeBase = {
@@ -163,6 +183,7 @@ export type RetellKnowledgeBase = {
   status: 'in_progress' | 'complete' | 'error' | 'refreshing_in_progress';
   knowledge_base_sources?: Array<Record<string, unknown>>;
   enable_auto_refresh?: boolean;
+  user_modified_timestamp?: number;
 };
 
 // --- LLM ---
@@ -173,6 +194,7 @@ export async function createLLM(config: {
   model?: string;
   modelTemperature?: number;
   modelHighPriority?: boolean;
+  beginMessage?: string;
   knowledgeBaseIds?: string[];
   kbConfig?: { top_k?: number; filter_score?: number };
 }): Promise<RetellLLMConfig> {
@@ -184,6 +206,7 @@ export async function createLLM(config: {
       model: config.model ?? getDefaultRetellLlmModel(),
       model_temperature: config.modelTemperature,
       model_high_priority: config.modelHighPriority ?? getDefaultRetellLlmHighPriority(),
+      begin_message: config.beginMessage,
       knowledge_base_ids: config.knowledgeBaseIds?.length ? config.knowledgeBaseIds : undefined,
       kb_config: config.knowledgeBaseIds?.length ? (config.kbConfig ?? { top_k: 3, filter_score: 0.6 }) : undefined,
     }),
@@ -198,6 +221,7 @@ export async function updateLLM(
     model?: string;
     modelTemperature?: number;
     modelHighPriority?: boolean;
+    beginMessage?: string;
     knowledgeBaseIds?: string[];
     kbConfig?: { top_k?: number; filter_score?: number };
   },
@@ -207,6 +231,7 @@ export async function updateLLM(
   if (config.tools !== undefined) body.general_tools = config.tools.length ? config.tools : [];
   if (config.model !== undefined) body.model = config.model;
   if (config.modelTemperature !== undefined) body.model_temperature = config.modelTemperature;
+  if (config.beginMessage !== undefined) body.begin_message = config.beginMessage;
   body.model_high_priority = config.modelHighPriority ?? getDefaultRetellLlmHighPriority();
   if (config.knowledgeBaseIds !== undefined) {
     body.knowledge_base_ids = config.knowledgeBaseIds.length ? config.knowledgeBaseIds : [];
@@ -221,6 +246,36 @@ export async function updateLLM(
 
 export async function getLLM(llmId: string): Promise<RetellLLMConfig> {
   return retellRequest(`/get-retell-llm/${encodeURIComponent(llmId)}`);
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function arrayField<T>(record: Record<string, unknown>, keys: string[]): T[] | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) return value as T[];
+  }
+  return null;
+}
+
+function responseHasMore(record: Record<string, unknown>): boolean {
+  if (record.has_more === true || record.hasMore === true) return true;
+  if (typeof record.next_cursor === 'string' && record.next_cursor.trim()) return true;
+  if (typeof record.nextCursor === 'string' && record.nextCursor.trim()) return true;
+  const pagination = asRecord(record.pagination);
+  return Boolean(pagination?.has_more === true || pagination?.hasMore === true);
+}
+
+export async function listLLMs(): Promise<RetellLLMList> {
+  const res = await retellRequest<unknown>('/v2/list-retell-llms');
+  if (Array.isArray(res)) return { items: res, hasMore: false };
+  const record = asRecord(res);
+  if (!record) throw new Error('RETELL_LLM_LIST_UNSUPPORTED_SHAPE');
+  const items = arrayField<RetellLLMSummary>(record, ['items', 'data', 'llms', 'retell_llms']);
+  if (!items) throw new Error('RETELL_LLM_LIST_UNSUPPORTED_SHAPE');
+  return { items, hasMore: responseHasMore(record) };
 }
 
 // --- Knowledge Base ---
@@ -255,6 +310,17 @@ export async function createKnowledgeBase(config: {
 
 export async function getKnowledgeBase(knowledgeBaseId: string): Promise<RetellKnowledgeBase> {
   return retellRequest(`/get-knowledge-base/${encodeURIComponent(knowledgeBaseId)}`);
+}
+
+export async function listKnowledgeBases(): Promise<RetellKnowledgeBase[]> {
+  const res = await retellRequest<unknown>('/list-knowledge-bases');
+  if (Array.isArray(res)) return res as RetellKnowledgeBase[];
+  const record = asRecord(res);
+  if (!record) throw new Error('RETELL_KB_LIST_UNSUPPORTED_SHAPE');
+  if (responseHasMore(record)) throw new Error('RETELL_KB_LIST_PAGINATED');
+  const items = arrayField<RetellKnowledgeBase>(record, ['items', 'data', 'knowledge_bases', 'knowledgeBases']);
+  if (!items) throw new Error('RETELL_KB_LIST_UNSUPPORTED_SHAPE');
+  return items;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -388,6 +454,11 @@ type RetellVoiceModel =
   | 's1'
   | 's2-pro';
 
+export type RetellDenoisingMode =
+  | 'no-denoise'
+  | 'noise-cancellation'
+  | 'noise-and-background-speech-cancellation';
+
 type VoiceRuntimeConfig = {
   voiceModel?: RetellVoiceModel | null;
   voiceTemperature?: number;
@@ -458,8 +529,12 @@ export async function createAgent(config: {
   voiceTemperature?: number;
   fallbackVoiceIds?: string[] | null;
   responsiveness?: number;
+  denoisingMode?: RetellDenoisingMode;
   maxCallDurationMs?: number;
   interruptionSensitivity?: number;
+  enableDynamicResponsiveness?: boolean;
+  reminderTriggerMs?: number;
+  reminderMaxCount?: number;
   enableBackchannel?: boolean;
   allowUserDtmf?: boolean;
   webhookUrl?: string;
@@ -475,16 +550,16 @@ export async function createAgent(config: {
     language: config.language ?? 'de-DE',
     voice_speed: config.voiceSpeed,
     responsiveness: config.responsiveness,
+    denoising_mode: config.denoisingMode,
     interruption_sensitivity: config.interruptionSensitivity ?? defaultInterruption(),
     enable_backchannel: config.enableBackchannel ?? defaultBackchannel(),
     allow_user_dtmf: config.allowUserDtmf,
-    // Keep response eagerness at the configured value instead of letting Retell
-    // dynamically add wait time for slower speakers. Phonbot demos optimize for
-    // snappy turn-taking; caller patience can still be handled in the prompt.
-    enable_dynamic_responsiveness: false,
+    // Default stays snappy for existing agents; specific demos can opt into
+    // slower listening without changing global runtime behavior.
+    enable_dynamic_responsiveness: config.enableDynamicResponsiveness ?? false,
     max_call_duration_ms: config.maxCallDurationMs,
-    reminder_trigger_ms: defaultReminderTriggerMs(),
-    reminder_max_count: defaultReminderMaxCount(),
+    reminder_trigger_ms: config.reminderTriggerMs ?? defaultReminderTriggerMs(),
+    reminder_max_count: config.reminderMaxCount ?? defaultReminderMaxCount(),
     end_call_after_silence_ms: defaultEndCallSilenceMs(),
   };
   applyVoiceRuntime(body, voiceId, config);
@@ -517,8 +592,12 @@ export async function updateAgent(
     voiceTemperature?: number;
     fallbackVoiceIds?: string[] | null;
     responsiveness?: number;
+    denoisingMode?: RetellDenoisingMode;
     maxCallDurationMs?: number;
     interruptionSensitivity?: number;
+    enableDynamicResponsiveness?: boolean;
+    reminderTriggerMs?: number;
+    reminderMaxCount?: number;
     enableBackchannel?: boolean;
     allowUserDtmf?: boolean;
     webhookUrl?: string;
@@ -532,15 +611,16 @@ export async function updateAgent(
   // name-only update silently reset any per-agent tuning the user had
   // configured in the Retell dashboard. Now we only override when asked.
   const body: Record<string, unknown> = {
-    enable_dynamic_responsiveness: false,
-    reminder_trigger_ms: defaultReminderTriggerMs(),
-    reminder_max_count: defaultReminderMaxCount(),
+    enable_dynamic_responsiveness: config.enableDynamicResponsiveness ?? false,
+    reminder_trigger_ms: config.reminderTriggerMs ?? defaultReminderTriggerMs(),
+    reminder_max_count: config.reminderMaxCount ?? defaultReminderMaxCount(),
     end_call_after_silence_ms: defaultEndCallSilenceMs(),
   };
   if (config.interruptionSensitivity !== undefined) body.interruption_sensitivity = config.interruptionSensitivity;
   if (config.enableBackchannel !== undefined) body.enable_backchannel = config.enableBackchannel;
   if (config.voiceSpeed !== undefined) body.voice_speed = config.voiceSpeed;
   if (config.responsiveness !== undefined) body.responsiveness = config.responsiveness;
+  if (config.denoisingMode !== undefined) body.denoising_mode = config.denoisingMode;
   if (config.maxCallDurationMs !== undefined) body.max_call_duration_ms = config.maxCallDurationMs;
   if (config.allowUserDtmf !== undefined) body.allow_user_dtmf = config.allowUserDtmf;
   if (config.name !== undefined) body.agent_name = config.name;
@@ -732,8 +812,16 @@ export async function updatePhoneNumber(
   config: { outboundAgentId?: string | null; inboundAgentId?: string | null },
 ): Promise<void> {
   const body: Record<string, unknown> = {};
-  if (config.outboundAgentId !== undefined) body.outbound_agent_id = config.outboundAgentId;
-  if (config.inboundAgentId !== undefined) body.inbound_agent_id = config.inboundAgentId;
+  if (config.outboundAgentId !== undefined) {
+    body.outbound_agents = config.outboundAgentId
+      ? [{ agent_id: config.outboundAgentId, agent_version: 0, weight: 1 }]
+      : null;
+  }
+  if (config.inboundAgentId !== undefined) {
+    body.inbound_agents = config.inboundAgentId
+      ? [{ agent_id: config.inboundAgentId, agent_version: 0, weight: 1 }]
+      : null;
+  }
 
   const res = await fetch(`${RETELL_API}/update-phone-number/${encodeURIComponent(phoneNumber)}`, {
     method: 'PATCH',

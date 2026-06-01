@@ -5,6 +5,7 @@ import { runAgentTurn } from './agent-runtime.js';
 import { getMessages, clearSession, listSessions } from './session-store.js';
 import { redis } from './redis.js';
 import type { JwtPayload } from './auth.js';
+import { redactForTrace } from './pii.js';
 
 const ChatBody = z.object({
   sessionId: z.string().min(1),
@@ -69,7 +70,7 @@ export async function registerChat(app: FastifyInstance) {
       type: 'user_transcript_final',
       sessionId: body.sessionId,
       tenantId: orgId,
-      text: body.text,
+      text: redactForTrace(body.text),
       at: Date.now(),
     } as TraceEvent);
 
@@ -98,7 +99,7 @@ export async function registerChat(app: FastifyInstance) {
       type: 'agent_text',
       sessionId: body.sessionId,
       tenantId: orgId,
-      text: reply.text,
+      text: redactForTrace(reply.text),
       at: Date.now(),
     } as TraceEvent);
 

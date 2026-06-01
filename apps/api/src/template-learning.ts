@@ -11,7 +11,7 @@
 
 import OpenAI from 'openai';
 import { pool } from './db.js';
-import { redactPII } from './pii.js';
+import { redactForEval } from './pii.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? '' });
 const MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
@@ -174,7 +174,7 @@ async function checkAndCreateTemplateLearning(
   // organisation-identifying phrasing too (company names, specific dates).
   const fixes = analysis.bad_moments
     .filter((m) => m.category === category && m.prompt_fix)
-    .map((m) => redactPII(m.prompt_fix ?? ''))
+    .map((m) => redactForEval(m.prompt_fix ?? ''))
     .filter(Boolean);
 
   const content = fixes.length > 0
@@ -230,7 +230,7 @@ async function extractConversationPattern(
   // (name, phone, email, address, IBAN, DOB) BEFORE sending to OpenAI so the
   // resulting pattern stored in conversation_patterns can't expose one tenant's
   // customer data to another tenant via reused prompt fragments.
-  const safeTranscript = redactPII(transcript).slice(0, 4000);
+  const safeTranscript = redactForEval(transcript).slice(0, 4000);
 
   try {
     const resp = await openai.chat.completions.create({
@@ -273,8 +273,8 @@ Extrahiere das wiederverwendbare Gesprächsmuster als JSON:
     // Belt-and-suspenders: even though the input was redacted, OpenAI sometimes
     // hallucinates plausible-looking PII (fake phone numbers, names). Re-redact
     // the output before persisting to a cross-org table.
-    const safeSituation = redactPII(pattern.situation).slice(0, 500);
-    const safeResponse = redactPII(pattern.agent_response).slice(0, 500);
+    const safeSituation = redactForEval(pattern.situation).slice(0, 500);
+    const safeResponse = redactForEval(pattern.agent_response).slice(0, 500);
 
     await pool.query(
       `INSERT INTO conversation_patterns

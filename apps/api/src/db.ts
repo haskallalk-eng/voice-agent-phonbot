@@ -22,6 +22,9 @@ export const DATABASE_URL = process.env.DATABASE_URL;
 async function resolveHost(dbUrl: string): Promise<pg.PoolConfig> {
   const parsed = new URL(dbUrl);
   const hostname = parsed.hostname;
+  const isSupabasePooler =
+    hostname.endsWith('.pooler.supabase.com') ||
+    (hostname.startsWith('db.') && hostname.endsWith('.supabase.co') && parsed.port === '6543');
 
   // Time-boxed DNS resolution (5s). Without this, a DNS outage would hang
   // the module import indefinitely and block server startup.
@@ -32,7 +35,8 @@ async function resolveHost(dbUrl: string): Promise<pg.PoolConfig> {
     ]);
 
   let resolvedHost = hostname;
-  try {
+  if (process.env.DB_SKIP_DNS_RESOLVE !== 'true' && !isSupabasePooler) {
+    try {
     const v4 = await dnsWithTimeout(dns.resolve4(hostname), 'resolve4');
     if (v4 && v4.length > 0) {
       resolvedHost = v4[0]!;
@@ -42,6 +46,8 @@ async function resolveHost(dbUrl: string): Promise<pg.PoolConfig> {
     }
   } catch {
     // Keep original hostname — let pg try
+  }
+
   }
 
   return {
@@ -268,9 +274,8 @@ export async function cleanupOldWebhookHealth(dbPool: pg.Pool | null): Promise<n
   return (res as { rowCount?: number }).rowCount ?? 0;
 }
 
-// Fixed advisory-lock key for the migration. pg_advisory_lock is a 64-bit
-// session-scoped mutex that Postgres provides; any integer works as long as
-// every replica uses the same one. Chosen arbitrarily.
+// Fixed advisory-lock key for the migration. We use a transaction-scoped lock
+// so this remains safe when DATABASE_URL points at Supabase Transaction Pooler.
 const MIGRATION_ADVISORY_LOCK_KEY = 92541803715;
 
 async function hardenSupabasePublicApiAccess(): Promise<void> {
@@ -336,11 +341,16 @@ export async function migrate() {
   // lock + unlock on the same connection, regardless of pool routing.
   const migrationClient = await pool.connect();
   try {
-    await migrationClient.query(`SELECT pg_advisory_lock($1)`, [MIGRATION_ADVISORY_LOCK_KEY]);
+    await migrationClient.query('BEGIN');
+    await migrationClient.query(`SELECT pg_advisory_xact_lock($1)`, [MIGRATION_ADVISORY_LOCK_KEY]);
     try {
       await runMigrationBody();
+      await migrationClient.query('COMMIT');
+    } catch (err) {
+      await migrationClient.query('ROLLBACK').catch(() => {});
+      throw err;
     } finally {
-      await migrationClient.query(`SELECT pg_advisory_unlock($1)`, [MIGRATION_ADVISORY_LOCK_KEY]).catch(() => {/* already released */});
+      // pg_advisory_xact_lock releases on COMMIT/ROLLBACK.
     }
   } finally {
     migrationClient.release();
@@ -786,6 +796,166 @@ async function runMigrationBody() {
   await pool.query(`
     create unique index if not exists knowledge_files_org_tenant_sha_idx
     on knowledge_files(org_id, tenant_id, sha256);
+  `);
+
+  await pool.query(`
+    create table if not exists retell_kb_cleanup_failures (
+      id uuid primary key default gen_random_uuid(),
+      knowledge_base_id text not null,
+      knowledge_base_name text,
+      source text not null default 'unknown',
+      error text not null,
+      attempts int not null default 0,
+      context jsonb not null default '{}',
+      first_failed_at timestamptz not null default now(),
+      last_failed_at timestamptz not null default now(),
+      next_retry_at timestamptz,
+      resolved_at timestamptz
+    );
+  `);
+  await pool.query(`
+    create index if not exists retell_kb_cleanup_failures_pending_idx
+      on retell_kb_cleanup_failures(next_retry_at, last_failed_at)
+      where resolved_at is null;
+  `);
+  await pool.query(`
+    create index if not exists retell_kb_cleanup_failures_kb_idx
+      on retell_kb_cleanup_failures(knowledge_base_id)
+      where resolved_at is null;
+  `);
+
+  await pool.query(`
+    create table if not exists retell_kb_protection_windows (
+      knowledge_base_id text primary key,
+      org_id uuid references orgs(id) on delete cascade,
+      tenant_id text,
+      reason text not null check (reason in ('pending_deploy', 'rollback_standby', 'manual_hold')),
+      expires_at timestamptz not null,
+      context jsonb not null default '{}'::jsonb,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+  `);
+  await pool.query(`
+    create index if not exists retell_kb_protection_windows_active_idx
+      on retell_kb_protection_windows(expires_at);
+  `);
+  await pool.query(`
+    create index if not exists retell_kb_protection_windows_org_idx
+      on retell_kb_protection_windows(org_id, tenant_id, expires_at desc);
+  `);
+
+  await pool.query(`
+    create table if not exists kb_shadow_runs (
+      id uuid primary key default gen_random_uuid(),
+      org_id uuid not null references orgs(id) on delete cascade,
+      tenant_id text not null,
+      agent_id text,
+      name text not null,
+      source text not null default 'transcripts'
+        check (source in ('transcripts', 'manual', 'ci')),
+      status text not null default 'running'
+        check (status in ('running', 'done', 'failed')),
+      sample_size int not null default 0 check (sample_size >= 0),
+      config jsonb not null default '{}'::jsonb,
+      summary jsonb not null default '{}'::jsonb,
+      error text,
+      started_at timestamptz not null default now(),
+      finished_at timestamptz
+    );
+  `);
+  await pool.query(`
+    create unique index if not exists kb_shadow_runs_id_scope_uidx
+      on kb_shadow_runs(id, org_id, tenant_id);
+  `);
+  await pool.query(`
+    create table if not exists kb_shadow_results (
+      id uuid primary key default gen_random_uuid(),
+      run_id uuid not null,
+      org_id uuid not null references orgs(id) on delete cascade,
+      tenant_id text not null,
+      agent_id text,
+      call_id text,
+      turn_index int,
+      query_hash text not null,
+      query_text_redacted text not null,
+      own_answerable boolean not null,
+      own_confidence numeric(4,3) not null default 0,
+      own_latency_ms int not null check (own_latency_ms >= 0),
+      own_citations jsonb not null default '[]'::jsonb,
+      retrieval_event_id uuid,
+      status text not null check (status in ('answerable', 'not_answerable', 'error', 'skipped')),
+      failure_reason text,
+      baseline_provider text not null default 'retell_kb_production',
+      baseline_signal text not null default 'unknown'
+        check (baseline_signal in ('retell_answered', 'retell_abstained', 'unknown')),
+      expires_at timestamptz not null default (now() + interval '30 days'),
+      created_at timestamptz not null default now()
+    );
+  `);
+  await pool.query(`
+    do $$
+    begin
+      if not exists (select 1 from pg_constraint where conname = 'kb_shadow_results_run_scope_fk') then
+        alter table kb_shadow_results
+          add constraint kb_shadow_results_run_scope_fk
+          foreign key (run_id, org_id, tenant_id)
+          references kb_shadow_runs(id, org_id, tenant_id)
+          on delete cascade;
+      end if;
+      if exists (select 1 from information_schema.tables where table_name = 'kb_retrieval_events')
+         and not exists (select 1 from pg_constraint where conname = 'kb_shadow_results_retrieval_event_scope_fk') then
+        alter table kb_shadow_results
+          add constraint kb_shadow_results_retrieval_event_scope_fk
+          foreign key (retrieval_event_id, org_id, tenant_id)
+          references kb_retrieval_events(id, org_id, tenant_id)
+          on delete no action;
+      end if;
+    end $$;
+  `);
+  await pool.query(`
+    create index if not exists kb_shadow_runs_scope_idx
+      on kb_shadow_runs(org_id, tenant_id, started_at desc);
+  `);
+  await pool.query(`
+    create index if not exists kb_shadow_runs_agent_idx
+      on kb_shadow_runs(org_id, tenant_id, agent_id, started_at desc);
+  `);
+  await pool.query(`
+    create index if not exists kb_shadow_results_run_idx
+      on kb_shadow_results(run_id, status);
+  `);
+  await pool.query(`
+    create index if not exists kb_shadow_results_scope_idx
+      on kb_shadow_results(org_id, tenant_id, created_at desc);
+  `);
+  await pool.query(`
+    create index if not exists kb_shadow_results_call_idx
+      on kb_shadow_results(call_id, turn_index)
+      where call_id is not null;
+  `);
+  await pool.query(`
+    create unique index if not exists kb_shadow_results_run_query_uidx
+      on kb_shadow_results(run_id, coalesce(call_id, ''), coalesce(turn_index, -1), query_hash);
+  `);
+  await pool.query(`
+    create index if not exists kb_shadow_results_expires_idx
+      on kb_shadow_results(expires_at);
+  `);
+  await pool.query(`alter table kb_shadow_runs enable row level security;`);
+  await pool.query(`alter table kb_shadow_results enable row level security;`);
+  await pool.query(`
+    do $$
+    begin
+      if exists (select 1 from pg_roles where rolname = 'anon') then
+        revoke all on table kb_shadow_runs from anon;
+        revoke all on table kb_shadow_results from anon;
+      end if;
+      if exists (select 1 from pg_roles where rolname = 'authenticated') then
+        revoke all on table kb_shadow_runs from authenticated;
+        revoke all on table kb_shadow_results from authenticated;
+      end if;
+    end $$;
   `);
 
   // In case table existed before these fields were introduced.

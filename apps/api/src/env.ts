@@ -96,4 +96,9 @@ if (process.env.NODE_ENV === 'production') {
       `Will become hard-required in a future round (matches the WEBHOOK_SIGNING_SECRET migration).\n`,
     );
   }
+
+  if (process.env.DB_REJECT_UNAUTHORIZED === 'false' && process.env.ALLOW_INSECURE_DB_TLS !== 'true') {
+    process.stderr.write(`[env] FATAL: DB_REJECT_UNAUTHORIZED=false is not allowed in production without ALLOW_INSECURE_DB_TLS=true.\n`);
+    throw new Error('DB_REJECT_UNAUTHORIZED=false is not allowed in production');
+  }
 }
