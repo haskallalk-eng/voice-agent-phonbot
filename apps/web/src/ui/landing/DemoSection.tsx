@@ -1,5 +1,4 @@
 import React from 'react';
-import { FoxLogo } from '../FoxLogo.js';
 import {
   IconBolt,
   IconCheckCircle,
@@ -21,6 +20,14 @@ type DemoSectionProps = {
 type TemplateCardProps = {
   template: (typeof TEMPLATES)[number];
 };
+
+function CrystalDemoMark() {
+  return (
+    <div className="crystal-demo-mark" aria-hidden="true">
+      <img src="/brand/phonbot-crystal-icon-cropped.png" alt="" className="h-12 w-12 object-contain" />
+    </div>
+  );
+}
 
 function TemplateCard({ template }: TemplateCardProps) {
   return (
@@ -110,8 +117,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
           >
             <div className="mb-7 flex items-center gap-4">
               <div className="relative">
-                <span className="absolute inset-0 rounded-full bg-orange-500/20 blur-2xl" />
-                <FoxLogo size="lg" glow animate />
+                <CrystalDemoMark />
               </div>
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-orange-300/80">Direkt anrufen</p>

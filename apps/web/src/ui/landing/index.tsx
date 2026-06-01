@@ -153,19 +153,19 @@ export function LandingPage({ onGoToRegister, onGoToLogin, onGoToContact }: Prop
         <CrystalAtmosphere />
       </Suspense>
 
-      {/* Background glow orbs */}
+      {/* Background crystal glows */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" style={{ zIndex: 0 }}>
         <div
-          className="glow-pulse absolute -top-40 -left-40 w-[700px] h-[700px] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.18) 0%, transparent 70%)' }}
+          className="crystal-page-glow glow-pulse absolute -top-44 -left-44 h-[720px] w-[720px]"
+          style={{ background: 'radial-gradient(ellipse, rgba(255,91,10,0.18) 0%, transparent 68%)' }}
         />
         <div
-          className="glow-pulse absolute top-1/2 -right-60 w-[600px] h-[600px] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.12) 0%, transparent 70%)', animationDelay: '1.5s' }}
+          className="crystal-page-glow crystal-page-glow-cyan glow-pulse absolute top-1/2 -right-64 h-[620px] w-[620px]"
+          style={{ background: 'radial-gradient(ellipse, rgba(32,217,255,0.12) 0%, transparent 70%)', animationDelay: '1.5s' }}
         />
         <div
-          className="glow-pulse absolute -bottom-40 left-1/3 w-[500px] h-[500px] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.10) 0%, transparent 70%)', animationDelay: '3s' }}
+          className="crystal-page-glow glow-pulse absolute -bottom-44 left-1/3 h-[520px] w-[520px]"
+          style={{ background: 'radial-gradient(ellipse, rgba(255,183,102,0.10) 0%, transparent 70%)', animationDelay: '3s' }}
         />
       </div>
 

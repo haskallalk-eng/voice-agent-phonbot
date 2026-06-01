@@ -55,8 +55,8 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
       <div className="relative rounded-3xl overflow-hidden">
         <div className="absolute inset-0 backdrop-blur-[48px]" style={{ background: 'rgba(255,255,255,0.03)' }} />
         <div className="absolute inset-0 rounded-3xl" style={{ border: '1px solid rgba(255,255,255,0.07)' }} />
-        <div className="absolute -top-40 -left-40 w-80 h-80 rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.06) 0%, transparent 70%)' }} />
-        <div className="absolute -bottom-40 -right-40 w-80 h-80 rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.04) 0%, transparent 70%)' }} />
+        <div className="crystal-page-glow absolute -top-40 -left-40 h-80 w-80 pointer-events-none" style={{ background: 'radial-gradient(ellipse, rgba(249,115,22,0.07) 0%, transparent 72%)' }} />
+        <div className="crystal-page-glow crystal-page-glow-cyan absolute -bottom-40 -right-40 h-80 w-80 pointer-events-none" style={{ background: 'radial-gradient(ellipse, rgba(6,182,212,0.05) 0%, transparent 72%)' }} />
 
         <div className="relative grid grid-cols-1 lg:grid-cols-2">
           {/* Sliders */}

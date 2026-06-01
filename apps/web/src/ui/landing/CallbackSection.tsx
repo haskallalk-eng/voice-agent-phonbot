@@ -1,5 +1,4 @@
 import React from 'react';
-import { FoxLogo } from '../FoxLogo.js';
 import { IconPrivacy, IconBolt, IconCheckCircle } from '../PhonbotIcons.js';
 import { TurnstileWidget, type TurnstileHandle } from '../TurnstileWidget.js';
 import { useVisible } from './shared.js';
@@ -72,22 +71,23 @@ export function CallbackSection() {
             boxShadow: '0 0 60px rgba(249,115,22,0.08), 0 0 120px rgba(6,182,212,0.04)',
           }}
         >
-          {/* Glow blobs */}
-          <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full pointer-events-none"
-            style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.12) 0%, transparent 70%)' }} />
-          <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full pointer-events-none"
-            style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.08) 0%, transparent 70%)' }} />
+          <div className="crystal-page-glow absolute -top-24 -right-20 h-72 w-72 pointer-events-none"
+            style={{ background: 'radial-gradient(ellipse, rgba(249,115,22,0.14) 0%, transparent 72%)' }} />
+          <div className="crystal-page-glow crystal-page-glow-cyan absolute -bottom-24 -left-20 h-72 w-72 pointer-events-none"
+            style={{ background: 'radial-gradient(ellipse, rgba(6,182,212,0.1) 0%, transparent 72%)' }} />
 
           <div className="relative grid grid-cols-1 sm:grid-cols-5 gap-0">
             {/* Left — visual (3/5 width) */}
             <div className="sm:col-span-2 p-8 sm:p-10 flex flex-col items-center sm:items-start justify-center text-center sm:text-left">
-              {/* Chipy avatar with pulse */}
               <div className="relative mb-6">
-                <div className="absolute inset-0 rounded-full animate-ping opacity-20"
-                  style={{ background: 'rgba(249,115,22,0.3)', animationDuration: '2.5s' }} />
-                <div className="relative w-20 h-20 rounded-full flex items-center justify-center"
-                  style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.2), rgba(6,182,212,0.15))', border: '1px solid rgba(249,115,22,0.2)' }}>
-                  <FoxLogo size={48} glow />
+                <div className="absolute inset-[-10px] opacity-55 blur-xl"
+                  style={{
+                    background: 'conic-gradient(from 140deg, rgba(249,115,22,0.32), rgba(6,182,212,0.16), rgba(249,115,22,0.28))',
+                    clipPath: 'polygon(50% 0%, 82% 18%, 100% 55%, 72% 100%, 26% 90%, 0 48%, 18% 14%)',
+                    animation: 'breathe 2.8s ease-in-out infinite',
+                  }} />
+                <div className="crystal-demo-mark relative">
+                  <img src="/brand/phonbot-crystal-icon-cropped.png" alt="" className="h-12 w-12 object-contain" />
                 </div>
               </div>
 
