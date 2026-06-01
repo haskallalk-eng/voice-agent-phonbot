@@ -27,6 +27,7 @@ import {
   DRKALLA_RAG_BEGIN_MESSAGE,
   DRKALLA_RAG_KB_CONFIG,
   DRKALLA_RAG_KB_NAME_PREFIX,
+  DRKALLA_RAG_KB_SCHEMA_VERSION,
   DRKALLA_RAG_PROMPT,
   buildDrkallaKnowledgeTexts,
   drkallaSnapshotHash,
@@ -149,7 +150,7 @@ async function syncDrkallaRagAgent(
   const snapshot = await readSnapshot(snapshotPath);
   const snapshotHash = drkallaSnapshotHash(snapshot);
   const knowledgeTexts = buildDrkallaKnowledgeTexts(snapshot);
-  const kbName = `${DRKALLA_RAG_KB_NAME_PREFIX} ${snapshotHash}`;
+  const kbName = `${DRKALLA_RAG_KB_NAME_PREFIX} ${snapshotHash} ${DRKALLA_RAG_KB_SCHEMA_VERSION}`;
   const model = getDefaultRetellLlmModel();
   const modelHighPriority = getDefaultRetellLlmHighPriority();
   const webhookBase = webhookBaseUrl();
