@@ -83,8 +83,8 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
     <section id="demo" className="relative z-10 mx-auto max-w-6xl px-6 py-20 ambient-glow-alt ambient-glow">
       <div className="mb-10 flex flex-col gap-5 text-center">
         <div className="flex flex-wrap items-center justify-center gap-3">
-          <span className="inline-flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/15 px-3 py-1 text-xs font-bold text-red-100">
-            <span className="breathe inline-block h-2 w-2 rounded-full bg-red-500" />
+          <span className="inline-flex items-center gap-2 rounded-full border border-orange-400/30 bg-orange-500/12 px-3 py-1 text-xs font-bold text-orange-100">
+            <span className="breathe inline-block h-2 w-2 rounded-full bg-orange-400 shadow-[0_0_14px_rgba(249,115,22,0.75)]" />
             Live-Telefon
           </span>
           <span className="rounded-full border border-cyan-400/20 bg-cyan-400/8 px-3 py-1 text-xs font-semibold text-cyan-100/80">
@@ -112,7 +112,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
           <div
             className="relative p-6 sm:p-8 lg:p-10"
             style={{
-              background: 'radial-gradient(circle at 18% 12%, rgba(249,115,22,0.16), transparent 34%), radial-gradient(circle at 85% 88%, rgba(6,182,212,0.13), transparent 32%)',
+              background: 'radial-gradient(ellipse at 18% 12%, rgba(249,115,22,0.16), transparent 34%), radial-gradient(ellipse at 85% 88%, rgba(6,182,212,0.13), transparent 32%)',
             }}
           >
             <div className="mb-7 flex items-center gap-4">

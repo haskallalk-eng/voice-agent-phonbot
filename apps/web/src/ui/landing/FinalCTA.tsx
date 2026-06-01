@@ -8,7 +8,7 @@ export function FinalCTA({ onGoToRegister }: FinalCTAProps) {
   return (
     <section className="relative z-10 px-6 py-24 max-w-5xl mx-auto ambient-glow">
       <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-black/45 px-6 py-12 text-center shadow-[0_32px_140px_rgba(0,0,0,0.45)]">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(249,115,22,0.20),transparent_28%),radial-gradient(circle_at_80%_35%,rgba(6,182,212,0.18),transparent_30%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_20%_20%,rgba(249,115,22,0.20),transparent_28%),radial-gradient(ellipse_at_80%_35%,rgba(6,182,212,0.18),transparent_30%)]" />
         <img
           src="/brand/phonbot-crystal-icon-cropped.png"
           alt=""

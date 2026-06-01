@@ -99,7 +99,7 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
               <div className="mb-10">
                 <p className="text-xs text-white/25 uppercase tracking-[0.15em] font-medium mb-3">Netto-Ersparnis / Monat</p>
                 <p className={`text-4xl sm:text-[64px] font-extrabold leading-[0.9] tracking-tighter transition-colors duration-300 ${
-                  netto > 0 ? '' : netto === 0 ? 'text-white/30' : 'text-red-400'
+                  netto > 0 ? '' : netto === 0 ? 'text-white/30' : 'text-orange-300'
                 }`}
                   style={netto > 0 ? { backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)', WebkitBackgroundClip: 'text', color: 'transparent' } : undefined}
                 >
@@ -130,7 +130,8 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
                 </div>
                 <div className="flex flex-col gap-1 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
                   <span className="min-w-0 text-[13px] text-white/50 font-medium tracking-wide">Dein Vorteil</span>
-                  <span className={`text-[15px] font-bold tracking-tight tabular-nums sm:shrink-0 ${netto >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  <span className={`text-[15px] font-bold tracking-tight tabular-nums sm:shrink-0 ${netto >= 0 ? 'bg-clip-text text-transparent' : 'text-orange-300'}`}
+                    style={netto >= 0 ? { backgroundImage: 'var(--crystal-gradient)' } : undefined}>
                     {netto >= 0 ? '+' : ''}<Num value={netto} /> €
                   </span>
                 </div>

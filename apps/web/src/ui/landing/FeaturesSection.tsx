@@ -21,8 +21,8 @@ export function FeaturesSection() {
               animationDelay: `${i * 80}ms`,
             }}
           >
-            <div className="pointer-events-none absolute -right-16 -top-16 h-32 w-32 rounded-full bg-cyan-400/10 blur-2xl transition-opacity duration-300 group-hover:opacity-100 opacity-40" />
-            <div className="pointer-events-none absolute -bottom-20 left-4 h-32 w-32 rounded-full bg-orange-500/10 blur-2xl transition-opacity duration-300 group-hover:opacity-100 opacity-30" />
+            <div className="crystal-page-glow crystal-page-glow-cyan pointer-events-none absolute -right-16 -top-16 h-32 w-32 bg-cyan-400/10 transition-opacity duration-300 group-hover:opacity-100 opacity-40" />
+            <div className="crystal-page-glow pointer-events-none absolute -bottom-20 left-4 h-32 w-32 bg-orange-500/10 transition-opacity duration-300 group-hover:opacity-100 opacity-30" />
             {/* Icon */}
             <div className="w-10 h-10 rounded-lg flex items-center justify-center mb-4
               bg-gradient-to-br from-orange-500/15 to-cyan-500/10 border border-orange-500/20

@@ -297,7 +297,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
                     {cbLoading ? '...' : 'Chipy soll mich anrufen'}
                   </button>
                   {cbError && (
-                    <p id="callback-demo-consent-error" className="mt-2 text-center text-sm text-red-400" role="alert">{cbError}</p>
+                    <p id="callback-demo-consent-error" className="mt-2 text-center text-sm text-orange-200" role="alert">{cbError}</p>
                   )}
                 </form>
                 <p className="mt-3 text-center text-xs text-white/25">
