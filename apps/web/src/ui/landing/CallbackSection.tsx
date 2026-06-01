@@ -117,14 +117,13 @@ export function CallbackSection() {
             <div className="sm:col-span-3 p-8 sm:p-10 sm:border-l" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
               {state === 'success' ? (
                 <div className="h-full flex flex-col items-center justify-center text-center gap-5 py-4">
-                  <div className="w-16 h-16 rounded-full flex items-center justify-center"
-                    style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)' }}>
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <div className="crystal-demo-mark">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#20d9ff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="20 6 9 17 4 12"/>
                     </svg>
                   </div>
                   <div>
-                    <p className="text-green-300 font-bold text-lg">Chipy ruft dich gleich an!</p>
+                    <p className="bg-clip-text text-lg font-bold text-transparent" style={{ backgroundImage: 'var(--crystal-gradient)' }}>Chipy ruft dich gleich an!</p>
                     <p className="text-white/40 text-sm mt-1.5">Dein Telefon klingelt in wenigen Sekunden.</p>
                   </div>
                   <button onClick={() => setState('idle')} className="text-xs text-white/25 hover:text-white/50 transition-colors mt-1">
@@ -180,7 +179,7 @@ export function CallbackSection() {
                   {/* Turnstile — invisible, execute-on-demand at submit time */}
                   <TurnstileWidget ref={turnstileRef} mode="execute" theme="dark" />
                   {state === 'error' && (
-                    <p className="text-red-400/80 text-xs bg-red-500/8 border border-red-500/15 rounded-xl px-4 py-2.5">
+                    <p className="rounded-xl border border-orange-400/20 bg-orange-500/10 px-4 py-2.5 text-xs text-orange-100/80">
                       Etwas ist schiefgelaufen — bitte versuche es erneut.
                     </p>
                   )}

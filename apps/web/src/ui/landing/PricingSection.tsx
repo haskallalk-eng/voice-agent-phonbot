@@ -99,7 +99,7 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
           />
         </button>
         <span className={`text-sm font-medium ${yearly ? 'text-white' : 'text-white/40'}`}>
-          Jährlich <span className="text-green-400 text-xs font-bold">-20%</span>
+          Jährlich <span className="bg-clip-text text-xs font-bold text-transparent" style={{ backgroundImage: 'var(--crystal-gradient)' }}>-20%</span>
         </span>
       </div>
 
@@ -115,7 +115,7 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
           <div className="flex items-center gap-4 mb-2 sm:mb-0">
             <div>
               <p className="text-lg font-bold text-white">{freePlan.name}</p>
-              <p className="text-xs text-green-400/70 font-medium">Für immer kostenlos</p>
+              <p className="text-xs font-medium text-cyan-100/70">Für immer kostenlos</p>
             </div>
             <div className="hidden lg:flex flex-wrap items-center gap-x-6 gap-y-2 ml-6">
               {freePlan.features.map(f => (
@@ -211,8 +211,8 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
         }}
       >
         <div
-          className="absolute -top-24 -right-24 w-64 h-64 rounded-full blur-3xl opacity-30 pointer-events-none"
-          style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.5) 0%, transparent 70%)' }}
+          className="crystal-page-glow crystal-page-glow-cyan absolute -top-24 -right-24 h-64 w-64 opacity-45 pointer-events-none"
+          style={{ background: 'radial-gradient(ellipse, rgba(6,182,212,0.32) 0%, transparent 72%)' }}
         />
         <div className="flex-1 relative z-10">
           <div className="flex items-center gap-3 mb-2">
