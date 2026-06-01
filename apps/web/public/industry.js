@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Shared JS for legacy static industry landing pages.
  * Public demos are telephone-first: demo buttons open the real demo number.
  */
@@ -91,7 +91,7 @@ function initCalculator() {
         nettoEl.style.webkitBackgroundClip = '';
         nettoEl.style.webkitTextFillColor = '';
         nettoEl.style.backgroundClip = '';
-        nettoEl.style.color = netto < 0 ? '#F87171' : 'rgba(255,255,255,.3)';
+        nettoEl.style.color = netto < 0 ? '#FDBA74' : 'rgba(255,255,255,.3)';
       }
     }
 
@@ -105,13 +105,25 @@ function initCalculator() {
     const vorteilEl = $('#calc-vorteil', calc);
     if (vorteilEl) {
       vorteilEl.textContent = (netto >= 0 ? '+' : '') + netto.toLocaleString('de-DE') + ' EUR';
-      vorteilEl.style.color = netto >= 0 ? '#4ADE80' : '#F87171';
+      if (netto >= 0) {
+        vorteilEl.style.backgroundImage = 'linear-gradient(135deg, #F97316, #06B6D4)';
+        vorteilEl.style.webkitBackgroundClip = 'text';
+        vorteilEl.style.webkitTextFillColor = 'transparent';
+        vorteilEl.style.backgroundClip = 'text';
+        vorteilEl.style.color = 'transparent';
+      } else {
+        vorteilEl.style.backgroundImage = '';
+        vorteilEl.style.webkitBackgroundClip = '';
+        vorteilEl.style.webkitTextFillColor = '';
+        vorteilEl.style.backgroundClip = '';
+        vorteilEl.style.color = '#FDBA74';
+      }
     }
 
     const hintEl = $('#calc-hint', calc);
     if (hintEl) {
       if (netto > 200) hintEl.textContent = 'Entspricht ca. ' + Math.round(netto / lohn) + ' Stunden, die dein Team fuer wichtigere Aufgaben nutzen kann.';
-      else if (netto > 0) hintEl.textContent = 'Schon ab wenigen Anrufen pro Tag rechnet sich Chipy fuer dein Business.';
+      else if (netto > 0) hintEl.textContent = 'Schon ab wenigen Anrufen pro Tag rechnet sich Phonbot fuer dein Business.';
       else hintEl.textContent = 'Starte kostenlos und teste, ob die Bot-Quote fuer dein Business passt.';
     }
   };

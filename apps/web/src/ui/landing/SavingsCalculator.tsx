@@ -125,7 +125,7 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
                   <span className="text-[15px] text-white/80 font-semibold tracking-tight tabular-nums sm:shrink-0"><Num value={personal} /> €</span>
                 </div>
                 <div className="flex flex-col gap-1 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                  <span className="min-w-0 text-[13px] text-white/35 tracking-wide">Chipy ({planName})</span>
+                  <span className="min-w-0 text-[13px] text-white/35 tracking-wide">Phonbot ({planName})</span>
                   <span className="text-[15px] text-white/35 font-semibold tracking-tight tabular-nums sm:shrink-0">–{plan} €</span>
                 </div>
                 <div className="flex flex-col gap-1 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
@@ -142,7 +142,7 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
                 {netto > 200
                   ? 'Entspricht ca. ' + Math.round(netto / lohn) + ' Stunden die dein Team für wichtigere Aufgaben nutzen kann.'
                   : netto > 0
-                    ? 'Schon ab wenigen Anrufen pro Tag rechnet sich Chipy für dein Business.'
+                    ? 'Schon ab wenigen Anrufen pro Tag rechnet sich Phonbot für dein Business.'
                     : 'Starte kostenlos und teste ob die Bot-Quote für dein Business passt.'}
               </p>
             </div>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { resetPassword } from '../lib/api.js';
-import { FoxLogo } from './FoxLogo.js';
+import { PhonbotBrand } from './FoxLogo.js';
 import { PasswordInput } from './PasswordInput.js';
 
 export function ResetPasswordPage() {
@@ -34,11 +34,7 @@ export function ResetPasswordPage() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center gap-3 mb-8">
-          <FoxLogo size="lg" glow />
-          <span className="text-xl font-black tracking-tight">
-            <span className="text-white">Phon</span>
-            <span style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>bot</span>
-          </span>
+          <PhonbotBrand size="md" />
         </div>
 
         {status === 'success' ? (
@@ -60,8 +56,8 @@ export function ResetPasswordPage() {
             <p className="text-white/40 text-sm mb-6 text-center">Mindestens 8 Zeichen</p>
 
             {error && (
-              <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 mb-4">
-                <p className="text-red-300 text-sm">{error}</p>
+              <div className="mb-4 rounded-xl border border-orange-400/20 bg-orange-500/10 px-4 py-3">
+                <p className="text-sm text-orange-100/80">{error}</p>
               </div>
             )}
 

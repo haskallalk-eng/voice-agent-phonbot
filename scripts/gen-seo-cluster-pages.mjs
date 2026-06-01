@@ -182,7 +182,7 @@ ${NAV_HTML}
       <p class="eyebrow">${esc(page.eyebrow)}</p>
       <h1>${esc(page.headline)}</h1>
       <p class="lead">${esc(page.intro)}</p>
-      <div class="actions"><a class="btn" href="/?page=register">Kostenlos testen</a><a class="btn secondary" href="${DEMO_PHONE_HREF}">Chipy live anrufen</a></div>
+      <div class="actions"><a class="btn" href="/?page=register">Kostenlos testen</a><a class="btn secondary" href="${DEMO_PHONE_HREF}">Phonbot live anrufen</a></div>
     </div>
   </header>
   <section>

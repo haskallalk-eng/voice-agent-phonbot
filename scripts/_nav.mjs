@@ -6,25 +6,8 @@
 // click-outside) lives in /apps/web/public/nav.js — already loaded by
 // every static page via <script src="/nav.js" defer>.
 
-const FOX_LOGO_SVG = [
-  '<svg viewBox="0 8 100 92" fill="none" xmlns="http://www.w3.org/2000/svg" width="32" height="32">',
-  '<defs>',
-  '<radialGradient id="ch" cx="50%" cy="40%" r="65%"><stop offset="0%" stop-color="#F5C842"/><stop offset="100%" stop-color="#D49B12"/></radialGradient>',
-  '<radialGradient id="cc" cx="50%" cy="40%" r="70%"><stop offset="0%" stop-color="#F7D04A"/><stop offset="100%" stop-color="#D9A015"/></radialGradient>',
-  '<radialGradient id="ce" cx="30%" cy="25%" r="75%"><stop offset="0%" stop-color="#FCD34D"/><stop offset="100%" stop-color="#B45309"/></radialGradient>',
-  '</defs>',
-  '<circle cx="28" cy="22" r="9" fill="#D49B12"/><circle cx="28" cy="22" r="5.5" fill="#E8B32D"/>',
-  '<circle cx="72" cy="22" r="9" fill="#D49B12"/><circle cx="72" cy="22" r="5.5" fill="#E8B32D"/>',
-  '<circle cx="50" cy="55" r="38" fill="url(#ch)"/>',
-  '<ellipse cx="14" cy="62" rx="12" ry="11" fill="url(#cc)"/><ellipse cx="86" cy="62" rx="12" ry="11" fill="url(#cc)"/>',
-  '<circle cx="36" cy="50" r="13" fill="white"/><circle cx="36" cy="50" r="10" fill="url(#ce)"/>',
-  '<ellipse cx="36" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="40" cy="46" r="3" fill="white"/>',
-  '<circle cx="64" cy="50" r="13" fill="white"/><circle cx="64" cy="50" r="10" fill="url(#ce)"/>',
-  '<ellipse cx="64" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="68" cy="46" r="3" fill="white"/>',
-  '<ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309"/>',
-  '<path d="M44 68 Q50 73 56 68" stroke="#8B4513" stroke-width="1.6" fill="none" stroke-linecap="round"/>',
-  '</svg>',
-].join('');
+const CRYSTAL_LOGO_HTML =
+  '<img class="ph-mark" src="/brand/phonbot-crystal-icon-cropped.png" alt="" width="32" height="32" decoding="async" loading="eager">';
 
 // Matches TEMPLATES in apps/web/src/ui/landing/shared.ts — keep in sync!
 const INDUSTRIES = [
@@ -68,6 +51,7 @@ export const NAV_STYLE = `/*--nav-css-begin--*/
 .ph-header{position:sticky;top:0;z-index:50;border-bottom:1px solid rgba(255,255,255,.05);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);background:rgba(10,10,15,.8)}
 .ph-inner{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.5rem;max-width:1152px;margin:0 auto;gap:1rem}
 .ph-logo{display:flex;align-items:center;gap:8px;text-decoration:none;flex-shrink:0}
+.ph-mark{width:32px;height:32px;object-fit:contain;filter:drop-shadow(0 0 12px rgba(249,115,22,.45)) drop-shadow(0 0 14px rgba(6,182,212,.24))}
 .ph-brand{font-size:18px;font-weight:900;letter-spacing:-.5px;line-height:1}
 .ph-brand .w{color:#fff}
 .ph-brand .o{background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
@@ -119,7 +103,7 @@ body.mopen .ph-mob{display:block}
 export const NAV_HTML = `<!--nav-html-begin-->
 <header class="ph-header">
   <div class="ph-inner">
-    <a href="/" class="ph-logo" aria-label="Phonbot Startseite">${FOX_LOGO_SVG}<span class="ph-brand"><span class="w">Phon</span><span class="o">bot</span></span></a>
+    <a href="/" class="ph-logo" aria-label="Phonbot Startseite">${CRYSTAL_LOGO_HTML}<span class="ph-brand"><span class="w">Phon</span><span class="o">bot</span></span></a>
     <nav class="ph-nav" aria-label="Hauptnavigation">
       <a href="/#demo">Demo</a>
       <a href="/#features">Features</a>

@@ -39,9 +39,9 @@ export const FEATURES: FeatureItem[] = [
   { Icon: IconBolt, title: 'In 2 Minuten live', desc: 'Template wählen, Daten eintragen, fertig. Kein Techniker, kein Setup-Marathon.' },
   { Icon: IconPhone, title: 'Weniger Anrufe verpassen', desc: '24/7 erreichbar — auch nachts und am Wochenende. Viele Anrufe sind mögliche Aufträge.' },
   { Icon: IconSettings, title: 'Deine Nummer bleibt', desc: 'Einfach weiterleiten. Kein Nummernwechsel, keine Unterbrechung für deine Kunden.' },
-  { Icon: IconCalendar, title: 'Termine? Strukturiert.', desc: 'Chipy prüft freie Slots und bucht erst, wenn der Kalender die Buchung bestätigt.' },
-  { Icon: IconTickets, title: 'Nichts bleibt liegen', desc: 'Was Chipy nicht sofort löst, wird zum strukturierten Ticket. Kein Zettelchaos.' },
-  { Icon: IconInsights, title: 'Wird mit jedem Anruf besser', desc: 'Chipy analysiert Gespräche und optimiert sich selbst — dein Agent lernt aus jeder Interaktion.' },
+  { Icon: IconCalendar, title: 'Termine? Strukturiert.', desc: 'Phonbot prüft freie Slots und bucht erst, wenn der Kalender die Buchung bestätigt.' },
+  { Icon: IconTickets, title: 'Nichts bleibt liegen', desc: 'Was Phonbot nicht sofort löst, wird zum strukturierten Ticket. Kein Zettelchaos.' },
+  { Icon: IconInsights, title: 'Wird mit jedem Anruf besser', desc: 'Phonbot analysiert Gespräche und optimiert sich selbst — dein Agent lernt aus jeder Interaktion.' },
 ];
 
 export const STEPS = [

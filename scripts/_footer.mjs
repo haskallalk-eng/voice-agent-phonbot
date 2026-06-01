@@ -5,20 +5,8 @@
 // content, so `scripts/sync-legal-nav.mjs` can find-and-replace the block
 // idempotently.
 
-const FOX_LOGO_SVG_SM = [
-  '<svg viewBox="0 8 100 92" fill="none" xmlns="http://www.w3.org/2000/svg" width="28" height="28">',
-  '<circle cx="28" cy="22" r="9" fill="#D49B12"/><circle cx="28" cy="22" r="5.5" fill="#E8B32D"/>',
-  '<circle cx="72" cy="22" r="9" fill="#D49B12"/><circle cx="72" cy="22" r="5.5" fill="#E8B32D"/>',
-  '<circle cx="50" cy="55" r="38" fill="url(#ch)"/>',
-  '<ellipse cx="14" cy="62" rx="12" ry="11" fill="url(#cc)"/><ellipse cx="86" cy="62" rx="12" ry="11" fill="url(#cc)"/>',
-  '<circle cx="36" cy="50" r="13" fill="white"/><circle cx="36" cy="50" r="10" fill="url(#ce)"/>',
-  '<ellipse cx="36" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="40" cy="46" r="3" fill="white"/>',
-  '<circle cx="64" cy="50" r="13" fill="white"/><circle cx="64" cy="50" r="10" fill="url(#ce)"/>',
-  '<ellipse cx="64" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="68" cy="46" r="3" fill="white"/>',
-  '<ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309"/>',
-  '<path d="M44 68 Q50 73 56 68" stroke="#8B4513" stroke-width="1.6" fill="none" stroke-linecap="round"/>',
-  '</svg>',
-].join('');
+const CRYSTAL_LOGO_HTML =
+  '<img class="footer-mark" src="/brand/phonbot-crystal-icon-cropped.png" alt="" width="28" height="28" decoding="async" loading="lazy">';
 
 export const FOOTER_STYLE = `/*--footer-css-begin--*/
 .site-footer{position:relative;z-index:10;border-top:1px solid rgba(255,255,255,.05);padding:3rem 1.5rem 2rem;margin-top:4rem;background:rgba(10,10,15,.6)}
@@ -28,6 +16,7 @@ export const FOOTER_STYLE = `/*--footer-css-begin--*/
 @media(max-width:480px){.footer-grid{grid-template-columns:1fr}}
 .col-brand{display:flex;flex-direction:column;gap:.5rem;align-items:flex-start}
 .col-brand .brand-row{display:flex;align-items:center;gap:6px;text-decoration:none}
+.col-brand .footer-mark{width:28px;height:28px;object-fit:contain;filter:drop-shadow(0 0 10px rgba(249,115,22,.42)) drop-shadow(0 0 12px rgba(6,182,212,.22))}
 .col-brand .brand-row .brand{font-size:18px;font-weight:800;letter-spacing:-.5px}
 .col-brand .brand-row .brand .w{color:#fff}
 .col-brand .brand-row .brand .o{background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
@@ -48,8 +37,8 @@ export const FOOTER_HTML = `<!--footer-html-begin-->
   <div class="footer-container">
     <div class="footer-grid">
       <div class="col-brand">
-        <a href="/" class="brand-row">${FOX_LOGO_SVG_SM}<span class="brand"><span class="w">Phon</span><span class="o">bot</span></span></a>
-        <p>Chipy — dein KI-Telefonassistent.<br>Immer erreichbar.</p>
+        <a href="/" class="brand-row">${CRYSTAL_LOGO_HTML}<span class="brand"><span class="w">Phon</span><span class="o">bot</span></span></a>
+        <p>KI-Telefonassistent.<br>Immer erreichbar.</p>
       </div>
       <div>
         <p class="footer-heading">Produkt</p>

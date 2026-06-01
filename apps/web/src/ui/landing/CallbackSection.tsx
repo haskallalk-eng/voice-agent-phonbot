@@ -54,11 +54,11 @@ export function CallbackSection() {
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white leading-tight">
             Hör selbst, wie{' '}
             <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
-              Chipy
+              Phonbot
             </span>{' '}klingt
           </h2>
           <p className="text-white/40 text-sm mt-3 max-w-lg mx-auto">
-            Ein 30-Sekunden-Anruf sagt mehr als jede Demo-Seite. Chipy ruft dich an und zeigt dir live, wie natürlich ein KI-Agent klingt.
+            Ein 30-Sekunden-Anruf sagt mehr als jede Demo-Seite. Phonbot ruft dich an und zeigt dir live, wie natürlich ein KI-Agent klingt.
           </p>
         </div>
 
@@ -95,7 +95,7 @@ export function CallbackSection() {
                 30 Sekunden.<br />Ein Anruf. Überzeugt.
               </h3>
               <p className="text-white/40 text-xs leading-relaxed mb-5">
-                Kein Formular, kein Vertriebsgespräch — nur dein Telefon klingelt und Chipy zeigt dir was er kann.
+                Kein Formular, kein Vertriebsgespräch — nur dein Telefon klingelt und Phonbot zeigt dir was er kann.
               </p>
 
               {/* Trust signals */}
@@ -123,7 +123,7 @@ export function CallbackSection() {
                     </svg>
                   </div>
                   <div>
-                    <p className="bg-clip-text text-lg font-bold text-transparent" style={{ backgroundImage: 'var(--crystal-gradient)' }}>Chipy ruft dich gleich an!</p>
+                    <p className="bg-clip-text text-lg font-bold text-transparent" style={{ backgroundImage: 'var(--crystal-gradient)' }}>Phonbot ruft dich gleich an!</p>
                     <p className="text-white/40 text-sm mt-1.5">Dein Telefon klingelt in wenigen Sekunden.</p>
                   </div>
                   <button onClick={() => setState('idle')} className="text-xs text-white/25 hover:text-white/50 transition-colors mt-1">
@@ -173,7 +173,7 @@ export function CallbackSection() {
                       className="mt-0.5 accent-orange-500"
                     />
                     <span>
-                      Ich bin einverstanden, dass Chipy mich für die Demo anruft und der Demo-Anruf als Audio/Transkript bis zu 90 Tage zur Demo-Qualität und Lead-Bearbeitung gespeichert wird.
+                      Ich bin einverstanden, dass Phonbot mich für die Demo anruft und der Demo-Anruf als Audio/Transkript bis zu 90 Tage zur Demo-Qualität und Lead-Bearbeitung gespeichert wird.
                     </span>
                   </label>
                   {/* Turnstile — invisible, execute-on-demand at submit time */}
@@ -191,7 +191,7 @@ export function CallbackSection() {
                     {state === 'loading' ? (
                       <span className="flex items-center justify-center gap-2">
                         <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                        Chipy wählt deine Nummer…
+                        Phonbot wählt deine Nummer…
                       </span>
                     ) : (
                       'Jetzt anrufen lassen →'

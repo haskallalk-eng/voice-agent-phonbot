@@ -46,10 +46,10 @@ a{color:inherit;text-decoration:none}
 
 /* ── Ambient glow orbs (3 pulsing radials, fixed full-bleed) ── */
 .orbs{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
-.orb{position:absolute;border-radius:50%;filter:blur(40px);animation:glow-pulse 3s ease-in-out infinite}
-.orb-1{width:700px;height:700px;top:-160px;left:-160px;background:radial-gradient(circle,rgba(249,115,22,.18) 0%,transparent 70%)}
-.orb-2{width:600px;height:600px;top:50%;right:-240px;background:radial-gradient(circle,rgba(6,182,212,.12) 0%,transparent 70%);animation-delay:1.5s}
-.orb-3{width:500px;height:500px;bottom:-160px;left:35%;background:radial-gradient(circle,rgba(249,115,22,.10) 0%,transparent 70%);animation-delay:3s}
+.orb{position:absolute;clip-path:polygon(50% 0%,88% 18%,100% 54%,70% 100%,22% 90%,0 45%,16% 14%);filter:blur(44px) saturate(1.2);animation:glow-pulse 3s ease-in-out infinite}
+.orb-1{width:700px;height:700px;top:-160px;left:-160px;background:radial-gradient(ellipse,rgba(249,115,22,.18) 0%,transparent 70%)}
+.orb-2{width:600px;height:600px;top:50%;right:-240px;background:radial-gradient(ellipse,rgba(6,182,212,.12) 0%,transparent 70%);animation-delay:1.5s;clip-path:polygon(34% 0%,92% 24%,78% 88%,18% 100%,0 38%)}
+.orb-3{width:500px;height:500px;bottom:-160px;left:35%;background:radial-gradient(ellipse,rgba(249,115,22,.10) 0%,transparent 70%);animation-delay:3s}
 @keyframes glow-pulse{0%,100%{opacity:.3}50%{opacity:.7}}
 
 /* ── Glass utility ── */
@@ -60,6 +60,7 @@ a{color:inherit;text-decoration:none}
 .ph-header{position:sticky;top:0;z-index:50;border-bottom:1px solid rgba(255,255,255,.05);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);background:rgba(10,10,15,.8)}
 .ph-inner{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.5rem;max-width:1152px;margin:0 auto;gap:1rem}
 .ph-logo{display:flex;align-items:center;gap:8px;text-decoration:none;flex-shrink:0}
+.ph-mark{width:32px;height:32px;object-fit:contain;filter:drop-shadow(0 0 12px rgba(249,115,22,.45)) drop-shadow(0 0 14px rgba(6,182,212,.24))}
 .ph-brand{font-size:18px;font-weight:900;letter-spacing:-.5px;line-height:1}
 .ph-brand .w{color:#fff}
 .ph-brand .o{background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
@@ -158,8 +159,8 @@ p{color:rgba(255,255,255,.7)}
 .dialogue{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:1.5rem;padding:1.75rem;max-width:640px;margin:0 auto;position:relative;overflow:hidden}
 @media(max-width:640px){.dialogue{padding:1.25rem}}
 .dialogue-header{display:flex;align-items:center;gap:.6rem;padding-bottom:1rem;margin-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,.06);font-size:.7rem;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.1em;font-weight:600}
-.dialogue-header .dot{width:8px;height:8px;border-radius:50%;background:#ef4444;animation:call-pulse 2s ease-in-out infinite}
-@keyframes call-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.6),0 0 0 0 rgba(239,68,68,.35)}50%{box-shadow:0 0 0 6px rgba(239,68,68,0),0 0 0 12px rgba(239,68,68,0)}}
+.dialogue-header .dot{width:8px;height:8px;border-radius:50%;background:#F97316;animation:call-pulse 2s ease-in-out infinite;box-shadow:0 0 14px rgba(249,115,22,.75)}
+@keyframes call-pulse{0%,100%{box-shadow:0 0 0 0 rgba(249,115,22,.6),0 0 0 0 rgba(6,182,212,.35)}50%{box-shadow:0 0 0 6px rgba(249,115,22,0),0 0 0 12px rgba(6,182,212,0)}}
 .dialogue-header .duration{margin-left:auto;font-variant-numeric:tabular-nums;color:rgba(255,255,255,.5);letter-spacing:.06em}
 
 /* Messages animate in on page load, staggered — no IntersectionObserver,
@@ -183,9 +184,9 @@ p{color:rgba(255,255,255,.7)}
 .msg.user{flex-direction:row-reverse}
 .msg .avatar{flex-shrink:0;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);color:rgba(255,255,255,.65);position:relative}
 .msg .avatar svg{display:block;width:14px;height:14px}
-.msg.bot .avatar{background:transparent;border:none;overflow:visible;width:40px;height:40px;filter:drop-shadow(0 0 10px rgba(249,115,22,.30));animation:chipy-breathe 3.5s ease-in-out infinite}
-.msg.bot .avatar svg{display:block;width:40px;height:40px}
-@keyframes chipy-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+.msg.bot .avatar{background:transparent;border:none;overflow:visible;width:40px;height:40px;filter:drop-shadow(0 0 10px rgba(249,115,22,.30)) drop-shadow(0 0 12px rgba(6,182,212,.20));animation:crystal-breathe 3.5s ease-in-out infinite}
+.msg.bot .avatar img{display:block;width:40px;height:40px;object-fit:contain}
+@keyframes crystal-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
 .msg .bubble{max-width:78%;padding:.75rem 1rem;border-radius:1rem;font-size:.9375rem;line-height:1.55;position:relative}
 .msg.user .bubble{background:rgba(255,255,255,.06);color:rgba(255,255,255,.82);border-bottom-right-radius:.375rem}
 .msg.bot .bubble{background:linear-gradient(135deg,rgba(249,115,22,.14),rgba(6,182,212,.08));color:#fff;border:1px solid rgba(249,115,22,.22);border-bottom-left-radius:.375rem;box-shadow:0 0 24px rgba(249,115,22,.08)}
@@ -245,7 +246,7 @@ p{color:rgba(255,255,255,.7)}
 .extra-title{color:#fff;font-weight:600;font-size:.9375rem;margin-bottom:.2rem;line-height:1.35}
 .extra-desc{color:rgba(255,255,255,.6);font-size:.875rem;line-height:1.55}
 
-/* ── FAQ (native <details> accordion, chipy-design tint on open) ── */
+/* ── FAQ (native <details> accordion, Phonbot-design tint on open) ── */
 .faq-list{max-width:48rem;margin:0 auto;display:flex;flex-direction:column;gap:.75rem}
 .faq-item{border-radius:1rem;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.02);overflow:hidden;transition:all .3s}
 .faq-item[open]{background:rgba(249,115,22,.05);border-color:rgba(249,115,22,.2)}
@@ -289,6 +290,7 @@ p{color:rgba(255,255,255,.7)}
 @media(max-width:480px){.footer-grid{grid-template-columns:1fr}}
 .col-brand{display:flex;flex-direction:column;gap:.5rem;align-items:flex-start}
 .col-brand .brand-row{display:flex;align-items:center;gap:6px;text-decoration:none}
+.col-brand .footer-mark{width:28px;height:28px;object-fit:contain;filter:drop-shadow(0 0 10px rgba(249,115,22,.42)) drop-shadow(0 0 12px rgba(6,182,212,.22))}
 .col-brand .brand-row .brand{font-size:18px;font-weight:800;letter-spacing:-.5px}
 .col-brand .brand-row .brand .w{color:#fff}
 .col-brand .brand-row .brand .o{background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
@@ -314,7 +316,7 @@ p{color:rgba(255,255,255,.7)}
 <!--nav-html-begin-->
 <header class="ph-header">
   <div class="ph-inner">
-    <a href="/" class="ph-logo" aria-label="Phonbot Startseite"><svg viewBox="0 8 100 92" fill="none" xmlns="http://www.w3.org/2000/svg" width="32" height="32"><defs><radialGradient id="ch" cx="50%" cy="40%" r="65%"><stop offset="0%" stop-color="#F5C842"/><stop offset="100%" stop-color="#D49B12"/></radialGradient><radialGradient id="cc" cx="50%" cy="40%" r="70%"><stop offset="0%" stop-color="#F7D04A"/><stop offset="100%" stop-color="#D9A015"/></radialGradient><radialGradient id="ce" cx="30%" cy="25%" r="75%"><stop offset="0%" stop-color="#FCD34D"/><stop offset="100%" stop-color="#B45309"/></radialGradient></defs><circle cx="28" cy="22" r="9" fill="#D49B12"/><circle cx="28" cy="22" r="5.5" fill="#E8B32D"/><circle cx="72" cy="22" r="9" fill="#D49B12"/><circle cx="72" cy="22" r="5.5" fill="#E8B32D"/><circle cx="50" cy="55" r="38" fill="url(#ch)"/><ellipse cx="14" cy="62" rx="12" ry="11" fill="url(#cc)"/><ellipse cx="86" cy="62" rx="12" ry="11" fill="url(#cc)"/><circle cx="36" cy="50" r="13" fill="white"/><circle cx="36" cy="50" r="10" fill="url(#ce)"/><ellipse cx="36" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="40" cy="46" r="3" fill="white"/><circle cx="64" cy="50" r="13" fill="white"/><circle cx="64" cy="50" r="10" fill="url(#ce)"/><ellipse cx="64" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="68" cy="46" r="3" fill="white"/><ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309"/><path d="M44 68 Q50 73 56 68" stroke="#8B4513" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg><span class="ph-brand"><span class="w">Phon</span><span class="o">bot</span></span></a>
+    <a href="/" class="ph-logo" aria-label="Phonbot Startseite"><img class="ph-mark" src="/brand/phonbot-crystal-icon-cropped.png" alt="" width="32" height="32" decoding="async" loading="eager"><span class="ph-brand"><span class="w">Phon</span><span class="o">bot</span></span></a>
     <nav class="ph-nav" aria-label="Hauptnavigation">
       <a href="/#demo">Demo</a>
       <a href="/#features">Features</a>
@@ -360,7 +362,7 @@ p{color:rgba(255,255,255,.7)}
     <p class="subtitle">Phonbot nimmt Reservierungen an während du in der Küche bist, beantwortet Fragen zur Speisekarte, erfasst Take-away-Bestellungen und bucht direkt in dein Reservierungssystem.</p>
     <div class="cta-row">
       <a href="/?page=register" class="btn btn-primary">Kostenlos testen</a>
-      <a href="tel:+493075937286" class="btn btn-ghost"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg><span style="margin-left:.5rem">Chipy live anrufen</span></a>
+      <a href="tel:+493075937286" class="btn btn-ghost"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg><span style="margin-left:.5rem">Phonbot live anrufen</span></a>
     </div>
     <div class="trust-line">✓ Kostenlos starten · ✓ Sofort einsatzbereit · ✓ DSGVO-fokussiert, AVV verfügbar</div>
   </div>
@@ -372,19 +374,19 @@ p{color:rgba(255,255,255,.7)}
     <div class="dialogue">
       <div class="dialogue-header">
         <span class="dot" aria-hidden="true"></span>
-        <span>Live-Anruf · Chipy</span>
+        <span>Live-Anruf · Phonbot</span>
         <span class="duration">0:31</span>
       </div>
       <div class="msg user"><div class="avatar" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg></div><div class="bubble"><span class="name">Gast</span>„Hallo, ich würde gerne heute Abend einen Tisch für vier Personen um 19 Uhr reservieren."</div></div>
-      <div class="msg bot"><div class="avatar" aria-hidden="true"><svg viewBox="0 8 100 92" width="40" height="40"><circle cx="28" cy="22" r="9" fill="#D49B12"/><circle cx="28" cy="22" r="5.5" fill="#E8B32D"/><circle cx="72" cy="22" r="9" fill="#D49B12"/><circle cx="72" cy="22" r="5.5" fill="#E8B32D"/><circle cx="50" cy="55" r="38" fill="url(#ch)"/><ellipse cx="14" cy="62" rx="12" ry="11" fill="url(#cc)"/><ellipse cx="86" cy="62" rx="12" ry="11" fill="url(#cc)"/><circle cx="36" cy="50" r="13" fill="white"/><circle cx="36" cy="50" r="10" fill="url(#ce)"/><ellipse cx="36" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="40" cy="46" r="3" fill="white"/><circle cx="64" cy="50" r="13" fill="white"/><circle cx="64" cy="50" r="10" fill="url(#ce)"/><ellipse cx="64" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="68" cy="46" r="3" fill="white"/><ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309"/><path d="M44 68 Q50 73 56 68" stroke="#8B4513" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg></div><div class="bubble"><span class="name">Phonbot</span>„Heute 19 Uhr für vier — einen Moment, ich schaue. Ja, das passt. Auf welchen Namen?"</div></div>
+      <div class="msg bot"><div class="avatar" aria-hidden="true"><img src="/brand/phonbot-crystal-icon-cropped.png" alt=""></div><div class="bubble"><span class="name">Phonbot</span>„Heute 19 Uhr für vier — einen Moment, ich schaue. Ja, das passt. Auf welchen Namen?"</div></div>
       <div class="msg user"><div class="avatar" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg></div><div class="bubble"><span class="name">Gast</span>„Martin Bauer."</div></div>
-      <div class="msg bot"><div class="avatar" aria-hidden="true"><svg viewBox="0 8 100 92" width="40" height="40"><circle cx="28" cy="22" r="9" fill="#D49B12"/><circle cx="28" cy="22" r="5.5" fill="#E8B32D"/><circle cx="72" cy="22" r="9" fill="#D49B12"/><circle cx="72" cy="22" r="5.5" fill="#E8B32D"/><circle cx="50" cy="55" r="38" fill="url(#ch)"/><ellipse cx="14" cy="62" rx="12" ry="11" fill="url(#cc)"/><ellipse cx="86" cy="62" rx="12" ry="11" fill="url(#cc)"/><circle cx="36" cy="50" r="13" fill="white"/><circle cx="36" cy="50" r="10" fill="url(#ce)"/><ellipse cx="36" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="40" cy="46" r="3" fill="white"/><circle cx="64" cy="50" r="13" fill="white"/><circle cx="64" cy="50" r="10" fill="url(#ce)"/><ellipse cx="64" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="68" cy="46" r="3" fill="white"/><ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309"/><path d="M44 68 Q50 73 56 68" stroke="#8B4513" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg></div><div class="bubble"><span class="name">Phonbot</span>„Gebucht, Martin. Gibt es Allergien oder besondere Wünsche — Kinderhochstuhl, vegetarisch?"</div></div>
+      <div class="msg bot"><div class="avatar" aria-hidden="true"><img src="/brand/phonbot-crystal-icon-cropped.png" alt=""></div><div class="bubble"><span class="name">Phonbot</span>„Gebucht, Martin. Gibt es Allergien oder besondere Wünsche — Kinderhochstuhl, vegetarisch?"</div></div>
       <div class="msg user"><div class="avatar" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg></div><div class="bubble"><span class="name">Gast</span>„Nichts Besonderes, danke."</div></div>
-      <div class="msg bot"><div class="avatar" aria-hidden="true"><svg viewBox="0 8 100 92" width="40" height="40"><circle cx="28" cy="22" r="9" fill="#D49B12"/><circle cx="28" cy="22" r="5.5" fill="#E8B32D"/><circle cx="72" cy="22" r="9" fill="#D49B12"/><circle cx="72" cy="22" r="5.5" fill="#E8B32D"/><circle cx="50" cy="55" r="38" fill="url(#ch)"/><ellipse cx="14" cy="62" rx="12" ry="11" fill="url(#cc)"/><ellipse cx="86" cy="62" rx="12" ry="11" fill="url(#cc)"/><circle cx="36" cy="50" r="13" fill="white"/><circle cx="36" cy="50" r="10" fill="url(#ce)"/><ellipse cx="36" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="40" cy="46" r="3" fill="white"/><circle cx="64" cy="50" r="13" fill="white"/><circle cx="64" cy="50" r="10" fill="url(#ce)"/><ellipse cx="64" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="68" cy="46" r="3" fill="white"/><ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309"/><path d="M44 68 Q50 73 56 68" stroke="#8B4513" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg></div><div class="bubble"><span class="name">Phonbot</span>„Perfekt. Du bekommst gleich eine Bestätigungs-SMS. Bis heute Abend!"</div></div>
+      <div class="msg bot"><div class="avatar" aria-hidden="true"><img src="/brand/phonbot-crystal-icon-cropped.png" alt=""></div><div class="bubble"><span class="name">Phonbot</span>„Perfekt. Du bekommst gleich eine Bestätigungs-SMS. Bis heute Abend!"</div></div>
     </div>
     <p class="dialogue-note">→ Reservierung im System · SMS-Bestätigung an Gast · Dauer: 31 Sek</p>
     <div style="text-align:center;margin-top:2rem">
-      <a href="tel:+493075937286" class="btn btn-ghost btn-sm"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg><span style="margin-left:.5rem">Chipy live am Telefon hören: +49 30 75937286</span></a>
+      <a href="tel:+493075937286" class="btn btn-ghost btn-sm"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg><span style="margin-left:.5rem">Phonbot live am Telefon hören: +49 30 75937286</span></a>
     </div>
   </div>
 </section>
@@ -392,7 +394,7 @@ p{color:rgba(255,255,255,.7)}
 <section>
   <div class="container">
     <h2>Typische Anrufe — <span class="accent">automatisch bearbeitet</span></h2>
-    <p class="section-lead">Was Chipy auf deiner Nummer ab Tag 1 übernimmt.</p>
+    <p class="section-lead">Was Phonbot auf deiner Nummer ab Tag 1 übernimmt.</p>
     <div class="features">
       <div class="feature"><div class="feature-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="2" x2="18" y2="22"/><path d="M22 8H14V2"/><line x1="6" y1="2" x2="6" y2="8"/><path d="M2 8a4 4 0 008 0"/><line x1="6" y1="12" x2="6" y2="22"/></svg></div><h3>Reservierungen</h3><p>Tisch-Reservierung mit Uhrzeit und Gästezahl direkt im Restaurant-Kalender eingetragen.</p></div>
         <div class="feature"><div class="feature-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div><h3>Speisekarten-Auskunft</h3><p>„Habt ihr glutenfreie Pizza?" — Phonbot kennt deine Karte und antwortet präzise.</p></div>
@@ -475,7 +477,7 @@ p{color:rgba(255,255,255,.7)}
     <p class="section-lead">Registrierung in unter 2 Minuten · Keine Kreditkarte · Monatlich kündbar.</p>
     <div class="cta-row">
       <a href="/?page=register" class="btn btn-primary">Jetzt einrichten</a>
-      <a href="tel:+493075937286" class="btn btn-ghost">Erst Chipy anrufen</a>
+      <a href="tel:+493075937286" class="btn btn-ghost">Erst Phonbot anrufen</a>
     </div>
   </div>
 </section>
@@ -486,8 +488,8 @@ p{color:rgba(255,255,255,.7)}
   <div class="footer-container">
     <div class="footer-grid">
       <div class="col-brand">
-        <a href="/" class="brand-row"><svg viewBox="0 8 100 92" fill="none" xmlns="http://www.w3.org/2000/svg" width="28" height="28"><circle cx="28" cy="22" r="9" fill="#D49B12"/><circle cx="28" cy="22" r="5.5" fill="#E8B32D"/><circle cx="72" cy="22" r="9" fill="#D49B12"/><circle cx="72" cy="22" r="5.5" fill="#E8B32D"/><circle cx="50" cy="55" r="38" fill="url(#ch)"/><ellipse cx="14" cy="62" rx="12" ry="11" fill="url(#cc)"/><ellipse cx="86" cy="62" rx="12" ry="11" fill="url(#cc)"/><circle cx="36" cy="50" r="13" fill="white"/><circle cx="36" cy="50" r="10" fill="url(#ce)"/><ellipse cx="36" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="40" cy="46" r="3" fill="white"/><circle cx="64" cy="50" r="13" fill="white"/><circle cx="64" cy="50" r="10" fill="url(#ce)"/><ellipse cx="64" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="68" cy="46" r="3" fill="white"/><ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309"/><path d="M44 68 Q50 73 56 68" stroke="#8B4513" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg><span class="brand"><span class="w">Phon</span><span class="o">bot</span></span></a>
-        <p>Chipy — dein KI-Telefonassistent.<br>Immer erreichbar.</p>
+        <a href="/" class="brand-row"><img class="footer-mark" src="/brand/phonbot-crystal-icon-cropped.png" alt="" width="28" height="28" decoding="async" loading="lazy"><span class="brand"><span class="w">Phon</span><span class="o">bot</span></span></a>
+        <p>KI-Telefonassistent.<br>Immer erreichbar.</p>
       </div>
       <div>
         <p class="footer-heading">Produkt</p>

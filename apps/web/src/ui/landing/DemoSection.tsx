@@ -96,12 +96,12 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
           <h2 className="text-3xl font-extrabold leading-tight sm:text-5xl">
             Ruf{' '}
             <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
-              Chipy
+              Phonbot
             </span>{' '}
             direkt an
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-white/58 sm:text-lg">
-            Ein echter Telefonanruf statt Web-Spielerei: Chipy beantwortet Phonbot-Fragen,
+            Ein echter Telefonanruf statt Web-Spielerei: Phonbot beantwortet Phonbot-Fragen,
             simuliert Branchenablaeufe und reagiert auf Unterbrechungen wie im Kundencall.
           </p>
         </div>
@@ -148,7 +148,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
             <div className="mb-6 space-y-3">
               {[
                 'Frage frei nach Phonbot, Preisen, Einrichtung oder Datenschutz.',
-                'Unterbrich Chipy mit "stopp", "nein" oder einer Korrektur.',
+                'Unterbrich Phonbot mit "stopp", "nein" oder einer Korrektur.',
                 'Starte eine Branchen-Simulation wie Friseur, Handwerk oder Restaurant.',
               ].map((text) => (
                 <div key={text} className="flex gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-3 text-sm leading-relaxed text-white/60">

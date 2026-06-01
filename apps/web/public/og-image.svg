@@ -1,66 +1,61 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img" aria-labelledby="og-title og-desc">
-  <title id="og-title">Phonbot — KI-Telefonassistent für kleine Unternehmen</title>
-  <desc id="og-desc">Phonbot mascot Chipy alongside the Phonbot wordmark and three value propositions: 24/7 appointment booking, never miss a call, natural German voice.</desc>
+  <title id="og-title">Phonbot - KI-Telefonassistent fuer kleine Unternehmen</title>
+  <desc id="og-desc">Phonbot crystal mark with orange and cyan glass light, wordmark, and core value propositions.</desc>
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0A0A0F"/>
-      <stop offset="100%" stop-color="#1A0F1F"/>
+      <stop offset="0%" stop-color="#050508"/>
+      <stop offset="100%" stop-color="#0A0A0F"/>
     </linearGradient>
-    <radialGradient id="glow1" cx="20%" cy="30%" r="40%">
-      <stop offset="0%" stop-color="#F97316" stop-opacity="0.35"/>
-      <stop offset="100%" stop-color="#F97316" stop-opacity="0"/>
+    <radialGradient id="warm" cx="20%" cy="30%" r="48%">
+      <stop offset="0%" stop-color="#FF5B0A" stop-opacity="0.38"/>
+      <stop offset="100%" stop-color="#FF5B0A" stop-opacity="0"/>
     </radialGradient>
-    <radialGradient id="glow2" cx="85%" cy="70%" r="35%">
-      <stop offset="0%" stop-color="#06B6D4" stop-opacity="0.3"/>
-      <stop offset="100%" stop-color="#06B6D4" stop-opacity="0"/>
+    <radialGradient id="cool" cx="84%" cy="70%" r="42%">
+      <stop offset="0%" stop-color="#20D9FF" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="#20D9FF" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#F97316"/>
-      <stop offset="100%" stop-color="#06B6D4"/>
+    <linearGradient id="brand" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF5B0A"/>
+      <stop offset="32%" stop-color="#FFB766"/>
+      <stop offset="52%" stop-color="#F7FBFF"/>
+      <stop offset="74%" stop-color="#20D9FF"/>
+      <stop offset="100%" stop-color="#008DE6"/>
     </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="18" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
   </defs>
 
-  <!-- Background -->
   <rect width="1200" height="630" fill="url(#bg)"/>
-  <rect width="1200" height="630" fill="url(#glow1)"/>
-  <rect width="1200" height="630" fill="url(#glow2)"/>
+  <rect width="1200" height="630" fill="url(#warm)"/>
+  <rect width="1200" height="630" fill="url(#cool)"/>
+  <path d="M70 470 C250 350 470 410 650 290 C800 190 1000 200 1150 120" stroke="url(#brand)" stroke-width="2" opacity=".22" fill="none"/>
 
-  <!-- Chipy mascot (hamster) - scaled up -->
-  <g transform="translate(120, 165) scale(3)">
-    <circle cx="50" cy="55" r="40" fill="#F5C842"/>
-    <ellipse cx="14" cy="62" rx="12" ry="11" fill="#E8B32D"/>
-    <ellipse cx="86" cy="62" rx="12" ry="11" fill="#E8B32D"/>
-    <circle cx="28" cy="22" r="9" fill="#D49B12"/>
-    <circle cx="72" cy="22" r="9" fill="#D49B12"/>
-    <circle cx="36" cy="50" r="13" fill="white"/>
-    <circle cx="36" cy="50" r="10" fill="#E8A317"/>
-    <circle cx="37" cy="51" r="6" fill="#1C1917"/>
-    <circle cx="40" cy="46" r="3" fill="white"/>
-    <circle cx="64" cy="50" r="13" fill="white"/>
-    <circle cx="64" cy="50" r="10" fill="#E8A317"/>
-    <circle cx="65" cy="51" r="6" fill="#1C1917"/>
-    <circle cx="68" cy="46" r="3" fill="white"/>
-    <ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309"/>
+  <g transform="translate(130 105)" filter="url(#glow)">
+    <path d="M170 0 290 88 252 340 170 410 88 340 50 88Z" fill="url(#brand)"/>
+    <path d="M170 0 170 410 88 340 50 88Z" fill="#FF5B0A" opacity=".34"/>
+    <path d="M170 0 290 88 252 340 170 410Z" fill="#20D9FF" opacity=".34"/>
+    <path d="M50 88 170 146 290 88 170 0Z" fill="#FFFFFF" opacity=".24"/>
+    <path d="M88 340 170 146 252 340 170 410Z" fill="#050508" opacity=".30"/>
   </g>
 
-  <!-- Brand name -->
-  <text x="480" y="265" font-family="Inter, -apple-system, sans-serif" font-size="108" font-weight="900" fill="url(#brandGrad)" letter-spacing="-2">Phonbot</text>
+  <text x="510" y="260" font-family="Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="104" font-weight="900" fill="url(#brand)">Phonbot</text>
+  <text x="515" y="332" font-family="Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="42" font-weight="750" fill="#ffffff">KI-Telefonassistent</text>
+  <text x="515" y="382" font-family="Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="30" font-weight="500" fill="#ffffff" opacity=".72">fuer kleine Unternehmen</text>
 
-  <!-- Tagline -->
-  <text x="480" y="340" font-family="Inter, -apple-system, sans-serif" font-size="44" font-weight="700" fill="#ffffff">KI-Telefonassistent</text>
-  <text x="480" y="390" font-family="Inter, -apple-system, sans-serif" font-size="32" font-weight="500" fill="#ffffff" opacity="0.7">für kleine Unternehmen</text>
-
-  <!-- Value props -->
-  <g font-family="Inter, -apple-system, sans-serif" font-size="22" font-weight="500" fill="#ffffff" opacity="0.85">
-    <circle cx="495" cy="470" r="4" fill="#F97316"/>
-    <text x="510" y="478">Termine buchen 24/7</text>
-    <circle cx="495" cy="510" r="4" fill="#06B6D4"/>
-    <text x="510" y="518">Anrufe verpassen gehört der Vergangenheit an</text>
-    <circle cx="495" cy="550" r="4" fill="#F97316"/>
-    <text x="510" y="558">Natürliche deutsche Stimme</text>
+  <g font-family="Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="22" font-weight="650" fill="#ffffff" opacity=".88">
+    <path d="M518 455 526 463 542 442" stroke="#FFB766" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="560" y="464">Termine buchen 24/7</text>
+    <path d="M518 501 526 509 542 488" stroke="#20D9FF" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="560" y="510">Keinen Anruf mehr verpassen</text>
+    <path d="M518 547 526 555 542 534" stroke="#FFB766" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="560" y="556">Natuerliche deutsche Stimme</text>
   </g>
 
-  <!-- URL footer -->
-  <text x="600" y="605" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="20" font-weight="600" fill="#ffffff" opacity="0.5">phonbot.de</text>
+  <text x="600" y="606" text-anchor="middle" font-family="Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="20" font-weight="700" fill="#ffffff" opacity=".45">phonbot.de</text>
 </svg>
