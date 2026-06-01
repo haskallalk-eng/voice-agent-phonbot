@@ -14,9 +14,11 @@ import {
   DRKALLA_RAG_REMINDER_MAX_COUNT,
   DRKALLA_RAG_REMINDER_TRIGGER_MS,
   DRKALLA_RAG_RESPONSIVENESS,
+  chooseReusableDrkallaKnowledgeBase,
   drkallaRagTools,
 } from '../scripts/sync-drkalla-rag-agent.js';
 import { DRKALLA_LINK_TOOL_NAME, buildDrkallaLinkSmsBody, normalizeDrkallaLinkUrl } from '../drkalla-link-tool.js';
+import type { RetellKnowledgeBase } from '../retell.js';
 
 function productFixture(overrides: Partial<DrkallaProduct> = {}): DrkallaProduct {
   return {
@@ -82,6 +84,16 @@ function legacyKnowledgeTitles(snapshot: DrkallaKnowledgeSnapshot): string[] {
     ...snapshot.pages.map((page) => `DrKalla Page - ${page.title}`),
     'DrKalla Products legacy',
   ];
+}
+
+function retellKbFixture(overrides: Partial<RetellKnowledgeBase>): RetellKnowledgeBase {
+  return {
+    knowledge_base_id: 'knowledge_base_fixture',
+    knowledge_base_name: 'DrKalla KB test-hash',
+    status: 'complete',
+    user_modified_timestamp: 1,
+    ...overrides,
+  };
 }
 
 describe('DrKalla transcript-driven A/B regressions', () => {
@@ -316,6 +328,37 @@ describe('DrKalla transcript-driven A/B regressions', () => {
     expect(DRKALLA_RAG_RESPONSIVENESS).toBe(0.87);
     expect(DRKALLA_RAG_INTERRUPTION_SENSITIVITY).toBe(0.77);
     expect(DRKALLA_RAG_DENOISING_MODE).toBe('no-denoise');
+  });
+
+  it('B reuses the newest complete DrKalla KB for the same snapshot instead of creating duplicates', () => {
+    const reusable = chooseReusableDrkallaKnowledgeBase([
+      retellKbFixture({
+        knowledge_base_id: 'knowledge_base_old',
+        knowledge_base_name: 'DrKalla KB test-hash',
+        status: 'complete',
+        user_modified_timestamp: 10,
+      }),
+      retellKbFixture({
+        knowledge_base_id: 'knowledge_base_processing',
+        knowledge_base_name: 'DrKalla KB test-hash',
+        status: 'in_progress',
+        user_modified_timestamp: 30,
+      }),
+      retellKbFixture({
+        knowledge_base_id: 'knowledge_base_other_hash',
+        knowledge_base_name: 'DrKalla KB other-hash',
+        status: 'complete',
+        user_modified_timestamp: 40,
+      }),
+      retellKbFixture({
+        knowledge_base_id: 'knowledge_base_new',
+        knowledge_base_name: 'DrKalla KB test-hash',
+        status: 'complete',
+        user_modified_timestamp: 20,
+      }),
+    ], 'DrKalla KB test-hash');
+
+    expect(reusable?.knowledge_base_id).toBe('knowledge_base_new');
   });
 
   it('B keeps the DrKalla voice prompt lean while preserving behavior anchors', () => {
