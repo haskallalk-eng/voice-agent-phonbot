@@ -36,7 +36,6 @@ import {
 import { DRKALLA_LINK_TOOL_NAME, DRKALLA_LINK_TOOL_PATH, drkallaLinkToolSignature } from '../drkalla-link-tool.js';
 
 const DEFAULT_SNAPSHOT_PATH = path.resolve(process.cwd(), 'tmp/drkalla-rag/drkalla-products.json');
-const DEFAULT_DRKALLA_TEST_PHONE_NUMBER = '+493075937286';
 export const DRKALLA_RAG_RESPONSIVENESS = 0.87;
 export const DRKALLA_RAG_INTERRUPTION_SENSITIVITY = 0.77;
 export const DRKALLA_RAG_DENOISING_MODE: RetellDenoisingMode = 'no-denoise';
@@ -113,11 +112,12 @@ async function readSnapshot(filePath: string): Promise<DrkallaKnowledgeSnapshot>
 }
 
 function drkallaTestPhoneNumber(): string {
-  return process.env.DRKALLA_DEMO_PHONE_NUMBER?.trim()
-    || process.env.RETELL_DRKALLA_DEMO_PHONE_NUMBER?.trim()
-    || process.env.PUBLIC_DEMO_PHONE_NUMBER?.trim()
-    || process.env.RETELL_PUBLIC_DEMO_PHONE_NUMBER?.trim()
-    || DEFAULT_DRKALLA_TEST_PHONE_NUMBER;
+  const phone = process.env.DRKALLA_DEMO_PHONE_NUMBER?.trim()
+    || process.env.RETELL_DRKALLA_DEMO_PHONE_NUMBER?.trim();
+  if (!phone) {
+    throw new Error('DRKALLA_DEMO_PHONE_NUMBER_REQUIRED_FOR_ASSIGN_PHONE');
+  }
+  return phone;
 }
 
 function maskPhone(value: string): string {
