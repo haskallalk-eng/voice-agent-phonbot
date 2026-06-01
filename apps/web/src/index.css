@@ -338,7 +338,7 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 .hero-crystal-video {
   animation: crystal-drop-in 3.4s cubic-bezier(0.16, 1, 0.3, 1) both;
   transform-origin: center center;
-  object-position: center 36%;
+  object-position: center 44%;
   filter:
     drop-shadow(0 0 42px rgba(32, 217, 255, 0.22))
     drop-shadow(0 0 32px rgba(255, 91, 10, 0.18));
@@ -540,7 +540,7 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 @keyframes crystal-drop-in {
   0% {
     opacity: 0;
-    transform: translateY(-68%) scale(1.18);
+    transform: translateY(-48%) scale(1);
     filter:
       blur(6px)
       drop-shadow(0 0 24px rgba(32, 217, 255, 0.12))
@@ -548,14 +548,14 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   }
   58% {
     opacity: 1;
-    transform: translateY(-18%) scale(1.22);
+    transform: translateY(0) scale(1);
   }
   76% {
-    transform: translateY(-22%) scale(1.2);
+    transform: translateY(-2%) scale(1);
   }
   100% {
     opacity: 1;
-    transform: translateY(-20%) scale(1.2);
+    transform: translateY(0) scale(1);
     filter:
       blur(0)
       drop-shadow(0 0 42px rgba(32, 217, 255, 0.22))
