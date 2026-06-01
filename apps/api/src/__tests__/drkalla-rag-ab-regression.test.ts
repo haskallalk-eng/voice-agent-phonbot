@@ -163,7 +163,7 @@ describe('DrKalla transcript-driven A/B regressions', () => {
 
     expect(legacyTitles.some((title) => title.includes('DrKalla Kontakt'))).toBe(false);
     expect(fixedTexts.some((entry) => entry.title.includes('DrKalla Kontakt'))).toBe(true);
-    expect(fixedTexts.some((entry) => entry.text.includes('Silbersteinstrasse 83, 12051 Berlin'))).toBe(true);
+    expect(fixedTexts.some((entry) => entry.text.includes('Silbersteinstraße 83, 12051 Berlin'))).toBe(true);
   });
 
   it('A reads or fakes long URLs; B sends links only through the real SMS tool', () => {
@@ -237,7 +237,7 @@ describe('DrKalla transcript-driven A/B regressions', () => {
 
     expect(legacy).not.toContain('neun Prozent Entwickler');
     expect(fixed).toContain('neun Prozent Entwickler');
-    expect(fixed).toContain('dreissig Vol Entwickler');
+    expect(fixed).toContain('dreißig Vol Entwickler');
   });
 
   it('A can invent a single peroxide price; B exposes a range and requires variant clarification', () => {
@@ -277,7 +277,7 @@ describe('DrKalla transcript-driven A/B regressions', () => {
     const legacyPrompt = 'Bei Haarfarbe nenne passende Pflegeprodukte wie Anti-Gelb.';
 
     expect(legacyPrompt).not.toContain('Bei roten, kupfernen oder gefaerbten Haaren nicht automatisch Anti-Gelb empfehlen');
-    expect(DRKALLA_RAG_PROMPT).toContain('Bei roten, kupfernen oder gefaerbten Haaren nicht automatisch Anti-Gelb empfehlen');
+    expect(DRKALLA_RAG_PROMPT).toContain('Bei roten, kupfernen oder gefärbten Haaren nicht automatisch Anti-Gelb empfehlen');
     expect(DRKALLA_RAG_PROMPT).toContain('Farbschutz');
     expect(DRKALLA_RAG_PROMPT).toContain('Rot-/Kupferpflege');
   });
@@ -287,7 +287,7 @@ describe('DrKalla transcript-driven A/B regressions', () => {
 
     expect(legacyPrompt).not.toContain('bestaetige das nur, wenn die KB eine konkrete Profi-Seite');
     expect(DRKALLA_RAG_PROMPT).toContain('Wenn der Anrufer nach Profi-Login oder Profi-Preisen fragt');
-    expect(DRKALLA_RAG_PROMPT).toContain('bestaetige das nur, wenn die KB eine konkrete Profi-Seite');
+    expect(DRKALLA_RAG_PROMPT).toContain('bestätige das nur, wenn die KB eine konkrete Profi-Seite');
   });
 
   it('A answers inaudible turns as if understood; B requires the exact repair prompt', () => {
@@ -295,10 +295,10 @@ describe('DrKalla transcript-driven A/B regressions', () => {
 
     expect(legacyPrompt).not.toContain('Ich habe dich gerade schlecht verstanden');
     expect(DRKALLA_RAG_PROMPT).toContain('"(inaudible speech)"');
-    expect(DRKALLA_RAG_PROMPT).toContain('nur Geraeusch');
+    expect(DRKALLA_RAG_PROMPT).toContain('nur Geräusch');
     expect(DRKALLA_RAG_PROMPT).toContain('Wie bitte?');
     expect(DRKALLA_RAG_PROMPT).toContain('Ich habe dich gerade schlecht verstanden');
-    expect(DRKALLA_RAG_PROMPT).toContain('Antworte nicht mit "natuerlich"');
+    expect(DRKALLA_RAG_PROMPT).toContain('Antworte nicht mit "natürlich"');
   });
 
   it('A repeats the same inaudible repair twice; B switches to a simpler second-miss rescue prompt', () => {
@@ -468,9 +468,9 @@ describe('DrKalla transcript-driven A/B regressions', () => {
 
     expect(fixed).toContain('neun Prozent Entwickler');
     expect(fixed).toContain('Preisbereich: von 3,00 EUR bis 12,00 EUR');
-    expect(DRKALLA_RAG_PROMPT).toContain('Bei roten, kupfernen oder gefaerbten Haaren nicht automatisch Anti-Gelb empfehlen');
+    expect(DRKALLA_RAG_PROMPT).toContain('Bei roten, kupfernen oder gefärbten Haaren nicht automatisch Anti-Gelb empfehlen');
     expect(DRKALLA_RAG_PROMPT).toContain('Widersprich dir nicht mit einem Einzelpreis');
-    expect(DRKALLA_RAG_PROMPT).toContain('Bei Entwickler/Oxidant/Wasserstoffperoxid immer Prozentstaerke und Groesse klaeren');
+    expect(DRKALLA_RAG_PROMPT).toContain('Bei Entwickler/Oxidant/Wasserstoffperoxid immer Prozentstärke und Größe klären');
   });
 
   it('multi-aspect: visit and address questions retrieve contact facts while preserving shop-not-salon boundaries', () => {
@@ -479,20 +479,37 @@ describe('DrKalla transcript-driven A/B regressions', () => {
     const joined = fixedTexts.map((entry) => `${entry.title}\n${entry.text}`).join('\n---\n');
 
     expect(joined).toContain('DrKalla Kontakt');
-    expect(joined).toContain('Adresse: Silbersteinstrasse 83, 12051 Berlin.');
-    expect(joined).toContain('Oeffnungszeiten: Montag bis Freitag von 10 bis 18 Uhr.');
+    expect(joined).toContain('Adresse: Silbersteinstraße 83, 12051 Berlin.');
+    expect(joined).toContain('Öffnungszeiten: Montag bis Freitag von 10 bis 18 Uhr.');
     expect(joined).toContain('E-Mail gesprochen: kontakt at drkalla punkt com.');
-    expect(joined).toContain('S+U Hermannstrasse');
+    expect(joined).toContain('S+U Hermannstraße');
     expect(joined).toContain('von Hermannplatz');
     expect(joined).toContain('Dr.Kalla Cosmetics ist ein Friseurbedarf-Shop, kein Friseursalon.');
     expect(DRKALLA_RAG_PROMPT).toContain('keine Salontermine');
     expect(DRKALLA_RAG_PROMPT).toContain('Sprich als Dr.Kalla-Team');
     expect(DRKALLA_RAG_PROMPT).toContain('unser Shop');
     expect(DRKALLA_RAG_PROMPT).toContain('Vermeide Formulierungen wie "ich suche im Shop"');
-    expect(DRKALLA_RAG_PROMPT).toContain('Bei Kontakt-, Adresse-, Oeffnungszeiten- oder Besuchsfragen nutze die Kontakt-KB direkt');
+    expect(DRKALLA_RAG_PROMPT).toContain('Bei Kontakt-, Adresse-, Öffnungszeiten- oder Besuchsfragen nutze die Kontakt-KB direkt');
     expect(DRKALLA_RAG_PROMPT).toContain('Wenn nur nach E-Mail gefragt wird, nenne direkt kontakt at drkalla punkt com');
     expect(DRKALLA_RAG_PROMPT).toContain('Kontaktfacts nur einmal pro Antwort nennen');
     expect(DRKALLA_RAG_PROMPT).toContain('Wenn du Adresse, Telefon oder E-Mail gerade genannt hast');
+  });
+
+  it('B keeps German umlauts in spoken recommendation and contact facts', () => {
+    const recommendation = formatDrkallaProductFact(productFixture({
+      title: 'Feuchtigkeitsspendende Maske',
+      productType: 'Haarpflege',
+    }));
+    const joined = buildDrkallaKnowledgeTexts(snapshotFixture(productFixture()))
+      .map((entry) => `${entry.title}\n${entry.text}`)
+      .join('\n---\n');
+
+    expect(DRKALLA_RAG_PROMPT).toContain('gesprochen mit ä, ö, ü, ß');
+    expect(recommendation).toContain('Feuchtigkeitsmaske für trockenes Haar');
+    expect(recommendation).not.toContain('fuer trockenes Haar');
+    expect(joined).toContain('Öffnungszeiten: Montag bis Freitag von 10 bis 18 Uhr.');
+    expect(joined).toContain('Adresse: Silbersteinstraße 83, 12051 Berlin.');
+    expect(joined).toContain('Berlin-Neukölln');
   });
 
   it('multi-aspect: Profi prices and checkout questions require evidence, contact fallback, and no phone checkout', () => {
@@ -500,7 +517,7 @@ describe('DrKalla transcript-driven A/B regressions', () => {
 
     expect(legacyPrompt).not.toContain('bestaetige das nur, wenn die KB eine konkrete Profi-Seite');
     expect(legacyPrompt).not.toContain('Nimm keine Bestellung oder Zahlung am Telefon auf');
-    expect(DRKALLA_RAG_PROMPT).toContain('bestaetige das nur, wenn die KB eine konkrete Profi-Seite');
+    expect(DRKALLA_RAG_PROMPT).toContain('bestätige das nur, wenn die KB eine konkrete Profi-Seite');
     expect(DRKALLA_RAG_PROMPT).toContain('Wenn nicht, verweise auf Website/Kontakt');
     expect(DRKALLA_RAG_PROMPT).toContain('Nimm keine Bestellung oder Zahlung am Telefon auf');
   });

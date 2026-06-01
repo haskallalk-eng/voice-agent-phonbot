@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 export const DRKALLA_SITE_ORIGIN = 'https://drkalla.com';
 export const DRKALLA_RAG_AGENT_NAME = 'DrKalla RAG Voice Agent';
 export const DRKALLA_RAG_KB_NAME_PREFIX = 'DrKalla KB';
-export const DRKALLA_RAG_KB_SCHEMA_VERSION = 'contact-v2';
+export const DRKALLA_RAG_KB_SCHEMA_VERSION = 'c3u';
 export const DRKALLA_RAG_BEGIN_MESSAGE =
   'Hallo, hier ist der Dr. Kalla Assistent. Wie kann ich dir bei Friseurbedarf helfen?';
 
@@ -57,39 +57,39 @@ export type DrkallaKnowledgeSnapshot = {
 export const DRKALLA_RAG_PROMPT = `# Dr.Kalla Friseurbedarf Voice Agent
 
 ## Auftrag und Grenzen
-- Dr.Kalla ist ein Berliner Friseurbedarf-Shop fuer Haarpflege, Farbe und Styling.
+- Dr.Kalla ist ein Berliner Friseurbedarf-Shop für Haarpflege, Farbe und Styling.
 - Dr.Kalla ist kein Friseursalon: keine Salontermine oder Haarschnitte.
 - Sprich als Dr.Kalla-Team: "bei uns", "unser Shop", "unsere Website". Vermeide Formulierungen wie "ich suche im Shop".
 - Hilf bei Sortiment, Produktwahl, Anwendung, Nachbestellung, Kontakt und Versand.
-- Nutze KB zuerst. Erfinde keine Produkte, Preise, Lagerbestaende, Lieferzeiten, Garantien oder Profi-Zugaenge.
-- Produktpreise: "laut aktuellem Shop-Datenstand"; sie koennen sich aendern.
-- Keine Diagnose/Farbberatung; bei Risiko, Allergie, Wunden, Haarausfall, Farbkorrektur oder Blondierung an Fachpruefung verweisen.
+- Nutze KB zuerst. Erfinde keine Produkte, Preise, Lagerbestände, Lieferzeiten, Garantien oder Profi-Zugänge.
+- Produktpreise: "laut aktuellem Shop-Datenstand"; sie können sich ändern.
+- Keine Diagnose/Farbberatung; bei Risiko, Allergie, Wunden, Haarausfall, Farbkorrektur oder Blondierung an Fachprüfung verweisen.
 
 ## Voice/KB-Regeln
-- Deutsch knapp: 1-2 Saetze, danach genau eine konkrete Frage.
+- Deutsch knapp: 1-2 Sätze, gesprochen mit ä, ö, ü, ß statt ae/oe/ue/ss; danach genau eine Frage.
 - Verwende am Telefon den KB-Wert "Sprachname"; keine SKU-Ketten, Farbcodes oder langen Listen. Max. 3 Optionen.
-- Wenn mehrere Produkte/Varianten zum selben Sprachname passen, sage "Ich sehe mehrere Varianten" und frage nach Groesse, Prozentstaerke, Farbton, Duftart oder Preisbereich. Widersprich dir nicht mit einem Einzelpreis.
-- Bei Kontakt-, Adresse-, Oeffnungszeiten- oder Besuchsfragen nutze die Kontakt-KB direkt: Adresse, Zeiten, E-Mail, Anfahrt nennen.
+- Wenn mehrere Produkte/Varianten zum selben Sprachname passen, sage "Ich sehe mehrere Varianten" und frage nach Größe, Prozentstärke, Farbton, Duftart oder Preisbereich. Widersprich dir nicht mit einem Einzelpreis.
+- Bei Kontakt-, Adresse-, Öffnungszeiten- oder Besuchsfragen nutze die Kontakt-KB direkt: Adresse, Zeiten, E-Mail, Anfahrt nennen.
 - Wenn nur nach E-Mail gefragt wird, nenne direkt kontakt at drkalla punkt com; nie "c om" oder falsche ASR-Adresse.
-- Lies im Voice-Call keine langen URLs vor; nenne maximal drkalla.com oder den kurzen Produktnamen. Bei explizitem Link-/SMS-Wunsch nutze das SMS-Link-Tool; nicht bei "nenn mir", nicht nach unverstaendlichem Input, nicht doppelt; behaupte Versand erst nach Tool-Erfolg.
+- Lies im Voice-Call keine langen URLs vor; nenne maximal drkalla.com oder den kurzen Produktnamen. Bei explizitem Link-/SMS-Wunsch nutze das SMS-Link-Tool; nicht bei "nenn mir", nicht nach unverständlichem Input, nicht doppelt; behaupte Versand erst nach Tool-Erfolg.
 - Wiederhole nicht denselben Satz. Kontaktfacts nur einmal pro Antwort nennen. Wenn du Adresse, Telefon oder E-Mail gerade genannt hast, nicht wiederholen. Bei mehreren Anliegen: "Welche Kategorie oder welches Produkt zuerst?"
 
 ## Akustische Reparatur
-- Wenn der letzte Nutzer-Turn "(inaudible speech)", leer, abgebrochen, nur Geraeusch oder unverstaendlich ist, tu nicht so, als haettest du verstanden. Erstes Mal: "Wie bitte? Ich habe dich gerade schlecht verstanden. Suchst du ein Produkt, eine Kategorie oder Bestellung?"
+- Wenn der letzte Nutzer-Turn "(inaudible speech)", leer, abgebrochen, nur Geräusch oder unverständlich ist, tu nicht so, als hättest du verstanden. Erstes Mal: "Wie bitte? Ich habe dich gerade schlecht verstanden. Suchst du ein Produkt, eine Kategorie oder Bestellung?"
 - Wenn du den Anrufer zweimal hintereinander schlecht verstehst: "Sag bitte nur ein Stichwort: Produkt, Kategorie, Bestellung oder Kontakt." Beim dritten Mal: "Die Verbindung ist gerade schwer zu verstehen. Sag bitte etwas lauter ein Stichwort."
-- Antworte nicht mit "natuerlich", wenn vorher nichts Verstaendliches gesagt wurde.
+- Antworte nicht mit "natürlich", wenn vorher nichts Verständliches gesagt wurde.
 
 ## Typische Korrekturen
 - Friseurtermin/Haarschnittpreis: "Dr.Kalla ist ein Friseurbedarf-Shop, kein Salon. Ich kann dir aber Produkte oder Salonbedarf aus dem Shop suchen."
 - Konkretes Produkt: in der KB genau dieses Produkt oder nahe Varianten nutzen.
-- Wenn der Anrufer nach Profi-Login oder Profi-Preisen fragt, bestaetige das nur, wenn die KB eine konkrete Profi-Seite oder einen konkreten Hinweis liefert. Wenn nicht, verweise auf Website/Kontakt.
+- Wenn der Anrufer nach Profi-Login oder Profi-Preisen fragt, bestätige das nur, wenn die KB eine konkrete Profi-Seite oder einen konkreten Hinweis liefert. Wenn nicht, verweise auf Website/Kontakt.
 - Bei Herren-, Damen- oder Unisex-Duft nicht ungefragt wechseln; bei ASR-Unsicherheit: "Meinst du einen Herrenduft, Damenduft oder Unisex?"
-- Bei Entwickler/Oxidant/Wasserstoffperoxid immer Prozentstaerke und Groesse klaeren, wenn mehrere Shop-Varianten passen.
-- Bei roten, kupfernen oder gefaerbten Haaren nicht automatisch Anti-Gelb empfehlen. Frage nach Farbschutz, Rot-/Kupferpflege oder Farbberatung.
-- Nimm keine Bestellung oder Zahlung am Telefon auf. Fuer Kauf, Checkout und tagesaktuelle Verfuegbarkeit auf drkalla.com/Kontakt verweisen.
+- Bei Entwickler/Oxidant/Wasserstoffperoxid immer Prozentstärke und Größe klären, wenn mehrere Shop-Varianten passen.
+- Bei roten, kupfernen oder gefärbten Haaren nicht automatisch Anti-Gelb empfehlen. Frage nach Farbschutz, Rot-/Kupferpflege oder Farbberatung.
+- Nimm keine Bestellung oder Zahlung am Telefon auf. Für Kauf, Checkout und tagesaktuelle Verfügbarkeit auf drkalla.com/Kontakt verweisen.
 
 ## Abschluss
-- Am Ende kurz fragen: "Soll ich dir dazu noch eine Produktkategorie oder Kontaktmoeglichkeit nennen?"
+- Am Ende kurz fragen: "Soll ich dir dazu noch eine Produktkategorie oder Kontaktmöglichkeit nennen?"
 - Lege nur auf, wenn der Anrufer sich klar verabschiedet, explizit "leg auf/beende den Anruf" sagt oder Retell nach echter langer Stille beendet. "(inaudible speech)" ist keine Stille.`;
 
 function compact(input: string): string {
@@ -223,10 +223,10 @@ function specialSpokenName(title: string): string | null {
   if (/ultrastark/i.test(title) && /gel/i.test(title)) return 'Ultrastark Gel';
   if (/ultrastark/i.test(title) && /haarspray/i.test(title)) return 'Ultrastark Haarspray';
   if (/dea\s+placenta|plazenta/i.test(title) && /haarausfall|haarwurzel|schwach|brüchig|bruechig/i.test(title)) return 'Plazenta Haarausfall-Ampullen';
-  if (/haarfaerb|haarfärb|faerbeschale|färbeschale/i.test(title)) return 'Haarfaerbeschale';
-  if (/infrared\s+keratin\s+pro/i.test(title)) return 'Sthauer Infrared Keratin Glaetteisen';
-  if (/luxe[-\s]*oel|luxe[-\s]*öl/i.test(title) && /leave/i.test(title)) return 'Luxe-Oel Leave-in';
-  if (/luxe[-\s]*oel|luxe[-\s]*öl/i.test(title) && /shampoo/i.test(title)) return 'Luxe-Oel Shampoo';
+  if (/haarfaerb|haarfärb|faerbeschale|färbeschale/i.test(title)) return 'Haarfärbeschale';
+  if (/infrared\s+keratin\s+pro/i.test(title)) return 'Sthauer Infrared Keratin Glätteisen';
+  if (/luxe[-\s]*oel|luxe[-\s]*öl/i.test(title) && /leave/i.test(title)) return 'Luxe-Öl Leave-in';
+  if (/luxe[-\s]*oel|luxe[-\s]*öl/i.test(title) && /shampoo/i.test(title)) return 'Luxe-Öl Shampoo';
   if (/new\s+york\s+secret/i.test(title)) return 'New York Secret Salonwagen';
   if (/new\s+york\s+sky/i.test(title)) return 'New York Sky Salonwagen';
   if (/next\s+basic/i.test(title) && /salonwagen/i.test(title)) return 'Next Basic Salonwagen';
@@ -238,14 +238,14 @@ function specialSpokenName(title: string): string | null {
   if (/repair[-\s]?haarmaske/i.test(title)) return 'Repair-Haarmaske';
   if (/restrukturierende\s+maske/i.test(title)) return 'Restrukturierende Maske';
   if (/restrukturierendes\s+shampoo/i.test(title)) return 'Restrukturierendes Shampoo';
-  if (/feuchtigkeitsspendende\s+maske/i.test(title)) return 'Feuchtigkeitsmaske fuer trockenes Haar';
+  if (/feuchtigkeitsspendende\s+maske/i.test(title)) return 'Feuchtigkeitsmaske für trockenes Haar';
   if (/plazenta\s+haar/i.test(title)) return 'Plazenta Haar-Ampullen';
   if (/london\s+easy/i.test(title) && /salonwagen/i.test(title)) return 'London Easy Salonwagen';
   if (/magnetico/i.test(title) && /salonwagen/i.test(title)) return 'Magnetico Salonwagen';
-  if (/stahlrahmen/i.test(title) && /wasch/i.test(title)) return 'Stahlrahmen Ersatzteil fuer Wascheinheit';
+  if (/stahlrahmen/i.test(title) && /wasch/i.test(title)) return 'Stahlrahmen Ersatzteil für Wascheinheit';
   if (/shaver\s*3\s*pro/i.test(title)) return 'Sthauer Shaver 3 Pro';
   if (/astro\s+ionic/i.test(title)) return 'Sthauer Astro Ionic Haartrockner';
-  if (/seidenprotein/i.test(title) && /spuelung|spülung/i.test(title)) return 'Seidenprotein Pflegespuelung';
+  if (/seidenprotein/i.test(title) && /spuelung|spülung/i.test(title)) return 'Seidenprotein Pflegespülung';
   if (/regenerierende\s+haarmaske/i.test(title)) return 'Regenerierende Haarmaske';
   if (/blondierpulver/i.test(title)) return shortenHumanName(title.replace(/professionelle?s?/gi, '').replace(/bis zu.*$/i, ''), 54);
   if (/baobab/i.test(title) && /haarserum/i.test(title)) return 'Baobab Haarserum';
@@ -300,14 +300,14 @@ function germanNumberWord(value: string | undefined): string | null {
   if (!value) return null;
   const normalized = value.replace(',', '.');
   const words: Record<string, string> = {
-    '1.5': 'eins komma fuenf',
+    '1.5': 'eins komma fünf',
     '3': 'drei',
-    '4.5': 'vier komma fuenf',
+    '4.5': 'vier komma fünf',
     '6': 'sechs',
     '9': 'neun',
-    '12': 'zwoelf',
+    '12': 'zwölf',
     '20': 'zwanzig',
-    '30': 'dreissig',
+    '30': 'dreißig',
     '40': 'vierzig',
   };
   return words[normalized] ?? null;
@@ -391,7 +391,7 @@ export function formatDrkallaProductFact(product: DrkallaProduct): string {
   const variantSummary = product.variants
     .slice(0, 12)
     .map((variant) => {
-      const stock = variant.available ? 'verfuegbar' : 'nicht verfuegbar';
+      const stock = variant.available ? 'verfügbar' : 'nicht verfügbar';
       const sku = variant.sku ? `, SKU ${variant.sku}` : '';
       const compare = variant.compareAtPrice ? `, Vergleichspreis ${variant.compareAtPrice} EUR` : '';
       return `${variant.title}: ${variant.price} EUR${compare}, ${stock}${sku}`;
@@ -416,7 +416,7 @@ export function formatDrkallaProductFact(product: DrkallaProduct): string {
 export function buildDrkallaKnowledgeTexts(snapshot: DrkallaKnowledgeSnapshot): Array<{ title: string; text: string }> {
   const hash = drkallaSnapshotHash(snapshot);
   const overview = [
-    'Dr.Kalla Cosmetics - oeffentlicher Website-Snapshot',
+    'Dr.Kalla Cosmetics - öffentlicher Website-Snapshot',
     `Quelle: ${snapshot.source}`,
     `Scraped at: ${snapshot.scrapedAt}`,
     `Snapshot hash: ${hash}`,
@@ -425,22 +425,22 @@ export function buildDrkallaKnowledgeTexts(snapshot: DrkallaKnowledgeSnapshot): 
     'Keine Haarschnitt-, Farb- oder Salontermine anbieten.',
     snapshot.categories.length ? `Kategorien: ${snapshot.categories.join(', ')}` : '',
     snapshot.vendors.length ? `Marken/Anbieter: ${snapshot.vendors.join(', ')}` : '',
-    'Kontakt laut oeffentlicher Website: Silbersteinstrasse 83, 12051 Berlin; kontakt@drkalla.com; E-Mail gesprochen: kontakt at drkalla punkt com; Montag bis Freitag 10 bis 18 Uhr.',
+    'Kontakt laut öffentlicher Website: Silbersteinstraße 83, 12051 Berlin; kontakt@drkalla.com; E-Mail gesprochen: kontakt at drkalla punkt com; Montag bis Freitag 10 bis 18 Uhr.',
     'Versandhinweis laut oeffentlicher Website: Versandinformationen werden im Checkout angezeigt; auf der Startseite wird kostenloser Versand ab 49 Euro genannt.',
   ].filter(Boolean).join('\n');
 
   const contact = [
-    'Dr.Kalla Kontakt, Besuch und Oeffnungszeiten',
-    'Diese Angaben sind fuer direkte Kontaktfragen, Adresse, Besuch und Oeffnungszeiten priorisiert.',
+    'Dr.Kalla Kontakt, Besuch und Öffnungszeiten',
+    'Diese Angaben sind für direkte Kontaktfragen, Adresse, Besuch und Öffnungszeiten priorisiert.',
     'Dr.Kalla Cosmetics ist ein Friseurbedarf-Shop, kein Friseursalon.',
-    'Adresse: Silbersteinstrasse 83, 12051 Berlin.',
-    'Oeffnungszeiten: Montag bis Freitag von 10 bis 18 Uhr.',
+    'Adresse: Silbersteinstraße 83, 12051 Berlin.',
+    'Öffnungszeiten: Montag bis Freitag von 10 bis 18 Uhr.',
     'E-Mail geschrieben: kontakt@drkalla.com.',
     'E-Mail gesprochen: kontakt at drkalla punkt com.',
     'Telefon und WhatsApp laut Kontaktseite: +49 30 62987736.',
     'Website: drkalla.com.',
-    'Anfahrt grob: Dr.Kalla liegt in Berlin-Neukoelln nahe S+U Hermannstrasse/Silbersteinstrasse; von Hermannplatz ist die U8 Richtung Hermannstrasse naheliegend. Genaue Verbindung tagesaktuell mit BVG oder Maps pruefen.',
-    'Bei Unsicherheit zu tagesaktuellen Oeffnungszeiten oder Produktverfuegbarkeit an Kontakt oder Website verweisen.',
+    'Anfahrt grob: Dr.Kalla liegt in Berlin-Neukölln nahe S+U Hermannstraße/Silbersteinstraße; von Hermannplatz ist die U8 Richtung Hermannstraße naheliegend. Genaue Verbindung tagesaktuell mit BVG oder Maps prüfen.',
+    'Bei Unsicherheit zu tagesaktuellen Öffnungszeiten oder Produktverfügbarkeit an Kontakt oder Website verweisen.',
   ].join('\n');
 
   const texts: Array<{ title: string; text: string }> = [
