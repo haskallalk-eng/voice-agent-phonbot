@@ -32,10 +32,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/72" />
 
             <video
-              className={[
-                'hero-crystal-video absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-500',
-                crystalSettled ? 'opacity-0' : 'opacity-100',
-              ].join(' ')}
+              className="hero-crystal-video absolute inset-0 z-0 h-full w-full object-cover object-center"
               src="/media/chipy-crystal-reveal.mp4"
               poster="/media/chipy-crystal-reveal-poster.png"
               autoPlay
@@ -45,19 +42,9 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
               preload="auto"
             />
 
-            <img
-              src="/media/chipy-crystal-cutout.png"
-              alt=""
-              aria-hidden="true"
-              className={[
-                'hero-crystal-cutout absolute left-1/2 top-[50%] z-10 h-[54%] w-auto -translate-x-1/2 -translate-y-1/2 object-contain transition-opacity duration-700 sm:top-[58%] sm:h-[52%] lg:h-[56%]',
-                crystalSettled ? 'opacity-100' : 'opacity-0',
-              ].join(' ')}
-            />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[64%] bg-gradient-to-t from-black via-black/92 to-transparent" />
 
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-52 bg-gradient-to-t from-black/84 to-transparent" />
-
-            <div className="absolute inset-x-4 bottom-4 flex items-center justify-between gap-4 sm:inset-x-6 sm:bottom-6 lg:inset-x-8 lg:bottom-8">
+            <div className="absolute inset-x-4 bottom-4 z-20 flex items-center justify-between gap-4 sm:inset-x-6 sm:bottom-6 lg:inset-x-8 lg:bottom-8">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200/70">Chipy Crystal</p>
                 <p className="mt-1 text-sm font-semibold text-white sm:text-base">
