@@ -39,6 +39,7 @@ const DEFAULT_DRKALLA_TEST_PHONE_NUMBER = '+493075937286';
 export const DRKALLA_RAG_RESPONSIVENESS = 0.87;
 export const DRKALLA_RAG_INTERRUPTION_SENSITIVITY = 0.77;
 export const DRKALLA_RAG_DENOISING_MODE: RetellDenoisingMode = 'no-denoise';
+export const DRKALLA_RAG_VOICE_SPEED = 1.03;
 export const DRKALLA_RAG_REMINDER_TRIGGER_MS = 6500;
 export const DRKALLA_RAG_REMINDER_MAX_COUNT = 2;
 export const DRKALLA_RAG_END_CALL_DESCRIPTION = [
@@ -70,7 +71,7 @@ export function drkallaRagTools(webhookBase?: string): RetellTool[] {
       type: 'custom',
       name: DRKALLA_LINK_TOOL_NAME,
       description:
-        'Send exactly one Dr.Kalla shop, product, category, or contact link by SMS after the caller asks for it or agrees. Use only drkalla.com URLs from the KB or official contact page. Do not read long URLs aloud. Never claim the link was sent unless the tool result says smsSent=true.',
+        'Send exactly one Dr.Kalla shop, product, category, or contact link by SMS. Only call after the caller explicitly asks for a link or SMS, or after they clearly answer yes to "Soll ich dir den Link per SMS schicken?". Never call for "nenn mir", "sag mir", contact details, inaudible speech, or vague agreement. Use only drkalla.com URLs. Never claim the link was sent unless the tool result says smsSent=true.',
       url: `${webhookBase.replace(/\/+$/, '')}${DRKALLA_LINK_TOOL_PATH}?drkalla_sig=${drkallaLinkToolSignature()}`,
       execution_message_description: 'Sende den Dr.Kalla Link per SMS.',
       parameters: {
@@ -204,7 +205,7 @@ async function syncDrkallaRagAgent(
       llmId,
       voiceId: DEFAULT_STANDARD_VOICE_ID,
       language: 'de-DE',
-      voiceSpeed: 0.96,
+      voiceSpeed: DRKALLA_RAG_VOICE_SPEED,
       responsiveness: DRKALLA_RAG_RESPONSIVENESS,
       interruptionSensitivity: DRKALLA_RAG_INTERRUPTION_SENSITIVITY,
       denoisingMode: DRKALLA_RAG_DENOISING_MODE,
@@ -233,7 +234,7 @@ async function syncDrkallaRagAgent(
       llmId,
       voiceId: DEFAULT_STANDARD_VOICE_ID,
       language: 'de-DE',
-      voiceSpeed: 0.96,
+      voiceSpeed: DRKALLA_RAG_VOICE_SPEED,
       responsiveness: DRKALLA_RAG_RESPONSIVENESS,
       interruptionSensitivity: DRKALLA_RAG_INTERRUPTION_SENSITIVITY,
       denoisingMode: DRKALLA_RAG_DENOISING_MODE,

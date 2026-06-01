@@ -14,6 +14,7 @@ import {
   DRKALLA_RAG_REMINDER_MAX_COUNT,
   DRKALLA_RAG_REMINDER_TRIGGER_MS,
   DRKALLA_RAG_RESPONSIVENESS,
+  DRKALLA_RAG_VOICE_SPEED,
   chooseReusableDrkallaKnowledgeBase,
   drkallaRagTools,
 } from '../scripts/sync-drkalla-rag-agent.js';
@@ -174,7 +175,7 @@ describe('DrKalla transcript-driven A/B regressions', () => {
     expect(DRKALLA_RAG_PROMPT).toContain('nutze das SMS-Link-Tool');
     expect(DRKALLA_RAG_PROMPT).toContain('behaupte Versand erst nach Tool-Erfolg');
     expect(DRKALLA_RAG_PROMPT).toContain('nenne maximal drkalla.com');
-    expect(DRKALLA_RAG_PROMPT).toContain('Wenn mehrere Produkte oder Varianten zum selben Sprachname passen');
+    expect(DRKALLA_RAG_PROMPT).toContain('Wenn mehrere Produkte/Varianten zum selben Sprachname passen');
   });
 
   it('A keeps shop artifacts in product names; B removes copied, pipe, and dangling-word artifacts', () => {
@@ -328,6 +329,7 @@ describe('DrKalla transcript-driven A/B regressions', () => {
     expect(DRKALLA_RAG_RESPONSIVENESS).toBe(0.87);
     expect(DRKALLA_RAG_INTERRUPTION_SENSITIVITY).toBe(0.77);
     expect(DRKALLA_RAG_DENOISING_MODE).toBe('no-denoise');
+    expect(DRKALLA_RAG_VOICE_SPEED).toBe(1.03);
   });
 
   it('B reuses the newest complete DrKalla KB for the same snapshot instead of creating duplicates', () => {
@@ -392,6 +394,8 @@ describe('DrKalla transcript-driven A/B regressions', () => {
     expect(linkTool?.type).toBe('custom');
     expect(linkTool?.url).toContain('/retell/tools/drkalla.send_link?drkalla_sig=');
     expect(linkTool?.description).toContain('Never claim the link was sent unless the tool result says smsSent=true');
+    expect(linkTool?.description).toContain('Only call after the caller explicitly asks for a link or SMS');
+    expect(linkTool?.description).toContain('Never call for "nenn mir"');
     expect(linkTool?.parameters).toMatchObject({
       type: 'object',
       required: ['url', 'label'],
@@ -473,9 +477,16 @@ describe('DrKalla transcript-driven A/B regressions', () => {
     expect(joined).toContain('DrKalla Kontakt');
     expect(joined).toContain('Adresse: Silbersteinstrasse 83, 12051 Berlin.');
     expect(joined).toContain('Oeffnungszeiten: Montag bis Freitag von 10 bis 18 Uhr.');
+    expect(joined).toContain('E-Mail gesprochen: kontakt at drkalla punkt com.');
+    expect(joined).toContain('S+U Hermannstrasse');
+    expect(joined).toContain('von Hermannplatz');
     expect(joined).toContain('Dr.Kalla Cosmetics ist ein Friseurbedarf-Shop, kein Friseursalon.');
     expect(DRKALLA_RAG_PROMPT).toContain('keine Salontermine');
+    expect(DRKALLA_RAG_PROMPT).toContain('Sprich als Dr.Kalla-Team');
+    expect(DRKALLA_RAG_PROMPT).toContain('unser Shop');
+    expect(DRKALLA_RAG_PROMPT).toContain('Vermeide Formulierungen wie "ich suche im Shop"');
     expect(DRKALLA_RAG_PROMPT).toContain('Bei Kontakt-, Adresse-, Oeffnungszeiten- oder Besuchsfragen nutze die Kontakt-KB direkt');
+    expect(DRKALLA_RAG_PROMPT).toContain('Wenn nur nach E-Mail gefragt wird, nenne direkt kontakt at drkalla punkt com');
   });
 
   it('multi-aspect: Profi prices and checkout questions require evidence, contact fallback, and no phone checkout', () => {
@@ -484,7 +495,7 @@ describe('DrKalla transcript-driven A/B regressions', () => {
     expect(legacyPrompt).not.toContain('bestaetige das nur, wenn die KB eine konkrete Profi-Seite');
     expect(legacyPrompt).not.toContain('Nimm keine Bestellung oder Zahlung am Telefon auf');
     expect(DRKALLA_RAG_PROMPT).toContain('bestaetige das nur, wenn die KB eine konkrete Profi-Seite');
-    expect(DRKALLA_RAG_PROMPT).toContain('Wenn nicht, verweise auf die Website oder den Kontakt');
+    expect(DRKALLA_RAG_PROMPT).toContain('Wenn nicht, verweise auf Website/Kontakt');
     expect(DRKALLA_RAG_PROMPT).toContain('Nimm keine Bestellung oder Zahlung am Telefon auf');
   });
 });

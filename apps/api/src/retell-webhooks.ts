@@ -258,6 +258,24 @@ type VerifiedRetellCallContext = {
   testMode: boolean;
 };
 
+const DRKALLA_SENT_LINK_TTL_MS = 3 * 60 * 60 * 1000;
+const drkallaSentLinksByCall = new Map<string, { expiresAt: number; urls: Set<string> }>();
+
+function rememberDrkallaLinkForCall(callId: string, url: string, nowMs = now()): boolean {
+  for (const [key, value] of drkallaSentLinksByCall) {
+    if (value.expiresAt <= nowMs) drkallaSentLinksByCall.delete(key);
+  }
+
+  const current = drkallaSentLinksByCall.get(callId);
+  if (current?.urls.has(url)) return false;
+
+  const next = current ?? { expiresAt: nowMs + DRKALLA_SENT_LINK_TTL_MS, urls: new Set<string>() };
+  next.expiresAt = Math.max(next.expiresAt, nowMs + DRKALLA_SENT_LINK_TTL_MS);
+  next.urls.add(url);
+  drkallaSentLinksByCall.set(callId, next);
+  return true;
+}
+
 function retellArgs(body: RetellEventBody): Record<string, unknown> {
   return (body?.args ?? body ?? {}) as Record<string, unknown>;
 }
@@ -496,6 +514,7 @@ function safeTraceOutput(result: Record<string, unknown>): Record<string, unknow
     fallback: typeof result.fallback === 'boolean' ? result.fallback : undefined,
     partial: typeof result.partial === 'boolean' ? result.partial : undefined,
     reused: typeof result.reused === 'boolean' ? result.reused : undefined,
+    duplicate: typeof result.duplicate === 'boolean' ? result.duplicate : undefined,
     smsSent: typeof result.smsSent === 'boolean' ? result.smsSent : undefined,
     callbackScheduled: typeof result.callbackScheduled === 'boolean' ? result.callbackScheduled : undefined,
     matchCount: matches?.length,
@@ -510,7 +529,7 @@ function sanitizeToolResultForModel(result: Record<string, unknown>): Record<str
     return redactForToolResult(value.slice(0, max));
   };
   const out: Record<string, unknown> = {};
-  for (const key of ['ok', 'partial', 'fallback', 'reused', 'smsSent', 'callbackScheduled']) {
+  for (const key of ['ok', 'partial', 'fallback', 'reused', 'duplicate', 'smsSent', 'callbackScheduled']) {
     if (typeof result[key] === 'boolean') out[key] = result[key];
   }
   for (const key of ['status', 'matchType', 'error', 'message', 'instruction', 'deliveryInstruction', 'source', 'service', 'preferredTime', 'preferredStylist']) {
@@ -2969,6 +2988,27 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
         at: now(),
       } as Parameters<typeof appendTraceEvent>[0]);
       return sanitizeToolResultForModel(blocked);
+    }
+
+    if (!rememberDrkallaLinkForCall(liveCall.callId, url)) {
+      const duplicate = {
+        ok: true,
+        smsSent: false,
+        duplicate: true,
+        linkLabel: label,
+        instruction: 'Diesen Link hast du dem Anrufer in diesem Call bereits per SMS geschickt. Sende ihn nicht nochmal und sage nur kurz: Den Link habe ich dir schon geschickt.',
+      };
+      await appendTraceEvent({
+        type: 'tool_call',
+        sessionId: liveCall.callId,
+        tenantId: 'demo:drkalla',
+        agentId: liveCall.agentId,
+        tool: 'drkalla.send_link',
+        input: safeTraceInput(args, { omitFields: ['url'] }),
+        output: duplicate,
+        at: now(),
+      } as Parameters<typeof appendTraceEvent>[0]);
+      return sanitizeToolResultForModel(duplicate);
     }
 
     const { sendSms } = await import('./sms.js');
