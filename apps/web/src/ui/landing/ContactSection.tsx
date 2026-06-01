@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { IconPhone, IconBolt } from '../PhonbotIcons.js';
-import { FoxLogo } from '../FoxLogo.js';
 import { useVisible } from './shared.js';
 
 export function ContactSection() {
@@ -82,8 +81,8 @@ export function ContactSection() {
             <div className="relative rounded-2xl p-6 overflow-hidden" style={{ backdropFilter: 'blur(48px)' }}>
               <div className="absolute inset-0" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '1rem' }} />
               <div className="relative flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.15), rgba(6,182,212,0.1))' }}>
-                  <FoxLogo size={32} />
+                <div className="crystal-demo-mark shrink-0 scale-75">
+                  <img src="/brand/phonbot-crystal-icon-cropped.png" alt="" className="h-12 w-12 object-contain" />
                 </div>
                 <div>
                   <p className="text-xs text-white/30 uppercase tracking-wider font-semibold mb-0.5">Live testen</p>

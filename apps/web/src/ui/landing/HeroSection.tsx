@@ -17,7 +17,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
 
   return (
     <>
-      <section className="relative z-10 w-full px-0 pb-12 pt-0">
+      <section className="relative z-10 w-full px-0 pb-0 pt-0">
         <div className="relative min-h-[1080px] overflow-hidden px-4 py-8 sm:min-h-[calc(100svh-72px)] sm:px-8 sm:py-9 lg:min-h-[790px] lg:px-10 lg:py-10">
           <div className="pointer-events-none absolute -inset-24 bg-[radial-gradient(circle_at_18%_18%,rgba(255,91,10,0.24),transparent_28%),radial-gradient(circle_at_82%_22%,rgba(32,217,255,0.22),transparent_30%),radial-gradient(circle_at_50%_88%,rgba(255,183,102,0.10),transparent_36%)] blur-2xl" />
 
@@ -121,7 +121,9 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
         </div>
       </section>
 
-      <section className="relative z-10 mx-auto max-w-4xl px-6 py-6">
+      <div className="hero-crystal-transition relative z-10 -mt-24 h-52 sm:-mt-36 sm:h-72" aria-hidden="true" />
+
+      <section className="relative z-10 mx-auto -mt-16 max-w-4xl px-6 pb-8 pt-0 sm:-mt-24">
         <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10">
           <div className="flex items-center gap-2 text-sm text-white/60">
             <IconBolt size={14} className="text-white/50" />

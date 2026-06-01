@@ -1,6 +1,5 @@
 // Note: file named OwlyDemoModal for historical reasons, mascot is now "Chipy".
 import React, { useEffect, useRef, useState } from 'react';
-import { FoxLogo } from './FoxLogo.js';
 import { IconPhone } from './PhonbotIcons.js';
 import {
   DEMO_PHONE_HREF,
@@ -14,6 +13,14 @@ type Props = {
   onClose: () => void;
   onGoToRegister?: () => void;
 };
+
+function CrystalModalMark({ className = '' }: { className?: string }) {
+  return (
+    <div className={`crystal-demo-mark ${className}`} aria-hidden="true">
+      <img src="/brand/phonbot-crystal-icon-cropped.png" alt="" className="h-12 w-12 object-contain" />
+    </div>
+  );
+}
 
 function PhoneTemplateGrid() {
   return (
@@ -174,7 +181,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
         </button>
 
         <div className="px-6 pb-4 pt-8 text-center">
-          <FoxLogo size="lg" glow animate className="mx-auto mb-3" />
+          <CrystalModalMark className="mx-auto mb-3" />
           <h2 id="chipy-demo-modal-title" className="text-xl font-bold text-white">Chipy live testen</h2>
           <p className="mt-1 text-sm text-white/50">
             Ruf direkt an oder lass dich zurückrufen. Die Demo läuft als echter Telefonanruf mit deiner Rufnummer.
@@ -299,7 +306,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
               </>
             ) : (
               <div className="py-4 text-center">
-                <FoxLogo size="lg" glow animate className="mx-auto mb-4" />
+                <CrystalModalMark className="mx-auto mb-4" />
                 <h3 className="mb-2 text-lg font-bold text-white">Chipy ruft dich an!</h3>
                 <p className="mb-2 text-sm text-white/50">
                   Du erhältst in Kürze einen Anruf auf <strong className="text-white">{cbPhone}</strong>.
