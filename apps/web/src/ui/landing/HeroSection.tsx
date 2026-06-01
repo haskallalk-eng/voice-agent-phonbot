@@ -33,8 +33,8 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
 
             <video
               className="hero-crystal-video absolute inset-0 z-0 h-full w-full object-cover object-center sm:object-contain"
-              src="/media/chipy-crystal-reveal.mp4"
-              poster="/media/chipy-crystal-reveal-poster.png"
+              src="/media/Phonbot-crystal-reveal.mp4"
+              poster="/media/Phonbot-crystal-reveal-poster.png"
               autoPlay
               muted
               onEnded={() => setCrystalSettled(true)}
@@ -46,7 +46,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
 
             <div className="hidden">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200/70">Chipy Crystal</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-200/70">Phonbot Crystal</p>
                 <p className="mt-1 text-sm font-semibold text-white sm:text-base">
                   {crystalSettled ? 'Die Schritte sind bereit - klick für die Demo' : 'Der Crystal landet gleich - klick für die Demo'}
                 </p>
@@ -80,7 +80,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
               </h1>
 
               <p className="mx-auto mb-7 max-w-3xl text-lg leading-relaxed text-white/58 sm:text-xl">
-                <span className="bg-clip-text font-semibold text-transparent" style={{ backgroundImage: 'var(--crystal-gradient)' }}>Chipy</span> beantwortet Anrufe, bucht Termine und{' '}
+                <span className="bg-clip-text font-semibold text-transparent" style={{ backgroundImage: 'var(--crystal-gradient)' }}>Phonbot</span> beantwortet Anrufe, bucht Termine und{' '}
                 <span className="font-medium text-white/82">lernt mit jedem Gespräch dazu.</span>
               </p>
 

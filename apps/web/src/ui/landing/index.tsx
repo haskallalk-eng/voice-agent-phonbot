@@ -68,7 +68,7 @@ function DeferredDemoSection({ onGoToRegister }: { onGoToRegister: () => void })
     return (
       <section id="demo" ref={ref} className="relative z-10 px-6 py-20 max-w-5xl mx-auto ambient-glow-alt ambient-glow text-center">
         <p className="text-[11px] font-semibold tracking-[0.2em] text-orange-400/60 uppercase mb-4">Telefon-Demo</p>
-        <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">Chipy live anrufen</h2>
+        <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">Phonbot live anrufen</h2>
         <p className="text-white/50 max-w-2xl mx-auto mb-6">
           Die Telefon-Demo wird erst geladen, wenn du sie wirklich ansehen möchtest. So bleibt die Startseite schnell.
         </p>

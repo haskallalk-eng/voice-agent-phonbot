@@ -77,7 +77,7 @@ export function ContactSection() {
               </div>
             </div>
 
-            {/* Chipy card */}
+            {/* Phonbot card */}
             <div className="relative rounded-2xl p-6 overflow-hidden" style={{ backdropFilter: 'blur(48px)' }}>
               <div className="absolute inset-0" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '1rem' }} />
               <div className="relative flex items-center gap-4">
@@ -86,7 +86,7 @@ export function ContactSection() {
                 </div>
                 <div>
                   <p className="text-xs text-white/30 uppercase tracking-wider font-semibold mb-0.5">Live testen</p>
-                  <p className="text-xs text-white/50">Ruf Chipy an und erlebe ihn selbst</p>
+                  <p className="text-xs text-white/50">Ruf Phonbot an und erlebe ihn selbst</p>
                 </div>
               </div>
             </div>

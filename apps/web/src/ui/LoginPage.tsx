@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../lib/auth.js';
 import { forgotPassword, startCheckoutSignup, LEGAL_CONFIRMATION } from '../lib/api.js';
-import { FoxLogo } from './FoxLogo.js';
+import { PhonbotBrand } from './FoxLogo.js';
 import { PasswordInput } from './PasswordInput.js';
 import {
   PAID_PLAN_LABELS,
@@ -132,11 +132,11 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
 
   return (
     <div className="min-h-screen bg-[#0A0A0F] flex flex-col items-center justify-center px-4 py-8 relative overflow-x-hidden overflow-y-auto">
-      {/* Background glow */}
+      {/* Background crystal glow */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div
-          className="glow-pulse absolute top-1/4 left-1/2 -translate-x-1/2 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.1) 0%, transparent 65%)' }}
+          className="crystal-page-glow glow-pulse absolute top-1/4 left-1/2 h-[300px] w-[300px] -translate-x-1/2 sm:h-[600px] sm:w-[600px]"
+          style={{ background: 'radial-gradient(ellipse, rgba(249,115,22,0.1) 0%, transparent 65%)' }}
         />
       </div>
 
@@ -154,11 +154,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
       <div className="relative z-10 w-full max-w-sm glass rounded-2xl p-8">
         {/* Logo */}
         <div className="text-center mb-6">
-          <FoxLogo size="lg" glow className="mx-auto mb-3" />
-          <h1 className="text-2xl font-black tracking-tight leading-none">
-            <span className="text-white">Phon</span>
-            <span style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>bot</span>
-          </h1>
+          <PhonbotBrand size="md" className="mx-auto" />
         </div>
 
         {/* Tab switcher */}
@@ -194,7 +190,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
           <div>
             <h2 className="text-base font-semibold text-white mb-4">Passwort zurücksetzen</h2>
             {forgotSuccess ? (
-              <div className="text-sm text-green-300 bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 mb-4">
+              <div className="mb-4 rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100/80">
                 Falls ein Account mit dieser E-Mail existiert, haben wir dir einen Reset-Link gesendet.
               </div>
             ) : (
@@ -255,10 +251,10 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
                     type="text"
                     placeholder="Muster GmbH"
                     className={`w-full rounded-xl bg-white/5 border px-4 py-2.5 text-sm text-white placeholder-white/30
-                      focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${errors.orgName ? 'border-red-500/60' : 'border-white/10'}`}
+                      focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${errors.orgName ? 'border-orange-400/70' : 'border-white/10'}`}
                     {...register('orgName', { required: mode === 'register', minLength: { value: 2, message: 'Mindestens 2 Zeichen' } })}
                   />
-                  {errors.orgName && <p className="mt-1 text-xs text-red-400">{errors.orgName.message}</p>}
+                  {errors.orgName && <p className="mt-1 text-xs text-orange-200">{errors.orgName.message}</p>}
                 </div>
               )}
 
@@ -271,7 +267,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
                   placeholder={mode === 'login' ? 'coifeur jimmy, E-Mail oder 0176 12345678' : 'du@beispiel.de'}
                   autoComplete={mode === 'login' ? 'username' : 'email'}
                   className={`w-full rounded-xl bg-white/5 border px-4 py-2.5 text-sm text-white placeholder-white/30
-                    focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${errors.email ? 'border-red-500/60' : 'border-white/10'}`}
+                    focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${errors.email ? 'border-orange-400/70' : 'border-white/10'}`}
                   {...register('email', {
                     required: mode === 'login' ? 'E-Mail, Telefonnummer oder Login-Name ist erforderlich' : 'E-Mail ist erforderlich',
                     validate: (value) => {
@@ -280,7 +276,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
                     },
                   })}
                 />
-                {errors.email && <p className="mt-1 text-xs text-red-400">{errors.email.message}</p>}
+                {errors.email && <p className="mt-1 text-xs text-orange-200">{errors.email.message}</p>}
               </div>
 
               {mode === 'register' && (
@@ -293,13 +289,13 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
                     placeholder="+49 176 12345678"
                     autoComplete="tel"
                     className={`w-full rounded-xl bg-white/5 border px-4 py-2.5 text-sm text-white placeholder-white/30
-                      focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${errors.phone ? 'border-red-500/60' : 'border-white/10'}`}
+                      focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${errors.phone ? 'border-orange-400/70' : 'border-white/10'}`}
                     {...register('phone', {
                       required: mode === 'register' ? 'Telefonnummer ist erforderlich' : false,
                       minLength: { value: 7, message: 'Bitte gib eine gueltige Telefonnummer ein.' },
                     })}
                   />
-                  {errors.phone && <p className="mt-1 text-xs text-red-400">{errors.phone.message}</p>}
+                  {errors.phone && <p className="mt-1 text-xs text-orange-200">{errors.phone.message}</p>}
                 </div>
               )}
 
@@ -311,13 +307,13 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
                   placeholder={mode === 'register' ? 'Min. 8 Zeichen' : '••••••••'}
                   autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
                   className={`w-full rounded-xl bg-white/5 border px-4 py-2.5 text-sm text-white placeholder-white/30
-                    focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${errors.password ? 'border-red-500/60' : 'border-white/10'}`}
+                    focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${errors.password ? 'border-orange-400/70' : 'border-white/10'}`}
                   {...register('password', {
                     required: 'Passwort ist erforderlich',
                     minLength: { value: 8, message: 'Mindestens 8 Zeichen' },
                   })}
                 />
-                {errors.password && <p className="mt-1 text-xs text-red-400">{errors.password.message}</p>}
+                {errors.password && <p className="mt-1 text-xs text-orange-200">{errors.password.message}</p>}
                 {mode === 'login' && (
                   <button
                     type="button"
@@ -371,7 +367,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
               )}
 
               {error && (
-                <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 break-words [overflow-wrap:anywhere]">
+                <div className="break-words rounded-xl border border-orange-400/20 bg-orange-500/10 px-4 py-2.5 text-sm text-orange-100/80 [overflow-wrap:anywhere]">
                   {error}
                 </div>
               )}

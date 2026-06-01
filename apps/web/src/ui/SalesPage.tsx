@@ -102,7 +102,7 @@ function LoginOverlay({ onLogin, notice }: { onLogin: (rep: SalesRep) => void; n
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white outline-none focus:border-orange-500/50" />
           </label>
         </div>
-        {error && <p className="mt-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p>}
+        {error && <p className="mt-4 rounded-2xl border border-orange-400/20 bg-orange-500/10 px-4 py-3 text-sm text-orange-100/80">{error}</p>}
         <button disabled={loading} className="mt-5 w-full rounded-2xl px-4 py-3 text-sm font-bold text-white transition-all hover:brightness-110 disabled:opacity-50" style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)' }}>
           {loading ? 'Einloggen...' : 'Einloggen'}
         </button>
@@ -146,7 +146,7 @@ function PasswordSetup({ onDone }: { onDone: () => void }) {
       <form onSubmit={submit} className="mt-6 space-y-3">
         <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Temporäres Passwort" className="w-full rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white outline-none focus:border-orange-500/50" />
         <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Neues Passwort, mindestens 8 Zeichen" className="w-full rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white outline-none focus:border-orange-500/50" />
-        {error && <p className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p>}
+        {error && <p className="rounded-2xl border border-orange-400/20 bg-orange-500/10 px-4 py-3 text-sm text-orange-100/80">{error}</p>}
         <button disabled={loading || newPassword.length < 8} className="w-full rounded-2xl px-4 py-3 text-sm font-bold text-white transition-all hover:brightness-110 disabled:opacity-50" style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)' }}>
           Passwort speichern
         </button>
@@ -275,11 +275,11 @@ function LeadDetail({ lead, onClose, onChanged }: { lead: SalesLead; onClose: ()
           </section>
         </div>
 
-        {error && <p className="mt-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p>}
+        {error && <p className="mt-4 rounded-2xl border border-orange-400/20 bg-orange-500/10 px-4 py-3 text-sm text-orange-100/80">{error}</p>}
         <div className="mt-5 flex justify-end">
           <button onClick={() => {
             if (window.confirm('Lead wirklich dauerhaft sperren und löschen?')) void run('delete', () => salesDeleteLead(localLead.id).then(onClose));
-          }} className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-200">
+          }} className="rounded-xl border border-orange-400/20 bg-orange-500/10 px-4 py-2 text-sm font-semibold text-orange-100">
             Dauerhaft löschen
           </button>
         </div>
@@ -498,8 +498,8 @@ export function SalesPage() {
   return (
     <div className="min-h-screen bg-[#0A0A0F] px-4 py-5 text-white sm:px-6">
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -top-40 right-0 h-[520px] w-[520px] rounded-full" style={{ background: 'radial-gradient(circle,rgba(249,115,22,.11),transparent 62%)', filter: 'blur(8px)' }} />
-        <div className="absolute bottom-0 left-10 h-[420px] w-[420px] rounded-full" style={{ background: 'radial-gradient(circle,rgba(6,182,212,.08),transparent 62%)', filter: 'blur(8px)' }} />
+        <div className="crystal-page-glow absolute -top-40 right-0 h-[520px] w-[520px]" style={{ background: 'radial-gradient(ellipse,rgba(249,115,22,.11),transparent 62%)' }} />
+        <div className="crystal-page-glow crystal-page-glow-cyan absolute bottom-0 left-10 h-[420px] w-[420px]" style={{ background: 'radial-gradient(ellipse,rgba(6,182,212,.08),transparent 62%)' }} />
       </div>
       <div className="relative z-10 mx-auto max-w-7xl">
         <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -632,7 +632,7 @@ export function SalesPage() {
                           <p className="mt-1 text-xs text-white/45">{formatDateTime(h.slot_time)} · {h.status} · {h.booked_by_name ?? 'unbekannt'}</p>
                           <div className="mt-3 flex flex-wrap gap-2">
                             <button onClick={() => salesClaimHotLead(h.id).then(refreshHot).catch((err) => setToast(parseError(err)))} className="rounded-xl bg-white/5 px-3 py-1.5 text-xs text-white/60">In Bearbeitung</button>
-                            <button onClick={() => salesFailHotLead(h.id).then(refreshHot).catch((err) => setToast(parseError(err)))} className="rounded-xl bg-red-500/10 px-3 py-1.5 text-xs text-red-200">Failed</button>
+                            <button onClick={() => salesFailHotLead(h.id).then(refreshHot).catch((err) => setToast(parseError(err)))} className="rounded-xl bg-orange-500/10 px-3 py-1.5 text-xs text-orange-100">Failed</button>
                             <button onClick={() => {
                               if (window.confirm('Nur bestätigen, wenn der Kunde Legal/AGB/AVV/B2B bestätigt hat.')) {
                                 salesCloseHotLead(h.id, { planId: 'starter', billingInterval: 'month', legalConfirmedByCustomer: true }).then(refreshHot).catch((err) => setToast(parseError(err)));

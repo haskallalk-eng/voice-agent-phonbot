@@ -10,7 +10,7 @@ import { icon } from './_icons.mjs';
 // Emoji → house-icon mapping. All user-facing emojis in the branch-page
 // data are mapped through this table so the rendered page uses our own
 // SVG icons (consistent stroke / colour / size) instead of platform-
-// specific Unicode fonts. Added 2026-04-22 as part of the chipy-design
+// specific Unicode fonts. Added 2026-04-22 as part of the Phonbot-design
 // polish pass. Any new emoji in BRANCHEN data MUST also get an entry
 // here — otherwise it falls through untouched and breaks visual unity.
 const EMOJI_TO_ICON = {
@@ -109,9 +109,9 @@ const BRANCHEN = [
         { icon: 'star', label: 'Deine Ersparnis', amount: '1.421 €', per: '/Monat', highlight: true },
       ],
       extras: [
-      { icon: 'clock', title: 'Weniger verpasste Anrufe in Stoßzeiten', desc: 'Während Föhnen, Färben oder Schnitt geht Chipy trotzdem dran und nimmt Terminwünsche strukturiert auf.' },
+      { icon: 'clock', title: 'Weniger verpasste Anrufe in Stoßzeiten', desc: 'Während Föhnen, Färben oder Schnitt geht Phonbot trotzdem dran und nimmt Terminwünsche strukturiert auf.' },
       { icon: 'phone', title: 'Parallelgespräche statt Warteschleife', desc: 'Mehrere Kundinnen können gleichzeitig mit je einem Agenten sprechen, statt auf ein besetztes Telefon zu treffen.' },
-      { icon: 'calendar', title: 'Kalenderprüfung vor Bestätigung', desc: 'Chipy prüft freie Slots in Echtzeit und bestätigt erst, wenn calendar.book erfolgreich war.' },
+      { icon: 'calendar', title: 'Kalenderprüfung vor Bestätigung', desc: 'Phonbot prüft freie Slots in Echtzeit und bestätigt erst, wenn calendar.book erfolgreich war.' },
       ],
     },
     faq: [
@@ -225,7 +225,7 @@ const BRANCHEN = [
       extras: [
         { icon: 'document', title: 'Angebotsanfragen sauber aufgenommen', desc: 'Objekt-Art, Quadratmeter, Frequenz — alles systematisch im Ticket, keine Excel-Liste am Abend mehr.' },
         { icon: 'calendar', title: 'Wiederkehrende Aufträge live gebucht', desc: 'Freie Slots für Büroreinigung oder Gastro-Grundreinigung direkt vereinbart — feste Kunden freuen sich.' },
-        { icon: 'euro', title: 'Preisauskunft für Standard-Leistungen', desc: 'Chipy kennt deine Preistabellen und gibt direkt Auskunft — der Interessent weiß sofort, woran er ist.' },
+        { icon: 'euro', title: 'Preisauskunft für Standard-Leistungen', desc: 'Phonbot kennt deine Preistabellen und gibt direkt Auskunft — der Interessent weiß sofort, woran er ist.' },
       ],
     },
     faq: [
@@ -334,7 +334,7 @@ const BRANCHEN = [
       ],
       extras: [
         { icon: 'car', title: 'Fahrzeug-Daten systematisch erfasst', desc: 'Modell, Baujahr, Kilometerstand, Fehlerbild — strukturiert im Ticket, nie auf dem Zettel verschlampt.' },
-        { icon: 'calendar', title: 'TÜV und Inspektion automatisch gebucht', desc: 'Chipy kennt deine Werkstatt-Auslastung und vergibt passende Slots — ohne dass du anrufen musst.' },
+        { icon: 'calendar', title: 'TÜV und Inspektion automatisch gebucht', desc: 'Phonbot kennt deine Werkstatt-Auslastung und vergibt passende Slots — ohne dass du anrufen musst.' },
         { icon: 'document', title: 'Kostenvoranschlag-Tickets sauber', desc: 'Komplexe Anfragen landen als Ticket im Dashboard — du rufst später in Ruhe mit dem Angebot zurück.' },
       ],
     },
@@ -357,20 +357,20 @@ const BRANCHEN = [
     templateId: 'solo',
     emoji: '💼',
     offerPrice: '89',
-    h1Text: 'Dein Handy klingelt, während du arbeitest? <span class="accent">Chipy geht ran.</span>',
+    h1Text: 'Dein Handy klingelt, während du arbeitest? <span class="accent">Phonbot geht ran.</span>',
     title: 'KI-Telefonassistent für Selbstständige · Keine Anrufe verpassen | Phonbot',
-    description: 'Chipy hebt ab, wenn du arbeitest. Für Freelancer, Coaches, Berater, Fotografen & Kreative. Termine buchen, Rückrufe verwalten, DSGVO-fokussiert. Ab 89 €/Monat.',
+    description: 'Phonbot hebt ab, wenn du arbeitest. Für Freelancer, Coaches, Berater, Fotografen & Kreative. Termine buchen, Rückrufe verwalten, DSGVO-fokussiert. Ab 89 €/Monat.',
     eyebrow: 'KI-Telefonassistent für Selbstständige',
-    subtitle: 'Der einzige KI-Telefonassistent, der nach dir klingt. Chipy nimmt deine Anrufe an — mit deiner Stimme, deinen Regeln — während du im Kundentermin, im Workshop oder im Deep Work bist. Starter-Plan 89 €/Monat inkl. 300 Minuten.',
+    subtitle: 'Der einzige KI-Telefonassistent, der nach dir klingt. Phonbot nimmt deine Anrufe an — mit deiner Stimme, deinen Regeln — während du im Kundentermin, im Workshop oder im Deep Work bist. Starter-Plan 89 €/Monat inkl. 300 Minuten.',
     ogTitle: 'KI-Telefonassistent für Selbstständige · Phonbot',
-    ogDesc: 'Chipy hebt ab, wenn du nicht kannst. Mit deiner Stimme, deinen Regeln — kein Corporate-Tool, ein persönlicher Voice-Twin für Solopreneurs.',
+    ogDesc: 'Phonbot hebt ab, wenn du nicht kannst. Mit deiner Stimme, deinen Regeln — kein Corporate-Tool, ein persönlicher Voice-Twin für Solopreneurs.',
     serviceName: 'KI-Telefonassistent für Selbstständige',
     audienceType: 'Freelancer, Coaches, Berater, Solopreneurs',
     features: [
-      { icon: '📅', title: 'Termine direkt gebucht', desc: '„Haben Sie Donnerstag 14 Uhr frei?" — Chipy prüft Google Calendar / Cal.com live und bucht, während du im Workshop bist.' },
+      { icon: '📅', title: 'Termine direkt gebucht', desc: '„Haben Sie Donnerstag 14 Uhr frei?" — Phonbot prüft Google Calendar / Cal.com live und bucht, während du im Workshop bist.' },
       { icon: '📝', title: 'Strukturierte Rückruf-Tickets', desc: 'Name, Nummer, Anliegen, Wunschzeit — alles landet strukturiert im Dashboard. Keine Post-its mehr, keine verlorenen Zettel.' },
-      { icon: '🌍', title: '30 Sprachen, 15 nativ', desc: 'Englisch-sprechende Kunden? Italienische Interessenten? Chipy wechselt sprachlich, bleibt persönlich; weitere Sprachen laufen über hochwertige multilinguale Stimmen.' },
-      { icon: '🎙️', title: 'Voice-Clone nach dir', desc: 'Im Premium-Setup klingt Chipy wie DU — nicht wie eine austauschbare KI-Stimme. Deine Marke, deine Bindung zum Kunden.' },
+      { icon: '🌍', title: '30 Sprachen, 15 nativ', desc: 'Englisch-sprechende Kunden? Italienische Interessenten? Phonbot wechselt sprachlich, bleibt persönlich; weitere Sprachen laufen über hochwertige multilinguale Stimmen.' },
+      { icon: '🎙️', title: 'Voice-Clone nach dir', desc: 'Im Premium-Setup klingt Phonbot wie DU — nicht wie eine austauschbare KI-Stimme. Deine Marke, deine Bindung zum Kunden.' },
     ],
     dialogue: [
       { speaker: 'user', text: '📞 Interessent: „Hallo, ich hab Ihre Website gesehen — bieten Sie Business-Coaching für Solo-Gründer an?"' },
@@ -382,7 +382,7 @@ const BRANCHEN = [
     ],
     dialogueNote: '→ Erstgespräch im Kalender · Kontext im Ticket · Dauer: 36 Sek',
     personasHeadline: 'Gebaut für dich, wenn du <span class="accent">einer davon</span> bist',
-    personasLead: 'Chipy passt sich deiner Arbeit an — nicht umgekehrt. Ein paar typische Stimmen aus der Zielgruppe.',
+    personasLead: 'Phonbot passt sich deiner Arbeit an — nicht umgekehrt. Ein paar typische Stimmen aus der Zielgruppe.',
     // Solo-Handwerker wurde hier bewusst entfernt — die haben eine eigene
     // dedizierte Seite unter /handwerker/ (andere Pain-Points: Notdienst,
     // Baustelle). Stattdessen ein „Freelancer"-Eintrag für Text/Design/
@@ -411,15 +411,15 @@ const BRANCHEN = [
         { icon: 'star', label: 'Deine Ersparnis + zurückgewonnene Deep-Work-Zeit', amount: '271 €', per: '/Monat', highlight: true },
       ],
       extras: [
-        { icon: 'clock', title: 'Deep-Work-Schutz', desc: 'Dein Handy vibriert nicht mehr während du im Kundentermin bist. Chipy regelt die Erst-Qualifizierung, du siehst später im Dashboard was passiert ist.' },
-        { icon: 'phone', title: 'Kein Anruf versickert', desc: 'Auch abends, sonntags, im Urlaub — Chipy hebt immer ab, nimmt Kontext auf, vereinbart Rückruf oder bucht direkt.' },
-        { icon: 'star', title: 'Du bleibst der Kontakt', desc: 'Chipy ist die ersten 30 Sekunden. Wer mit dir selbst sprechen will, kommt auch mit dir selbst zusammen — nur nicht gerade jetzt.' },
+        { icon: 'clock', title: 'Deep-Work-Schutz', desc: 'Dein Handy vibriert nicht mehr während du im Kundentermin bist. Phonbot regelt die Erst-Qualifizierung, du siehst später im Dashboard was passiert ist.' },
+        { icon: 'phone', title: 'Kein Anruf versickert', desc: 'Auch abends, sonntags, im Urlaub — Phonbot hebt immer ab, nimmt Kontext auf, vereinbart Rückruf oder bucht direkt.' },
+        { icon: 'star', title: 'Du bleibst der Kontakt', desc: 'Phonbot ist die ersten 30 Sekunden. Wer mit dir selbst sprechen will, kommt auch mit dir selbst zusammen — nur nicht gerade jetzt.' },
       ],
     },
     faq: [
-      { q: 'Wie klingt Chipy am Telefon — erkennt der Anrufer die KI?', a: 'Im Standard-Setup verwendet Chipy eine natürliche Standardstimme und unterstützt rund 30 Sprachen, davon 15 mit nativen Stimmen. Die meisten Anrufer merken vor allem, dass schnell geholfen wird. Voice-Clone ist als separates Premium-Setup möglich.' },
+      { q: 'Wie klingt Phonbot am Telefon — erkennt der Anrufer die KI?', a: 'Im Standard-Setup verwendet Phonbot eine natürliche Standardstimme und unterstützt rund 30 Sprachen, davon 15 mit nativen Stimmen. Die meisten Anrufer merken vor allem, dass schnell geholfen wird. Voice-Clone ist als separates Premium-Setup möglich.' },
       { q: 'Kann ich bestimmen, welche Anrufe durchgestellt werden?', a: 'Ja. Du legst Regeln fest: Notfall-Keywords („dringend", „heute noch") lösen sofort einen Push oder eine Weiterleitung an dein Handy aus, alles andere landet im Dashboard als Ticket zum ruhigen Nachbearbeiten.' },
-      { q: 'Ich bin oft im Ausland / Zeitzone wechselt — geht das?', a: 'Ja. Chipy kennt deine Zeitzone und die des Anrufers und wählt passende Slots. Mehrsprachigkeit auf dem gleichen Agent: ein Anruf kommt auf Deutsch rein, der nächste auf Englisch — Chipy wechselt automatisch.' },
+      { q: 'Ich bin oft im Ausland / Zeitzone wechselt — geht das?', a: 'Ja. Phonbot kennt deine Zeitzone und die des Anrufers und wählt passende Slots. Mehrsprachigkeit auf dem gleichen Agent: ein Anruf kommt auf Deutsch rein, der nächste auf Englisch — Phonbot wechselt automatisch.' },
       { q: 'Wie schnell ist das Ding einsatzbereit?', a: 'Schnell-Setup: 5 Minuten (Name, Geschäftsart, Kalender verbunden — fertig). Premium-Setup inkl. Voice-Clone + Custom-Prompt + Workflows: 30 Minuten. Du kannst mit Schnell-Setup starten und später tiefer konfigurieren.' },
       { q: 'Kann ich später zwischen den Plänen wechseln?', a: 'Jederzeit, monatlich. Der Starter-Plan beginnt bei 89 €/Monat inklusive 300 Minuten und 1 Agent. Brauchst du nur eine Phonbot-Nummer, gibt es separat den Nummer-Plan ab 8,99 €/Monat mit 70 Minuten pro Monat.' },
     ],
@@ -444,10 +444,10 @@ a{color:inherit;text-decoration:none}
 
 /* ── Ambient glow orbs (3 pulsing radials, fixed full-bleed) ── */
 .orbs{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
-.orb{position:absolute;border-radius:50%;filter:blur(40px);animation:glow-pulse 3s ease-in-out infinite}
-.orb-1{width:700px;height:700px;top:-160px;left:-160px;background:radial-gradient(circle,rgba(249,115,22,.18) 0%,transparent 70%)}
-.orb-2{width:600px;height:600px;top:50%;right:-240px;background:radial-gradient(circle,rgba(6,182,212,.12) 0%,transparent 70%);animation-delay:1.5s}
-.orb-3{width:500px;height:500px;bottom:-160px;left:35%;background:radial-gradient(circle,rgba(249,115,22,.10) 0%,transparent 70%);animation-delay:3s}
+.orb{position:absolute;clip-path:polygon(50% 0%,88% 18%,100% 54%,70% 100%,22% 90%,0 45%,16% 14%);filter:blur(44px) saturate(1.2);animation:glow-pulse 3s ease-in-out infinite}
+.orb-1{width:700px;height:700px;top:-160px;left:-160px;background:radial-gradient(ellipse,rgba(249,115,22,.18) 0%,transparent 70%)}
+.orb-2{width:600px;height:600px;top:50%;right:-240px;background:radial-gradient(ellipse,rgba(6,182,212,.12) 0%,transparent 70%);animation-delay:1.5s;clip-path:polygon(34% 0%,92% 24%,78% 88%,18% 100%,0 38%)}
+.orb-3{width:500px;height:500px;bottom:-160px;left:35%;background:radial-gradient(ellipse,rgba(249,115,22,.10) 0%,transparent 70%);animation-delay:3s}
 @keyframes glow-pulse{0%,100%{opacity:.3}50%{opacity:.7}}
 
 /* ── Glass utility ── */
@@ -508,8 +508,8 @@ p{color:rgba(255,255,255,.7)}
 .dialogue{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:1.5rem;padding:1.75rem;max-width:640px;margin:0 auto;position:relative;overflow:hidden}
 @media(max-width:640px){.dialogue{padding:1.25rem}}
 .dialogue-header{display:flex;align-items:center;gap:.6rem;padding-bottom:1rem;margin-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,.06);font-size:.7rem;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.1em;font-weight:600}
-.dialogue-header .dot{width:8px;height:8px;border-radius:50%;background:#ef4444;animation:call-pulse 2s ease-in-out infinite}
-@keyframes call-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.6),0 0 0 0 rgba(239,68,68,.35)}50%{box-shadow:0 0 0 6px rgba(239,68,68,0),0 0 0 12px rgba(239,68,68,0)}}
+.dialogue-header .dot{width:8px;height:8px;border-radius:50%;background:#F97316;animation:call-pulse 2s ease-in-out infinite;box-shadow:0 0 14px rgba(249,115,22,.75)}
+@keyframes call-pulse{0%,100%{box-shadow:0 0 0 0 rgba(249,115,22,.6),0 0 0 0 rgba(6,182,212,.35)}50%{box-shadow:0 0 0 6px rgba(249,115,22,0),0 0 0 12px rgba(6,182,212,0)}}
 .dialogue-header .duration{margin-left:auto;font-variant-numeric:tabular-nums;color:rgba(255,255,255,.5);letter-spacing:.06em}
 
 /* Messages animate in on page load, staggered — no IntersectionObserver,
@@ -533,9 +533,9 @@ p{color:rgba(255,255,255,.7)}
 .msg.user{flex-direction:row-reverse}
 .msg .avatar{flex-shrink:0;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);color:rgba(255,255,255,.65);position:relative}
 .msg .avatar svg{display:block;width:14px;height:14px}
-.msg.bot .avatar{background:transparent;border:none;overflow:visible;width:40px;height:40px;filter:drop-shadow(0 0 10px rgba(249,115,22,.30));animation:chipy-breathe 3.5s ease-in-out infinite}
-.msg.bot .avatar svg{display:block;width:40px;height:40px}
-@keyframes chipy-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+.msg.bot .avatar{background:transparent;border:none;overflow:visible;width:40px;height:40px;filter:drop-shadow(0 0 10px rgba(249,115,22,.30)) drop-shadow(0 0 12px rgba(6,182,212,.20));animation:crystal-breathe 3.5s ease-in-out infinite}
+.msg.bot .avatar img{display:block;width:40px;height:40px;object-fit:contain}
+@keyframes crystal-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
 .msg .bubble{max-width:78%;padding:.75rem 1rem;border-radius:1rem;font-size:.9375rem;line-height:1.55;position:relative}
 .msg.user .bubble{background:rgba(255,255,255,.06);color:rgba(255,255,255,.82);border-bottom-right-radius:.375rem}
 .msg.bot .bubble{background:linear-gradient(135deg,rgba(249,115,22,.14),rgba(6,182,212,.08));color:#fff;border:1px solid rgba(249,115,22,.22);border-bottom-left-radius:.375rem;box-shadow:0 0 24px rgba(249,115,22,.08)}
@@ -595,7 +595,7 @@ p{color:rgba(255,255,255,.7)}
 .extra-title{color:#fff;font-weight:600;font-size:.9375rem;margin-bottom:.2rem;line-height:1.35}
 .extra-desc{color:rgba(255,255,255,.6);font-size:.875rem;line-height:1.55}
 
-/* ── FAQ (native <details> accordion, chipy-design tint on open) ── */
+/* ── FAQ (native <details> accordion, Phonbot-design tint on open) ── */
 .faq-list{max-width:48rem;margin:0 auto;display:flex;flex-direction:column;gap:.75rem}
 .faq-item{border-radius:1rem;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.02);overflow:hidden;transition:all .3s}
 .faq-item[open]{background:rgba(249,115,22,.05);border-color:rgba(249,115,22,.2)}
@@ -736,13 +736,9 @@ function buildPage(d) {
       const m = cleaned.match(/^([^:]+):\s*(.*)$/);
       const name = m ? m[1].trim() : (line.speaker === 'user' ? 'Anrufer' : 'Phonbot');
       const body = m ? m[2].trim() : cleaned;
-      // Bot avatar uses the SAME Chipy artwork as the nav logo — same
-      // viewBox (0 8 100 92), same radialGradient refs (#ch / #cc / #ce),
-      // which are defined once in _nav.mjs's FOX_LOGO_SVG at the top of
-      // every page. Multiple bot turns share those defs, no duplication.
       const avatar = line.speaker === 'user'
         ? `<div class="avatar" aria-hidden="true">${icon('phone', 14)}</div>`
-        : `<div class="avatar" aria-hidden="true"><svg viewBox="0 8 100 92" width="40" height="40"><circle cx="28" cy="22" r="9" fill="#D49B12"/><circle cx="28" cy="22" r="5.5" fill="#E8B32D"/><circle cx="72" cy="22" r="9" fill="#D49B12"/><circle cx="72" cy="22" r="5.5" fill="#E8B32D"/><circle cx="50" cy="55" r="38" fill="url(#ch)"/><ellipse cx="14" cy="62" rx="12" ry="11" fill="url(#cc)"/><ellipse cx="86" cy="62" rx="12" ry="11" fill="url(#cc)"/><circle cx="36" cy="50" r="13" fill="white"/><circle cx="36" cy="50" r="10" fill="url(#ce)"/><ellipse cx="36" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="40" cy="46" r="3" fill="white"/><circle cx="64" cy="50" r="13" fill="white"/><circle cx="64" cy="50" r="10" fill="url(#ce)"/><ellipse cx="64" cy="50" rx="6" ry="6" fill="#1C1917"/><circle cx="68" cy="46" r="3" fill="white"/><ellipse cx="50" cy="64" rx="3" ry="2.2" fill="#B45309"/><path d="M44 68 Q50 73 56 68" stroke="#8B4513" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg></div>`;
+        : `<div class="avatar" aria-hidden="true"><img src="/brand/phonbot-crystal-icon-cropped.png" alt=""></div>`;
       return `<div class="msg ${line.speaker}">${avatar}<div class="bubble"><span class="name">${name}</span>${body}</div></div>`;
     })
     .join('\n      ');
@@ -900,7 +896,7 @@ ${NAV_HTML}
     <p class="subtitle">${d.subtitle}</p>
     <div class="cta-row">
       <a href="/?page=register" class="btn btn-primary">Kostenlos testen</a>
-      <a href="${DEMO_PHONE_HREF}" class="btn btn-ghost">${icon('phone', 18)}<span style="margin-left:.5rem">Chipy live anrufen</span></a>
+      <a href="${DEMO_PHONE_HREF}" class="btn btn-ghost">${icon('phone', 18)}<span style="margin-left:.5rem">Phonbot live anrufen</span></a>
     </div>
     <div class="trust-line">✓ Kostenlos starten · ✓ Sofort einsatzbereit · ✓ DSGVO-fokussiert, AVV verfügbar</div>
   </div>
@@ -912,14 +908,14 @@ ${NAV_HTML}
     <div class="dialogue">
       <div class="dialogue-header">
         <span class="dot" aria-hidden="true"></span>
-        <span>Live-Anruf · Chipy</span>
+        <span>Live-Anruf · Phonbot</span>
         <span class="duration">${callDuration}</span>
       </div>
       ${dialogue}
     </div>
     <p class="dialogue-note">${d.dialogueNote}</p>
     <div style="text-align:center;margin-top:2rem">
-      <a href="${DEMO_PHONE_HREF}" class="btn btn-ghost btn-sm">${icon('phone', 18)}<span style="margin-left:.5rem">Chipy live am Telefon hören: ${DEMO_PHONE_LABEL}</span></a>
+      <a href="${DEMO_PHONE_HREF}" class="btn btn-ghost btn-sm">${icon('phone', 18)}<span style="margin-left:.5rem">Phonbot live am Telefon hören: ${DEMO_PHONE_LABEL}</span></a>
     </div>
   </div>
 </section>
@@ -927,7 +923,7 @@ ${NAV_HTML}
 <section>
   <div class="container">
     <h2>Typische Anrufe — <span class="accent">automatisch bearbeitet</span></h2>
-    <p class="section-lead">Was Chipy auf deiner Nummer ab Tag 1 übernimmt.</p>
+    <p class="section-lead">Was Phonbot auf deiner Nummer ab Tag 1 übernimmt.</p>
     <div class="features">
       ${features}
     </div>
@@ -970,7 +966,7 @@ ${disclaimerBlock}
     <p class="section-lead">Registrierung in unter 2 Minuten · Keine Kreditkarte · Monatlich kündbar.</p>
     <div class="cta-row">
       <a href="/?page=register" class="btn btn-primary">Jetzt einrichten</a>
-      <a href="${DEMO_PHONE_HREF}" class="btn btn-ghost">Erst Chipy anrufen</a>
+      <a href="${DEMO_PHONE_HREF}" class="btn btn-ghost">Erst Phonbot anrufen</a>
     </div>
   </div>
 </section>

@@ -24,7 +24,7 @@ Sprachen: Über 30 Sprachen. Native Stimmen u. a. für Deutsch (primär, nativ t
 
 **Headline**: Nie wieder einen Anruf verpassen.
 
-**Subheadline**: chipy (das KI-Maskottchen) beantwortet Anrufe, bucht Termine und lernt mit jedem Gespräch dazu.
+**Subheadline**: Phonbot beantwortet Anrufe, bucht Termine und lernt mit jedem Gespräch dazu.
 
 **Trust-Bar** (unter Hero):
 - In 2 Minuten live

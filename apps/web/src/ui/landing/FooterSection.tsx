@@ -15,7 +15,7 @@ export function FooterSection({ onShowLegal, onGoToContact }: FooterSectionProps
           {/* Brand */}
           <div className="sm:col-span-2 lg:col-span-1">
             <PhonbotBrand size="sm" />
-            <p className="text-xs text-white/60 mt-2 leading-relaxed">Chipy — dein KI-Telefonassistent.<br />Immer erreichbar.</p>
+            <p className="text-xs text-white/60 mt-2 leading-relaxed">Phonbot — dein KI-Telefonassistent.<br />Immer erreichbar.</p>
           </div>
 
           {/* Produkt */}

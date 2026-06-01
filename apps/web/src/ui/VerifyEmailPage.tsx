@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { verifyEmail } from '../lib/api.js';
-import { FoxLogo } from './FoxLogo.js';
+import { PhonbotBrand } from './FoxLogo.js';
 
 type VerifyState = 'loading' | 'success' | 'error';
 
@@ -38,20 +38,7 @@ export function VerifyEmailPage() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-[#0A0A0F] text-white px-4">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center gap-3 mb-8">
-          <FoxLogo size="lg" glow />
-          <span className="text-xl font-black tracking-tight">
-            <span className="text-white">Phon</span>
-            <span
-              style={{
-                background: 'linear-gradient(135deg,#F97316,#06B6D4)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-              }}
-            >
-              bot
-            </span>
-          </span>
+          <PhonbotBrand size="md" />
         </div>
 
         <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 text-center shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
@@ -84,8 +71,8 @@ export function VerifyEmailPage() {
             <>
               <div className="text-3xl mb-4">!</div>
               <h1 className="text-lg font-bold mb-2">Link konnte nicht bestaetigt werden</h1>
-              <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 my-5">
-                <p className="text-red-200 text-sm">{error}</p>
+              <div className="my-5 rounded-xl border border-orange-400/20 bg-orange-500/10 px-4 py-3">
+                <p className="text-sm text-orange-100/80">{error}</p>
               </div>
               <p className="text-white/45 text-sm mb-6">
                 Logge dich ein und sende dir die Bestaetigungs-E-Mail erneut. Falls du schon verifiziert bist,
