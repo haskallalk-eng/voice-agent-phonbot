@@ -126,5 +126,32 @@ export function evaluateToolPolicy(input: PolicyInput): PolicyDecision {
     }
   }
 
+  if (toolName === 'ticket_create') {
+    if (!hasIdentity(input)) {
+      return reject(
+        'CONTACT_REQUIRED',
+        'Ein Ticket braucht einen sicheren Kontaktweg fuer Rueckfragen.',
+        'Frage nach Telefonnummer oder E-Mail und bestaetige den Kontaktweg kurz.',
+      );
+    }
+  }
+
+  if (toolName === 'customer_upsert') {
+    if (!hasStrongIdentity(input)) {
+      return reject(
+        'STRONG_IDENTITY_REQUIRED',
+        'Kundendaten duerfen nur mit sicherer Identitaet gespeichert werden.',
+        'Nutze die verifizierte Anrufernummer oder eine bestaetigte E-Mail, bevor du Kundendaten speicherst.',
+      );
+    }
+    if (!anyStringValue(args, ['customerName', 'customer_name', 'name'])) {
+      return reject(
+        'CUSTOMER_NAME_REQUIRED',
+        'Es fehlt der Name fuer den Kundendatensatz.',
+        'Frage nach dem Namen und speichere erst danach.',
+      );
+    }
+  }
+
   return { allowed: true };
 }

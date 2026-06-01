@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.stubEnv('NODE_ENV', 'test');
 vi.stubEnv('WEBHOOK_BASE_URL', 'https://api.phonbot.test');
@@ -81,6 +84,10 @@ vi.mock('../twilio-openai-bridge.js', () => ({ triggerBridgeCall: vi.fn() }));
 
 const { deployToRetell } = await import('../agent-config.js');
 
+const canaryArtifactHash = 'a'.repeat(64);
+const primaryArtifactHash = 'b'.repeat(64);
+const tempDirs: string[] = [];
+
 type ConfigArg = Parameters<typeof deployToRetell>[0];
 
 function cfg(overrides: Partial<ConfigArg> = {}): ConfigArg {
@@ -110,10 +117,61 @@ function cfg(overrides: Partial<ConfigArg> = {}): ConfigArg {
   } as unknown as ConfigArg;
 }
 
+function writePromotionAttestation(kind: 'canary' | 'primary', input: {
+  artifactId: string;
+  artifactSha256: string;
+  decision: string;
+}) {
+  const dir = mkdtempSync(join(tmpdir(), 'own-kb-attestation-'));
+  tempDirs.push(dir);
+  const file = join(dir, `${kind}.json`);
+  writeFileSync(file, JSON.stringify({
+    artifactId: input.artifactId,
+    artifactSha256: input.artifactSha256,
+    decision: input.decision,
+    promotionEvidenceUsable: true,
+  }));
+  vi.stubEnv(kind === 'canary'
+    ? 'OWN_KB_CANARY_APPROVED_0_5B_ATTESTATION_PATH'
+    : 'OWN_KB_PRIMARY_APPROVED_0_5B_ATTESTATION_PATH', file);
+}
+
 describe('deployToRetell callback privacy sync', () => {
   beforeEach(() => {
     mockUpdateLLM.mockClear();
     mockUpdateAgent.mockClear();
+    vi.stubEnv('OWN_KB_SEARCH_ENABLED', 'false');
+    vi.stubEnv('OWN_KB_ROLLOUT_ALLOW_ALL', 'false');
+    vi.stubEnv('OWN_KB_ROLLOUT_ALLOWED_ORG_IDS', '');
+    vi.stubEnv('OWN_KB_ROLLOUT_ALLOWED_TENANT_IDS', '');
+    vi.stubEnv('OWN_KB_ROLLOUT_ALLOWED_AGENT_IDS', '');
+    vi.stubEnv('OWN_KB_CANARY_DEPLOY_UNLOCKED', 'false');
+    vi.stubEnv('OWN_KB_CANARY_APPROVED_0_5B_ARTIFACT_ID', '');
+    vi.stubEnv('OWN_KB_CANARY_APPROVED_0_5B_ARTIFACT_SHA256', '');
+    vi.stubEnv('OWN_KB_CANARY_APPROVED_0_5B_DECISION', '');
+    vi.stubEnv('OWN_KB_CANARY_APPROVED_0_5B_ATTESTATION_PATH', '');
+    vi.stubEnv('OWN_KB_PRIMARY_DEPLOY_UNLOCKED', 'false');
+    vi.stubEnv('OWN_KB_PRIMARY_APPROVED_0_5B_ARTIFACT_ID', '');
+    vi.stubEnv('OWN_KB_PRIMARY_APPROVED_0_5B_ARTIFACT_SHA256', '');
+    vi.stubEnv('OWN_KB_PRIMARY_APPROVED_0_5B_DECISION', '');
+    vi.stubEnv('OWN_KB_PRIMARY_APPROVED_0_5B_ATTESTATION_PATH', '');
+    vi.stubEnv('OWN_KB_PRIMARY_CANARY_WITHOUT_P0_DAYS', '0');
+    vi.stubEnv('OWN_KB_PRIMARY_RETELL_STANDBY_DAYS', '0');
+    vi.stubEnv('OWN_KB_PRIMARY_NO_UNRESOLVED_P1', 'false');
+    vi.stubEnv('OWN_KB_PRIMARY_LATENCY_GATES_PASSED', 'false');
+    vi.stubEnv('OWN_KB_PRIMARY_QUALITY_GATES_PASSED', 'false');
+    vi.stubEnv('OWN_KB_PRIMARY_SAFETY_GATES_PASSED', 'false');
+    vi.stubEnv('OWN_KB_PRIMARY_RETELL_STANDBY_READY', 'false');
+    vi.stubEnv('OWN_KB_PRIMARY_ROLLBACK_TESTED', 'false');
+    vi.stubEnv('OWN_KB_PRIMARY_KILL_SWITCH_TESTED', 'false');
+    vi.stubEnv('OWN_KB_PRIMARY_PRODUCT_KPI_GATES_PASSED', 'false');
+    vi.stubEnv('OWN_KB_PRIMARY_EXCEPTION_PATH_SLO_REPORTED', 'false');
+  });
+
+  afterEach(() => {
+    for (const dir of tempDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('updates existing callback agents to basic storage when retention is disabled', async () => {
@@ -147,5 +205,146 @@ describe('deployToRetell callback privacy sync', () => {
         dataStorageRetentionDays: 7,
       }),
     );
+  });
+
+  it('rejects Own-KB primary deploys outside the server-side rollout allowlist', async () => {
+    vi.stubEnv('OWN_KB_SEARCH_ENABLED', 'true');
+
+    await expect(deployToRetell(cfg({ kbProvider: 'own_kb_primary' }), 'org-1'))
+      .rejects.toThrow('OWN_KB_ROLLOUT_NOT_ALLOWED');
+  });
+
+  it('rejects Own-KB primary deploys when primary promotion gates are missing even if allowlisted', async () => {
+    vi.stubEnv('OWN_KB_SEARCH_ENABLED', 'true');
+    vi.stubEnv('OWN_KB_ROLLOUT_ALLOWED_ORG_IDS', 'org-1');
+
+    await expect(deployToRetell(cfg({ kbProvider: 'own_kb_primary' }), 'org-1'))
+      .rejects.toThrow('OWN_KB_PRIMARY_PROMOTION_GATES_NOT_PASSED');
+    expect(mockUpdateLLM).not.toHaveBeenCalled();
+    expect(mockUpdateAgent).not.toHaveBeenCalledWith('agent-main', expect.anything());
+  });
+
+  it('rejects Own-KB canary deploys when canary promotion gates are missing even if allowlisted', async () => {
+    vi.stubEnv('OWN_KB_SEARCH_ENABLED', 'true');
+    vi.stubEnv('OWN_KB_ROLLOUT_ALLOWED_ORG_IDS', 'org-1');
+
+    await expect(deployToRetell(cfg({ kbProvider: 'own_kb_shadow', canaryEnabled: true }), 'org-1'))
+      .rejects.toThrow('OWN_KB_CANARY_PROMOTION_GATES_NOT_PASSED');
+    expect(mockUpdateLLM).not.toHaveBeenCalled();
+    expect(mockUpdateAgent).not.toHaveBeenCalledWith('agent-main', expect.anything());
+  });
+
+  it('rejects Own-KB primary deploys when the 0.5B artifact evidence is only a boolean-like flag', async () => {
+    vi.stubEnv('OWN_KB_SEARCH_ENABLED', 'true');
+    vi.stubEnv('OWN_KB_ROLLOUT_ALLOWED_ORG_IDS', 'org-1');
+    vi.stubEnv('OWN_KB_CANARY_DEPLOY_UNLOCKED', 'true');
+    vi.stubEnv('OWN_KB_CANARY_APPROVED_0_5B_ARTIFACT_ID', '0.5b-canary-report-2026-05-30');
+    vi.stubEnv('OWN_KB_CANARY_APPROVED_0_5B_ARTIFACT_SHA256', canaryArtifactHash);
+    vi.stubEnv('OWN_KB_CANARY_APPROVED_0_5B_DECISION', 'owkb_primary_candidate');
+    writePromotionAttestation('canary', {
+      artifactId: '0.5b-canary-report-2026-05-30',
+      artifactSha256: canaryArtifactHash,
+      decision: 'owkb_primary_candidate',
+    });
+    vi.stubEnv('OWN_KB_PRIMARY_DEPLOY_UNLOCKED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_APPROVED_0_5B_ARTIFACT_ID', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_APPROVED_0_5B_ARTIFACT_SHA256', primaryArtifactHash);
+    vi.stubEnv('OWN_KB_PRIMARY_APPROVED_0_5B_DECISION', 'owkb_primary_candidate');
+    vi.stubEnv('OWN_KB_PRIMARY_CANARY_WITHOUT_P0_DAYS', '14');
+    vi.stubEnv('OWN_KB_PRIMARY_RETELL_STANDBY_DAYS', '14');
+    vi.stubEnv('OWN_KB_PRIMARY_NO_UNRESOLVED_P1', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_LATENCY_GATES_PASSED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_QUALITY_GATES_PASSED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_SAFETY_GATES_PASSED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_RETELL_STANDBY_READY', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_ROLLBACK_TESTED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_KILL_SWITCH_TESTED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_PRODUCT_KPI_GATES_PASSED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_EXCEPTION_PATH_SLO_REPORTED', 'true');
+
+    await expect(deployToRetell(cfg({ kbProvider: 'own_kb_primary' }), 'org-1'))
+      .rejects.toThrow('OWN_KB_PRIMARY_PROMOTION_GATES_NOT_PASSED');
+    expect(mockUpdateLLM).not.toHaveBeenCalled();
+  });
+
+  it('allows Own-KB primary deploys only when allowlist and primary promotion gates pass', async () => {
+    vi.stubEnv('OWN_KB_SEARCH_ENABLED', 'true');
+    vi.stubEnv('OWN_KB_ROLLOUT_ALLOWED_ORG_IDS', 'org-1');
+    vi.stubEnv('OWN_KB_CANARY_DEPLOY_UNLOCKED', 'true');
+    vi.stubEnv('OWN_KB_CANARY_APPROVED_0_5B_ARTIFACT_ID', '0.5b-canary-report-2026-05-30');
+    vi.stubEnv('OWN_KB_CANARY_APPROVED_0_5B_ARTIFACT_SHA256', canaryArtifactHash);
+    vi.stubEnv('OWN_KB_CANARY_APPROVED_0_5B_DECISION', 'owkb_primary_candidate');
+    writePromotionAttestation('canary', {
+      artifactId: '0.5b-canary-report-2026-05-30',
+      artifactSha256: canaryArtifactHash,
+      decision: 'owkb_primary_candidate',
+    });
+    vi.stubEnv('OWN_KB_PRIMARY_DEPLOY_UNLOCKED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_APPROVED_0_5B_ARTIFACT_ID', '0.5b-report-2026-05-30');
+    vi.stubEnv('OWN_KB_PRIMARY_APPROVED_0_5B_ARTIFACT_SHA256', primaryArtifactHash);
+    vi.stubEnv('OWN_KB_PRIMARY_APPROVED_0_5B_DECISION', 'owkb_primary_candidate');
+    writePromotionAttestation('primary', {
+      artifactId: '0.5b-report-2026-05-30',
+      artifactSha256: primaryArtifactHash,
+      decision: 'owkb_primary_candidate',
+    });
+    vi.stubEnv('OWN_KB_PRIMARY_CANARY_WITHOUT_P0_DAYS', '14');
+    vi.stubEnv('OWN_KB_PRIMARY_RETELL_STANDBY_DAYS', '14');
+    vi.stubEnv('OWN_KB_PRIMARY_NO_UNRESOLVED_P1', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_LATENCY_GATES_PASSED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_QUALITY_GATES_PASSED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_SAFETY_GATES_PASSED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_RETELL_STANDBY_READY', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_ROLLBACK_TESTED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_KILL_SWITCH_TESTED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_PRODUCT_KPI_GATES_PASSED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_EXCEPTION_PATH_SLO_REPORTED', 'true');
+
+    const deployed = await deployToRetell(cfg({
+      kbProvider: 'own_kb_primary',
+      retellKnowledgeBaseId: 'kb-standby',
+      knowledgeBaseSignature: 'sig-standby',
+    } as Partial<ConfigArg>), 'org-1');
+
+    expect(mockUpdateLLM).toHaveBeenCalled();
+    expect((deployed as Record<string, unknown>).retellKnowledgeBaseId).toBe('kb-standby');
+    expect((deployed as Record<string, unknown>).knowledgeBaseSignature).toBe('sig-standby');
+    const llmToolsUpdate = mockUpdateLLM.mock.calls.find((call) =>
+      JSON.stringify(call[1]).includes('knowledge_search'),
+    );
+    expect(llmToolsUpdate).toBeTruthy();
+  });
+
+  it('rejects Own-KB primary deploys when primary and canary artifact evidence are identical', async () => {
+    vi.stubEnv('OWN_KB_SEARCH_ENABLED', 'true');
+    vi.stubEnv('OWN_KB_ROLLOUT_ALLOWED_ORG_IDS', 'org-1');
+    vi.stubEnv('OWN_KB_CANARY_DEPLOY_UNLOCKED', 'true');
+    vi.stubEnv('OWN_KB_CANARY_APPROVED_0_5B_ARTIFACT_ID', '0.5b-same-report-2026-05-30');
+    vi.stubEnv('OWN_KB_CANARY_APPROVED_0_5B_ARTIFACT_SHA256', canaryArtifactHash);
+    vi.stubEnv('OWN_KB_CANARY_APPROVED_0_5B_DECISION', 'owkb_primary_candidate');
+    writePromotionAttestation('canary', {
+      artifactId: '0.5b-same-report-2026-05-30',
+      artifactSha256: canaryArtifactHash,
+      decision: 'owkb_primary_candidate',
+    });
+    vi.stubEnv('OWN_KB_PRIMARY_DEPLOY_UNLOCKED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_APPROVED_0_5B_ARTIFACT_ID', '0.5b-same-report-2026-05-30');
+    vi.stubEnv('OWN_KB_PRIMARY_APPROVED_0_5B_ARTIFACT_SHA256', canaryArtifactHash);
+    vi.stubEnv('OWN_KB_PRIMARY_APPROVED_0_5B_DECISION', 'owkb_primary_candidate');
+    vi.stubEnv('OWN_KB_PRIMARY_CANARY_WITHOUT_P0_DAYS', '14');
+    vi.stubEnv('OWN_KB_PRIMARY_RETELL_STANDBY_DAYS', '14');
+    vi.stubEnv('OWN_KB_PRIMARY_NO_UNRESOLVED_P1', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_LATENCY_GATES_PASSED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_QUALITY_GATES_PASSED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_SAFETY_GATES_PASSED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_RETELL_STANDBY_READY', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_ROLLBACK_TESTED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_KILL_SWITCH_TESTED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_PRODUCT_KPI_GATES_PASSED', 'true');
+    vi.stubEnv('OWN_KB_PRIMARY_EXCEPTION_PATH_SLO_REPORTED', 'true');
+
+    await expect(deployToRetell(cfg({ kbProvider: 'own_kb_primary' }), 'org-1'))
+      .rejects.toThrow('OWN_KB_PRIMARY_PROMOTION_GATES_NOT_PASSED');
+    expect(mockUpdateLLM).not.toHaveBeenCalled();
   });
 });

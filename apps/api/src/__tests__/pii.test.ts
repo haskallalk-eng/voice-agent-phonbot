@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { redactPII } from '../pii.js';
+import {
+  preserveForUserConfirmation,
+  redactForEval,
+  redactForLog,
+  redactForPrompt,
+  redactForShadow,
+  redactForToolArgument,
+  redactForToolResult,
+  redactForTrace,
+  redactPII,
+  redactStructuredPII,
+} from '../pii.js';
 
 describe('PII redaction', () => {
   it('redacts email addresses', () => {
@@ -26,7 +37,7 @@ describe('PII redaction', () => {
   });
 
   it('redacts German street addresses', () => {
-    expect(redactPII('Wohnt in Musterstraße 12')).toBe('Wohnt in [ADDRESS]');
+    expect(redactPII('Wohnt in Musterstrasse 12')).toBe('Wohnt in [ADDRESS]');
     expect(redactPII('Hauptstr. 5a')).toContain('[ADDRESS]');
   });
 
@@ -53,5 +64,59 @@ describe('PII redaction', () => {
     expect(result).toContain('[IBAN]');
     expect(result).not.toContain('max@test.de');
     expect(result).not.toContain('+49 176');
+  });
+
+  it('exposes purpose-specific redaction helpers for logs, traces, evals, prompts, and tools', () => {
+    const input = 'Mail max@test.de, Telefon 0176-12345678, IBAN DE89370400440532013000, DOB 12.03.1985.';
+    for (const redact of [
+      redactForLog,
+      redactForTrace,
+      redactForEval,
+      redactForShadow,
+      redactForPrompt,
+      redactForToolArgument,
+      redactForToolResult,
+    ]) {
+      const output = redact(input);
+      expect(output).toContain('[EMAIL]');
+      expect(output).toContain('[PHONE]');
+      expect(output).toContain('[IBAN]');
+      expect(output).toContain('[DOB]');
+      expect(output).not.toContain('max@test.de');
+      expect(output).not.toContain('0176-12345678');
+    }
+  });
+
+  it('handles mixed German phrasing across common PII classes', () => {
+    const input = 'Meine Mail ist eva@test.de, Telefon 030 12345678, Adresse Hauptstr. 5a, Karte 4111 1111 1111 1111.';
+    const output = redactForEval(input);
+    expect(output).toContain('[EMAIL]');
+    expect(output).toContain('[PHONE]');
+    expect(output).toContain('[ADDRESS]');
+    expect(output).toContain('[CC]');
+    expect(output).not.toContain('eva@test.de');
+    expect(output).not.toContain('4111 1111 1111 1111');
+  });
+
+  it('preserves voice user-visible confirmation only when policy allows it', () => {
+    const input = 'Ich bestaetige max@test.de und 0176-12345678.';
+    expect(preserveForUserConfirmation(input, { policyAllowsUserVisibleConfirmation: true })).toBe(input);
+    const blocked = preserveForUserConfirmation(input, { policyAllowsUserVisibleConfirmation: false });
+    expect(blocked).toContain('[EMAIL]');
+    expect(blocked).toContain('[PHONE]');
+  });
+
+  it('redacts nested tool payloads by purpose', () => {
+    const payload = {
+      customer: { email: 'max@test.de', phone: '+49 151 12345678' },
+      notes: ['Adresse Musterstrasse 12', 'IBAN DE89370400440532013000'],
+      ok: true,
+    };
+    const output = redactStructuredPII(payload, 'tool_result');
+    expect(output.customer.email).toBe('[EMAIL]');
+    expect(output.customer.phone).toBe('[PHONE]');
+    expect(output.notes[0]).toBe('Adresse [ADDRESS]');
+    expect(output.notes[1]).toBe('IBAN [IBAN]');
+    expect(output.ok).toBe(true);
   });
 });

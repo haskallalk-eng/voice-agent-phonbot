@@ -2,8 +2,9 @@ import crypto from 'node:crypto';
 import dns from 'node:dns';
 import http, { type IncomingMessage } from 'node:http';
 import https from 'node:https';
-import { createKnowledgeBase, deleteKnowledgeBase, waitForKnowledgeBaseComplete } from './retell.js';
+import { createKnowledgeBase, waitForKnowledgeBaseComplete } from './retell.js';
 import { pool } from './db.js';
+import { deleteKnowledgeBaseWithRetry, protectRetellKnowledgeBaseWindow } from './retell-kb-cleanup.js';
 import { isPrivateHost, isPrivateResolved, isBlockedPort } from './ssrf-guard.js';
 import {
   customerModuleActiveForAgentConfig,
@@ -16,6 +17,8 @@ import { ocrPdfWithOpenAI, type KnowledgeOcrResult } from './knowledge-ocr.js';
 
 export type KnowledgeSource = {
   id: string;
+  orgId?: string;
+  tenantId?: string;
   type: 'url' | 'pdf' | 'text';
   name: string;
   content: string;
@@ -121,6 +124,7 @@ const MAX_URL_SNAPSHOT_CHARS = 50000;
 const MAX_URL_SCAN_BYTES = 300000;
 const URL_FETCH_TIMEOUT_MS = 8000;
 const MAX_URL_REDIRECTS = 3;
+const RETELL_PENDING_KB_PROTECTION_DAYS = Math.max(1, Math.min(14, Number(process.env.RETELL_PENDING_KB_PROTECTION_DAYS ?? 3) || 3));
 
 const KNOWLEDGE_RETRIEVAL_PRESETS: Record<KnowledgeRetrievalMode, Omit<KnowledgeRetrievalSettings, 'mode'>> = {
   strict: { topK: 2, filterScore: 0.72 },
@@ -359,6 +363,10 @@ function canonicalFactsPolicyError(textForScanning: string): string | null {
   if (textForScanning && containsPromptInjection(textForScanning)) return 'PROMPT_INJECTION_DETECTED';
   if (textForScanning && containsCanonicalSensitiveData(textForScanning)) return 'PII_DETECTED';
   return null;
+}
+
+export function canonicalBusinessFactsSafetyError(textForScanning: string): string | null {
+  return canonicalFactsPolicyError(textForScanning);
 }
 
 function externalOcrProcessorAllowed(): boolean {
@@ -829,7 +837,7 @@ export async function storeKnowledgePdf(input: {
   };
 }
 
-async function loadStoredKnowledgePdf(orgId: string, tenantId: string, source: KnowledgeSource): Promise<KnowledgeFile | null> {
+export async function loadStoredKnowledgePdf(orgId: string, tenantId: string, source: KnowledgeSource): Promise<KnowledgeFile | null> {
   if (!pool || !source.fileId) return null;
   const res = await pool.query(
     `SELECT filename, mime_type, size_bytes, sha256, data
@@ -1195,11 +1203,34 @@ export async function syncRetellKnowledgeBase<T extends Record<string, unknown>>
     files: payload.files,
     enableAutoRefresh: payload.enableAutoRefresh,
   });
+  if (orgId && tenantId) {
+    try {
+      await protectRetellKnowledgeBaseWindow({
+        knowledgeBaseId: kb.knowledge_base_id,
+        orgId,
+        tenantId,
+        reason: 'pending_deploy',
+        expiresAt: new Date(Date.now() + RETELL_PENDING_KB_PROTECTION_DAYS * 24 * 60 * 60 * 1000),
+        context: { source: 'syncRetellKnowledgeBase', knowledgeBaseName: knowledgeBaseName(config) },
+      });
+    } catch (err) {
+      await deleteKnowledgeBaseWithRetry(kb.knowledge_base_id, {
+        knowledgeBaseName: kb.knowledge_base_name,
+        context: { source: 'pending-protection-failed', knowledgeBaseName: kb.knowledge_base_name },
+      }).catch(() => {});
+      const wrapped = new Error('RETELL_KB_PROTECTION_FAILED') as Error & { cause?: unknown };
+      wrapped.cause = err;
+      throw wrapped;
+    }
+  }
   let readyKb;
   try {
     readyKb = await waitForKnowledgeBaseComplete(kb.knowledge_base_id);
   } catch (err) {
-    await Promise.resolve(deleteKnowledgeBase(kb.knowledge_base_id)).catch(() => {});
+    await deleteKnowledgeBaseWithRetry(kb.knowledge_base_id, {
+      knowledgeBaseName: kb.knowledge_base_name,
+      context: { source: 'readiness-failed', knowledgeBaseName: kb.knowledge_base_name },
+    }).catch(() => {});
     throw err;
   }
 

@@ -20,7 +20,6 @@ import {
   getLLM as retellGetLlm,
   deleteAgent as retellDeleteAgent,
   deleteLLM as retellDeleteLlm,
-  deleteKnowledgeBase as retellDeleteKnowledgeBase,
   updatePhoneNumber as retellUpdatePhoneNumber,
   DEFAULT_VOICE_ID,
   getDefaultRetellLlmModel,
@@ -45,7 +44,9 @@ import { PLANS, type PlanId } from './billing.js';
 import { invalidateInboundWebhooksCache } from './inbound-webhooks.js';
 import { isVoiceAllowedForOrg } from './voice-ownership.js';
 import { shortenRetellRetentionForAgentConfig } from './retell-retention.js';
+import { deleteKnowledgeBaseWithRetry, protectRetellKnowledgeBaseWindow } from './retell-kb-cleanup.js';
 import { summarizeRecentCallLatency } from './latency-stats.js';
+import { assertOwnKbRolloutAllowed, ownKbSearchCallableForConfig } from './own-kb-rollout.js';
 import {
   customerModuleActiveForAgentConfig,
   customerModuleStatus,
@@ -259,6 +260,13 @@ const AgentConfigSchema = z.object({
   // Retell AI references (set after first deploy)
   retellAgentId: z.string().optional(),
   retellLlmId: z.string().optional(),
+  voiceRuntime: z.enum(['retell', 'openai_realtime']).optional().default('retell'),
+  kbProvider: z.enum(['retell_kb', 'own_kb_shadow', 'own_kb_primary']).optional().default('retell_kb'),
+  ownKbVersion: z.string().optional(),
+  lastGoodKbVersion: z.string().optional(),
+  retellKbStandbyUntil: z.string().optional(),
+  shadowEnabled: z.boolean().optional().default(false),
+  canaryEnabled: z.boolean().optional().default(false),
 
   // Callback agent (separate Retell LLM+Agent used for outbound callbacks)
   retellCallbackAgentId: z.string().optional(),
@@ -268,6 +276,7 @@ const AgentConfigSchema = z.object({
 type AgentConfig = z.infer<typeof AgentConfigSchema>;
 
 const KNOWLEDGE_PDF_MAX_BYTES = 50 * 1024 * 1024;
+const RETELL_REPLACED_KB_STANDBY_DAYS = Math.max(1, Math.min(30, Number(process.env.RETELL_REPLACED_KB_STANDBY_DAYS ?? 14) || 14));
 
 type PromptDaySchedule = { enabled: boolean; start: string; end: string };
 type PromptWeekSchedule = Record<string, PromptDaySchedule>;
@@ -569,6 +578,7 @@ async function enforceVoiceAllowedForOrg(orgId: string, config: AgentConfig): Pr
 
 async function writeConfig(config: AgentConfig, orgId?: string, actorUserId?: string): Promise<AgentConfig> {
   const parsed = parseAgentConfig(config);
+  assertOwnKbRolloutAllowed(parsed, orgId);
   if (orgId) await enforceVoiceAllowedForOrg(orgId, parsed);
   const withIntegrations = await applyIntegrationEncryption(parsed, orgId);
   const normalized = await normalizeKnowledgeSources(withIntegrations as unknown as Record<string, unknown>) as AgentConfig;
@@ -743,7 +753,7 @@ function retellDataStorageRetentionDays(config: { recordCalls?: boolean; dataRet
 }
 
 /** Map our tool names to Retell custom function definitions. */
-export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): RetellTool[] {
+export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string, orgId?: string): RetellTool[] {
   const tools: RetellTool[] = [];
   const enabled = expandCalendarToolSet(config.tools);
   const signedQuery = buildToolAuthQuery(config.tenantId, config.retellAgentId);
@@ -772,6 +782,28 @@ export function buildRetellTools(config: AgentConfig, webhookBaseUrl: string): R
       url: `${webhookBaseUrl}/retell/tools/recording.declined?${signedQuery}`,
       execution_message_description: 'Ich respektiere den Widerspruch.',
       parameters: { type: 'object', properties: {} },
+    });
+  }
+
+  const ownKbCallable = ownKbSearchCallableForConfig(config, { orgId });
+  if (ownKbCallable) {
+    tools.push({
+      type: 'custom',
+      name: 'knowledge_search',
+      description: 'Search approved, current business knowledge. Read-only: use only for factual answers. Never use this tool to authorize bookings, customer lookup, payments, cancellations, deletions, retention changes, or other mutations.',
+      url: `${webhookBaseUrl}/retell/tools/knowledge.search?${signedQuery}`,
+      execution_message_description: 'Ich pruefe die Wissensbasis...',
+      parameters: {
+        type: 'object',
+        required: ['query'],
+        properties: {
+          query: { type: 'string', description: 'Short factual search query. Do not include orgId, tenantId, agentId, or callId.' },
+          intent: { type: 'string', description: 'faq, pricing, service, policy, hours, staff, or other.' },
+          topK: { type: 'number', description: 'Number of snippets to return, max 5.' },
+          mode: { type: 'string', enum: ['strict', 'balanced', 'broad'] },
+        },
+        additionalProperties: false,
+      },
     });
   }
 
@@ -1121,11 +1153,46 @@ function buildPostCallAnalysisData(config: AgentConfig): PostCallAnalysisField[]
 }
 
 export async function deployToRetell(config: AgentConfig, orgId?: string): Promise<AgentConfig> {
+  assertOwnKbRolloutAllowed(config, orgId);
   if (orgId) await enforceVoiceAllowedForOrg(orgId, config);
+  if (config.kbProvider === 'own_kb_primary' && process.env.OWN_KB_SEARCH_ENABLED !== 'true') {
+    throw new Error('OWN_KB_PRIMARY_REQUIRES_OWN_KB_SEARCH_ENABLED');
+  }
   const previousKnowledgeBaseId = typeof (config as Record<string, unknown>).retellKnowledgeBaseId === 'string'
     ? (config as Record<string, unknown>).retellKnowledgeBaseId as string
     : '';
-  const preparedConfig = await syncRetellKnowledgeBase(config as unknown as Record<string, unknown>, orgId) as AgentConfig;
+  const previousKnowledgeBaseSignature = typeof (config as Record<string, unknown>).knowledgeBaseSignature === 'string'
+    ? (config as Record<string, unknown>).knowledgeBaseSignature as string
+    : '';
+  if (config.kbProvider === 'own_kb_primary' && previousKnowledgeBaseId) {
+    const tenantId = typeof (config as Record<string, unknown>).tenantId === 'string'
+      ? (config as Record<string, unknown>).tenantId as string
+      : null;
+    const standbyUntil = new Date(Date.now() + RETELL_REPLACED_KB_STANDBY_DAYS * 24 * 60 * 60 * 1000);
+    await protectRetellKnowledgeBaseWindow({
+      knowledgeBaseId: previousKnowledgeBaseId,
+      orgId,
+      tenantId,
+      reason: 'rollback_standby',
+      expiresAt: standbyUntil,
+      context: {
+        previousKbId: previousKnowledgeBaseId,
+        currentKbId: previousKnowledgeBaseId,
+        source: 'own-kb-primary-deploy-standby',
+      },
+    }).catch((protectErr: Error) => {
+      const err = new Error('OWN_KB_PRIMARY_RETELL_STANDBY_PROTECTION_FAILED') as Error & { cause?: Error };
+      err.cause = protectErr;
+      throw err;
+    });
+  }
+  const preparedConfig = config.kbProvider === 'own_kb_primary'
+    ? { ...config } as AgentConfig
+    : await syncRetellKnowledgeBase(config as unknown as Record<string, unknown>, orgId) as AgentConfig;
+  if (config.kbProvider === 'own_kb_primary') {
+    delete (preparedConfig as Record<string, unknown>).retellKnowledgeBaseId;
+    delete (preparedConfig as Record<string, unknown>).knowledgeBaseSignature;
+  }
   const preparedKnowledgeBaseId = typeof (preparedConfig as Record<string, unknown>).retellKnowledgeBaseId === 'string'
     ? (preparedConfig as Record<string, unknown>).retellKnowledgeBaseId as string
     : '';
@@ -1140,10 +1207,12 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
   const promptConfig = await withCalendarOpeningHoursForPrompt(preparedConfig, orgId);
   const customerPrompt = buildAgentInstructions(promptConfig);
   const instructions = `${platformBaseline}\n\n${customerPrompt}`;
-  const retellTools = buildRetellTools(preparedConfig, webhookBase);
+  const retellTools = buildRetellTools(preparedConfig, webhookBase, orgId);
   const postCallAnalysisData = buildPostCallAnalysisData(preparedConfig);
   const technical = deriveTechnicalRuntimeSettings(preparedConfig as Parameters<typeof deriveTechnicalRuntimeSettings>[0]);
-  const knowledgeBaseId = (preparedConfig as Record<string, unknown>).retellKnowledgeBaseId as string | undefined;
+  const knowledgeBaseId = preparedConfig.kbProvider === 'own_kb_primary'
+    ? undefined
+    : (preparedConfig as Record<string, unknown>).retellKnowledgeBaseId as string | undefined;
   const knowledgeBaseIds = knowledgeBaseId ? [knowledgeBaseId] : [];
   const kbConfig = knowledgeBaseIds.length
     ? toRetellKbConfig((preparedConfig as Record<string, unknown>).knowledgeRetrieval)
@@ -1237,7 +1306,7 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
     });
     agentId = agent.agent_id;
     await updateLLM(llmId, {
-      tools: buildRetellTools({ ...preparedConfig, retellLlmId: llmId, retellAgentId: agentId }, webhookBase),
+      tools: buildRetellTools({ ...preparedConfig, retellLlmId: llmId, retellAgentId: agentId }, webhookBase, orgId),
     });
   } else {
     // Fresh deploy: create LLM first (agent needs llmId), then create agent.
@@ -1269,7 +1338,7 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
     });
     agentId = agent.agent_id;
     await updateLLM(llmId, {
-      tools: buildRetellTools({ ...preparedConfig, retellLlmId: llmId, retellAgentId: agentId }, webhookBase),
+      tools: buildRetellTools({ ...preparedConfig, retellLlmId: llmId, retellAgentId: agentId }, webhookBase, orgId),
     });
   }
 
@@ -1300,10 +1369,19 @@ export async function deployToRetell(config: AgentConfig, orgId?: string): Promi
     await Promise.all(callbackUpdates);
   }
 
-  return { ...preparedConfig, retellLlmId: llmId, retellAgentId: agentId };
+  const deployedConfig = { ...preparedConfig, retellLlmId: llmId, retellAgentId: agentId } as AgentConfig;
+  if (config.kbProvider === 'own_kb_primary' && previousKnowledgeBaseId) {
+    (deployedConfig as Record<string, unknown>).retellKnowledgeBaseId = previousKnowledgeBaseId;
+    if (previousKnowledgeBaseSignature) {
+      (deployedConfig as Record<string, unknown>).knowledgeBaseSignature = previousKnowledgeBaseSignature;
+    }
+  }
+  return deployedConfig;
   } catch (err) {
     if (preparedKnowledgeBaseId && preparedKnowledgeBaseId !== previousKnowledgeBaseId) {
-      await retellDeleteKnowledgeBase(preparedKnowledgeBaseId).catch((cleanupErr: Error) => {
+      await deleteKnowledgeBaseWithRetry(preparedKnowledgeBaseId, {
+        context: { orgId, knowledgeBaseId: preparedKnowledgeBaseId, source: 'deploy-error' },
+      }).catch((cleanupErr: Error) => {
         log.warn(
           {
             err: cleanupErr.message,
@@ -1474,7 +1552,11 @@ async function cleanupRetellDeployAfterPersistFailure(args: {
   }
 
   const cleanupTasks: Promise<unknown>[] = [];
-  if (currentKbId && currentKbId !== previousKbId) cleanupTasks.push(retellDeleteKnowledgeBase(currentKbId));
+  if (currentKbId && currentKbId !== previousKbId) {
+    cleanupTasks.push(deleteKnowledgeBaseWithRetry(currentKbId, {
+      context: { orgId: args.orgId, tenantId: args.tenantId, source: 'persist-failure' },
+    }));
+  }
   if (!previous.retellAgentId && typeof deployed.retellAgentId === 'string') cleanupTasks.push(retellDeleteAgent(deployed.retellAgentId));
   if (!previous.retellCallbackAgentId && typeof deployed.retellCallbackAgentId === 'string') cleanupTasks.push(retellDeleteAgent(deployed.retellCallbackAgentId));
   if (!previous.retellLlmId && typeof deployed.retellLlmId === 'string') cleanupTasks.push(retellDeleteLlm(deployed.retellLlmId));
@@ -1795,7 +1877,7 @@ export async function registerAgentConfig(app: FastifyInstance) {
     const promptConfig = await withCalendarOpeningHoursForPrompt(config, orgId);
     const platformBaseline = await loadPlatformBaseline();
     const webhookBase = process.env.WEBHOOK_BASE_URL?.replace(/\/$/, '') || 'https://preview.invalid';
-    const retellTools = buildRetellTools(promptConfig, webhookBase);
+    const retellTools = buildRetellTools(promptConfig, webhookBase, orgId);
     const toolDescriptions = retellTools
       .map((tool) => `- ${tool.name}: ${tool.description ?? 'Keine Beschreibung.'}`)
       .join('\n');
@@ -1994,6 +2076,30 @@ export async function registerAgentConfig(app: FastifyInstance) {
           message: 'Diese geklonte Stimme gehoert nicht zu deiner Organisation.',
         });
       }
+      if (e.message === 'OWN_KB_PRIMARY_REQUIRES_OWN_KB_SEARCH_ENABLED') {
+        return reply.status(400).send({
+          error: 'OWN_KB_PRIMARY_REQUIRES_OWN_KB_SEARCH_ENABLED',
+          message: 'Own-KB Primary darf erst deployt werden, wenn OWN_KB_SEARCH_ENABLED=true gesetzt ist.',
+        });
+      }
+      if (e.message === 'OWN_KB_ROLLOUT_NOT_ALLOWED') {
+        return reply.status(403).send({
+          error: 'OWN_KB_ROLLOUT_NOT_ALLOWED',
+          message: 'Own-KB Shadow/Canary/Primary ist fuer diese Organisation oder diesen Agenten nicht freigegeben.',
+        });
+      }
+      if (e.message === 'OWN_KB_CANARY_PROMOTION_GATES_NOT_PASSED') {
+        return reply.status(403).send({
+          error: 'OWN_KB_CANARY_PROMOTION_GATES_NOT_PASSED',
+          message: 'Own-KB Canary ist blockiert, bis 0.5B-Artefakt, Retell-Standby, Rollback, Kill-Switch, KPI- und Latenz-Gates bestanden sind.',
+        });
+      }
+      if (e.message === 'OWN_KB_PRIMARY_PROMOTION_GATES_NOT_PASSED') {
+        return reply.status(403).send({
+          error: 'OWN_KB_PRIMARY_PROMOTION_GATES_NOT_PASSED',
+          message: 'Own-KB Primary ist blockiert, bis 0.5B-Artefakt, Canary, Retell-Standby, Rollback, Kill-Switch, KPI- und Latenz-Gates bestanden sind.',
+        });
+      }
       if (e.statusCode === 409) return reply.status(409).send({ error: e.message });
       throw err;
     }
@@ -2036,6 +2142,24 @@ export async function registerAgentConfig(app: FastifyInstance) {
     });
     let deployed: AgentConfig;
     try {
+      const standbyKbId = typeof (serverIds as Record<string, unknown>).retellKnowledgeBaseId === 'string'
+        ? (serverIds as Record<string, unknown>).retellKnowledgeBaseId as string
+        : '';
+      if (body.kbProvider === 'own_kb_primary' && standbyKbId) {
+        const standbyUntil = new Date(Date.now() + RETELL_REPLACED_KB_STANDBY_DAYS * 24 * 60 * 60 * 1000);
+        await protectRetellKnowledgeBaseWindow({
+          knowledgeBaseId: standbyKbId,
+          orgId,
+          tenantId,
+          reason: 'rollback_standby',
+          expiresAt: standbyUntil,
+          context: { previousKbId: standbyKbId, currentKbId: standbyKbId, source: 'own-kb-primary-predeploy-standby' },
+        }).catch((protectErr: Error) => {
+          const err = new Error('OWN_KB_PRIMARY_RETELL_STANDBY_PROTECTION_FAILED') as Error & { cause?: Error };
+          err.cause = protectErr;
+          throw err;
+        });
+      }
       deployed = await deployToRetell(body, orgId);
     } catch (err) {
       const e = err as Error & { statusCode?: number };
@@ -2043,6 +2167,36 @@ export async function registerAgentConfig(app: FastifyInstance) {
         return reply.status(403).send({
           error: 'VOICE_NOT_ALLOWED',
           message: 'Diese geklonte Stimme gehoert nicht zu deiner Organisation.',
+        });
+      }
+      if (e.message === 'OWN_KB_ROLLOUT_NOT_ALLOWED') {
+        return reply.status(403).send({
+          error: 'OWN_KB_ROLLOUT_NOT_ALLOWED',
+          message: 'Own-KB Shadow/Canary/Primary ist fuer diese Organisation oder diesen Agenten nicht freigegeben.',
+        });
+      }
+      if (e.message === 'OWN_KB_CANARY_PROMOTION_GATES_NOT_PASSED') {
+        return reply.status(403).send({
+          error: 'OWN_KB_CANARY_PROMOTION_GATES_NOT_PASSED',
+          message: 'Own-KB Canary ist blockiert, bis 0.5B-Artefakt, Retell-Standby, Rollback, Kill-Switch, KPI- und Latenz-Gates bestanden sind.',
+        });
+      }
+      if (e.message === 'OWN_KB_PRIMARY_PROMOTION_GATES_NOT_PASSED') {
+        return reply.status(403).send({
+          error: 'OWN_KB_PRIMARY_PROMOTION_GATES_NOT_PASSED',
+          message: 'Own-KB Primary ist blockiert, bis 0.5B-Artefakt, Canary, Retell-Standby, Rollback, Kill-Switch, KPI- und Latenz-Gates bestanden sind.',
+        });
+      }
+      if (e.message === 'OWN_KB_PRIMARY_REQUIRES_OWN_KB_SEARCH_ENABLED') {
+        return reply.status(400).send({
+          error: 'OWN_KB_PRIMARY_REQUIRES_OWN_KB_SEARCH_ENABLED',
+          message: 'Own-KB Primary darf erst deployt werden, wenn OWN_KB_SEARCH_ENABLED=true gesetzt ist.',
+        });
+      }
+      if (e.message === 'OWN_KB_PRIMARY_RETELL_STANDBY_PROTECTION_FAILED') {
+        return reply.status(503).send({
+          error: 'OWN_KB_PRIMARY_RETELL_STANDBY_PROTECTION_FAILED',
+          message: 'Own-KB Primary ist blockiert, weil der Retell-KB Standby-Schutz nicht gespeichert werden konnte.',
         });
       }
       throw err;
@@ -2072,6 +2226,24 @@ export async function registerAgentConfig(app: FastifyInstance) {
           message: 'Diese geklonte Stimme gehoert nicht zu deiner Organisation.',
         });
       }
+      if (e.message === 'OWN_KB_ROLLOUT_NOT_ALLOWED') {
+        return reply.status(403).send({
+          error: 'OWN_KB_ROLLOUT_NOT_ALLOWED',
+          message: 'Own-KB Shadow/Canary/Primary ist fuer diese Organisation oder diesen Agenten nicht freigegeben.',
+        });
+      }
+      if (e.message === 'OWN_KB_CANARY_PROMOTION_GATES_NOT_PASSED') {
+        return reply.status(403).send({
+          error: 'OWN_KB_CANARY_PROMOTION_GATES_NOT_PASSED',
+          message: 'Own-KB Canary ist blockiert, bis 0.5B-Artefakt, Retell-Standby, Rollback, Kill-Switch, KPI- und Latenz-Gates bestanden sind.',
+        });
+      }
+      if (e.message === 'OWN_KB_PRIMARY_PROMOTION_GATES_NOT_PASSED') {
+        return reply.status(403).send({
+          error: 'OWN_KB_PRIMARY_PROMOTION_GATES_NOT_PASSED',
+          message: 'Own-KB Primary ist blockiert, bis 0.5B-Artefakt, Canary, Retell-Standby, Rollback, Kill-Switch, KPI- und Latenz-Gates bestanden sind.',
+        });
+      }
       if (e.statusCode === 409) return reply.status(409).send({ error: e.message });
       throw err;
     }
@@ -2085,10 +2257,38 @@ export async function registerAgentConfig(app: FastifyInstance) {
     const currentKbId = typeof (saved as unknown as Record<string, unknown>).retellKnowledgeBaseId === 'string'
       ? (saved as unknown as Record<string, unknown>).retellKnowledgeBaseId as string
       : '';
-    if (previousKbId && previousKbId !== currentKbId) {
-      retellDeleteKnowledgeBase(previousKbId).catch((err: Error) =>
-        req.log.warn({ err: err.message, orgId, tenantId, previousKbId, currentKbId }, 'agent-config/deploy: old Retell KB cleanup failed'),
+    if (previousKbId && saved.kbProvider === 'own_kb_primary') {
+      const standbyUntil = new Date(Date.now() + RETELL_REPLACED_KB_STANDBY_DAYS * 24 * 60 * 60 * 1000);
+      await protectRetellKnowledgeBaseWindow({
+        knowledgeBaseId: previousKbId,
+        orgId,
+        tenantId,
+        reason: 'rollback_standby',
+        expiresAt: standbyUntil,
+        context: { previousKbId, currentKbId, source: 'own-kb-primary-standby' },
+      }).catch((err: Error) =>
+        req.log.warn({ err: err.message, orgId, tenantId, previousKbId, currentKbId }, 'agent-config/deploy: failed to protect Retell KB standby for Own-KB primary'),
       );
+    } else if (previousKbId && previousKbId !== currentKbId) {
+      if (process.env.RETELL_DELETE_REPLACED_KB_IMMEDIATELY === 'true') {
+        await deleteKnowledgeBaseWithRetry(previousKbId, {
+          context: { orgId, tenantId, previousKbId, currentKbId, source: 'deploy-replaced-kb' },
+        }).catch((err: Error) =>
+          req.log.warn({ err: err.message, orgId, tenantId, previousKbId, currentKbId }, 'agent-config/deploy: old Retell KB cleanup failed after retries'),
+        );
+      } else {
+        const standbyUntil = new Date(Date.now() + RETELL_REPLACED_KB_STANDBY_DAYS * 24 * 60 * 60 * 1000);
+        await protectRetellKnowledgeBaseWindow({
+          knowledgeBaseId: previousKbId,
+          orgId,
+          tenantId,
+          reason: 'rollback_standby',
+          expiresAt: standbyUntil,
+          context: { previousKbId, currentKbId, source: 'deploy-replaced-kb' },
+        }).catch((err: Error) =>
+          req.log.warn({ err: err.message, orgId, tenantId, previousKbId, currentKbId }, 'agent-config/deploy: failed to protect old Retell KB standby window'),
+        );
+      }
     }
     return { ok: true, config: toClientConfig(saved), retellAgentId: saved.retellAgentId, retellLlmId: saved.retellLlmId };
     });
@@ -2153,7 +2353,9 @@ export async function registerAgentConfig(app: FastifyInstance) {
     const cleanup = await Promise.allSettled([
       ...connectedNumbers.map((number) => retellUpdatePhoneNumber(number, { inboundAgentId: null })),
       ...retellAgentIds.map((id) => retellDeleteAgent(id)),
-      ...retellKnowledgeBaseIds.map((id) => retellDeleteKnowledgeBase(id)),
+      ...retellKnowledgeBaseIds.map((id) => deleteKnowledgeBaseWithRetry(id, {
+        context: { orgId, tenantId, source: 'agent-delete' },
+      })),
     ]);
     cleanup.push(...await Promise.allSettled(retellLlmIds.map((id) => retellDeleteLlm(id))));
     const cleanupFailed = cleanup.filter((r) => r.status === 'rejected').length;

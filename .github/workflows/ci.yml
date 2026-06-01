@@ -30,6 +30,12 @@ jobs:
       - name: Typecheck Web
         run: cd apps/web && pnpm typecheck
 
+      - name: Check Supabase migrations
+        run: node scripts/check-supabase-migrations.mjs
+
+      - name: Test API
+        run: cd apps/api && pnpm test -- --run
+
   build:
     name: Build
     runs-on: ubuntu-latest

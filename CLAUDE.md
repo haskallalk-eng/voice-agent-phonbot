@@ -1,3 +1,25 @@
+# Non-Authoritative For Codex
+
+This file is legacy Claude Code guidance. It is not authoritative for Codex
+architecture, planning, Retell-KB/Own-KB rollout decisions, or latency SLOs.
+For Codex implementation authority, use `AGENTS.md` and `PLANS.md`.
+If this file conflicts with `AGENTS.md` or `PLANS.md`, those root Codex files win.
+
+Codex may use this file only for low-level repository hygiene if explicitly useful:
+- pnpm/typecheck commands
+- ESM import style
+- `.env` file locations
+- duplicate declaration avoidance
+- large-file edit caution
+
+Codex must not use this file for:
+- architecture decisions
+- Retell-KB vs Own-KB decisions
+- latency SLOs
+- rollout/canary decisions
+- provider strategy
+- security or production gates
+
 # CLAUDE.md — Regelwerk für Claude Code
 
 ## Projekt: Phonbot Voice Agent SaaS

@@ -12,6 +12,16 @@
 //
 // Returns redacted text with tokens like [PHONE], [EMAIL], [IBAN], [CC], [ADDRESS], [DOB].
 
+export type RedactionPurpose =
+  | 'log'
+  | 'trace'
+  | 'eval'
+  | 'shadow'
+  | 'prompt'
+  | 'tool_argument'
+  | 'tool_result'
+  | 'voice_user_visible_confirmation';
+
 // Order matters: more specific patterns first so a phone doesn't get mis-matched as CC etc.
 type Replacement = string | ((match: string) => string);
 const PATTERNS: Array<[RegExp, Replacement]> = [
@@ -31,7 +41,7 @@ const PATTERNS: Array<[RegExp, Replacement]> = [
   [/\b(0?[1-9]|[12]\d|3[01])[./](0?[1-9]|1[0-2])[./](19\d{2}|20[0-2]\d)\b/g, '[DOB]'],
 
   // German street + house number
-  [/\b[A-ZÄÖÜ][a-zäöüß]{2,}(?:straße|str\.|weg|platz|allee|gasse|ring|damm|ufer)\s+\d+[a-z]?\b/gi, '[ADDRESS]'],
+  [/\b\p{L}{3,}(?:(?:stra\u00dfe|strasse)|str\.|weg|platz|allee|gasse|ring|damm|ufer)\s+\d+[a-z]?\b/giu, '[ADDRESS]'],
 
   // Credit card (13-19 digits, formatted groups) — last because most permissive
   [/\b(?:\d[\s-]?){13,19}\b/g, (match: string) => {
@@ -53,11 +63,72 @@ export function redactPII(text: string | null | undefined): string {
   return out;
 }
 
+export function redactForLog(text: string | null | undefined): string {
+  return redactPII(text);
+}
+
+export function redactForTrace(text: string | null | undefined): string {
+  return redactPII(text);
+}
+
+export function redactForEval(text: string | null | undefined): string {
+  return redactPII(text);
+}
+
+export function redactForShadow(text: string | null | undefined): string {
+  return redactPII(text);
+}
+
+export function redactForPrompt(text: string | null | undefined): string {
+  return redactPII(text);
+}
+
+export function redactForToolArgument(text: string | null | undefined): string {
+  return redactPII(text);
+}
+
+export function redactForToolResult(text: string | null | undefined): string {
+  return redactPII(text);
+}
+
+export function preserveForUserConfirmation(
+  text: string | null | undefined,
+  options: { policyAllowsUserVisibleConfirmation: boolean },
+): string {
+  if (!text) return text ?? '';
+  return options.policyAllowsUserVisibleConfirmation
+    ? text
+    : redactPII(text);
+}
+
+export function redactByPurpose(text: string | null | undefined, purpose: RedactionPurpose): string {
+  if (purpose === 'voice_user_visible_confirmation') {
+    return preserveForUserConfirmation(text, { policyAllowsUserVisibleConfirmation: false });
+  }
+  return redactPII(text);
+}
+
+export function redactStructuredPII<T>(value: T, purpose: RedactionPurpose): T {
+  if (typeof value === 'string') {
+    return redactByPurpose(value, purpose) as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactStructuredPII(item, purpose)) as T;
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .map(([key, item]) => [key, redactStructuredPII(item, purpose)]),
+    ) as T;
+  }
+  return value;
+}
+
 export function redactMessages(messages: unknown): unknown {
   if (!Array.isArray(messages)) return messages;
   return messages.map((m) => {
     if (m && typeof m === 'object' && 'content' in m && typeof (m as { content: unknown }).content === 'string') {
-      return { ...m, content: redactPII((m as { content: string }).content) };
+      return { ...m, content: redactForEval((m as { content: string }).content) };
     }
     return m;
   });

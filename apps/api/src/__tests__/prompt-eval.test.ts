@@ -22,7 +22,14 @@ const { OUTBOUND_BASELINE_PROMPT, ensureOutboundSafetyKernel } = await import('.
 const { ensurePlatformSafetyKernel } = await import('../platform-baseline.js');
 const { DEMO_END_CALL_TOOL_DESCRIPTION, SALES_END_CALL_TOOL_DESCRIPTION, buildInboundEndCallToolDescription } = await import('../end-call-policy.js');
 const { TEMPLATES } = await import('../templates.js');
-const { PUBLIC_PHONE_DEMO_PROMPT } = await import('../scripts/sync-public-demo-phone.js');
+const {
+  PUBLIC_PHONE_DEMO_BEGIN_MESSAGE,
+  PUBLIC_PHONE_DEMO_END_CALL_DESCRIPTION,
+  PUBLIC_PHONE_DEMO_FIXED_GOODBYE,
+  PUBLIC_PHONE_DEMO_REMINDER_MAX_COUNT,
+  PUBLIC_PHONE_DEMO_PROMPT,
+  buildPublicPhoneDemoPrompt,
+} = await import('../scripts/sync-public-demo-phone.js');
 
 describe('prompt eval dry-run harness', () => {
   it('builds at least 1000 dry-run prompt/function cases with specialized simulation agents', () => {
@@ -126,8 +133,108 @@ describe('prompt eval dry-run harness', () => {
     expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Wenn der Anrufer "fuenf erstmal" sagt');
     expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Qualitätssicherung');
     expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('acht Euro neunundneunzig');
-    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Wenn Sprache unhörbar ist');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Unhoerbare Sprache ist immer ein Reparatur-Turn');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('erstes Mal "Wie bitte?"');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('zweites Mal "Ich habe es akustisch nicht verstanden');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('drittes Mal "Die Verbindung ist gerade schwer zu verstehen');
     expect(DEMO_SAFETY_OVERLAY).toContain('TTS-Aussprache');
+  });
+
+  it('keeps the public phone demo opening owned by Retell begin_message without stale dates or same-turn repeats', () => {
+    expect(PUBLIC_PHONE_DEMO_BEGIN_MESSAGE).toBe('Hi, hier ist Chippy von PhoneBot. Mit wem darf ich sprechen?');
+    expect(PUBLIC_PHONE_DEMO_BEGIN_MESSAGE).not.toContain('einverstanden');
+    expect(PUBLIC_PHONE_DEMO_BEGIN_MESSAGE).not.toContain('Aufzeichnung');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Retell begin_message liefert exakt die erste Namensfrage');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Wiederhole diese Begruessung nicht');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Stelle keine Einverstaendnisfrage');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Hallo {Name}. Zur Qualitaetssicherung wird dieser Demo-Anruf');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Wenn die Antwort auf die Namensfrage keinen verwertbaren Namen');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('sage nicht "Hallo" ohne Namen');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Wie bitte? Ich habe deinen Namen akustisch nicht verstanden. Mit wem darf ich sprechen?');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('merke: name_unknown');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Wenn du das nicht moechtest, beende bitte jetzt den Anruf');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('ja, ich bin einverstanden');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Danke. Mit wem darf ich sprechen?');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).not.toContain('Bist du damit einverstanden?');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).not.toContain('Bist du mit der Aufzeichnung und Speicherung fuer diese Demo einverstanden?');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Kein Problem, danke dir. Tschüss!');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).not.toContain('Kein Problem, danke dir. Tschuess!');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Gib niemals denselben vollstaendigen Satz zweimal in derselben Antwort aus');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Pflichtfeld-Regel');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('keinen sicher verwertbaren Wert');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).not.toContain('Heute ist 22. Mai 2026');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Aktueller Telefon-Kontext');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).not.toContain('current_date_iso');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).not.toContain('date_lookup_de');
+    const promptWithDate = buildPublicPhoneDemoPrompt(new Date('2026-06-01T10:00:00.000Z'));
+    expect(promptWithDate).toContain('current_date_iso: 2026-06-01');
+    expect(promptWithDate).toContain('current_weekday_de: Montag');
+    expect(promptWithDate).toContain('tomorrow_weekday_de: Dienstag');
+    expect(promptWithDate).toContain('kommender_montag_de: Montag, 2026-06-08');
+    expect(promptWithDate).toContain('Dieser Abschnitt ist sicherer Call-Kontext');
+    expect(promptWithDate).toContain('sage niemals, du koenntest das heutige Datum');
+    expect(promptWithDate).toContain('date_lookup_de: heute: Montag, 2026-06-01');
+  });
+
+  it('hardens the public phone demo against eager interruption, premature hangup, and brittle demo-role wording', () => {
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Wenn der Anrufer direkt nach der ersten Begruessung');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Danke. Mit wem darf ich sprechen?');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Moechtest du eine kurze Demo-Simulation hoeren oder hast du eine Frage zu PhoneBot?');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Ich kann dir die Demo zeigen oder Fragen zu Phonbot beantworten.');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Wenn der Anrufer Feedback, Kritik oder eine Anmerkung gibt');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Wieso?');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('nicht auflegen');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Unklare Moduswoerter wie "Vornwort"');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Meinst du, wir sollen zu PhoneBot wechseln oder mit der Demo weitermachen?');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).not.toContain('Alles klar, was soll ich anders machen?');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Friseursalon Beispiel');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Friseursalon am Apparat');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Wie kann ich dir weiterhelfen?');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Der Name aus dem Start ist nur dann der Demo-Kundenname');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('behaupte spaeter nicht, der Name sei bekannt');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('frage in der Simulation nicht "Wie heisst du?"');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('eine kurze Antwort wie ein Name oder ein einzelnes Wort');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('"Color", "Kalla", "Hassib", "Thala", "Carnames K."');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Lege nach einer Namensantwort nie direkt auf');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('rufe end_call in diesem Zustand nie auf');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Fuehre keine abgebrochene Satzhaelfte fort');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).not.toContain('bin die Praxis am Apparat');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('from_number');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('frage nicht erneut nach einer Telefonnummer');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Sage "in dieser Demo" bei simulierten Aktionen');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('aber nicht in jedem Satz');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Wenn der Anrufer nur allgemein eine Demo-Simulation will');
+    expect(PUBLIC_PHONE_DEMO_REMINDER_MAX_COUNT).toBe(0);
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Stop", "stopp", "halt", "warte" oder "moment" bedeutet nur');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Herrenschnitt ab 28 Euro');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Stimmt, fuer diese Demo gilt Herrenschnitt ab achtundzwanzig Euro');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).not.toContain('Herrenschnitt achtzig Euro');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).not.toContain('Alles klar, ich stoppe.');
+  });
+
+  it('allows public phone demo hangup only for explicit final caller intent', () => {
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('klar zum Verabschieden oder Beenden auffordert');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('jetzt muss eigentlich der Endcall');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('verabschiede dich');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('wie eine Kundenverabschiedung klingen wuerde');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Lege nie aktiv auf nach Feedback, Kritik, Fragen oder Korrekturen');
+    expect(PUBLIC_PHONE_DEMO_FIXED_GOODBYE).toBe('Danke dir fürs Testen. Wenn du weiter ausprobieren möchtest, ruf jederzeit wieder an. Einen schönen Tag noch. Tschüss!');
+    expect(PUBLIC_PHONE_DEMO_FIXED_GOODBYE).toContain('Danke dir fürs Testen');
+    expect(PUBLIC_PHONE_DEMO_FIXED_GOODBYE).toContain('ruf jederzeit wieder an');
+    expect(PUBLIC_PHONE_DEMO_FIXED_GOODBYE).toContain('schönen Tag');
+    expect(PUBLIC_PHONE_DEMO_FIXED_GOODBYE).not.toMatch(/fuers|wuensche|Tschuess/);
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain(`sage exakt "${PUBLIC_PHONE_DEMO_FIXED_GOODBYE}"`);
+    expect(PUBLIC_PHONE_DEMO_PROMPT).not.toContain('ich beende die Demo');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).not.toContain('ich warte noch kurz');
+    expect(PUBLIC_PHONE_DEMO_END_CALL_DESCRIPTION.length).toBeLessThanOrEqual(1024);
+    expect(PUBLIC_PHONE_DEMO_END_CALL_DESCRIPTION).toContain('jetzt muss eigentlich der Endcall');
+    expect(PUBLIC_PHONE_DEMO_END_CALL_DESCRIPTION).toContain('verabschiede dich');
+    expect(PUBLIC_PHONE_DEMO_END_CALL_DESCRIPTION).toContain(PUBLIC_PHONE_DEMO_FIXED_GOODBYE);
+    expect(PUBLIC_PHONE_DEMO_END_CALL_DESCRIPTION).toContain('call this tool in the same turn');
+    expect(PUBLIC_PHONE_DEMO_END_CALL_DESCRIPTION).toContain('Color, Kalla, Hassib, Thala');
+    expect(PUBLIC_PHONE_DEMO_END_CALL_DESCRIPTION).toContain('one-word answers like Color, Kalla, Hassib, Thala');
+    expect(PUBLIC_PHONE_DEMO_END_CALL_DESCRIPTION).toContain('Never call while collecting name');
+    expect(PUBLIC_PHONE_DEMO_END_CALL_DESCRIPTION).toContain('one-word answers');
   });
 
   it('keeps end_call tool descriptions mode-specific and positively whitelisted', () => {
@@ -212,6 +319,7 @@ describe('prompt eval dry-run harness', () => {
 
     expect(hardened).toContain('30 einmalige Testminuten');
     expect(hardened).toContain('Nummer: 8,99 Euro pro Monat, 70 Minuten');
+    expect(hardened).toContain('Niemals behaupten, beim Nummer-Tarif koste jede Zusatzminute 0,25 Euro');
     expect(hardened).toContain('Starter: 89 Euro pro Monat, 300 Minuten');
     expect(hardened).toContain('Professional: 179 Euro pro Monat, 900 Minuten');
     expect(hardened).toContain('Agency: 349 Euro pro Monat, 2.000 Minuten');

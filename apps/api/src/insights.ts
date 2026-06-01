@@ -25,7 +25,7 @@ import { z } from 'zod';
 import { pool } from './db.js';
 import { log, logBg } from './logger.js';
 import { computeSatisfactionScore, extractSignalsFromCall, storeSatisfactionData } from './satisfaction-signals.js';
-import { redactPII } from './pii.js';
+import { redactForEval } from './pii.js';
 import { CURATED_INDUSTRY_KEYS } from './templates.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? '' });
@@ -708,9 +708,9 @@ async function loadRecentCorrectionsForFewShot(limit = 5): Promise<string> {
     // every PII-tainted past correction to OpenAI on every call. Redact at
     // the boundary so OpenAI never sees raw PII even though it sits in our DB.
     const lines = res.rows.map((r: Record<string, unknown>, i: number) => {
-      const orig = redactPII((r.original_text as string).slice(0, 400));
-      const corr = redactPII((r.corrected_text as string).slice(0, 400));
-      const reason = redactPII((r.correction_reason as string | null)?.slice(0, 200) ?? '');
+      const orig = redactForEval((r.original_text as string).slice(0, 400));
+      const corr = redactForEval((r.corrected_text as string).slice(0, 400));
+      const reason = redactForEval((r.correction_reason as string | null)?.slice(0, 200) ?? '');
       return `Korrektur ${i + 1}:\n  Ursprünglicher Vorschlag: "${orig}"\n  Admin-Korrektur: "${corr}"${reason ? `\n  Grund: ${reason}` : ''}`;
     });
     return `\n\nMETA-LERNEN — Frühere Admin-Korrekturen (lerne aus diesen Mustern, wiederhole sie nicht):\n${lines.join('\n\n')}`;

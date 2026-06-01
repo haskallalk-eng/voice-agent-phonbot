@@ -15,6 +15,12 @@
     "retell:sync": "node scripts/sync-retell-agent-tools.mjs",
     "retell:cleanup:dry": "node scripts/cleanup-retell-orphans.mjs",
     "retell:cleanup": "node scripts/cleanup-retell-orphans.mjs --execute --include-unreferenced --clean-phone-only",
+    "supabase:migrations:check": "node scripts/check-supabase-migrations.mjs && node scripts/check-own-kb-readiness.mjs",
+    "own-kb:backfill": "pnpm --filter @vas/api own-kb:backfill",
+    "own-kb:eval": "pnpm --filter @vas/api own-kb:eval",
+    "own-kb:shadow": "corepack pnpm --filter @vas/api own-kb:shadow",
+    "own-kb:gaps": "corepack pnpm --filter @vas/api own-kb:gaps",
+    "own-kb:readiness": "corepack pnpm --filter @vas/api own-kb:readiness",
     "prepare": "git config core.hooksPath .githooks || true"
   },
   "devDependencies": {

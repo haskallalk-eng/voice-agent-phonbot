@@ -41,6 +41,7 @@ import { registerContact } from './contact.js';
 import { registerAdmin } from './admin.js';
 import { registerSales, migrateSales } from './sales.js';
 import { setBgLogger } from './logger.js';
+import { cleanupUnreferencedRetellKnowledgeBases, retryRetellKnowledgeBaseCleanupFailures } from './retell-kb-cleanup.js';
 
 initSentry();
 const SENTRY_DSN = process.env.SENTRY_DSN ?? '';
@@ -415,6 +416,84 @@ if (pool) {
   setTimeout(runFailedInvoiceRetry, 150_000); // first run 2.5 min after startup (staggered)
 }
 
+type RetellKbCleanupMode = 'off' | 'dry_run' | 'delete';
+
+function retellKbCleanupMode(): RetellKbCleanupMode {
+  const raw = (process.env.RETELL_KB_ORPHAN_CLEANUP ?? 'dry_run').trim().toLowerCase();
+  if (/^(0|false|no|off|disabled)$/.test(raw)) return 'off';
+  if (raw === 'delete') return 'delete';
+  return 'dry_run';
+}
+
+const RETELL_KB_CLEANUP_LOCK_KEY = 529284713645;
+
+async function withRetellKbCleanupLock<T>(fn: () => Promise<T>): Promise<T | null> {
+  if (!pool) return null;
+  const client = await pool.connect();
+  try {
+    const locked = await client.query<{ locked: boolean }>(
+      'SELECT pg_try_advisory_lock($1::bigint) AS locked',
+      [RETELL_KB_CLEANUP_LOCK_KEY],
+    );
+    if (!locked.rows[0]?.locked) {
+      return null;
+    }
+    try {
+      return await fn();
+    } finally {
+      await client.query('SELECT pg_advisory_unlock($1::bigint)', [RETELL_KB_CLEANUP_LOCK_KEY]).catch(() => {});
+    }
+  } finally {
+    client.release();
+  }
+}
+
+const retellKbCleanup = retellKbCleanupMode();
+if (process.env.RETELL_API_KEY && retellKbCleanup !== 'off') {
+  const minAgeMs = Number(process.env.RETELL_KB_ORPHAN_MIN_AGE_MS ?? 60 * 60 * 1000);
+  const maxDeletes = Number(process.env.RETELL_KB_ORPHAN_MAX_DELETES_PER_RUN ?? 5);
+  const runRetellKbOrphanCleanup = async () => {
+    try {
+      const dryRun = retellKbCleanup !== 'delete';
+      const safeMinAgeMs = Number.isFinite(minAgeMs) && minAgeMs >= 0 ? minAgeMs : 60 * 60 * 1000;
+      const safeMaxDeletes = Number.isFinite(maxDeletes) && maxDeletes >= 0 ? maxDeletes : 5;
+      const runSweep = (maxDeletesForSweep = safeMaxDeletes) => cleanupUnreferencedRetellKnowledgeBases({
+        dryRun,
+        minAgeMs: safeMinAgeMs,
+        maxDeletes: maxDeletesForSweep,
+        requireDbProtection: true,
+      });
+      const runDelete = async () => {
+        const retry = await retryRetellKnowledgeBaseCleanupFailures({
+          limit: safeMaxDeletes,
+          minAgeMs: safeMinAgeMs,
+        });
+        const remainingDeletes = Math.max(0, safeMaxDeletes - retry.attempted);
+        const cleanup = await runSweep(remainingDeletes);
+        return { cleanup, retry };
+      };
+      const result = dryRun
+        ? { cleanup: await runSweep(), retry: null }
+        : await withRetellKbCleanupLock(runDelete);
+      if (!result) {
+        app.log.info({ skippedReason: 'LOCK_NOT_ACQUIRED', dryRun }, 'Retell KB orphan cleanup skipped');
+        return;
+      }
+      const { cleanup, retry } = result;
+      if (retry && (retry.attempted || retry.resolved || retry.failed || retry.skippedReferenced || retry.skippedDbProtected || retry.skippedGuardUnavailable)) {
+        app.log.info(retry, 'Retell KB cleanup retry finished');
+      }
+      if (cleanup.deleted || cleanup.failed || cleanup.skippedReason) {
+        app.log.info(cleanup, 'Retell KB orphan cleanup finished');
+      }
+    } catch (e) {
+      app.log.warn({ err: (e as Error).message }, 'Retell KB orphan cleanup failed');
+    }
+  };
+  setInterval(runRetellKbOrphanCleanup, 60 * 60 * 1000);
+  setTimeout(runRetellKbOrphanCleanup, 180_000);
+}
+
 app.get('/health', async () => {
   const checks: Record<string, string> = {};
 
@@ -462,6 +541,72 @@ app.get('/health', async () => {
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
   };
+});
+
+app.get('/ready', async (_req, reply) => {
+  const checks: Record<string, string> = {};
+  let ok = true;
+
+  if (!pool) {
+    checks.db = 'not_configured';
+    ok = false;
+  } else {
+    try {
+      await pool.query('SELECT 1');
+      checks.db = 'ok';
+    } catch {
+      checks.db = 'error';
+      ok = false;
+    }
+
+    const ownKbRequired = process.env.OWN_KB_SEARCH_ENABLED === 'true';
+
+    try {
+      const ext = await pool.query(`select extname from pg_extension where extname = 'vector'`);
+      checks.pgvector = ext.rowCount ? 'ok' : 'missing';
+      if (!ext.rowCount && ownKbRequired) ok = false;
+    } catch {
+      checks.pgvector = 'error';
+      if (ownKbRequired) ok = false;
+    }
+
+    try {
+      const expected = [
+        'kb_sources',
+        'kb_source_versions',
+        'kb_documents',
+        'kb_chunks',
+        'kb_embeddings',
+        'kb_ingestion_jobs',
+        'kb_retrieval_events',
+        'kb_retrieval_citations',
+        'kb_eval_runs',
+        'kb_eval_results',
+        'voice_rag_turn_metrics',
+      ];
+      const res = await pool.query<{ table_name: string }>(
+        `select table_name
+           from information_schema.tables
+          where table_schema = 'public'
+            and table_name = any($1::text[])`,
+        [expected],
+      );
+      const found = new Set(res.rows.map((row) => row.table_name));
+      const missing = expected.filter((name) => !found.has(name));
+      checks.ownKbSchema = missing.length ? `missing:${missing.join(',')}` : 'ok';
+      if (missing.length && ownKbRequired) ok = false;
+    } catch {
+      checks.ownKbSchema = 'error';
+      if (ownKbRequired) ok = false;
+    }
+  }
+
+  checks.retell = process.env.RETELL_API_KEY ? 'configured' : 'not_configured';
+  checks.openai = process.env.OPENAI_API_KEY ? 'configured' : 'not_configured';
+  if (!process.env.RETELL_API_KEY || !process.env.OPENAI_API_KEY) ok = false;
+
+  reply.code(ok ? 200 : 503);
+  return { ok, checks, timestamp: new Date().toISOString() };
 });
 
 const port = Number(process.env.PORT ?? 3001);

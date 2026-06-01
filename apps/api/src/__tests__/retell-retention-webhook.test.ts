@@ -64,7 +64,11 @@ vi.mock('../demo.js', () => ({
   demoRecordingDeclinedToolSignature: vi.fn(() => 'demo-recording-sig'),
   isKnownSalesCallbackAgent: vi.fn(async () => false),
 }));
-vi.mock('../pii.js', () => ({ redactPII: (value: string) => value }));
+vi.mock('../pii.js', () => ({
+  redactForToolResult: (value: string) => value,
+  redactForTrace: (value: string) => value,
+  redactPII: (value: string) => value,
+}));
 vi.mock('../agent-instructions.js', () => ({ RECORDING_CONSENT_PROMPT_VERSION: 'test-v1' }));
 vi.mock('../logger.js', () => {
   const noop = () => {};

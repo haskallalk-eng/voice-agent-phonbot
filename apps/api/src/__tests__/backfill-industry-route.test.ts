@@ -49,7 +49,10 @@ vi.mock('../satisfaction-signals.js', () => ({
   storeSatisfactionData: vi.fn(),
 }));
 
-vi.mock('../pii.js', () => ({ redactPII: (s: string) => s }));
+vi.mock('../pii.js', () => ({
+  redactForEval: (s: string) => s,
+  redactPII: (s: string) => s,
+}));
 
 vi.stubEnv('OPENAI_API_KEY', 'test-key');
 vi.stubEnv('NODE_ENV', 'test');

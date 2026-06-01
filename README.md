@@ -36,6 +36,11 @@ See `apps/api/.env.example` for all required env vars (40+).
 
 ## Security
 
+Codex authority: `AGENTS.md` and `PLANS.md` are the only authoritative
+architecture, rollout, KB, latency, security-gate, and planning documents.
+`CLAUDE.md` is legacy Claude guidance and may be used only for low-level repo
+hygiene when explicitly useful.
+
 - Multi-tenant isolation (`org_id` on every query, SQL-level ON CONFLICT guards)
 - Webhook signature verification (Retell HMAC, Stripe constructEvent, Twilio)
 - Token encryption at rest (AES-256-GCM for OAuth + Cal.com keys)
@@ -46,7 +51,7 @@ See `apps/api/.env.example` for all required env vars (40+).
 - Rate-limiting per IP + per org + global Redis counters
 - Atomic minute-reservation (`tryReserveMinutes`) against concurrent-call over-billing
 
-See `CLAUDE.md` §15 for the full security posture.
+For Codex architecture and rollout decisions, use `AGENTS.md` and `PLANS.md`.
 
 ## Tests
 
@@ -56,6 +61,9 @@ cd apps/api && pnpm test       # smoke tests (usage, captcha, session-store)
 
 ## Docs
 
-- `CLAUDE.md` — coding rules + security conventions
-- `docs/architecture.md` — system architecture
-- `apps/api/.env.example` — all 40+ env vars documented
+- `AGENTS.md` - Codex architecture and safety contract
+- `PLANS.md` - Codex living execution plan
+
+- `CLAUDE.md` - legacy Claude guidance; Codex may use it only for low-level repo hygiene, not architecture, rollout, KB, latency, provider, security-gate, or production decisions
+- `docs/architecture.md` - system architecture
+- `apps/api/.env.example` - all 40+ env vars documented

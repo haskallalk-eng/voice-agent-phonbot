@@ -61,4 +61,32 @@ describe('evaluateToolPolicy', () => {
     });
     expect(result).toEqual({ allowed: true });
   });
+
+  it('blocks ticket creation without any contact path', () => {
+    const result = evaluateToolPolicy({
+      toolName: 'ticket_create',
+      nowIsoDate,
+      args: { reason: 'Rueckruf' },
+    });
+    expect(result).toMatchObject({ allowed: false, code: 'CONTACT_REQUIRED' });
+  });
+
+  it('blocks customer upsert without strong identity', () => {
+    const result = evaluateToolPolicy({
+      toolName: 'customer_upsert',
+      nowIsoDate,
+      args: { customerName: 'Mina', customerPhone: '+4915112345678' },
+    });
+    expect(result).toMatchObject({ allowed: false, code: 'STRONG_IDENTITY_REQUIRED' });
+  });
+
+  it('allows customer upsert with verified caller identity and name', () => {
+    const result = evaluateToolPolicy({
+      toolName: 'customer_upsert',
+      nowIsoDate,
+      callerPhoneVerified: true,
+      args: { customerName: 'Mina' },
+    });
+    expect(result).toEqual({ allowed: true });
+  });
 });
