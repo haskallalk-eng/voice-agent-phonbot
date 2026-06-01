@@ -497,17 +497,10 @@ if (process.env.RETELL_API_KEY && retellKbCleanup !== 'off') {
 app.get('/health', async () => {
   const checks: Record<string, string> = {};
 
-  // DB check
-  if (pool) {
-    try {
-      await pool.query('SELECT 1');
-      checks.db = 'ok';
-    } catch {
-      checks.db = 'error';
-    }
-  } else {
-    checks.db = 'not_configured';
-  }
+  // Liveness must stay fast for Docker health checks. DB readiness is exposed
+  // separately on /ready so DNS or database slowness cannot mark the running
+  // API process unhealthy.
+  checks.db = pool ? 'ready_check_deferred' : 'not_configured';
 
   // Redis check
   if (redis) {
@@ -521,7 +514,7 @@ app.get('/health', async () => {
     checks.redis = 'not_configured';
   }
 
-  const ok = Object.values(checks).every((v) => v === 'ok' || v === 'not_configured');
+  const ok = Object.values(checks).every((v) => v === 'ok' || v === 'not_configured' || v === 'ready_check_deferred');
 
   // Read version from package.json (bundled at build time via import)
   let version = 'unknown';
