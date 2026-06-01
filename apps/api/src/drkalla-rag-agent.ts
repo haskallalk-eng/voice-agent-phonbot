@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 export const DRKALLA_SITE_ORIGIN = 'https://drkalla.com';
 export const DRKALLA_RAG_AGENT_NAME = 'DrKalla RAG Voice Agent';
 export const DRKALLA_RAG_KB_NAME_PREFIX = 'DrKalla KB';
+export const DRKALLA_RAG_KB_SCHEMA_VERSION = 'contact-v2';
 export const DRKALLA_RAG_BEGIN_MESSAGE =
   'Hallo, hier ist der Dr. Kalla Assistent. Wie kann ich dir bei Friseurbedarf helfen?';
 
