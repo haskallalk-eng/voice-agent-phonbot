@@ -12,11 +12,13 @@ import {
   getDefaultRetellLlmModel,
   getLLM,
   listAgents,
+  listKnowledgeBases,
   listPhoneNumbers,
   updateAgent,
   updateLLM,
   updatePhoneNumber,
   waitForKnowledgeBaseComplete,
+  type RetellKnowledgeBase,
   type RetellDenoisingMode,
   type RetellTool,
 } from '../retell.js';
@@ -120,10 +122,26 @@ function maskPhone(value: string): string {
   return value.replace(/\d(?=\d{3})/g, '*');
 }
 
+function retellTimestampMs(value: number | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  return value < 10_000_000_000 ? value * 1000 : value;
+}
+
+export function chooseReusableDrkallaKnowledgeBase(
+  knowledgeBases: RetellKnowledgeBase[],
+  kbName: string,
+): RetellKnowledgeBase | null {
+  return knowledgeBases
+    .filter((kb) => kb.knowledge_base_name === kbName && kb.status === 'complete')
+    .sort((a, b) => retellTimestampMs(b.user_modified_timestamp) - retellTimestampMs(a.user_modified_timestamp))[0]
+    ?? null;
+}
+
 async function syncDrkallaRagAgent(
   execute: boolean,
   createTestWebCall: boolean,
   assignPhone: boolean,
+  forceNewKnowledgeBase: boolean,
 ): Promise<void> {
   const snapshotPathArg = process.argv.find((arg) => arg.startsWith('--snapshot='));
   const snapshotPath = snapshotPathArg ? path.resolve(snapshotPathArg.slice('--snapshot='.length)) : DEFAULT_SNAPSHOT_PATH;
@@ -151,18 +169,21 @@ async function syncDrkallaRagAgent(
       knowledgeTextCount: knowledgeTexts.length,
       model,
       modelHighPriority,
+      forceNewKnowledgeBase,
       phoneNumberAssignment: assignPhone ? { phoneNumberMasked: maskPhone(drkallaTestPhoneNumber()) } : false,
     }, null, 2));
     return;
   }
 
-  const kb = await createKnowledgeBase({
+  const reusableKb = forceNewKnowledgeBase
+    ? null
+    : chooseReusableDrkallaKnowledgeBase(await listKnowledgeBases(), kbName);
+  const readyKb = reusableKb ?? await waitForKnowledgeBaseComplete((await createKnowledgeBase({
     name: kbName,
     texts: knowledgeTexts,
     urls: [],
     enableAutoRefresh: false,
-  });
-  const readyKb = await waitForKnowledgeBaseComplete(kb.knowledge_base_id);
+  })).knowledge_base_id);
 
   let agentId = existing?.agent_id ?? null;
   let llmId = existing?.response_engine?.llm_id ?? null;
@@ -251,6 +272,7 @@ async function syncDrkallaRagAgent(
     agentIdMasked: maskId(agentId),
     llmIdMasked: maskId(llmId),
     kbIdMasked: maskId(readyKb.knowledge_base_id),
+    knowledgeBaseReused: Boolean(reusableKb),
     kbStatus: readyKb.status,
     snapshotHash,
     productCount: snapshot.productCount,
@@ -279,6 +301,7 @@ if (invokedDirectly) {
     process.argv.includes('--execute'),
     process.argv.includes('--web-call'),
     process.argv.includes('--assign-phone'),
+    process.argv.includes('--force-new-kb'),
   )
     .catch((err) => {
       console.error(err instanceof Error ? err.message : String(err));
