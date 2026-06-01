@@ -121,6 +121,25 @@ describe('Retell DrKalla send_link tool', () => {
     expect(mockSendSms.mock.calls[0]?.[0]?.to).not.toBe('+499999999');
   });
 
+  it('does not send the same DrKalla link twice in one live call', async () => {
+    const first = await postDrkallaLink({
+      url: 'https://drkalla.com/products/duplicate-test',
+      label: 'Duplicate Test',
+      linkKind: 'product',
+    });
+    const second = await postDrkallaLink({
+      url: 'https://drkalla.com/products/duplicate-test',
+      label: 'Duplicate Test',
+      linkKind: 'product',
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({ ok: true, smsSent: true });
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toMatchObject({ ok: true, smsSent: false, duplicate: true });
+    expect(mockSendSms).toHaveBeenCalledTimes(1);
+  });
+
   it('blocks non-DrKalla links and instructs the model not to claim SMS delivery', async () => {
     const res = await postDrkallaLink({
       url: 'https://evil.example/products/lattafa-fakhar',
