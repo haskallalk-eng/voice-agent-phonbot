@@ -44,10 +44,11 @@ export const DRKALLA_RAG_REMINDER_TRIGGER_MS = 6500;
 export const DRKALLA_RAG_REMINDER_MAX_COUNT = 2;
 export const DRKALLA_RAG_END_CALL_DESCRIPTION = [
   'DrKalla only. Call only for clear final caller intent.',
-  'Allowed: caller says tschüss, danke tschüss, auf Wiederhören, leg auf, beende den Anruf, or confirms no further help.',
-  'Say one short polite goodbye, then call this tool in the same turn.',
-  'Never call after inaudible speech, noise, unclear speech, questions, corrections, requests, or while caller may still speak.',
-  'Never call while collecting product, category, order, contact, variant, size, strength, color, scent, price, or availability.',
+  'Allowed only: tschüss, danke tschüss, auf Wiederhören, leg auf, or beende den Anruf.',
+  'Say short goodbye, then call tool.',
+  'Never call for alles klar, sehr schoen, hast du schon gesagt, ok, acknowledgements, questions, corrections, requests, or while caller may still speak.',
+  'Never call after inaudible speech, noise, or unclear speech.',
+  'Never call while collecting product, category, order, contact, variant, size, strength, price, or availability.',
   'If unsure, clarify instead of ending.',
 ].join(' ');
 

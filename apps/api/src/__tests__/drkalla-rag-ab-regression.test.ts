@@ -378,6 +378,10 @@ describe('DrKalla transcript-driven A/B regressions', () => {
     expect(legacyTools.some((tool) => (tool as { name?: string }).name === 'end_call')).toBe(false);
     expect(DRKALLA_RAG_END_CALL_DESCRIPTION).toContain('clear final caller intent');
     expect(DRKALLA_RAG_END_CALL_DESCRIPTION).toContain('tschüss');
+    expect(DRKALLA_RAG_END_CALL_DESCRIPTION).not.toContain('confirms no further help');
+    expect(DRKALLA_RAG_END_CALL_DESCRIPTION).toContain('Never call for alles klar');
+    expect(DRKALLA_RAG_END_CALL_DESCRIPTION).toContain('sehr schoen');
+    expect(DRKALLA_RAG_END_CALL_DESCRIPTION).toContain('hast du schon gesagt');
     expect(DRKALLA_RAG_END_CALL_DESCRIPTION).toContain('Never call after inaudible speech');
     expect(DRKALLA_RAG_END_CALL_DESCRIPTION).toContain('Never call while collecting product');
     expect(DRKALLA_RAG_END_CALL_DESCRIPTION.length).toBeLessThanOrEqual(540);
@@ -487,6 +491,8 @@ describe('DrKalla transcript-driven A/B regressions', () => {
     expect(DRKALLA_RAG_PROMPT).toContain('Vermeide Formulierungen wie "ich suche im Shop"');
     expect(DRKALLA_RAG_PROMPT).toContain('Bei Kontakt-, Adresse-, Oeffnungszeiten- oder Besuchsfragen nutze die Kontakt-KB direkt');
     expect(DRKALLA_RAG_PROMPT).toContain('Wenn nur nach E-Mail gefragt wird, nenne direkt kontakt at drkalla punkt com');
+    expect(DRKALLA_RAG_PROMPT).toContain('Kontaktfacts nur einmal pro Antwort nennen');
+    expect(DRKALLA_RAG_PROMPT).toContain('Wenn du Adresse, Telefon oder E-Mail gerade genannt hast');
   });
 
   it('multi-aspect: Profi prices and checkout questions require evidence, contact fallback, and no phone checkout', () => {
