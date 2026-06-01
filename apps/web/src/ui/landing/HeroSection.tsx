@@ -33,8 +33,8 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
 
             <video
               className="hero-crystal-video absolute inset-0 z-0 h-full w-full object-cover object-center sm:object-contain"
-              src="/media/Phonbot-crystal-reveal.mp4"
-              poster="/media/Phonbot-crystal-reveal-poster.png"
+              src="/media/chipy-crystal-reveal.mp4"
+              poster="/media/chipy-crystal-reveal-poster.png"
               autoPlay
               muted
               onEnded={() => setCrystalSettled(true)}
