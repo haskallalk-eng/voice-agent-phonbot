@@ -54,16 +54,6 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
 
           <div className="pointer-events-none relative z-20 flex min-h-[1020px] flex-col justify-between sm:min-h-[calc(100svh-136px)] lg:min-h-[700px]">
             <div className="mx-auto max-w-4xl pt-16 text-center sm:pt-20 lg:pt-20">
-              <div className="mb-5 inline-flex items-center gap-2">
-                <span
-                  className="glass inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium text-white/80"
-                  style={{ boxShadow: '0 0 20px rgba(255,91,10,0.30), inset 0 0 20px rgba(255,183,102,0.06)' }}
-                >
-                  <IconStar size={14} className="text-[#ffb766]" />
-                  Dein KI-Telefonassistent
-                </span>
-              </div>
-
               <h1 className="mx-auto mb-5 max-w-4xl text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
                 Nie wieder einen{' '}
                 <span
