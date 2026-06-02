@@ -15,7 +15,6 @@ import { FooterSection } from './FooterSection.js';
 const DemoSection = React.lazy(() => import('./DemoSection.js').then((m) => ({ default: m.DemoSection })));
 const CallbackSection = React.lazy(() => import('./CallbackSection.js').then((m) => ({ default: m.CallbackSection })));
 const OwlyDemoModal = React.lazy(() => import('../OwlyDemoModal.js').then((m) => ({ default: m.OwlyDemoModal })));
-const CrystalAtmosphere = React.lazy(() => import('./CrystalAtmosphere.js').then((m) => ({ default: m.CrystalAtmosphere })));
 
 function useLoadWhenVisible(rootMargin = '0px') {
   const [load, setLoad] = useState(false);
@@ -148,26 +147,7 @@ export function LandingPage({ onGoToRegister, onGoToLogin, onGoToContact }: Prop
   }, []);
 
   return (
-    <div className="phonbot-landing noise bg-[#0A0A0F] text-white relative">
-      <Suspense fallback={null}>
-        <CrystalAtmosphere />
-      </Suspense>
-
-      {/* Background crystal glows */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden" style={{ zIndex: 0 }}>
-        <div
-          className="crystal-page-glow glow-pulse absolute -top-44 -left-44 h-[720px] w-[720px]"
-          style={{ background: 'radial-gradient(ellipse, rgba(255,91,10,0.18) 0%, transparent 68%)' }}
-        />
-        <div
-          className="crystal-page-glow crystal-page-glow-cyan glow-pulse absolute top-1/2 -right-64 h-[620px] w-[620px]"
-          style={{ background: 'radial-gradient(ellipse, rgba(32,217,255,0.12) 0%, transparent 70%)', animationDelay: '1.5s' }}
-        />
-        <div
-          className="crystal-page-glow glow-pulse absolute -bottom-44 left-1/3 h-[520px] w-[520px]"
-          style={{ background: 'radial-gradient(ellipse, rgba(255,183,102,0.10) 0%, transparent 70%)', animationDelay: '3s' }}
-        />
-      </div>
+    <div className="phonbot-landing bg-[#050508] text-white relative">
 
       {/* ── NAV ── */}
       <NavHeader
