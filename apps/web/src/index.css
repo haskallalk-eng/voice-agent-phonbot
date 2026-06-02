@@ -247,12 +247,13 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 .hero-crystal-transition {
   overflow: hidden;
   background:
-    radial-gradient(ellipse at 16% 18%, rgba(255, 91, 10, 0.20), transparent 42%),
-    radial-gradient(ellipse at 84% 18%, rgba(32, 217, 255, 0.18), transparent 44%),
-    radial-gradient(ellipse at 50% 64%, rgba(255, 183, 102, 0.07), transparent 42%),
-    linear-gradient(to bottom, rgba(0, 0, 0, 0), rgba(4, 4, 7, 0.82) 30%, rgba(7, 7, 11, 0.98) 60%, rgba(10, 10, 15, 0));
-  -webkit-mask-image: linear-gradient(to bottom, transparent, #fff 14%, #fff 86%, transparent);
-  mask-image: linear-gradient(to bottom, transparent, #fff 14%, #fff 86%, transparent);
+    radial-gradient(ellipse at 16% 6%, rgba(255, 91, 10, 0.22), transparent 48%),
+    radial-gradient(ellipse at 84% 8%, rgba(32, 217, 255, 0.20), transparent 50%),
+    radial-gradient(ellipse at 50% 12%, rgba(247, 251, 255, 0.10), transparent 38%),
+    radial-gradient(ellipse at 50% 70%, rgba(255, 183, 102, 0.08), transparent 48%),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0), rgba(4, 4, 7, 0.68) 24%, rgba(7, 7, 11, 0.96) 64%, rgba(10, 10, 15, 0));
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #fff 8%, #fff 90%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, #fff 8%, #fff 90%, transparent);
 }
 
 .hero-crystal-transition::before,
@@ -266,9 +267,9 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 }
 
 .hero-crystal-transition::before {
-  top: 18%;
+  top: 4%;
   width: min(980px, 96vw);
-  height: 66%;
+  height: 72%;
   background:
     linear-gradient(112deg, rgba(255, 91, 10, 0.16), rgba(247, 251, 255, 0.08) 46%, rgba(32, 217, 255, 0.14)),
     rgba(255, 255, 255, 0.02);
@@ -277,9 +278,9 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 }
 
 .hero-crystal-transition::after {
-  top: 35%;
+  top: 28%;
   width: min(760px, 82vw);
-  height: 34%;
+  height: 42%;
   background: linear-gradient(90deg, rgba(255, 183, 102, 0.14), rgba(32, 217, 255, 0.12));
   filter: blur(36px);
   opacity: 0.44;
@@ -418,12 +419,35 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 /* ─── Animations ─── */
 
 .hero-crystal-video {
+  --crystal-scale: 1;
+  --crystal-settle-y: 0%;
   animation: crystal-drop-in 3.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  mix-blend-mode: screen;
   transform-origin: center center;
-  object-position: center 44%;
+  object-position: center 50%;
   filter:
     drop-shadow(0 0 42px rgba(32, 217, 255, 0.22))
     drop-shadow(0 0 32px rgba(255, 91, 10, 0.18));
+}
+
+@media (max-width: 639px) {
+  .hero-crystal-video {
+    --crystal-scale: 1.66;
+    --crystal-settle-y: -2%;
+  }
+}
+
+.hero-crystal-stage {
+  isolation: isolate;
+}
+
+.hero-crystal-bottom-fade {
+  background:
+    radial-gradient(ellipse at 28% 16%, rgba(255, 91, 10, 0.22), transparent 46%),
+    radial-gradient(ellipse at 72% 16%, rgba(32, 217, 255, 0.22), transparent 48%),
+    linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.38) 36%, rgba(5, 5, 8, 0.90) 78%, rgba(8, 8, 12, 0.98));
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #fff 26%, #fff);
+  mask-image: linear-gradient(to bottom, transparent, #fff 26%, #fff);
 }
 
 .crystal-step-card {
@@ -622,7 +646,7 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 @keyframes crystal-drop-in {
   0% {
     opacity: 0;
-    transform: translateY(-48%) scale(1);
+    transform: translateY(-48%) scale(var(--crystal-scale, 1));
     filter:
       blur(6px)
       drop-shadow(0 0 24px rgba(32, 217, 255, 0.12))
@@ -630,14 +654,14 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   }
   58% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(var(--crystal-settle-y, 0%)) scale(var(--crystal-scale, 1));
   }
   76% {
-    transform: translateY(-2%) scale(1);
+    transform: translateY(calc(var(--crystal-settle-y, 0%) - 2%)) scale(var(--crystal-scale, 1));
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(var(--crystal-settle-y, 0%)) scale(var(--crystal-scale, 1));
     filter:
       blur(0)
       drop-shadow(0 0 42px rgba(32, 217, 255, 0.22))
