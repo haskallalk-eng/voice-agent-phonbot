@@ -418,10 +418,10 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 .hero-crystal-video {
   --crystal-scale: 1;
   --crystal-settle-y: 0%;
-  animation: crystal-drop-in 3.4s cubic-bezier(0.16, 1, 0.3, 1) both;
   mix-blend-mode: screen;
   transform-origin: center center;
   object-position: center 50%;
+  transform: translateY(var(--crystal-settle-y, 0%)) scale(var(--crystal-scale, 1));
   filter:
     drop-shadow(0 0 42px rgba(32, 217, 255, 0.22))
     drop-shadow(0 0 32px rgba(255, 91, 10, 0.18));
@@ -430,7 +430,7 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 @media (max-width: 639px) {
   .hero-crystal-video {
     --crystal-scale: 1.66;
-    --crystal-settle-y: -2%;
+    --crystal-settle-y: -28%;
   }
 }
 
@@ -951,10 +951,6 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-crystal-video {
-    animation: none;
-  }
-
   .crystal-steps-shell {
     animation: none;
   }
