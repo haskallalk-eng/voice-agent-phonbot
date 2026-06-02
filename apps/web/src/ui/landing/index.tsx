@@ -94,6 +94,9 @@ function DeferredCallbackSection() {
   if (!load) {
     return (
       <section ref={ref} className="relative z-10 px-6 py-20 max-w-4xl mx-auto text-center">
+        <div className="mx-auto mb-5 h-20 w-20">
+          <img className="brand-asset-mark" src="/brand/phonbot-crystal-calendar.png" alt="" />
+        </div>
         <p className="text-white/45 mb-4">Lieber Rückruf statt selbst testen?</p>
         <button
           type="button"
