@@ -86,8 +86,8 @@ export function CallbackSection() {
                     clipPath: 'polygon(50% 0%, 82% 18%, 100% 55%, 72% 100%, 26% 90%, 0 48%, 18% 14%)',
                     animation: 'breathe 2.8s ease-in-out infinite',
                   }} />
-                <div className="crystal-demo-mark relative">
-                  <img src="/brand/phonbot-crystal-icon-cropped.png" alt="" className="h-12 w-12 object-contain" />
+                <div className="relative flex h-20 w-20 items-center justify-center">
+                  <img className="brand-asset-mark" src="/brand/phonbot-crystal-phone.png" alt="" />
                 </div>
               </div>
 
@@ -117,10 +117,8 @@ export function CallbackSection() {
             <div className="sm:col-span-3 p-8 sm:p-10 sm:border-l" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
               {state === 'success' ? (
                 <div className="h-full flex flex-col items-center justify-center text-center gap-5 py-4">
-                  <div className="crystal-demo-mark">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#20d9ff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
+                  <div className="h-20 w-20">
+                    <img className="brand-asset-mark" src="/brand/phonbot-face-icon.png" alt="" />
                   </div>
                   <div>
                     <p className="bg-clip-text text-lg font-bold text-transparent" style={{ backgroundImage: 'var(--crystal-gradient)' }}>Phonbot ruft dich gleich an!</p>
