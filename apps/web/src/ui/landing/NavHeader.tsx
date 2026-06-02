@@ -66,7 +66,7 @@ export function NavHeader({
   const navLinkClass = 'text-sm text-white/60 hover:text-white transition-colors duration-200';
 
   return (
-    <header className="pointer-events-none absolute inset-x-0 top-0 z-50 bg-transparent">
+    <header className="pointer-events-none absolute inset-x-0 top-0 z-50 bg-[#050508]">
       <div className="pointer-events-auto mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
         {/* Logo */}
         <PhonbotBrand size="sm" />
