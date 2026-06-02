@@ -53,7 +53,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
           </button>
 
           <div className="pointer-events-none relative z-20 flex min-h-[1020px] flex-col justify-between sm:min-h-[calc(100svh-136px)] lg:min-h-[700px]">
-            <div className="mx-auto max-w-4xl pt-3 text-center sm:pt-4 lg:pt-3">
+            <div className="mx-auto max-w-4xl pt-20 text-center sm:pt-24 lg:pt-24">
               <div className="mb-5 inline-flex items-center gap-2">
                 <span
                   className="glass inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium text-white/80"
