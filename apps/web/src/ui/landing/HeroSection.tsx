@@ -18,7 +18,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
   return (
     <>
       <section className="relative z-10 w-full px-0 pb-0 pt-0">
-        <div className="crystal-plain-bg relative min-h-[1080px] overflow-hidden px-4 py-8 sm:min-h-[calc(100svh-72px)] sm:px-8 sm:py-9 lg:min-h-[790px] lg:px-10 lg:py-10">
+        <div className="crystal-plain-bg relative min-h-[1080px] overflow-hidden px-4 pb-8 pt-0 sm:min-h-[calc(100svh-72px)] sm:px-8 sm:pb-9 sm:pt-0 lg:min-h-[790px] lg:px-10 lg:pb-10 lg:pt-0">
 
           <button
             type="button"
@@ -53,7 +53,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
           </button>
 
           <div className="pointer-events-none relative z-20 flex min-h-[1020px] flex-col justify-between sm:min-h-[calc(100svh-136px)] lg:min-h-[700px]">
-            <div className="mx-auto max-w-4xl pt-5 text-center sm:pt-7 lg:pt-4">
+            <div className="mx-auto max-w-4xl pt-3 text-center sm:pt-4 lg:pt-3">
               <div className="mb-5 inline-flex items-center gap-2">
                 <span
                   className="glass inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium text-white/80"
