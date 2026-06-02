@@ -24,7 +24,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
           <button
             type="button"
             onClick={onShowDemoModal}
-            className="group absolute inset-x-0 top-0 bottom-0 overflow-hidden bg-black text-left transition-transform duration-500 hover:scale-[1.002] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/80"
+            className="hero-crystal-stage group absolute inset-x-0 top-0 bottom-0 overflow-hidden bg-black text-left transition-transform duration-500 hover:scale-[1.002] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/80"
             aria-label="Telefon-Demo öffnen"
           >
             <div className="absolute -inset-20 bg-[radial-gradient(ellipse_at_30%_36%,rgba(255,91,10,0.40),transparent_30%),radial-gradient(ellipse_at_52%_40%,rgba(255,247,232,0.10),transparent_28%),radial-gradient(ellipse_at_70%_42%,rgba(32,217,255,0.36),transparent_34%)] opacity-80 blur-3xl transition-opacity duration-500 group-hover:opacity-100" />
@@ -32,7 +32,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/72" />
 
             <video
-              className="hero-crystal-video absolute inset-0 z-0 h-full w-full object-cover object-center sm:object-contain"
+              className="hero-crystal-video absolute inset-0 z-0 h-full w-full object-contain object-center"
               src="/media/chipy-crystal-reveal.mp4"
               poster="/media/chipy-crystal-reveal-poster.png"
               autoPlay
@@ -43,6 +43,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
             />
 
             <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[46%] bg-gradient-to-t from-black via-black/86 to-transparent" />
+            <div className="hero-crystal-bottom-fade pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[34%]" />
 
             <div className="hidden">
               <div>
@@ -103,7 +104,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
             </div>
 
             <div
-              className="crystal-steps-shell pointer-events-none absolute inset-x-4 top-[560px] z-30 grid gap-3 sm:inset-x-6 sm:bottom-32 sm:top-auto sm:grid-cols-3 lg:inset-x-8 lg:bottom-36"
+              className="crystal-steps-shell pointer-events-none absolute inset-x-4 top-[720px] z-30 grid gap-3 sm:inset-x-6 sm:bottom-32 sm:top-auto sm:grid-cols-3 lg:inset-x-8 lg:bottom-36"
             >
               {STEPS.map((step) => (
                 <div key={step.num} className="crystal-step-card">
@@ -121,9 +122,9 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
         </div>
       </section>
 
-      <div className="hero-crystal-transition relative z-10 -mt-24 h-52 sm:-mt-36 sm:h-72" aria-hidden="true" />
+      <div className="hero-crystal-transition relative z-10 -mt-36 h-72 sm:-mt-44 sm:h-80" aria-hidden="true" />
 
-      <section className="relative z-10 mx-auto -mt-16 max-w-4xl px-6 pb-8 pt-0 sm:-mt-24">
+      <section className="relative z-10 mx-auto -mt-24 max-w-4xl px-6 pb-8 pt-0 sm:-mt-28">
         <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10">
           <div className="flex items-center gap-2 text-sm text-white/60">
             <IconBolt size={14} className="text-white/50" />
