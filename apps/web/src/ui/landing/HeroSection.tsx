@@ -18,8 +18,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
   return (
     <>
       <section className="relative z-10 w-full px-0 pb-0 pt-0">
-        <div className="relative min-h-[1080px] overflow-hidden px-4 py-8 sm:min-h-[calc(100svh-72px)] sm:px-8 sm:py-9 lg:min-h-[790px] lg:px-10 lg:py-10">
-          <div className="pointer-events-none absolute -inset-24 bg-[radial-gradient(ellipse_at_18%_18%,rgba(255,91,10,0.24),transparent_28%),radial-gradient(ellipse_at_82%_22%,rgba(32,217,255,0.22),transparent_30%),radial-gradient(ellipse_at_50%_88%,rgba(255,183,102,0.10),transparent_36%)] blur-2xl" />
+        <div className="crystal-plain-bg relative min-h-[1080px] overflow-hidden px-4 py-8 sm:min-h-[calc(100svh-72px)] sm:px-8 sm:py-9 lg:min-h-[790px] lg:px-10 lg:py-10">
 
           <button
             type="button"
@@ -27,9 +26,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
             className="hero-crystal-stage group absolute inset-x-0 top-0 bottom-0 overflow-hidden bg-black text-left transition-transform duration-500 hover:scale-[1.002] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/80"
             aria-label="Telefon-Demo öffnen"
           >
-            <div className="absolute -inset-20 bg-[radial-gradient(ellipse_at_30%_36%,rgba(255,91,10,0.40),transparent_30%),radial-gradient(ellipse_at_52%_40%,rgba(255,247,232,0.10),transparent_28%),radial-gradient(ellipse_at_70%_42%,rgba(32,217,255,0.36),transparent_34%)] opacity-80 blur-3xl transition-opacity duration-500 group-hover:opacity-100" />
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,transparent_48%,rgba(0,0,0,0.36)_78%,rgba(0,0,0,0.66)_100%)]" />
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/72" />
+            <div className="absolute inset-0 bg-transparent" />
 
             <video
               className="hero-crystal-video absolute inset-0 z-0 h-full w-full object-contain object-center"
@@ -41,9 +38,6 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
               playsInline
               preload="auto"
             />
-
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[46%] bg-gradient-to-t from-black via-black/86 to-transparent" />
-            <div className="hero-crystal-bottom-fade pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[34%]" />
 
             <div className="hidden">
               <div>
