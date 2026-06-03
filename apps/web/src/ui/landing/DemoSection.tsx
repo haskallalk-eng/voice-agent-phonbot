@@ -23,8 +23,8 @@ type TemplateCardProps = {
 
 function CrystalDemoMark() {
   return (
-    <div className="flex h-16 w-16 items-center justify-center" aria-hidden="true">
-      <img className="brand-asset-mark" src="/brand/phonbot-crystal-phone.png" alt="" />
+    <div className="crystal-demo-mark" aria-hidden="true">
+      <img src="/brand/phonbot-crystal-icon-cropped.png" alt="" className="h-12 w-12 object-contain" />
     </div>
   );
 }

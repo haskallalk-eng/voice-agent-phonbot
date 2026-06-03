@@ -314,16 +314,6 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
     drop-shadow(0 0 14px rgba(32, 217, 255, 0.18));
 }
 
-.brand-asset-mark {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  filter:
-    drop-shadow(0 0 18px rgba(255, 91, 10, 0.22))
-    drop-shadow(0 0 22px rgba(32, 217, 255, 0.20));
-}
-
 @supports (-webkit-text-stroke: 1px transparent) {
   .phonbot-landing h1,
   .phonbot-landing h2 {
