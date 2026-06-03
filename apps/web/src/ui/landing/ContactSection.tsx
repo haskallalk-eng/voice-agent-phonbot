@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { IconBolt } from '../PhonbotIcons.js';
+import { IconPhone, IconBolt } from '../PhonbotIcons.js';
 import { useVisible } from './shared.js';
 
 export function ContactSection() {
@@ -77,12 +77,12 @@ export function ContactSection() {
               </div>
             </div>
 
-            {/* Live test card */}
+            {/* Phonbot card */}
             <div className="relative rounded-2xl p-6 overflow-hidden" style={{ backdropFilter: 'blur(48px)' }}>
               <div className="absolute inset-0" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '1rem' }} />
               <div className="relative flex items-center gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center">
-                  <img className="brand-asset-mark" src="/brand/phonbot-eyes-glow.png" alt="" />
+                <div className="crystal-demo-mark shrink-0 scale-75">
+                  <img src="/brand/phonbot-crystal-icon-cropped.png" alt="" className="h-12 w-12 object-contain" />
                 </div>
                 <div>
                   <p className="text-xs text-white/30 uppercase tracking-wider font-semibold mb-0.5">Live testen</p>
@@ -107,8 +107,10 @@ export function ContactSection() {
               <div className="relative p-8 sm:p-10">
                 {state === 'sent' ? (
                   <div className="flex flex-col items-center justify-center text-center py-10 gap-5">
-                    <div className="h-20 w-20">
-                      <img className="brand-asset-mark" src="/brand/phonbot-face-icon.png" alt="" />
+                    <div className="crystal-demo-mark">
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#20d9ff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
                     </div>
                     <div>
                       <p className="bg-clip-text text-lg font-bold text-transparent" style={{ backgroundImage: 'var(--crystal-gradient)' }}>Nachricht gesendet!</p>

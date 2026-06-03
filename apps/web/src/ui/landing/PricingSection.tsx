@@ -214,12 +214,6 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
           className="crystal-page-glow crystal-page-glow-cyan absolute -top-24 -right-24 h-64 w-64 opacity-45 pointer-events-none"
           style={{ background: 'radial-gradient(ellipse, rgba(6,182,212,0.32) 0%, transparent 72%)' }}
         />
-        <img
-          className="pointer-events-none absolute -right-8 -top-10 h-36 w-36 object-contain opacity-30 sm:h-44 sm:w-44 lg:opacity-45"
-          src="/brand/phonbot-crystal-calendar.png"
-          alt=""
-          aria-hidden="true"
-        />
         <div className="flex-1 relative z-10">
           <div className="flex items-center gap-3 mb-2">
             <span
