@@ -154,7 +154,7 @@ export function NavHeader({
 
       {/* Mobile dropdown menu */}
       {mobileMenuOpen && (
-        <div className="lg:hidden border-t border-white/5 bg-[#0A0A0F]/95 backdrop-blur-md px-6 py-4 space-y-1">
+        <div className="lg:hidden min-h-[calc(100svh-66px)] border-t border-white/5 bg-[#050508] px-6 py-4 space-y-1">
           {NAV_ITEMS.map((item) => (
             <a
               key={item.anchor}

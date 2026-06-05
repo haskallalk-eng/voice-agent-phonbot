@@ -440,8 +440,8 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 @media (max-width: 639px) {
   .hero-crystal-video {
     --crystal-scale: 1.22;
-    --crystal-settle-y: 5%;
-    object-position: center 48%;
+    --crystal-settle-y: -3%;
+    object-position: center 46%;
   }
 }
 
@@ -480,6 +480,14 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   .crystal-step-card {
     min-height: 92px;
     padding: 12px;
+  }
+
+  .mobile-crystal-steps {
+    margin-top: calc(100svh - 500px);
+  }
+
+  .has-cookie-banner .mobile-crystal-steps {
+    margin-top: calc(100svh - 360px);
   }
 
   .phonbot-landing .crystal-button {
