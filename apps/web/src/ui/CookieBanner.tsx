@@ -52,7 +52,7 @@ export function CookieBanner({ onShowDatenschutz }: { onShowDatenschutz?: () => 
 
   return (
     <div
-      className="fixed bottom-0 left-0 right-0 z-50 px-4 py-4 sm:px-6 sm:py-5"
+      className="fixed bottom-0 left-0 right-0 z-50 px-4 py-3 pb-safe sm:px-6 sm:py-5"
       style={{
         background: 'linear-gradient(180deg, rgba(5,5,8,0.02), rgba(5,5,8,0.94) 18%, rgba(5,5,8,0.98))',
         borderTop: '0',
@@ -61,29 +61,34 @@ export function CookieBanner({ onShowDatenschutz }: { onShowDatenschutz?: () => 
         boxShadow: '0 -22px 54px rgba(5,5,8,0.72)',
       }}
     >
-      <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-start sm:items-center gap-4">
+      <div className="mx-auto flex max-w-5xl flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
         {/* Text */}
-        <div className="flex-1 text-sm text-white/70 leading-relaxed">
-          Wir verwenden technisch notwendige Cookies. Zur Fehlererkennung setzen wir Sentry ein
-          (Error-Tracking, ohne personenbezogene Daten). Zur Bot-Absicherung von Formularen
-          nutzen wir Cloudflare Turnstile (IP + Browser-Merkmale, keine Tracking-Cookies).
-          Keine Marketing- oder Tracking-Cookies.{' '}
+        <div className="flex-1 text-xs leading-relaxed text-white/72 sm:text-sm">
+          <span className="sm:hidden">
+            Notwendige Cookies und Sicherheitsdienste. Keine Marketing-Cookies.{' '}
+          </span>
+          <span className="hidden sm:inline">
+            Wir verwenden technisch notwendige Cookies. Zur Fehlererkennung setzen wir Sentry ein
+            (Error-Tracking, ohne personenbezogene Daten). Zur Bot-Absicherung von Formularen
+            nutzen wir Cloudflare Turnstile (IP + Browser-Merkmale, keine Tracking-Cookies).
+            Keine Marketing- oder Tracking-Cookies.{' '}
+          </span>
           <button onClick={onShowDatenschutz} className="text-orange-400 hover:text-orange-300 underline cursor-pointer transition-colors">
             Datenschutz
           </button>
         </div>
 
         {/* Buttons */}
-        <div className="flex gap-2 shrink-0">
+        <div className="grid w-full shrink-0 grid-cols-2 gap-2 sm:flex sm:w-auto">
           <button
             onClick={handleNecessary}
-            className="crystal-button crystal-button-secondary rounded-full px-4 py-2 text-sm font-medium text-white/70 hover:text-white transition-all"
+            className="crystal-button crystal-button-secondary rounded-full px-3 py-2 text-xs font-medium text-white/70 transition-all hover:text-white sm:px-4 sm:text-sm"
           >
             Nur notwendige
           </button>
           <button
             onClick={handleAccept}
-            className="crystal-button rounded-full px-5 py-2 text-sm font-semibold text-white transition-all hover:scale-[1.03]"
+            className="crystal-button rounded-full px-3 py-2 text-xs font-semibold text-white transition-all hover:scale-[1.03] sm:px-5 sm:text-sm"
           >
             Akzeptieren
           </button>
