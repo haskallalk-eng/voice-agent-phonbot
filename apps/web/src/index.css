@@ -49,6 +49,13 @@ body {
 @media (max-width: 640px) {
   .break-all-mobile { word-break: break-all; overflow-wrap: anywhere; }
 
+  .phonbot-landing h1,
+  .phonbot-landing h2,
+  .phonbot-landing p,
+  .phonbot-landing button {
+    overflow-wrap: anywhere;
+  }
+
   .ambient-glow,
   .ambient-glow-alt {
     overflow-x: clip;
@@ -150,6 +157,9 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   font-feature-settings: "cv02" 1, "cv03" 1, "cv04" 1, "ss01" 1;
   text-rendering: geometricPrecision;
   background: #050508 !important;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: clip;
 }
 
 .phonbot-landing section,
@@ -429,8 +439,9 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 
 @media (max-width: 639px) {
   .hero-crystal-video {
-    --crystal-scale: 1.66;
-    --crystal-settle-y: -28%;
+    --crystal-scale: 1.22;
+    --crystal-settle-y: 5%;
+    object-position: center 48%;
   }
 }
 
@@ -467,8 +478,12 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 
 @media (max-width: 639px) {
   .crystal-step-card {
-    min-height: 104px;
+    min-height: 92px;
     padding: 12px;
+  }
+
+  .phonbot-landing .crystal-button {
+    max-width: 100%;
   }
 }
 

@@ -18,7 +18,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
   return (
     <>
       <section className="relative z-10 w-full px-0 pb-0 pt-0">
-        <div className="crystal-plain-bg relative min-h-[1080px] overflow-hidden px-4 pb-8 pt-0 sm:min-h-[calc(100svh-72px)] sm:px-8 sm:pb-9 sm:pt-0 lg:min-h-[790px] lg:px-10 lg:pb-10 lg:pt-0">
+        <div className="crystal-plain-bg relative min-h-[940px] overflow-hidden px-4 pb-8 pt-0 sm:min-h-[calc(100svh-72px)] sm:px-8 sm:pb-9 sm:pt-0 lg:min-h-[790px] lg:px-10 lg:pb-10 lg:pt-0">
 
           <button
             type="button"
@@ -52,9 +52,9 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
             </div>
           </button>
 
-          <div className="pointer-events-none relative z-20 flex min-h-[1020px] flex-col justify-between sm:min-h-[calc(100svh-136px)] lg:min-h-[700px]">
-            <div className="mx-auto max-w-4xl pt-16 text-center sm:pt-20 lg:pt-20">
-              <h1 className="mx-auto mb-5 max-w-4xl text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
+          <div className="pointer-events-none relative z-20 flex min-h-[880px] flex-col justify-between sm:min-h-[calc(100svh-136px)] lg:min-h-[700px]">
+            <div className="mx-auto w-full max-w-[21rem] pt-16 text-center sm:max-w-4xl sm:pt-20 lg:pt-20">
+              <h1 className="mx-auto mb-4 max-w-[20rem] text-[2.08rem] font-extrabold leading-[1.04] tracking-tight sm:mb-5 sm:max-w-4xl sm:text-5xl md:text-6xl lg:text-7xl">
                 Nie wieder einen{' '}
                 <span
                   className="bg-clip-text text-transparent"
@@ -64,21 +64,21 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
                 </span>
               </h1>
 
-              <p className="mx-auto mb-7 max-w-3xl text-lg leading-relaxed text-white/58 sm:text-xl">
+              <p className="mx-auto mb-6 max-w-[20rem] text-[0.95rem] leading-relaxed text-white/64 sm:mb-7 sm:max-w-3xl sm:text-xl">
                 <span className="bg-clip-text font-semibold text-transparent" style={{ backgroundImage: 'var(--crystal-gradient)' }}>Phonbot</span> beantwortet Anrufe, bucht Termine und{' '}
                 <span className="font-medium text-white/82">lernt mit jedem Gespräch dazu.</span>
               </p>
 
-              <div className="pointer-events-auto flex flex-col items-center justify-center gap-4 sm:flex-row">
+              <div className="pointer-events-auto mx-auto flex w-full max-w-[20.5rem] flex-col items-center justify-center gap-3 sm:max-w-none sm:flex-row sm:gap-4">
                 <button
                   onClick={onGoToRegister}
-                  className="crystal-button w-full rounded-full px-8 py-4 text-base font-semibold text-white transition-all duration-300 hover:scale-105 sm:w-auto"
+                  className="crystal-button min-h-14 w-full rounded-full px-5 py-3.5 text-base font-semibold text-white transition-all duration-300 hover:scale-105 sm:w-auto sm:px-8 sm:py-4"
                 >
                   Kostenlos testen
                 </button>
                 <button
                   onClick={onShowDemoModal}
-                  className="crystal-button crystal-button-secondary inline-flex w-full items-center justify-center gap-2 rounded-full px-8 py-4 text-center text-base font-semibold text-white/90 transition-all duration-300 hover:scale-105 hover:text-white sm:w-auto"
+                  className="crystal-button crystal-button-secondary inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-full px-5 py-3.5 text-center text-base font-semibold text-white/90 transition-all duration-300 hover:scale-105 hover:text-white sm:w-auto sm:px-8 sm:py-4"
                 >
                   <IconPhone size={18} className="opacity-70" />
                   Demo anrufen
@@ -88,7 +88,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
             </div>
 
             <div
-              className="crystal-steps-shell pointer-events-none absolute inset-x-4 top-[720px] z-30 grid gap-3 sm:inset-x-6 sm:bottom-32 sm:top-auto sm:grid-cols-3 lg:inset-x-8 lg:bottom-36"
+              className="crystal-steps-shell pointer-events-none absolute inset-x-4 top-[620px] z-30 grid gap-3 sm:inset-x-6 sm:bottom-32 sm:top-auto sm:grid-cols-3 lg:inset-x-8 lg:bottom-36"
             >
               {STEPS.map((step) => (
                 <div key={step.num} className="crystal-step-card">
