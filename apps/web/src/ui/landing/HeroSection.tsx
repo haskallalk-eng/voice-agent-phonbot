@@ -18,7 +18,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
   return (
     <>
       <section className="relative z-10 w-full px-0 pb-0 pt-0">
-        <div className="crystal-plain-bg relative min-h-[940px] overflow-hidden px-4 pb-8 pt-0 sm:min-h-[calc(100svh-72px)] sm:px-8 sm:pb-9 sm:pt-0 lg:min-h-[790px] lg:px-10 lg:pb-10 lg:pt-0">
+        <div className="crystal-plain-bg relative min-h-[1130px] overflow-hidden px-4 pb-8 pt-0 sm:min-h-[calc(100svh-72px)] sm:px-8 sm:pb-9 sm:pt-0 lg:min-h-[790px] lg:px-10 lg:pb-10 lg:pt-0">
 
           <button
             type="button"
@@ -52,7 +52,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
             </div>
           </button>
 
-          <div className="pointer-events-none relative z-20 flex min-h-[880px] flex-col justify-between sm:min-h-[calc(100svh-136px)] lg:min-h-[700px]">
+          <div className="pointer-events-none relative z-20 flex min-h-[1060px] flex-col justify-start sm:min-h-[calc(100svh-136px)] sm:justify-between lg:min-h-[700px]">
             <div className="mx-auto w-full max-w-[21rem] pt-16 text-center sm:max-w-4xl sm:pt-20 lg:pt-20">
               <h1 className="mx-auto mb-4 max-w-[20rem] text-[2.08rem] font-extrabold leading-[1.04] tracking-tight sm:mb-5 sm:max-w-4xl sm:text-5xl md:text-6xl lg:text-7xl">
                 Nie wieder einen{' '}
@@ -88,7 +88,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
             </div>
 
             <div
-              className="crystal-steps-shell pointer-events-none absolute inset-x-4 top-[620px] z-30 grid gap-3 sm:inset-x-6 sm:bottom-32 sm:top-auto sm:grid-cols-3 lg:inset-x-8 lg:bottom-36"
+              className="crystal-steps-shell mobile-crystal-steps pointer-events-none relative z-30 mx-auto grid w-full max-w-[22rem] gap-3 sm:absolute sm:inset-x-6 sm:bottom-32 sm:top-auto sm:mx-0 sm:max-w-none sm:grid-cols-3 lg:inset-x-8 lg:bottom-36"
             >
               {STEPS.map((step) => (
                 <div key={step.num} className="crystal-step-card">

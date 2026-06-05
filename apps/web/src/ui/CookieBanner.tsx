@@ -38,6 +38,11 @@ export function CookieBanner({ onShowDatenschutz }: { onShowDatenschutz?: () => 
     if (!stored) setVisible(true);
   }, []);
 
+  useEffect(() => {
+    document.documentElement.classList.toggle('has-cookie-banner', visible);
+    return () => document.documentElement.classList.remove('has-cookie-banner');
+  }, [visible]);
+
   function handleAccept() {
     writeConsent('accepted');
     setVisible(false);
@@ -52,7 +57,7 @@ export function CookieBanner({ onShowDatenschutz }: { onShowDatenschutz?: () => 
 
   return (
     <div
-      className="fixed bottom-0 left-0 right-0 z-50 px-4 py-3 pb-safe sm:px-6 sm:py-5"
+      className="fixed bottom-0 left-0 right-0 z-50 px-4 py-2 pb-safe sm:px-6 sm:py-5"
       style={{
         background: 'linear-gradient(180deg, rgba(5,5,8,0.02), rgba(5,5,8,0.94) 18%, rgba(5,5,8,0.98))',
         borderTop: '0',
@@ -61,9 +66,9 @@ export function CookieBanner({ onShowDatenschutz }: { onShowDatenschutz?: () => 
         boxShadow: '0 -22px 54px rgba(5,5,8,0.72)',
       }}
     >
-      <div className="mx-auto flex max-w-5xl flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
+      <div className="mx-auto flex max-w-5xl flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-4">
         {/* Text */}
-        <div className="flex-1 text-xs leading-relaxed text-white/72 sm:text-sm">
+        <div className="flex-1 text-[11px] leading-snug text-white/72 sm:text-sm sm:leading-relaxed">
           <span className="sm:hidden">
             Notwendige Cookies und Sicherheitsdienste. Keine Marketing-Cookies.{' '}
           </span>
@@ -82,13 +87,13 @@ export function CookieBanner({ onShowDatenschutz }: { onShowDatenschutz?: () => 
         <div className="grid w-full shrink-0 grid-cols-2 gap-2 sm:flex sm:w-auto">
           <button
             onClick={handleNecessary}
-            className="crystal-button crystal-button-secondary rounded-full px-3 py-2 text-xs font-medium text-white/70 transition-all hover:text-white sm:px-4 sm:text-sm"
+            className="crystal-button crystal-button-secondary rounded-full px-3 py-1.5 text-xs font-medium text-white/70 transition-all hover:text-white sm:px-4 sm:py-2 sm:text-sm"
           >
             Nur notwendige
           </button>
           <button
             onClick={handleAccept}
-            className="crystal-button rounded-full px-3 py-2 text-xs font-semibold text-white transition-all hover:scale-[1.03] sm:px-5 sm:text-sm"
+            className="crystal-button rounded-full px-3 py-1.5 text-xs font-semibold text-white transition-all hover:scale-[1.03] sm:px-5 sm:py-2 sm:text-sm"
           >
             Akzeptieren
           </button>
