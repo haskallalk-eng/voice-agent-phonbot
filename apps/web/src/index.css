@@ -496,7 +496,7 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   }
 
   .mobile-crystal-steps {
-    margin-top: 430px;
+    margin-top: 220px;
   }
 
   .phonbot-landing .crystal-button {
@@ -551,6 +551,12 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 
 .crystal-steps-shell {
   animation: crystal-steps-reveal 0.8s cubic-bezier(0.16, 1, 0.3, 1) 3.45s both;
+}
+
+@media (max-width: 639px) {
+  .mobile-crystal-steps.crystal-steps-shell {
+    animation: none;
+  }
 }
 
 /* Pulsing mic ring */
