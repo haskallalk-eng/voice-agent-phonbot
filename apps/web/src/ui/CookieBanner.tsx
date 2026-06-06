@@ -38,11 +38,6 @@ export function CookieBanner({ onShowDatenschutz }: { onShowDatenschutz?: () => 
     if (!stored) setVisible(true);
   }, []);
 
-  useEffect(() => {
-    document.documentElement.classList.toggle('has-cookie-banner', visible);
-    return () => document.documentElement.classList.remove('has-cookie-banner');
-  }, [visible]);
-
   function handleAccept() {
     writeConsent('accepted');
     setVisible(false);

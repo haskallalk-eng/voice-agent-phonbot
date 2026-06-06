@@ -29,14 +29,23 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
             <div className="absolute inset-0 bg-transparent" />
 
             <video
-              className="hero-crystal-video absolute inset-0 z-0 h-full w-full object-contain object-center"
+              className="hero-crystal-video absolute inset-0 z-0 hidden h-full w-full object-contain object-center sm:block"
               src="/media/chipy-crystal-reveal.mp4"
               poster="/media/chipy-crystal-reveal-poster.png"
               autoPlay
               muted
+              controls={false}
+              disablePictureInPicture
               onEnded={() => setCrystalSettled(true)}
               playsInline
               preload="auto"
+            />
+            <img
+              className="hero-crystal-video absolute inset-0 z-0 h-full w-full object-contain object-center sm:hidden"
+              src="/media/chipy-crystal-reveal-poster.png"
+              alt=""
+              aria-hidden="true"
+              draggable={false}
             />
 
             <div className="hidden">
