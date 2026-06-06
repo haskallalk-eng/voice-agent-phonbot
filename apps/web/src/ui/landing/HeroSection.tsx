@@ -84,7 +84,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
                   Demo anrufen
                 </button>
               </div>
-              <p className="mt-4 text-xs text-white/42">✓ Kostenlos · ✓ Sofort einsatzbereit · ✓ DSGVO-fokussiert</p>
+              <p className="hero-trust-line mx-auto mt-4 inline-flex max-w-full items-center justify-center rounded-full px-2.5 py-1.5 text-[11px] font-semibold leading-none text-white/68 min-[390px]:text-xs">✓ Kostenlos · ✓ Sofort einsatzbereit · ✓ DSGVO-fokussiert</p>
             </div>
 
             <div
