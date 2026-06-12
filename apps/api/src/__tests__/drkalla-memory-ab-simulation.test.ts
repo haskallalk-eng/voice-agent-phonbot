@@ -159,6 +159,20 @@ describe('DrKalla memory A/B simulation matrix', () => {
     expect(evaluation.reason).toBe('resolve_common_german_asr_alias');
   });
 
+  it('keeps plural German product-type requests in the active product-type funnel', () => {
+    const cases = buildDrkallaMemoryAbCases({ cases: 1000, seed: 'drkalla-product-type-plural-v1' });
+    const productTypeCase = cases.find((item) =>
+      item.category === 'asr_aliases'
+      && item.userText.includes('Haarfarben')
+    );
+
+    expect(productTypeCase).toBeTruthy();
+    const evaluation = evaluateDrkallaMemoryAbCase(productTypeCase!);
+    expect(evaluation.aPasses).toBe(false);
+    expect(evaluation.bPasses).toBe(true);
+    expect(evaluation.reason).toBe('resolve_common_german_asr_alias');
+  });
+
   it('adds the Profi disclosure only for the first non-perfume price question', () => {
     const cases = buildDrkallaMemoryAbCases({ cases: 1000, seed: 'drkalla-price-profi-funnel-v1' });
     const priceCase = cases.find((item) =>

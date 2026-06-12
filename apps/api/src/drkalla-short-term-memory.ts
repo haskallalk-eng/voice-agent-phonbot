@@ -157,7 +157,7 @@ const STATIC_FACT_KEYS = new Set<DrkallaStoredMemoryFactKey>([
 
 function detectUserProductType(text: string): string | null {
   const normalized = text.toLocaleLowerCase('de-DE');
-  if (/\b(?:haarfarbe|farbcreme|color cream|haare? f(?:ä|ae)rben|f(?:ä|ae)rben|farbe)\b/u.test(normalized)) {
+  if (/\b(?:haarfarben?|farbcremes?|color creams?|coloration|haare? f(?:ä|ae)rben|f(?:ä|ae)rben|farben?)\b/u.test(normalized)) {
     return 'Haarfarbe/Farbcreme';
   }
   if (/\b(?:entwickler|oxidant|wasserstoffperoxid|peroxid|prozentst(?:ä|ae)rke)\b/u.test(normalized)) {

@@ -84,7 +84,7 @@ function fallbackTextWithMemory(input: {
     return `Soll ich dir den Produktlink zu ${input.memory.lastMentionedProduct.spokenName} per SMS schicken?`;
   }
   if (input.memory.activeProductType) {
-    return `Bei ${input.memory.activeProductType.label} kann ich dir Marken, Varianten oder passende Produkte nennen. Suchst du eine bestimmte Marke oder Nuance?`;
+    return `Bei ${input.memory.activeProductType.label} kann ich dir eine kurze Auswahl nach Marken, Varianten oder Nuancen nennen. Soll ich mit Marken anfangen?`;
   }
   return fallbackText(userText);
 }

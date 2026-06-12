@@ -287,4 +287,44 @@ describe('DrKalla custom LLM responder', () => {
     expect(response.text).not.toContain('welches Produkt oder welche Produktart');
     expect(response.metrics.extraKbCalls).toBe(0);
   });
+
+  it('uses plural German product-type requests for the next funnel step', async () => {
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: {
+        enabled: true,
+        allowModelDirectives: true,
+        allowLiveRollout: false,
+        maxDirectiveChars: 650,
+      },
+      event: turn('Ich suche Haarfarben.'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => '' },
+    });
+
+    expect(response.text).toContain('Haarfarbe');
+    expect(response.text).toContain('Marke');
+    expect(response.text).not.toContain('welches Produkt oder welche Produktart');
+    expect(response.metrics.extraLlmCalls).toBe(1);
+    expect(response.metrics.extraKbCalls).toBe(0);
+  });
+
+  it('offers an active product-type selection instead of asking for one specific brand', async () => {
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: {
+        enabled: true,
+        allowModelDirectives: true,
+        allowLiveRollout: false,
+        maxDirectiveChars: 650,
+      },
+      event: turn('Ich suche Haarfarben.'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => '' },
+    });
+
+    expect(response.text).toContain('Auswahl');
+    expect(response.text).toContain('Marken');
+    expect(response.text).not.toContain('bestimmte Marke');
+    expect(response.text).not.toContain('welches Produkt oder welche Produktart');
+    expect(response.metrics.extraKbCalls).toBe(0);
+  });
 });
