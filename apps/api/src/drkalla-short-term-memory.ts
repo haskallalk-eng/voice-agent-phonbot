@@ -157,6 +157,15 @@ const STATIC_FACT_KEYS = new Set<DrkallaStoredMemoryFactKey>([
 
 function detectUserProductType(text: string): string | null {
   const normalized = text.toLocaleLowerCase('de-DE');
+  if (/\b(?:farbentferner|farbentfernung(?:st(?:ü|ue)cher)?|farbe entfernen|color remover|remover)\b/u.test(normalized)) {
+    return 'Farbentferner';
+  }
+  if (/\b(?:blondierung(?:en)?|blondierpulver|bleichpulver|aufheller|blondieren)\b/u.test(normalized)) {
+    return 'Blondierung';
+  }
+  if (/\b(?:haargl(?:ä|ae)ttung|gl(?:ä|ae)ttung|gl(?:ä|ae)ttungscreme|keratin|gl(?:ä|ae)tteisen|haare? gl(?:ä|ae)tten)\b/u.test(normalized)) {
+    return 'Haarglättung';
+  }
   if (/\b(?:haarfarben?|farbcremes?|color creams?|coloration|haare? f(?:ä|ae)rben|f(?:ä|ae)rben|farben?)\b/u.test(normalized)) {
     return 'Haarfarbe/Farbcreme';
   }
@@ -168,6 +177,12 @@ function detectUserProductType(text: string): string | null {
   }
   if (/\b(?:parfum|duft|eau de parfum|herrenduft|damenduft|unisexduft)\b/u.test(normalized)) {
     return 'Parfum/Duft';
+  }
+  if (/\b(?:haarspray|mousse|haargel|styling|wachs|pomade)\b/u.test(normalized)) {
+    return 'Styling';
+  }
+  if (/\b(?:salonwagen|wascheinheit|friseurstuhl|salonst(?:ü|ue)hle?|stuhl|salonm(?:ö|oe)bel|friseurm(?:ö|oe)bel|ablage|stehmatte)\b/u.test(normalized)) {
+    return 'Salonmöbel/-ausstattung';
   }
   if (/\b(?:kamm|b(?:ü|ue)rste|schere|clipper|trimmer|friseurtool|tool)\b/u.test(normalized)) {
     return 'Friseur-Tool';
