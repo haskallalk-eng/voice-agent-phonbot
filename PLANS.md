@@ -262,6 +262,7 @@ Acceptance:
 - [x] 2026-06-12: Reviewed the first real DrKalla Custom Runtime Canary webcall. Retell reached the correct custom-LLM canary and ASR captured the user, but the transcript contained no assistant turns because live `response_required` events used numeric `response_id` values while the parser accepted only strings. The route now normalizes safe numeric response IDs to strings and still rejects invalid object IDs fail-closed. Verification passed with focused custom-runtime WebSocket tests, API typecheck, redeploy with Retell sync skipped, public health 200, and a public WebSocket smoke using numeric `response_id` that returned a Retell-compatible `response` in about 374 ms. No phone number, Retell-KB, production DrKalla agent, Own-KB primary flag, or OpenAI Realtime implementation changed.
 - [x] 2026-06-12: Reviewed the next DrKalla Custom Runtime Canary webcall after the response-ID fix. The canary now produces assistant turns, proving Retell transport and Custom LLM response format work, but the call exposed the next quality gap: the canary repeated the same fallback clarification because live product/RAG/funnel response composition is not yet wired into Custom Runtime. Added the 99%-review implementation plan `docs/superpowers/plans/2026-06-12-turn-taking-endpointing-guard.md` and introduced Milestone 1J as the next runtime-quality layer: deterministic Turn-Taking / Endpointing Guard, no normal-path LLM/KB calls, p95 decision cost <= 20 ms, no authority over facts/tools/end-call/scope. No phone number, Retell-KB, production DrKalla agent, Own-KB primary flag, or OpenAI Realtime implementation changed.
 - [x] 2026-06-12: Implemented Milestone 1J first pass as a pure deterministic Turn-Taking / Endpointing Guard in `apps/api/src/turn-taking-guard.ts` with focused tests in `apps/api/src/__tests__/turn-taking-guard.test.ts`. It distinguishes complete final utterances, trailing German connectors/fillers, unstable partials, low ASR confidence, inaudible streaks, corrections/interruptions, empty input, and long silence while proving it cannot call LLM/KB, authorize tools, or end calls. TDD evidence included a red test for German `aehm` filler handling before the regex fix. Verification passed with 61 focused voice/runtime/canary tests, API typecheck, and a 1000-case local simulation (`p95DecisionMs` about 0.008 ms, no extra LLM/KB calls). This is not live-wired yet; no phone number, Retell-KB, production DrKalla agent, Own-KB primary flag, or OpenAI Realtime implementation changed.
+- [x] 2026-06-12: Wired the Milestone 1J guard into the DrKalla Custom Runtime Canary responder for the safest live-relevant path only: inaudible/repair turns now update short-term memory, return a deterministic human repair prompt, keep `end_call=false`, and skip the model call. TDD evidence first reproduced the bug with red responder/route tests showing two model calls on two `(inaudible speech)` turns; the fix made the same tests green and proves per-session memory escalates from "Wie bitte?" to the second-miss repair while separate sessions start fresh. Verification passed with 65 focused turn-taking/voice-runtime/custom-LLM tests and API typecheck. Wait/delay endpointing behavior and full product/RAG/funnel response composition remain future work; no phone number, Retell-KB, production DrKalla agent, Own-KB primary flag, runtime rollout flag, or OpenAI Realtime implementation changed.
 - [ ] Milestone 0.5B: Trusted Retell-KB vs Own-KB benchmark execution after Milestone 1A, 1B, 1D, and 1E; real transcript/shadow/call-log/eval artifact storage also requires Milestone 1C when potential PII is present.
 - [x] Milestone 1A: TrustedScope for `knowledge.search`.
 - [x] Milestone 1B: Trace scope correctness.
@@ -272,7 +273,7 @@ Acceptance:
 - [x] Milestone 1G: Voice Compliance and Disclosure Controls.
 - [x] Milestone 1H: German Voice Output Normalization Contract.
 - [x] Milestone 1I: STT / TTT / TTS Voice Pipeline Contract.
-- [complete first pass] Milestone 1J: Turn-Taking / Endpointing Guard.
+- [complete first pass + repair canary wiring] Milestone 1J: Turn-Taking / Endpointing Guard.
 - [complete first pass] Milestone 2C: Intent Playbooks for Top Real Calls.
 - [complete first pass] Milestone 2D: Tool Confirmation State Machine.
 - [complete first pass] Milestone 2E: Business Hours and Holiday Resolver.
@@ -906,7 +907,22 @@ Acceptance:
   Rationale: a semantic turn detector can improve interruptions, unfinished German phrases, inaudible speech, and false endpointing, but a normal-path LLM call before every response would violate the 500-800 ms SLO. Milestone 1J therefore starts as a pure function over normalized STT/VAD/update state with p95 decision cost <= 20 ms, no extra LLM/KB calls, and no authority over facts, tools, end-call, tenant scope, or policy.
   Date/Author: 2026-06-12 / Codex turn-taking 99%-plan review.
 
+- Decision: live canary guard wiring starts with repair prompts only, not wait/delay endpointing.
+  Rationale: the latest DrKalla canary problem included inaudible/misheard turns and repeated fallback. Repair prompts are the lowest-risk guard action because they require no extra model/KB call, no provider timing delay, no facts, no tools, and no end-call authority. Delaying or overriding Retell endpointing for `wait_short`/`keep_listening` needs separate live timing evidence before it can affect calls.
+  Date/Author: 2026-06-12 / Codex custom-runtime canary hardening.
+
 ## Outcomes & Retrospective
+
+Milestone 1J turn-taking guard outcome, 2026-06-12:
+
+- Added `apps/api/src/turn-taking-guard.ts` as a deterministic guard for `respond_now`, `wait_short`, `keep_listening`, and `repair_prompt`.
+- Added `apps/api/src/__tests__/turn-taking-guard.test.ts` with coverage for final German utterances, trailing fillers/connectors, unstable partials, low-confidence ASR, inaudible streaks, corrections/interruptions, empty input, true silence, no LLM/KB/tool/end-call authority, and a 1000-case latency simulation.
+- Wired the guard into `apps/api/src/drkalla-custom-llm-responder.ts` for repair prompts after DrKalla memory updates and before model completion.
+- Added responder and WebSocket route tests proving `(inaudible speech)` keeps `end_call=false`, avoids the model call, increments per-session short-term memory, escalates the second repair prompt, and does not leak memory across separate WebSocket sessions.
+- Verified focused tests pass: `corepack pnpm --filter @vas/api test -- --run src/__tests__/turn-taking-guard.test.ts src/__tests__/voice-pipeline-contract.test.ts src/__tests__/voice-runtime-provider-adapters.test.ts src/__tests__/retell-drkalla-custom-llm-ws.test.ts src/__tests__/retell-drkalla-custom-llm-ws-route.test.ts src/__tests__/drkalla-custom-llm-responder.test.ts` (65 tests).
+- Verified API typecheck passes: `corepack pnpm --filter @vas/api typecheck`.
+- No phone number, Retell-KB, production DrKalla agent, Own-KB primary flag, runtime rollout flag, or OpenAI Realtime implementation changed.
+- Remaining work: full product/RAG/funnel response composition is not wired into Custom Runtime yet; `wait_short`/`keep_listening` should stay advisory until live timing evidence proves they improve endpointing without hurting the 500-800 ms SLO.
 
 Milestone 1I voice pipeline contract outcome, 2026-05-30:
 

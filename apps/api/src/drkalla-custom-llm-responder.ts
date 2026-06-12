@@ -2,7 +2,11 @@ import {
   buildDrkallaCustomRuntimeCanaryTurn,
   type DrkallaCustomRuntimeCanaryConfig,
 } from './drkalla-custom-runtime-canary.js';
-import type { DrkallaShortTermVoiceMemory } from './drkalla-short-term-memory.js';
+import {
+  nextInaudibleRepair,
+  type DrkallaShortTermVoiceMemory,
+} from './drkalla-short-term-memory.js';
+import { evaluateTurnTakingGuard } from './turn-taking-guard.js';
 import type { AgentTurnRequestedEvent } from './voice-runtime-contract.js';
 
 export type DrkallaCustomLlmClient = {
@@ -85,6 +89,28 @@ export async function buildDrkallaCustomLlmResponse(input: {
   }
 
   const user = sanitizeUserText(input.event.currentUserText ?? '');
+  const turnGuard = evaluateTurnTakingGuard({
+    transcriptText: user,
+    transcriptFinal: true,
+    asrConfidence: null,
+    partialStableMs: 0,
+    silenceMs: canaryTurn.runtime.memory.silenceMs,
+    inaudibleStreak: canaryTurn.runtime.memory.inaudibleStreak,
+  });
+  if (turnGuard.action === 'repair_prompt') {
+    return {
+      blocked: false,
+      text: nextInaudibleRepair(canaryTurn.runtime.memory),
+      memory: canaryTurn.runtime.memory,
+      metrics: {
+        extraLlmCalls: 0,
+        extraKbCalls: 0,
+        directiveChars: canaryTurn.directiveChars,
+      },
+      blockers: [],
+    };
+  }
+
   const text = (await input.client.complete({
     system: compactSystemPrompt(canaryTurn.modelDirectives),
     user,

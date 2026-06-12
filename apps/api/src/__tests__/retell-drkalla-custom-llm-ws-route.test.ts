@@ -92,13 +92,13 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     await app.close();
   });
 
-  it('keeps short-term memory across turns within the same Retell websocket session', async () => {
+  it('keeps short-term memory across repair turns without calling the model', async () => {
     process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
     process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
-    const systemPrompts: string[] = [];
+    let modelCalls = 0;
     const { app, url } = await testServer({
-      complete: async (input) => {
-        systemPrompts.push(input.system);
+      complete: async () => {
+        modelCalls += 1;
         return 'Wie bitte? Ich habe dich gerade schlecht verstanden.';
       },
     });
@@ -109,18 +109,28 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
       response_id: 'response-1',
       transcript: [{ role: 'user', content: '(inaudible speech)' }],
     }));
-    await receive(ws);
+    const first = await receive(ws);
 
     ws.send(JSON.stringify({
       interaction_type: 'response_required',
       response_id: 'response-2',
       transcript: [{ role: 'user', content: '(inaudible speech)' }],
     }));
-    await receive(ws);
+    const second = await receive(ws);
 
-    expect(systemPrompts).toHaveLength(2);
-    expect(systemPrompts[0]).toContain('inaudible_streak=1');
-    expect(systemPrompts[1]).toContain('inaudible_streak=2');
+    expect(modelCalls).toBe(0);
+    expect(first).toMatchObject({
+      response_type: 'response',
+      response_id: 'response-1',
+      end_call: false,
+    });
+    expect(JSON.stringify(first)).toContain('Wie bitte?');
+    expect(second).toMatchObject({
+      response_type: 'response',
+      response_id: 'response-2',
+      end_call: false,
+    });
+    expect(JSON.stringify(second)).toContain('Sag bitte nur ein Stichwort');
 
     ws.close();
     await app.close();
@@ -129,10 +139,10 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
   it('does not leak short-term memory across separate Retell websocket sessions', async () => {
     process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
     process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
-    const systemPrompts: string[] = [];
+    let modelCalls = 0;
     const { app, url } = await testServer({
-      complete: async (input) => {
-        systemPrompts.push(input.system);
+      complete: async () => {
+        modelCalls += 1;
         return 'Wie bitte? Ich habe dich gerade schlecht verstanden.';
       },
     });
@@ -143,7 +153,7 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
       response_id: 'response-1',
       transcript: [{ role: 'user', content: '(inaudible speech)' }],
     }));
-    await receive(first);
+    const firstResponse = await receive(first);
     first.close();
 
     const second = await connect(url);
@@ -152,12 +162,12 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
       response_id: 'response-2',
       transcript: [{ role: 'user', content: '(inaudible speech)' }],
     }));
-    await receive(second);
+    const secondResponse = await receive(second);
 
-    expect(systemPrompts).toHaveLength(2);
-    expect(systemPrompts[0]).toContain('inaudible_streak=1');
-    expect(systemPrompts[1]).toContain('inaudible_streak=1');
-    expect(systemPrompts[1]).not.toContain('inaudible_streak=2');
+    expect(modelCalls).toBe(0);
+    expect(JSON.stringify(firstResponse)).toContain('Wie bitte?');
+    expect(JSON.stringify(secondResponse)).toContain('Wie bitte?');
+    expect(JSON.stringify(secondResponse)).not.toContain('Sag bitte nur ein Stichwort');
 
     second.close();
     await app.close();
