@@ -16,12 +16,13 @@ import type { AgentTurnRequestedEvent } from './voice-runtime-contract.js';
 export type RetellDrkallaCustomLlmParsedMessage = {
   interactionType: string;
   responseId: string;
+  providerResponseId: string | number;
   currentUserText: string;
 };
 
 export type RetellDrkallaCustomLlmReply = {
   response_type: 'response';
-  response_id: string;
+  response_id: string | number;
   content: string;
   content_complete: true;
   end_call: false;
@@ -54,12 +55,12 @@ function firstString(...values: unknown[]): string {
   return '';
 }
 
-function firstIdentifierString(...values: unknown[]): string {
+function firstProviderResponseId(...values: unknown[]): string | number | null {
   for (const value of values) {
     if (typeof value === 'string' && value.trim()) return value.trim();
-    if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return String(value);
+    if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return value;
   }
-  return '';
+  return null;
 }
 
 function latestUserText(transcript: unknown): string {
@@ -85,7 +86,9 @@ export function parseRetellDrkallaCustomLlmMessage(raw: string): RetellDrkallaCu
   if (!message) return null;
 
   const interactionType = firstString(message.interaction_type, message.event);
-  const responseId = firstIdentifierString(message.response_id);
+  const providerResponseId = firstProviderResponseId(message.response_id);
+  if (providerResponseId === null) return null;
+  const responseId = String(providerResponseId);
   const currentUserText = firstString(
     message.current_user_text,
     message.last_user_transcript,
@@ -96,6 +99,7 @@ export function parseRetellDrkallaCustomLlmMessage(raw: string): RetellDrkallaCu
   return {
     interactionType,
     responseId,
+    providerResponseId,
     currentUserText,
   };
 }
@@ -128,7 +132,7 @@ function canonicalTurn(parsed: RetellDrkallaCustomLlmParsedMessage, callId: stri
   };
 }
 
-function reply(responseId: string, content: string): RetellDrkallaCustomLlmReply {
+function reply(responseId: string | number, content: string): RetellDrkallaCustomLlmReply {
   return {
     response_type: 'response',
     response_id: responseId,
@@ -173,7 +177,7 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
   });
   input.onMemory?.(response.memory);
 
-  return reply(parsed.responseId, response.text);
+  return reply(parsed.providerResponseId, response.text);
 }
 
 function secretAccepted(configuredSecret: string | undefined, candidate: unknown): boolean {
