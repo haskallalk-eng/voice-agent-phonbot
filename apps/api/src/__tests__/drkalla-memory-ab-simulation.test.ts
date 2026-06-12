@@ -179,6 +179,9 @@ describe('DrKalla memory A/B simulation matrix', () => {
     ['Haarglättung'],
     ['Haarspray'],
     ['Salonwagen'],
+    ['Friseurwagen'],
+    ['Rollwagen'],
+    ['Arbeitswagen'],
   ])('keeps "%s" catalogue requests in the active product-type funnel', (term) => {
     const cases = buildDrkallaMemoryAbCases({ cases: 1000, seed: 'drkalla-catalogue-product-types-v1' });
     const productTypeCase = cases.find((item) =>

@@ -334,6 +334,9 @@ describe('DrKalla custom LLM responder', () => {
     ['Ich suche Haarglättung.', 'Haarglättung'],
     ['Ich brauche Haarspray.', 'Styling'],
     ['Habt ihr Salonwagen?', 'Salonmöbel/-ausstattung'],
+    ['Habt ihr Friseurwagen?', 'Salonmöbel/-ausstattung'],
+    ['Ich suche einen Rollwagen.', 'Salonmöbel/-ausstattung'],
+    ['Ich brauche einen Arbeitswagen.', 'Salonmöbel/-ausstattung'],
   ])('uses catalogue product-type fallback for "%s"', async (text, expectedProductType) => {
     const response = await buildDrkallaCustomLlmResponse({
       canary: {

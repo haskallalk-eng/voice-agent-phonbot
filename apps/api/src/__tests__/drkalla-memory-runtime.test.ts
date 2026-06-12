@@ -141,6 +141,9 @@ describe('DrKalla memory runtime bridge', () => {
     ['Ich suche Haarglättung.', 'Haarglättung'],
     ['Ich brauche Haarspray.', 'Styling'],
     ['Habt ihr Salonwagen?', 'Salonmöbel/-ausstattung'],
+    ['Habt ihr Friseurwagen?', 'Salonmöbel/-ausstattung'],
+    ['Ich suche einen Rollwagen.', 'Salonmöbel/-ausstattung'],
+    ['Ich brauche einen Arbeitswagen.', 'Salonmöbel/-ausstattung'],
   ])('recognizes catalogue product-type voice request "%s"', (text, expectedProductType) => {
     const session = createDrkallaMemoryRuntimeSession({
       mode: 'custom_runtime',
