@@ -62,6 +62,30 @@ function fallbackText(userText: string): string {
   return 'Ich prüfe das kurz. Sag mir bitte, welches Produkt oder welche Produktart du meinst.';
 }
 
+function fallbackTextWithMemory(input: {
+  userText: string;
+  memory: DrkallaShortTermVoiceMemory;
+}): string {
+  const userText = input.userText;
+  if (/\bunterschied|vergleich\b/i.test(userText)) {
+    const recent = input.memory.recentProducts.slice(-2);
+    if (recent.length >= 2) {
+      return `Ich pruefe den Unterschied zwischen ${recent[0]?.spokenName} und ${recent[1]?.spokenName}. Geht es dir um Anwendung oder Kaufentscheidung?`;
+    }
+    return fallbackText(userText);
+  }
+  if (/\b(?:preis|kostet|kosten|teuer|euro)\b/i.test(userText) && input.memory.lastMentionedProduct) {
+    if (input.memory.profiPriceDisclosureGiven) {
+      return `Soll ich dir den Produktlink zu ${input.memory.lastMentionedProduct.spokenName} per SMS schicken?`;
+    }
+    return 'Das ist der normale Kaeuferpreis; Profi-Friseurpreise kann ich telefonisch nicht nennen. Soll ich dir den Produktlink oder den Profi-Zugang per SMS schicken?';
+  }
+  if (/\blink|kauf|kaufe|bestell|sms\b/i.test(userText) && input.memory.lastMentionedProduct) {
+    return `Soll ich dir den Produktlink zu ${input.memory.lastMentionedProduct.spokenName} per SMS schicken?`;
+  }
+  return fallbackText(userText);
+}
+
 export async function buildDrkallaCustomLlmResponse(input: {
   canary: DrkallaCustomRuntimeCanaryConfig;
   event: AgentTurnRequestedEvent;
@@ -119,7 +143,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
 
   return {
     blocked: false,
-    text: text || fallbackText(user),
+    text: text || fallbackTextWithMemory({ userText: user, memory: canaryTurn.runtime.memory }),
     memory: canaryTurn.runtime.memory,
     metrics: {
       extraLlmCalls: 1,
