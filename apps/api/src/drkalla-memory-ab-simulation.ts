@@ -113,7 +113,9 @@ function textFor(category: DrkallaMemoryAbCategory, index: number): string {
         'Anti Oransch Shampoo',
         'ich meine die Profipreise, ob ihr so einen Profi Login habt',
         'ich will als Friseur Profi Preise sehen',
-      ][index % 4] ?? 'Latasse fuer Herren';
+        'Ich suche Haarfarben',
+        'Welche Farbcremes habt ihr?',
+      ][index % 6] ?? 'Latasse fuer Herren';
     case 'sms_link_dedupe':
       return [
         'Schick mir den Link per SMS.',
@@ -617,6 +619,17 @@ export function evaluateDrkallaMemoryAbCase(testCase: DrkallaMemoryAbCase): Drka
           && DRKALLA_RAG_PROMPT.includes('Profi-Preise anfragen')
           && DRKALLA_RAG_PROMPT.includes('Gewerbe-/Steuernachweis')
           && DRKALLA_RAG_PROMPT.includes('nicht mit Entwicklerpreisen beantworten');
+        break;
+      }
+      if (/Haarfarben|Farbcremes/i.test(testCase.userText)) {
+        const afterProductType = reduceDrkallaShortTermMemory(memory, {
+          type: 'user_audio',
+          turnIndex: 1,
+          text: testCase.userText,
+          audioState: 'heard',
+        });
+        bPasses = afterProductType.activeProductType?.label === 'Haarfarbe/Farbcreme'
+          && nextDrkallaProductFunnelAction(afterProductType, 'Welche Marken habt ihr?') === 'list_active_product_type_selection';
         break;
       }
       const product = testCase.userText.includes('Latasse')
