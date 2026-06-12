@@ -268,6 +268,24 @@ describe('DrKalla memory A/B simulation matrix', () => {
     expect(evaluation.reason).toBe('resolve_common_german_asr_alias');
   });
 
+  it.each([
+    ['Farbkarten'],
+    ['Farbkarte'],
+    ['Koleston Farbkarte'],
+  ])('keeps "%s" Farbkarte requests in the active product-type funnel', (term) => {
+    const cases = buildDrkallaMemoryAbCases({ cases: 1000, seed: 'drkalla-farbkarte-v1' });
+    const productTypeCase = cases.find((item) =>
+      item.category === 'asr_aliases'
+      && item.userText.includes(term)
+    );
+
+    expect(productTypeCase).toBeTruthy();
+    const evaluation = evaluateDrkallaMemoryAbCase(productTypeCase!);
+    expect(evaluation.aPasses).toBe(false);
+    expect(evaluation.bPasses).toBe(true);
+    expect(evaluation.reason).toBe('resolve_common_german_asr_alias');
+  });
+
   it('adds the Profi disclosure only for the first non-perfume price question', () => {
     const cases = buildDrkallaMemoryAbCases({ cases: 1000, seed: 'drkalla-price-profi-funnel-v1' });
     const priceCase = cases.find((item) =>

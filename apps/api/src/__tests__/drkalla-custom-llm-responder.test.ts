@@ -425,6 +425,29 @@ describe('DrKalla custom LLM responder', () => {
   });
 
   it.each([
+    ['Habt ihr Farbkarten?', 'Farbkarte'],
+    ['Ich suche eine Farbkarte.', 'Farbkarte'],
+    ['Habt ihr eine Koleston Farbkarte?', 'Farbkarte'],
+  ])('uses Farbkarte product-type fallback for "%s"', async (text, expectedProductType) => {
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: {
+        enabled: true,
+        allowModelDirectives: true,
+        allowLiveRollout: false,
+        maxDirectiveChars: 650,
+      },
+      event: turn(text),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => '' },
+    });
+
+    expect(response.text).toContain(expectedProductType);
+    expect(response.text).toContain('Auswahl');
+    expect(response.text).not.toContain('welches Produkt oder welche Produktart');
+    expect(response.metrics.extraKbCalls).toBe(0);
+  });
+
+  it.each([
     ['Habt ihr Wascheinheiten?', 'Salonmöbel/-ausstattung'],
     ['Ich suche Friseurstühle.', 'Salonmöbel/-ausstattung'],
     ['Habt ihr Ablagen?', 'Salonmöbel/-ausstattung'],

@@ -166,6 +166,9 @@ function detectUserProductType(text: string): string | null {
   if (/\b(?:haargl(?:ä|ae)ttung|gl(?:ä|ae)ttung|gl(?:ä|ae)ttungscreme|keratin|gl(?:ä|ae)tteisen|haare? gl(?:ä|ae)tten)\b/u.test(normalized)) {
     return 'Haarglättung';
   }
+  if (/\b(?:farbkarten?|nuancenkarten?)\b/u.test(normalized)) {
+    return 'Farbkarte';
+  }
   if (/\b(?:haarfarben?|farbcremes?|color creams?|coloration|haare? f(?:ä|ae)rben|f(?:ä|ae)rben|farben?)\b/u.test(normalized)) {
     return 'Haarfarbe/Farbcreme';
   }
