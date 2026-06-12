@@ -205,7 +205,7 @@ function detectUserProductType(text: string): string | null {
   if (/\b(?:spitzenpapier|nackenpapier|halskrausen?|friseurumh(?:ä|ae)nge?|friseurumhang|salonumh(?:ä|ae)nge?|salonumhang|schneideumh(?:ä|ae)nge?|schneideumhang|schneidecapes?|barbercapes?|umh(?:ä|ae)nge?|umhang|handschuhe?|nitrilhandschuhe?)\b/u.test(normalized)) {
     return 'Salon-Verbrauchsmaterial';
   }
-  if (/\b(?:kamm|k(?:ä|ae)mme|b(?:ü|ue)rsten?|scheren?|friseurscheren?|haarscheren?|clipper|trimmer|friseurtools?|tools?|f(?:ä|ae)rbeschalen?|farbschalen?|f(?:ä|ae)rbepinsel|farbpinsel|alufolie|str(?:ä|ae)hnenfolie|f(?:ä|ae)rbefolie|gl(?:ä|ae)tteisen|haartrockner|f(?:ö|oe)hn|shaver|rasierer|barttrimmer|haartrimmer|haarschneidemaschinen?|schneidemaschinen?)\b/u.test(normalized)) {
+  if (/\b(?:kamm|k(?:ä|ae)mme|b(?:ü|ue)rsten?|scheren?|friseurscheren?|haarscheren?|clipper|trimmer|friseurtools?|tools?|f(?:ä|ae)rbeschalen?|farbschalen?|f(?:ä|ae)rbepinsel|farbpinsel|alufolie|str(?:ä|ae)hnenfolie|f(?:ä|ae)rbefolie|gl(?:ä|ae)tteisen|haartrockner|f(?:ö|oe)hn|shaver|rasierer|barttrimmer|haartrimmer|rasierpinsel|rasierklingen?|haarschneidemaschinen?|schneidemaschinen?|haarstaubwedel|nackenwedel)\b/u.test(normalized)) {
     return 'Friseur-Tool';
   }
   return null;
