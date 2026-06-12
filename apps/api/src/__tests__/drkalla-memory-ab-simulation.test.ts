@@ -248,6 +248,9 @@ describe('DrKalla memory A/B simulation matrix', () => {
 
   it.each([
     ['Wascheinheiten'],
+    ['Waschbecken'],
+    ['Waschplatz'],
+    ['Rückwärtswaschbecken'],
     ['Friseurstühle'],
     ['Ablagen'],
     ['Stehmatten'],
