@@ -54,6 +54,14 @@ function firstString(...values: unknown[]): string {
   return '';
 }
 
+function firstIdentifierString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return String(value);
+  }
+  return '';
+}
+
 function latestUserText(transcript: unknown): string {
   if (!Array.isArray(transcript)) return '';
   for (const turn of [...transcript].reverse()) {
@@ -77,7 +85,7 @@ export function parseRetellDrkallaCustomLlmMessage(raw: string): RetellDrkallaCu
   if (!message) return null;
 
   const interactionType = firstString(message.interaction_type, message.event);
-  const responseId = firstString(message.response_id);
+  const responseId = firstIdentifierString(message.response_id);
   const currentUserText = firstString(
     message.current_user_text,
     message.last_user_transcript,
