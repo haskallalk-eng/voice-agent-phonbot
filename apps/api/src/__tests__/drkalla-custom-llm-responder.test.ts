@@ -55,6 +55,35 @@ function productMemory() {
   });
 }
 
+function twoProductMemory() {
+  const first = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+    type: 'agent_spoke',
+    turnIndex: 1,
+    text: 'Das Serum pflegt die Spitzen.',
+    lastProduct: {
+      spokenName: 'Luxe-Oel Serum',
+      productId: 'luxe-oel-serum',
+      productKind: 'Serum',
+    },
+    factsMentioned: [
+      { key: 'product.luxe-oel-serum.description', label: 'Beschreibung' },
+    ],
+  });
+  return reduceDrkallaShortTermMemory(first, {
+    type: 'agent_spoke',
+    turnIndex: 2,
+    text: 'Das Leave-in bleibt im Haar.',
+    lastProduct: {
+      spokenName: 'Luxe-Oel Leave-in',
+      productId: 'luxe-oel-leave-in',
+      productKind: 'Leave-in',
+    },
+    factsMentioned: [
+      { key: 'product.luxe-oel-leave-in.description', label: 'Beschreibung' },
+    ],
+  });
+}
+
 describe('DrKalla custom LLM responder', () => {
   it('does not call the model while the custom runtime canary is disabled', async () => {
     let calls = 0;
@@ -180,5 +209,63 @@ describe('DrKalla custom LLM responder', () => {
     expect(response.blocked).toBe(false);
     expect(response.text).toContain('Ich prüfe das kurz');
     expect(response.text.length).toBeLessThanOrEqual(180);
+  });
+
+  it('uses product-funnel fallback instead of a category reset when model output is empty', async () => {
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: {
+        enabled: true,
+        allowModelDirectives: true,
+        allowLiveRollout: false,
+        maxDirectiveChars: 650,
+      },
+      event: turn('Wie kaufe ich das?'),
+      memory: productMemory(),
+      client: { complete: async () => '   ' },
+    });
+
+    expect(response.text).toContain('Produktlink');
+    expect(response.text).toContain('SMS');
+    expect(response.text).not.toContain('Produktart');
+    expect(response.text).not.toContain('Produktkategorie');
+  });
+
+  it('uses recent products for comparison fallback when model output is empty', async () => {
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: {
+        enabled: true,
+        allowModelDirectives: true,
+        allowLiveRollout: false,
+        maxDirectiveChars: 650,
+      },
+      event: turn('Was ist der Unterschied?'),
+      memory: twoProductMemory(),
+      client: { complete: async () => '' },
+    });
+
+    expect(response.text).toContain('Luxe-Oel Serum');
+    expect(response.text).toContain('Luxe-Oel Leave-in');
+    expect(response.text).not.toContain('Produktkategorie');
+  });
+
+  it('uses first-price Profi funnel fallback instead of a category reset when model output is empty', async () => {
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: {
+        enabled: true,
+        allowModelDirectives: true,
+        allowLiveRollout: false,
+        maxDirectiveChars: 650,
+      },
+      event: turn('Was kostet das?'),
+      memory: productMemory(),
+      client: { complete: async () => '' },
+    });
+
+    expect(response.text).toContain('normale');
+    expect(response.text).toContain('Profi-Zugang');
+    expect(response.text).toContain('Produktlink');
+    expect(response.text).toContain('SMS');
+    expect(response.text).not.toContain('Produktart');
+    expect(response.text).not.toContain('Produktkategorie');
   });
 });
