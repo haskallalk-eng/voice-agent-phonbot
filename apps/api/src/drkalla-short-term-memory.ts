@@ -193,7 +193,7 @@ function detectUserProductType(text: string): string | null {
   if (/\b(?:parfum|duft|eau de parfum|herrenduft|damenduft|unisexduft)\b/u.test(normalized)) {
     return 'Parfum/Duft';
   }
-  if (/\b(?:haarspray|mousse|haargel|styling|wachs|pomade)\b/u.test(normalized)) {
+  if (/\b(?:haarspray|mousse|haargel|styling|wachs|pomade|dauerwellen?(?:l(?:ö|oe)sung|mittel)?|dauerwelle)\b/u.test(normalized)) {
     return 'Styling';
   }
   if (/\b(?:salonwagen|wascheinheiten?|friseurst(?:ü|ue)hle?|friseurstuhl|salonst(?:ü|ue)hle?|stuhl|salonm(?:ö|oe)bel|friseurm(?:ö|oe)bel|ablagen?|stehmatten?)\b/u.test(normalized)) {
