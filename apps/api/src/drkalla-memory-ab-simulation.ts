@@ -155,13 +155,17 @@ function textFor(category: DrkallaMemoryAbCategory, index: number): string {
         'Ich suche einen Ablagetisch',
         'Habt ihr Ablagetische',
         'Ich brauche Stehmatten',
+        'Habt ihr Spitzenpapier',
+        'Ich brauche Nackenpapier',
+        'Habt ihr Friseurumhänge',
+        'Ich suche Handschuhe',
         'Habt ihr Dauerwellenlösung',
         'Ich suche Dauerwelle',
         'Ich brauche Dauerwellenmittel',
         'Habt ihr Farbkarten',
         'Ich suche eine Farbkarte',
         'Habt ihr eine Koleston Farbkarte',
-      ][index % 52] ?? 'Latasse fuer Herren';
+      ][index % 56] ?? 'Latasse fuer Herren';
     case 'sms_link_dedupe':
       return [
         'Schick mir den Link per SMS.',
@@ -691,6 +695,7 @@ export function evaluateDrkallaMemoryAbCase(testCase: DrkallaMemoryAbCase): Drka
         { pattern: /Haarserum/i, label: 'Serum' },
         { pattern: /Kämme|Bürsten|Scheren|Färbeschalen|Färbepinsel|Alufolie|Strähnenfolie|Glätteisen|Föhn|Haartrockner|Shaver|Rasierer|Barttrimmer|Haarschneidemaschinen|Schneidemaschinen/i, label: 'Friseur-Tool' },
         { pattern: /Wascheinheiten|Waschbecken|Waschplatz|Rückwärtswaschbecken|Friseurstühle|Barberstühle|Friseursessel|Salonstühle|Ablagen|Ablagetische?|Stehmatten/i, label: 'Salonmöbel/-ausstattung' },
+        { pattern: /Spitzenpapier|Nackenpapier|Friseurumhänge|Handschuhe/i, label: 'Salon-Verbrauchsmaterial' },
         { pattern: /Dauerwellenlösung|Dauerwelle|Dauerwellenmittel/i, label: 'Styling' },
         { pattern: /Farbkarten?|Koleston Farbkarte/i, label: 'Farbkarte' },
       ];
