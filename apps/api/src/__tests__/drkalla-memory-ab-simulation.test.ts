@@ -309,6 +309,20 @@ describe('DrKalla memory A/B simulation matrix', () => {
     ['Hair-Clips'],
     ['Handtücher'],
     ['Strähnenhauben'],
+    ['Kosmetikbedarf'],
+    ['Depilationszubehör'],
+    ['Hitzeschutz'],
+    ['Ampullen'],
+    ['Nackenstreifen'],
+    ['Haarschaum'],
+    ['Bright-Wax'],
+    ['Glanz-Spray'],
+    ['Laminier-Spray'],
+    ['Vorbereitungsshampoo'],
+    ['Strähnchenfolie'],
+    ['Blond-Booster'],
+    ['Desinfektionswagen'],
+    ['UVC Lampe'],
   ])('keeps "%s" catalog-backed accessory requests in the active product-type funnel', (term) => {
     const cases = buildDrkallaMemoryAbCases({ cases: 1000, seed: 'drkalla-catalog-accessory-v1' });
     const productTypeCase = cases.find((item) =>

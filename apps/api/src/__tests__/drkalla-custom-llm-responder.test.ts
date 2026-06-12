@@ -535,6 +535,20 @@ describe('DrKalla custom LLM responder', () => {
     ['Habt ihr Hair-Clips?', 'Styling'],
     ['Ich brauche Handtücher.', 'Salon-Verbrauchsmaterial'],
     ['Habt ihr Strähnenhauben?', 'Friseur-Tool'],
+    ['Habt ihr Kosmetikbedarf?', 'Kosmetikbedarf'],
+    ['Habt ihr Depilationszubehör?', 'Kosmetikbedarf'],
+    ['Ich brauche Hitzeschutz.', 'Haarpflege'],
+    ['Habt ihr Ampullen?', 'Haarpflege'],
+    ['Ich suche Nackenstreifen.', 'Salon-Verbrauchsmaterial'],
+    ['Habt ihr Haarschaum?', 'Styling'],
+    ['Ich brauche Bright-Wax.', 'Styling'],
+    ['Habt ihr Glanz-Spray?', 'Styling'],
+    ['Habt ihr Laminier-Spray?', 'Styling'],
+    ['Ich suche Vorbereitungsshampoo.', 'Shampoo'],
+    ['Habt ihr Strähnchenfolie?', 'Friseur-Tool'],
+    ['Ich brauche Blond-Booster.', 'Blondierung'],
+    ['Habt ihr Desinfektionswagen?', 'Salonmöbel/-ausstattung'],
+    ['Ich brauche eine UVC Lampe.', 'Friseur-Tool'],
   ])('uses catalog-backed accessory fallback for "%s"', async (text, expectedProductType) => {
     const response = await buildDrkallaCustomLlmResponse({
       canary: {
