@@ -90,6 +90,12 @@ Voice-agent work must preserve separately measured and governed speech-to-text, 
    - Handles turn-taking, interruptions, barge-in recovery, transport/session control, provider response correlation, streaming, and audio playback.
    - Runtime interaction may coordinate canonical events/commands but must not make business, retrieval, policy, tenant-scope, or mutation decisions.
 
+5. Turn-Taking / Endpointing Guard
+   - May use normalized STT/VAD/update/turn-state signals to advise `respond_now`, `wait_short`, `keep_listening`, or `repair_prompt`.
+   - Must stay deterministic and low-latency in the normal path: no extra LLM call, no extra KB call, no network call, and p95 decision cost <= 20 ms.
+   - Must not select facts, authorize tools, end calls, mutate state, decide tenant scope, or override Agent Core policy.
+   - Retell remains the current voice runtime; this guard improves Custom Runtime behavior without replacing provider audio endpointing by assumption.
+
 ## Canonical Runtime Contract
 
 Every provider integration must map into these internal concepts before reaching business logic.
@@ -457,11 +463,12 @@ corepack pnpm --filter @vas/api test -- <test-file-or-pattern>
 7. Milestone 1G Voice Compliance and Disclosure Controls is accepted as complete; preserve disclosure, consent, retention, deletion, minimization, and audit-event readiness gates.
 8. Milestone 1H German Voice Output Normalization Contract is accepted as complete; preserve `writtenText`/`spokenText` separation, evidence-preserving transformations, and provider-neutral pronunciation boundaries.
 9. Milestone 1I STT / TTT / TTS Voice Pipeline Contract is accepted as complete first pass; preserve separate STT, TTT, TTS, and runtime-interaction measurement boundaries and reopen only on regression.
-10. Run trusted Milestone 0.5B Retell-KB vs Own-KB benchmark execution only with explicit 0.5B-approved eval artifacts after Milestone 1A TrustedScope, Milestone 1B Trace Scope Correctness, Milestone 1D DB/RLS/readiness validation, and Milestone 1E Voice Latency Measurement Contract pass. If no approved artifact is available, fail closed and produce no promotion evidence. If real transcripts, shadow data, call logs, or eval artifacts with potential PII are stored or processed beyond minimal local/dev testing, Milestone 1C PII Purpose Redaction must also pass first. A trusted report is necessary but never sufficient for canary or primary; rollout is governed by the Canary/Primary readiness matrix in `PLANS.md`.
-11. Add architecture-drift CI checks before Milestone 2 provider/core refactors.
-12. Add the canonical runtime contract and provider adapter tests.
-13. Add ContextContract schema and snapshot tests.
-14. Add KB ingestion prompt-injection red-team fixtures.
-15. Add conversational quality evals, product KPIs, and P0/P1 gates.
-16. Improve Own-KB coverage and latency only against Retell-KB parity benchmarks.
-17. Only then expand OpenAI Realtime canary integration.
+10. Milestone 1J Turn-Taking / Endpointing Guard is accepted as complete first pass. Preserve the deterministic runtime-only guard contract: no normal-path LLM/KB calls, p95 decision cost <= 20 ms, and no authority over facts/tools/end-call/scope. Live canary wiring remains future work and must stay behind explicit canary approval.
+11. Run trusted Milestone 0.5B Retell-KB vs Own-KB benchmark execution only with explicit 0.5B-approved eval artifacts after Milestone 1A TrustedScope, Milestone 1B Trace Scope Correctness, Milestone 1D DB/RLS/readiness validation, and Milestone 1E Voice Latency Measurement Contract pass. If no approved artifact is available, fail closed and produce no promotion evidence. If real transcripts, shadow data, call logs, or eval artifacts with potential PII are stored or processed beyond minimal local/dev testing, Milestone 1C PII Purpose Redaction must also pass first. A trusted report is necessary but never sufficient for canary or primary; rollout is governed by the Canary/Primary readiness matrix in `PLANS.md`.
+12. Add architecture-drift CI checks before Milestone 2 provider/core refactors.
+13. Add the canonical runtime contract and provider adapter tests.
+14. Add ContextContract schema and snapshot tests.
+15. Add KB ingestion prompt-injection red-team fixtures.
+16. Add conversational quality evals, product KPIs, and P0/P1 gates.
+17. Improve Own-KB coverage and latency only against Retell-KB parity benchmarks.
+18. Only then expand OpenAI Realtime canary integration.
