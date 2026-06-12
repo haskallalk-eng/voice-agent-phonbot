@@ -20,7 +20,7 @@ export function drkallaLinkToolSignature(): string {
   return crypto.createHmac('sha256', drkallaToolAuthSecret()).update('drkalla-send-link:v1').digest('base64url');
 }
 
-export type DrkallaLinkKind = 'shop' | 'product' | 'category' | 'contact';
+export type DrkallaLinkKind = 'shop' | 'product' | 'category' | 'contact' | 'profi';
 
 export function normalizeDrkallaLinkUrl(input: unknown): string | null {
   if (typeof input !== 'string') return null;
@@ -53,6 +53,8 @@ export function buildDrkallaLinkSmsBody(input: {
   const kind = compact(input.linkKind).toLowerCase();
   const intro = kind === 'contact'
     ? 'Hier ist der Kontaktlink von Dr.Kalla'
+    : kind === 'profi'
+      ? 'Hier ist der Profi-Zugang von Dr.Kalla'
     : kind === 'category'
       ? 'Hier ist die Dr.Kalla Kategorie'
       : kind === 'product'

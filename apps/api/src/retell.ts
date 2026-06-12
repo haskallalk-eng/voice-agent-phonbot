@@ -155,7 +155,7 @@ export type RetellState = {
 export type RetellAgent = {
   agent_id: string;
   agent_name: string | null;
-  response_engine: { type: string; llm_id: string };
+  response_engine: { type: string; llm_id?: string; llm_websocket_url?: string };
   voice_id: string;
   voice_model?: string | null;
   fallback_voice_ids?: string[] | null;
@@ -465,6 +465,30 @@ type VoiceRuntimeConfig = {
   fallbackVoiceIds?: string[] | null;
 };
 
+type CustomLlmAgentConfig = {
+  name: string;
+  llmWebsocketUrl: string;
+  voiceId?: string;
+  language?: string;
+  voiceSpeed?: number;
+  voiceModel?: RetellVoiceModel | null;
+  voiceTemperature?: number;
+  fallbackVoiceIds?: string[] | null;
+  responsiveness?: number;
+  denoisingMode?: RetellDenoisingMode;
+  maxCallDurationMs?: number;
+  interruptionSensitivity?: number;
+  enableDynamicResponsiveness?: boolean;
+  reminderTriggerMs?: number;
+  reminderMaxCount?: number;
+  enableBackchannel?: boolean;
+  allowUserDtmf?: boolean;
+  webhookUrl?: string;
+  postCallAnalysisData?: PostCallAnalysisField[];
+  dataStorageSetting?: RetellDataStorageSetting;
+  dataStorageRetentionDays?: number;
+};
+
 function envNumber(name: string, fallback: number, min: number, max: number): number {
   const raw = process.env[name];
   if (raw === undefined || raw === '') return fallback;
@@ -578,6 +602,50 @@ export async function createAgent(config: {
     body.data_storage_retention_days = config.dataStorageRetentionDays;
   }
   return retellRequest('/create-agent', { method: 'POST', body: JSON.stringify(body) });
+}
+
+function customLlmAgentBody(config: CustomLlmAgentConfig): Record<string, unknown> {
+  const voiceId = config.voiceId ?? DEFAULT_VOICE_ID;
+  const body: Record<string, unknown> = {
+    agent_name: config.name,
+    response_engine: {
+      type: 'custom-llm',
+      llm_websocket_url: config.llmWebsocketUrl,
+    },
+    voice_id: voiceId,
+    language: config.language ?? 'de-DE',
+    voice_speed: config.voiceSpeed,
+    responsiveness: config.responsiveness,
+    denoising_mode: config.denoisingMode,
+    interruption_sensitivity: config.interruptionSensitivity ?? defaultInterruption(),
+    enable_backchannel: config.enableBackchannel ?? defaultBackchannel(),
+    allow_user_dtmf: config.allowUserDtmf,
+    enable_dynamic_responsiveness: config.enableDynamicResponsiveness ?? false,
+    max_call_duration_ms: config.maxCallDurationMs,
+    reminder_trigger_ms: config.reminderTriggerMs ?? defaultReminderTriggerMs(),
+    reminder_max_count: config.reminderMaxCount ?? defaultReminderMaxCount(),
+    end_call_after_silence_ms: defaultEndCallSilenceMs(),
+  };
+  applyVoiceRuntime(body, voiceId, config);
+  if (config.webhookUrl) body.webhook_url = config.webhookUrl;
+  if (config.postCallAnalysisData !== undefined) body.post_call_analysis_data = config.postCallAnalysisData;
+  if (config.dataStorageSetting !== undefined) body.data_storage_setting = config.dataStorageSetting;
+  if (config.dataStorageRetentionDays !== undefined) body.data_storage_retention_days = config.dataStorageRetentionDays;
+  return body;
+}
+
+export async function createCustomLlmAgent(config: CustomLlmAgentConfig): Promise<RetellAgent> {
+  return retellRequest('/create-agent', {
+    method: 'POST',
+    body: JSON.stringify(customLlmAgentBody(config)),
+  });
+}
+
+export async function updateCustomLlmAgent(agentId: string, config: CustomLlmAgentConfig): Promise<RetellAgent> {
+  return retellRequest(`/update-agent/${encodeURIComponent(agentId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(customLlmAgentBody(config)),
+  });
 }
 
 export async function updateAgent(

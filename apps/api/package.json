@@ -24,6 +24,9 @@
     "own-kb:authoring-enrich": "tsx src/scripts/create-own-kb-simulation-enrichment.ts",
     "own-kb:fact-intake-validate": "tsx src/scripts/validate-own-kb-fact-intake.ts",
     "own-kb:source-import-readiness": "tsx src/scripts/report-own-kb-source-import-readiness.ts",
+    "drkalla:ab-memory": "tsx src/scripts/run-drkalla-memory-ab.ts",
+    "drkalla:kb-audit": "tsx src/scripts/run-drkalla-kb-quality-audit.ts",
+    "drkalla:custom-runtime-canary": "tsx src/scripts/sync-drkalla-custom-runtime-canary.ts",
     "model:smoke": "tsx src/scripts/model-smoke-test.ts",
     "model:retell-ab": "tsx src/scripts/retell-model-ab-test.ts"
   },
