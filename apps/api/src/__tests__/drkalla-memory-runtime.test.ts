@@ -105,6 +105,21 @@ describe('DrKalla memory runtime bridge', () => {
     expect(result.responsePlan.mustNotDo).toContain('offer_product_category');
   });
 
+  it('keeps user-stated product type as live memory before a concrete product is named', () => {
+    const session = createDrkallaMemoryRuntimeSession({
+      mode: 'custom_runtime',
+      memory: createDrkallaShortTermMemory(),
+    });
+    const result = applyDrkallaMemoryRuntimeEvent(session, turn('Ich will eine Haarfarbe.'));
+
+    expect(result.memory.activeProductType?.label).toBe('Haarfarbe/Farbcreme');
+    expect(result.memoryContext).toContain('active_product_type=Haarfarbe/Farbcreme');
+    expect(result.dialogueView.level).toBe('active_product_type');
+    expect(result.responsePlan.mustNotDo).toContain('ask_for_category_when_type_known');
+    expect(result.extraLlmCalls).toBe(0);
+    expect(result.extraKbCalls).toBe(0);
+  });
+
   it('keeps inaudible speech inside memory without creating an end-call candidate', () => {
     const session = createDrkallaMemoryRuntimeSession({
       mode: 'custom_runtime',

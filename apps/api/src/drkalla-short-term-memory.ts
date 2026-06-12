@@ -155,6 +155,26 @@ const STATIC_FACT_KEYS = new Set<DrkallaStoredMemoryFactKey>([
   'product.last',
 ]);
 
+function detectUserProductType(text: string): string | null {
+  const normalized = text.toLocaleLowerCase('de-DE');
+  if (/\b(?:haarfarbe|farbcreme|color cream|haare? f(?:ä|ae)rben|f(?:ä|ae)rben|farbe)\b/u.test(normalized)) {
+    return 'Haarfarbe/Farbcreme';
+  }
+  if (/\b(?:entwickler|oxidant|wasserstoffperoxid|peroxid|prozentst(?:ä|ae)rke)\b/u.test(normalized)) {
+    return 'Entwickler/Oxidant';
+  }
+  if (/\b(?:shampoo|pflege|conditioner|maske|kur|anti gelb|anti orange)\b/u.test(normalized)) {
+    return 'Haarpflege';
+  }
+  if (/\b(?:parfum|duft|eau de parfum|herrenduft|damenduft|unisexduft)\b/u.test(normalized)) {
+    return 'Parfum/Duft';
+  }
+  if (/\b(?:kamm|b(?:ü|ue)rste|schere|clipper|trimmer|friseurtool|tool)\b/u.test(normalized)) {
+    return 'Friseur-Tool';
+  }
+  return null;
+}
+
 function hashValue(value: string): string {
   return crypto.createHash('sha256').update(value).digest('hex').slice(0, 16);
 }
@@ -388,9 +408,13 @@ function reduceUserAudio(
   const text = event.text.trim();
   const clearFarewell = FAREWELL.test(text) && !ACK_ONLY.test(text);
   const clearsPending = text.length > 0 && !ACK_ONLY.test(text);
+  const userProductType = detectUserProductType(text);
   return {
     ...memory,
     pendingClarification: clearsPending ? null : memory.pendingClarification,
+    activeProductType: userProductType
+      ? { label: userProductType, turnIndex: event.turnIndex }
+      : memory.activeProductType,
     inaudibleStreak: 0,
     silenceMs: 0,
     endCallEligible: clearFarewell,

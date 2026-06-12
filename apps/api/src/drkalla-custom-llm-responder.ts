@@ -83,6 +83,9 @@ function fallbackTextWithMemory(input: {
   if (/\blink|kauf|kaufe|bestell|sms\b/i.test(userText) && input.memory.lastMentionedProduct) {
     return `Soll ich dir den Produktlink zu ${input.memory.lastMentionedProduct.spokenName} per SMS schicken?`;
   }
+  if (input.memory.activeProductType) {
+    return `Bei ${input.memory.activeProductType.label} kann ich dir Marken, Varianten oder passende Produkte nennen. Suchst du eine bestimmte Marke oder Nuance?`;
+  }
   return fallbackText(userText);
 }
 
