@@ -118,6 +118,48 @@ describe('DrKalla custom LLM responder', () => {
     expect(response.metrics.extraKbCalls).toBe(0);
   });
 
+  it('repairs inaudible speech after memory update without calling the model', async () => {
+    let calls = 0;
+    const client: DrkallaCustomLlmClient = {
+      complete: async () => {
+        calls += 1;
+        return 'should not be used';
+      },
+    };
+
+    const first = await buildDrkallaCustomLlmResponse({
+      canary: {
+        enabled: true,
+        allowModelDirectives: true,
+        allowLiveRollout: false,
+        maxDirectiveChars: 650,
+      },
+      event: turn('(inaudible speech)'),
+      memory: createDrkallaShortTermMemory(),
+      client,
+    });
+    const second = await buildDrkallaCustomLlmResponse({
+      canary: {
+        enabled: true,
+        allowModelDirectives: true,
+        allowLiveRollout: false,
+        maxDirectiveChars: 650,
+      },
+      event: turn('(inaudible speech)'),
+      memory: first.memory,
+      client,
+    });
+
+    expect(calls).toBe(0);
+    expect(first.blocked).toBe(false);
+    expect(first.text).toContain('Wie bitte?');
+    expect(first.memory.inaudibleStreak).toBe(1);
+    expect(first.metrics.extraLlmCalls).toBe(0);
+    expect(second.text).toContain('Sag bitte nur ein Stichwort');
+    expect(second.memory.inaudibleStreak).toBe(2);
+    expect(second.metrics.extraLlmCalls).toBe(0);
+  });
+
   it('falls back safely if the model returns an empty answer', async () => {
     const client: DrkallaCustomLlmClient = {
       complete: async () => '   ',
