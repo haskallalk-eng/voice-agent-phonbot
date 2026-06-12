@@ -301,6 +301,14 @@ describe('DrKalla memory A/B simulation matrix', () => {
     ['Watteschnur'],
     ['Spiegel'],
     ['Aufsteller'],
+    ['Servicewagen'],
+    ['Kosmetikwagen'],
+    ['Haarsauger'],
+    ['Clean All'],
+    ['Alligatorclips'],
+    ['Hair-Clips'],
+    ['Handtücher'],
+    ['Strähnenhauben'],
   ])('keeps "%s" catalog-backed accessory requests in the active product-type funnel', (term) => {
     const cases = buildDrkallaMemoryAbCases({ cases: 1000, seed: 'drkalla-catalog-accessory-v1' });
     const productTypeCase = cases.find((item) =>

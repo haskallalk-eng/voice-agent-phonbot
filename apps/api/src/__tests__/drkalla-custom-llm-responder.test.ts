@@ -527,6 +527,14 @@ describe('DrKalla custom LLM responder', () => {
     ['Ich brauche Watteschnur.', 'Salon-Verbrauchsmaterial'],
     ['Habt ihr Spiegel?', 'Salon-Zubehör'],
     ['Ich suche einen Aufsteller.', 'Salon-Zubehör'],
+    ['Ich suche einen Servicewagen.', 'Salon-Zubehör'],
+    ['Habt ihr Kosmetikwagen?', 'Salon-Zubehör'],
+    ['Ich brauche einen Haarsauger.', 'Friseur-Tool'],
+    ['Habt ihr Clean All?', 'Friseur-Tool'],
+    ['Ich suche Alligatorclips.', 'Styling'],
+    ['Habt ihr Hair-Clips?', 'Styling'],
+    ['Ich brauche Handtücher.', 'Salon-Verbrauchsmaterial'],
+    ['Habt ihr Strähnenhauben?', 'Friseur-Tool'],
   ])('uses catalog-backed accessory fallback for "%s"', async (text, expectedProductType) => {
     const response = await buildDrkallaCustomLlmResponse({
       canary: {

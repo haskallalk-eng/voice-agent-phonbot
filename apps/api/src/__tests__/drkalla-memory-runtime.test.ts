@@ -306,6 +306,14 @@ describe('DrKalla memory runtime bridge', () => {
     ['Ich brauche Watteschnur.', 'Salon-Verbrauchsmaterial'],
     ['Habt ihr Spiegel?', 'Salon-Zubehör'],
     ['Ich suche einen Aufsteller.', 'Salon-Zubehör'],
+    ['Ich suche einen Servicewagen.', 'Salon-Zubehör'],
+    ['Habt ihr Kosmetikwagen?', 'Salon-Zubehör'],
+    ['Ich brauche einen Haarsauger.', 'Friseur-Tool'],
+    ['Habt ihr Clean All?', 'Friseur-Tool'],
+    ['Ich suche Alligatorclips.', 'Styling'],
+    ['Habt ihr Hair-Clips?', 'Styling'],
+    ['Ich brauche Handtücher.', 'Salon-Verbrauchsmaterial'],
+    ['Habt ihr Strähnenhauben?', 'Friseur-Tool'],
   ])('keeps catalog-backed accessory voice request "%s"', (text, expectedProductType) => {
     const session = createDrkallaMemoryRuntimeSession({
       mode: 'custom_runtime',
@@ -344,6 +352,6 @@ describe('DrKalla memory runtime bridge', () => {
     const source = readFileSync(join(__dirname, '..', 'drkalla-short-term-memory.ts'), 'utf8');
 
     expect(source).toContain('detectDrkallaUserProductType');
-    expect(source).not.toMatch(/\b(?:spitzenpapier|rasierpinsel|barberstuhl|spr(?:ü|ue)hflasche|watteschnur)\b/i);
+    expect(source).not.toMatch(/\b(?:spitzenpapier|rasierpinsel|barberstuhl|spr(?:ü|ue)hflasche|watteschnur|servicewagen|haarsauger|alligatorclips)\b/i);
   });
 });
