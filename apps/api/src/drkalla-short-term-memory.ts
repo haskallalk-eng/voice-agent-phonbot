@@ -202,7 +202,7 @@ function detectUserProductType(text: string): string | null {
   if (/\b(?:salonwagen|wascheinheiten?|friseurst(?:ü|ue)hle?|friseurstuhl|salonst(?:ü|ue)hle?|stuhl|salonm(?:ö|oe)bel|friseurm(?:ö|oe)bel|ablagen?|stehmatten?)\b/u.test(normalized)) {
     return 'Salonmöbel/-ausstattung';
   }
-  if (/\b(?:kamm|k(?:ä|ae)mme|b(?:ü|ue)rsten?|scheren?|friseurscheren?|haarscheren?|clipper|trimmer|friseurtools?|tools?|f(?:ä|ae)rbeschalen?|farbschalen?|f(?:ä|ae)rbepinsel|farbpinsel|alufolie|str(?:ä|ae)hnenfolie|f(?:ä|ae)rbefolie|gl(?:ä|ae)tteisen|haartrockner|f(?:ö|oe)hn|shaver)\b/u.test(normalized)) {
+  if (/\b(?:kamm|k(?:ä|ae)mme|b(?:ü|ue)rsten?|scheren?|friseurscheren?|haarscheren?|clipper|trimmer|friseurtools?|tools?|f(?:ä|ae)rbeschalen?|farbschalen?|f(?:ä|ae)rbepinsel|farbpinsel|alufolie|str(?:ä|ae)hnenfolie|f(?:ä|ae)rbefolie|gl(?:ä|ae)tteisen|haartrockner|f(?:ö|oe)hn|shaver|rasierer|barttrimmer|haartrimmer|haarschneidemaschinen?|schneidemaschinen?)\b/u.test(normalized)) {
     return 'Friseur-Tool';
   }
   return null;

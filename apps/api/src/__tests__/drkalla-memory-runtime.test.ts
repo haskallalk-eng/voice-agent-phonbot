@@ -189,6 +189,10 @@ describe('DrKalla memory runtime bridge', () => {
     ['Ich brauche einen Föhn.', 'Friseur-Tool'],
     ['Habt ihr Haartrockner?', 'Friseur-Tool'],
     ['Ich suche einen Shaver.', 'Friseur-Tool'],
+    ['Habt ihr Rasierer?', 'Friseur-Tool'],
+    ['Ich brauche einen Barttrimmer.', 'Friseur-Tool'],
+    ['Habt ihr Haarschneidemaschinen?', 'Friseur-Tool'],
+    ['Ich suche Schneidemaschinen.', 'Friseur-Tool'],
   ])('keeps plural tool product-type voice request "%s"', (text, expectedProductType) => {
     const session = createDrkallaMemoryRuntimeSession({
       mode: 'custom_runtime',

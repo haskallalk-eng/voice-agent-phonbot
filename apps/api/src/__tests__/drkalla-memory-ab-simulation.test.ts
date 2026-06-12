@@ -225,6 +225,10 @@ describe('DrKalla memory A/B simulation matrix', () => {
     ['Föhn'],
     ['Haartrockner'],
     ['Shaver'],
+    ['Rasierer'],
+    ['Barttrimmer'],
+    ['Haarschneidemaschinen'],
+    ['Schneidemaschinen'],
   ])('keeps "%s" plural tool requests in the active product-type funnel', (term) => {
     const cases = buildDrkallaMemoryAbCases({ cases: 1000, seed: 'drkalla-plural-tool-types-v1' });
     const productTypeCase = cases.find((item) =>
