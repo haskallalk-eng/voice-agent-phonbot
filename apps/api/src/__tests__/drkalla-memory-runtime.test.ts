@@ -251,6 +251,9 @@ describe('DrKalla memory runtime bridge', () => {
 
   it.each([
     ['Habt ihr Wascheinheiten?', 'Salonmöbel/-ausstattung'],
+    ['Habt ihr Waschbecken?', 'Salonmöbel/-ausstattung'],
+    ['Ich suche einen Waschplatz.', 'Salonmöbel/-ausstattung'],
+    ['Habt ihr Rückwärtswaschbecken?', 'Salonmöbel/-ausstattung'],
     ['Ich suche Friseurstühle.', 'Salonmöbel/-ausstattung'],
     ['Habt ihr Ablagen?', 'Salonmöbel/-ausstattung'],
     ['Ich brauche Stehmatten.', 'Salonmöbel/-ausstattung'],
