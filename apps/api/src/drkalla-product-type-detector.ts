@@ -78,7 +78,7 @@ const DRKALLA_PRODUCT_TYPE_RULES: DrkallaProductTypeRule[] = [
   },
   {
     label: 'Styling',
-    patterns: [/\b(?:haarspray|mousse|haargel|styling|wachs|pomade|dauerwellen?(?:l(?:\u00f6|oe)sung|mittel)?|dauerwelle)\b/u],
+    patterns: [/\b(?:haarspray|mousse|haargel|styling|wachs|pomade|alligator[-\s]?clips?|hair[-\s]?clips?|haarklammern?|dauerwellen?(?:l(?:\u00f6|oe)sung|mittel)?|dauerwelle)\b/u],
   },
   {
     label: 'Salonmöbel/-ausstattung',
@@ -89,17 +89,17 @@ const DRKALLA_PRODUCT_TYPE_RULES: DrkallaProductTypeRule[] = [
   {
     label: 'Salon-Verbrauchsmaterial',
     patterns: [
-      /\b(?:spitzenpapier|watteschnur|spr(?:\u00fc|ue)hflaschen?|nackenpapier|halskrausen?|friseurumh(?:\u00e4|ae)nge?|friseurumhang|salonumh(?:\u00e4|ae)nge?|salonumhang|schneideumh(?:\u00e4|ae)nge?|schneideumhang|schneidecapes?|barbercapes?|umh(?:\u00e4|ae)nge?|umhang|handschuhe?|nitrilhandschuhe?)\b/u,
+      /\b(?:spitzenpapier|watteschnur|spr(?:\u00fc|ue|ay)h?flaschen?|handt(?:\u00fc|ue)cher|handtuch|nackenpapier|halskrausen?|friseurumh(?:\u00e4|ae)nge?|friseurumhang|salonumh(?:\u00e4|ae)nge?|salonumhang|schneideumh(?:\u00e4|ae)nge?|schneideumhang|schneidecapes?|barbercapes?|umh(?:\u00e4|ae)nge?|umhang|handschuhe?|nitrilhandschuhe?)\b/u,
     ],
   },
   {
     label: 'Salon-Zubehör',
-    patterns: [/\b(?:spiegel|kabinettspiegel|aufsteller|display(?:\s+stand)?|salonzubeh(?:\u00f6|oe)r|salon zubeh(?:\u00f6|oe)r)\b/u],
+    patterns: [/\b(?:spiegel|kabinettspiegel|aufsteller|display(?:\s+stand)?|servicewagen|kosmetikwagen|salonzubeh(?:\u00f6|oe)r|salon zubeh(?:\u00f6|oe)r)\b/u],
   },
   {
     label: 'Friseur-Tool',
     patterns: [
-      /\b(?:kamm|k(?:\u00e4|ae)mme|b(?:\u00fc|ue)rsten?|scheren?|friseurscheren?|haarscheren?|clipper|trimmer|friseurtools?|tools?|f(?:\u00e4|ae)rbeschalen?|farbschalen?|f(?:\u00e4|ae)rbepinsel|farbpinsel|alufolie|str(?:\u00e4|ae)hnenfolie|f(?:\u00e4|ae)rbefolie|gl(?:\u00e4|ae)tteisen|haartrockner|f(?:\u00f6|oe)hn|shaver|rasierer|barttrimmer|haartrimmer|rasierpinsel|rasierklingen?|haarschneidemaschinen?|schneidemaschinen?|haarstaubwedel|nackenwedel)\b/u,
+      /\b(?:kamm|k(?:\u00e4|ae)mme|b(?:\u00fc|ue)rsten?|scheren?|friseurscheren?|haarscheren?|clipper|trimmer|friseurtools?|tools?|f(?:\u00e4|ae)rbeschalen?|farbschalen?|f(?:\u00e4|ae)rbepinsel|farbpinsel|alufolie|str(?:\u00e4|ae)hnenfolie|str(?:\u00e4|ae)hnenhauben?|f(?:\u00e4|ae)rbefolie|gl(?:\u00e4|ae)tteisen|haartrockner|f(?:\u00f6|oe)hn|haarsauger|clean\s+all|shaver|rasierer|barttrimmer|haartrimmer|rasierpinsel|rasierklingen?|haarschneidemaschinen?|schneidemaschinen?|haarstaubwedel|nackenwedel)\b/u,
     ],
   },
 ];

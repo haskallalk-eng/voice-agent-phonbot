@@ -167,13 +167,21 @@ function textFor(category: DrkallaMemoryAbCategory, index: number): string {
         'Ich brauche Watteschnur',
         'Habt ihr Spiegel',
         'Ich suche einen Aufsteller',
+        'Ich suche einen Servicewagen',
+        'Habt ihr Kosmetikwagen',
+        'Ich brauche einen Haarsauger',
+        'Habt ihr Clean All',
+        'Ich suche Alligatorclips',
+        'Habt ihr Hair-Clips',
+        'Ich brauche Handtücher',
+        'Habt ihr Strähnenhauben',
         'Habt ihr Dauerwellenlösung',
         'Ich suche Dauerwelle',
         'Ich brauche Dauerwellenmittel',
         'Habt ihr Farbkarten',
         'Ich suche eine Farbkarte',
         'Habt ihr eine Koleston Farbkarte',
-      ][index % 64] ?? 'Latasse fuer Herren';
+      ][index % 72] ?? 'Latasse fuer Herren';
     case 'sms_link_dedupe':
       return [
         'Schick mir den Link per SMS.',
@@ -706,6 +714,11 @@ export function evaluateDrkallaMemoryAbCase(testCase: DrkallaMemoryAbCase): Drka
         { pattern: /Spitzenpapier|Nackenpapier|Friseurumhänge|Handschuhe/i, label: 'Salon-Verbrauchsmaterial' },
         { pattern: /Sprühflaschen|Watteschnur/i, label: 'Salon-Verbrauchsmaterial' },
         { pattern: /Spiegel|Aufsteller/i, label: 'Salon-Zubehör' },
+        { pattern: /Servicewagen|Kosmetikwagen/i, label: 'Salon-Zubehör' },
+        { pattern: /Haarsauger|Clean All/i, label: 'Friseur-Tool' },
+        { pattern: /Alligatorclips|Hair-Clips/i, label: 'Styling' },
+        { pattern: /Handtücher/i, label: 'Salon-Verbrauchsmaterial' },
+        { pattern: /Strähnenhauben/i, label: 'Friseur-Tool' },
         { pattern: /Dauerwellenlösung|Dauerwelle|Dauerwellenmittel/i, label: 'Styling' },
         { pattern: /Farbkarten?|Koleston Farbkarte/i, label: 'Farbkarte' },
       ];
