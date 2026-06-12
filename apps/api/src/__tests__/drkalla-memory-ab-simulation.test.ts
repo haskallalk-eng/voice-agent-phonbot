@@ -274,6 +274,25 @@ describe('DrKalla memory A/B simulation matrix', () => {
   });
 
   it.each([
+    ['Spitzenpapier'],
+    ['Nackenpapier'],
+    ['Friseurumhänge'],
+    ['Handschuhe'],
+  ])('keeps "%s" salon-consumable requests in the active product-type funnel', (term) => {
+    const cases = buildDrkallaMemoryAbCases({ cases: 1000, seed: 'drkalla-salon-consumables-v1' });
+    const productTypeCase = cases.find((item) =>
+      item.category === 'asr_aliases'
+      && item.userText.includes(term)
+    );
+
+    expect(productTypeCase).toBeTruthy();
+    const evaluation = evaluateDrkallaMemoryAbCase(productTypeCase!);
+    expect(evaluation.aPasses).toBe(false);
+    expect(evaluation.bPasses).toBe(true);
+    expect(evaluation.reason).toBe('resolve_common_german_asr_alias');
+  });
+
+  it.each([
     ['Dauerwellenlösung'],
     ['Dauerwelle'],
     ['Dauerwellenmittel'],
