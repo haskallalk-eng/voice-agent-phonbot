@@ -256,6 +256,8 @@ describe('DrKalla memory runtime bridge', () => {
     ['Habt ihr Rückwärtswaschbecken?', 'Salonmöbel/-ausstattung'],
     ['Ich suche Friseurstühle.', 'Salonmöbel/-ausstattung'],
     ['Habt ihr Ablagen?', 'Salonmöbel/-ausstattung'],
+    ['Ich suche einen Ablagetisch.', 'Salonmöbel/-ausstattung'],
+    ['Habt ihr Ablagetische?', 'Salonmöbel/-ausstattung'],
     ['Ich brauche Stehmatten.', 'Salonmöbel/-ausstattung'],
   ])('keeps plural salon-equipment product-type voice request "%s"', (text, expectedProductType) => {
     const session = createDrkallaMemoryRuntimeSession({
