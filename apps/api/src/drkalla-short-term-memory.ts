@@ -199,7 +199,7 @@ function detectUserProductType(text: string): string | null {
   if (/\b(?:salonwagen|wascheinheit|friseurstuhl|salonst(?:ü|ue)hle?|stuhl|salonm(?:ö|oe)bel|friseurm(?:ö|oe)bel|ablage|stehmatte)\b/u.test(normalized)) {
     return 'Salonmöbel/-ausstattung';
   }
-  if (/\b(?:kamm|b(?:ü|ue)rste|schere|clipper|trimmer|friseurtool|tool)\b/u.test(normalized)) {
+  if (/\b(?:kamm|k(?:ä|ae)mme|b(?:ü|ue)rsten?|scheren?|friseurscheren?|haarscheren?|clipper|trimmer|friseurtools?|tools?)\b/u.test(normalized)) {
     return 'Friseur-Tool';
   }
   return null;

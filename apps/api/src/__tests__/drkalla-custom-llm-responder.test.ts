@@ -377,4 +377,27 @@ describe('DrKalla custom LLM responder', () => {
     expect(response.text).not.toContain('welches Produkt oder welche Produktart');
     expect(response.metrics.extraKbCalls).toBe(0);
   });
+
+  it.each([
+    ['Ich suche Kämme.', 'Friseur-Tool'],
+    ['Habt ihr Bürsten?', 'Friseur-Tool'],
+    ['Ich brauche Scheren.', 'Friseur-Tool'],
+  ])('uses plural tool product-type fallback for "%s"', async (text, expectedProductType) => {
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: {
+        enabled: true,
+        allowModelDirectives: true,
+        allowLiveRollout: false,
+        maxDirectiveChars: 650,
+      },
+      event: turn(text),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => '' },
+    });
+
+    expect(response.text).toContain(expectedProductType);
+    expect(response.text).toContain('Auswahl');
+    expect(response.text).not.toContain('welches Produkt oder welche Produktart');
+    expect(response.metrics.extraKbCalls).toBe(0);
+  });
 });
