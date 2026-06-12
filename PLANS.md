@@ -260,6 +260,8 @@ Acceptance:
 - [x] 2026-06-12: Created the separate Retell `DrKalla Custom Runtime Canary` agent through the dry-run-first sync path. The sync report confirms the canary uses `responseEngineType=custom-llm`, has a masked WebSocket URL, and has `phoneAssigned=false`; a follow-up dry-run now reports `action=update`, proving the canary exists. A public WebSocket smoke returned 404, so no webcall was started: the live test remains blocked until the new API route is deployed and the same persistent canary secret is configured on the live server. No existing phone number, Retell-KB, production DrKalla agent, or rollout flag changed.
 - [x] 2026-06-12: Deployed the Live API with the DrKalla Custom Runtime Canary route and configured the persistent canary secret on the live server. Deploy used the existing Docker path with Retell sync skipped, so existing Retell agents, phone assignments, and Retell-KB were not changed. Public health returned 200 after startup, the custom-LLM WebSocket smoke succeeded with a Retell-compatible `response` message in about 500 ms, and the separate `DrKalla Custom Runtime Canary` agent was updated after deploy with `phoneAssigned=false`. No canary webcall or phone-number switch was started in this step.
 - [x] 2026-06-12: Reviewed the first real DrKalla Custom Runtime Canary webcall. Retell reached the correct custom-LLM canary and ASR captured the user, but the transcript contained no assistant turns because live `response_required` events used numeric `response_id` values while the parser accepted only strings. The route now normalizes safe numeric response IDs to strings and still rejects invalid object IDs fail-closed. Verification passed with focused custom-runtime WebSocket tests, API typecheck, redeploy with Retell sync skipped, public health 200, and a public WebSocket smoke using numeric `response_id` that returned a Retell-compatible `response` in about 374 ms. No phone number, Retell-KB, production DrKalla agent, Own-KB primary flag, or OpenAI Realtime implementation changed.
+- [x] 2026-06-12: Reviewed the next DrKalla Custom Runtime Canary webcall after the response-ID fix. The canary now produces assistant turns, proving Retell transport and Custom LLM response format work, but the call exposed the next quality gap: the canary repeated the same fallback clarification because live product/RAG/funnel response composition is not yet wired into Custom Runtime. Added the 99%-review implementation plan `docs/superpowers/plans/2026-06-12-turn-taking-endpointing-guard.md` and introduced Milestone 1J as the next runtime-quality layer: deterministic Turn-Taking / Endpointing Guard, no normal-path LLM/KB calls, p95 decision cost <= 20 ms, no authority over facts/tools/end-call/scope. No phone number, Retell-KB, production DrKalla agent, Own-KB primary flag, or OpenAI Realtime implementation changed.
+- [x] 2026-06-12: Implemented Milestone 1J first pass as a pure deterministic Turn-Taking / Endpointing Guard in `apps/api/src/turn-taking-guard.ts` with focused tests in `apps/api/src/__tests__/turn-taking-guard.test.ts`. It distinguishes complete final utterances, trailing German connectors/fillers, unstable partials, low ASR confidence, inaudible streaks, corrections/interruptions, empty input, and long silence while proving it cannot call LLM/KB, authorize tools, or end calls. TDD evidence included a red test for German `aehm` filler handling before the regex fix. Verification passed with 61 focused voice/runtime/canary tests, API typecheck, and a 1000-case local simulation (`p95DecisionMs` about 0.008 ms, no extra LLM/KB calls). This is not live-wired yet; no phone number, Retell-KB, production DrKalla agent, Own-KB primary flag, or OpenAI Realtime implementation changed.
 - [ ] Milestone 0.5B: Trusted Retell-KB vs Own-KB benchmark execution after Milestone 1A, 1B, 1D, and 1E; real transcript/shadow/call-log/eval artifact storage also requires Milestone 1C when potential PII is present.
 - [x] Milestone 1A: TrustedScope for `knowledge.search`.
 - [x] Milestone 1B: Trace scope correctness.
@@ -270,6 +272,7 @@ Acceptance:
 - [x] Milestone 1G: Voice Compliance and Disclosure Controls.
 - [x] Milestone 1H: German Voice Output Normalization Contract.
 - [x] Milestone 1I: STT / TTT / TTS Voice Pipeline Contract.
+- [complete first pass] Milestone 1J: Turn-Taking / Endpointing Guard.
 - [complete first pass] Milestone 2C: Intent Playbooks for Top Real Calls.
 - [complete first pass] Milestone 2D: Tool Confirmation State Machine.
 - [complete first pass] Milestone 2E: Business Hours and Holiday Resolver.
@@ -898,6 +901,10 @@ Acceptance:
 - Decision: Retell Custom LLM `response_id` values are provider correlation IDs and may be string or safe integer on live events.
   Rationale: the first DrKalla Custom Runtime Canary webcall showed Retell sending numeric `response_id` values in `response_required` events. The adapter may normalize safe numeric IDs to strings for the canonical route response, but must still reject invalid/object IDs fail-closed and must not treat provider IDs as TrustedScope or authorization.
   Date/Author: 2026-06-12 / Codex custom-runtime canary review.
+
+- Decision: Turn-Taking / Endpointing Guard is a deterministic runtime-quality layer, not a blocking LLM layer before orchestration.
+  Rationale: a semantic turn detector can improve interruptions, unfinished German phrases, inaudible speech, and false endpointing, but a normal-path LLM call before every response would violate the 500-800 ms SLO. Milestone 1J therefore starts as a pure function over normalized STT/VAD/update state with p95 decision cost <= 20 ms, no extra LLM/KB calls, and no authority over facts, tools, end-call, tenant scope, or policy.
+  Date/Author: 2026-06-12 / Codex turn-taking 99%-plan review.
 
 ## Outcomes & Retrospective
 
@@ -2374,6 +2381,51 @@ Acceptance:
 - Provider-specific STT/TTS details stay inside runtime/adapters.
 - Tests/evals distinguish ASR failure, text reasoning failure, TTS/spoken-output failure, and runtime interaction failure.
 - No production runtime behavior, rollout flag, Retell-KB behavior, Own-KB primary state, or OpenAI Realtime implementation changes are introduced by this additive type/test-only milestone.
+
+### Milestone 1J: Turn-Taking / Endpointing Guard
+
+Status: first-pass additive type/test-only guard implemented; live canary wiring remains future work.
+
+Goal: improve conversation timing without harming the 500-800 ms SLO. The guard may advise when to respond, briefly wait, keep listening, or ask a repair prompt based on normalized STT/VAD/update state. It must not become a blocking LLM layer before orchestration.
+
+Contract:
+
+```ts
+type TurnTakingGuardAction = 'respond_now' | 'wait_short' | 'keep_listening' | 'repair_prompt';
+
+type TurnTakingGuardDecision = {
+  action: TurnTakingGuardAction;
+  reason:
+    | 'final_transcript_complete'
+    | 'partial_still_changing'
+    | 'trailing_connector'
+    | 'low_asr_confidence'
+    | 'interruption_or_correction'
+    | 'long_silence'
+    | 'inaudible_streak'
+    | 'empty_or_missing_text';
+  userLikelyDone: number;
+  userLikelyContinuing: number;
+  confidence: number;
+  maxWaitMs: number;
+  p95BudgetMs: 20;
+  mayCallLlm: false;
+  mayCallKb: false;
+  mayAuthorizeTool: false;
+  mayEndCall: false;
+};
+```
+
+Acceptance:
+
+- Retell remains the current voice runtime; this guard improves Custom Runtime behavior without replacing provider audio endpointing by assumption.
+- Normal path makes no extra LLM call, no extra KB call, and no network call.
+- Guard decision p95 <= 20 ms on a 1000-case synthetic simulation.
+- Final German utterances can respond immediately.
+- Trailing connectors, unstable partials, low-confidence ASR, interruption/correction phrases, inaudible streaks, and true silence are distinguished.
+- Inaudible speech and low-confidence speech can ask repair prompts but cannot authorize `EndCall`.
+- Guard output cannot select KB facts, authorize tools, mutate state, decide tenant scope, or override Agent Core policy.
+- Future canary wiring must use the guard as advisory runtime state only and must remain behind explicit canary approval.
 
 ## Milestone 2: Canonical Runtime Contract
 
