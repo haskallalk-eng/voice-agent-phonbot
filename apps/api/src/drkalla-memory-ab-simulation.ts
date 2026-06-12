@@ -125,7 +125,10 @@ function textFor(category: DrkallaMemoryAbCategory, index: number): string {
         'Ich brauche Conditioner',
         'Ich suche Leave-in',
         'Habt ihr Haarserum',
-      ][index % 16] ?? 'Latasse fuer Herren';
+        'Ich suche Kämme',
+        'Habt ihr Bürsten',
+        'Ich brauche Scheren',
+      ][index % 19] ?? 'Latasse fuer Herren';
     case 'sms_link_dedupe':
       return [
         'Schick mir den Link per SMS.',
@@ -653,6 +656,7 @@ export function evaluateDrkallaMemoryAbCase(testCase: DrkallaMemoryAbCase): Drka
         { pattern: /Conditioner/i, label: 'Conditioner/Spülung' },
         { pattern: /Leave-in/i, label: 'Leave-in' },
         { pattern: /Haarserum/i, label: 'Serum' },
+        { pattern: /Kämme|Bürsten|Scheren/i, label: 'Friseur-Tool' },
       ];
       const catalogueProductType = catalogueProductTypes.find(({ pattern }) => pattern.test(testCase.userText))?.label;
       if (catalogueProductType) {
