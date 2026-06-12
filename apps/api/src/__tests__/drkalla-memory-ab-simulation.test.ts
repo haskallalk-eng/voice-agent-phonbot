@@ -311,11 +311,21 @@ describe('DrKalla memory A/B simulation matrix', () => {
     ['Strähnenhauben'],
     ['Kosmetikbedarf'],
     ['Depilationszubehör'],
+    ['Depilationswachs'],
     ['Hitzeschutz'],
+    ['Haarpflege'],
     ['Ampullen'],
+    ['Haarkur'],
+    ['klärende Spülung'],
+    ['Neutralshampoo'],
+    ['Haarfärbemittel'],
     ['Nackenstreifen'],
+    ['Einweghandschuhe'],
     ['Haarschaum'],
     ['Bright-Wax'],
+    ['Stylingwax'],
+    ['Gel-Spray'],
+    ['Volumen-Puder'],
     ['Glanz-Spray'],
     ['Laminier-Spray'],
     ['Vorbereitungsshampoo'],
@@ -323,6 +333,10 @@ describe('DrKalla memory A/B simulation matrix', () => {
     ['Blond-Booster'],
     ['Desinfektionswagen'],
     ['UVC Lampe'],
+    ['Accessories'],
+    ['Zubehör'],
+    ['Salonbedarf'],
+    ['Barber-Bedarf'],
   ])('keeps "%s" catalog-backed accessory requests in the active product-type funnel', (term) => {
     const cases = buildDrkallaMemoryAbCases({ cases: 1000, seed: 'drkalla-catalog-accessory-v1' });
     const productTypeCase = cases.find((item) =>
@@ -350,6 +364,26 @@ describe('DrKalla memory A/B simulation matrix', () => {
 
     expect(productTypeCase).toBeTruthy();
     const evaluation = evaluateDrkallaMemoryAbCase(productTypeCase!);
+    expect(evaluation.aPasses).toBe(false);
+    expect(evaluation.bPasses).toBe(true);
+    expect(evaluation.reason).toBe('resolve_common_german_asr_alias');
+  });
+
+  it.each([
+    ['Habt ihr einen Delrin Hair Comb'],
+    ['Ich brauche Haarstyling'],
+    ['Ich suche Pflegespülung'],
+    ['Ich brauche ein professionelles Salonhandtuch'],
+    ['Habt ihr Salon-Verbrauchsmaterial'],
+  ])('reproduces and fixes remaining catalogue-audit product-type miss "%s"', (userText) => {
+    const evaluation = evaluateDrkallaMemoryAbCase({
+      id: `catalogue-audit-${userText}`,
+      category: 'asr_aliases',
+      userText,
+      expectedBehavior: 'resolve_common_german_asr_alias',
+      mode: 'bugfix',
+    });
+
     expect(evaluation.aPasses).toBe(false);
     expect(evaluation.bPasses).toBe(true);
     expect(evaluation.reason).toBe('resolve_common_german_asr_alias');
