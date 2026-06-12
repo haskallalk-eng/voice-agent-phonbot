@@ -128,6 +128,10 @@ function textFor(category: DrkallaMemoryAbCategory, index: number): string {
         'Ich suche Kämme',
         'Habt ihr Bürsten',
         'Ich brauche Scheren',
+        'Habt ihr Färbeschalen',
+        'Ich brauche Färbepinsel',
+        'Habt ihr Alufolie',
+        'Ich suche Strähnenfolie',
         'Habt ihr Wascheinheiten',
         'Ich suche Friseurstühle',
         'Habt ihr Ablagen',
@@ -138,7 +142,7 @@ function textFor(category: DrkallaMemoryAbCategory, index: number): string {
         'Habt ihr Farbkarten',
         'Ich suche eine Farbkarte',
         'Habt ihr eine Koleston Farbkarte',
-      ][index % 29] ?? 'Latasse fuer Herren';
+      ][index % 33] ?? 'Latasse fuer Herren';
     case 'sms_link_dedupe':
       return [
         'Schick mir den Link per SMS.',
@@ -666,7 +670,7 @@ export function evaluateDrkallaMemoryAbCase(testCase: DrkallaMemoryAbCase): Drka
         { pattern: /Conditioner/i, label: 'Conditioner/Spülung' },
         { pattern: /Leave-in/i, label: 'Leave-in' },
         { pattern: /Haarserum/i, label: 'Serum' },
-        { pattern: /Kämme|Bürsten|Scheren/i, label: 'Friseur-Tool' },
+        { pattern: /Kämme|Bürsten|Scheren|Färbeschalen|Färbepinsel|Alufolie|Strähnenfolie/i, label: 'Friseur-Tool' },
         { pattern: /Wascheinheiten|Friseurstühle|Ablagen|Stehmatten/i, label: 'Salonmöbel/-ausstattung' },
         { pattern: /Dauerwellenlösung|Dauerwelle|Dauerwellenmittel/i, label: 'Styling' },
         { pattern: /Farbkarten?|Koleston Farbkarte/i, label: 'Farbkarte' },
