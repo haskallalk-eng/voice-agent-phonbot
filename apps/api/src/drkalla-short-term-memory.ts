@@ -172,7 +172,22 @@ function detectUserProductType(text: string): string | null {
   if (/\b(?:entwickler|oxidant|wasserstoffperoxid|peroxid|prozentst(?:ä|ae)rke)\b/u.test(normalized)) {
     return 'Entwickler/Oxidant';
   }
-  if (/\b(?:shampoo|pflege|conditioner|maske|kur|anti gelb|anti orange)\b/u.test(normalized)) {
+  if (/\b(?:shampoos?|silbershampoo|anti[-\s]?(?:gelb|yellow|orange)\s*shampoo)\b/u.test(normalized)) {
+    return 'Shampoo';
+  }
+  if (/\b(?:haarmasken?|masken?|kuren?|anti[-\s]?(?:gelb|yellow|orange)\s*(?:maske|mask))\b/u.test(normalized)) {
+    return 'Haarmaske';
+  }
+  if (/\b(?:conditioner|sp(?:ü|ue)lungen?|pflegesp(?:ü|ue)lungen?)\b/u.test(normalized)) {
+    return 'Conditioner/Spülung';
+  }
+  if (/\b(?:leave[-\s]?in|leave in)\b/u.test(normalized)) {
+    return 'Leave-in';
+  }
+  if (/\b(?:haarserum|seren|serum|(?:öl|oel)[-\s]?serum)\b/u.test(normalized)) {
+    return 'Serum';
+  }
+  if (/\b(?:pflege|anti gelb|anti orange)\b/u.test(normalized)) {
     return 'Haarpflege';
   }
   if (/\b(?:parfum|duft|eau de parfum|herrenduft|damenduft|unisexduft)\b/u.test(normalized)) {
