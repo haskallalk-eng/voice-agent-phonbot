@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { detectDrkallaUserProductType } from './drkalla-product-type-detector.js';
 
 export type DrkallaRuntimeMode = 'retell_managed' | 'custom_runtime';
 export type DrkallaRuntimeMemoryState = {
@@ -156,59 +157,7 @@ const STATIC_FACT_KEYS = new Set<DrkallaStoredMemoryFactKey>([
 ]);
 
 function detectUserProductType(text: string): string | null {
-  const normalized = text.toLocaleLowerCase('de-DE');
-  if (/\b(?:farbentferner|farbentfernung(?:st(?:ü|ue)cher)?|farbe entfernen|color remover|remover)\b/u.test(normalized)) {
-    return 'Farbentferner';
-  }
-  if (/\b(?:blondierung(?:en)?|blondierpulver|bleichpulver|aufheller|blondieren)\b/u.test(normalized)) {
-    return 'Blondierung';
-  }
-  if (/\b(?:haargl(?:ä|ae)ttung|gl(?:ä|ae)ttung|gl(?:ä|ae)ttungscreme|keratin|haare? gl(?:ä|ae)tten)\b/u.test(normalized)) {
-    return 'Haarglättung';
-  }
-  if (/\b(?:farbkarten?|nuancenkarten?)\b/u.test(normalized)) {
-    return 'Farbkarte';
-  }
-  if (/\b(?:haarfarben?|farbcremes?|color creams?|coloration|haare? f(?:ä|ae)rben|f(?:ä|ae)rben|farben?)\b/u.test(normalized)) {
-    return 'Haarfarbe/Farbcreme';
-  }
-  if (/\b(?:entwickler|oxidant|wasserstoffperoxid|peroxid|prozentst(?:ä|ae)rke)\b/u.test(normalized)) {
-    return 'Entwickler/Oxidant';
-  }
-  if (/\b(?:shampoos?|silbershampoo|anti[-\s]?(?:gelb|yellow|orange)\s*shampoo)\b/u.test(normalized)) {
-    return 'Shampoo';
-  }
-  if (/\b(?:haarmasken?|masken?|kuren?|anti[-\s]?(?:gelb|yellow|orange)\s*(?:maske|mask))\b/u.test(normalized)) {
-    return 'Haarmaske';
-  }
-  if (/\b(?:conditioner|sp(?:ü|ue)lungen?|pflegesp(?:ü|ue)lungen?)\b/u.test(normalized)) {
-    return 'Conditioner/Spülung';
-  }
-  if (/\b(?:leave[-\s]?in|leave in)\b/u.test(normalized)) {
-    return 'Leave-in';
-  }
-  if (/\b(?:haarserum|seren|serum|(?:öl|oel)[-\s]?serum)\b/u.test(normalized)) {
-    return 'Serum';
-  }
-  if (/\b(?:pflege|anti gelb|anti orange)\b/u.test(normalized)) {
-    return 'Haarpflege';
-  }
-  if (/\b(?:parfum|duft|eau de parfum|herrenduft|damenduft|unisexduft)\b/u.test(normalized)) {
-    return 'Parfum/Duft';
-  }
-  if (/\b(?:haarspray|mousse|haargel|styling|wachs|pomade|dauerwellen?(?:l(?:ö|oe)sung|mittel)?|dauerwelle)\b/u.test(normalized)) {
-    return 'Styling';
-  }
-  if (/\b(?:salonwagen|friseurwagen|rollwagen|arbeitswagen|wascheinheiten?|waschbecken|waschpl(?:ä|ae)tze?|waschplatz|r(?:ü|ue)ckw(?:ä|ae)rtswaschbecken|friseurst(?:ü|ue)hle?|friseurstuhl|barberst(?:ü|ue)hle?|barberstuhl|friseursessel|salonst(?:ü|ue)hle?|stuhl|salonm(?:ö|oe)bel|friseurm(?:ö|oe)bel|ablagen?|ablagetische?|stehmatten?)\b/u.test(normalized)) {
-    return 'Salonmöbel/-ausstattung';
-  }
-  if (/\b(?:spitzenpapier|nackenpapier|halskrausen?|friseurumh(?:ä|ae)nge?|friseurumhang|salonumh(?:ä|ae)nge?|salonumhang|schneideumh(?:ä|ae)nge?|schneideumhang|schneidecapes?|barbercapes?|umh(?:ä|ae)nge?|umhang|handschuhe?|nitrilhandschuhe?)\b/u.test(normalized)) {
-    return 'Salon-Verbrauchsmaterial';
-  }
-  if (/\b(?:kamm|k(?:ä|ae)mme|b(?:ü|ue)rsten?|scheren?|friseurscheren?|haarscheren?|clipper|trimmer|friseurtools?|tools?|f(?:ä|ae)rbeschalen?|farbschalen?|f(?:ä|ae)rbepinsel|farbpinsel|alufolie|str(?:ä|ae)hnenfolie|f(?:ä|ae)rbefolie|gl(?:ä|ae)tteisen|haartrockner|f(?:ö|oe)hn|shaver|rasierer|barttrimmer|haartrimmer|rasierpinsel|rasierklingen?|haarschneidemaschinen?|schneidemaschinen?|haarstaubwedel|nackenwedel)\b/u.test(normalized)) {
-    return 'Friseur-Tool';
-  }
-  return null;
+  return detectDrkallaUserProductType(text);
 }
 
 function hashValue(value: string): string {

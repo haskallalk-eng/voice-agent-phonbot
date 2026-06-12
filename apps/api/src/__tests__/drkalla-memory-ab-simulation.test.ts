@@ -297,6 +297,25 @@ describe('DrKalla memory A/B simulation matrix', () => {
   });
 
   it.each([
+    ['Sprühflaschen'],
+    ['Watteschnur'],
+    ['Spiegel'],
+    ['Aufsteller'],
+  ])('keeps "%s" catalog-backed accessory requests in the active product-type funnel', (term) => {
+    const cases = buildDrkallaMemoryAbCases({ cases: 1000, seed: 'drkalla-catalog-accessory-v1' });
+    const productTypeCase = cases.find((item) =>
+      item.category === 'asr_aliases'
+      && item.userText.includes(term)
+    );
+
+    expect(productTypeCase).toBeTruthy();
+    const evaluation = evaluateDrkallaMemoryAbCase(productTypeCase!);
+    expect(evaluation.aPasses).toBe(false);
+    expect(evaluation.bPasses).toBe(true);
+    expect(evaluation.reason).toBe('resolve_common_german_asr_alias');
+  });
+
+  it.each([
     ['Dauerwellenlösung'],
     ['Dauerwelle'],
     ['Dauerwellenmittel'],
