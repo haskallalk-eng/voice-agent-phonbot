@@ -120,6 +120,9 @@ function textFor(category: DrkallaMemoryAbCategory, index: number): string {
         'Ich suche Haarglättung',
         'Ich brauche Haarspray',
         'Habt ihr Salonwagen',
+        'Habt ihr Friseurwagen',
+        'Ich suche einen Rollwagen',
+        'Ich brauche einen Arbeitswagen',
         'Ich suche Shampoos',
         'Habt ihr Haarmasken',
         'Ich brauche Conditioner',
@@ -150,7 +153,7 @@ function textFor(category: DrkallaMemoryAbCategory, index: number): string {
         'Habt ihr Farbkarten',
         'Ich suche eine Farbkarte',
         'Habt ihr eine Koleston Farbkarte',
-      ][index % 41] ?? 'Latasse fuer Herren';
+      ][index % 44] ?? 'Latasse fuer Herren';
     case 'sms_link_dedupe':
       return [
         'Schick mir den Link per SMS.',
@@ -672,7 +675,7 @@ export function evaluateDrkallaMemoryAbCase(testCase: DrkallaMemoryAbCase): Drka
         { pattern: /Farbentferner/i, label: 'Farbentferner' },
         { pattern: /Haarglättung/i, label: 'Haarglättung' },
         { pattern: /Haarspray/i, label: 'Styling' },
-        { pattern: /Salonwagen/i, label: 'Salonmöbel/-ausstattung' },
+        { pattern: /Salonwagen|Friseurwagen|Rollwagen|Arbeitswagen/i, label: 'Salonmöbel/-ausstattung' },
         { pattern: /Shampoos?/i, label: 'Shampoo' },
         { pattern: /Haarmasken?/i, label: 'Haarmaske' },
         { pattern: /Conditioner/i, label: 'Conditioner/Spülung' },
