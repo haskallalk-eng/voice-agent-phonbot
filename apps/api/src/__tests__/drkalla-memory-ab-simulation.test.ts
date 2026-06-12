@@ -253,6 +253,8 @@ describe('DrKalla memory A/B simulation matrix', () => {
     ['Rückwärtswaschbecken'],
     ['Friseurstühle'],
     ['Ablagen'],
+    ['Ablagetisch'],
+    ['Ablagetische'],
     ['Stehmatten'],
   ])('keeps "%s" plural salon-equipment requests in the active product-type funnel', (term) => {
     const cases = buildDrkallaMemoryAbCases({ cases: 1000, seed: 'drkalla-plural-salon-equipment-v1' });

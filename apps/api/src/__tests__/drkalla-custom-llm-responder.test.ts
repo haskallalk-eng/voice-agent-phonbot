@@ -469,6 +469,8 @@ describe('DrKalla custom LLM responder', () => {
     ['Habt ihr Rückwärtswaschbecken?', 'Salonmöbel/-ausstattung'],
     ['Ich suche Friseurstühle.', 'Salonmöbel/-ausstattung'],
     ['Habt ihr Ablagen?', 'Salonmöbel/-ausstattung'],
+    ['Ich suche einen Ablagetisch.', 'Salonmöbel/-ausstattung'],
+    ['Habt ihr Ablagetische?', 'Salonmöbel/-ausstattung'],
     ['Ich brauche Stehmatten.', 'Salonmöbel/-ausstattung'],
   ])('uses plural salon-equipment product-type fallback for "%s"', async (text, expectedProductType) => {
     const response = await buildDrkallaCustomLlmResponse({
