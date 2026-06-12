@@ -115,7 +115,12 @@ function textFor(category: DrkallaMemoryAbCategory, index: number): string {
         'ich will als Friseur Profi Preise sehen',
         'Ich suche Haarfarben',
         'Welche Farbcremes habt ihr?',
-      ][index % 6] ?? 'Latasse fuer Herren';
+        'Ich brauche eine Blondierung',
+        'Habt ihr Farbentferner',
+        'Ich suche Haarglättung',
+        'Ich brauche Haarspray',
+        'Habt ihr Salonwagen',
+      ][index % 11] ?? 'Latasse fuer Herren';
     case 'sms_link_dedupe':
       return [
         'Schick mir den Link per SMS.',
@@ -630,6 +635,25 @@ export function evaluateDrkallaMemoryAbCase(testCase: DrkallaMemoryAbCase): Drka
         });
         bPasses = afterProductType.activeProductType?.label === 'Haarfarbe/Farbcreme'
           && nextDrkallaProductFunnelAction(afterProductType, 'Welche Marken habt ihr?') === 'list_active_product_type_selection';
+        break;
+      }
+      const catalogueProductTypes: Array<{ pattern: RegExp; label: string }> = [
+        { pattern: /Blondierung/i, label: 'Blondierung' },
+        { pattern: /Farbentferner/i, label: 'Farbentferner' },
+        { pattern: /Haarglättung/i, label: 'Haarglättung' },
+        { pattern: /Haarspray/i, label: 'Styling' },
+        { pattern: /Salonwagen/i, label: 'Salonmöbel/-ausstattung' },
+      ];
+      const catalogueProductType = catalogueProductTypes.find(({ pattern }) => pattern.test(testCase.userText))?.label;
+      if (catalogueProductType) {
+        const afterProductType = reduceDrkallaShortTermMemory(memory, {
+          type: 'user_audio',
+          turnIndex: 1,
+          text: testCase.userText,
+          audioState: 'heard',
+        });
+        bPasses = afterProductType.activeProductType?.label === catalogueProductType
+          && nextDrkallaProductFunnelAction(afterProductType, 'Welche Auswahl habt ihr?') === 'list_active_product_type_selection';
         break;
       }
       const product = testCase.userText.includes('Latasse')
