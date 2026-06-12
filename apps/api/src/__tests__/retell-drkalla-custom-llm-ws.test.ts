@@ -19,6 +19,37 @@ describe('Retell DrKalla custom LLM websocket handler', () => {
     expect(parsed?.currentUserText).toBe('Was ist der Unterschied?');
   });
 
+  it('accepts numeric Retell response IDs from live custom-LLM calls', async () => {
+    const reply = await buildRetellDrkallaCustomLlmWsReply({
+      enabled: true,
+      secretAccepted: true,
+      rawMessage: JSON.stringify({
+        interaction_type: 'response_required',
+        response_id: 1,
+        transcript: [{ role: 'user', content: 'Hallo.' }],
+      }),
+      complete: async () => 'Hallo, wie kann ich helfen?',
+    });
+
+    expect(reply).toEqual({
+      response_type: 'response',
+      response_id: '1',
+      content: 'Hallo, wie kann ich helfen?',
+      content_complete: true,
+      end_call: false,
+    });
+  });
+
+  it('fails closed on invalid non-string non-numeric response IDs', () => {
+    const parsed = parseRetellDrkallaCustomLlmMessage(JSON.stringify({
+      interaction_type: 'response_required',
+      response_id: { unsafe: true },
+      transcript: [{ role: 'user', content: 'Hallo.' }],
+    }));
+
+    expect(parsed).toBeNull();
+  });
+
   it('ignores update_only messages without returning model output', async () => {
     const reply = await buildRetellDrkallaCustomLlmWsReply({
       enabled: true,
