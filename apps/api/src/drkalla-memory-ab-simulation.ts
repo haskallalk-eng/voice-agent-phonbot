@@ -135,7 +135,10 @@ function textFor(category: DrkallaMemoryAbCategory, index: number): string {
         'Habt ihr Dauerwellenlösung',
         'Ich suche Dauerwelle',
         'Ich brauche Dauerwellenmittel',
-      ][index % 26] ?? 'Latasse fuer Herren';
+        'Habt ihr Farbkarten',
+        'Ich suche eine Farbkarte',
+        'Habt ihr eine Koleston Farbkarte',
+      ][index % 29] ?? 'Latasse fuer Herren';
     case 'sms_link_dedupe':
       return [
         'Schick mir den Link per SMS.',
@@ -666,6 +669,7 @@ export function evaluateDrkallaMemoryAbCase(testCase: DrkallaMemoryAbCase): Drka
         { pattern: /Kämme|Bürsten|Scheren/i, label: 'Friseur-Tool' },
         { pattern: /Wascheinheiten|Friseurstühle|Ablagen|Stehmatten/i, label: 'Salonmöbel/-ausstattung' },
         { pattern: /Dauerwellenlösung|Dauerwelle|Dauerwellenmittel/i, label: 'Styling' },
+        { pattern: /Farbkarten?|Koleston Farbkarte/i, label: 'Farbkarte' },
       ];
       const catalogueProductType = catalogueProductTypes.find(({ pattern }) => pattern.test(testCase.userText))?.label;
       if (catalogueProductType) {
