@@ -196,7 +196,7 @@ function detectUserProductType(text: string): string | null {
   if (/\b(?:haarspray|mousse|haargel|styling|wachs|pomade)\b/u.test(normalized)) {
     return 'Styling';
   }
-  if (/\b(?:salonwagen|wascheinheit|friseurstuhl|salonst(?:ü|ue)hle?|stuhl|salonm(?:ö|oe)bel|friseurm(?:ö|oe)bel|ablage|stehmatte)\b/u.test(normalized)) {
+  if (/\b(?:salonwagen|wascheinheiten?|friseurst(?:ü|ue)hle?|friseurstuhl|salonst(?:ü|ue)hle?|stuhl|salonm(?:ö|oe)bel|friseurm(?:ö|oe)bel|ablagen?|stehmatten?)\b/u.test(normalized)) {
     return 'Salonmöbel/-ausstattung';
   }
   if (/\b(?:kamm|k(?:ä|ae)mme|b(?:ü|ue)rsten?|scheren?|friseurscheren?|haarscheren?|clipper|trimmer|friseurtools?|tools?)\b/u.test(normalized)) {

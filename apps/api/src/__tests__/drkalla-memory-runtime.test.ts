@@ -196,6 +196,26 @@ describe('DrKalla memory runtime bridge', () => {
     expect(result.extraKbCalls).toBe(0);
   });
 
+  it.each([
+    ['Habt ihr Wascheinheiten?', 'Salonmöbel/-ausstattung'],
+    ['Ich suche Friseurstühle.', 'Salonmöbel/-ausstattung'],
+    ['Habt ihr Ablagen?', 'Salonmöbel/-ausstattung'],
+    ['Ich brauche Stehmatten.', 'Salonmöbel/-ausstattung'],
+  ])('keeps plural salon-equipment product-type voice request "%s"', (text, expectedProductType) => {
+    const session = createDrkallaMemoryRuntimeSession({
+      mode: 'custom_runtime',
+      memory: createDrkallaShortTermMemory(),
+    });
+    const result = applyDrkallaMemoryRuntimeEvent(session, turn(text));
+
+    expect(result.memory.activeProductType?.label).toBe(expectedProductType);
+    expect(result.memoryContext).toContain(`active_product_type=${expectedProductType}`);
+    expect(result.dialogueView.level).toBe('active_product_type');
+    expect(result.responsePlan.mustNotDo).toContain('ask_for_category_when_type_known');
+    expect(result.extraLlmCalls).toBe(0);
+    expect(result.extraKbCalls).toBe(0);
+  });
+
   it('keeps inaudible speech inside memory without creating an end-call candidate', () => {
     const session = createDrkallaMemoryRuntimeSession({
       mode: 'custom_runtime',
