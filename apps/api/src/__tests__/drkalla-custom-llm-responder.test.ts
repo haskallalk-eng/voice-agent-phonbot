@@ -268,4 +268,23 @@ describe('DrKalla custom LLM responder', () => {
     expect(response.text).not.toContain('Produktart');
     expect(response.text).not.toContain('Produktkategorie');
   });
+
+  it('uses user-stated product type fallback instead of repeating the generic product question', async () => {
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: {
+        enabled: true,
+        allowModelDirectives: true,
+        allowLiveRollout: false,
+        maxDirectiveChars: 650,
+      },
+      event: turn('Ich will eine Haarfarbe.'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => '' },
+    });
+
+    expect(response.text).toContain('Haarfarbe');
+    expect(response.text).toContain('Marke');
+    expect(response.text).not.toContain('welches Produkt oder welche Produktart');
+    expect(response.metrics.extraKbCalls).toBe(0);
+  });
 });
