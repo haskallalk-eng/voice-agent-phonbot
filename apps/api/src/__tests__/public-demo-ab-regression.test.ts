@@ -27,6 +27,7 @@ const {
   PUBLIC_PHONE_DEMO_RESPONSIVENESS,
   buildPublicPhoneDemoPrompt,
 } = await import('../scripts/sync-public-demo-phone.js');
+const { buildPublicDemoSimulatedSmsBody, PUBLIC_DEMO_TEST_LINK } = await import('../public-demo-sms-tool.js');
 
 describe('public demo transcript-driven A/B regressions', () => {
   it('A asks recording consent before the name; B starts name-first and informs after the name', () => {
@@ -61,6 +62,43 @@ describe('public demo transcript-driven A/B regressions', () => {
     expect(legacyAnswer).not.toContain('Terminbestaetigung');
     expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('PhoneBot-Testlink');
     expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('normale Kunden-SMS die Terminbestaetigung enthalten wuerde');
+  });
+
+  it('B builds the simulated appointment SMS in customer-facing wording with the test link', () => {
+    const legacySms = 'PhoneBot Demo: Herrenschnitt, Dienstag, 17 Uhr wurde simuliert vorgemerkt. Testlink: https://phonbot.de/demo';
+    const fixedSms = buildPublicDemoSimulatedSmsBody({
+      smsKind: 'appointment_confirmation',
+      service: 'Herrenschnitt',
+      date: 'Dienstag',
+      time: '17 Uhr',
+    });
+
+    expect(legacySms).not.toContain('Ihr simulierter Termin');
+    expect(legacySms).not.toContain('Wenn Sie PhoneBot testen moechten');
+    expect(fixedSms).toContain('Ihr simulierter Termin Herrenschnitt, Dienstag, 17 Uhr wurde aufgenommen');
+    expect(fixedSms).toContain('Wenn Sie PhoneBot testen moechten');
+    expect(fixedSms).toContain(PUBLIC_DEMO_TEST_LINK);
+  });
+
+  it('A rejects Monday 17:00 despite opening hours; B treats it as valid demo time when the service can fit', () => {
+    const legacyAnswer = 'Montag um siebzehn Uhr liegt in dieser Demo ausserhalb der Oeffnungszeiten.';
+
+    expect(legacyAnswer).toContain('ausserhalb');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Montag siebzehn Uhr ist innerhalb der Demo-Oeffnungszeiten');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('nicht als ausserhalb ablehnen');
+  });
+
+  it('B explains pricing with the standalone number plan before packages', () => {
+    const legacyAnswer = 'Starter kostet neunundachtzig Euro, Professional hundertneunundsiebzig Euro.';
+
+    expect(legacyAnswer).not.toContain('Nummer fuer acht Euro neunundneunzig');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Nummer fuer acht Euro neunundneunzig im Monat');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('danach die Pakete mit Inklusivminuten');
+  });
+
+  it('B asks whether to use the inbound number before simulated SMS instead of asking for a new number first', () => {
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('Soll ich die Nummer nutzen, mit der du gerade anrufst, oder eine andere?');
+    expect(PUBLIC_PHONE_DEMO_PROMPT).toContain('nicht erneut nach einer Telefonnummer');
   });
 
   it('A leaves date pronunciation underspecified; B requires natural spoken German dates and weekdays', () => {

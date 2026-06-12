@@ -41,6 +41,10 @@ type ShopifyProduct = {
     available?: boolean | null;
     sku?: string | null;
   }>;
+  images?: Array<{
+    src?: string | null;
+    alt?: string | null;
+  }>;
 };
 
 function compact(input: string): string {
@@ -95,6 +99,12 @@ function normalizeProduct(product: ShopifyProduct): DrkallaProduct | null {
     available: variant.available === true,
     sku: variant.sku ? compact(variant.sku) : null,
   }));
+  const images = (product.images ?? [])
+    .map((image) => ({
+      src: compact(image.src ?? ''),
+      alt: image.alt ? compact(stripHtml(image.alt)) : null,
+    }))
+    .filter((image) => image.src.startsWith('http'));
   return {
     id: product.id,
     title,
@@ -105,6 +115,7 @@ function normalizeProduct(product: ShopifyProduct): DrkallaProduct | null {
     tags: productTags(product.tags),
     description: stripHtml(product.body_html ?? ''),
     variants,
+    images,
   };
 }
 

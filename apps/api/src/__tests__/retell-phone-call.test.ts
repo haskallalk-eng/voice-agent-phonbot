@@ -234,6 +234,83 @@ describe('Retell agent runtime tuning', () => {
   });
 });
 
+describe('Retell custom LLM canary agents', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it('creates a separate custom-llm agent without creating a Retell managed LLM', async () => {
+    vi.stubEnv('RETELL_API_KEY', 'key_test');
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({
+      agent_id: 'agent_custom',
+      agent_name: 'DrKalla Custom Runtime Canary',
+      response_engine: {
+        type: 'custom-llm',
+        llm_websocket_url: 'wss://example.test/retell/custom-llm/drkalla?secret=secret',
+      },
+      voice_id: 'voice_1',
+    }), { status: 201, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { createCustomLlmAgent } = await import('../retell.js');
+    await createCustomLlmAgent({
+      name: 'DrKalla Custom Runtime Canary',
+      llmWebsocketUrl: 'wss://example.test/retell/custom-llm/drkalla?secret=secret',
+      voiceId: 'voice_1',
+      language: 'de-DE',
+      responsiveness: 0.87,
+      interruptionSensitivity: 0.77,
+      denoisingMode: 'no-denoise',
+      webhookUrl: 'https://example.test/retell/webhook',
+    });
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/create-agent');
+    const body = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string) as Record<string, unknown>;
+    expect(body.response_engine).toEqual({
+      type: 'custom-llm',
+      llm_websocket_url: 'wss://example.test/retell/custom-llm/drkalla?secret=secret',
+    });
+    expect(body).not.toHaveProperty('llm_id');
+    expect(body).not.toHaveProperty('knowledge_base_ids');
+    expect(body.responsiveness).toBe(0.87);
+    expect(body.interruption_sensitivity).toBe(0.77);
+    expect(body.webhook_url).toBe('https://example.test/retell/webhook');
+  });
+
+  it('updates an existing custom-llm canary agent without assigning phone numbers', async () => {
+    vi.stubEnv('RETELL_API_KEY', 'key_test');
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({
+      agent_id: 'agent_custom',
+      agent_name: 'DrKalla Custom Runtime Canary',
+      response_engine: {
+        type: 'custom-llm',
+        llm_websocket_url: 'wss://example.test/retell/custom-llm/drkalla?secret=secret',
+      },
+      voice_id: 'voice_1',
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { updateCustomLlmAgent } = await import('../retell.js');
+    await updateCustomLlmAgent('agent_custom', {
+      name: 'DrKalla Custom Runtime Canary',
+      llmWebsocketUrl: 'wss://example.test/retell/custom-llm/drkalla?secret=secret',
+      voiceId: 'voice_1',
+      responsiveness: 0.87,
+      interruptionSensitivity: 0.77,
+    });
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/update-agent/agent_custom');
+    const body = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string) as Record<string, unknown>;
+    expect(body.response_engine).toEqual({
+      type: 'custom-llm',
+      llm_websocket_url: 'wss://example.test/retell/custom-llm/drkalla?secret=secret',
+    });
+    expect(body).not.toHaveProperty('inbound_agents');
+    expect(body).not.toHaveProperty('outbound_agents');
+  });
+});
+
 describe('Retell phone number routing', () => {
   afterEach(() => {
     vi.unstubAllEnvs();

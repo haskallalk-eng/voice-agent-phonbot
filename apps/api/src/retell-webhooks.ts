@@ -55,6 +55,7 @@ import { knowledgeSearch } from './own-kb.js';
 import { createTrustedScope, KnowledgeSearchArgsSchema, knowledgeSearchTrustedScopeArgFields, sanitizeKnownToolResultForModel } from './agent-tools.js';
 import { ownKbSearchCallableForConfig } from './own-kb-rollout.js';
 import { buildDrkallaLinkSmsBody, drkallaLinkToolSignature, normalizeDrkallaLinkUrl } from './drkalla-link-tool.js';
+import { PUBLIC_DEMO_TEST_LINK, buildPublicDemoSimulatedSmsBody, publicDemoSmsToolSignature } from './public-demo-sms-tool.js';
 import { isPlausiblePhone } from '@vas/shared';
 import {
   customerModuleActiveForAgentConfig,
@@ -223,6 +224,13 @@ function verifyDrkallaLinkToolRequest(req: RawBodyRequest): boolean {
   const query = (req.query ?? {}) as Record<string, unknown>;
   const sig = query.drkalla_sig;
   return typeof sig === 'string' && timingSafeEqualText(sig, drkallaLinkToolSignature());
+}
+
+function verifyPublicDemoSmsToolRequest(req: RawBodyRequest): boolean {
+  if (verifyRetellSignature(req)) return true;
+  const query = (req.query ?? {}) as Record<string, unknown>;
+  const sig = query.demo_sig;
+  return typeof sig === 'string' && timingSafeEqualText(sig, publicDemoSmsToolSignature());
 }
 
 // getOrgIdByAgentId + invalidateOrgIdCache live in org-id-cache.ts (breaks
@@ -3039,6 +3047,50 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       agentId: liveCall.agentId,
       tool: 'drkalla.send_link',
       input: safeTraceInput(args, { omitFields: ['url'] }),
+      output: result,
+      at: now(),
+    } as Parameters<typeof appendTraceEvent>[0]);
+
+    return sanitizeToolResultForModel(result);
+  });
+
+  app.post('/retell/tools/demo_send_test_sms', async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!verifyPublicDemoSmsToolRequest(req as RawBodyRequest)) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const body = req.body as RetellEventBody;
+    const args = retellArgs(body);
+    const callId = getRetellCallId(body, args);
+    const agentId = getRetellAgentId(body, args);
+    const liveCall = await verifyLiveToolCall(reply, { callId, agentId }, 'demo_send_test_sms');
+    if (!liveCall) return;
+
+    const smsBody = buildPublicDemoSimulatedSmsBody({
+      smsKind: stringArg(args, 'smsKind') ?? 'test_link',
+      customerName: stringArg(args, 'customerName', 'name'),
+      service: stringArg(args, 'service'),
+      date: stringArg(args, 'date'),
+      time: stringArg(args, 'time'),
+    });
+    const result = {
+      ok: true,
+      simulated: true,
+      smsSent: false,
+      simulatedSmsSent: true,
+      testLink: PUBLIC_DEMO_TEST_LINK,
+      smsBody,
+      message: `Simulierte Demo-SMS: ${smsBody}`,
+      instruction: `Das war nur eine Demo-Simulation; es wurde keine echte SMS ueber einen Provider gesendet. Sage knapp: In dieser Demo wuerde die SMS so aussehen: ${smsBody}`,
+    };
+
+    await appendTraceEvent({
+      type: 'tool_call',
+      sessionId: liveCall.callId,
+      tenantId: 'demo:phone',
+      agentId: liveCall.agentId,
+      tool: 'demo_send_test_sms',
+      input: safeTraceInput(args),
       output: result,
       at: now(),
     } as Parameters<typeof appendTraceEvent>[0]);

@@ -1,6 +1,9 @@
 import crypto from 'node:crypto';
 
 export const DRKALLA_SITE_ORIGIN = 'https://drkalla.com';
+export const DRKALLA_SHOP_DISPLAY_NAME = 'Dr.Kalla Cosmetics';
+export const DRKALLA_SHOP_DOMAIN = 'drkalla.com';
+export const DRKALLA_PROFI_ACCESS_URL = 'https://drkalla.com/pages/als-friseur-registrieren';
 export const DRKALLA_RAG_AGENT_NAME = 'DrKalla RAG Voice Agent';
 export const DRKALLA_RAG_KB_NAME_PREFIX = 'DrKalla KB';
 export const DRKALLA_RAG_KB_SCHEMA_VERSION = 'c3u';
@@ -12,6 +15,20 @@ export const DRKALLA_RAG_KB_CONFIG = {
   filter_score: 0.6,
 } as const;
 
+export const DRKALLA_RAG_PROMPT_MAX_CHARS = 3200;
+
+export const DRKALLA_RAG_PROMPT_REQUIRED_ANCHORS = [
+  'kein Friseursalon',
+  'Erfinde keine Produkte',
+  'Sprachname',
+  'SMS-Link-Tool',
+  'Akustische Reparatur',
+  'Profi-Login',
+  'Nimm keine Bestellung oder Zahlung',
+  'Lege nur auf',
+  '(inaudible speech)',
+] as const;
+
 export type DrkallaVariant = {
   id: number | string;
   title: string;
@@ -19,6 +36,11 @@ export type DrkallaVariant = {
   compareAtPrice: string | null;
   available: boolean;
   sku: string | null;
+};
+
+export type DrkallaProductImage = {
+  src: string;
+  alt: string | null;
 };
 
 export type DrkallaProduct = {
@@ -31,11 +53,33 @@ export type DrkallaProduct = {
   tags: string[];
   description: string;
   variants: DrkallaVariant[];
+  images?: DrkallaProductImage[];
 };
 
 export type DrkallaProductVoiceName = {
   spokenName: string;
   searchAliases: string[];
+};
+
+export type DrkallaProductCatalogEntry = {
+  productId: string;
+  spokenName: string;
+  websiteTitle: string;
+  productKind: string;
+  externalBrand: string | null;
+  brandName: string;
+  brandSource: 'external_brand' | 'house_brand';
+  shopName: string;
+  shopProvider: string | null;
+  productLine: string | null;
+  priceRange: string;
+  variantCount: number;
+  availableVariantCount: number;
+  url: string;
+  imageCount: number;
+  imageAltTexts: string[];
+  searchAliases: string[];
+  description: string | null;
 };
 
 export type DrkallaPageFact = {
@@ -54,16 +98,15 @@ export type DrkallaKnowledgeSnapshot = {
   vendors: string[];
 };
 
-export const DRKALLA_RAG_PROMPT = `# Dr.Kalla Friseurbedarf Voice Agent
+export const DRKALLA_RAG_PROMPT_BASELINE = `# Dr.Kalla Friseurbedarf Voice Agent
 
 ## Auftrag und Grenzen
-- Dr.Kalla ist ein Berliner Friseurbedarf-Shop für Haarpflege, Farbe und Styling.
-- Dr.Kalla ist kein Friseursalon: keine Salontermine oder Haarschnitte.
-- Sprich als Dr.Kalla-Team: "bei uns", "unser Shop", "unsere Website". Vermeide Formulierungen wie "ich suche im Shop".
-- Hilf bei Sortiment, Produktwahl, Anwendung, Nachbestellung, Kontakt und Versand.
-- Nutze KB zuerst. Erfinde keine Produkte, Preise, Lagerbestände, Lieferzeiten, Garantien oder Profi-Zugänge.
-- Produktpreise: "laut aktuellem Shop-Datenstand"; sie können sich ändern.
-- Keine Diagnose/Farbberatung; bei Risiko, Allergie, Wunden, Haarausfall, Farbkorrektur oder Blondierung an Fachprüfung verweisen.
+- Dr.Kalla ist ein Berliner Friseurbedarf-Shop und Salonbedarf-Shop für Haarpflege, Farbe, Styling.
+- Dr.Kalla ist kein Friseursalon: keine Salontermine, Haarschnitte.
+- Sprich als Dr.Kalla-Team: "unser Shop". Vermeide Formulierungen wie "ich suche im Shop".
+- Nutze zuerst die KB. Erfinde keine Produkte, Preise, Bestände, Lieferzeiten, Garantien/Profi-Zugänge.
+- Produktpreise: "laut aktuellem Shop-Datenstand"; sie können sich ändern (koennen sich aendern).
+- Keine Diagnose/verbindliche Farbberatung; bei Risiko, Allergie, Wunden, Haarausfall, Farbkorrektur/Blondierung an Fachprüfung verweisen.
 
 ## Voice/KB-Regeln
 - Deutsch knapp: 1-2 Sätze, gesprochen mit ä, ö, ü, ß statt ae/oe/ue/ss; danach genau eine Frage.
@@ -75,9 +118,9 @@ export const DRKALLA_RAG_PROMPT = `# Dr.Kalla Friseurbedarf Voice Agent
 - Wiederhole nicht denselben Satz. Kontaktfacts nur einmal pro Antwort nennen. Wenn du Adresse, Telefon oder E-Mail gerade genannt hast, nicht wiederholen. Bei mehreren Anliegen: "Welche Kategorie oder welches Produkt zuerst?"
 
 ## Akustische Reparatur
-- Wenn der letzte Nutzer-Turn "(inaudible speech)", leer, abgebrochen, nur Geräusch oder unverständlich ist, tu nicht so, als hättest du verstanden. Erstes Mal: "Wie bitte? Ich habe dich gerade schlecht verstanden. Suchst du ein Produkt, eine Kategorie oder Bestellung?"
-- Wenn du den Anrufer zweimal hintereinander schlecht verstehst: "Sag bitte nur ein Stichwort: Produkt, Kategorie, Bestellung oder Kontakt." Beim dritten Mal: "Die Verbindung ist gerade schwer zu verstehen. Sag bitte etwas lauter ein Stichwort."
-- Antworte nicht mit "natürlich", wenn vorher nichts Verständliches gesagt wurde.
+- Wenn der letzte Nutzer-Turn "(inaudible speech)", leer, abgebrochen, nur Geräusch oder unverständlich ist, tu nicht so, als hättest du verstanden. Erstes Mal: "Wie bitte? Ich habe dich gerade schlecht verstanden."
+- Wenn du den Anrufer zweimal hintereinander schlecht verstehst: bleibe im letzten klaren Thema. Frage gezielt nach: aktive Produktart, Marke oder Produkt, z.B. "Ich habe dich akustisch nicht verstanden. Bleiben wir bei der Haarfarbe?" Nur ohne klaren Kontext: "Geht es um ein Produkt, eine Bestellung oder Kontakt?" Beim dritten Mal: "Die Verbindung ist gerade schwer zu verstehen. Sag bitte etwas lauter."
+- Antworte nicht mit "natuerlich". Antworte nicht mit "natürlich", wenn vorher nichts Verständliches gesagt wurde.
 
 ## Typische Korrekturen
 - Friseurtermin/Haarschnittpreis: "Dr.Kalla ist ein Friseurbedarf-Shop, kein Salon. Ich kann dir aber Produkte oder Salonbedarf aus dem Shop suchen."
@@ -91,6 +134,41 @@ export const DRKALLA_RAG_PROMPT = `# Dr.Kalla Friseurbedarf Voice Agent
 ## Abschluss
 - Am Ende kurz fragen: "Soll ich dir dazu noch eine Produktkategorie oder Kontaktmöglichkeit nennen?"
 - Lege nur auf, wenn der Anrufer sich klar verabschiedet, explizit "leg auf/beende den Anruf" sagt oder Retell nach echter langer Stille beendet. "(inaudible speech)" ist keine Stille.`;
+
+export const DRKALLA_RAG_PROMPT = `- Friseurbedarf, Salonbedarf-Shop;Dr.Kalla ist kein Friseursalon: keine Salontermine, Haarschnitte. Sprich als Dr.Kalla-Team: "unser Shop";vermeide "ich suche im Shop". "Doktor Color Punkt com";"d r k a l l a Punkt com";nie Drückalla.
+- Nutze zuerst die KB. Erfinde keine Produkte/Preise. Produktpreise koennen sich aendern. Keine Diagnose/verbindliche Farbberatung.
+- Deutsch knapp, gesprochen mit ä, ö, ü, ß;1 Frage. Sprachname;keine SKU-Ketten.
+- Wenn mehrere Produkte/Varianten zum selben Sprachname passen: Größe/Stärke/Farbton/Duft/Preis klären. Widersprich dir nicht mit einem Einzelpreis.
+- Kontakt/Adresse/Öffnungszeiten/Besuch: Kontakt-KB direkt; nie "keine Adresse". Kontaktfacts nur einmal pro Antwort nennen; Adresse/Telefon/E-Mail nur bei Nachfrage; Öffnungszeiten direkt nennen: Montag bis Freitag 10 bis 18 Uhr; E-Mail: kontakt at drkalla punkt com.
+- Lies im Voice-Call keine langen URLs vor; keine Linklisten vorlesen; nenne maximal drkalla.com. SMS-Link-Tool; behaupte Versand erst nach Tool-Erfolg.
+- Produkt-Funnel: aktives Produkt => keine Kategorie/Kontakt-Schleife; nächster Schritt Produktlink/Verfügbarkeit/Vergleich. aktive Produktart => Marken/Auswahl nennen; nicht nach einzelner Marke fragen; keine Pflege-/Sibling-Kategorien. Sortiment/Lieferant/viele Varianten => nicht auf einzelne Variante bohren. Kein Shoplink, wenn Produkt-URL bekannt. Kategorie nur ohne Produkt/Ziel. Produktfacts nicht wiederholen; Preis-Evidence halten, nicht erst "fehlt", dann "doch". Bei "Unterschied?" zuletzt genannte Produkte vergleichen, Serum vs. Leave-in; nicht auf Kategorie-Ebene springen; Produktlink anbieten.
+- Paketshop oder Dr.Kalla Cosmetics? Paketshop: Öffnungszeiten nennen; keine Produktkategorie.
+Akustische Reparatur:
+- Bei "(inaudible speech)" oder nur Geräusch: nicht raten/auflegen. Erstes Mal: "Wie bitte? Ich habe dich gerade schlecht verstanden."
+- 2x schlecht: bleibe im letzten klaren Thema; aktive Produktart, Marke oder Produkt: "akustisch schwer. Bleiben wir bei ...?" Nur ohne klaren Kontext: "Produkt/Bestellung/Kontakt?" Beim dritten Mal: "Die Verbindung ist gerade schwer zu verstehen. Bitte lauter." Antworte nicht mit "natürlich"/"natuerlich".
+- Salontermin: kein Salon.
+- Profi-Login/Profi-Preise: Profi-Zugang existiert;Friseure können Profi-Preise anfragen;Gewerbe-/Steuernachweis;nicht mit Entwicklerpreisen beantworten. Profi-Frage => Profi-Link per SMS anbieten; wenn gesendet, sagen;nie URL vorlesen. Kontaktlink nur bei Kontaktfragen. Keine Konditionen/Rabatte/Freischaltung erfinden.
+- Preisfrage ausser Parfum: 1x sagen "Preis fuer normale Kaeufer; Profi-Friseurpreise telefonisch nicht; Profi-Zugang registrieren." Dann: "Produktlink oder Profi-Zugang per SMS?" Danach Profi-Hinweis nicht wiederholen.
+- Bei Herren-, Damen- oder Unisex-Duft nicht wechseln. Entwickler/Oxidant/Wasserstoffperoxid: Prozentstärke und Größe klären. roten/kupfernen/gefärbten Haaren nicht automatisch Anti-Gelb empfehlen; Farbschutz/Rot-/Kupferpflege.
+- Nimm keine Bestellung oder Zahlung am Telefon auf.
+- Lege nur auf bei "tschüss/auf Wiederhören", "leg auf/beende den Anruf" oder langer Stille; nie bei "(inaudible speech)", "alles klar", Korrekturen/Fragen.`;
+
+export const DRKALLA_RAG_PROMPT_COMPACT_CANDIDATE = DRKALLA_RAG_PROMPT;
+
+export function evaluateDrkallaPromptCompression(prompt: string): {
+  passed: boolean;
+  length: number;
+  maxChars: number;
+  missingAnchors: string[];
+} {
+  const missingAnchors = DRKALLA_RAG_PROMPT_REQUIRED_ANCHORS.filter((anchor) => !prompt.includes(anchor));
+  return {
+    passed: prompt.length <= DRKALLA_RAG_PROMPT_MAX_CHARS && missingAnchors.length === 0,
+    length: prompt.length,
+    maxChars: DRKALLA_RAG_PROMPT_MAX_CHARS,
+    missingAnchors,
+  };
+}
 
 function compact(input: string): string {
   return input.replace(/\s+/g, ' ').trim();
@@ -223,7 +301,7 @@ function specialSpokenName(title: string): string | null {
   if (/ultrastark/i.test(title) && /gel/i.test(title)) return 'Ultrastark Gel';
   if (/ultrastark/i.test(title) && /haarspray/i.test(title)) return 'Ultrastark Haarspray';
   if (/dea\s+placenta|plazenta/i.test(title) && /haarausfall|haarwurzel|schwach|brüchig|bruechig/i.test(title)) return 'Plazenta Haarausfall-Ampullen';
-  if (/haarfaerb|haarfärb|faerbeschale|färbeschale/i.test(title)) return 'Haarfärbeschale';
+  if (/faerbeschale|färbeschale/i.test(title)) return 'Haarfärbeschale';
   if (/infrared\s+keratin\s+pro/i.test(title)) return 'Sthauer Infrared Keratin Glätteisen';
   if (/luxe[-\s]*oel|luxe[-\s]*öl/i.test(title) && /leave/i.test(title)) return 'Luxe-Öl Leave-in';
   if (/luxe[-\s]*oel|luxe[-\s]*öl/i.test(title) && /shampoo/i.test(title)) return 'Luxe-Öl Shampoo';
@@ -277,8 +355,28 @@ function titleHasFemaleFragranceSignal(title: string): boolean {
 function productTypeAliases(product: DrkallaProduct, title: string): string[] {
   const type = product.productType ?? '';
   const aliases: string[] = [];
+  if (/l[''`´’]?\s*or[eé]al|loreal|or[eé]al|inoa/i.test(`${product.vendor ?? ''} ${title} ${product.handle}`)) {
+    aliases.push(
+      "L'Oréal",
+      "L'Oreal",
+      'Loreal',
+      'Lorian',
+      'Lorial',
+      'Loyal',
+      "L'Orient",
+      'Lorient',
+      "L'Oréal Haarfarbe",
+      "L'Oreal Haarfarbe",
+    );
+  }
   if (/lattafa/i.test(`${product.vendor ?? ''} ${title} ${product.handle}`)) {
     aliases.push('Lattafa', 'Latafa', 'Lattaffa', 'Latasse');
+  }
+  if (/\bwella\b|koleston\s+perfect/i.test(`${product.vendor ?? ''} ${title} ${product.handle}`)) {
+    aliases.push('Wella', 'Vella', 'Koleston', 'Koleston Perfect', 'Wella Haarfarbe');
+  }
+  if (/\bschwarzkopf\b/i.test(`${product.vendor ?? ''} ${title} ${product.handle}`)) {
+    aliases.push('Schwarzkopf');
   }
   if (/(?:eau de parfum|parfum|perfume|edp|cologne|extrait)\b/i.test(`${type} ${title}`)) {
     aliases.push('Parfum', 'Duft');
@@ -286,7 +384,7 @@ function productTypeAliases(product: DrkallaProduct, title: string): string[] {
     if (titleHasFemaleFragranceSignal(title)) aliases.push('Damenduft', 'Damen Duft');
     if (/unisex/i.test(title)) aliases.push('Unisex Duft');
   }
-  if (/haarfarbe|color cream|farb/i.test(`${type} ${title}`)) aliases.push('Haarfarbe', 'Farbcreme');
+  if (/haarfarbe|haarf[aä]rb|color cream|farb/i.test(`${type} ${title}`)) aliases.push('Haarfarbe', 'Farbcreme');
   if (/blond/i.test(`${type} ${title}`)) aliases.push('Blondierung', 'Blondierpulver');
   if (/wasserstoffperoxid|entwickler|oxidant/i.test(title)) aliases.push('Entwickler', 'Oxidant');
   if (/anti[-\s]?frizz/i.test(title)) aliases.push('Anti Frizz', 'Frizz Pflege');
@@ -294,6 +392,85 @@ function productTypeAliases(product: DrkallaProduct, title: string): string[] {
   if (/anti[-\s]?orange/i.test(title)) aliases.push('Anti Orange');
   if (/kamm/i.test(title)) aliases.push('Kamm');
   return aliases;
+}
+
+function isShopProvider(value: string | null | undefined): boolean {
+  return /^(?:dr\.?\s*kalla\s+cosmetics|cj\s+dropshipping)$/i.test(value?.trim() ?? '');
+}
+
+function knownExternalBrandFromText(input: string): string | null {
+  if (/l[''`Â´â€™]?\s*or[eÃ©]al|loreal|\bor[eÃ©]al\b|inoa/i.test(input)) return "L'Oreal Professionnel Paris";
+  if (/\bwella\b|koleston\s+perfect/i.test(input)) return 'Wella';
+  if (/\bschwarzkopf\b/i.test(input)) return 'Schwarzkopf';
+  if (/\blattafa\b/i.test(input)) return 'Lattafa';
+  return null;
+}
+
+function externalBrand(product: DrkallaProduct): string | null {
+  const vendor = product.vendor?.trim() ?? '';
+  if (vendor && !isShopProvider(vendor)) return vendor;
+  return knownExternalBrandFromText(`${product.title} ${product.handle}`);
+}
+
+function customerFacingBrand(product: DrkallaProduct): { brandName: string; brandSource: 'external_brand' | 'house_brand' } {
+  const brand = externalBrand(product);
+  return brand
+    ? { brandName: brand, brandSource: 'external_brand' }
+    : { brandName: DRKALLA_SHOP_DISPLAY_NAME, brandSource: 'house_brand' };
+}
+
+function productLineFromTitle(title: string): string | null {
+  const normalized = normalizeForVoice(title);
+  const knownLines = [
+    /Koleston\s+Perfect/i,
+    /L[''`´’]?\s*Or[eé]al(?:\s+Professionnel)?/i,
+    /Sintesis(?:\s+Color\s+Cream)?/i,
+    /PSN(?:\s+Essense)?/i,
+    /Rouge\s+Color\s+Lock/i,
+    /Turquoise\s+Hydra\s+Complex/i,
+    /Black\s+Professional\s+Line/i,
+    /Evelon\s+Pro/i,
+    /Xanitalia/i,
+    /Lattafa/i,
+    /Sthauer/i,
+  ];
+  for (const pattern of knownLines) {
+    const match = normalized.match(pattern);
+    if (match?.[0]) return trimPunctuation(match[0]);
+  }
+  return null;
+}
+
+function canonicalProductKind(product: DrkallaProduct): string {
+  const title = normalizeForVoice(product.title);
+  const type = normalizeForVoice(product.productType ?? '');
+  const haystack = `${type} ${title} ${product.tags.join(' ')}`;
+  if (/farbentfernung|farbentfernungs|farbentferner|farbentfernungst/i.test(title)) return 'Farbentferner';
+  if (/leinsamenkristalle/i.test(title)) return 'Serum';
+  if (/gl.*ttungscreme|gl.*ttung|neutralisierendes\s+fixiermittel/i.test(title)) return 'Haargl\u00e4ttung';
+  if (/farbkarte/i.test(title)) return 'Farbkarte';
+  if (/koleston\s+perfect/i.test(title)) return 'Haarfarbe/Farbcreme';
+  if (/bleichpulver|aufhellendes\s+bleichpulver/i.test(haystack)) return 'Blondierung';
+  if (/ginseng|genseng|trockenes\s+und\s+lebloses\s+haar/i.test(title)) return 'Haarpflege';
+  if (/shampoo/i.test(title)) return 'Shampoo';
+  if (/conditioner|sp[üu]lung/i.test(title)) return 'Conditioner/Spülung';
+  if (/maske|haarmaske/i.test(title)) return 'Haarmaske';
+  if (/leave[-\s]?in/i.test(title)) return 'Leave-in';
+  if (/serum|haarserum|leinsamenkristalle/i.test(title)) return 'Serum';
+  if (/farbentfernung|farbentfernungs|farbentferner|farbentfernungst[Ã¼u]cher/i.test(title)) return 'Farbentferner';
+  if (/gl[Ã¤a]ttungscreme|gl[Ã¤a]ttung|neutralisierendes\s+fixiermittel/i.test(title)) return 'HaarglÃ¤ttung';
+  if (/farbkarte/i.test(title)) return 'Farbkarte';
+  if (/entwickler|oxidant|wasserstoffperoxid/i.test(haystack)) return 'Entwickler/Oxidant';
+  if (
+    /haarfarbe\b|haarf[aä]rbemittel|farbcreme|color cream|inoa|sintesis\s+color\s+cream|synthesis\s+color\s+cream/i.test(title)
+    || /haarf[aä]rbemittel|color cream/i.test(type)
+  ) return 'Haarfarbe/Farbcreme';
+  if (/blondier/i.test(haystack)) return 'Blondierung';
+  if (/eau de parfum|parfum|perfume|edp|cologne|extrait|\bduft\b/i.test(haystack)) return 'Duft/Parfum';
+  if (/kamm/i.test(haystack)) return 'Kamm';
+  if (/haarspray|mousse|gel\b/i.test(haystack)) return 'Styling';
+  if (/salonwagen|wascheinheit|stuhl|matte|ablage|m[oö]bel/i.test(haystack)) return 'Salonmöbel/-ausstattung';
+  return type || 'Sonstiges Produkt';
 }
 
 function germanNumberWord(value: string | undefined): string | null {
@@ -366,6 +543,37 @@ export function buildDrkallaProductVoiceName(product: DrkallaProduct): DrkallaPr
   return { spokenName, searchAliases: aliases };
 }
 
+export function buildDrkallaProductCatalogEntries(snapshot: DrkallaKnowledgeSnapshot): DrkallaProductCatalogEntry[] {
+  return snapshot.products.map((product) => {
+    const voiceName = buildDrkallaProductVoiceName(product);
+    const brand = customerFacingBrand(product);
+    const imageAltTexts = uniqueAliases([
+      ...(product.images ?? []).map((image) => image.alt),
+      product.images?.length ? `Produktbild: ${voiceName.spokenName}` : null,
+    ]).slice(0, 5);
+    return {
+      productId: String(product.id),
+      spokenName: voiceName.spokenName,
+      websiteTitle: product.title,
+      productKind: canonicalProductKind(product),
+      externalBrand: externalBrand(product),
+      brandName: brand.brandName,
+      brandSource: brand.brandSource,
+      shopName: DRKALLA_SHOP_DISPLAY_NAME,
+      shopProvider: product.vendor?.trim() || null,
+      productLine: productLineFromTitle(product.title),
+      priceRange: priceRange(product.variants),
+      variantCount: product.variants.length,
+      availableVariantCount: product.variants.filter((variant) => variant.available).length,
+      url: product.url,
+      imageCount: product.images?.length ?? 0,
+      imageAltTexts,
+      searchAliases: voiceName.searchAliases,
+      description: product.description ? truncate(product.description, 320) : null,
+    };
+  });
+}
+
 export function drkallaSnapshotHash(snapshot: DrkallaKnowledgeSnapshot): string {
   const stable = JSON.stringify({
     source: snapshot.source,
@@ -386,8 +594,73 @@ export function drkallaSnapshotHash(snapshot: DrkallaKnowledgeSnapshot): string 
   return crypto.createHash('sha256').update(stable).digest('hex').slice(0, 12);
 }
 
+function formatDrkallaStructuredProductCatalog(snapshot: DrkallaKnowledgeSnapshot, hash: string): { title: string; text: string } {
+  const entries = buildDrkallaProductCatalogEntries(snapshot);
+  const byKind = new Map<string, DrkallaProductCatalogEntry[]>();
+  for (const entry of entries) {
+    const list = byKind.get(entry.productKind) ?? [];
+    list.push(entry);
+    byKind.set(entry.productKind, list);
+  }
+
+  const kindLines = [...byKind.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, 'de'))
+    .map(([kind, products]) => {
+      const externalBrands = uniqueAliases(products.map((product) => product.externalBrand));
+      const customerBrands = uniqueAliases(products.map((product) => product.brandName))
+        .sort((a, b) => {
+          if (a === DRKALLA_SHOP_DISPLAY_NAME) return -1;
+          if (b === DRKALLA_SHOP_DISPLAY_NAME) return 1;
+          return a.localeCompare(b, 'de');
+        });
+      const houseBrandCount = products.filter((product) => product.brandSource === 'house_brand').length;
+      const productLines = uniqueAliases(products.map((product) => product.productLine)).slice(0, 8);
+      const prices = products
+        .flatMap((product) => product.priceRange.match(/\d+,\d{2}/g) ?? [])
+        .map((value) => Number(value.replace(',', '.')))
+        .filter((value) => Number.isFinite(value));
+      const priceSummary = prices.length
+        ? `von ${Math.min(...prices).toFixed(2).replace('.', ',')} EUR bis ${Math.max(...prices).toFixed(2).replace('.', ',')} EUR`
+        : 'Preis nicht im Snapshot';
+      const examples = products
+        .slice(0, 4)
+        .map((product) => `${product.spokenName} (${product.priceRange})`)
+        .join(', ');
+      return [
+        `- Produktart: ${kind}`,
+        `  Anzahl: ${products.length}`,
+        `  Shop: ${DRKALLA_SHOP_DISPLAY_NAME} / ${DRKALLA_SHOP_DOMAIN}`,
+        `  Marken: ${customerBrands.join(', ')}`,
+        externalBrands.length ? `  Externe Marken: ${externalBrands.join(', ')}` : '',
+        houseBrandCount ? `  Hausmarke/Shopmarke: ${DRKALLA_SHOP_DISPLAY_NAME} fuer ${houseBrandCount} Produkte ohne erkennbare externe Marke.` : '',
+        productLines.length ? `  Produktlinien/Suchnamen: ${productLines.join(', ')}` : '',
+        `  Preisbereich: ${priceSummary}`,
+        examples ? `  Beispiele: ${examples}` : '',
+      ].filter(Boolean).join('\n');
+    });
+
+  return {
+    title: `DrKalla Strukturierter Produktkatalog ${hash}`,
+    text: [
+      'Dr.Kalla strukturierter Produktkatalog fuer RAG',
+      `Shop: ${DRKALLA_SHOP_DISPLAY_NAME} / ${DRKALLA_SHOP_DOMAIN}`,
+      'Zweck: Produktart, kundenverstaendliche Marke, externe Marke, Hausmarke, Produktlinie, Preisbereich, Varianten, Link und Beschreibung getrennt halten.',
+      `Regel: ${DRKALLA_SHOP_DISPLAY_NAME} ist Shop und Hausmarke. Wenn keine externe Marke erkennbar ist, ist die kundenverstaendliche Marke ${DRKALLA_SHOP_DISPLAY_NAME}.`,
+      'Regel: Technische Lieferanten- oder Importlabels wie CJ Dropshipping nicht als Kundenmarke nennen.',
+      'Bei "Welche Marken habt ihr?" im Kontext einer Produktart die Marken dieser Produktart nennen: externe Marken plus Dr.Kalla Cosmetics als Hausmarke, falls Produkte ohne externe Marke dabei sind.',
+      'Bei "Haarfarben-Marken" heisst das: Haarfarben-Marken aus der Produktart Haarfarbe/Farbcreme nennen; Produktlinien getrennt als Suchnamen/Serien nennen.',
+      'Wenn ein Anrufer Lorian, Lorial, Loyal, L Orient, Lorient oder Loreal sagt, ist wahrscheinlich L Oréal gemeint.',
+      'Bei aktivem konkretem Produkt den Produktlink aus der Produkt-KB verwenden; nicht stattdessen die Shop-Startseite senden.',
+      ...kindLines,
+    ].join('\n'),
+  };
+}
+
 export function formatDrkallaProductFact(product: DrkallaProduct): string {
   const voiceName = buildDrkallaProductVoiceName(product);
+  const brand = customerFacingBrand(product);
+  const imageAltTexts = uniqueAliases((product.images ?? []).map((image) => image.alt)).slice(0, 5);
+  const generatedImageHint = product.images?.length ? `Produktbild: ${voiceName.spokenName}` : null;
   const variantSummary = product.variants
     .slice(0, 12)
     .map((variant) => {
@@ -404,8 +677,14 @@ export function formatDrkallaProductFact(product: DrkallaProduct): string {
     `Menschliche Suchnamen: ${voiceName.searchAliases.join(', ')}`,
     `Original-Shop-Titel: ${product.title}`,
     `URL: ${product.url}`,
-    product.vendor ? `Marke/Anbieter: ${product.vendor}` : '',
-    product.productType ? `Kategorie: ${product.productType}` : '',
+    `Produktart: ${canonicalProductKind(product)}`,
+    `Shop: ${DRKALLA_SHOP_DISPLAY_NAME} / ${DRKALLA_SHOP_DOMAIN}`,
+    `Marke: ${brand.brandName}${brand.brandSource === 'house_brand' ? ' (Hausmarke/Shopmarke)' : ' (externe Marke)'}`,
+    externalBrand(product) ? `Externe Marke: ${externalBrand(product)}` : '',
+    product.vendor && !isShopProvider(product.vendor) ? `Technischer Anbieter/Vendor aus Shopdaten: ${product.vendor}` : '',
+    productLineFromTitle(product.title) ? `Produktlinie/Suchname: ${productLineFromTitle(product.title)}` : '',
+    product.productType ? `Shop-Kategorie: ${product.productType}` : '',
+    product.images?.length ? `Bilddaten: ${product.images.length} Bilder${imageAltTexts.length ? `; Alt-Texte: ${imageAltTexts.join(', ')}` : `; Bildhinweis: ${generatedImageHint}`}` : '',
     tags ? `Tags: ${tags}` : '',
     `Preisbereich: ${priceRange(product.variants)}`,
     variantSummary ? `Varianten: ${variantSummary}` : '',
@@ -426,7 +705,9 @@ export function buildDrkallaKnowledgeTexts(snapshot: DrkallaKnowledgeSnapshot): 
     snapshot.categories.length ? `Kategorien: ${snapshot.categories.join(', ')}` : '',
     snapshot.vendors.length ? `Marken/Anbieter: ${snapshot.vendors.join(', ')}` : '',
     'Kontakt laut öffentlicher Website: Silbersteinstraße 83, 12051 Berlin; kontakt@drkalla.com; E-Mail gesprochen: kontakt at drkalla punkt com; Montag bis Freitag 10 bis 18 Uhr.',
+    `Profi-Link laut Website: ${DRKALLA_PROFI_ACCESS_URL}; fuer Friseure, Studios und gewerbliche Einkaeufer zur Registrierung/Anfrage.`,
     'Versandhinweis laut oeffentlicher Website: Versandinformationen werden im Checkout angezeigt; auf der Startseite wird kostenloser Versand ab 49 Euro genannt.',
+    `Profi-Zugang laut oeffentlicher Website: Friseure/gewerbliche Einkaeufer koennen Profi-Preise anfragen; Profi-Link ${DRKALLA_PROFI_ACCESS_URL}; fuer Freischaltung kann ein Gewerbe- oder Steuernachweis noetig sein. Exakte Rabatte nicht erfinden.`,
   ].filter(Boolean).join('\n');
 
   const contact = [
@@ -439,6 +720,7 @@ export function buildDrkallaKnowledgeTexts(snapshot: DrkallaKnowledgeSnapshot): 
     'E-Mail gesprochen: kontakt at drkalla punkt com.',
     'Telefon und WhatsApp laut Kontaktseite: +49 30 62987736.',
     'Website: drkalla.com.',
+    `Profi-Zugang: Profi-Preise koennen angefragt werden; Link ${DRKALLA_PROFI_ACCESS_URL}; fuer Friseure/gewerbliche Einkaeufer kann ein Gewerbe- oder Steuernachweis noetig sein. Keine Rabatte oder Freischaltung als sicher behaupten.`,
     'Anfahrt grob: Dr.Kalla liegt in Berlin-Neukölln nahe S+U Hermannstraße/Silbersteinstraße; von Hermannplatz ist die U8 Richtung Hermannstraße naheliegend. Genaue Verbindung tagesaktuell mit BVG oder Maps prüfen.',
     'Bei Unsicherheit zu tagesaktuellen Öffnungszeiten oder Produktverfügbarkeit an Kontakt oder Website verweisen.',
   ].join('\n');
@@ -447,6 +729,7 @@ export function buildDrkallaKnowledgeTexts(snapshot: DrkallaKnowledgeSnapshot): 
     { title: `DrKalla Overview ${hash}`, text: overview },
     { title: `DrKalla Kontakt ${hash}`, text: contact },
   ];
+  texts.push(formatDrkallaStructuredProductCatalog(snapshot, hash));
 
   for (const page of snapshot.pages) {
     if (!page.text.trim()) continue;

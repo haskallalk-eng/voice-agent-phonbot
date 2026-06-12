@@ -1,0 +1,126 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { createTrustedScope } from '../trusted-scope.js';
+import {
+  applyDrkallaMemoryRuntimeEvent,
+  createDrkallaMemoryRuntimeSession,
+} from '../drkalla-memory-runtime.js';
+import {
+  createDrkallaShortTermMemory,
+  isDrkallaMemoryLiveEffective,
+  reduceDrkallaShortTermMemory,
+} from '../drkalla-short-term-memory.js';
+import type { AgentTurnRequestedEvent } from '../voice-runtime-contract.js';
+
+const trustedScope = createTrustedScope({
+  orgId: 'org-1',
+  tenantId: 'tenant-1',
+  agentId: 'agent-drkalla',
+  callId: 'call-1',
+  source: 'server',
+  resolvedFrom: 'call_registry',
+});
+
+function turn(currentUserText: string): AgentTurnRequestedEvent {
+  return {
+    type: 'AgentTurnRequested',
+    eventId: 'event-1',
+    traceId: 'trace-1',
+    trustedScope,
+    provider: 'retell',
+    channel: 'voice',
+    providerEventId: 'event-1',
+    providerCallId: 'call-1',
+    turnId: 'turn-1',
+    responseId: 'response-1',
+    occurredAt: '2026-06-12T10:00:00.000Z',
+    receivedAt: '2026-06-12T10:00:00.100Z',
+    currentUserText,
+  };
+}
+
+function productMemory() {
+  return reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+    type: 'agent_spoke',
+    turnIndex: 1,
+    text: 'Synthesis Color Cream ist eine Haarfarbe mit 100 ml und Preis.',
+    lastProduct: {
+      spokenName: 'Synthesis Color Cream',
+      productId: 'synthesis-color-cream',
+      productKind: 'Haarfarbe/Farbcreme',
+    },
+    factsMentioned: [
+      { key: 'product.synthesis-color-cream.description', label: 'Beschreibung' },
+      { key: 'product.synthesis-color-cream.size', label: 'Menge' },
+      { key: 'product.synthesis-color-cream.price', label: 'Preis' },
+    ],
+  });
+}
+
+describe('DrKalla memory runtime bridge', () => {
+  it('does not mark Retell-managed prompt mode as live-effective memory', () => {
+    const session = createDrkallaMemoryRuntimeSession({
+      mode: 'retell_managed',
+      memory: productMemory(),
+    });
+    const result = applyDrkallaMemoryRuntimeEvent(session, turn('Was kostet das?'));
+
+    expect(result.memoryContextInjected).toBe(false);
+    expect(result.memoryContext).toBeNull();
+    expect(isDrkallaMemoryLiveEffective(result)).toBe(false);
+  });
+
+  it('injects bounded non-evidence memory context only in custom runtime mode', () => {
+    const session = createDrkallaMemoryRuntimeSession({
+      mode: 'custom_runtime',
+      memory: productMemory(),
+    });
+    const result = applyDrkallaMemoryRuntimeEvent(session, turn('Was kostet das?'));
+
+    expect(result.memoryContextInjected).toBe(true);
+    expect(isDrkallaMemoryLiveEffective(result)).toBe(true);
+    expect(result.memoryContext).toContain('not_evidence=true');
+    expect(result.memoryContext).toContain('active_product=Synthesis Color Cream');
+    expect(result.memoryContext).toContain('product_facts=description,size,price');
+    expect(result.memoryContext?.length).toBeLessThanOrEqual(550);
+    expect(result.extraLlmCalls).toBe(0);
+    expect(result.extraKbCalls).toBe(0);
+  });
+
+  it('exposes the product-funnel dialogue view above retrieval/evidence context', () => {
+    const session = createDrkallaMemoryRuntimeSession({
+      mode: 'custom_runtime',
+      memory: productMemory(),
+    });
+    const result = applyDrkallaMemoryRuntimeEvent(session, turn('Wie kaufe ich das?'));
+
+    expect(result.dialogueView.level).toBe('active_product');
+    expect(result.dialogueView.nextAction).toBe('offer_product_link');
+    expect(result.dialogueView.isEvidence).toBe(false);
+    expect(result.dialogueView.forbiddenMoves).toContain('category_reset');
+    expect(result.dialogueView.forbiddenMoves).toContain('contact_loop');
+    expect(result.responsePlan.plan).toBe('offer_product_link');
+    expect(result.responsePlan.mustDo).toContain('offer_specific_product_link_or_availability');
+    expect(result.responsePlan.mustNotDo).toContain('offer_product_category');
+  });
+
+  it('keeps inaudible speech inside memory without creating an end-call candidate', () => {
+    const session = createDrkallaMemoryRuntimeSession({
+      mode: 'custom_runtime',
+      memory: productMemory(),
+    });
+    const result = applyDrkallaMemoryRuntimeEvent(session, turn('(inaudible speech)'));
+
+    expect(result.memory.inaudibleStreak).toBe(1);
+    expect(result.memory.endCallEligible).toBe(false);
+    expect(result.memoryContext).toContain('inaudible_streak=1');
+  });
+
+  it('keeps the memory runtime bridge provider-neutral and free of SDK imports', () => {
+    const source = readFileSync(join(__dirname, '..', 'drkalla-memory-runtime.ts'), 'utf8');
+
+    expect(source).not.toMatch(/from ['"].*(?:retell|openai|@retell|retell-sdk)/i);
+    expect(source).not.toMatch(/\b(response_required|update_only|transcript_with_tool_calls|input_audio_buffer)\b/);
+  });
+});

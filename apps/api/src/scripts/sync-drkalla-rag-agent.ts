@@ -29,6 +29,7 @@ import {
   DRKALLA_RAG_KB_NAME_PREFIX,
   DRKALLA_RAG_KB_SCHEMA_VERSION,
   DRKALLA_RAG_PROMPT,
+  DRKALLA_PROFI_ACCESS_URL,
   buildDrkallaKnowledgeTexts,
   drkallaSnapshotHash,
   type DrkallaKnowledgeSnapshot,
@@ -72,7 +73,7 @@ export function drkallaRagTools(webhookBase?: string): RetellTool[] {
       type: 'custom',
       name: DRKALLA_LINK_TOOL_NAME,
       description:
-        'Send exactly one Dr.Kalla shop, product, category, or contact link by SMS. Only call after the caller explicitly asks for a link or SMS, or after they clearly answer yes to "Soll ich dir den Link per SMS schicken?". Never call for "nenn mir", "sag mir", contact details, inaudible speech, or vague agreement. Use only drkalla.com URLs. Never claim the link was sent unless the tool result says smsSent=true.',
+        `Send exactly one Dr.Kalla shop, product, category, contact, or Profi link by SMS. Profi-Zugang/Profi-Preise => use Profi linkKind=profi and ${DRKALLA_PROFI_ACCESS_URL}, not contact. Contact questions => contact linkKind=contact, not Profi. Never read URLs aloud; send them through this tool. Only call after the caller explicitly asks for a link or SMS, or after they clearly answer yes to "Soll ich dir den Link per SMS schicken?". Never call for "nenn mir", "sag mir", inaudible speech, or vague agreement. Use only drkalla.com URLs. Never claim the link was sent unless the tool result says smsSent=true.`,
       url: `${webhookBase.replace(/\/+$/, '')}${DRKALLA_LINK_TOOL_PATH}?drkalla_sig=${drkallaLinkToolSignature()}`,
       execution_message_description: 'Sende den Dr.Kalla Link per SMS.',
       parameters: {
@@ -88,7 +89,7 @@ export function drkallaRagTools(webhookBase?: string): RetellTool[] {
           },
           linkKind: {
             type: 'string',
-            enum: ['shop', 'product', 'category', 'contact'],
+            enum: ['shop', 'product', 'category', 'contact', 'profi'],
           },
         },
         required: ['url', 'label'],
