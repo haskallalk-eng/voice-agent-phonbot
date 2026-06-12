@@ -521,4 +521,28 @@ describe('DrKalla custom LLM responder', () => {
     expect(response.text).not.toContain('welches Produkt oder welche Produktart');
     expect(response.metrics.extraKbCalls).toBe(0);
   });
+
+  it.each([
+    ['Habt ihr Sprühflaschen?', 'Salon-Verbrauchsmaterial'],
+    ['Ich brauche Watteschnur.', 'Salon-Verbrauchsmaterial'],
+    ['Habt ihr Spiegel?', 'Salon-Zubehör'],
+    ['Ich suche einen Aufsteller.', 'Salon-Zubehör'],
+  ])('uses catalog-backed accessory fallback for "%s"', async (text, expectedProductType) => {
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: {
+        enabled: true,
+        allowModelDirectives: true,
+        allowLiveRollout: false,
+        maxDirectiveChars: 650,
+      },
+      event: turn(text),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => '' },
+    });
+
+    expect(response.text).toContain(expectedProductType);
+    expect(response.text).toContain('Auswahl');
+    expect(response.text).not.toContain('welches Produkt oder welche Produktart');
+    expect(response.metrics.extraKbCalls).toBe(0);
+  });
 });
