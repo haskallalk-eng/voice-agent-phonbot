@@ -386,6 +386,10 @@ describe('DrKalla custom LLM responder', () => {
     ['Ich brauche Färbepinsel.', 'Friseur-Tool'],
     ['Habt ihr Alufolie?', 'Friseur-Tool'],
     ['Ich suche Strähnenfolie.', 'Friseur-Tool'],
+    ['Habt ihr Glätteisen?', 'Friseur-Tool'],
+    ['Ich brauche einen Föhn.', 'Friseur-Tool'],
+    ['Habt ihr Haartrockner?', 'Friseur-Tool'],
+    ['Ich suche einen Shaver.', 'Friseur-Tool'],
   ])('uses plural tool product-type fallback for "%s"', async (text, expectedProductType) => {
     const response = await buildDrkallaCustomLlmResponse({
       canary: {
