@@ -6,6 +6,7 @@ import {
   reportDrkallaProductNameDetectorCoverage,
   type DrkallaProductNameEntry,
 } from '../drkalla-product-name-detector.js';
+import { loadDrkallaProductNameEntries } from '../retell-drkalla-custom-llm-ws.js';
 
 const entries: DrkallaProductNameEntry[] = [
   {
@@ -131,6 +132,21 @@ describe('DrKalla product name detector', () => {
     expect(amb('Was macht Dr.Kalla Cosmetics?')).toBeNull();
   });
 
+  it('B: a single-word category tag shared across products never resolves to one SKU (probe Bug 2)', () => {
+    // A-red: "Ampullenkur" was a unique alias on one product (the other carried
+    // it only inside "Haar-Ampullenkur"), so the generic care-category word
+    // resolved to a single SKU. B: cross-product token frequency marks it
+    // generic, so it no longer auto-resolves.
+    const entries = [
+      { productId: 'amp1', spokenName: 'Stärkende Haarwurzel Vitalisierung', productKind: 'Ampullen', aliases: ['Ampullenkur'] },
+      { productId: 'amp2', spokenName: 'Plazenta Regeneration', productKind: 'Ampullen', aliases: ['Haar-Ampullenkur'] },
+    ];
+    const det = buildDrkallaProductNameDetector(entries);
+    expect(det('Ich suche eine Ampullenkur.')).toEqual([]);
+    // The full distinctive names still resolve.
+    expect(det('Was kostet die Stärkende Haarwurzel Vitalisierung?')[0]?.productId).toBe('amp1');
+  });
+
   it('reports duplicate spoken names as coverage gaps instead of hiding them (Codex P2)', () => {
     const report = reportDrkallaProductNameDetectorCoverage([
       { productId: 'a', spokenName: 'Universal Haaroel', productKind: null, aliases: [] },
@@ -140,6 +156,36 @@ describe('DrKalla product name detector', () => {
     expect(report.totalProducts).toBe(3);
     expect(report.detectableBySpokenName).toBe(1);
     expect(report.undetectableProductIds.sort()).toEqual(['a', 'b']);
+  });
+});
+
+describe('DrKalla product name detector — real catalog snapshot invariants', () => {
+  const entries = loadDrkallaProductNameEntries();
+  const detect = buildDrkallaProductNameDetector(entries);
+
+  it('loads the tracked catalog snapshot', () => {
+    expect(entries.length).toBeGreaterThan(100);
+  });
+
+  it('speaking a full product name never pulls in an unrelated second SKU (probe Bug 1)', () => {
+    // The token-subset/exact-alias paths used to attach a spurious second
+    // product whose short alias was a substring of a longer product name the
+    // caller spoke; that wrong second hit became lastMentionedProduct and
+    // mis-grounded price/evidence. This asserts the property over the whole
+    // real catalog so a future re-sync collision is caught too.
+    const wrong: string[] = [];
+    for (const entry of entries) {
+      const hits = detect(`Was kostet die ${entry.spokenName}?`);
+      if (hits.some((product) => product.productId !== entry.productId)) wrong.push(entry.productId);
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  it('generic single-word category tags never resolve to a single SKU (probe Bug 2)', () => {
+    for (const word of ['Kopfhaut', 'Ampullenkur', 'Hairspray', 'Vanille']) {
+      // 0 (clarify) or >1 (ambiguous) is fine; exactly 1 would be a wrong guess.
+      expect(detect(`Ich suche ${word}.`).length).not.toBe(1);
+    }
   });
 });
 
