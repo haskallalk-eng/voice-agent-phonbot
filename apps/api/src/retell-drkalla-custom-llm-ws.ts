@@ -7,14 +7,18 @@ import type { WebSocket } from 'ws';
 import {
   buildDrkallaCustomLlmResponse,
   type DrkallaCustomLlmClient,
+  type DrkallaSendLinkExecutor,
 } from './drkalla-custom-llm-responder.js';
 import {
   buildDrkallaProductEvidenceLookup,
   type DrkallaProductEvidenceLookup,
   type DrkallaRawCatalogProduct,
 } from './drkalla-product-evidence.js';
+import { DRKALLA_LINK_TOOL_PATH, drkallaLinkToolSignature } from './drkalla-link-tool.js';
 import {
+  buildDrkallaAmbiguousProductNameDetector,
   buildDrkallaProductNameDetector,
+  type DrkallaAmbiguousProductNameDetector,
   type DrkallaProductNameDetector,
   type DrkallaProductNameEntry,
 } from './drkalla-product-name-detector.js';
@@ -165,13 +169,13 @@ type RawAliasEntry = {
  * Fail-soft: a missing or invalid snapshot disables product-name detection
  * instead of breaking the canary route.
  */
-export function loadDrkallaProductNameDetector(aliasPath?: string): DrkallaProductNameDetector | undefined {
+export function loadDrkallaProductNameEntries(aliasPath?: string): DrkallaProductNameEntry[] {
   const resolved = aliasPath
     ?? process.env.DRKALLA_PRODUCT_ALIAS_PATH
     ?? path.join(process.cwd(), 'tmp', 'drkalla-rag', 'drkalla-product-voice-aliases.json');
   try {
     const parsed = JSON.parse(readFileSync(resolved, 'utf8')) as { entries?: unknown };
-    if (!Array.isArray(parsed.entries)) return undefined;
+    if (!Array.isArray(parsed.entries)) return [];
     const entries: DrkallaProductNameEntry[] = [];
     for (const raw of parsed.entries as RawAliasEntry[]) {
       if (typeof raw?.handle !== 'string' || typeof raw.spokenName !== 'string') continue;
@@ -185,11 +189,25 @@ export function loadDrkallaProductNameDetector(aliasPath?: string): DrkallaProdu
           : [],
       });
     }
-    if (!entries.length) return undefined;
-    return buildDrkallaProductNameDetector(entries);
+    return entries;
   } catch {
-    return undefined;
+    return [];
   }
+}
+
+export function loadDrkallaProductNameDetector(aliasPath?: string): DrkallaProductNameDetector | undefined {
+  const entries = loadDrkallaProductNameEntries(aliasPath);
+  return entries.length ? buildDrkallaProductNameDetector(entries) : undefined;
+}
+
+/**
+ * Removes the canary auth secret from request URLs before they reach logs
+ * (path segment and secret/token query params).
+ */
+export function redactDrkallaCanarySecretFromUrl(url: string): string {
+  return url
+    .replace(/(\/retell\/custom-llm\/drkalla\/auth\/)[^/?]+/i, '$1[redacted]')
+    .replace(/([?&](?:secret|token)=)[^&]*/gi, '$1[redacted]');
 }
 
 /**
@@ -231,7 +249,9 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
   complete: DrkallaCustomLlmClient['complete'];
   completeStream?: DrkallaCustomLlmClient['completeStream'];
   detectProducts?: DrkallaProductNameDetector;
+  detectAmbiguousProduct?: DrkallaAmbiguousProductNameDetector;
   evidenceLookup?: DrkallaProductEvidenceLookup;
+  executeSendLink?: DrkallaSendLinkExecutor;
   sequence?: number;
   onDelta?: (chunk: string) => void;
 }): Promise<RetellDrkallaCustomLlmReply | null> {
@@ -259,7 +279,9 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
     memory: input.memory ?? createDrkallaShortTermMemory(),
     client: { complete: input.complete, completeStream: input.completeStream },
     detectProducts: input.detectProducts,
+    detectAmbiguousProduct: input.detectAmbiguousProduct,
     evidenceLookup: input.evidenceLookup,
+    executeSendLink: input.executeSendLink,
     onDelta: input.onDelta,
   });
   input.onMemory?.(response.memory);
@@ -361,8 +383,17 @@ export async function registerRetellDrkallaCustomLlmWs(
     evidenceLookup?: DrkallaProductEvidenceLookup;
   } = {},
 ): Promise<void> {
-  const detectProducts = options.detectProducts ?? loadDrkallaProductNameDetector();
+  const aliasEntries = options.detectProducts ? [] : loadDrkallaProductNameEntries();
+  const detectProducts = options.detectProducts
+    ?? (aliasEntries.length ? buildDrkallaProductNameDetector(aliasEntries) : undefined);
+  const detectAmbiguousProduct: DrkallaAmbiguousProductNameDetector | undefined = aliasEntries.length
+    ? buildDrkallaAmbiguousProductNameDetector(aliasEntries)
+    : undefined;
   const evidenceLookup = options.evidenceLookup ?? loadDrkallaProductEvidenceLookup();
+  // Real SMS sending stays off unless explicitly enabled; the executor goes
+  // through the existing policied send_link tool endpoint (live-call verify,
+  // URL allowlist, per-call dedupe, audit trace) via local injection.
+  const smsToolEnabled = process.env.DRKALLA_CUSTOM_RUNTIME_SMS_TOOL_ENABLED === 'true';
   const handler = (socket: WebSocket, request: { query: unknown; params: unknown }) => {
     const query = request.query as { secret?: string; token?: string };
     const params = request.params as { secret?: string };
@@ -427,6 +458,28 @@ export async function registerRetellDrkallaCustomLlmWs(
             }
           };
 
+          const executeSendLink = smsToolEnabled
+            ? async (link: { url: string; label: string; linkKind: 'product' }) => {
+                try {
+                  const injected = await app.inject({
+                    method: 'POST',
+                    url: `${DRKALLA_LINK_TOOL_PATH}?drkalla_sig=${drkallaLinkToolSignature()}`,
+                    payload: {
+                      call: { call_id: callId },
+                      args: { url: link.url, label: link.label, linkKind: link.linkKind },
+                    },
+                  });
+                  const result = injected.json() as { smsSent?: unknown; duplicate?: unknown };
+                  return {
+                    smsSent: result?.smsSent === true,
+                    duplicate: result?.duplicate === true,
+                  };
+                } catch {
+                  return { smsSent: false };
+                }
+              }
+            : undefined;
+
           const outbound = await buildRetellDrkallaCustomLlmWsReply({
             enabled,
             secretAccepted: secretOk,
@@ -439,7 +492,9 @@ export async function registerRetellDrkallaCustomLlmWs(
             complete: client.complete,
             completeStream: client.completeStream,
             detectProducts,
+            detectAmbiguousProduct,
             evidenceLookup,
+            executeSendLink,
             sequence: turnCounter,
             onDelta: isResponseTurn ? onDelta : undefined,
           });
