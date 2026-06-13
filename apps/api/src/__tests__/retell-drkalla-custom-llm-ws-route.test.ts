@@ -701,4 +701,31 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     ws.close();
     await app.close();
   });
+
+  it('greets on a repeated-greeting opener and hangs up on "leg einfach auf" (real-call regressions)', async () => {
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
+    let modelCalls = 0;
+    const { app, url } = await testServer({ complete: async () => { modelCalls += 1; return 'Gern, was suchen Sie?'; } });
+    const ws = await connect(url);
+    const frames: Array<{ response_id?: unknown; content?: string; content_complete?: boolean; end_call?: boolean }> = [];
+    ws.on('message', (data) => frames.push(JSON.parse(data.toString())));
+
+    // A real call opened with "Hallo? Hallo." and the single-token regex missed
+    // it, so the greeting never fired. It must greet now (no model).
+    ws.send(JSON.stringify({ interaction_type: 'response_required', response_id: 1, transcript: [{ role: 'user', content: 'Hallo? Hallo.' }] }));
+    await new Promise((r) => setTimeout(r, 150));
+    expect(frames.find((f) => f.response_id === 1)?.content).toContain('Wie kann ich Ihnen');
+
+    // The caller repeatedly said "leg einfach auf" / "leg bitte auf" and the old
+    // literal "leg auf" missed it, so the agent never hung up. It must now.
+    ws.send(JSON.stringify({ interaction_type: 'response_required', response_id: 2, transcript: [{ role: 'user', content: 'Nein, leg einfach auf.' }] }));
+    await new Promise((r) => setTimeout(r, 200));
+    const bye = frames.find((f) => f.response_id === 2 && f.content_complete === true);
+    expect(bye?.end_call).toBe(true);
+    expect(modelCalls).toBe(0); // both paths deterministic
+
+    ws.close();
+    await app.close();
+  });
 });
