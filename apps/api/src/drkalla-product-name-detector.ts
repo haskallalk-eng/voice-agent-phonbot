@@ -127,6 +127,21 @@ export function buildDrkallaProductNameDetector(
   const aliasToProducts = new Map<string, Set<string>>();
   const productById = new Map<string, DrkallaDetectedProduct>();
 
+  // Cross-product document frequency of each content token across spoken names
+  // AND aliases. A single-word alias whose token is shared by >=2 products is a
+  // generic/category term ("Kopfhaut", "Hairspray", "Ampullenkur", "Vanille"),
+  // not a distinctive product name, and must never auto-resolve to one SKU.
+  const tokenDocFreq = new Map<string, number>();
+  for (const entry of entries) {
+    if (!entry.productId || !entry.spokenName) continue;
+    const tokens = new Set<string>();
+    for (const text of [entry.spokenName, ...entry.aliases]) {
+      if (typeof text !== 'string') continue;
+      for (const token of contentTokens(text)) if (!SHOP_TOKENS.has(token)) tokens.add(token);
+    }
+    for (const token of tokens) tokenDocFreq.set(token, (tokenDocFreq.get(token) ?? 0) + 1);
+  }
+
   for (const entry of entries) {
     if (!entry.productId || !entry.spokenName) continue;
     productById.set(entry.productId, {
@@ -140,6 +155,10 @@ export function buildDrkallaProductNameDetector(
       if (typeof alias !== 'string') continue;
       const normalized = normalize(alias);
       if (!isSpecificAlias(alias, normalized)) continue;
+      // Reject single-word category/marketing tags: a lone word shared across
+      // two or more products is generic, even if it happens to sit in one
+      // product's name. Multi-word aliases keep their existing handling.
+      if (!normalized.includes(' ') && (tokenDocFreq.get(normalized) ?? 0) >= 2) continue;
       const existing = aliasToProducts.get(normalized) ?? new Set<string>();
       existing.add(entry.productId);
       aliasToProducts.set(normalized, existing);
@@ -147,6 +166,8 @@ export function buildDrkallaProductNameDetector(
   }
 
   const index = buildProductTokenIndex(entries);
+  const nameTokensById = new Map<string, Set<string>>();
+  for (const te of index.tokenEntries) nameTokensById.set(te.product.productId, te.tokens);
 
   // An alias counts as unique only if it is genuinely DISTINCTIVE: its content
   // tokens must not also occur (as a set) in two or more products' names.
@@ -206,6 +227,33 @@ export function buildDrkallaProductNameDetector(
         const trusted = found.filter((p) => candidateIds.has(p.productId));
         return trusted;
       }
+    }
+
+    // Secondary-hit anchoring: found[0] is the caller's primary match (the
+    // longest unique alias that occurs in the utterance). Any ADDITIONAL exact-
+    // alias hit is trusted only if the caller actually named it — the utterance
+    // must contain at least two of that product's distinctive name tokens (or
+    // all of them, for shorter names). This drops spurious second products whose
+    // short/generic unique alias merely appears as a substring of a longer
+    // product name the caller spoke (real-catalog probe: 26 such cases), while
+    // genuine two-product comparisons keep both hits (both full names are
+    // token-anchored).
+    if (found.length > 1) {
+      const userTokenSet = new Set(contentTokens(text).filter((t) => index.vocab.has(t)));
+      const primaryTokens = nameTokensById.get(found[0]!.productId) ?? new Set<string>();
+      return found.filter((product, position) => {
+        if (position === 0) return true;
+        const nameTokens = nameTokensById.get(product.productId);
+        if (!nameTokens || !nameTokens.size) return false;
+        // Caller-said tokens that belong to this product's name.
+        const saidForProduct = [...nameTokens].filter((t) => userTokenSet.has(t));
+        if (saidForProduct.length < Math.min(2, nameTokens.size)) return false;
+        // ...and at least one of them must distinguish this product from the
+        // primary, so a second SKU whose caller-said tokens are all shared with
+        // the primary's name (two near-identical variants) is not spuriously
+        // returned — a genuine comparison names a distinguishing token.
+        return saidForProduct.some((t) => !primaryTokens.has(t));
+      });
     }
 
     // The fuzzy partial-name (token-subset) path deliberately NEVER auto-
