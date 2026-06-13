@@ -8,6 +8,7 @@ import {
   detectDrkallaContactIntent,
 } from './drkalla-contact-facts.js';
 import type { DrkallaProductEvidenceLookup } from './drkalla-product-evidence.js';
+import type { DrkallaProductCatalogSearch } from './drkalla-product-catalog-search.js';
 import { detectDrkallaDuForm } from './drkalla-formality-detector.js';
 import { redactForPrompt } from './pii.js';
 import {
@@ -109,11 +110,12 @@ function compactSystemPrompt(directives: string[]): string {
     'Dr.Kalla ist ein Friseurbedarf-Shop, kein Friseursalon: keine Termine, keine Haarschnitte oder Faerbe-Dienstleistungen; verweise hoeflich auf Produkte/Salonbedarf.',
     'Nenne Adresse, Oeffnungszeiten, E-Mail, Preise oder Verfuegbarkeit nur aus der gegebenen Evidence- oder Kontakt-Fakt-Zeile. Fehlt die Angabe, erfinde nichts und verweise auf drkalla.com oder den Kontakt.',
     'Erklaere die Profi-Preise hoechstens einmal ausfuehrlich; wurde der Profi-Zugang schon erwaehnt, fasse dich knapp und biete nur kurz den Link an, ohne die Erklaerung zu wiederholen.',
+    'Wenn der Bedarf oder die Produktart bekannt ist, NENNE konkrete Produkte aus der Katalog-Treffer-Zeile oder grenze nach Marke/Variante ein. Stelle nicht wiederholt dieselbe Kategorie-Frage; wenn der Anrufer den Bedarf schon genannt hat, gehe weiter, statt erneut zu fragen.',
     'Nutze diese Dialogsteuerung, aber behandle Memory nie als Faktenbeweis.',
     'Behaupte nie, eine SMS oder einen Link bereits gesendet zu haben; frage nie nach der Telefonnummer (eine SMS geht automatisch an die Anrufernummer).',
     'Bei klarer Verabschiedung verabschiede dich kurz und haenge keine neue Frage an.',
     ...directives,
-  ].join('\n').slice(0, 2000);
+  ].join('\n').slice(0, 2600);
 }
 
 // Match the model's paraphrases of the SMS offer too (schicken/senden/
@@ -252,6 +254,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
   detectProducts?: DrkallaProductNameDetector;
   detectAmbiguousProduct?: DrkallaAmbiguousProductNameDetector;
   evidenceLookup?: DrkallaProductEvidenceLookup;
+  catalogSearch?: DrkallaProductCatalogSearch;
   executeSendLink?: DrkallaSendLinkExecutor;
   onDelta?: (chunk: string) => void;
   signal?: AbortSignal;
@@ -433,7 +436,19 @@ export async function buildDrkallaCustomLlmResponse(input: {
     };
   }
 
-  const system = compactSystemPrompt(canaryTurn.modelDirectives);
+  // Open-ended need ("was habt ihr für Dauerwelle / welche Marken?"): when the
+  // caller did NOT name a specific product, surface real catalog products by
+  // category so the model NAMES them instead of looping on clarifying questions
+  // (live call 2026-06-13). Grounded: only real catalog names are injected.
+  const namedNow = input.detectProducts?.(user) ?? [];
+  const catalogHits = namedNow.length === 0 ? (input.catalogSearch?.(user, 4) ?? []) : [];
+  let system = compactSystemPrompt(canaryTurn.modelDirectives);
+  if (catalogHits.length) {
+    const list = catalogHits
+      .map((p) => (p.priceText ? `${p.spokenName} (${p.priceText})` : p.spokenName))
+      .join('; ');
+    system += `\nKatalog-Treffer zum Bedarf (nenne dem Anrufer konkret ein bis drei dieser echten Produkte, erfinde nichts dazu, und frage nicht erneut nach der Produktart): ${list}`;
+  }
   const maxOutputChars = 420;
   let modelText = '';
   if (input.client.completeStream && input.onDelta) {

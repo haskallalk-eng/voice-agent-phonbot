@@ -527,8 +527,9 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     const { app, url } = await testServer({ complete: async () => { modelCalls += 1; return 'unused'; } });
     const ws = await connect(url);
 
-    // Retell elicits the opening line with an empty response_required.
-    ws.send(JSON.stringify({ interaction_type: 'response_required', response_id: 0, transcript: [] }));
+    // Real Retell may already include the caller's first words in the opening
+    // turn; the greeting must still fire on the first response turn.
+    ws.send(JSON.stringify({ interaction_type: 'response_required', response_id: 0, transcript: [{ role: 'user', content: 'Hallo' }] }));
     const first = await receive(ws);
 
     expect(modelCalls).toBe(0);

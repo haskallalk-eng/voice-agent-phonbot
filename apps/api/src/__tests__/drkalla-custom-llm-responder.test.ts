@@ -664,6 +664,24 @@ describe('DrKalla register/style + deterministic price (live call 2026-06-13 fix
     expect(second.metrics.extraLlmCalls).toBe(0);
   });
 
+  it('B: an open category need injects real catalog products into the prompt so the model can name them (live-call fix)', async () => {
+    const prompts: string[] = [];
+    const catalogSearch = (text: string) =>
+      /dauerwelle/i.test(text)
+        ? [{ productId: 'perm', spokenName: 'Ammoniakfreie duftende Dauerwellenlösung', productType: 'Styling', priceText: '16,00 Euro' }]
+        : [];
+    await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Was habt ihr für Dauerwelle?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async ({ system }) => { prompts.push(system); return 'Wir haben die Ammoniakfreie duftende Dauerwellenlösung.'; } },
+      catalogSearch,
+    });
+    expect(prompts[0]).toContain('Katalog-Treffer');
+    expect(prompts[0]).toContain('Ammoniakfreie duftende Dauerwellenlösung');
+    expect(prompts[0]).toMatch(/NENNE konkrete Produkte|frage nicht erneut nach der Produktart/);
+  });
+
   it('B: a comparison price question still goes to the model (not the deterministic path)', async () => {
     let modelCalls = 0;
     await buildDrkallaCustomLlmResponse({
