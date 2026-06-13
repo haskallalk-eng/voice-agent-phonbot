@@ -35,6 +35,12 @@ export type DrkallaCustomLlmClient = {
     system: string;
     user: string;
     maxOutputChars: number;
+    /**
+     * Optional barge-in signal. When it aborts (a newer caller turn arrived),
+     * the model call should stop early so the serialized turn chain advances
+     * immediately instead of waiting out the stale turn's budget.
+     */
+    signal?: AbortSignal;
   }): Promise<string>;
   /**
    * Optional streaming completion. Must call onDelta for each text chunk and
@@ -46,6 +52,7 @@ export type DrkallaCustomLlmClient = {
     user: string;
     maxOutputChars: number;
     onDelta: (chunk: string) => void;
+    signal?: AbortSignal;
   }): Promise<string>;
 };
 
@@ -193,6 +200,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
   evidenceLookup?: DrkallaProductEvidenceLookup;
   executeSendLink?: DrkallaSendLinkExecutor;
   onDelta?: (chunk: string) => void;
+  signal?: AbortSignal;
 }): Promise<DrkallaCustomLlmResponse> {
   const canaryTurn = buildDrkallaCustomRuntimeCanaryTurn({
     canary: input.canary,
@@ -359,10 +367,10 @@ export async function buildDrkallaCustomLlmResponse(input: {
     };
     // No trim here: forwarded deltas must stay an exact prefix of the final
     // text so the transport can compute the remaining tail frame.
-    const raw = await input.client.completeStream({ system, user, maxOutputChars, onDelta });
+    const raw = await input.client.completeStream({ system, user, maxOutputChars, onDelta, signal: input.signal });
     modelText = raw.trim() ? raw.slice(0, maxOutputChars) : '';
   } else {
-    modelText = (await input.client.complete({ system, user, maxOutputChars }))
+    modelText = (await input.client.complete({ system, user, maxOutputChars, signal: input.signal }))
       .trim()
       .slice(0, maxOutputChars);
   }

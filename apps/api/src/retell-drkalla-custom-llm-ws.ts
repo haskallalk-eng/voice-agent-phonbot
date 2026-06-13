@@ -280,6 +280,7 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
   sequence?: number;
   noInputReminderCount?: number;
   onDelta?: (chunk: string) => void;
+  signal?: AbortSignal;
 }): Promise<RetellDrkallaCustomLlmReply | null> {
   if (!input.secretAccepted) return null;
 
@@ -322,6 +323,7 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
     evidenceLookup: input.evidenceLookup,
     executeSendLink: input.executeSendLink,
     onDelta: input.onDelta,
+    signal: input.signal,
   });
   input.onMemory?.(response.memory);
 
@@ -358,23 +360,27 @@ function createOpenAiClient(): DrkallaCustomLlmClient {
     timeout: timeoutMs,
   });
   return {
-    complete: async ({ system, user, maxOutputChars }) => {
+    complete: async ({ system, user, maxOutputChars, signal }) => {
+      if (signal?.aborted) return ''; // barge-in: a newer turn already arrived
       try {
-        const completion = await openai.chat.completions.create({
-          model,
-          messages: [
-            { role: 'system', content: system },
-            { role: 'user', content: user },
-          ],
-          max_completion_tokens: Math.max(80, Math.ceil(maxOutputChars / 3)),
-          temperature: 0.2,
-        });
+        const completion = await openai.chat.completions.create(
+          {
+            model,
+            messages: [
+              { role: 'system', content: system },
+              { role: 'user', content: user },
+            ],
+            max_completion_tokens: Math.max(80, Math.ceil(maxOutputChars / 3)),
+            temperature: 0.2,
+          },
+          { signal },
+        );
         return completion.choices[0]?.message?.content ?? '';
       } catch {
         return '';
       }
     },
-    completeStream: async ({ system, user, maxOutputChars, onDelta }) => {
+    completeStream: async ({ system, user, maxOutputChars, onDelta, signal }) => {
       const controller = new AbortController();
       let accumulated = '';
       let sawFirstToken = false;
@@ -382,6 +388,15 @@ function createOpenAiClient(): DrkallaCustomLlmClient {
         if (!sawFirstToken) controller.abort();
       }, timeoutMs);
       const totalTimer = setTimeout(() => controller.abort(), streamTotalMs);
+      // Barge-in: a newer caller turn aborts the in-flight stream so the
+      // serialized chain advances immediately instead of waiting out the
+      // stale turn's stream budget. Chain the external signal onto the local
+      // timer controller and detach the listener when the turn ends.
+      const onExternalAbort = () => controller.abort();
+      if (signal) {
+        if (signal.aborted) controller.abort();
+        else signal.addEventListener('abort', onExternalAbort, { once: true });
+      }
       try {
         const stream = await openai.chat.completions.create(
           {
@@ -413,6 +428,7 @@ function createOpenAiClient(): DrkallaCustomLlmClient {
       } finally {
         clearTimeout(firstTokenTimer);
         clearTimeout(totalTimer);
+        signal?.removeEventListener('abort', onExternalAbort);
       }
       return accumulated;
     },
@@ -455,6 +471,10 @@ export async function registerRetellDrkallaCustomLlmWs(
     let latestArrival = 0;
     let noInputReminderCount = 0;
     let processing: Promise<void> = Promise.resolve();
+    // The model call of the turn currently allowed to speak. A newer turn
+    // aborts it on arrival (barge-in) so the serialized chain does not wait
+    // out a stale turn's stream budget.
+    let inFlightAbort: AbortController | null = null;
 
     if (!secretOk) {
       socket.close(1008, 'unauthorized');
@@ -471,6 +491,18 @@ export async function registerRetellDrkallaCustomLlmWs(
       // Both response and reminder turns produce a spoken frame and so must
       // claim arrival order; a reminder is dropped if the caller speaks first.
       const myArrival = (isResponseTurn || isReminderTurn) ? ++latestArrival : latestArrival;
+
+      // Barge-in: a newer turn supersedes any in-flight model call. Abort it
+      // synchronously here (at arrival, before the serialized body runs) so the
+      // stale turn's stream stops at once and the chain advances to this turn
+      // instead of waiting out streamTotalMs. Only response turns call the
+      // model, so only they get a controller, but any newer turn cancels.
+      if (isResponseTurn || isReminderTurn) {
+        inFlightAbort?.abort();
+        inFlightAbort = null;
+      }
+      const myAbort = isResponseTurn ? new AbortController() : null;
+      if (myAbort) inFlightAbort = myAbort;
 
       // Serialize turns per socket so concurrent events cannot drop memory
       // updates (lost-update race on the shared per-session memory).
@@ -532,6 +564,12 @@ export async function registerRetellDrkallaCustomLlmWs(
               }
             : undefined;
 
+          // Defer the memory commit: a superseded turn never speaks, so its
+          // agent-spoke reduction (Profi disclosure, facts-answered,
+          // lastAgentQuestion) must not pollute the session memory the next
+          // live turn builds on. Capture the candidate and only commit if this
+          // turn is still the newest when the reply is ready.
+          let pendingMemory: DrkallaShortTermVoiceMemory | null = null;
           const outbound = await buildRetellDrkallaCustomLlmWsReply({
             enabled,
             secretAccepted: secretOk,
@@ -539,7 +577,7 @@ export async function registerRetellDrkallaCustomLlmWs(
             callId,
             memory,
             onMemory: (nextMemory) => {
-              memory = nextMemory;
+              pendingMemory = nextMemory;
             },
             complete: client.complete,
             completeStream: client.completeStream,
@@ -550,9 +588,12 @@ export async function registerRetellDrkallaCustomLlmWs(
             sequence: turnCounter,
             noInputReminderCount,
             onDelta: isResponseTurn ? onDelta : undefined,
+            signal: myAbort?.signal,
           });
+          const superseded = (isResponseTurn || isReminderTurn) && myArrival !== latestArrival;
+          if (!superseded && pendingMemory) memory = pendingMemory;
           if (!outbound) return;
-          if ((isResponseTurn || isReminderTurn) && myArrival !== latestArrival) return;
+          if (superseded) return;
 
           // Final frame carries whatever was not streamed yet. If trimming or
           // fallback changed the text so streamed chunks are no longer a
@@ -572,6 +613,10 @@ export async function registerRetellDrkallaCustomLlmWs(
           );
         } catch (error) {
           app.log.warn({ err: error instanceof Error ? error.message : String(error) }, 'DrKalla custom LLM canary failed');
+        } finally {
+          // Release the in-flight slot only if a newer turn has not already
+          // claimed it (otherwise we would clear the next turn's controller).
+          if (myAbort && inFlightAbort === myAbort) inFlightAbort = null;
         }
       });
     });

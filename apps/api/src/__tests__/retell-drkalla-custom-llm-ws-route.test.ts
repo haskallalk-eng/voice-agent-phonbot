@@ -4,6 +4,7 @@ import WebSocket from 'ws';
 import { afterEach, describe, expect, it } from 'vitest';
 import { registerRetellDrkallaCustomLlmWs } from '../retell-drkalla-custom-llm-ws.js';
 import type { DrkallaCustomLlmClient } from '../drkalla-custom-llm-responder.js';
+import { buildDrkallaProductNameDetector } from '../drkalla-product-name-detector.js';
 
 const originalEnabled = process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED;
 const originalSecret = process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET;
@@ -302,6 +303,130 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     });
     expect(ws.readyState).toBe(WebSocket.CLOSED);
 
+    await app.close();
+  });
+
+  it('aborts the in-flight model call when a newer caller turn arrives (barge-in)', async () => {
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
+    let aborted = false;
+    let modelCalls = 0;
+    const { app, url } = await testServer({
+      complete: async ({ user, signal }) => {
+        modelCalls += 1;
+        if (modelCalls === 1) {
+          // The first (superseded) turn waits on the barge-in signal rather
+          // than a fixed timer, so the test proves the cancel actually
+          // propagates into the model call. The safety valve only fires if the
+          // abort never arrives (a regression) — then `aborted` stays false.
+          await new Promise<void>((resolve) => {
+            if (signal?.aborted) {
+              aborted = true;
+              resolve();
+              return;
+            }
+            signal?.addEventListener('abort', () => {
+              aborted = true;
+              resolve();
+            }, { once: true });
+            setTimeout(resolve, 2000);
+          });
+          return '';
+        }
+        return `Antwort auf: ${user}`;
+      },
+    });
+    const ws = await connect(url);
+    const received: Array<{ response_type: string; response_id: unknown }> = [];
+    ws.on('message', (data) => received.push(JSON.parse(data.toString())));
+
+    ws.send(JSON.stringify({
+      interaction_type: 'response_required',
+      response_id: 1,
+      transcript: [{ role: 'user', content: 'Was kostet die erste Frage?' }],
+    }));
+    ws.send(JSON.stringify({
+      interaction_type: 'response_required',
+      response_id: 2,
+      transcript: [{ role: 'user', content: 'Stopp, neue Frage bitte.' }],
+    }));
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // The stale model call is cancelled, the serialized chain advances, and
+    // only the newest turn speaks — without waiting out the 2s safety valve.
+    expect(aborted).toBe(true);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toMatchObject({ response_type: 'response', response_id: 2 });
+    expect(modelCalls).toBe(2);
+
+    ws.close();
+    await app.close();
+  });
+
+  it('does not commit a superseded turn\'s agent memory (barge-in)', async () => {
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
+    const detectProducts = buildDrkallaProductNameDetector([
+      {
+        productId: 'scc',
+        spokenName: 'Synthesis Color Cream',
+        productKind: 'Haarfarbe/Farbcreme',
+        url: 'https://drkalla.com/products/synthesis-color-cream',
+        aliases: ['Synthesis Color Cream'],
+      },
+    ]);
+    let modelCalls = 0;
+    const client: DrkallaCustomLlmClient = {
+      complete: async ({ user, signal }) => {
+        modelCalls += 1;
+        if (/synthesis|kostet/i.test(user)) {
+          // Turn 1 is a price question whose interrupted fallback would, if
+          // committed, leave a "Profi disclosure given + SMS offer pending"
+          // state in memory.
+          await new Promise<void>((resolve) => {
+            if (signal?.aborted) return resolve();
+            signal?.addEventListener('abort', () => resolve(), { once: true });
+            setTimeout(resolve, 2000);
+          });
+          return '';
+        }
+        return 'Gern, womit kann ich Ihnen helfen?';
+      },
+    };
+    const app = Fastify({ logger: false });
+    await app.register(websocket);
+    await registerRetellDrkallaCustomLlmWs(app, { client, detectProducts });
+    await app.listen({ host: '127.0.0.1', port: 0 });
+    const address = app.server.address();
+    if (!address || typeof address === 'string') throw new Error('Expected local TCP address');
+    const url = `ws://127.0.0.1:${address.port}/retell/custom-llm/drkalla/auth/${TEST_SECRET}/call-mem-smoke`;
+    const ws = await connect(url);
+    const received: Array<{ content: string; response_id: unknown }> = [];
+    ws.on('message', (data) => received.push(JSON.parse(data.toString())));
+
+    ws.send(JSON.stringify({
+      interaction_type: 'response_required',
+      response_id: 1,
+      transcript: [{ role: 'user', content: 'Was kostet die Synthesis Color Cream?' }],
+    }));
+    ws.send(JSON.stringify({
+      interaction_type: 'response_required',
+      response_id: 2,
+      transcript: [{ role: 'user', content: 'ja' }],
+    }));
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // The interrupted turn never spoke, so its agent memory is not committed:
+    // the following "ja" is NOT treated as a confirmed SMS offer and reaches
+    // the model instead of the deterministic link-confirm path.
+    expect(received).toHaveLength(1);
+    expect(received[0]).toMatchObject({ response_id: 2 });
+    expect(received[0]?.content).toBe('Gern, womit kann ich Ihnen helfen?');
+    expect(modelCalls).toBe(2);
+
+    ws.close();
     await app.close();
   });
 });
