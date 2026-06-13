@@ -152,10 +152,12 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     const frames: Array<{ content: string; content_complete: boolean; response_id: unknown }> = [];
     ws.on('message', (data) => frames.push(JSON.parse(data.toString())));
 
+    // Open-ended question that reaches the model (not a contact/product/
+    // ambiguous deterministic path) so the streaming frames are exercised.
     ws.send(JSON.stringify({
       interaction_type: 'response_required',
       response_id: 7,
-      transcript: [{ role: 'user', content: 'Was kostet die Synthesis Color Cream?' }],
+      transcript: [{ role: 'user', content: 'Was empfehlen Sie mir denn?' }],
     }));
     await new Promise((resolve) => setTimeout(resolve, 400));
 

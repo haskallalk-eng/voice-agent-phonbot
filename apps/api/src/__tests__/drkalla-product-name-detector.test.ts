@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildDrkallaAmbiguousProductNameDetector,
   buildDrkallaProductNameDetector,
   deriveDrkallaAgentSpokeEvent,
   reportDrkallaProductNameDetectorCoverage,
@@ -80,6 +81,54 @@ describe('DrKalla product name detector', () => {
 
   it('ignores junk aliases such as bare sizes', () => {
     expect(detect('Ich brauche 1000ml.')).toEqual([]);
+  });
+
+  it('the fuzzy partial path never auto-resolves a specific product (correctness-safe)', () => {
+    // Partial/brand+line matches collide against the real catalog, so the
+    // detector must never guess one SKU (wrong price/link). Specific products
+    // still resolve only via the exact unique-alias path (full spoken name).
+    const entries = [
+      { productId: 'evelon', spokenName: 'Evelon Pro Hairspray Pro Lch', productKind: 'Haarpflege', aliases: ['Evelon Pro', 'Haarspray'] },
+      { productId: 'other', spokenName: 'Synthesis Color Cream', productKind: 'Haarfarbe/Farbcreme', aliases: [] },
+    ];
+    const det2 = buildDrkallaProductNameDetector(entries);
+    // Partial token match -> no auto-resolution.
+    expect(det2('Was kostet das Evelon Hairspray?')).toEqual([]);
+    // Full unique spoken name still resolves (exact-alias path).
+    expect(det2('Ich suche die Synthesis Color Cream.')[0]?.productId).toBe('other');
+  });
+
+  it('surfaces a brand+line that matches several SKUs as a variant clarification', () => {
+    const entries = [
+      { productId: 'kp-7-0', spokenName: 'Koleston Perfect 7/0', productKind: 'Haarfarbe/Farbcreme', aliases: ['Koleston'] },
+      { productId: 'kp-9-1', spokenName: 'Koleston Perfect 9/1', productKind: 'Haarfarbe/Farbcreme', aliases: ['Koleston'] },
+    ];
+    const det2 = buildDrkallaProductNameDetector(entries);
+    const amb = buildDrkallaAmbiguousProductNameDetector(entries);
+    expect(det2('Was kostet die Koleston Perfect?')).toEqual([]); // never guess one SKU
+    const hit = amb('Was kostet die Koleston Perfect?');
+    expect(hit?.productCount).toBe(2);
+    expect(hit?.label).toContain('Koleston');
+  });
+
+  it('requires at least two content tokens so a single generic word never triggers clarification', () => {
+    const entries = [
+      { productId: 'a', spokenName: 'Synthesis Color Cream', productKind: 'Haarfarbe/Farbcreme', aliases: [] },
+      { productId: 'b', spokenName: 'Synthesis Color Booster', productKind: 'Haarfarbe/Farbcreme', aliases: [] },
+    ];
+    const amb = buildDrkallaAmbiguousProductNameDetector(entries);
+    expect(amb('Habt ihr Color?')).toBeNull();
+    expect(amb('Was kostet das?')).toBeNull();
+    // Two shared tokens (synthesis + color) -> clarification.
+    expect(amb('Was kostet die Synthesis Color?')?.productCount).toBe(2);
+  });
+
+  it('never clarifies on shop/company terms via the partial path', () => {
+    const amb = buildDrkallaAmbiguousProductNameDetector([
+      { productId: 'a', spokenName: 'Synthesis Color Cream', productKind: 'Haarfarbe/Farbcreme', aliases: [] },
+      { productId: 'b', spokenName: 'Synthesis Color Booster', productKind: 'Haarfarbe/Farbcreme', aliases: [] },
+    ]);
+    expect(amb('Was macht Dr.Kalla Cosmetics?')).toBeNull();
   });
 
   it('reports duplicate spoken names as coverage gaps instead of hiding them (Codex P2)', () => {
