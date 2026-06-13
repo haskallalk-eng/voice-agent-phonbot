@@ -33,6 +33,13 @@ describe('DrKalla contact-intent detection', () => {
     ['Wann habt ihr geöffnet?', 'hours'],
     ['Wie sind eure Öffnungszeiten?', 'hours'],
     ['Habt ihr heute auf?', 'hours'],
+    // B: ASR/typed umlaut transliterations (oe/ae) must classify too. A-red:
+    // "[öÖo]ffnungszeit" matched only a single ö/Ö/o, so "Oeffnungszeiten",
+    // "geoeffnet", "Geschaeft", "oeffentliche" fell through to the model and
+    // it abstained even though the fact is known (live smoke 2026-06-13).
+    ['Wie sind eure Oeffnungszeiten?', 'hours'],
+    ['Habt ihr ein Geschaeft in Berlin?', 'address'],
+    ['Gibt es oeffentliche Verkehrsmittel zu euch?', 'anfahrt'],
     ['Wie ist eure E-Mail?', 'email'],
     ['Wie komme ich mit der U-Bahn zu euch?', 'anfahrt'],
     ['Ich bin Friseurin, bekomme ich Profi-Preise?', 'profi'],

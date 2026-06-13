@@ -17,13 +17,15 @@ export const DRKALLA_CONTACT_FACTS = {
 
 export type DrkallaContactIntent = 'address' | 'hours' | 'email' | 'anfahrt' | 'profi' | null;
 
-const ADDRESS_RE = /\b(?:adresse|anschrift|wo (?:seid|sind|ist|liegt|findet)|wo bei euch|standort|laden|gesch[äa]ft|filiale|vorbeikommen|besuchen|vorbei(?:schauen|kommen))\b/i;
+const ADDRESS_RE = /\b(?:adresse|anschrift|wo (?:seid|sind|ist|liegt|findet)|wo bei euch|standort|laden|gesch(?:ae|ä|Ä|a)ft|filiale|vorbeikommen|besuchen|vorbei(?:schauen|kommen))\b/i;
 // Capital umlauts listed explicitly because the `i` flag does not case-fold
-// ö/Ö without the `u` flag. "auf" is matched only in clear hours phrasings
-// ("habt ihr ... auf", "heute/jetzt ... auf") to avoid "ich lege auf".
-const HOURS_RE = /[öÖo]ffnungszeit|ge[öÖo]ffnet|wann (?:habt|haben|macht|hat)|wie lange (?:habt|haben)|uhrzeit|wann (?:zu|geschlossen)|geschlossen|feiertag|habt ihr[^.?!]*\bauf\b|\b(?:heute|morgen|jetzt|noch|schon|gerade)\b[^.?!]*\bauf\b/i;
+// ö/Ö without the `u` flag; the oe/ae digraphs are listed too because German
+// ASR/typing often transliterates umlauts ("Oeffnungszeiten", "Geschaeft").
+// "auf" is matched only in clear hours phrasings ("habt ihr ... auf",
+// "heute/jetzt ... auf") to avoid "ich lege auf".
+const HOURS_RE = /(?:oe|ö|Ö|o)ffnungszeit|ge(?:oe|ö|Ö|o)ffnet|wann (?:habt|haben|macht|hat)|wie lange (?:habt|haben)|uhrzeit|wann (?:zu|geschlossen)|geschlossen|feiertag|habt ihr[^.?!]*\bauf\b|\b(?:heute|morgen|jetzt|noch|schon|gerade)\b[^.?!]*\bauf\b/i;
 const EMAIL_RE = /\b(?:e-?mail|email|mail(?:adresse)?|anschreiben|schreiben an)\b/i;
-const ANFAHRT_RE = /\b(?:anfahrt|wie komme ich|welche (?:bahn|linie|u-?bahn|s-?bahn)|[öo]ffentliche|parken|parkplatz|verbindung)\b/i;
+const ANFAHRT_RE = /\b(?:anfahrt|wie komme ich|welche (?:bahn|linie|u-?bahn|s-?bahn)|(?:oe|ö|Ö|o)ffentliche|parken|parkplatz|verbindung)\b/i;
 const PROFI_RE = /\bprofi[\s-]?(?:zugang|preis|preise|preisen|konto|login|registr|freischalt|konditionen)|friseur[\s-]?(?:preis|konto|registr)|gewerbe(?:konto|preis|kunde)/i;
 
 /**
