@@ -73,20 +73,22 @@ export function buildDrkallaProductNameDetector(
 
   // Aliases shared by more than one product are brand/line/type level
   // ("Koleston", "Evelon Pro") and must not resolve to a single product.
+  // Pre-padded for the containment check so the per-turn scan allocates
+  // nothing per alias.
   const uniqueAliases = [...aliasToProducts.entries()]
     .filter(([, products]) => products.size === 1)
-    .map(([alias, products]) => ({ alias, productId: [...products][0] as string }))
-    .sort((left, right) => right.alias.length - left.alias.length);
+    .map(([alias, products]) => ({ padded: ` ${alias} `, productId: [...products][0] as string }))
+    .sort((left, right) => right.padded.length - left.padded.length);
 
   return (text: string) => {
     const normalizedText = ` ${normalize(text)} `;
     if (normalizedText.trim().length < 6) return [];
     const found: DrkallaDetectedProduct[] = [];
     const seen = new Set<string>();
-    for (const { alias, productId } of uniqueAliases) {
+    for (const { padded, productId } of uniqueAliases) {
       if (found.length >= MAX_DETECTED_PRODUCTS) break;
       if (seen.has(productId)) continue;
-      if (!normalizedText.includes(` ${alias} `)) continue;
+      if (!normalizedText.includes(padded)) continue;
       const product = productById.get(productId);
       if (!product) continue;
       seen.add(productId);
@@ -96,9 +98,46 @@ export function buildDrkallaProductNameDetector(
   };
 }
 
+export type DrkallaProductNameCoverageReport = {
+  totalProducts: number;
+  detectableBySpokenName: number;
+  undetectableProductIds: string[];
+};
+
+/**
+ * Reports which catalog products cannot be detected by speaking their own
+ * spokenName (duplicate or too-generic names fall out of the unique-alias
+ * rule). Diagnostic for KB/alias curation; not a runtime path.
+ */
+export function reportDrkallaProductNameDetectorCoverage(
+  entries: DrkallaProductNameEntry[],
+): DrkallaProductNameCoverageReport {
+  const detect = buildDrkallaProductNameDetector(entries);
+  const undetectableProductIds: string[] = [];
+  for (const entry of entries) {
+    if (!entry.productId || !entry.spokenName) continue;
+    const found = detect(`Ich suche ${entry.spokenName}.`);
+    if (!found.some((product) => product.productId === entry.productId)) {
+      undetectableProductIds.push(entry.productId);
+    }
+  }
+  const totalProducts = entries.filter((entry) => entry.productId && entry.spokenName).length;
+  return {
+    totalProducts,
+    detectableBySpokenName: totalProducts - undetectableProductIds.length,
+    undetectableProductIds,
+  };
+}
+
 const PRICE_MARKER = /\d+(?:[.,]\d{1,2})?\s*(?:euro|eur|€)|\bpreis\b[^.?!]*\d/i;
+// Spelled-out German prices ("neunundneunzig Euro", "zwölf Euro fünfzig").
+const SPELLED_PRICE_MARKER = /\b(?:ein|zwei|drei|vier|f(?:ü|ue)nf|sechs|sieben|acht|neun|zehn|elf|zw(?:ö|oe)lf|zwanzig|drei(?:ß|ss)ig|vierzig|f(?:ü|ue)nfzig|sechzig|siebzig|achtzig|neunzig|hundert)[a-zäöüß]*\s+euro\b/i;
 const SIZE_MARKER = /\b\d+\s*(?:ml|milliliter|liter|l|g|gramm|kg)\b/i;
 const LINK_MARKER = /(?:produktlink|link)[^.?!]*\bsms\b|\bsms\b[^.?!]*(?:produktlink|link)/i;
+// A negated sentence ("kostet nicht ...", "kein 1 Liter", "folgt nicht per
+// SMS") must never mark a fact as already answered: a wrong mark would block
+// later legitimate answers, while a missed mark only risks repetition.
+const NEGATION_MARKER = /\b(?:nicht|kein(?:e|en|em|er|s)?|nie|niemals|ohne|leider)\b/i;
 const PROFI_DISCLOSURE_MARKER = /profi[\s-]?(?:friseur)?preise?\b[^.?!]*telefonisch[^.?!]*nicht|normale\s+k(?:ä|ae)ufer/i;
 
 export type DrkallaDerivedAgentSpoke = {
@@ -110,6 +149,11 @@ export type DrkallaDerivedAgentSpoke = {
     productId?: string;
     productKind?: string;
   };
+  productsMentioned?: Array<{
+    spokenName: string;
+    productId?: string;
+    productKind?: string | null;
+  }>;
   factsMentioned?: Array<{ key: `product.${string}.${'price' | 'size' | 'link'}`; label: string }>;
   lastAgentQuestion?: string;
   profiPriceDisclosureGiven?: boolean;
@@ -127,19 +171,21 @@ function lastQuestionSentence(text: string): string | undefined {
   return undefined;
 }
 
-function factKindsInText(text: string): Array<'price' | 'size' | 'link'> {
+function factKindsInSentence(sentence: string): Array<'price' | 'size' | 'link'> {
+  if (NEGATION_MARKER.test(sentence)) return [];
   const kinds: Array<'price' | 'size' | 'link'> = [];
-  if (PRICE_MARKER.test(text)) kinds.push('price');
-  if (SIZE_MARKER.test(text)) kinds.push('size');
-  if (LINK_MARKER.test(text)) kinds.push('link');
+  if (PRICE_MARKER.test(sentence) || SPELLED_PRICE_MARKER.test(sentence)) kinds.push('price');
+  if (SIZE_MARKER.test(sentence)) kinds.push('size');
+  if (LINK_MARKER.test(sentence)) kinds.push('link');
   return kinds;
 }
 
 /**
  * Deterministically derive an agent_spoke memory event from the reply the
  * custom runtime is about to speak. Pure text analysis: no LLM call, no KB
- * call. Facts are attributed conservatively — to the single product detected
- * in the whole reply, or per sentence when two products are mentioned.
+ * call. Facts are extracted per sentence with a negation guard and attributed
+ * to the product named in that sentence; sentences without a product name
+ * attribute to the single overall product, never across two products.
  */
 export function deriveDrkallaAgentSpokeEvent(input: {
   text: string;
@@ -158,19 +204,18 @@ export function deriveDrkallaAgentSpokeEvent(input: {
       : undefined);
 
   const factsMentioned: NonNullable<DrkallaDerivedAgentSpoke['factsMentioned']> = [];
-  if (detected.length <= 1 && primary) {
-    for (const kind of factKindsInText(input.text)) {
-      factsMentioned.push({ key: `product.${primary.productId}.${kind}`, label: kind });
-    }
-  } else if (detected.length > 1) {
-    for (const sentence of input.text.split(/(?<=[.!?])\s+/)) {
-      const inSentence = input.detectProducts?.(sentence) ?? [];
-      if (inSentence.length !== 1) continue;
-      const product = inSentence[0];
-      if (!product) continue;
-      for (const kind of factKindsInText(sentence)) {
-        factsMentioned.push({ key: `product.${product.productId}.${kind}`, label: kind });
-      }
+  for (const sentence of input.text.split(/(?<=[.!?])\s+/)) {
+    const kinds = factKindsInSentence(sentence);
+    if (!kinds.length) continue;
+    const inSentence = input.detectProducts?.(sentence) ?? [];
+    const target = inSentence.length === 1
+      ? inSentence[0]
+      : inSentence.length === 0 && detected.length <= 1
+        ? primary
+        : undefined;
+    if (!target) continue;
+    for (const kind of kinds) {
+      factsMentioned.push({ key: `product.${target.productId}.${kind}`, label: kind });
     }
   }
 
@@ -184,6 +229,13 @@ export function deriveDrkallaAgentSpokeEvent(input: {
           productId: primary.productId,
           productKind: primary.productKind ?? undefined,
         }
+      : undefined,
+    productsMentioned: detected.length
+      ? detected.map((product) => ({
+          spokenName: product.spokenName,
+          productId: product.productId,
+          productKind: product.productKind,
+        }))
       : undefined,
     factsMentioned: factsMentioned.length ? factsMentioned : undefined,
     lastAgentQuestion: lastQuestionSentence(input.text),
