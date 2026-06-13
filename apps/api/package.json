@@ -27,6 +27,7 @@
     "drkalla:ab-memory": "tsx src/scripts/run-drkalla-memory-ab.ts",
     "drkalla:kb-audit": "tsx src/scripts/run-drkalla-kb-quality-audit.ts",
     "drkalla:custom-runtime-canary": "tsx src/scripts/sync-drkalla-custom-runtime-canary.ts",
+    "drkalla:custom-runtime-webcall": "tsx src/scripts/serve-drkalla-custom-runtime-webcall.ts",
     "model:smoke": "tsx src/scripts/model-smoke-test.ts",
     "model:retell-ab": "tsx src/scripts/retell-model-ab-test.ts"
   },
