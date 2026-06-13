@@ -2,6 +2,7 @@ import {
   buildDrkallaCustomRuntimeCanaryTurn,
   type DrkallaCustomRuntimeCanaryConfig,
 } from './drkalla-custom-runtime-canary.js';
+import type { DrkallaProductEvidenceLookup } from './drkalla-product-evidence.js';
 import {
   deriveDrkallaAgentSpokeEvent,
   type DrkallaProductNameDetector,
@@ -28,7 +29,24 @@ export type DrkallaCustomLlmClient = {
     user: string;
     maxOutputChars: number;
   }): Promise<string>;
+  /**
+   * Optional streaming completion. Must call onDelta for each text chunk and
+   * resolve with the full accumulated text. The responder enforces the
+   * output cap across the stream.
+   */
+  completeStream?(input: {
+    system: string;
+    user: string;
+    maxOutputChars: number;
+    onDelta: (chunk: string) => void;
+  }): Promise<string>;
 };
+
+// Spoken when the caller confirms an SMS link offer while no real SMS tool
+// is wired into the custom runtime. The agent must never claim a link was
+// sent before a successful tool execution.
+export const DRKALLA_SMS_NOT_WIRED_TEXT =
+  'Der SMS-Versand ist in diesem Testanruf noch nicht freigeschaltet. Du findest das Produkt direkt auf drkalla punkt com. Kann ich sonst noch etwas klären?';
 
 export type DrkallaCustomLlmResponse = {
   blocked: boolean;
@@ -61,9 +79,13 @@ function compactSystemPrompt(directives: string[]): string {
     'Du bist der Dr.Kalla Voice-Agent fuer Friseurbedarf.',
     'Antworte kurz, natuerlich und auf Deutsch.',
     'Nutze diese Dialogsteuerung, aber behandle Memory nie als Faktenbeweis.',
+    'Behaupte nie, eine SMS oder einen Link bereits gesendet zu haben.',
     ...directives,
-  ].join('\n').slice(0, 1200);
+  ].join('\n').slice(0, 1400);
 }
+
+const SMS_OFFER_QUESTION = /per sms schicken\?/i;
+const SHORT_AFFIRMATION = /^(?:ja|ja,?\s*(?:bitte|gerne?)|gerne?|okay?|ok|bitte|mach das|machen sie das|klar)[.! ]*$/i;
 
 function fallbackText(userText: string): string {
   if (/\bunterschied|vergleich\b/i.test(userText)) {
@@ -83,6 +105,7 @@ type DrkallaFallbackResult = {
 function fallbackTextWithMemory(input: {
   userText: string;
   memory: DrkallaShortTermVoiceMemory;
+  evidenceLookup?: DrkallaProductEvidenceLookup;
 }): DrkallaFallbackResult {
   const userText = input.userText;
   const lastProduct = input.memory.lastMentionedProduct;
@@ -96,14 +119,21 @@ function fallbackTextWithMemory(input: {
     return { text: fallbackText(userText) };
   }
   if (/\b(?:preis|kostet|kosten|teuer|euro)\b/i.test(userText) && lastProduct) {
+    // Catalog evidence lets the fallback answer the actual price truthfully
+    // instead of dodging to a link offer (price facts come from the catalog
+    // snapshot, never from memory).
+    const evidence = input.evidenceLookup?.byKeyHash(lastProduct.productKeyHash) ?? null;
+    const priceSentence = evidence?.priceText
+      ? `${lastProduct.spokenName} kostet laut Shop-Datenstand ${evidence.priceText}. `
+      : '';
     if (input.memory.profiPriceDisclosureGiven && !/\bprofi/i.test(userText)) {
       return {
-        text: `Soll ich dir den Produktlink zu ${lastProduct.spokenName} per SMS schicken?`,
+        text: `${priceSentence}Soll ich dir den Produktlink zu ${lastProduct.spokenName} per SMS schicken?`,
         product: lastProduct,
       };
     }
     return {
-      text: `${DRKALLA_PROFI_PRICE_DISCLOSURE} ${DRKALLA_PROFI_LINK_QUESTION}`,
+      text: `${priceSentence}${DRKALLA_PROFI_PRICE_DISCLOSURE} ${DRKALLA_PROFI_LINK_QUESTION}`,
       product: lastProduct,
     };
   }
@@ -127,12 +157,15 @@ export async function buildDrkallaCustomLlmResponse(input: {
   memory: DrkallaShortTermVoiceMemory;
   client: DrkallaCustomLlmClient;
   detectProducts?: DrkallaProductNameDetector;
+  evidenceLookup?: DrkallaProductEvidenceLookup;
+  onDelta?: (chunk: string) => void;
 }): Promise<DrkallaCustomLlmResponse> {
   const canaryTurn = buildDrkallaCustomRuntimeCanaryTurn({
     canary: input.canary,
     event: input.event,
     memory: input.memory,
     runtimeOptions: { detectProducts: input.detectProducts },
+    evidenceLookup: input.evidenceLookup,
   });
   const turnIndex = input.event.sequence ?? 0;
 
@@ -177,15 +210,60 @@ export async function buildDrkallaCustomLlmResponse(input: {
     };
   }
 
-  const modelText = (await input.client.complete({
-    system: compactSystemPrompt(canaryTurn.modelDirectives),
-    user,
-    maxOutputChars: 420,
-  })).trim().slice(0, 420);
+  // A confirmed SMS-link offer must never reach the model while no real SMS
+  // tool is wired: the model could claim a link was sent. Answer truthfully
+  // and deterministically (also saves the model call).
+  if (
+    canaryTurn.runtime.memory.lastAgentQuestion
+    && SMS_OFFER_QUESTION.test(canaryTurn.runtime.memory.lastAgentQuestion)
+    && SHORT_AFFIRMATION.test(user)
+  ) {
+    return {
+      blocked: false,
+      text: DRKALLA_SMS_NOT_WIRED_TEXT,
+      memory: reduceDrkallaShortTermMemory(
+        canaryTurn.runtime.memory,
+        deriveDrkallaAgentSpokeEvent({ text: DRKALLA_SMS_NOT_WIRED_TEXT, turnIndex }),
+      ),
+      metrics: {
+        extraLlmCalls: 0,
+        extraKbCalls: 0,
+        directiveChars: canaryTurn.directiveChars,
+      },
+      blockers: [],
+    };
+  }
+
+  const system = compactSystemPrompt(canaryTurn.modelDirectives);
+  const maxOutputChars = 420;
+  let modelText = '';
+  if (input.client.completeStream && input.onDelta) {
+    // Stream chunks upward so TTS can start on the first sentence; enforce
+    // the output cap across the whole stream.
+    let forwardedChars = 0;
+    const onDelta = (chunk: string) => {
+      if (!chunk || forwardedChars >= maxOutputChars) return;
+      const allowed = chunk.slice(0, maxOutputChars - forwardedChars);
+      forwardedChars += allowed.length;
+      input.onDelta?.(allowed);
+    };
+    // No trim here: forwarded deltas must stay an exact prefix of the final
+    // text so the transport can compute the remaining tail frame.
+    const raw = await input.client.completeStream({ system, user, maxOutputChars, onDelta });
+    modelText = raw.trim() ? raw.slice(0, maxOutputChars) : '';
+  } else {
+    modelText = (await input.client.complete({ system, user, maxOutputChars }))
+      .trim()
+      .slice(0, maxOutputChars);
+  }
 
   const fallback = modelText
     ? null
-    : fallbackTextWithMemory({ userText: user, memory: canaryTurn.runtime.memory });
+    : fallbackTextWithMemory({
+        userText: user,
+        memory: canaryTurn.runtime.memory,
+        evidenceLookup: input.evidenceLookup,
+      });
   const spokenText = modelText || (fallback?.text ?? '');
 
   // Reduce what the agent is about to say back into short-term memory so the

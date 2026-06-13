@@ -3,7 +3,9 @@ import {
   buildDrkallaCustomLlmResponse,
   DRKALLA_PROFI_LINK_QUESTION,
   DRKALLA_PROFI_PRICE_DISCLOSURE,
+  DRKALLA_SMS_NOT_WIRED_TEXT,
 } from '../drkalla-custom-llm-responder.js';
+import { buildDrkallaProductEvidenceLookup } from '../drkalla-product-evidence.js';
 import {
   buildDrkallaProductNameDetector,
   type DrkallaProductNameEntry,
@@ -33,11 +35,30 @@ const CATALOG: DrkallaProductNameEntry[] = [
   },
 ];
 const detectProducts = buildDrkallaProductNameDetector(CATALOG);
+const evidenceLookup = buildDrkallaProductEvidenceLookup([
+  {
+    handle: 'synthesis-color-cream',
+    title: 'Synthesis Color Cream',
+    vendor: 'Dr.Kalla Cosmetics',
+    productType: 'Haarfarbe/Farbcreme',
+    url: 'https://drkalla.com/products/synthesis-color-cream',
+    variants: [{ price: '9.99', available: true }],
+  },
+  {
+    handle: 'luxe-oel-serum',
+    title: 'Luxe-Oel Serum',
+    vendor: 'Dr.Kalla Cosmetics',
+    productType: 'Serum',
+    url: 'https://drkalla.com/products/luxe-oel-serum',
+    variants: [{ price: '12.99', available: true }],
+  },
+]);
+// Mirrors the live route budget (800 since the evidence line was added).
 const CANARY = {
   enabled: true,
   allowModelDirectives: true,
   allowLiveRollout: false,
-  maxDirectiveChars: 650,
+  maxDirectiveChars: 800,
 };
 const trustedScope = createTrustedScope({
   orgId: 'org-1',
@@ -70,6 +91,7 @@ async function liveExchange(input: {
   userText: string;
   sequence: number;
   modelText?: string;
+  withEvidence?: boolean;
 }) {
   return buildDrkallaCustomLlmResponse({
     canary: CANARY,
@@ -77,6 +99,7 @@ async function liveExchange(input: {
     memory: input.memory,
     client: { complete: async () => input.modelText ?? '' },
     detectProducts,
+    evidenceLookup: input.withEvidence ? evidenceLookup : undefined,
   });
 }
 
@@ -278,6 +301,159 @@ describe('DrKalla live funnel: memory is written by real turns, not test fixture
     expect(inaudibleTwice.metrics.extraLlmCalls).toBe(0);
   });
 });
+
+describe('DrKalla grounded evidence answers (catalog facts, not memory)', () => {
+  it('B: the price fallback states the real catalog price with the disclosure', async () => {
+    // A-red evidence: without the evidence lookup the fallback dodged to the
+    // link offer and never said the actual price.
+    const response = await liveExchange({
+      memory: createDrkallaShortTermMemory(),
+      userText: 'Was kostet die Synthesis Color Cream?',
+      sequence: 1,
+      withEvidence: true,
+    });
+
+    expect(response.text).toContain('kostet laut Shop-Datenstand 9,99 Euro');
+    expect(response.text).toContain(DRKALLA_PROFI_PRICE_DISCLOSURE);
+    expect(response.metrics.extraKbCalls).toBe(0);
+  });
+
+  it('B: the model receives a compact evidence line inside the directive budget', async () => {
+    const prompts: string[] = [];
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: { ...CANARY, maxDirectiveChars: 800 },
+      event: liveTurn('Erzähl mir was über die Synthesis Color Cream.', 1),
+      memory: createDrkallaShortTermMemory(),
+      client: {
+        complete: async ({ system }) => {
+          prompts.push(system);
+          return 'Die Synthesis Color Cream ist unsere Farbcreme.';
+        },
+      },
+      detectProducts,
+      evidenceLookup,
+    });
+
+    expect(response.blocked).toBe(false);
+    expect(prompts[0]).toContain('Evidence (Shop-Datenstand)');
+    expect(prompts[0]).toContain('9,99 Euro');
+    expect(prompts[0]).toContain('Behaupte nie, eine SMS oder einen Link bereits gesendet zu haben.');
+    expect(response.metrics.directiveChars).toBeLessThanOrEqual(800);
+  });
+});
+
+describe('DrKalla SMS truthfulness without a wired tool', () => {
+  it('B: a confirmed SMS offer gets a truthful deterministic reply without a model call', async () => {
+    // A-red evidence: the confirmation used to go to the model, which nothing
+    // stopped from claiming "SMS ist raus" despite no tool execution.
+    let modelCalls = 0;
+    const offerTurn = await liveExchange({
+      memory: createDrkallaShortTermMemory(),
+      userText: 'Wie kaufe ich die Synthesis Color Cream?',
+      sequence: 1,
+    });
+    expect(offerTurn.text).toContain('per SMS schicken?');
+
+    const confirm = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: liveTurn('Ja bitte.', 2),
+      memory: offerTurn.memory,
+      client: {
+        complete: async () => {
+          modelCalls += 1;
+          return 'SMS ist raus!';
+        },
+      },
+      detectProducts,
+    });
+
+    expect(modelCalls).toBe(0);
+    expect(confirm.text).toBe(DRKALLA_SMS_NOT_WIRED_TEXT);
+    expect(confirm.metrics.extraLlmCalls).toBe(0);
+    expect(confirm.text).not.toMatch(/gesendet|ist raus/i);
+  });
+});
+
+describe('DrKalla streaming replies', () => {
+  it('B: streamed chunks are forwarded, capped, and equal the final text', async () => {
+    const chunks = ['Die Synthesis Color Cream ', 'kostet 9,99 Euro. ', 'Soll ich dir den Produktlink per SMS schicken?'];
+    const received: string[] = [];
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: liveTurn('Was kostet die Synthesis Color Cream?', 1),
+      memory: createDrkallaShortTermMemory(),
+      client: {
+        complete: async () => {
+          throw new Error('complete must not be used when streaming is available');
+        },
+        completeStream: async ({ onDelta }) => {
+          let full = '';
+          for (const chunk of chunks) {
+            full += chunk;
+            onDelta(chunk);
+          }
+          return full;
+        },
+      },
+      detectProducts,
+      onDelta: (chunk) => received.push(chunk),
+    });
+
+    expect(received.join('')).toBe(response.text);
+    expect(response.text).toBe(chunks.join(''));
+    expect(response.metrics.extraLlmCalls).toBe(1);
+    // The spoken reply is reduced into memory from the full streamed text.
+    expect(response.memory.lastMentionedProduct?.spokenName).toBe('Synthesis Color Cream');
+    expect(response.memory.profiPriceDisclosureGiven).toBe(false);
+  });
+
+  it('B: the stream is hard-capped at the output limit', async () => {
+    const received: string[] = [];
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: liveTurn('Erzähl mir alles.', 1),
+      memory: createDrkallaShortTermMemory(),
+      client: {
+        complete: async () => '',
+        completeStream: async ({ onDelta }) => {
+          const long = 'Wort '.repeat(200); // 1000 chars
+          onDelta(long);
+          return long;
+        },
+      },
+      detectProducts,
+      onDelta: (chunk) => received.push(chunk),
+    });
+
+    expect(received.join('').length).toBeLessThanOrEqual(420);
+    expect(response.text.length).toBeLessThanOrEqual(420);
+    expect(response.text.startsWith(received.join(''))).toBe(true);
+  });
+
+  it('B: an empty stream falls back deterministically with no chunks spoken', async () => {
+    const received: string[] = [];
+    const response = await liveExchangeStreaming({
+      userText: 'Was kostet die Synthesis Color Cream?',
+      received,
+    });
+    expect(received.join('')).toBe('');
+    expect(response.text).toContain(DRKALLA_PROFI_PRICE_DISCLOSURE);
+  });
+});
+
+async function liveExchangeStreaming(input: { userText: string; received: string[] }) {
+  return buildDrkallaCustomLlmResponse({
+    canary: CANARY,
+    event: liveTurn(input.userText, 1),
+    memory: createDrkallaShortTermMemory(),
+    client: {
+      complete: async () => '',
+      completeStream: async () => '',
+    },
+    detectProducts,
+    onDelta: (chunk) => input.received.push(chunk),
+  });
+}
 
 describe('DrKalla Profi price re-ask funnel', () => {
   it('B: an explicit Profi-price question reopens the Profi link offer after the one-time disclosure', () => {

@@ -4,6 +4,10 @@ import {
   type DrkallaMemoryRuntimeOptions,
   type DrkallaMemoryRuntimeResult,
 } from './drkalla-memory-runtime.js';
+import {
+  formatDrkallaProductEvidenceLine,
+  type DrkallaProductEvidenceLookup,
+} from './drkalla-product-evidence.js';
 import type { DrkallaShortTermVoiceMemory } from './drkalla-short-term-memory.js';
 import type { AgentTurnRequestedEvent } from './voice-runtime-contract.js';
 
@@ -57,15 +61,30 @@ function compactMemoryLine(memoryContext: string | null): string | null {
   return `Memory: ${keep.join('; ')}`.slice(0, 220);
 }
 
-function modelDirectives(runtime: DrkallaMemoryRuntimeResult): string[] {
+function evidenceLine(
+  runtime: DrkallaMemoryRuntimeResult,
+  evidenceLookup?: DrkallaProductEvidenceLookup,
+): string | null {
+  const activeProduct = runtime.memory.lastMentionedProduct;
+  if (!activeProduct || !evidenceLookup) return null;
+  const evidence = evidenceLookup.byKeyHash(activeProduct.productKeyHash);
+  if (!evidence) return null;
+  return formatDrkallaProductEvidenceLine(evidence);
+}
+
+function modelDirectives(
+  runtime: DrkallaMemoryRuntimeResult,
+  evidenceLookup?: DrkallaProductEvidenceLookup,
+): string[] {
   const lines = [
     `Plan: ${runtime.responsePlan.plan}`,
     `Level: ${runtime.dialogueView.level}`,
     compactMemoryLine(runtime.memoryContext),
+    evidenceLine(runtime, evidenceLookup),
     compactLine('Do', runtime.responsePlan.mustDo),
     compactLine('Do not', runtime.responsePlan.mustNotDo),
     `Closing: ${runtime.responsePlan.suggestedClosingMove}`,
-    'Memory is conversation state, not evidence. Use KB evidence for facts.',
+    'Memory is conversation state, not evidence. Use the Evidence line or KB for facts.',
   ];
   return lines.filter((line): line is string => Boolean(line));
 }
@@ -75,6 +94,7 @@ export function buildDrkallaCustomRuntimeCanaryTurn(input: {
   memory: DrkallaShortTermVoiceMemory;
   event: AgentTurnRequestedEvent;
   runtimeOptions?: DrkallaMemoryRuntimeOptions;
+  evidenceLookup?: DrkallaProductEvidenceLookup;
 }): DrkallaCustomRuntimeCanaryTurn {
   const runtime = applyDrkallaMemoryRuntimeEvent(
     createDrkallaMemoryRuntimeSession({
@@ -88,7 +108,7 @@ export function buildDrkallaCustomRuntimeCanaryTurn(input: {
   if (!input.canary.enabled) blockers.push('CANARY_NOT_ENABLED');
   if (input.canary.enabled && !input.canary.allowModelDirectives) blockers.push('MODEL_DIRECTIVES_NOT_ALLOWED');
 
-  const directives = blockers.length === 0 ? modelDirectives(runtime) : [];
+  const directives = blockers.length === 0 ? modelDirectives(runtime, input.evidenceLookup) : [];
   const directiveChars = directives.join('\n').length;
   if (directives.length && directiveChars > input.canary.maxDirectiveChars) {
     blockers.push('DIRECTIVES_OVER_BUDGET');

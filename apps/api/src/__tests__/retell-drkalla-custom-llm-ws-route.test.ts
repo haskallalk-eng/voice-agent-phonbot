@@ -136,6 +136,41 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     await app.close();
   });
 
+  it('streams sentence chunks before the final frame so TTS can start early', async () => {
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
+    const fullText = 'Die Synthesis Color Cream kostet 9,99 Euro. Soll ich dir den Produktlink per SMS schicken?';
+    const { app, url } = await testServer({
+      complete: async () => fullText,
+      completeStream: async ({ onDelta }) => {
+        onDelta('Die Synthesis Color Cream kostet 9,99 Euro. ');
+        onDelta('Soll ich dir den Produktlink per SMS schicken?');
+        return 'Die Synthesis Color Cream kostet 9,99 Euro. Soll ich dir den Produktlink per SMS schicken?';
+      },
+    });
+    const ws = await connect(url);
+    const frames: Array<{ content: string; content_complete: boolean; response_id: unknown }> = [];
+    ws.on('message', (data) => frames.push(JSON.parse(data.toString())));
+
+    ws.send(JSON.stringify({
+      interaction_type: 'response_required',
+      response_id: 7,
+      transcript: [{ role: 'user', content: 'Was kostet die Synthesis Color Cream?' }],
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(frames.length).toBeGreaterThanOrEqual(2);
+    expect(frames.slice(0, -1).every((frame) => frame.content_complete === false)).toBe(true);
+    expect(frames[frames.length - 1]?.content_complete).toBe(true);
+    expect(frames.every((frame) => frame.response_id === 7)).toBe(true);
+    expect(frames.map((frame) => frame.content).join('')).toBe(
+      'Die Synthesis Color Cream kostet 9,99 Euro. Soll ich dir den Produktlink per SMS schicken?',
+    );
+
+    ws.close();
+    await app.close();
+  });
+
   it('suppresses a stale reply when a newer user turn arrives during a slow model call', async () => {
     process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
     process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
