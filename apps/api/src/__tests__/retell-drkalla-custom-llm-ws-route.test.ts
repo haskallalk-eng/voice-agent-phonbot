@@ -661,4 +661,44 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     ws.close();
     await app.close();
   });
+
+  it('replays a realistic interleaved real-Retell frame sequence end to end', async () => {
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
+    let modelCalls = 0;
+    const { app, url } = await testServer({ complete: async ({ user }) => { modelCalls += 1; return `Modellantwort: ${user}`; } });
+    const ws = await connect(url);
+    const frames: Array<{ response_type?: string; response_id?: unknown; content?: string; content_complete?: boolean; end_call?: boolean; timestamp?: number }> = [];
+    ws.on('message', (data) => frames.push(JSON.parse(data.toString())));
+    const send = (m: Record<string, unknown>) => ws.send(JSON.stringify(m));
+    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    // Mirrors a real call: connect metadata, opener, a transcript refresh, a
+    // keepalive, a silence nudge, then a clear farewell — all interleaved.
+    send({ interaction_type: 'call_details', call: { call_id: 'real', from_number: '+490000000000' } });
+    send({ interaction_type: 'response_required', response_id: 1, transcript: [{ role: 'user', content: 'Hallo' }] });
+    await delay(200);
+    send({ interaction_type: 'update_only', transcript: [{ role: 'user', content: 'ähm' }] });
+    send({ interaction_type: 'ping_pong', timestamp: 7 });
+    await delay(150);
+    send({ interaction_type: 'reminder_required', response_id: 2 });
+    await delay(200);
+    send({ interaction_type: 'response_required', response_id: 3, transcript: [{ role: 'user', content: 'Tschüss, das war alles.' }] });
+    await delay(300);
+
+    // Keepalive echoed; greeting on the first real turn; reminder re-engages
+    // without hanging up; the farewell hangs up. call_details and update_only
+    // produce no response frames, and nothing reached the model.
+    expect(frames.find((f) => f.response_type === 'ping_pong')).toEqual({ response_type: 'ping_pong', timestamp: 7 });
+    expect(frames.find((f) => f.response_id === 1)?.content).toContain('Wie kann ich Ihnen');
+    expect(frames.find((f) => f.response_id === 2)?.end_call).toBe(false);
+    const bye = frames.find((f) => f.response_id === 3 && f.content_complete === true);
+    expect(bye?.end_call).toBe(true);
+    const responseIds = frames.filter((f) => f.response_type === 'response').map((f) => f.response_id);
+    expect(new Set(responseIds)).toEqual(new Set([1, 2, 3]));
+    expect(modelCalls).toBe(0);
+
+    ws.close();
+    await app.close();
+  });
 });
