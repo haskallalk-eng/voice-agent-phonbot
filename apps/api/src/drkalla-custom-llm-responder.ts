@@ -2,6 +2,11 @@ import {
   buildDrkallaCustomRuntimeCanaryTurn,
   type DrkallaCustomRuntimeCanaryConfig,
 } from './drkalla-custom-runtime-canary.js';
+import {
+  buildDrkallaContactAnswer,
+  DRKALLA_CONTACT_FACTS,
+  detectDrkallaContactIntent,
+} from './drkalla-contact-facts.js';
 import type { DrkallaProductEvidenceLookup } from './drkalla-product-evidence.js';
 import {
   deriveDrkallaAgentSpokeEvent,
@@ -79,20 +84,27 @@ function compactSystemPrompt(directives: string[]): string {
   return [
     'Du bist der Dr.Kalla Voice-Agent fuer Friseurbedarf.',
     'Antworte kurz, natuerlich und auf Deutsch; sprich den Anrufer konsequent mit Sie an.',
+    'Dr.Kalla ist ein Friseurbedarf-Shop, kein Friseursalon: keine Termine, keine Haarschnitte oder Faerbe-Dienstleistungen; verweise hoeflich auf Produkte/Salonbedarf.',
+    'Nenne Adresse, Oeffnungszeiten, E-Mail, Preise oder Verfuegbarkeit nur aus der gegebenen Evidence- oder Kontakt-Fakt-Zeile. Fehlt die Angabe, erfinde nichts und verweise auf drkalla.com oder den Kontakt.',
     'Nutze diese Dialogsteuerung, aber behandle Memory nie als Faktenbeweis.',
     'Behaupte nie, eine SMS oder einen Link bereits gesendet zu haben.',
     ...directives,
-  ].join('\n').slice(0, 1400);
+  ].join('\n').slice(0, 1600);
 }
 
 const SMS_OFFER_QUESTION = /per sms schicken\?/i;
+// The two-option offer ("Produktlink ODER Profi-Zugang per SMS"): a bare "ja"
+// here is ambiguous and must be re-asked, not silently sent as product link.
+const TWO_OPTION_OFFER = /produktlink\s+oder\s+(?:den\s+link\s+(?:zum\s+)?)?profi/i;
 const SHORT_AFFIRMATION = /^(?:ja|ja,?\s*(?:bitte|gerne?)|gerne?|okay?|ok|bitte|mach das|machen sie das|klar)[.! ]*$/i;
-const PRODUCT_LINK_CHOICE = /^(?:ja,?\s*)?(?:den\s+)?produktlink(?:\s+bitte)?[.! ]*$/i;
+const PRODUCT_LINK_CHOICE = /\b(?:produktlink|den ersten|das erste|das produkt|zum produkt)\b/i;
+const PROFI_LINK_CHOICE = /\b(?:profi[\s-]?(?:zugang|link)|den profi|zum profi|das zweite|den zweiten|der zweite|registrier)\b/i;
 
+export type DrkallaSendLinkKind = 'product' | 'profi';
 export type DrkallaSendLinkExecutor = (input: {
   url: string;
   label: string;
-  linkKind: 'product';
+  linkKind: DrkallaSendLinkKind;
 }) => Promise<{ smsSent: boolean; duplicate?: boolean }>;
 
 function fallbackText(userText: string): string {
@@ -117,6 +129,13 @@ function fallbackTextWithMemory(input: {
 }): DrkallaFallbackResult {
   const userText = input.userText;
   const lastProduct = input.memory.lastMentionedProduct;
+  // Grounded contact answer takes precedence: never let the fallback dodge a
+  // contact question with a generic discovery prompt, and never invent.
+  const contactIntent = detectDrkallaContactIntent(userText);
+  if (contactIntent) {
+    const contactAnswer = buildDrkallaContactAnswer(contactIntent);
+    if (contactAnswer) return { text: contactAnswer };
+  }
   if (/\bunterschied|vergleich\b/i.test(userText)) {
     const recent = input.memory.recentProducts.slice(-2);
     if (recent.length >= 2) {
@@ -224,49 +243,72 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // executor wired the server sends the real SMS through the policied
   // send_link tool; without it the agent answers truthfully. Either way the
   // model can never claim a send that did not happen.
-  if (
-    canaryTurn.runtime.memory.lastAgentQuestion
-    && SMS_OFFER_QUESTION.test(canaryTurn.runtime.memory.lastAgentQuestion)
-    && (SHORT_AFFIRMATION.test(user) || PRODUCT_LINK_CHOICE.test(user))
-  ) {
-    const activeProduct = canaryTurn.runtime.memory.lastMentionedProduct;
-    const evidence = activeProduct
-      ? input.evidenceLookup?.byKeyHash(activeProduct.productKeyHash) ?? null
-      : null;
-    let text = DRKALLA_SMS_NOT_WIRED_TEXT;
-    let linkSentUrl: string | null = null;
-    if (input.executeSendLink && activeProduct && evidence?.url) {
-      const outcome = await input.executeSendLink({
-        url: evidence.url,
-        label: activeProduct.spokenName,
-        linkKind: 'product',
-      }).catch(() => ({ smsSent: false as const }));
-      if (outcome.smsSent) {
-        text = `Erledigt, ich habe Ihnen den Produktlink zu ${activeProduct.spokenName} per SMS geschickt. Kann ich sonst noch etwas klären?`;
-        linkSentUrl = evidence.url;
-      } else if ('duplicate' in outcome && outcome.duplicate) {
-        text = `Den Link zu ${activeProduct.spokenName} habe ich Ihnen in diesem Anruf schon geschickt. Kann ich sonst noch etwas klären?`;
-      } else {
-        text = `Das hat gerade leider nicht geklappt, die SMS ging nicht raus. Sie finden ${activeProduct.spokenName} auf drkalla punkt com.`;
-      }
+  const lastQ = canaryTurn.runtime.memory.lastAgentQuestion ?? '';
+  if (SMS_OFFER_QUESTION.test(lastQ)) {
+    const twoOption = TWO_OPTION_OFFER.test(lastQ);
+    const wantsProfi = PROFI_LINK_CHOICE.test(user);
+    const wantsProduct = PRODUCT_LINK_CHOICE.test(user);
+    const bareYes = SHORT_AFFIRMATION.test(user);
+
+    if (twoOption && bareYes && !wantsProfi && !wantsProduct) {
+      // Ambiguous yes to a two-option offer: ask which link, never guess.
+      const clarify = 'Gern. Möchten Sie den Produktlink oder den Link zum Profi-Zugang?';
+      return {
+        blocked: false,
+        text: clarify,
+        memory: reduceDrkallaShortTermMemory(
+          canaryTurn.runtime.memory,
+          deriveDrkallaAgentSpokeEvent({ text: clarify, turnIndex }),
+        ),
+        metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
+        blockers: [],
+      };
     }
-    const agentEvent = deriveDrkallaAgentSpokeEvent({ text, turnIndex });
-    return {
-      blocked: false,
-      text,
-      memory: reduceDrkallaShortTermMemory(canaryTurn.runtime.memory, {
-        ...agentEvent,
-        linksSent: linkSentUrl && activeProduct
-          ? [{ url: linkSentUrl, label: activeProduct.spokenName }]
-          : undefined,
-      }),
-      metrics: {
-        extraLlmCalls: 0,
-        extraKbCalls: 0,
-        directiveChars: canaryTurn.directiveChars,
-      },
-      blockers: [],
-    };
+
+    if (wantsProfi || wantsProduct || bareYes) {
+      const activeProduct = canaryTurn.runtime.memory.lastMentionedProduct;
+      const evidence = activeProduct
+        ? input.evidenceLookup?.byKeyHash(activeProduct.productKeyHash) ?? null
+        : null;
+      // Choice resolution: explicit Profi wins; else explicit product; else a
+      // bare yes on a single-option offer follows that offer (product).
+      const kind: DrkallaSendLinkKind = wantsProfi ? 'profi' : 'product';
+      const target = kind === 'profi'
+        ? { url: DRKALLA_CONTACT_FACTS.profiUrl, label: 'Profi-Zugang' }
+        : activeProduct && evidence?.url
+          ? { url: evidence.url, label: activeProduct.spokenName }
+          : null;
+
+      let text = DRKALLA_SMS_NOT_WIRED_TEXT;
+      let linkSentUrl: string | null = null;
+      if (input.executeSendLink && target) {
+        const outcome = await input.executeSendLink({ url: target.url, label: target.label, linkKind: kind })
+          .catch(() => ({ smsSent: false as const }));
+        if (outcome.smsSent) {
+          text = kind === 'profi'
+            ? 'Erledigt, ich habe Ihnen den Link zum Profi-Zugang per SMS geschickt. Kann ich sonst noch etwas klären?'
+            : `Erledigt, ich habe Ihnen den Produktlink zu ${target.label} per SMS geschickt. Kann ich sonst noch etwas klären?`;
+          linkSentUrl = target.url;
+        } else if ('duplicate' in outcome && outcome.duplicate) {
+          text = `Den Link habe ich Ihnen in diesem Anruf schon geschickt. Kann ich sonst noch etwas klären?`;
+        } else {
+          text = kind === 'profi'
+            ? 'Das hat gerade leider nicht geklappt, die SMS ging nicht raus. Den Profi-Zugang finden Sie auf drkalla punkt com.'
+            : `Das hat gerade leider nicht geklappt, die SMS ging nicht raus. Sie finden ${target.label} auf drkalla punkt com.`;
+        }
+      }
+      const agentEvent = deriveDrkallaAgentSpokeEvent({ text, turnIndex });
+      return {
+        blocked: false,
+        text,
+        memory: reduceDrkallaShortTermMemory(canaryTurn.runtime.memory, {
+          ...agentEvent,
+          linksSent: linkSentUrl && target ? [{ url: linkSentUrl, label: target.label }] : undefined,
+        }),
+        metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
+        blockers: [],
+      };
+    }
   }
 
   // A product name shared by several catalog products cannot resolve to one

@@ -27,6 +27,7 @@ export type DrkallaMemoryRuntimeSession = {
 export type DrkallaMemoryRuntimeResult = DrkallaMemoryRuntimeSession & {
   memoryContext: string | null;
   memoryContextInjected: boolean;
+  currentUserText: string;
   dialogueView: DrkallaDialogueView;
   responsePlan: DrkallaDialogueResponsePlan;
   extraLlmCalls: 0;
@@ -94,6 +95,7 @@ export function applyDrkallaMemoryRuntimeEvent(
     memory,
     memoryContext: canInject ? buildDrkallaMemoryContext(memory) : null,
     memoryContextInjected: canInject,
+    currentUserText,
     dialogueView,
     responsePlan: buildDrkallaDialogueResponsePlan(dialogueView),
     extraLlmCalls: 0,

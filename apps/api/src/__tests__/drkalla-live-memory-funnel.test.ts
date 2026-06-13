@@ -541,6 +541,58 @@ describe('DrKalla gated SMS link executor', () => {
     expect(Object.keys(failed.memory.sentLinkHashes)).toHaveLength(0);
   });
 
+  it('B: a bare "ja" to the two-option Profi offer re-asks which link, sends nothing (Codex rank 3)', async () => {
+    // A-red: bare "ja" after the two-option offer sent the PRODUCT link.
+    const sent: Array<{ linkKind: string }> = [];
+    const offer = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: liveTurn('Was kostet die Synthesis Color Cream?', 1),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => '' },
+      detectProducts,
+      evidenceLookup,
+    });
+    expect(offer.text).toContain(DRKALLA_PROFI_LINK_QUESTION); // two-option offer
+    const confirm = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: liveTurn('Ja bitte.', 2),
+      memory: offer.memory,
+      client: { complete: async () => 'darf nicht laufen' },
+      detectProducts,
+      evidenceLookup,
+      executeSendLink: async (l) => { sent.push({ linkKind: l.linkKind }); return { smsSent: true }; },
+    });
+    expect(sent).toHaveLength(0);
+    expect(confirm.text).toContain('Produktlink oder den Link zum Profi-Zugang');
+    expect(confirm.metrics.extraLlmCalls).toBe(0);
+  });
+
+  it('B: "den Profi-Zugang bitte" sends the Profi link, not the product link (Codex rank 3)', async () => {
+    const sent: Array<{ url: string; linkKind: string }> = [];
+    const offer = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: liveTurn('Was kostet die Synthesis Color Cream?', 1),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => '' },
+      detectProducts,
+      evidenceLookup,
+    });
+    const confirm = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: liveTurn('Den Profi-Zugang bitte.', 2),
+      memory: offer.memory,
+      client: { complete: async () => 'darf nicht laufen' },
+      detectProducts,
+      evidenceLookup,
+      executeSendLink: async (l) => { sent.push({ url: l.url, linkKind: l.linkKind }); return { smsSent: true }; },
+    });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.linkKind).toBe('profi');
+    expect(sent[0]?.url).toContain('als-friseur-registrieren');
+    expect(confirm.text).toContain('Profi-Zugang');
+    expect(confirm.text).not.toContain('Produktlink zu');
+  });
+
   it('B: an explicit "Produktlink bitte" choice also triggers the executor', async () => {
     const offer = await buildDrkallaCustomLlmResponse({
       canary: CANARY,
