@@ -9,6 +9,11 @@ import {
   type DrkallaCustomLlmClient,
 } from './drkalla-custom-llm-responder.js';
 import {
+  buildDrkallaProductEvidenceLookup,
+  type DrkallaProductEvidenceLookup,
+  type DrkallaRawCatalogProduct,
+} from './drkalla-product-evidence.js';
+import {
   buildDrkallaProductNameDetector,
   type DrkallaProductNameDetector,
   type DrkallaProductNameEntry,
@@ -187,6 +192,25 @@ export function loadDrkallaProductNameDetector(aliasPath?: string): DrkallaProdu
   }
 }
 
+/**
+ * One-time startup load of the catalog snapshot into the structured product
+ * evidence lookup (never per turn). Fail-soft: without the snapshot the
+ * canary simply runs without grounded price/brand evidence.
+ */
+export function loadDrkallaProductEvidenceLookup(productsPath?: string): DrkallaProductEvidenceLookup | undefined {
+  const resolved = productsPath
+    ?? process.env.DRKALLA_PRODUCTS_PATH
+    ?? path.join(process.cwd(), 'tmp', 'drkalla-rag', 'drkalla-products.json');
+  try {
+    const parsed = JSON.parse(readFileSync(resolved, 'utf8')) as { products?: unknown };
+    if (!Array.isArray(parsed.products) || !parsed.products.length) return undefined;
+    const lookup = buildDrkallaProductEvidenceLookup(parsed.products as DrkallaRawCatalogProduct[]);
+    return lookup.size > 0 ? lookup : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function reply(responseId: string | number, content: string): RetellDrkallaCustomLlmReply {
   return {
     response_type: 'response',
@@ -205,8 +229,11 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
   memory?: DrkallaShortTermVoiceMemory;
   onMemory?: (memory: DrkallaShortTermVoiceMemory) => void;
   complete: DrkallaCustomLlmClient['complete'];
+  completeStream?: DrkallaCustomLlmClient['completeStream'];
   detectProducts?: DrkallaProductNameDetector;
+  evidenceLookup?: DrkallaProductEvidenceLookup;
   sequence?: number;
+  onDelta?: (chunk: string) => void;
 }): Promise<RetellDrkallaCustomLlmReply | null> {
   if (!input.secretAccepted) return null;
 
@@ -220,7 +247,7 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
           enabled: true,
           allowModelDirectives: true,
           allowLiveRollout: false,
-          maxDirectiveChars: 650,
+          maxDirectiveChars: 800,
         }
       : {
           enabled: false,
@@ -230,8 +257,10 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
     },
     event: canonicalTurn(parsed, input.callId || 'drkalla-custom-runtime-canary', input.sequence ?? 0),
     memory: input.memory ?? createDrkallaShortTermMemory(),
-    client: { complete: input.complete },
+    client: { complete: input.complete, completeStream: input.completeStream },
     detectProducts: input.detectProducts,
+    evidenceLookup: input.evidenceLookup,
+    onDelta: input.onDelta,
   });
   input.onMemory?.(response.memory);
 
@@ -253,6 +282,10 @@ function createOpenAiClient(): DrkallaCustomLlmClient {
     return { complete: async () => '' };
   }
   const timeoutMs = Math.max(250, Number(process.env.DRKALLA_CUSTOM_RUNTIME_MODEL_TIMEOUT_MS ?? 700));
+  // Streaming budget: the first token must arrive inside timeoutMs; once
+  // streaming, the stream may run up to this total wall-clock budget.
+  const streamTotalMs = Math.max(800, Number(process.env.DRKALLA_CUSTOM_RUNTIME_STREAM_TOTAL_MS ?? 2500));
+  const model = process.env.DRKALLA_CUSTOM_RUNTIME_MODEL || 'gpt-4.1-mini';
   const openai = new OpenAI({
     apiKey,
     maxRetries: 0,
@@ -262,7 +295,7 @@ function createOpenAiClient(): DrkallaCustomLlmClient {
     complete: async ({ system, user, maxOutputChars }) => {
       try {
         const completion = await openai.chat.completions.create({
-          model: process.env.DRKALLA_CUSTOM_RUNTIME_MODEL || 'gpt-4.1-mini',
+          model,
           messages: [
             { role: 'system', content: system },
             { role: 'user', content: user },
@@ -275,14 +308,61 @@ function createOpenAiClient(): DrkallaCustomLlmClient {
         return '';
       }
     },
+    completeStream: async ({ system, user, maxOutputChars, onDelta }) => {
+      const controller = new AbortController();
+      let accumulated = '';
+      let sawFirstToken = false;
+      const firstTokenTimer = setTimeout(() => {
+        if (!sawFirstToken) controller.abort();
+      }, timeoutMs);
+      const totalTimer = setTimeout(() => controller.abort(), streamTotalMs);
+      try {
+        const stream = await openai.chat.completions.create(
+          {
+            model,
+            messages: [
+              { role: 'system', content: system },
+              { role: 'user', content: user },
+            ],
+            max_completion_tokens: Math.max(80, Math.ceil(maxOutputChars / 3)),
+            temperature: 0.2,
+            stream: true,
+          },
+          { signal: controller.signal, timeout: streamTotalMs },
+        );
+        for await (const chunk of stream) {
+          const delta = chunk.choices[0]?.delta?.content ?? '';
+          if (!delta) continue;
+          sawFirstToken = true;
+          accumulated += delta;
+          onDelta(delta);
+          if (accumulated.length >= maxOutputChars) {
+            controller.abort();
+            break;
+          }
+        }
+      } catch {
+        // Abort or transport error: whatever was accumulated is the answer;
+        // empty means the caller falls back deterministically.
+      } finally {
+        clearTimeout(firstTokenTimer);
+        clearTimeout(totalTimer);
+      }
+      return accumulated;
+    },
   };
 }
 
 export async function registerRetellDrkallaCustomLlmWs(
   app: FastifyInstance,
-  options: { client?: DrkallaCustomLlmClient; detectProducts?: DrkallaProductNameDetector } = {},
+  options: {
+    client?: DrkallaCustomLlmClient;
+    detectProducts?: DrkallaProductNameDetector;
+    evidenceLookup?: DrkallaProductEvidenceLookup;
+  } = {},
 ): Promise<void> {
   const detectProducts = options.detectProducts ?? loadDrkallaProductNameDetector();
+  const evidenceLookup = options.evidenceLookup ?? loadDrkallaProductEvidenceLookup();
   const handler = (socket: WebSocket, request: { query: unknown; params: unknown }) => {
     const query = request.query as { secret?: string; token?: string };
     const params = request.params as { secret?: string };
@@ -318,6 +398,35 @@ export async function registerRetellDrkallaCustomLlmWs(
       processing = processing.then(async () => {
         try {
           if (isResponseTurn) turnCounter += 1;
+          const startedAt = Date.now();
+          let firstFrameMs: number | null = null;
+          let sentText = '';
+          let deltaBuffer = '';
+
+          const sendFrame = (content: string, complete: boolean) => {
+            if (!parsedPreview) return;
+            if (myArrival !== latestArrival) return; // stale: a newer turn arrived
+            if (firstFrameMs === null) firstFrameMs = Date.now() - startedAt;
+            socket.send(JSON.stringify({
+              response_type: 'response',
+              response_id: parsedPreview.providerResponseId,
+              content,
+              content_complete: complete,
+              end_call: false,
+            }));
+            if (!complete) sentText += content;
+          };
+
+          // Buffer streamed deltas to sentence boundaries (or ~60 chars) so
+          // Retell TTS gets natural prosody chunks instead of single tokens.
+          const onDelta = (chunk: string) => {
+            deltaBuffer += chunk;
+            if (/[.!?]\s*$/.test(deltaBuffer) || deltaBuffer.length >= 60) {
+              sendFrame(deltaBuffer, false);
+              deltaBuffer = '';
+            }
+          };
+
           const outbound = await buildRetellDrkallaCustomLlmWsReply({
             enabled,
             secretAccepted: secretOk,
@@ -328,12 +437,31 @@ export async function registerRetellDrkallaCustomLlmWs(
               memory = nextMemory;
             },
             complete: client.complete,
+            completeStream: client.completeStream,
             detectProducts,
+            evidenceLookup,
             sequence: turnCounter,
+            onDelta: isResponseTurn ? onDelta : undefined,
           });
           if (!outbound) return;
           if (isResponseTurn && myArrival !== latestArrival) return;
-          socket.send(JSON.stringify(outbound));
+
+          // Final frame carries whatever was not streamed yet. If trimming or
+          // fallback changed the text so streamed chunks are no longer a
+          // prefix, fall back to a single full final frame.
+          const fullText = String(outbound.content);
+          const tail = fullText.startsWith(sentText) ? fullText.slice(sentText.length) : fullText;
+          sendFrame(tail, true);
+
+          app.log.info(
+            {
+              turn: turnCounter,
+              firstFrameMs: firstFrameMs ?? Date.now() - startedAt,
+              totalMs: Date.now() - startedAt,
+              streamedFrames: sentText.length > 0,
+            },
+            'drkalla canary turn latency',
+          );
         } catch (error) {
           app.log.warn({ err: error instanceof Error ? error.message : String(error) }, 'DrKalla custom LLM canary failed');
         }
