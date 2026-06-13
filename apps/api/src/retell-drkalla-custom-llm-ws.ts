@@ -39,6 +39,12 @@ import type { AgentTurnRequestedEvent } from './voice-runtime-contract.js';
 
 const SAFE_UNAVAILABLE_TEXT = 'Entschuldigung, ich kann gerade nicht weiterhelfen. Bitte versuchen Sie es später noch einmal oder schreiben Sie an kontakt at drkalla punkt com.';
 
+// Custom-llm agents have no Retell begin_message; Retell elicits the agent's
+// first line via an empty response_required at call start. This deterministic
+// Sie greeting is spoken then (no model call), so the very first thing the
+// caller hears is on-brand and in the right register.
+export const DRKALLA_CUSTOM_RUNTIME_GREETING = 'Hallo, hier ist der Dr.Kalla Assistent. Wie kann ich Ihnen bei Friseurbedarf helfen?';
+
 export type RetellDrkallaCustomLlmParsedMessage = {
   interactionType: string;
   responseId: string;
@@ -287,11 +293,24 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
   noInputReminderCount?: number;
   onDelta?: (chunk: string) => void;
   signal?: AbortSignal;
+  isCallOpening?: boolean;
 }): Promise<RetellDrkallaCustomLlmReply | null> {
   if (!input.secretAccepted) return null;
 
   const parsed = parseRetellDrkallaCustomLlmMessage(input.rawMessage);
   if (!parsed) return null;
+
+  // Call opening: greet deterministically in Sie (no model call) so the first
+  // utterance is on-brand. Only when the canary is enabled; a disabled canary
+  // falls through to the safe-unavailable path.
+  if (input.isCallOpening && input.enabled && parsed.interactionType === 'response_required') {
+    const memory = input.memory ?? createDrkallaShortTermMemory();
+    input.onMemory?.(reduceDrkallaShortTermMemory(
+      memory,
+      deriveDrkallaAgentSpokeEvent({ text: DRKALLA_CUSTOM_RUNTIME_GREETING, turnIndex: input.sequence ?? 0 }),
+    ));
+    return reply(parsed.providerResponseId, DRKALLA_CUSTOM_RUNTIME_GREETING);
+  }
 
   // Caller went silent (Retell reminder). Re-engage deterministically: no
   // model call, no end_call. Retell still owns the hard silence timeout.
@@ -482,6 +501,7 @@ export async function registerRetellDrkallaCustomLlmWs(
     let turnCounter = 0;
     let latestArrival = 0;
     let noInputReminderCount = 0;
+    let greeted = false;
     let processing: Promise<void> = Promise.resolve();
     // The model call of the turn currently allowed to speak. A newer turn
     // aborts it on arrival (barge-in) so the serialized chain does not wait
@@ -525,6 +545,10 @@ export async function registerRetellDrkallaCustomLlmWs(
             noInputReminderCount = 0; // the caller spoke; reset silence nudges
           }
           if (isReminderTurn) noInputReminderCount += 1;
+          // Call opening: the first response turn with no caller text is Retell
+          // eliciting the agent's greeting (custom-llm has no begin_message).
+          const isCallOpening = isResponseTurn && !greeted && !(parsedPreview?.currentUserText ?? '').trim();
+          if (isCallOpening) greeted = true;
           const startedAt = Date.now();
           let firstFrameMs: number | null = null;
           let sentText = '';
@@ -605,6 +629,7 @@ export async function registerRetellDrkallaCustomLlmWs(
             noInputReminderCount,
             onDelta: isResponseTurn ? onDelta : undefined,
             signal: myAbort?.signal,
+            isCallOpening,
           });
           const superseded = (isResponseTurn || isReminderTurn) && myArrival !== latestArrival;
           if (!superseded && pendingMemory) memory = pendingMemory;
