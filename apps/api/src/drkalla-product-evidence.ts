@@ -134,7 +134,9 @@ export function formatDrkallaProductEvidenceLine(evidence: DrkallaProductEvidenc
       ? `Preis laut Shop-Datenstand ${evidence.priceText}`
       : 'Preis nicht im Datenstand',
     evidence.variantCount > 1 ? `${evidence.variantCount} Varianten` : null,
-    evidence.availableVariantCount > 0 ? 'verfuegbar' : 'Verfuegbarkeit unklar',
+    // Never assert live stock from a snapshot: availability is day-current and
+    // must be deferred to the website rather than spoken as fact.
+    'Verfuegbarkeit tagesaktuell auf drkalla.com pruefen',
     evidence.hasUrl ? 'Produktlink vorhanden' : null,
   ].filter(Boolean);
   return `Evidence (Shop-Datenstand): ${parts.join('; ')}`.slice(0, 220);

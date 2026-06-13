@@ -208,9 +208,14 @@ function evaluateCase(
         ? result(testCase, 'pass', 'image_metadata_available')
         : result(testCase, 'warn', 'image_url_available_but_alt_text_missing');
     case 'hallucination_guard_expert': {
-      const kindText = JSON.stringify(kindEntries);
-      if (/Wella|Schwarzkopf/i.test(kindText) && !kindText.includes('Wella') && !kindText.includes('Schwarzkopf')) {
-        return result(testCase, 'fail', 'impossible_hallucinated_brand_state');
+      // A non-null external brand must be a real, non-empty value: an empty or
+      // whitespace-only brand string is a fabricated/degenerate brand state
+      // that should have been the house brand fallback instead.
+      const emptyExternalBrand = kindEntries.some(
+        (item) => item.externalBrand !== null && item.externalBrand.trim() === '',
+      );
+      if (emptyExternalBrand) {
+        return result(testCase, 'fail', 'empty_or_fabricated_external_brand_state');
       }
       const invalidExternal = kindEntries.some((item) => item.externalBrand && SHOP_PROVIDER_LABELS.includes(item.externalBrand));
       return invalidExternal

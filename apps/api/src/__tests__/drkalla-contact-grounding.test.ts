@@ -101,6 +101,19 @@ describe('DrKalla custom runtime grounds contact facts (A: invents, B: grounded)
     expect(response.text).not.toContain('welches Produkt oder welche Produktart');
   });
 
+  it('B: caller PII (address) is redacted before the utterance reaches the model (Codex rank 13)', async () => {
+    const prompts: string[] = [];
+    await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Schicken Sie es an Beispielstraße 5, ich heiße Test.'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async ({ user }) => { prompts.push(user); return 'Alles klar.'; } },
+    });
+    // The user message sent to the model must not contain the raw street.
+    expect(prompts[0]).not.toContain('Beispielstraße 5');
+    expect(prompts[0]).toContain('[ADDRESS]');
+  });
+
   it('B: the system prompt carries the salon-vs-shop guard and the abstain rule', async () => {
     const prompts: string[] = [];
     await buildDrkallaCustomLlmResponse({
