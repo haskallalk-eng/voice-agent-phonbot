@@ -114,14 +114,29 @@ function heard(text: string, turnIndex = 1) {
 
 describe('DrKalla end-call strictness (A: old failures, B: fixed behavior)', () => {
   it('B: explicit "do not hang up" requests are never farewell end-call candidates', () => {
-    // A-red evidence: before the NOT-farewell guard these texts matched the
-    // unanchored FAREWELL regex ("leg auf" / "das war's") and produced
-    // endCallEligible=true with reason caller_farewell.
+    // Regression locks: most of these were already safe on 39a3da5 (the old
+    // FAREWELL regex happened not to match them); the genuinely red cases on
+    // 39a3da5 were the trailing-question goodbye below and the
+    // "das wars... ach nein" continuation (Codex P1).
     const cases = [
       'Bitte leg nicht auf, ich habe noch eine Frage.',
       'Nicht auflegen, warte mal kurz.',
       'Nein, das war’s noch nicht.',
       'Das war noch nicht alles.',
+    ];
+    for (const text of cases) {
+      const memory = heard(text);
+      expect(memory.endCallEligible, text).toBe(false);
+      expect(memory.endCallReason, text).toBeNull();
+    }
+  });
+
+  it('B: a goodbye taken back in the same utterance stays on the line (Codex P1)', () => {
+    // A-red evidence: "das wars... ach nein" returned endCallEligible=true.
+    const cases = [
+      'Das wars... ach nein.',
+      'Das war alles, ach nein, eine Sache noch.',
+      'Tschüss, doch nicht, ich brauche noch was.',
     ];
     for (const text of cases) {
       const memory = heard(text);
@@ -252,6 +267,29 @@ describe('DrKalla live funnel: memory is written by real turns, not test fixture
     expect(first.memory.lastMentionedProduct?.spokenName).toBe('Synthesis Color Cream');
     expect(state?.facts.price).toBe(true);
     expect(state?.facts.size).toBe(true);
+  });
+
+  it('B: a two-product model reply stores facts on the right products (Codex P1)', async () => {
+    // A-red evidence: both facts landed on lastMentionedProduct (Synthesis)
+    // and the Serum never became a recent product, breaking comparison.
+    const response = await liveExchange({
+      memory: createDrkallaShortTermMemory(),
+      userText: 'Vergleich bitte.',
+      sequence: 1,
+      modelText: 'Synthesis Color Cream kostet 9 Euro. Luxe-Oel Serum hat 100 ml.',
+    });
+
+    const conversations = Object.values(response.memory.productConversations);
+    const synthesis = conversations.find((entry) => entry?.spokenName === 'Synthesis Color Cream');
+    const serum = conversations.find((entry) => entry?.spokenName === 'Luxe-Oel Serum');
+    expect(synthesis?.facts.price).toBe(true);
+    expect(synthesis?.facts.size).toBeUndefined();
+    expect(serum?.facts.size).toBe(true);
+    expect(serum?.facts.price).toBeUndefined();
+    expect(response.memory.recentProducts.map((product) => product.spokenName).sort()).toEqual([
+      'Luxe-Oel Serum',
+      'Synthesis Color Cream',
+    ]);
   });
 
   it('B: two discussed products enable comparison instead of category reset', async () => {

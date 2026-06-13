@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDrkallaProductNameDetector,
   deriveDrkallaAgentSpokeEvent,
+  reportDrkallaProductNameDetectorCoverage,
   type DrkallaProductNameEntry,
 } from '../drkalla-product-name-detector.js';
 
@@ -80,6 +81,17 @@ describe('DrKalla product name detector', () => {
   it('ignores junk aliases such as bare sizes', () => {
     expect(detect('Ich brauche 1000ml.')).toEqual([]);
   });
+
+  it('reports duplicate spoken names as coverage gaps instead of hiding them (Codex P2)', () => {
+    const report = reportDrkallaProductNameDetectorCoverage([
+      { productId: 'a', spokenName: 'Universal Haaroel', productKind: null, aliases: [] },
+      { productId: 'b', spokenName: 'Universal Haaroel', productKind: null, aliases: [] },
+      { productId: 'c', spokenName: 'Synthesis Color Cream', productKind: null, aliases: [] },
+    ]);
+    expect(report.totalProducts).toBe(3);
+    expect(report.detectableBySpokenName).toBe(1);
+    expect(report.undetectableProductIds.sort()).toEqual(['a', 'b']);
+  });
 });
 
 describe('DrKalla agent-spoke derivation', () => {
@@ -125,5 +137,43 @@ describe('DrKalla agent-spoke derivation', () => {
       detectProducts: detect,
     });
     expect(event.profiPriceDisclosureGiven).toBeUndefined();
+  });
+
+  it('B: negated sentences never mark facts as already answered (Codex P1)', () => {
+    // A-red: "nicht per SMS" marked link, "kostet nicht 9 Euro" marked price,
+    // "kein 1 Liter" marked size — blocking later legitimate answers.
+    const negated = deriveDrkallaAgentSpokeEvent({
+      text: 'Der Link zur Synthesis Color Cream folgt nicht per SMS. Sie kostet nicht 9 Euro. Es ist kein 1 Liter Produkt.',
+      turnIndex: 7,
+      detectProducts: detect,
+    });
+    expect(negated.factsMentioned).toBeUndefined();
+  });
+
+  it('B: spelled-out German prices count as a price fact (Codex P1)', () => {
+    const event = deriveDrkallaAgentSpokeEvent({
+      text: 'Die Synthesis Color Cream kostet neunundneunzig Euro.',
+      turnIndex: 8,
+      detectProducts: detect,
+    });
+    expect(event.factsMentioned?.map((fact) => fact.key)).toEqual([
+      'product.synthesis-color-cream.price',
+    ]);
+  });
+
+  it('B: both mentioned products become known with facts on the right one (Codex P1)', () => {
+    const event = deriveDrkallaAgentSpokeEvent({
+      text: 'Synthesis Color Cream kostet 9 Euro. Luxe-Oel Serum hat 100 ml.',
+      turnIndex: 9,
+      detectProducts: detect,
+    });
+    expect(event.productsMentioned?.map((product) => product.productId).sort()).toEqual([
+      'luxe-oel-serum',
+      'synthesis-color-cream',
+    ]);
+    expect(event.factsMentioned?.map((fact) => fact.key).sort()).toEqual([
+      'product.luxe-oel-serum.size',
+      'product.synthesis-color-cream.price',
+    ]);
   });
 });

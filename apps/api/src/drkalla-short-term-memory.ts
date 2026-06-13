@@ -77,6 +77,11 @@ export type DrkallaShortTermMemoryEvent =
         productId?: string;
         productKind?: string;
       };
+      productsMentioned?: Array<{
+        spokenName: string;
+        productId?: string;
+        productKind?: string | null;
+      }>;
       lastAgentQuestion?: string;
       linksSent?: Array<{
         url: string;
@@ -159,7 +164,7 @@ const REPEAT_REQUEST = /\b(?:(?:nochmal|noch mal)\s+(?:sagen|wiederholen|nennen|
 const FAREWELL = /\b(?:tsch[uü]ss|ciao|auf wiederh[oö]ren|bis dann|sch[oö]nen tag noch|das war(?:'| e)?s|das war alles|nein danke,?\s+das war alles|leg auf|beende den anruf|du kannst auflegen)\b/i;
 // A farewell keyword inside a negated or continuing turn is NOT a goodbye:
 // "leg nicht auf", "nicht auflegen", "das war's noch nicht", "noch eine Frage".
-const NOT_FAREWELL = /\b(?:nicht|nie)\s+auf(?:legen|h[äa]ngen)|leg\s+nicht\s+auf|nicht\s+(?:beenden|auflegen)|noch\s+nicht\b|noch\s+(?:eine|ne|'?n)?\s*frage|warte|moment\b/i;
+const NOT_FAREWELL = /\b(?:nicht|nie)\s+auf(?:legen|h[äa]ngen)|leg\s+nicht\s+auf|nicht\s+(?:beenden|auflegen)|noch\s+nicht\b|noch\s+(?:eine|ne|'?n)?\s*frage|warte|moment\b|ach\s+nein|doch\s+nicht|eine?\s+sache\s+noch|noch\s+(?:et)?was\b/i;
 const ACK_ONLY = /^(?:alles klar|okay|ok|ja|genau|passt|danke)$/i;
 const PERFUME_PRICE_CONTEXT = /\b(?:parfum|eau de parfum|duft|herrenduft|damenduft|unisexduft|edp|cologne|lattafa)\b/i;
 const PRODUCT_FACT_KEY = /^product\.(.+)\.(description|size|price|location|availability|usage|brand|category|link)$/;
@@ -337,6 +342,30 @@ function reduceAgentSpoke(
   let recentProducts = memory.recentProducts;
   let activeProductType = memory.activeProductType;
 
+  // Make every product spoken about in this turn known (conversation state
+  // and recency), before the primary lastProduct so the primary stays the
+  // most recent entry.
+  for (const mention of (event.productsMentioned ?? []).slice(0, MAX_RECENT_PRODUCTS)) {
+    const product = rememberedProduct(
+      {
+        spokenName: mention.spokenName,
+        productId: mention.productId,
+        productKind: mention.productKind ?? undefined,
+      },
+      event.turnIndex,
+    );
+    productConversations = upsertProductConversation(productConversations, {
+      productKeyHash: product.productKeyHash,
+      spokenName: product.spokenName,
+      productKind: product.productKind,
+      turnIndex: event.turnIndex,
+    });
+    recentProducts = [
+      ...recentProducts.filter((item) => item.productKeyHash !== product.productKeyHash),
+      product,
+    ].slice(-MAX_RECENT_PRODUCTS);
+  }
+
   if (event.lastProduct) {
     const product = rememberedProduct(event.lastProduct, event.turnIndex);
     productConversations = upsertProductConversation(productConversations, {
@@ -367,10 +396,17 @@ function reduceAgentSpoke(
 
     const productFact = productFactFromKey(fact.key);
     if (productFact) {
+      // Attribute the fact to the product named in its key — never blanket
+      // to lastMentionedProduct (multi-product replies would otherwise write
+      // facts onto the wrong product).
+      const factHash = productKeyHash(productFact.productId);
+      const knownName = productConversations[factHash]?.spokenName
+        ?? (lastMentionedProduct?.productKeyHash === factHash ? lastMentionedProduct.spokenName : 'Produkt');
       productConversations = upsertProductConversation(productConversations, {
-        productKeyHash: lastMentionedProduct?.productKeyHash ?? productKeyHash(productFact.productId),
-        spokenName: lastMentionedProduct?.spokenName ?? 'Produkt',
-        productKind: lastMentionedProduct?.productKind ?? null,
+        productKeyHash: factHash,
+        spokenName: knownName,
+        productKind: productConversations[factHash]?.productKind
+          ?? (lastMentionedProduct?.productKeyHash === factHash ? lastMentionedProduct.productKind : null),
         turnIndex: event.turnIndex,
         factKind: productFact.factKind,
       });
