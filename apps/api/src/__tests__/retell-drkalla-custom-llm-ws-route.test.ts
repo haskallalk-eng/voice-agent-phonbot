@@ -519,4 +519,32 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     ws.close();
     await app.close();
   });
+
+  it('greets in Sie on call open (empty first turn) without calling the model', async () => {
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
+    let modelCalls = 0;
+    const { app, url } = await testServer({ complete: async () => { modelCalls += 1; return 'unused'; } });
+    const ws = await connect(url);
+
+    // Retell elicits the opening line with an empty response_required.
+    ws.send(JSON.stringify({ interaction_type: 'response_required', response_id: 0, transcript: [] }));
+    const first = await receive(ws);
+
+    expect(modelCalls).toBe(0);
+    expect(first).toMatchObject({ response_type: 'response', response_id: 0, content_complete: true, end_call: false });
+    expect(JSON.stringify(first)).toContain('Wie kann ich Ihnen');
+    expect(JSON.stringify(first)).not.toMatch(/\b(?:du|dich|dir|dein)\b/i);
+
+    // A following real turn is handled normally (not greeted again).
+    ws.send(JSON.stringify({
+      interaction_type: 'response_required', response_id: 1,
+      transcript: [{ role: 'user', content: 'Wie sind Ihre Öffnungszeiten?' }],
+    }));
+    const second = await receive(ws) as { content: string };
+    expect(second.content).not.toContain('Wie kann ich Ihnen bei Friseurbedarf helfen');
+
+    ws.close();
+    await app.close();
+  });
 });
