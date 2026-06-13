@@ -12,7 +12,12 @@ import {
   type DrkallaDialogueResponsePlan,
   type DrkallaDialogueView,
 } from './drkalla-dialogue-view.js';
+import type { DrkallaProductNameDetector } from './drkalla-product-name-detector.js';
 import type { CanonicalRuntimeEvent } from './voice-runtime-contract.js';
+
+export type DrkallaMemoryRuntimeOptions = {
+  detectProducts?: DrkallaProductNameDetector;
+};
 
 export type DrkallaMemoryRuntimeSession = {
   mode: DrkallaRuntimeMode;
@@ -47,22 +52,26 @@ function audioStateFromText(text: string): 'heard' | 'inaudible' {
 function reduceRuntimeSpeech(
   memory: DrkallaShortTermVoiceMemory,
   event: Extract<CanonicalRuntimeEvent, { type: 'AgentTurnRequested' | 'UserSpeechFinal' | 'UserSpeechPartial' }>,
+  options?: DrkallaMemoryRuntimeOptions,
 ): DrkallaShortTermVoiceMemory {
   const text = event.type === 'AgentTurnRequested'
     ? event.currentUserText ?? ''
     : event.text;
   if (!text.trim()) return memory;
+  const audioState = audioStateFromText(text);
   return reduceDrkallaShortTermMemory(memory, {
     type: 'user_audio',
     turnIndex: event.sequence ?? 0,
     text,
-    audioState: audioStateFromText(text),
+    audioState,
+    productsMentioned: audioState === 'heard' ? options?.detectProducts?.(text) : undefined,
   });
 }
 
 export function applyDrkallaMemoryRuntimeEvent(
   session: DrkallaMemoryRuntimeSession,
   event: CanonicalRuntimeEvent,
+  options?: DrkallaMemoryRuntimeOptions,
 ): DrkallaMemoryRuntimeResult {
   let memory = session.memory;
   if (
@@ -70,7 +79,7 @@ export function applyDrkallaMemoryRuntimeEvent(
     || event.type === 'UserSpeechFinal'
     || event.type === 'UserSpeechPartial'
   ) {
-    memory = reduceRuntimeSpeech(memory, event);
+    memory = reduceRuntimeSpeech(memory, event, options);
   }
 
   const canInject = session.mode === 'custom_runtime' && isDrkallaMemorySafeForModel(memory);

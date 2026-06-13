@@ -130,7 +130,46 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
       response_id: 'response-2',
       end_call: false,
     });
-    expect(JSON.stringify(second)).toContain('Sag bitte nur ein Stichwort');
+    expect(JSON.stringify(second)).toContain('Ich habe es akustisch nicht verstanden.');
+
+    ws.close();
+    await app.close();
+  });
+
+  it('suppresses a stale reply when a newer user turn arrives during a slow model call', async () => {
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
+    let modelCalls = 0;
+    const { app, url } = await testServer({
+      complete: async ({ user }) => {
+        modelCalls += 1;
+        if (modelCalls === 1) {
+          // First turn is slow; the caller barges in before it resolves.
+          await new Promise((resolve) => setTimeout(resolve, 150));
+        }
+        return `Antwort auf: ${user}`;
+      },
+    });
+    const ws = await connect(url);
+    const received: unknown[] = [];
+    ws.on('message', (data) => received.push(JSON.parse(data.toString())));
+
+    ws.send(JSON.stringify({
+      interaction_type: 'response_required',
+      response_id: 1,
+      transcript: [{ role: 'user', content: 'Was kostet die alte Frage?' }],
+    }));
+    ws.send(JSON.stringify({
+      interaction_type: 'response_required',
+      response_id: 2,
+      transcript: [{ role: 'user', content: 'Stopp, ich meine den Kamm.' }],
+    }));
+
+    await new Promise((resolve) => setTimeout(resolve, 600));
+
+    // The stale reply for response 1 is dropped; only the newest turn speaks.
+    expect(received).toHaveLength(1);
+    expect(received[0]).toMatchObject({ response_type: 'response', response_id: 2 });
 
     ws.close();
     await app.close();

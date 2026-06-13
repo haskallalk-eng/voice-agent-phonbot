@@ -3,11 +3,24 @@ import {
   type DrkallaCustomRuntimeCanaryConfig,
 } from './drkalla-custom-runtime-canary.js';
 import {
+  deriveDrkallaAgentSpokeEvent,
+  type DrkallaProductNameDetector,
+} from './drkalla-product-name-detector.js';
+import {
   nextInaudibleRepair,
+  reduceDrkallaShortTermMemory,
   type DrkallaShortTermVoiceMemory,
 } from './drkalla-short-term-memory.js';
 import { evaluateTurnTakingGuard } from './turn-taking-guard.js';
 import type { AgentTurnRequestedEvent } from './voice-runtime-contract.js';
+
+// Canonical first-price wording (project spec): said once per call for
+// non-perfume prices, then never repeated unless the caller explicitly asks
+// about Profi prices again.
+export const DRKALLA_PROFI_PRICE_DISCLOSURE =
+  'Das sind die Preise für normale Käufer. Spezielle Profi-Friseurpreise kann ich telefonisch nicht nennen; dafür können Sie sich über den Profi-Zugang registrieren.';
+export const DRKALLA_PROFI_LINK_QUESTION =
+  'Soll ich Ihnen den Produktlink oder den Link zum Profi-Zugang per SMS schicken?';
 
 export type DrkallaCustomLlmClient = {
   complete(input: {
@@ -62,31 +75,50 @@ function fallbackText(userText: string): string {
   return 'Ich prüfe das kurz. Sag mir bitte, welches Produkt oder welche Produktart du meinst.';
 }
 
+type DrkallaFallbackResult = {
+  text: string;
+  product?: { spokenName: string; productId?: string; productKind?: string | null };
+};
+
 function fallbackTextWithMemory(input: {
   userText: string;
   memory: DrkallaShortTermVoiceMemory;
-}): string {
+}): DrkallaFallbackResult {
   const userText = input.userText;
+  const lastProduct = input.memory.lastMentionedProduct;
   if (/\bunterschied|vergleich\b/i.test(userText)) {
     const recent = input.memory.recentProducts.slice(-2);
     if (recent.length >= 2) {
-      return `Ich pruefe den Unterschied zwischen ${recent[0]?.spokenName} und ${recent[1]?.spokenName}. Geht es dir um Anwendung oder Kaufentscheidung?`;
+      return {
+        text: `Ich pruefe den Unterschied zwischen ${recent[0]?.spokenName} und ${recent[1]?.spokenName}. Geht es dir um Anwendung oder Kaufentscheidung?`,
+      };
     }
-    return fallbackText(userText);
+    return { text: fallbackText(userText) };
   }
-  if (/\b(?:preis|kostet|kosten|teuer|euro)\b/i.test(userText) && input.memory.lastMentionedProduct) {
-    if (input.memory.profiPriceDisclosureGiven) {
-      return `Soll ich dir den Produktlink zu ${input.memory.lastMentionedProduct.spokenName} per SMS schicken?`;
+  if (/\b(?:preis|kostet|kosten|teuer|euro)\b/i.test(userText) && lastProduct) {
+    if (input.memory.profiPriceDisclosureGiven && !/\bprofi/i.test(userText)) {
+      return {
+        text: `Soll ich dir den Produktlink zu ${lastProduct.spokenName} per SMS schicken?`,
+        product: lastProduct,
+      };
     }
-    return 'Das ist der normale Kaeuferpreis; Profi-Friseurpreise kann ich telefonisch nicht nennen. Soll ich dir den Produktlink oder den Profi-Zugang per SMS schicken?';
+    return {
+      text: `${DRKALLA_PROFI_PRICE_DISCLOSURE} ${DRKALLA_PROFI_LINK_QUESTION}`,
+      product: lastProduct,
+    };
   }
-  if (/\blink|kauf|kaufe|bestell|sms\b/i.test(userText) && input.memory.lastMentionedProduct) {
-    return `Soll ich dir den Produktlink zu ${input.memory.lastMentionedProduct.spokenName} per SMS schicken?`;
+  if (/\blink|kauf|kaufe|bestell|sms\b/i.test(userText) && lastProduct) {
+    return {
+      text: `Soll ich dir den Produktlink zu ${lastProduct.spokenName} per SMS schicken?`,
+      product: lastProduct,
+    };
   }
   if (input.memory.activeProductType) {
-    return `Bei ${input.memory.activeProductType.label} kann ich dir eine kurze Auswahl nach Marken, Varianten oder Nuancen nennen. Soll ich mit Marken anfangen?`;
+    return {
+      text: `Bei ${input.memory.activeProductType.label} kann ich dir eine kurze Auswahl nach Marken, Varianten oder Nuancen nennen. Soll ich mit Marken anfangen?`,
+    };
   }
-  return fallbackText(userText);
+  return { text: fallbackText(userText) };
 }
 
 export async function buildDrkallaCustomLlmResponse(input: {
@@ -94,12 +126,15 @@ export async function buildDrkallaCustomLlmResponse(input: {
   event: AgentTurnRequestedEvent;
   memory: DrkallaShortTermVoiceMemory;
   client: DrkallaCustomLlmClient;
+  detectProducts?: DrkallaProductNameDetector;
 }): Promise<DrkallaCustomLlmResponse> {
   const canaryTurn = buildDrkallaCustomRuntimeCanaryTurn({
     canary: input.canary,
     event: input.event,
     memory: input.memory,
+    runtimeOptions: { detectProducts: input.detectProducts },
   });
+  const turnIndex = input.event.sequence ?? 0;
 
   if (!canaryTurn.enabled) {
     return {
@@ -125,10 +160,14 @@ export async function buildDrkallaCustomLlmResponse(input: {
     inaudibleStreak: canaryTurn.runtime.memory.inaudibleStreak,
   });
   if (turnGuard.action === 'repair_prompt') {
+    const repairText = nextInaudibleRepair(canaryTurn.runtime.memory);
     return {
       blocked: false,
-      text: nextInaudibleRepair(canaryTurn.runtime.memory),
-      memory: canaryTurn.runtime.memory,
+      text: repairText,
+      memory: reduceDrkallaShortTermMemory(
+        canaryTurn.runtime.memory,
+        deriveDrkallaAgentSpokeEvent({ text: repairText, turnIndex }),
+      ),
       metrics: {
         extraLlmCalls: 0,
         extraKbCalls: 0,
@@ -138,16 +177,34 @@ export async function buildDrkallaCustomLlmResponse(input: {
     };
   }
 
-  const text = (await input.client.complete({
+  const modelText = (await input.client.complete({
     system: compactSystemPrompt(canaryTurn.modelDirectives),
     user,
     maxOutputChars: 420,
   })).trim().slice(0, 420);
 
+  const fallback = modelText
+    ? null
+    : fallbackTextWithMemory({ userText: user, memory: canaryTurn.runtime.memory });
+  const spokenText = modelText || (fallback?.text ?? '');
+
+  // Reduce what the agent is about to say back into short-term memory so the
+  // funnel, per-product fact dedupe, and the once-only Profi disclosure work
+  // across live turns. Pure text analysis: no extra LLM call, no KB call.
+  const memoryAfterAgentTurn = reduceDrkallaShortTermMemory(
+    canaryTurn.runtime.memory,
+    deriveDrkallaAgentSpokeEvent({
+      text: spokenText,
+      turnIndex,
+      detectProducts: input.detectProducts,
+      fallbackProduct: fallback?.product,
+    }),
+  );
+
   return {
     blocked: false,
-    text: text || fallbackTextWithMemory({ userText: user, memory: canaryTurn.runtime.memory }),
-    memory: canaryTurn.runtime.memory,
+    text: spokenText,
+    memory: memoryAfterAgentTurn,
     metrics: {
       extraLlmCalls: 1,
       extraKbCalls: 0,
