@@ -141,6 +141,38 @@ export function parseRetellDrkallaCustomLlmMessage(raw: string): RetellDrkallaCu
   };
 }
 
+export type RetellDrkallaControlFrame = {
+  interactionType: string;
+  timestamp: number | null;
+  fromNumber: string;
+};
+
+/**
+ * Lightweight read of the real Retell custom-LLM control frames that carry no
+ * response_id and so are rejected by parseRetellDrkallaCustomLlmMessage:
+ *   - ping_pong   : keepalive; Retell expects the same timestamp echoed back.
+ *   - call_details: one-shot call metadata at connect (from/to numbers, etc.).
+ *   - update_only : transcript refresh with no reply expected.
+ * Fail-soft: malformed frames return null and are treated as unknown/no-op.
+ */
+export function parseRetellControlFrame(raw: string): RetellDrkallaControlFrame | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const message = asObject(parsed);
+  if (!message) return null;
+  const interactionType = firstString(message.interaction_type, message.event);
+  if (!interactionType) return null;
+  const ts = message.timestamp;
+  const timestamp = typeof ts === 'number' && Number.isFinite(ts) ? ts : null;
+  const call = asObject(message.call);
+  const fromNumber = call ? firstString(call.from_number, call.from) : '';
+  return { interactionType, timestamp, fromNumber };
+}
+
 function canaryTrustedScope() {
   return createTrustedScope({
     orgId: 'demo-drkalla',
@@ -532,6 +564,7 @@ export async function registerRetellDrkallaCustomLlmWs(
     let latestArrival = 0;
     let noInputReminderCount = 0;
     let greeted = false;
+    let loggedCallDetails = false;
     let processing: Promise<void> = Promise.resolve();
     // The model call of the turn currently allowed to speak. A newer turn
     // aborts it on arrival (barge-in) so the serialized chain does not wait
@@ -545,6 +578,42 @@ export async function registerRetellDrkallaCustomLlmWs(
 
     socket.on('message', (message) => {
       const rawMessage = message.toString();
+
+      // Real Retell custom-LLM control frames (no response_id) are handled here
+      // and never enter the serialized turn chain or affect barge-in ordering.
+      const control = parseRetellControlFrame(rawMessage);
+      const controlType = control?.interactionType ?? '';
+
+      // ping_pong keepalive: Retell sends one every ~2s and expects the same
+      // timestamp echoed back, else it may treat the socket as dead. Echo and
+      // return immediately — must not abort the in-flight model call or log.
+      if (controlType === 'ping_pong') {
+        if (control?.timestamp != null) {
+          socket.send(JSON.stringify({ response_type: 'ping_pong', timestamp: control.timestamp }));
+        }
+        return;
+      }
+
+      // call_details: one-shot connect metadata (caller/callee numbers). Log
+      // once for diagnostics, never respond. The SMS link tool still resolves
+      // the caller number server-side via call_id, so we only record presence.
+      if (controlType === 'call_details') {
+        if (!loggedCallDetails) {
+          loggedCallDetails = true;
+          app.log.info({ callId, hasCaller: control?.fromNumber !== '' }, 'drkalla canary call_details');
+        }
+        return;
+      }
+
+      // Anything that is not a turn (update_only transcript refresh, unknown, or
+      // malformed) produces no reply. Log the raw type once so a real call can
+      // be analyzed, then return — response/reminder turns emit their own
+      // latency log below, so they are not double-logged here.
+      if (controlType !== 'response_required' && controlType !== 'reminder_required') {
+        app.log.info({ callId, interactionType: controlType || 'unknown' }, 'drkalla canary non-turn interaction');
+        return;
+      }
+
       // Track arrival order so a reply computed for an older response_required
       // is dropped once a newer user turn has arrived (barge-in safety).
       const parsedPreview = parseRetellDrkallaCustomLlmMessage(rawMessage);
