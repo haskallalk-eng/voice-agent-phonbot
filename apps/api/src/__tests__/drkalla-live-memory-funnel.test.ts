@@ -12,6 +12,7 @@ import {
 } from '../drkalla-product-name-detector.js';
 import {
   createDrkallaShortTermMemory,
+  isFactMentionAllowed,
   nextDrkallaProductFunnelAction,
   nextInaudibleRepair,
   reduceDrkallaShortTermMemory,
@@ -643,6 +644,47 @@ describe('DrKalla ambiguous product names', () => {
     expect(response.text).toContain('Universal Salonhandtuch');
     expect(response.memory.pendingClarification?.kind).toBe('product_variant');
     expect(response.metrics.extraLlmCalls).toBe(0);
+  });
+});
+
+describe('DrKalla funnel: product-type switch + repeat gate (Codex rank 11/12)', () => {
+  it('B: stating a new product type while a product is active drops the stale product', () => {
+    // A-red: lastMentionedProduct stayed set, so the funnel kept offering the
+    // old color cream when the caller pivoted to shampoos.
+    const withProduct = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 1,
+      text: 'Die Synthesis Color Cream ist eine Farbcreme.',
+      lastProduct: { spokenName: 'Synthesis Color Cream', productId: 'synthesis-color-cream', productKind: 'Haarfarbe/Farbcreme' },
+    });
+    expect(withProduct.lastMentionedProduct).not.toBeNull();
+    const switched = reduceDrkallaShortTermMemory(withProduct, {
+      type: 'user_audio', turnIndex: 2, text: 'Und habt ihr auch Shampoos?', audioState: 'heard',
+    });
+    expect(switched.lastMentionedProduct).toBeNull();
+    expect(switched.recentProducts).toHaveLength(0);
+    expect(switched.activeProductType?.label).toContain('Shampoo');
+  });
+
+  it('B: stating the same product type keeps the active product', () => {
+    const withProduct = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke', turnIndex: 1, text: 'Farbcreme.',
+      lastProduct: { spokenName: 'Synthesis Color Cream', productId: 'synthesis-color-cream', productKind: 'Haarfarbe/Farbcreme' },
+    });
+    const same = reduceDrkallaShortTermMemory(withProduct, {
+      type: 'user_audio', turnIndex: 2, text: 'Habt ihr noch andere Haarfarben?', audioState: 'heard',
+    });
+    expect(same.lastMentionedProduct?.spokenName).toBe('Synthesis Color Cream');
+  });
+
+  it('B: broadened repeat requests re-allow a previously spoken fact', () => {
+    const spoken = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke', turnIndex: 1, text: 'Unsere Adresse ist Silbersteinstraße 83.',
+      factsMentioned: [{ key: 'contact.address', label: 'Adresse' }],
+    });
+    expect(isFactMentionAllowed(spoken, 'contact.address', 'okay')).toBe(false);
+    expect(isFactMentionAllowed(spoken, 'contact.address', 'Wie war das?')).toBe(true);
+    expect(isFactMentionAllowed(spoken, 'contact.address', 'Kannst du das nochmal sagen?')).toBe(true);
   });
 });
 

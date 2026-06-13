@@ -160,7 +160,7 @@ const RAW_ADDRESS = /\b[\p{L}ÄÖÜäöüß-]+(?:strasse|straße|weg|platz|allee
 const TITLED_PERSON_NAME = /\b(?:Herr|Frau)\s+[A-ZÄÖÜ][\p{L}ÄÖÜäöüß-]+\s+[A-ZÄÖÜ][\p{L}ÄÖÜäöüß-]+\b/gu;
 const FOR_PERSON_NAME = /\b(f(?:ue|ü)r)\s+[A-ZÄÖÜ][\p{L}ÄÖÜäöüß-]+\s+[A-ZÄÖÜ][\p{L}ÄÖÜäöüß-]+\b/gu;
 const LEADING_PERSON_NAME = /^[A-ZÄÖÜ][\p{L}ÄÖÜäöüß-]+\s+[A-ZÄÖÜ][\p{L}ÄÖÜäöüß-]+(?=,)/u;
-const REPEAT_REQUEST = /\b(?:(?:nochmal|noch mal)\s+(?:sagen|wiederholen|nennen|erkl[aä]ren|h[oö]ren)|wiederhol|sag.*noch|adresse nochmal|zeiten nochmal|(?:wie|was) war (?:der|die|das) (?:preis|name|link|adresse|uhrzeit|telefonnummer|nummer|produkt))\b/i;
+const REPEAT_REQUEST = /\b(?:(?:nochmal|noch mal)\s+(?:sagen|wiederholen|nennen|erkl[aä]ren|h[oö]ren)|wiederhol|sag.*noch|kannst du (?:das|es)\s+(?:nochmal|noch mal|wiederholen)|k[oö]nnen sie (?:das|es)\s+(?:nochmal|noch mal|wiederholen)|adresse nochmal|zeiten nochmal|wie war das|was war das|(?:wie|was) war (?:der|die|das) (?:preis|name|link|adresse|uhrzeit|telefonnummer|nummer|produkt))\b/i;
 const FAREWELL = /\b(?:tsch[uü]ss|ciao|auf wiederh[oö]ren|bis dann|sch[oö]nen tag noch|das war(?:'| e)?s|das war alles|nein danke,?\s+das war alles|leg auf|beende den anruf|du kannst auflegen)\b/i;
 // A farewell keyword inside a negated or continuing turn is NOT a goodbye:
 // "leg nicht auf", "nicht auflegen", "das war's noch nicht", "noch eine Frage".
@@ -490,6 +490,21 @@ function reduceUserAudio(
       product,
     ].slice(-MAX_RECENT_PRODUCTS);
     mentionedProductKind = product.productKind ?? mentionedProductKind;
+  }
+
+  // The caller stated a NEW product type (not a concrete product) that differs
+  // from the active product's kind: drop the stale product so the funnel moves
+  // to the new type instead of repeatedly offering the old product.
+  const switchedType = Boolean(
+    userProductType
+    && !mentionedProductKind
+    && lastMentionedProduct
+    && (lastMentionedProduct.productKind ?? '').toLocaleLowerCase('de-DE')
+      !== userProductType.toLocaleLowerCase('de-DE'),
+  );
+  if (switchedType) {
+    lastMentionedProduct = null;
+    recentProducts = [];
   }
 
   return {
