@@ -56,7 +56,7 @@ describe('DrKalla short-term voice memory', () => {
     });
 
     expect(nextInaudibleRepair(once)).toContain('Wie bitte');
-    expect(nextInaudibleRepair(twice)).toContain('Stichwort');
+    expect(nextInaudibleRepair(twice)).toContain('Ich habe es akustisch nicht verstanden.');
     expect(nextInaudibleRepair(third)).toContain('lauter');
     expect(once.endCallEligible).toBe(false);
     expect(twice.endCallEligible).toBe(false);

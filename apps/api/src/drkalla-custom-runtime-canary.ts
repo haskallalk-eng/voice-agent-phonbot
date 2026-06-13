@@ -1,6 +1,7 @@
 import {
   applyDrkallaMemoryRuntimeEvent,
   createDrkallaMemoryRuntimeSession,
+  type DrkallaMemoryRuntimeOptions,
   type DrkallaMemoryRuntimeResult,
 } from './drkalla-memory-runtime.js';
 import type { DrkallaShortTermVoiceMemory } from './drkalla-short-term-memory.js';
@@ -73,6 +74,7 @@ export function buildDrkallaCustomRuntimeCanaryTurn(input: {
   canary: DrkallaCustomRuntimeCanaryConfig;
   memory: DrkallaShortTermVoiceMemory;
   event: AgentTurnRequestedEvent;
+  runtimeOptions?: DrkallaMemoryRuntimeOptions;
 }): DrkallaCustomRuntimeCanaryTurn {
   const runtime = applyDrkallaMemoryRuntimeEvent(
     createDrkallaMemoryRuntimeSession({
@@ -80,6 +82,7 @@ export function buildDrkallaCustomRuntimeCanaryTurn(input: {
       memory: input.memory,
     }),
     input.event,
+    input.runtimeOptions,
   );
   const blockers: DrkallaCustomRuntimeCanaryBlocker[] = [];
   if (!input.canary.enabled) blockers.push('CANARY_NOT_ENABLED');

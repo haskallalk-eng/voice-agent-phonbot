@@ -3,6 +3,7 @@ import {
   DRKALLA_MEMORY_AB_CATEGORY_TARGETS,
   buildDrkallaMemoryAbCases,
   evaluateDrkallaMemoryAbCase,
+  evaluateDrkallaPromptCompressionNoRegression,
   runDrkallaMemoryAbSimulation,
   sanitizeDrkallaMemoryAbReport,
 } from '../drkalla-memory-ab-simulation.js';
@@ -40,6 +41,20 @@ describe('DrKalla memory A/B simulation matrix', () => {
     expect(report.aFailureByCategory.end_call_boundaries).toBeGreaterThan(0);
     expect(report.aFailureByCategory.sms_link_dedupe).toBeGreaterThan(0);
     expect(report.aFailureByCategory.prompt_compression_no_regression).toBe(0);
+  });
+
+  it('A: a tampered compact candidate fails the non-vacuous compression gate', () => {
+    // The matrix runs 0 prompt_compression_no_regression cases, so the report
+    // flag must come from a real evaluation, never from vacuous counts.
+    const tampered = evaluateDrkallaPromptCompressionNoRegression('Kurzer Prompt ohne Anker.');
+    expect(tampered.passed).toBe(false);
+    expect(tampered.reasons).toContain('CANDIDATE_OVER_CAP_OR_MISSING_ANCHORS');
+  });
+
+  it('B: the active compact candidate passes the non-vacuous compression gate', () => {
+    const result = evaluateDrkallaPromptCompressionNoRegression();
+    expect(result.passed).toBe(true);
+    expect(result.reasons).toEqual([]);
   });
 
   it('evaluates every category with a real assertion instead of falling through to pass', () => {

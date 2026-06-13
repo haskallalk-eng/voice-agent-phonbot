@@ -18,7 +18,11 @@ export type DrkallaMemoryFactKey =
   | `product.${string}.size`
   | `product.${string}.price`
   | `product.${string}.location`
-  | `product.${string}.availability`;
+  | `product.${string}.availability`
+  | `product.${string}.usage`
+  | `product.${string}.brand`
+  | `product.${string}.category`
+  | `product.${string}.link`;
 
 export type DrkallaStoredMemoryFactKey =
   | 'contact.address'
@@ -35,7 +39,16 @@ export type DrkallaMemoryFact = {
 };
 
 export type DrkallaMemoryAudioState = 'heard' | 'inaudible' | 'silence';
-export type DrkallaProductFactKind = 'description' | 'size' | 'price' | 'location' | 'availability';
+export type DrkallaProductFactKind =
+  | 'description'
+  | 'size'
+  | 'price'
+  | 'location'
+  | 'availability'
+  | 'usage'
+  | 'brand'
+  | 'category'
+  | 'link';
 export type DrkallaProductFunnelAction =
   | 'ask_goal_or_product_type'
   | 'clarify_variant'
@@ -77,6 +90,11 @@ export type DrkallaShortTermMemoryEvent =
       text: string;
       audioState: DrkallaMemoryAudioState;
       silenceMs?: number;
+      productsMentioned?: Array<{
+        spokenName: string;
+        productId?: string;
+        productKind?: string | null;
+      }>;
     }
   | {
       type: 'pending_clarification';
@@ -139,10 +157,23 @@ const FOR_PERSON_NAME = /\b(f(?:ue|ü)r)\s+[A-ZÄÖÜ][\p{L}ÄÖÜäöüß-]+\s+
 const LEADING_PERSON_NAME = /^[A-ZÄÖÜ][\p{L}ÄÖÜäöüß-]+\s+[A-ZÄÖÜ][\p{L}ÄÖÜäöüß-]+(?=,)/u;
 const REPEAT_REQUEST = /\b(?:(?:nochmal|noch mal)\s+(?:sagen|wiederholen|nennen|erkl[aä]ren|h[oö]ren)|wiederhol|sag.*noch|adresse nochmal|zeiten nochmal|(?:wie|was) war (?:der|die|das) (?:preis|name|link|adresse|uhrzeit|telefonnummer|nummer|produkt))\b/i;
 const FAREWELL = /\b(?:tsch[uü]ss|ciao|auf wiederh[oö]ren|bis dann|sch[oö]nen tag noch|das war(?:'| e)?s|das war alles|nein danke,?\s+das war alles|leg auf|beende den anruf|du kannst auflegen)\b/i;
+// A farewell keyword inside a negated or continuing turn is NOT a goodbye:
+// "leg nicht auf", "nicht auflegen", "das war's noch nicht", "noch eine Frage".
+const NOT_FAREWELL = /\b(?:nicht|nie)\s+auf(?:legen|h[äa]ngen)|leg\s+nicht\s+auf|nicht\s+(?:beenden|auflegen)|noch\s+nicht\b|noch\s+(?:eine|ne|'?n)?\s*frage|warte|moment\b/i;
 const ACK_ONLY = /^(?:alles klar|okay|ok|ja|genau|passt|danke)$/i;
 const PERFUME_PRICE_CONTEXT = /\b(?:parfum|eau de parfum|duft|herrenduft|damenduft|unisexduft|edp|cologne|lattafa)\b/i;
-const PRODUCT_FACT_KEY = /^product\.(.+)\.(description|size|price|location|availability)$/;
-const PRODUCT_FACT_ORDER: DrkallaProductFactKind[] = ['description', 'size', 'price', 'location', 'availability'];
+const PRODUCT_FACT_KEY = /^product\.(.+)\.(description|size|price|location|availability|usage|brand|category|link)$/;
+const PRODUCT_FACT_ORDER: DrkallaProductFactKind[] = [
+  'description',
+  'size',
+  'price',
+  'location',
+  'availability',
+  'usage',
+  'brand',
+  'category',
+  'link',
+];
 const MAX_HEARD_FACTS = 40;
 const MAX_SENT_LINKS = 12;
 const MAX_PRODUCT_CONVERSATIONS = 6;
@@ -391,15 +422,51 @@ function reduceUserAudio(
     };
   }
   const text = event.text.trim();
-  const clearFarewell = FAREWELL.test(text) && !ACK_ONLY.test(text);
+  const clearFarewell = FAREWELL.test(text)
+    && !ACK_ONLY.test(text)
+    && !NOT_FAREWELL.test(text)
+    && !/\?\s*$/.test(text);
   const clearsPending = text.length > 0 && !ACK_ONLY.test(text);
   const userProductType = detectUserProductType(text);
+
+  let productConversations = memory.productConversations;
+  let lastMentionedProduct = memory.lastMentionedProduct;
+  let recentProducts = memory.recentProducts;
+  let mentionedProductKind: string | null = null;
+  for (const mention of (event.productsMentioned ?? []).slice(0, 2)) {
+    const product = rememberedProduct(
+      {
+        spokenName: mention.spokenName,
+        productId: mention.productId,
+        productKind: mention.productKind ?? undefined,
+      },
+      event.turnIndex,
+    );
+    productConversations = upsertProductConversation(productConversations, {
+      productKeyHash: product.productKeyHash,
+      spokenName: product.spokenName,
+      productKind: product.productKind,
+      turnIndex: event.turnIndex,
+    });
+    lastMentionedProduct = product;
+    recentProducts = [
+      ...recentProducts.filter((item) => item.productKeyHash !== product.productKeyHash),
+      product,
+    ].slice(-MAX_RECENT_PRODUCTS);
+    mentionedProductKind = product.productKind ?? mentionedProductKind;
+  }
+
   return {
     ...memory,
     pendingClarification: clearsPending ? null : memory.pendingClarification,
+    productConversations: capRecord(productConversations, MAX_PRODUCT_CONVERSATIONS, (entry) => entry.lastMentionedTurn),
+    lastMentionedProduct,
+    recentProducts,
     activeProductType: userProductType
       ? { label: userProductType, turnIndex: event.turnIndex }
-      : memory.activeProductType,
+      : mentionedProductKind
+        ? { label: mentionedProductKind, turnIndex: event.turnIndex }
+        : memory.activeProductType,
     inaudibleStreak: 0,
     silenceMs: 0,
     endCallEligible: clearFarewell,
@@ -470,21 +537,21 @@ export function shouldIncludeDrkallaProfiPriceDisclosure(
 
 export function nextInaudibleRepair(memory: DrkallaShortTermVoiceMemory): string {
   if (memory.inaudibleStreak <= 1) {
-    return 'Wie bitte? Ich habe dich gerade schlecht verstanden. Suchst du ein Produkt, eine Kategorie oder Bestellung?';
+    return 'Wie bitte?';
   }
   if (memory.pendingClarification && memory.inaudibleStreak === 2) {
-    return `Ich habe dich akustisch nicht verstanden. ${memory.pendingClarification.prompt}`;
+    return `Ich habe es akustisch nicht verstanden. ${memory.pendingClarification.prompt}`;
   }
   if (memory.lastMentionedProduct && memory.inaudibleStreak === 2) {
-    return `Ich habe dich akustisch nicht verstanden. Bleiben wir bei ${memory.lastMentionedProduct.spokenName}?`;
+    return `Ich habe es akustisch nicht verstanden. Bleiben wir bei ${memory.lastMentionedProduct.spokenName}?`;
   }
   if (memory.activeProductType && memory.inaudibleStreak === 2) {
-    return `Ich habe dich akustisch nicht verstanden. Geht es weiter um ${memory.activeProductType.label}?`;
+    return `Ich habe es akustisch nicht verstanden. Geht es weiter um ${memory.activeProductType.label}?`;
   }
   if (memory.inaudibleStreak === 2) {
-    return 'Sag bitte nur ein Stichwort: Produkt, Kategorie, Bestellung oder Kontakt.';
+    return 'Ich habe es akustisch nicht verstanden. Geht es um ein Produkt, eine Bestellung oder Kontakt?';
   }
-  return 'Die Verbindung ist gerade schwer zu verstehen. Sag bitte etwas lauter ein Stichwort.';
+  return 'Die Verbindung ist gerade schwer zu verstehen. Sag es bitte noch einmal lauter und deutlicher.';
 }
 
 export function nextDrkallaProductFunnelAction(
@@ -495,6 +562,14 @@ export function nextDrkallaProductFunnelAction(
   if (memory.pendingClarification?.kind === 'product_variant') return 'clarify_variant';
   if (/\b(?:unterschied|vergleich|verglichen)\b/.test(text) && memory.recentProducts.length >= 2) {
     return 'compare_recent_products';
+  }
+  // An explicit Profi-price/Profi-Zugang question reopens the Profi link offer
+  // even after the one-time normal-buyer disclosure was already given.
+  if (
+    /\bprofi[\s-]?(?:preis|preise|preisen|zugang|konditionen|rabatt)/.test(text)
+    && (memory.lastMentionedProduct || memory.activeProductType)
+  ) {
+    return 'offer_product_or_profi_link';
   }
   if (/\b(?:marken|auswahl|welche habt|was habt)\b/.test(text) && memory.activeProductType) {
     return 'list_active_product_type_selection';

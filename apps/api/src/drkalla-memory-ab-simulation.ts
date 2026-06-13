@@ -912,22 +912,38 @@ export function evaluateDrkallaMemoryAbCase(testCase: DrkallaMemoryAbCase): Drka
       break;
     }
     case 'prompt_compression_no_regression': {
-      const promptReport = evaluateDrkallaPromptCompression(DRKALLA_RAG_PROMPT_COMPACT_CANDIDATE);
-      const baselineSignature = promptBehaviorSignature(DRKALLA_RAG_PROMPT_BASELINE);
-      const activeSignature = promptBehaviorSignature(DRKALLA_RAG_PROMPT);
-      const candidateSignature = promptBehaviorSignature(DRKALLA_RAG_PROMPT_COMPACT_CANDIDATE);
-      bPasses = promptReport.passed
-        && evaluateDrkallaPromptCompression(DRKALLA_RAG_PROMPT).passed
-        && signaturePasses(baselineSignature)
-        && JSON.stringify(activeSignature) === JSON.stringify(baselineSignature)
-        && JSON.stringify(candidateSignature) === JSON.stringify(baselineSignature)
-        && DRKALLA_RAG_PROMPT_BASELINE.length > DRKALLA_RAG_PROMPT_COMPACT_CANDIDATE.length;
+      bPasses = evaluateDrkallaPromptCompressionNoRegression().passed;
       reason = 'prompt_candidate_under_cap_with_functional_behavior_signature';
       break;
     }
   }
 
   return { checked: true, aPasses, bPasses, reason };
+}
+
+/**
+ * Non-vacuous prompt-compression no-regression check. The category target in
+ * the 1000-case matrix is 0, so the report flag must never rely on per-case
+ * failure counts alone: this helper always evaluates the real candidate
+ * against cap, anchors, and the functional behavior signature.
+ */
+export function evaluateDrkallaPromptCompressionNoRegression(
+  candidate: string = DRKALLA_RAG_PROMPT_COMPACT_CANDIDATE,
+): { passed: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  const candidateReport = evaluateDrkallaPromptCompression(candidate);
+  if (!candidateReport.passed) reasons.push('CANDIDATE_OVER_CAP_OR_MISSING_ANCHORS');
+  if (!evaluateDrkallaPromptCompression(DRKALLA_RAG_PROMPT).passed) reasons.push('ACTIVE_PROMPT_OVER_CAP_OR_MISSING_ANCHORS');
+  const baselineSignature = promptBehaviorSignature(DRKALLA_RAG_PROMPT_BASELINE);
+  if (!signaturePasses(baselineSignature)) reasons.push('BASELINE_SIGNATURE_INVALID');
+  if (JSON.stringify(promptBehaviorSignature(DRKALLA_RAG_PROMPT)) !== JSON.stringify(baselineSignature)) {
+    reasons.push('ACTIVE_SIGNATURE_DIVERGES_FROM_BASELINE');
+  }
+  if (JSON.stringify(promptBehaviorSignature(candidate)) !== JSON.stringify(baselineSignature)) {
+    reasons.push('CANDIDATE_SIGNATURE_DIVERGES_FROM_BASELINE');
+  }
+  if (DRKALLA_RAG_PROMPT_BASELINE.length <= candidate.length) reasons.push('CANDIDATE_NOT_SHORTER_THAN_BASELINE');
+  return { passed: reasons.length === 0, reasons };
 }
 
 function emptyCounts(): Record<DrkallaMemoryAbCategory, number> {
@@ -985,7 +1001,8 @@ export function runDrkallaMemoryAbSimulation(input: {
     aFailureByCategory,
     bFailureByCategory,
     categoryCounts,
-    promptCompressionNoRegressionPassed: bFailureByCategory.prompt_compression_no_regression === 0,
+    promptCompressionNoRegressionPassed: bFailureByCategory.prompt_compression_no_regression === 0
+      && evaluateDrkallaPromptCompressionNoRegression().passed,
     compactPromptCandidateReady: evaluateDrkallaPromptCompression(DRKALLA_RAG_PROMPT_COMPACT_CANDIDATE).passed,
     activeRetellPromptUnderCap: evaluateDrkallaPromptCompression(DRKALLA_RAG_PROMPT).passed,
     memoryP95Ms,

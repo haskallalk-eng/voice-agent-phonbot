@@ -1,4 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import OpenAI from 'openai';
 import type { WebSocket } from 'ws';
@@ -7,11 +9,18 @@ import {
   type DrkallaCustomLlmClient,
 } from './drkalla-custom-llm-responder.js';
 import {
+  buildDrkallaProductNameDetector,
+  type DrkallaProductNameDetector,
+  type DrkallaProductNameEntry,
+} from './drkalla-product-name-detector.js';
+import {
   createDrkallaShortTermMemory,
   type DrkallaShortTermVoiceMemory,
 } from './drkalla-short-term-memory.js';
 import { createTrustedScope } from './trusted-scope.js';
 import type { AgentTurnRequestedEvent } from './voice-runtime-contract.js';
+
+const SAFE_UNAVAILABLE_TEXT = 'Entschuldigung, ich kann gerade nicht weiterhelfen. Bitte versuchen Sie es später noch einmal oder schreiben Sie an kontakt at drkalla punkt com.';
 
 export type RetellDrkallaCustomLlmParsedMessage = {
   interactionType: string;
@@ -115,7 +124,11 @@ function canaryTrustedScope() {
   });
 }
 
-function canonicalTurn(parsed: RetellDrkallaCustomLlmParsedMessage, callId: string): AgentTurnRequestedEvent {
+function canonicalTurn(
+  parsed: RetellDrkallaCustomLlmParsedMessage,
+  callId: string,
+  sequence: number,
+): AgentTurnRequestedEvent {
   const now = new Date().toISOString();
   return {
     type: 'AgentTurnRequested',
@@ -126,10 +139,52 @@ function canonicalTurn(parsed: RetellDrkallaCustomLlmParsedMessage, callId: stri
     channel: 'voice',
     providerCallId: callId,
     responseId: parsed.responseId,
+    sequence,
     occurredAt: now,
     receivedAt: now,
     currentUserText: parsed.currentUserText,
   };
+}
+
+type RawAliasEntry = {
+  handle?: unknown;
+  title?: unknown;
+  productType?: unknown;
+  url?: unknown;
+  spokenName?: unknown;
+  searchAliases?: unknown;
+};
+
+/**
+ * One-time startup load of the product alias snapshot (never per turn).
+ * Fail-soft: a missing or invalid snapshot disables product-name detection
+ * instead of breaking the canary route.
+ */
+export function loadDrkallaProductNameDetector(aliasPath?: string): DrkallaProductNameDetector | undefined {
+  const resolved = aliasPath
+    ?? process.env.DRKALLA_PRODUCT_ALIAS_PATH
+    ?? path.join(process.cwd(), 'tmp', 'drkalla-rag', 'drkalla-product-voice-aliases.json');
+  try {
+    const parsed = JSON.parse(readFileSync(resolved, 'utf8')) as { entries?: unknown };
+    if (!Array.isArray(parsed.entries)) return undefined;
+    const entries: DrkallaProductNameEntry[] = [];
+    for (const raw of parsed.entries as RawAliasEntry[]) {
+      if (typeof raw?.handle !== 'string' || typeof raw.spokenName !== 'string') continue;
+      entries.push({
+        productId: raw.handle,
+        spokenName: raw.spokenName,
+        productKind: typeof raw.productType === 'string' ? raw.productType : null,
+        url: typeof raw.url === 'string' ? raw.url : undefined,
+        aliases: Array.isArray(raw.searchAliases)
+          ? raw.searchAliases.filter((alias): alias is string => typeof alias === 'string')
+          : [],
+      });
+    }
+    if (!entries.length) return undefined;
+    return buildDrkallaProductNameDetector(entries);
+  } catch {
+    return undefined;
+  }
 }
 
 function reply(responseId: string | number, content: string): RetellDrkallaCustomLlmReply {
@@ -150,6 +205,8 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
   memory?: DrkallaShortTermVoiceMemory;
   onMemory?: (memory: DrkallaShortTermVoiceMemory) => void;
   complete: DrkallaCustomLlmClient['complete'];
+  detectProducts?: DrkallaProductNameDetector;
+  sequence?: number;
 }): Promise<RetellDrkallaCustomLlmReply | null> {
   if (!input.secretAccepted) return null;
 
@@ -171,13 +228,15 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
           allowLiveRollout: false,
           maxDirectiveChars: 0,
     },
-    event: canonicalTurn(parsed, input.callId || 'drkalla-custom-runtime-canary'),
+    event: canonicalTurn(parsed, input.callId || 'drkalla-custom-runtime-canary', input.sequence ?? 0),
     memory: input.memory ?? createDrkallaShortTermMemory(),
     client: { complete: input.complete },
+    detectProducts: input.detectProducts,
   });
   input.onMemory?.(response.memory);
 
-  return reply(parsed.providerResponseId, response.text);
+  // Never speak internal diagnostics ("Canary disabled: ...") to a caller.
+  return reply(parsed.providerResponseId, response.blocked ? SAFE_UNAVAILABLE_TEXT : response.text);
 }
 
 function secretAccepted(configuredSecret: string | undefined, candidate: unknown): boolean {
@@ -221,8 +280,9 @@ function createOpenAiClient(): DrkallaCustomLlmClient {
 
 export async function registerRetellDrkallaCustomLlmWs(
   app: FastifyInstance,
-  options: { client?: DrkallaCustomLlmClient } = {},
+  options: { client?: DrkallaCustomLlmClient; detectProducts?: DrkallaProductNameDetector } = {},
 ): Promise<void> {
+  const detectProducts = options.detectProducts ?? loadDrkallaProductNameDetector();
   const handler = (socket: WebSocket, request: { query: unknown; params: unknown }) => {
     const query = request.query as { secret?: string; token?: string };
     const params = request.params as { secret?: string };
@@ -236,29 +296,48 @@ export async function registerRetellDrkallaCustomLlmWs(
     const enabled = process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED === 'true';
     const client = options.client ?? createOpenAiClient();
     let memory = createDrkallaShortTermMemory();
+    let turnCounter = 0;
+    let latestArrival = 0;
+    let processing: Promise<void> = Promise.resolve();
 
     if (!secretOk) {
       socket.close(1008, 'unauthorized');
       return;
     }
 
-    socket.on('message', async (message) => {
-      try {
-        const outbound = await buildRetellDrkallaCustomLlmWsReply({
-          enabled,
-          secretAccepted: secretOk,
-          rawMessage: message.toString(),
-          callId,
-          memory,
-          onMemory: (nextMemory) => {
-            memory = nextMemory;
-          },
-          complete: client.complete,
-        });
-        if (outbound) socket.send(JSON.stringify(outbound));
-      } catch (error) {
-        app.log.warn({ err: error instanceof Error ? error.message : String(error) }, 'DrKalla custom LLM canary failed');
-      }
+    socket.on('message', (message) => {
+      const rawMessage = message.toString();
+      // Track arrival order so a reply computed for an older response_required
+      // is dropped once a newer user turn has arrived (barge-in safety).
+      const parsedPreview = parseRetellDrkallaCustomLlmMessage(rawMessage);
+      const isResponseTurn = parsedPreview?.interactionType === 'response_required';
+      const myArrival = isResponseTurn ? ++latestArrival : latestArrival;
+
+      // Serialize turns per socket so concurrent events cannot drop memory
+      // updates (lost-update race on the shared per-session memory).
+      processing = processing.then(async () => {
+        try {
+          if (isResponseTurn) turnCounter += 1;
+          const outbound = await buildRetellDrkallaCustomLlmWsReply({
+            enabled,
+            secretAccepted: secretOk,
+            rawMessage,
+            callId,
+            memory,
+            onMemory: (nextMemory) => {
+              memory = nextMemory;
+            },
+            complete: client.complete,
+            detectProducts,
+            sequence: turnCounter,
+          });
+          if (!outbound) return;
+          if (isResponseTurn && myArrival !== latestArrival) return;
+          socket.send(JSON.stringify(outbound));
+        } catch (error) {
+          app.log.warn({ err: error instanceof Error ? error.message : String(error) }, 'DrKalla custom LLM canary failed');
+        }
+      });
     });
   };
 

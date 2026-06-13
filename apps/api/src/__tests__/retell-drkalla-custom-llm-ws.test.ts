@@ -108,10 +108,12 @@ describe('Retell DrKalla custom LLM websocket handler', () => {
       complete: async () => 'no',
     });
 
+    // Internal blocker diagnostics must never be spoken to a caller; the
+    // route answers with a safe German unavailability sentence instead.
     expect(gated).toEqual({
       response_type: 'response',
       response_id: 'response-1',
-      content: 'Canary disabled: CANARY_NOT_ENABLED',
+      content: 'Entschuldigung, ich kann gerade nicht weiterhelfen. Bitte versuchen Sie es später noch einmal oder schreiben Sie an kontakt at drkalla punkt com.',
       content_complete: true,
       end_call: false,
     });

@@ -42,6 +42,8 @@ test-migrate.mjs
 **/scratch/
 **/tmp-*.mjs
 **/tmp-*.ts
+# DrKalla local call transcripts/KB artifacts may contain raw caller PII.
+apps/api/tmp/
 
 # Compliance — only signed contracts + DPF-Screenshots stay outside the repo.
 # Eigene TIA-Bewertungen, VVT (.md), Mail-Templates und DPA-Vorlage sind

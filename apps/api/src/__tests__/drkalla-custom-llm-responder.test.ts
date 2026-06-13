@@ -184,7 +184,7 @@ describe('DrKalla custom LLM responder', () => {
     expect(first.text).toContain('Wie bitte?');
     expect(first.memory.inaudibleStreak).toBe(1);
     expect(first.metrics.extraLlmCalls).toBe(0);
-    expect(second.text).toContain('Sag bitte nur ein Stichwort');
+    expect(second.text).toContain('Ich habe es akustisch nicht verstanden.');
     expect(second.memory.inaudibleStreak).toBe(2);
     expect(second.metrics.extraLlmCalls).toBe(0);
   });
