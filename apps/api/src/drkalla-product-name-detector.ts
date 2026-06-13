@@ -46,6 +46,81 @@ function isSpecificAlias(alias: string, normalized: string): boolean {
   return true;
 }
 
+// German function/filler words that must never count as a product-name token.
+const TOKEN_STOPWORDS = new Set([
+  'ich', 'sie', 'der', 'die', 'das', 'den', 'dem', 'ein', 'eine', 'einen', 'einem', 'einer',
+  'und', 'oder', 'mit', 'fuer', 'von', 'vom', 'zum', 'zur', 'auf', 'aus', 'bei', 'habt', 'haben',
+  'hast', 'hat', 'suche', 'suchen', 'sucht', 'brauche', 'brauchen', 'moechte', 'moechten', 'will',
+  'wollen', 'was', 'wer', 'wie', 'wo', 'wann', 'warum', 'welche', 'welcher', 'welches', 'kostet',
+  'kosten', 'preis', 'preise', 'mir', 'mich', 'uns', 'euch', 'bitte', 'gerne', 'mal', 'noch',
+  'auch', 'etwas', 'eigentlich', 'denn', 'schon', 'gibt', 'gibts', 'eure', 'euer', 'euren', 'ihr',
+  'ist', 'sind', 'man', 'so', 'nur', 'mehr', 'ein', 'zwei', 'drei', 'dann', 'also', 'okay', 'aber',
+]);
+// Shop/company tokens that are never distinctive product tokens.
+const SHOP_TOKENS = new Set(['dr', 'kalla', 'cosmetics', 'doktor', 'drkalla', 'shop', 'team']);
+// At least 2 matched tokens to even consider a partial name (a single generic
+// word never matches). Auto-resolution to one product needs >=3 distinctive
+// tokens: 2-token brand+line is too collision-prone for a sales agent
+// (wrong price/link), so 2-token multi-matches become a variant clarification.
+const MIN_SUBSET_TOKENS = 2;
+
+function contentTokens(text: string): string[] {
+  return normalize(text)
+    .split(' ')
+    .filter((token) => token.length >= 3 && !TOKEN_STOPWORDS.has(token));
+}
+
+/**
+ * Distinctive token set built from the product's actual spoken name only
+ * (not aliases, which are broad), minus shop/company tokens. Used for the
+ * precision-controlled partial-name match.
+ */
+function productNameTokenSet(spokenName: string): Set<string> {
+  return new Set(
+    contentTokens(spokenName).filter((token) => !SHOP_TOKENS.has(token)),
+  );
+}
+
+function titleCase(tokens: string[]): string {
+  return tokens.map((t) => t.charAt(0).toUpperCase() + t.slice(1)).join(' ');
+}
+
+type ProductTokenEntry = { product: DrkallaDetectedProduct; tokens: Set<string> };
+
+function buildProductTokenIndex(entries: DrkallaProductNameEntry[]): {
+  tokenEntries: ProductTokenEntry[];
+  vocab: Set<string>;
+} {
+  const tokenEntries: ProductTokenEntry[] = [];
+  const vocab = new Set<string>();
+  for (const entry of entries) {
+    if (!entry.productId || !entry.spokenName) continue;
+    const tokens = productNameTokenSet(entry.spokenName);
+    if (!tokens.size) continue;
+    for (const t of tokens) vocab.add(t);
+    tokenEntries.push({
+      product: { productId: entry.productId, spokenName: entry.spokenName, productKind: entry.productKind ?? null, url: entry.url },
+      tokens,
+    });
+  }
+  return { tokenEntries, vocab };
+}
+
+/**
+ * Partial-name candidates: products whose distinctive name tokens are a
+ * superset of every catalog-known content token the caller said. Requires at
+ * least MIN_SUBSET_TOKENS so a single generic word cannot trigger a match.
+ */
+function subsetCandidates(
+  text: string,
+  index: { tokenEntries: ProductTokenEntry[]; vocab: Set<string> },
+): { candidates: ProductTokenEntry[]; userTokens: string[] } {
+  const userTokens = [...new Set(contentTokens(text).filter((t) => index.vocab.has(t)))];
+  if (userTokens.length < MIN_SUBSET_TOKENS) return { candidates: [], userTokens };
+  const candidates = index.tokenEntries.filter((entry) => userTokens.every((t) => entry.tokens.has(t)));
+  return { candidates, userTokens };
+}
+
 export function buildDrkallaProductNameDetector(
   entries: DrkallaProductNameEntry[],
 ): DrkallaProductNameDetector {
@@ -94,6 +169,13 @@ export function buildDrkallaProductNameDetector(
       seen.add(productId);
       found.push(product);
     }
+    // The fuzzy partial-name (token-subset) path deliberately NEVER auto-
+    // resolves a specific product: against the real catalog (messy aliases,
+    // translation duplicates, shared product lines) partial matches collide,
+    // and a wrong price/link is far worse than a clarifying question. Partial
+    // matches are surfaced only as a variant clarification by the ambiguous
+    // detector. Specific products still resolve here via the exact unique-alias
+    // pass above (i.e. the caller spoke the full product name).
     return found;
   };
 }
@@ -127,6 +209,8 @@ export function buildDrkallaAmbiguousProductNameDetector(
     .map(([normalized, value]) => ({ padded: ` ${normalized} `, label: value.label, productCount: value.products.size }))
     .sort((left, right) => right.padded.length - left.padded.length);
 
+  const index = buildProductTokenIndex(entries);
+
   return (text: string) => {
     const normalizedText = ` ${normalize(text)} `;
     if (normalizedText.trim().length < 6) return null;
@@ -134,6 +218,13 @@ export function buildDrkallaAmbiguousProductNameDetector(
       if (normalizedText.includes(candidate.padded)) {
         return { label: candidate.label, productCount: candidate.productCount };
       }
+    }
+    // Partial brand/line ("Koleston Perfect") that matches several SKUs:
+    // surface as ambiguous so the runtime asks which variant rather than
+    // guessing one.
+    const { candidates, userTokens } = subsetCandidates(text, index);
+    if (candidates.length > 1) {
+      return { label: titleCase(userTokens), productCount: candidates.length };
     }
     return null;
   };
