@@ -376,7 +376,8 @@ describe('DrKalla grounded evidence answers (catalog facts, not memory)', () => 
     expect(response.blocked).toBe(false);
     expect(prompts[0]).toContain('Evidence (Shop-Datenstand)');
     expect(prompts[0]).toContain('9,99 Euro');
-    expect(prompts[0]).toContain('Behaupte nie, eine SMS oder einen Link bereits gesendet zu haben.');
+    expect(prompts[0]).toContain('Behaupte nie, eine SMS oder einen Link bereits gesendet zu haben');
+    expect(prompts[0]).toContain('frage nie nach der Telefonnummer');
     expect(response.metrics.directiveChars).toBeLessThanOrEqual(800);
   });
 });
@@ -566,6 +567,32 @@ describe('DrKalla gated SMS link executor', () => {
     expect(sent).toHaveLength(0);
     expect(confirm.text).toContain('Produktlink oder den Link zum Profi-Zugang');
     expect(confirm.metrics.extraLlmCalls).toBe(0);
+  });
+
+  it('B: a model-paraphrased "per SMS senden?" offer is still caught by the deterministic confirm path (live W1)', async () => {
+    // A-red evidence (live smoke): the model phrased the offer with "sende",
+    // SMS_OFFER_QUESTION only matched "schicken", so the confirm reached the
+    // model which then asked for the caller's phone number.
+    const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 1,
+      text: 'Möchten Sie, dass ich Ihnen den Link zum Profi-Zugang per SMS sende?',
+      lastAgentQuestion: 'Möchten Sie, dass ich Ihnen den Link zum Profi-Zugang per SMS sende?',
+      profiPriceDisclosureGiven: true,
+    });
+    let modelCalls = 0;
+    const confirm = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: liveTurn('Den Profi-Zugang bitte.', 2),
+      memory,
+      client: { complete: async () => { modelCalls += 1; return 'ich benötige Ihre Mobilnummer'; } },
+      detectProducts,
+      evidenceLookup,
+      executeSendLink: async () => ({ smsSent: true }),
+    });
+    expect(modelCalls).toBe(0);
+    expect(confirm.text).not.toMatch(/mobilnummer|telefonnummer|nummer/i);
+    expect(confirm.text).toContain('Profi-Zugang');
   });
 
   it('B: "den Profi-Zugang bitte" sends the Profi link, not the product link (Codex rank 3)', async () => {

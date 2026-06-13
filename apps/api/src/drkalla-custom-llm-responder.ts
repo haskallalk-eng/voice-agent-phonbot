@@ -87,12 +87,17 @@ function compactSystemPrompt(directives: string[]): string {
     'Dr.Kalla ist ein Friseurbedarf-Shop, kein Friseursalon: keine Termine, keine Haarschnitte oder Faerbe-Dienstleistungen; verweise hoeflich auf Produkte/Salonbedarf.',
     'Nenne Adresse, Oeffnungszeiten, E-Mail, Preise oder Verfuegbarkeit nur aus der gegebenen Evidence- oder Kontakt-Fakt-Zeile. Fehlt die Angabe, erfinde nichts und verweise auf drkalla.com oder den Kontakt.',
     'Nutze diese Dialogsteuerung, aber behandle Memory nie als Faktenbeweis.',
-    'Behaupte nie, eine SMS oder einen Link bereits gesendet zu haben.',
+    'Behaupte nie, eine SMS oder einen Link bereits gesendet zu haben; frage nie nach der Telefonnummer (eine SMS geht automatisch an die Anrufernummer).',
+    'Bei klarer Verabschiedung verabschiede dich kurz und haenge keine neue Frage an.',
     ...directives,
   ].join('\n').slice(0, 1600);
 }
 
-const SMS_OFFER_QUESTION = /per sms schicken\?/i;
+// Match the model's paraphrases of the SMS offer too (schicken/senden/
+// zusenden/...), not just the canonical "schicken", so a caller's "ja" is
+// caught by the deterministic confirm path instead of reaching the model
+// (which otherwise invents steps like asking for the phone number).
+const SMS_OFFER_QUESTION = /per sms\s+(?:schick|send|zusend|zukomm)/i;
 // The two-option offer ("Produktlink ODER Profi-Zugang per SMS"): a bare "ja"
 // here is ambiguous and must be re-asked, not silently sent as product link.
 const TWO_OPTION_OFFER = /produktlink\s+oder\s+(?:den\s+link\s+(?:zum\s+)?)?profi/i;
