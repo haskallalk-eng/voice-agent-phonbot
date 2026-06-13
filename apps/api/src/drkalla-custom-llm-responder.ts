@@ -240,12 +240,59 @@ function tryDeterministicTypeListReply(input: {
   const hits = (input.catalogSearch?.(activeType.label, 4) ?? []).slice(0, 3);
   if (!hits.length) return null;
   const names = hits.map((p, index) =>
-    index === 0 && p.priceText ? `${p.spokenName} (${p.priceText})` : p.spokenName,
+    index === 0 && p.priceText ? `${p.shortName} (${p.priceText})` : p.shortName,
   );
   const list = names.length === 1
     ? names[0]
     : `${names.slice(0, -1).join(', ')} und ${names[names.length - 1]}`;
   return `Bei ${activeType.label} haben wir zum Beispiel ${list}. Welches davon interessiert Sie?`;
+}
+
+// Comparison / usage / why turns need real reasoning — leave those to the model
+// instead of answering with a product list.
+const NEED_VETO = /\b(?:unterschied|vergleich|verglichen|wie\s+(?:wende|benutz|verwend|trag|oft|lange|viel)|warum|wieso|weshalb|anwend|inhaltsstoff|vertr[äa]glich|allergie|wof[üu]r|wozu)\b/i;
+
+/**
+ * Deterministic product discovery for a clear category need. On the real call
+ * 2026-06-13 the model looped on clarifying questions and named long,
+ * ungroundable titles, so nothing could be sent by SMS or priced. When the
+ * caller expresses a need that hits a real catalog CATEGORY (productType/tag)
+ * and has NOT named a specific product, recommend the top SHORT real product,
+ * offer up to two alternatives, and — only if it has a sendable link — offer to
+ * SMS it. Returns the top product so the caller's "ja" can confirm an SMS and a
+ * follow-up price is grounded. Grounded: only real catalog names; never invents.
+ */
+function tryDeterministicNeedReply(input: {
+  userText: string;
+  catalogSearch?: DrkallaProductCatalogSearch;
+  evidenceLookup?: DrkallaProductEvidenceLookup;
+}): DrkallaFallbackResult | null {
+  const text = input.userText;
+  if (NEED_VETO.test(text) || detectDrkallaContactIntent(text)) return null;
+  const hits = input.catalogSearch?.(text, 4) ?? [];
+  // Require a real category match (productType/tag), not an incidental title
+  // hit, so we only take over discovery for a clear product category.
+  const strong = hits.filter((h) => h.categoryHit);
+  const top = strong[0];
+  if (!top) return null;
+  const evidence = input.evidenceLookup?.byId(top.productId) ?? null;
+  const alts = strong.slice(1, 3).map((h) => h.shortName).filter((n) => n && n !== top.shortName);
+  const priceStr = top.priceText ? ` für ${top.priceText}` : '';
+  let reply = `Da kann ich Ihnen ${top.shortName}${priceStr} empfehlen.`;
+  if (alts.length) {
+    reply += alts.length === 1
+      ? ` Alternativ haben wir ${alts[0]}.`
+      : ` Alternativ haben wir ${alts[0]} und ${alts[1]}.`;
+  }
+  // Offer the SMS link only when a sendable URL exists, so we never promise a
+  // link we cannot deliver (the old fallback claimed SMS, then it failed).
+  reply += evidence?.url
+    ? ` Soll ich Ihnen den Link zu ${top.shortName} per SMS schicken?`
+    : ` Möchten Sie zu ${top.shortName} mehr wissen?`;
+  return {
+    text: reply,
+    product: { spokenName: top.shortName, productId: top.productId, productKind: top.productType },
+  };
 }
 
 // LATENCY fast-path matchers for low-content caller turns. Anchored to the
@@ -596,18 +643,45 @@ export async function buildDrkallaCustomLlmResponse(input: {
     };
   }
 
-  // Open-ended need ("was habt ihr für Dauerwelle / welche Marken?"): when the
-  // caller did NOT name a specific product, surface real catalog products by
-  // category so the model NAMES them instead of looping on clarifying questions
-  // (live call 2026-06-13). Grounded: only real catalog names are injected.
   const namedNow = input.detectProducts?.(user) ?? [];
+
+  // Deterministic discovery for a clear category need: when the caller did NOT
+  // name a specific product but the need hits a real catalog category, name the
+  // top SHORT product (+ alternatives) and ground it — instead of letting the
+  // model loop on clarifying questions and long ungroundable titles (real call
+  // 2026-06-13). No detectProducts here so the recommended TOP hit wins as
+  // lastMentionedProduct, enabling a follow-up "ja" SMS confirm + grounded price.
+  if (namedNow.length === 0) {
+    const needReply = tryDeterministicNeedReply({
+      userText: user,
+      catalogSearch: input.catalogSearch,
+      evidenceLookup: input.evidenceLookup,
+    });
+    if (needReply) {
+      return {
+        blocked: false,
+        text: needReply.text,
+        memory: reduceDrkallaShortTermMemory(
+          canaryTurn.runtime.memory,
+          deriveDrkallaAgentSpokeEvent({ text: needReply.text, turnIndex, fallbackProduct: needReply.product }),
+        ),
+        metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
+        blockers: [],
+        quality: { duFormDetected: false, duFormConfidence: 'none', duFormSlips: [] },
+      };
+    }
+  }
+
+  // Fallback for an open need with no strong category match: surface real
+  // catalog products (short names) so the model NAMES them instead of looping.
+  // Grounded: only real catalog names are injected.
   const catalogHits = namedNow.length === 0 ? (input.catalogSearch?.(user, 4) ?? []) : [];
   let system = compactSystemPrompt(canaryTurn.modelDirectives);
   if (catalogHits.length) {
     const list = catalogHits
-      .map((p) => (p.priceText ? `${p.spokenName} (${p.priceText})` : p.spokenName))
+      .map((p) => (p.priceText ? `${p.shortName} (${p.priceText})` : p.shortName))
       .join('; ');
-    system += `\nKatalog-Treffer zum Bedarf (nenne dem Anrufer konkret ein bis drei dieser echten Produkte, erfinde nichts dazu, und frage nicht erneut nach der Produktart): ${list}`;
+    system += `\nKatalog-Treffer zum Bedarf (nenne dem Anrufer konkret ein bis drei dieser echten Produkte mit genau diesen kurzen Namen, erfinde nichts dazu, und frage nicht erneut nach der Produktart): ${list}`;
   }
   const maxOutputChars = 420;
   let modelText = '';
