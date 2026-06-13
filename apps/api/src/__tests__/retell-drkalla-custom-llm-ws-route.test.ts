@@ -574,4 +574,91 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     ws.close();
     await app.close();
   });
+
+  it('echoes ping_pong keepalive frames and never enters the turn chain', async () => {
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
+    let modelCalls = 0;
+    const { app, url } = await testServer({ complete: async () => { modelCalls += 1; return 'unused'; } });
+    const ws = await connect(url);
+    const frames: Array<{ response_type?: string; timestamp?: number }> = [];
+    ws.on('message', (data) => frames.push(JSON.parse(data.toString())));
+
+    // Retell sends a ping_pong with a timestamp; the server must echo the same
+    // timestamp back so the socket is not judged dead — and call no model.
+    ws.send(JSON.stringify({ interaction_type: 'ping_pong', timestamp: 1716250276547 }));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toEqual({ response_type: 'ping_pong', timestamp: 1716250276547 });
+    expect(modelCalls).toBe(0);
+
+    ws.close();
+    await app.close();
+  });
+
+  it('ignores call_details and update_only frames (no reply, greeting still fires on the first real turn)', async () => {
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
+    let modelCalls = 0;
+    const { app, url } = await testServer({ complete: async () => { modelCalls += 1; return 'unused'; } });
+    const ws = await connect(url);
+    const frames: Array<{ response_id?: unknown; content?: string; content_complete?: boolean }> = [];
+    ws.on('message', (data) => frames.push(JSON.parse(data.toString())));
+
+    // Real connect order: call_details first, then an update_only transcript
+    // refresh. Neither requests a reply, so neither may produce a frame nor
+    // consume the one-shot greeting slot.
+    ws.send(JSON.stringify({ interaction_type: 'call_details', call: { call_id: 'call-x', from_number: '+490000000000' } }));
+    ws.send(JSON.stringify({ interaction_type: 'update_only', transcript: [{ role: 'user', content: 'ähm' }] }));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(frames).toHaveLength(0);
+    expect(modelCalls).toBe(0);
+
+    // The first genuine response turn still greets deterministically.
+    ws.send(JSON.stringify({ interaction_type: 'response_required', response_id: 1, transcript: [{ role: 'user', content: 'Hallo' }] }));
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toMatchObject({ response_id: 1, content_complete: true });
+    expect(frames[0]?.content).toContain('Wie kann ich Ihnen');
+    expect(modelCalls).toBe(0);
+
+    ws.close();
+    await app.close();
+  });
+
+  it('a ping_pong during a slow model turn does not abort or supersede it', async () => {
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
+    let aborted = false;
+    const { app, url } = await testServer({
+      complete: async ({ user, signal }) => {
+        // Slow turn; a keepalive arrives mid-flight and must not cancel it.
+        await new Promise<void>((resolve) => {
+          if (signal?.aborted) { aborted = true; resolve(); return; }
+          signal?.addEventListener('abort', () => { aborted = true; resolve(); }, { once: true });
+          setTimeout(resolve, 150);
+        });
+        return `Antwort auf: ${user}`;
+      },
+    });
+    const ws = await connect(url);
+    const frames: Array<{ response_type?: string; response_id?: unknown; content?: string; content_complete?: boolean; timestamp?: number }> = [];
+    ws.on('message', (data) => frames.push(JSON.parse(data.toString())));
+
+    // Open-ended question reaches the model; a keepalive lands mid-stream.
+    ws.send(JSON.stringify({ interaction_type: 'response_required', response_id: 1, transcript: [{ role: 'user', content: 'Was empfehlen Sie mir denn?' }] }));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    ws.send(JSON.stringify({ interaction_type: 'ping_pong', timestamp: 999 }));
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(aborted).toBe(false); // keepalive did not cancel the in-flight model call
+    expect(frames.find((f) => f.response_type === 'ping_pong')).toEqual({ response_type: 'ping_pong', timestamp: 999 });
+    const reply = frames.find((f) => f.response_type === 'response');
+    expect(reply).toMatchObject({ response_id: 1, content_complete: true });
+    expect(reply?.content).toContain('Antwort auf:');
+
+    ws.close();
+    await app.close();
+  });
 });
