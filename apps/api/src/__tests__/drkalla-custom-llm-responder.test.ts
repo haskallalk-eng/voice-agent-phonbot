@@ -589,3 +589,90 @@ describe('DrKalla custom LLM responder', () => {
     expect(response.metrics.extraKbCalls).toBe(0);
   });
 });
+
+describe('DrKalla register/style + deterministic price (live call 2026-06-13 fixes)', () => {
+  const CANARY = { enabled: true, allowModelDirectives: true, allowLiveRollout: false, maxDirectiveChars: 800 };
+
+  function priceEvidenceLookup() {
+    return {
+      size: 1,
+      byId: () => null,
+      byKeyHash: () => ({
+        productId: 'synthesis-color-cream',
+        spokenName: 'Synthesis Color Cream',
+        productKind: 'Haarfarbe/Farbcreme',
+        brandName: 'Dr.Kalla Cosmetics',
+        priceText: '13,00 €',
+        variantCount: 1,
+        availableVariantCount: 1,
+        hasUrl: true,
+        url: 'https://drkalla.com/products/synthesis-color-cream',
+      }),
+    };
+  }
+
+  it('A-red/B: the system prompt forbids du and Stichpunkt style (live: model used du + fragments)', async () => {
+    const prompts: string[] = [];
+    await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Was empfehlen Sie mir denn?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async ({ system }) => { prompts.push(system); return 'Gern, ich helfe Ihnen.'; } },
+    });
+    expect(prompts[0]).toContain('NIEMALS du');
+    expect(prompts[0]).toMatch(/Niemals Stichpunkte|vollstaendigen, natuerlichen Saetzen/);
+    expect(prompts[0]).toContain('drkalla.com');
+  });
+
+  it('B: a plain price question is answered deterministically in Sie, without the model', async () => {
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Wie viel kostet die denn?'),
+      memory: productMemory(),
+      client: { complete: async () => { modelCalls += 1; return 'Soll ich dir das per SMS schicken?'; } },
+      evidenceLookup: priceEvidenceLookup() as never,
+    });
+    expect(modelCalls).toBe(0);
+    expect(response.metrics.extraLlmCalls).toBe(0);
+    expect(response.text).toContain('13,00 €');
+    expect(response.text).toContain('Profi-Zugang'); // disclosure given once
+    expect(response.text).not.toMatch(/\b(?:du|dich|dir|dein)\b/i);
+    expect(response.quality?.duFormDetected).toBe(false);
+  });
+
+  it('B: a follow-up price question does not repeat the Profi disclosure once it was given', async () => {
+    const first = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Was kostet die Synthesis Color Cream?'),
+      memory: productMemory(),
+      client: { complete: async () => 'unused' },
+      evidenceLookup: priceEvidenceLookup() as never,
+    });
+    expect(first.text).toContain('Profi-Friseurpreise'); // full disclosure first time
+    const second = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Und wie teuer ist die nochmal?'),
+      memory: first.memory,
+      client: { complete: async () => 'unused' },
+      evidenceLookup: priceEvidenceLookup() as never,
+    });
+    // Second time: price + link offer, but no repeated Profi explanation.
+    expect(second.text).toContain('13,00 €');
+    expect(second.text).not.toContain('telefonisch nicht');
+    expect(second.text).toContain('per SMS');
+    expect(second.metrics.extraLlmCalls).toBe(0);
+  });
+
+  it('B: a comparison price question still goes to the model (not the deterministic path)', async () => {
+    let modelCalls = 0;
+    await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Was ist der Preis-Unterschied zwischen den beiden?'),
+      memory: productMemory(),
+      client: { complete: async () => { modelCalls += 1; return 'Ich vergleiche das gern.'; } },
+      evidenceLookup: priceEvidenceLookup() as never,
+    });
+    expect(modelCalls).toBe(1);
+  });
+});

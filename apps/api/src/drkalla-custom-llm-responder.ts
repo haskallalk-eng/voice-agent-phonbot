@@ -100,14 +100,20 @@ function sanitizeUserText(value: string): string {
 function compactSystemPrompt(directives: string[]): string {
   return [
     'Du bist der Dr.Kalla Voice-Agent fuer Friseurbedarf.',
-    'Antworte kurz, natuerlich und auf Deutsch; sprich den Anrufer konsequent mit Sie an.',
+    // Register is the #1 live complaint: gpt-4.1-mini mirrors the caller and
+    // slips into du. State the rule first, as a hard prohibition with the
+    // exact forbidden words, so it actually sticks.
+    'ANREDE (zwingend): Sprich den Anrufer ausschliesslich in der Sie-Form an — Sie, Ihnen, Ihr, Ihre. Verwende NIEMALS du, dich, dir, dein, deine, ihr (als Anrede), euch oder euer, auch wenn der Anrufer dich duzt.',
+    'STIL: Antworte auf Deutsch in vollstaendigen, natuerlichen Saetzen. Niemals Stichpunkte, Aufzaehlungen, Doppelpunkt-Listen oder Telegrammstil. Fasse dich kurz, aber sprich in ganzen Saetzen.',
+    'Buchstabiere Web-Adressen oder E-Mails nicht einzeln; nenne den Shop einfach als drkalla.com.',
     'Dr.Kalla ist ein Friseurbedarf-Shop, kein Friseursalon: keine Termine, keine Haarschnitte oder Faerbe-Dienstleistungen; verweise hoeflich auf Produkte/Salonbedarf.',
     'Nenne Adresse, Oeffnungszeiten, E-Mail, Preise oder Verfuegbarkeit nur aus der gegebenen Evidence- oder Kontakt-Fakt-Zeile. Fehlt die Angabe, erfinde nichts und verweise auf drkalla.com oder den Kontakt.',
+    'Erklaere die Profi-Preise hoechstens einmal ausfuehrlich; wurde der Profi-Zugang schon erwaehnt, fasse dich knapp und biete nur kurz den Link an, ohne die Erklaerung zu wiederholen.',
     'Nutze diese Dialogsteuerung, aber behandle Memory nie als Faktenbeweis.',
     'Behaupte nie, eine SMS oder einen Link bereits gesendet zu haben; frage nie nach der Telefonnummer (eine SMS geht automatisch an die Anrufernummer).',
     'Bei klarer Verabschiedung verabschiede dich kurz und haenge keine neue Frage an.',
     ...directives,
-  ].join('\n').slice(0, 1600);
+  ].join('\n').slice(0, 2000);
 }
 
 // Match the model's paraphrases of the SMS offer too (schicken/senden/
@@ -198,6 +204,44 @@ function fallbackTextWithMemory(input: {
     };
   }
   return { text: fallbackText(userText) };
+}
+
+// A clear, simple price question (not a comparison, not a contact question).
+const DRKALLA_PRICE_INTENT = /\b(?:was\s+kostet|wie\s*viel|wie\s*teuer|preis|preise|kostet|kosten|teuer)\b/i;
+
+/**
+ * Deterministic, grounded price answer in full Sie sentences. The model
+ * (gpt-4.1-mini) paraphrases prices/Profi into du-form fragments and repeats
+ * the Profi disclosure across turns (observed live 2026-06-13), so when the
+ * caller plainly asks the price of the resolved active product and the catalog
+ * snapshot has a price, answer deterministically instead of via the model. The
+ * once-only Profi disclosure is honoured via memory. Returns null when this is
+ * not a clean single-product price question (then the model handles it).
+ */
+function tryDeterministicPriceAnswer(input: {
+  userText: string;
+  memory: DrkallaShortTermVoiceMemory;
+  evidenceLookup?: DrkallaProductEvidenceLookup;
+}): DrkallaFallbackResult | null {
+  const text = input.userText;
+  if (!DRKALLA_PRICE_INTENT.test(text)) return null;
+  if (/\b(?:unterschied|vergleich|verglichen)\b/i.test(text)) return null; // comparison -> model
+  if (detectDrkallaContactIntent(text)) return null; // contact/profi -> handled elsewhere
+  const lastProduct = input.memory.lastMentionedProduct;
+  if (!lastProduct) return null;
+  const evidence = input.evidenceLookup?.byKeyHash(lastProduct.productKeyHash) ?? null;
+  if (!evidence?.priceText) return null;
+  const priceSentence = `${lastProduct.spokenName} kostet laut Shop-Datenstand ${evidence.priceText}. `;
+  if (input.memory.profiPriceDisclosureGiven && !/\bprofi/i.test(text)) {
+    return {
+      text: `${priceSentence}Soll ich Ihnen den Produktlink zu ${lastProduct.spokenName} per SMS schicken?`,
+      product: lastProduct,
+    };
+  }
+  return {
+    text: `${priceSentence}${DRKALLA_PROFI_PRICE_DISCLOSURE} ${DRKALLA_PROFI_LINK_QUESTION}`,
+    product: lastProduct,
+  };
 }
 
 export async function buildDrkallaCustomLlmResponse(input: {
@@ -359,6 +403,33 @@ export async function buildDrkallaCustomLlmResponse(input: {
         directiveChars: canaryTurn.directiveChars,
       },
       blockers: [],
+    };
+  }
+
+  // Deterministic, grounded price answer for the sales-critical path (full Sie
+  // sentences, once-only Profi disclosure) — bypasses the model, which mangles
+  // register/style/repetition here.
+  const deterministicPrice = tryDeterministicPriceAnswer({
+    userText: user,
+    memory: canaryTurn.runtime.memory,
+    evidenceLookup: input.evidenceLookup,
+  });
+  if (deterministicPrice) {
+    return {
+      blocked: false,
+      text: deterministicPrice.text,
+      memory: reduceDrkallaShortTermMemory(
+        canaryTurn.runtime.memory,
+        deriveDrkallaAgentSpokeEvent({
+          text: deterministicPrice.text,
+          turnIndex,
+          detectProducts: input.detectProducts,
+          fallbackProduct: deterministicPrice.product,
+        }),
+      ),
+      metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
+      blockers: [],
+      quality: { duFormDetected: false, duFormConfidence: 'none', duFormSlips: [] },
     };
   }
 
