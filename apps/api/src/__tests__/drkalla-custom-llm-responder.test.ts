@@ -664,22 +664,52 @@ describe('DrKalla register/style + deterministic price (live call 2026-06-13 fix
     expect(second.metrics.extraLlmCalls).toBe(0);
   });
 
-  it('B: an open category need injects real catalog products into the prompt so the model can name them (live-call fix)', async () => {
-    const prompts: string[] = [];
+  it('B: an open category need NAMES the top short product deterministically and grounds it (live-call fix)', async () => {
+    let modelCalls = 0;
     const catalogSearch = (text: string) =>
       /dauerwelle/i.test(text)
-        ? [{ productId: 'perm', spokenName: 'Ammoniakfreie duftende Dauerwellenlösung', productType: 'Styling', priceText: '16,00 Euro' }]
+        ? [
+            { productId: 'perm', spokenName: 'Sanfte Dauerwelle für Wellen', shortName: 'Sanfte Dauerwelle', productType: 'Dauerwelle', priceText: '8,40 Euro', score: 4, categoryHit: true },
+            { productId: 'neutral', spokenName: 'Neutralisator', shortName: 'Neutralisator', productType: 'Styling', priceText: '12,00 Euro', score: 2, categoryHit: true },
+          ]
         : [];
-    await buildDrkallaCustomLlmResponse({
+    const evidenceLookup = {
+      byId: (id: string) => (id === 'perm' ? { productId: 'perm', priceText: '8,40 Euro', hasUrl: true, url: 'https://drkalla.com/products/sanfte-dauerwelle' } : null),
+      byKeyHash: () => null,
+    };
+    const response = await buildDrkallaCustomLlmResponse({
       canary: CANARY,
       event: turn('Was habt ihr für Dauerwelle?'),
       memory: createDrkallaShortTermMemory(),
-      client: { complete: async ({ system }) => { prompts.push(system); return 'Wir haben die Ammoniakfreie duftende Dauerwellenlösung.'; } },
+      client: { complete: async () => { modelCalls += 1; return 'should not be used'; } },
+      catalogSearch,
+      evidenceLookup: evidenceLookup as never,
+    });
+    expect(modelCalls).toBe(0);
+    expect(response.metrics.extraLlmCalls).toBe(0);
+    expect(response.text).toContain('Sanfte Dauerwelle');     // top short name
+    expect(response.text).not.toContain('für Wellen');         // not the long title
+    expect(response.text).toMatch(/per SMS schicken\?$/);      // offers the grounded link
+    // The recommended product is grounded so a follow-up "ja" can confirm SMS.
+    expect(response.memory.lastMentionedProduct?.spokenName).toBe('Sanfte Dauerwelle');
+  });
+
+  it('B: a need with only a title-only (no category) match falls back to model injection with short names', async () => {
+    const prompts: string[] = [];
+    const catalogSearch = (text: string) =>
+      /spezielles/i.test(text)
+        ? [{ productId: 'x', spokenName: 'Irgendein langer Produkttitel 500 Ml', shortName: 'Irgendein Produkt', productType: 'Styling', priceText: '5,00 Euro', score: 1, categoryHit: false }]
+        : [];
+    await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Habt ihr etwas spezielles?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async ({ system }) => { prompts.push(system); return 'Wir haben Irgendein Produkt.'; } },
       catalogSearch,
     });
     expect(prompts[0]).toContain('Katalog-Treffer');
-    expect(prompts[0]).toContain('Ammoniakfreie duftende Dauerwellenlösung');
-    expect(prompts[0]).toMatch(/NENNE konkrete Produkte|frage nicht erneut nach der Produktart/);
+    expect(prompts[0]).toContain('Irgendein Produkt');           // short name injected
+    expect(prompts[0]).not.toContain('langer Produkttitel');     // not the full title
   });
 
   it('B: a comparison price question still goes to the model (not the deterministic path)', async () => {
@@ -710,12 +740,17 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
   }
 
   // Stub catalog search returning 3 real-shaped products for the active type.
-  const threeProductSearch = (_text: string) => [
-    { productId: 'koleston', spokenName: 'Koleston Perfect', productType: 'Haarfarbe/Farbcreme', priceText: '9,90 Euro' },
-    { productId: 'majirel', spokenName: 'Majirel', productType: 'Haarfarbe/Farbcreme', priceText: '11,50 Euro' },
-    { productId: 'igora', spokenName: 'Igora Royal', productType: 'Haarfarbe/Farbcreme', priceText: '10,20 Euro' },
-    { productId: 'inoa', spokenName: 'Inoa', productType: 'Haarfarbe/Farbcreme', priceText: '14,00 Euro' },
-  ];
+  // Text-aware like the real search: a bare "ja" has no content tokens and
+  // returns nothing (so it cannot drive a deterministic product list).
+  const threeProductSearch = (text: string) =>
+    /haarfarbe|farbcreme|\bfarbe\b|marken|auswahl/i.test(text)
+      ? [
+          { productId: 'koleston', spokenName: 'Koleston Perfect', shortName: 'Koleston Perfect', productType: 'Haarfarbe/Farbcreme', priceText: '9,90 Euro', score: 4, categoryHit: true },
+          { productId: 'majirel', spokenName: 'Majirel', shortName: 'Majirel', productType: 'Haarfarbe/Farbcreme', priceText: '11,50 Euro', score: 4, categoryHit: true },
+          { productId: 'igora', spokenName: 'Igora Royal', shortName: 'Igora Royal', productType: 'Haarfarbe/Farbcreme', priceText: '10,20 Euro', score: 4, categoryHit: true },
+          { productId: 'inoa', spokenName: 'Inoa', shortName: 'Inoa', productType: 'Haarfarbe/Farbcreme', priceText: '14,00 Euro', score: 4, categoryHit: true },
+        ]
+      : [];
 
   it('A-red: a bare "Ja" with an active product type names 3 real products, no model call', async () => {
     const memory = activeTypeMemory();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDrkallaProductCatalogSearch } from '../drkalla-product-catalog-search.js';
+import { buildDrkallaProductCatalogSearch, buildDrkallaShortName } from '../drkalla-product-catalog-search.js';
 
 const products = [
   {
@@ -61,5 +61,42 @@ describe('DrKalla product catalog category search', () => {
     const r = search('Dauerwelle Locken', 1);
     expect(r).toHaveLength(1);
     expect(['perm-light', 'perm-fix']).toContain(r[0]?.productId);
+  });
+
+  it('returns short speakable names and a categoryHit flag, not the full title', () => {
+    const r = search('Habt ihr ein Shampoo gegen Schuppen?', 1);
+    expect(r[0]?.shortName).toBe('Reinigendes Anti-Schuppen-Shampoo');
+    expect(r[0]?.categoryHit).toBe(true);
+  });
+
+  it('buildDrkallaShortName drops bullets, sizes, codes and the second &-phrase', () => {
+    expect(buildDrkallaShortName('• Evelon Pro NutriElements Haarmaske für häufige Haarpflege 500 Ml'))
+      .toBe('Evelon Pro NutriElements Haarmaske');
+    expect(buildDrkallaShortName('Nährendes Haarspray & Starkes Halt 200 Ml')).toBe('Nährendes Haarspray');
+    expect(buildDrkallaShortName('Delrin-Kamm 4053 Profi')).toBe('Delrin-Kamm Profi');
+  });
+
+  it('ranks a productType match above a comb that only carries a topical tag (shampoo != comb)', () => {
+    const withComb = buildDrkallaProductCatalogSearch([
+      ...products,
+      {
+        handle: 'comb-curl',
+        title: 'Delrin-Kamm 4053 für lockiges Haar',
+        productType: 'Friseur-Tool',
+        tags: ['Kamm', 'Locken', 'lockiges Haar'],
+        variants: [{ price: '4.00', available: true }],
+      },
+      {
+        handle: 'shampoo-curl',
+        title: 'Locken Shampoo für lockiges Haar',
+        productType: 'Locken Shampoo',
+        tags: ['Shampoo', 'Locken'],
+        variants: [{ price: '12.00', available: true }],
+      },
+    ]);
+    const r = withComb('Ich suche ein Shampoo für lockiges Haar', 3);
+    expect(r[0]?.productId).toBe('shampoo-curl');           // shampoo wins
+    expect(r.findIndex((p) => p.productId === 'comb-curl'))  // comb ranks below, if present
+      .toBeGreaterThan(0);
   });
 });

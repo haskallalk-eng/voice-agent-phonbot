@@ -8,13 +8,22 @@
  * offer for open-ended needs and looped on clarifying questions (live call
  * 2026-06-13). Built once at startup; per-turn access is a pure in-memory scan
  * with no LLM/KB/network. Returns real product names only — never invents.
+ *
+ * Ranking weights a productType match far above a tag match and a tag match
+ * above a title-only match, so a "Shampoo" need surfaces shampoos, not a comb
+ * that merely carries a "lockiges Haar" tag (real-call failure 2026-06-13).
+ * `shortName` is a speakable name (brand + type, no size/code/long title) for
+ * the voice agent; the caller complained the full titles were unspeakable.
  */
 
 export type DrkallaCatalogMatch = {
   productId: string;
   spokenName: string;
+  shortName: string;
   productType: string | null;
   priceText: string | null;
+  score: number;
+  categoryHit: boolean; // matched the productType or a tag (not title-only)
 };
 
 export type DrkallaProductCatalogSearch = (text: string, limit?: number) => DrkallaCatalogMatch[];
@@ -81,14 +90,48 @@ function cleanSpokenName(title: string): string {
   return title.replace(/^[^0-9A-Za-zÄÖÜäöüß]+/u, '').replace(/\s+/g, ' ').trim();
 }
 
+// Size/volume/quantity tokens that make a spoken name long and unnatural.
+const SIZE_RE = /\b\d+[.,]?\d*\s?(?:ml|milliliter|liter|gramm|gr|kg|stk|st(?:ü|ue)ck|cm|mm|prozent|%|x)\b/gi;
+
+/**
+ * A short, speakable product name for voice: drop leading bullets, size/volume
+ * tokens and standalone numeric codes, de-duplicate repeated words (e.g. "Pro
+ * Pro") and keep the first few meaningful words. Falls back to the cleaned full
+ * title if nothing speakable remains. The caller said the full catalog titles
+ * ("... Haarmaske für häufige Haarpflege 500 Ml") were unspeakable.
+ */
+export function buildDrkallaShortName(title: string): string {
+  // Titles often join two marketing phrases with & | / – — keep the first.
+  const firstSegment = cleanSpokenName(title).split(/\s*[&|/–—]+\s*/)[0] ?? '';
+  const base = firstSegment
+    .replace(SIZE_RE, ' ')
+    .replace(/\b\d{2,}\b/g, ' ')   // standalone numeric size/article codes
+    .replace(/\s+/g, ' ')
+    .trim();
+  const seen = new Set<string>();
+  const words: string[] = [];
+  for (const w of base.split(' ')) {
+    if (!w) continue;
+    const key = w.toLocaleLowerCase('de-DE');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    words.push(w);
+  }
+  let short = words.slice(0, 4).join(' ').trim();
+  if (short.length > 42) short = short.slice(0, 42).replace(/\s+\S*$/, '').trim();
+  return short || cleanSpokenName(title);
+}
+
 type IndexedProduct = {
   productId: string;
   spokenName: string;
+  shortName: string;
   productType: string | null;
   priceText: string | null;
   available: number;
-  catTokens: Set<string>; // productType + tags (category-level)
-  allTokens: Set<string>; // + title (product-level)
+  typeTokens: Set<string>; // productType only (strongest signal)
+  catTokens: Set<string>;  // productType + tags (category-level)
+  allTokens: Set<string>;  // + title (product-level)
 };
 
 export function buildDrkallaProductCatalogSearch(
@@ -104,9 +147,10 @@ export function buildDrkallaProductCatalogSearch(
     const tags = Array.isArray(product.tags)
       ? product.tags.filter((t): t is string => typeof t === 'string')
       : [];
-    const catTokens = new Set<string>();
-    for (const source of [productType ?? '', ...tags]) {
-      for (const tok of contentTokens(source)) catTokens.add(tok);
+    const typeTokens = new Set<string>(contentTokens(productType ?? ''));
+    const catTokens = new Set<string>(typeTokens);
+    for (const tag of tags) {
+      for (const tok of contentTokens(tag)) catTokens.add(tok);
     }
     const allTokens = new Set<string>(catTokens);
     for (const tok of contentTokens(product.title)) allTokens.add(tok);
@@ -120,9 +164,11 @@ export function buildDrkallaProductCatalogSearch(
     indexed.push({
       productId: product.handle,
       spokenName: cleanSpokenName(product.title),
+      shortName: buildDrkallaShortName(product.title),
       productType,
       priceText: priceTextFromVariants(product.variants),
       available,
+      typeTokens,
       catTokens,
       allTokens,
     });
@@ -131,31 +177,37 @@ export function buildDrkallaProductCatalogSearch(
   return (text: string, limit = 4): DrkallaCatalogMatch[] => {
     const userTokens = [...new Set(contentTokens(text))];
     if (!userTokens.length) return [];
-    const scored: Array<{ p: IndexedProduct; catHits: number; allHits: number }> = [];
+    const scored: Array<{ p: IndexedProduct; score: number; catHits: number; allHits: number }> = [];
     for (const p of indexed) {
+      let typeHits = 0;
       let catHits = 0;
       let allHits = 0;
       for (const t of userTokens) {
+        if (p.typeTokens.has(t)) typeHits += 1;
         if (p.catTokens.has(t)) catHits += 1;
         if (p.allTokens.has(t)) allHits += 1;
       }
       if (allHits === 0) continue;
-      scored.push({ p, catHits, allHits });
+      // A productType match is the strongest "this is the right kind of product"
+      // signal; a tag match is next; a title-only match is weakest. This keeps a
+      // comb out of a shampoo result even when the comb carries a topical tag.
+      const score = typeHits * 4 + (catHits - typeHits) * 2 + (allHits - catHits);
+      scored.push({ p, score, catHits, allHits });
     }
     if (!scored.length) return [];
-    // Category-level matches (productType/tags) rank above title-only matches;
-    // then more matched tokens, then in-stock variety. This surfaces real,
-    // on-topic products for an open need.
     scored.sort((a, b) =>
-      (b.catHits - a.catHits)
-      || (b.allHits - a.allHits)
+      (b.score - a.score)
+      || (b.catHits - a.catHits)
       || (b.p.available - a.p.available)
-      || (b.p.spokenName.length - a.p.spokenName.length));
-    return scored.slice(0, Math.max(1, limit)).map(({ p }) => ({
+      || (a.p.shortName.length - b.p.shortName.length)); // shorter speakable name first
+    return scored.slice(0, Math.max(1, limit)).map(({ p, score, catHits }) => ({
       productId: p.productId,
       spokenName: p.spokenName,
+      shortName: p.shortName,
       productType: p.productType,
       priceText: p.priceText,
+      score,
+      categoryHit: catHits > 0,
     }));
   };
 }
