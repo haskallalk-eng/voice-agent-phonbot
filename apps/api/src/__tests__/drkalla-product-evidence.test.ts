@@ -77,4 +77,11 @@ describe('DrKalla product evidence lookup', () => {
     expect(line).not.toContain('https://');
     expect(line.length).toBeLessThanOrEqual(220);
   });
+
+  it('never asserts live stock as fact; defers availability to the website (Codex rank 4)', () => {
+    // A-red: an in-stock variant produced a blanket "verfuegbar" claim.
+    const inStock = formatDrkallaProductEvidenceLine(lookup.byId('synthesis-color-cream')!);
+    expect(inStock).not.toMatch(/\bverfuegbar\b/);
+    expect(inStock).toContain('Verfuegbarkeit tagesaktuell');
+  });
 });

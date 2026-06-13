@@ -8,6 +8,7 @@ import {
   detectDrkallaContactIntent,
 } from './drkalla-contact-facts.js';
 import type { DrkallaProductEvidenceLookup } from './drkalla-product-evidence.js';
+import { redactForPrompt } from './pii.js';
 import {
   deriveDrkallaAgentSpokeEvent,
   type DrkallaAmbiguousProductNameDetector,
@@ -67,13 +68,12 @@ export type DrkallaCustomLlmResponse = {
 };
 
 const RAW_PROVIDER_OR_SCOPE = /\b(?:orgId|tenantId|agentId|callId|response_required|update_only|transcript_with_tool_calls|authorization|Bearer)\b/gi;
-const RAW_PHONE = /(?:\+49|0049|0)\s?[1-9](?:[\s\-\/()]?\d){5,14}/g;
-const RAW_EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 
 function sanitizeUserText(value: string): string {
-  return value
-    .replace(RAW_PHONE, '[phone]')
-    .replace(RAW_EMAIL, '[email]')
+  // Use the central purpose-specific redactor (Milestone 1C) so caller PII —
+  // phone, email, address, IBAN, card, DOB — is stripped before the utterance
+  // reaches the model, then strip provider/scope tokens specific to this path.
+  return redactForPrompt(value)
     .replace(RAW_PROVIDER_OR_SCOPE, '[redacted]')
     .replace(/\s+/g, ' ')
     .trim()
