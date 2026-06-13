@@ -511,7 +511,7 @@ export async function registerRetellDrkallaCustomLlmWs(
           };
 
           const executeSendLink = smsToolEnabled
-            ? async (link: { url: string; label: string; linkKind: 'product' }) => {
+            ? async (link: { url: string; label: string; linkKind: 'product' | 'profi' }) => {
                 try {
                   const injected = await app.inject({
                     method: 'POST',

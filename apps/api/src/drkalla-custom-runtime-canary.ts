@@ -5,6 +5,10 @@ import {
   type DrkallaMemoryRuntimeResult,
 } from './drkalla-memory-runtime.js';
 import {
+  buildDrkallaContactDirective,
+  detectDrkallaContactIntent,
+} from './drkalla-contact-facts.js';
+import {
   formatDrkallaProductEvidenceLine,
   type DrkallaProductEvidenceLookup,
 } from './drkalla-product-evidence.js';
@@ -81,10 +85,11 @@ function modelDirectives(
     `Level: ${runtime.dialogueView.level}`,
     compactMemoryLine(runtime.memoryContext),
     evidenceLine(runtime, evidenceLookup),
+    buildDrkallaContactDirective(detectDrkallaContactIntent(runtime.currentUserText)),
     compactLine('Do', runtime.responsePlan.mustDo),
     compactLine('Do not', runtime.responsePlan.mustNotDo),
     `Closing: ${runtime.responsePlan.suggestedClosingMove}`,
-    'Memory is conversation state, not evidence. Use the Evidence line or KB for facts.',
+    'Memory is conversation state, not evidence. Use the Evidence/Kontakt-Fakt line or KB for facts.',
   ];
   return lines.filter((line): line is string => Boolean(line));
 }
@@ -108,7 +113,16 @@ export function buildDrkallaCustomRuntimeCanaryTurn(input: {
   if (!input.canary.enabled) blockers.push('CANARY_NOT_ENABLED');
   if (input.canary.enabled && !input.canary.allowModelDirectives) blockers.push('MODEL_DIRECTIVES_NOT_ALLOWED');
 
-  const directives = blockers.length === 0 ? modelDirectives(runtime, input.evidenceLookup) : [];
+  let directives = blockers.length === 0 ? modelDirectives(runtime, input.evidenceLookup) : [];
+  // Budget discipline without killing the turn: grounding (Evidence/Kontakt)
+  // and plan lines are correctness-critical, but the Memory line is only a
+  // dedupe hint. If the directives exceed the budget, drop the optional
+  // Memory line first rather than disabling the whole turn (which would block
+  // legitimate grounded answers). Only flag the blocker if still over after
+  // shedding the optional line.
+  if (directives.length && directives.join('\n').length > input.canary.maxDirectiveChars) {
+    directives = directives.filter((line) => !line.startsWith('Memory:'));
+  }
   const directiveChars = directives.join('\n').length;
   if (directives.length && directiveChars > input.canary.maxDirectiveChars) {
     blockers.push('DIRECTIVES_OVER_BUDGET');
