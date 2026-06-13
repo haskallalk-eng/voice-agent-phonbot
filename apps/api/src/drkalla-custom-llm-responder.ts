@@ -74,6 +74,8 @@ export type DrkallaCustomLlmResponse = {
     directiveChars: number;
   };
   blockers: string[];
+  /** True when the agent should hard hang-up after speaking (clear farewell). */
+  endCall?: boolean;
   /**
    * Non-blocking quality signal for observability. Only set on the model/
    * fallback path (deterministic paths are hardcoded Sie). Never alters text.
@@ -118,11 +120,13 @@ function compactSystemPrompt(directives: string[]): string {
   ].join('\n').slice(0, 2600);
 }
 
-// Match the model's paraphrases of the SMS offer too (schicken/senden/
-// zusenden/...), not just the canonical "schicken", so a caller's "ja" is
-// caught by the deterministic confirm path instead of reaching the model
-// (which otherwise invents steps like asking for the phone number).
-const SMS_OFFER_QUESTION = /per sms\s+(?:schick|send|zusend|zukomm)/i;
+// Match ANY phrasing where the agent's last question offered to SEND a
+// link/SMS — a send verb together with a link/SMS target, in either order —
+// so a caller's "ja" is caught by the deterministic confirm path instead of
+// reaching the model (which otherwise loops or invents asking for the number).
+// Covers "per SMS schicken/senden/zusenden/schreiben", "den Produktlink
+// senden", "schicke Ihnen den Link", "per Nachricht zusenden", etc.
+const SMS_OFFER_QUESTION = /(?:produktlink|\blink\b|per\s+sms|per\s+nachricht|\bsms\b)[^.?!]*\b(?:schick|sende|senden|zusend|zuschick|zukomm|schreib|versend)|\b(?:schick|sende|senden|zusend|zuschick|zukomm|schreib|versend)\w*[^.?!]*(?:produktlink|\blink\b|\bsms\b|nachricht)/i;
 // The two-option offer ("Produktlink ODER Profi-Zugang per SMS"): a bare "ja"
 // here is ambiguous and must be re-asked, not silently sent as product link.
 const TWO_OPTION_OFFER = /produktlink\s+oder\s+(?:den\s+link\s+(?:zum\s+)?)?profi/i;
@@ -379,6 +383,27 @@ export async function buildDrkallaCustomLlmResponse(input: {
         blockers: [],
       };
     }
+  }
+
+  // Clear caller farewell: say goodbye deterministically and hang up. No model,
+  // no new question. (Memory set endCallEligible on the caller's farewell turn;
+  // the agent_spoke reduction resets it, so we read it here before replying.)
+  if (
+    canaryTurn.runtime.memory.endCallEligible
+    && canaryTurn.runtime.memory.endCallReason === 'caller_farewell'
+  ) {
+    const byeText = 'Vielen Dank für Ihren Anruf bei Dr.Kalla. Auf Wiederhören!';
+    return {
+      blocked: false,
+      text: byeText,
+      memory: reduceDrkallaShortTermMemory(
+        canaryTurn.runtime.memory,
+        deriveDrkallaAgentSpokeEvent({ text: byeText, turnIndex }),
+      ),
+      metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
+      blockers: [],
+      endCall: true,
+    };
   }
 
   // A product name shared by several catalog products cannot resolve to one

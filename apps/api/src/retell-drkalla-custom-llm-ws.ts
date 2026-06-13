@@ -62,7 +62,7 @@ export type RetellDrkallaCustomLlmReply = {
   response_id: string | number;
   content: string;
   content_complete: true;
-  end_call: false;
+  end_call: boolean;
 };
 
 type RetellTranscriptTurn = {
@@ -287,13 +287,13 @@ export function loadDrkallaProductCatalogSearch(productsPath?: string): DrkallaP
   }
 }
 
-function reply(responseId: string | number, content: string): RetellDrkallaCustomLlmReply {
+function reply(responseId: string | number, content: string, endCall = false): RetellDrkallaCustomLlmReply {
   return {
     response_type: 'response',
     response_id: responseId,
     content,
     content_complete: true,
-    end_call: false,
+    end_call: endCall,
   };
 }
 
@@ -378,7 +378,11 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
   input.onQuality?.(response.quality);
 
   // Never speak internal diagnostics ("Canary disabled: ...") to a caller.
-  return reply(parsed.providerResponseId, response.blocked ? SAFE_UNAVAILABLE_TEXT : response.text);
+  return reply(
+    parsed.providerResponseId,
+    response.blocked ? SAFE_UNAVAILABLE_TEXT : response.text,
+    response.blocked ? false : response.endCall === true,
+  );
 }
 
 function secretAccepted(configuredSecret: string | undefined, candidate: unknown): boolean {
@@ -587,7 +591,7 @@ export async function registerRetellDrkallaCustomLlmWs(
           let sentText = '';
           let deltaBuffer = '';
 
-          const sendFrame = (content: string, complete: boolean) => {
+          const sendFrame = (content: string, complete: boolean, endCall = false) => {
             if (!parsedPreview) return;
             if (myArrival !== latestArrival) return; // stale: a newer turn arrived
             if (firstFrameMs === null) firstFrameMs = Date.now() - startedAt;
@@ -596,7 +600,9 @@ export async function registerRetellDrkallaCustomLlmWs(
               response_id: parsedPreview.providerResponseId,
               content,
               content_complete: complete,
-              end_call: false,
+              // Only the final frame may hang up, and only on a clear caller
+              // farewell (never on silence) — see endCall computation below.
+              end_call: complete ? endCall : false,
             }));
             if (!complete) sentText += content;
           };
@@ -675,7 +681,9 @@ export async function registerRetellDrkallaCustomLlmWs(
           // prefix, fall back to a single full final frame.
           const fullText = String(outbound.content);
           const tail = fullText.startsWith(sentText) ? fullText.slice(sentText.length) : fullText;
-          sendFrame(tail, true);
+          // Hard hang-up only on a clear caller farewell (response.endCall),
+          // carried on the final frame; never on streamed/intermediate frames.
+          sendFrame(tail, true, outbound.end_call === true);
 
           // Surface the non-blocking Sie-consistency signal so live du-form
           // slips are observable in logs (never alters the spoken answer).

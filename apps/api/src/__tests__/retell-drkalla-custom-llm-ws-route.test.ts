@@ -520,6 +520,32 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     await app.close();
   });
 
+  it('hard hangs up (end_call:true) on a clear caller farewell, never on silence', async () => {
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
+    let modelCalls = 0;
+    const { app, url } = await testServer({ complete: async () => { modelCalls += 1; return 'Gern, was suchen Sie?'; } });
+    const ws = await connect(url);
+
+    ws.send(JSON.stringify({
+      interaction_type: 'response_required', response_id: 1,
+      transcript: [{ role: 'user', content: 'Tschüss, das war alles.' }],
+    }));
+    const bye = await receive(ws) as { end_call: boolean; content: string; content_complete: boolean };
+    expect(bye.end_call).toBe(true);                 // hangs up
+    expect(bye.content_complete).toBe(true);
+    expect(bye.content).toMatch(/Wiederh[oö]ren|Tsch(ü|ue)ss|Danke/i); // says goodbye first
+    expect(modelCalls).toBe(0);                       // deterministic, no model
+
+    // A following silence reminder must NOT hang up.
+    ws.send(JSON.stringify({ interaction_type: 'reminder_required', response_id: 2 }));
+    const rem = await receive(ws) as { end_call: boolean };
+    expect(rem.end_call).toBe(false);
+
+    ws.close();
+    await app.close();
+  });
+
   it('greets in Sie on call open (empty first turn) without calling the model', async () => {
     process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
     process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
