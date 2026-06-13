@@ -342,10 +342,15 @@ function createOpenAiClient(): DrkallaCustomLlmClient {
   if (!apiKey) {
     return { complete: async () => '' };
   }
-  const timeoutMs = Math.max(250, Number(process.env.DRKALLA_CUSTOM_RUNTIME_MODEL_TIMEOUT_MS ?? 700));
+  // First-token budget. Live canary measurement (gpt-4.1-mini, de-DE) showed
+  // real first-token latency ~560-760 ms, so the previous 700 ms default
+  // aborted the stream before the first token on most turns and the agent
+  // always fell back. 1500 ms lets the model actually answer while still
+  // capping true outliers; tune via env per model.
+  const timeoutMs = Math.max(250, Number(process.env.DRKALLA_CUSTOM_RUNTIME_MODEL_TIMEOUT_MS ?? 1500));
   // Streaming budget: the first token must arrive inside timeoutMs; once
   // streaming, the stream may run up to this total wall-clock budget.
-  const streamTotalMs = Math.max(800, Number(process.env.DRKALLA_CUSTOM_RUNTIME_STREAM_TOTAL_MS ?? 2500));
+  const streamTotalMs = Math.max(800, Number(process.env.DRKALLA_CUSTOM_RUNTIME_STREAM_TOTAL_MS ?? 3500));
   const model = process.env.DRKALLA_CUSTOM_RUNTIME_MODEL || 'gpt-4.1-mini';
   const openai = new OpenAI({
     apiKey,
