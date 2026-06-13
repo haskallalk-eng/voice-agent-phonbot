@@ -15,6 +15,11 @@ import {
   type DrkallaProductEvidenceLookup,
   type DrkallaRawCatalogProduct,
 } from './drkalla-product-evidence.js';
+import {
+  buildDrkallaProductCatalogSearch,
+  type DrkallaProductCatalogSearch,
+  type DrkallaCatalogSearchRawProduct,
+} from './drkalla-product-catalog-search.js';
 import { DRKALLA_LINK_TOOL_PATH, drkallaLinkToolSignature } from './drkalla-link-tool.js';
 import {
   createDrkallaCanaryLatencyRecorder,
@@ -265,6 +270,23 @@ export function loadDrkallaProductEvidenceLookup(productsPath?: string): Drkalla
   }
 }
 
+/**
+ * One-time startup load of the deterministic catalog category/need search from
+ * the products snapshot (never per turn). Lets the agent NAME real products for
+ * open-ended needs ("was habt ihr für Dauerwelle?") instead of looping.
+ */
+export function loadDrkallaProductCatalogSearch(productsPath?: string): DrkallaProductCatalogSearch | undefined {
+  try {
+    const parsed = readFirstJson(
+      resolveDrkallaSnapshotPath('drkalla-products.json', productsPath ?? process.env.DRKALLA_PRODUCTS_PATH),
+    ) as { products?: unknown } | null;
+    if (!parsed || !Array.isArray(parsed.products) || !parsed.products.length) return undefined;
+    return buildDrkallaProductCatalogSearch(parsed.products as DrkallaCatalogSearchRawProduct[]);
+  } catch {
+    return undefined;
+  }
+}
+
 function reply(responseId: string | number, content: string): RetellDrkallaCustomLlmReply {
   return {
     response_type: 'response',
@@ -288,6 +310,7 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
   detectProducts?: DrkallaProductNameDetector;
   detectAmbiguousProduct?: DrkallaAmbiguousProductNameDetector;
   evidenceLookup?: DrkallaProductEvidenceLookup;
+  catalogSearch?: DrkallaProductCatalogSearch;
   executeSendLink?: DrkallaSendLinkExecutor;
   sequence?: number;
   noInputReminderCount?: number;
@@ -346,6 +369,7 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
     detectProducts: input.detectProducts,
     detectAmbiguousProduct: input.detectAmbiguousProduct,
     evidenceLookup: input.evidenceLookup,
+    catalogSearch: input.catalogSearch,
     executeSendLink: input.executeSendLink,
     onDelta: input.onDelta,
     signal: input.signal,
@@ -467,6 +491,7 @@ export async function registerRetellDrkallaCustomLlmWs(
     client?: DrkallaCustomLlmClient;
     detectProducts?: DrkallaProductNameDetector;
     evidenceLookup?: DrkallaProductEvidenceLookup;
+    catalogSearch?: DrkallaProductCatalogSearch;
   } = {},
 ): Promise<void> {
   const aliasEntries = options.detectProducts ? [] : loadDrkallaProductNameEntries();
@@ -476,6 +501,7 @@ export async function registerRetellDrkallaCustomLlmWs(
     ? buildDrkallaAmbiguousProductNameDetector(aliasEntries)
     : undefined;
   const evidenceLookup = options.evidenceLookup ?? loadDrkallaProductEvidenceLookup();
+  const catalogSearch = options.catalogSearch ?? loadDrkallaProductCatalogSearch();
   // Real SMS sending stays off unless explicitly enabled; the executor goes
   // through the existing policied send_link tool endpoint (live-call verify,
   // URL allowlist, per-call dedupe, audit trace) via local injection.
@@ -545,9 +571,16 @@ export async function registerRetellDrkallaCustomLlmWs(
             noInputReminderCount = 0; // the caller spoke; reset silence nudges
           }
           if (isReminderTurn) noInputReminderCount += 1;
-          // Call opening: the first response turn with no caller text is Retell
-          // eliciting the agent's greeting (custom-llm has no begin_message).
-          const isCallOpening = isResponseTurn && !greeted && !(parsedPreview?.currentUserText ?? '').trim();
+          // Call opening: greet on the FIRST response turn when the caller has
+          // not asked anything substantive yet — i.e. an empty turn (Retell
+          // eliciting the opener) OR a bare greeting/ack. Real Retell often puts
+          // the caller's "Hallo" into that first turn, so empty-only detection
+          // skipped the greeting (observed live: caller had to say "Hallo"
+          // twice). If the caller opens with a real question, answer it instead.
+          const openingText = (parsedPreview?.currentUserText ?? '').trim();
+          const isOpeningUtterance = openingText === ''
+            || /^(?:hallo|hallo\?+|hi|hey|hej|moin|servus|gr(?:ü|ue)(?:zi|ss\s+gott)|guten\s+(?:tag|morgen|abend)|jo|ja|hm+|h(?:a|ä)|hallu)[\s.,!?]*$/i.test(openingText);
+          const isCallOpening = isResponseTurn && !greeted && turnCounter === 1 && isOpeningUtterance;
           if (isCallOpening) greeted = true;
           const startedAt = Date.now();
           let firstFrameMs: number | null = null;
@@ -624,6 +657,7 @@ export async function registerRetellDrkallaCustomLlmWs(
             detectProducts,
             detectAmbiguousProduct,
             evidenceLookup,
+            catalogSearch,
             executeSendLink,
             sequence: turnCounter,
             noInputReminderCount,
