@@ -146,12 +146,32 @@ export function buildDrkallaProductNameDetector(
     }
   }
 
+  const index = buildProductTokenIndex(entries);
+
+  // An alias counts as unique only if it is genuinely DISTINCTIVE: its content
+  // tokens must not also occur (as a set) in two or more products' names.
+  // This drops shared words mislabelled as a single product's alias (e.g.
+  // "NutriElements" tagged only on one unrelated product while three real
+  // NutriElements SKUs exist), which otherwise mis-resolve to the wrong item.
+  const aliasIsDistinctive = (normalizedAlias: string): boolean => {
+    const at = contentTokens(normalizedAlias).filter((t) => !SHOP_TOKENS.has(t));
+    if (!at.length) return true;
+    let matches = 0;
+    for (const entry of index.tokenEntries) {
+      if (at.every((t) => entry.tokens.has(t))) {
+        matches += 1;
+        if (matches > 1) return false;
+      }
+    }
+    return true;
+  };
+
   // Aliases shared by more than one product are brand/line/type level
   // ("Koleston", "Evelon Pro") and must not resolve to a single product.
   // Pre-padded for the containment check so the per-turn scan allocates
   // nothing per alias.
   const uniqueAliases = [...aliasToProducts.entries()]
-    .filter(([, products]) => products.size === 1)
+    .filter(([alias, products]) => products.size === 1 && aliasIsDistinctive(alias))
     .map(([alias, products]) => ({ padded: ` ${alias} `, productId: [...products][0] as string }))
     .sort((left, right) => right.padded.length - left.padded.length);
 
@@ -169,13 +189,31 @@ export function buildDrkallaProductNameDetector(
       seen.add(productId);
       found.push(product);
     }
+
+    // Spurious-alias guard: against the real catalog some products carry
+    // shared/mislabelled aliases, so a unique-alias hit can resolve the WRONG
+    // product (e.g. caller says "Evelon Pro NutriElements" but a bad alias
+    // resolves an unrelated Haarmaske). If the utterance is token-ambiguous
+    // across several products and the exact hit is NOT one of those token
+    // candidates, the hit does not even contain the caller's distinctive
+    // tokens — suppress it and let the runtime ask which variant. A correctly
+    // spoken full product name stays resolved because it IS among its own
+    // token candidates.
+    if (found.length) {
+      const { candidates } = subsetCandidates(text, index);
+      if (candidates.length >= 2) {
+        const candidateIds = new Set(candidates.map((c) => c.product.productId));
+        const trusted = found.filter((p) => candidateIds.has(p.productId));
+        return trusted;
+      }
+    }
+
     // The fuzzy partial-name (token-subset) path deliberately NEVER auto-
-    // resolves a specific product: against the real catalog (messy aliases,
-    // translation duplicates, shared product lines) partial matches collide,
-    // and a wrong price/link is far worse than a clarifying question. Partial
-    // matches are surfaced only as a variant clarification by the ambiguous
-    // detector. Specific products still resolve here via the exact unique-alias
-    // pass above (i.e. the caller spoke the full product name).
+    // resolves a specific product: partial matches collide against the real
+    // catalog, and a wrong price/link is far worse than a clarifying question.
+    // Partial matches are surfaced only as a variant clarification by the
+    // ambiguous detector. Specific products still resolve via the exact
+    // unique-alias pass above (the caller spoke the full product name).
     return found;
   };
 }
