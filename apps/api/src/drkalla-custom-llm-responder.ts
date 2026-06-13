@@ -270,15 +270,16 @@ function tryDeterministicNeedReply(input: {
   const text = input.userText;
   if (NEED_VETO.test(text) || detectDrkallaContactIntent(text)) return null;
   const hits = input.catalogSearch?.(text, 4) ?? [];
-  // Require a real category match (productType/tag), not an incidental title
-  // hit, so we only take over discovery for a clear product category.
-  const strong = hits.filter((h) => h.categoryHit);
+  // Require a productType match (a clear product CATEGORY), not a tag/title hit,
+  // so this names products for "ich suche ein Shampoo" but leaves a specific
+  // ambiguous product line ("Koleston Perfect") to the variant clarification.
+  const strong = hits.filter((h) => h.typeHit);
   const top = strong[0];
   if (!top) return null;
   const evidence = input.evidenceLookup?.byId(top.productId) ?? null;
   const alts = strong.slice(1, 3).map((h) => h.shortName).filter((n) => n && n !== top.shortName);
-  const priceStr = top.priceText ? ` für ${top.priceText}` : '';
-  let reply = `Da kann ich Ihnen ${top.shortName}${priceStr} empfehlen.`;
+  let reply = `Da kann ich Ihnen ${top.shortName} empfehlen.`;
+  if (top.priceText) reply += ` Es kostet ${top.priceText}.`;
   if (alts.length) {
     reply += alts.length === 1
       ? ` Alternativ haben wir ${alts[0]}.`
@@ -564,6 +565,34 @@ export async function buildDrkallaCustomLlmResponse(input: {
     };
   }
 
+  // Deterministic discovery for a clear CATEGORY need (productType match) when
+  // the caller named no specific product: recommend the top SHORT product and
+  // ground it, so the agent stops looping and a follow-up "ja" sends the SMS.
+  // Runs BEFORE the ambiguous-variant clarification so "ich suche ein Shampoo"
+  // names shampoos instead of being treated as one ambiguous product line
+  // (real call 2026-06-13). No detectProducts in the reduce so the recommended
+  // TOP hit wins as lastMentionedProduct for a follow-up SMS confirm + price.
+  if ((input.detectProducts?.(user) ?? []).length === 0) {
+    const needReply = tryDeterministicNeedReply({
+      userText: user,
+      catalogSearch: input.catalogSearch,
+      evidenceLookup: input.evidenceLookup,
+    });
+    if (needReply) {
+      return {
+        blocked: false,
+        text: needReply.text,
+        memory: reduceDrkallaShortTermMemory(
+          canaryTurn.runtime.memory,
+          deriveDrkallaAgentSpokeEvent({ text: needReply.text, turnIndex, fallbackProduct: needReply.product }),
+        ),
+        metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
+        blockers: [],
+        quality: { duFormDetected: false, duFormConfidence: 'none', duFormSlips: [] },
+      };
+    }
+  }
+
   // A product name shared by several catalog products cannot resolve to one
   // product; ask a targeted variant question instead of guessing or
   // resetting to generic discovery.
@@ -645,36 +674,9 @@ export async function buildDrkallaCustomLlmResponse(input: {
 
   const namedNow = input.detectProducts?.(user) ?? [];
 
-  // Deterministic discovery for a clear category need: when the caller did NOT
-  // name a specific product but the need hits a real catalog category, name the
-  // top SHORT product (+ alternatives) and ground it — instead of letting the
-  // model loop on clarifying questions and long ungroundable titles (real call
-  // 2026-06-13). No detectProducts here so the recommended TOP hit wins as
-  // lastMentionedProduct, enabling a follow-up "ja" SMS confirm + grounded price.
-  if (namedNow.length === 0) {
-    const needReply = tryDeterministicNeedReply({
-      userText: user,
-      catalogSearch: input.catalogSearch,
-      evidenceLookup: input.evidenceLookup,
-    });
-    if (needReply) {
-      return {
-        blocked: false,
-        text: needReply.text,
-        memory: reduceDrkallaShortTermMemory(
-          canaryTurn.runtime.memory,
-          deriveDrkallaAgentSpokeEvent({ text: needReply.text, turnIndex, fallbackProduct: needReply.product }),
-        ),
-        metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
-        blockers: [],
-        quality: { duFormDetected: false, duFormConfidence: 'none', duFormSlips: [] },
-      };
-    }
-  }
-
-  // Fallback for an open need with no strong category match: surface real
-  // catalog products (short names) so the model NAMES them instead of looping.
-  // Grounded: only real catalog names are injected.
+  // Fallback for an open need that did NOT hit a productType (handled above) but
+  // still matches catalog products by tag/title: surface real products (short
+  // names) so the model NAMES them instead of looping. Grounded: real names only.
   const catalogHits = namedNow.length === 0 ? (input.catalogSearch?.(user, 4) ?? []) : [];
   let system = compactSystemPrompt(canaryTurn.modelDirectives);
   if (catalogHits.length) {

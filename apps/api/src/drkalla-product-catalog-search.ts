@@ -24,6 +24,7 @@ export type DrkallaCatalogMatch = {
   priceText: string | null;
   score: number;
   categoryHit: boolean; // matched the productType or a tag (not title-only)
+  typeHit: boolean;     // matched the productType itself (a clear category need)
 };
 
 export type DrkallaProductCatalogSearch = (text: string, limit?: number) => DrkallaCatalogMatch[];
@@ -177,7 +178,7 @@ export function buildDrkallaProductCatalogSearch(
   return (text: string, limit = 4): DrkallaCatalogMatch[] => {
     const userTokens = [...new Set(contentTokens(text))];
     if (!userTokens.length) return [];
-    const scored: Array<{ p: IndexedProduct; score: number; catHits: number; allHits: number }> = [];
+    const scored: Array<{ p: IndexedProduct; score: number; typeHits: number; catHits: number; allHits: number }> = [];
     for (const p of indexed) {
       let typeHits = 0;
       let catHits = 0;
@@ -192,7 +193,7 @@ export function buildDrkallaProductCatalogSearch(
       // signal; a tag match is next; a title-only match is weakest. This keeps a
       // comb out of a shampoo result even when the comb carries a topical tag.
       const score = typeHits * 4 + (catHits - typeHits) * 2 + (allHits - catHits);
-      scored.push({ p, score, catHits, allHits });
+      scored.push({ p, score, typeHits, catHits, allHits });
     }
     if (!scored.length) return [];
     scored.sort((a, b) =>
@@ -200,7 +201,7 @@ export function buildDrkallaProductCatalogSearch(
       || (b.catHits - a.catHits)
       || (b.p.available - a.p.available)
       || (a.p.shortName.length - b.p.shortName.length)); // shorter speakable name first
-    return scored.slice(0, Math.max(1, limit)).map(({ p, score, catHits }) => ({
+    return scored.slice(0, Math.max(1, limit)).map(({ p, score, typeHits, catHits }) => ({
       productId: p.productId,
       spokenName: p.spokenName,
       shortName: p.shortName,
@@ -208,6 +209,7 @@ export function buildDrkallaProductCatalogSearch(
       priceText: p.priceText,
       score,
       categoryHit: catHits > 0,
+      typeHit: typeHits > 0,
     }));
   };
 }

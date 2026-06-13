@@ -669,8 +669,8 @@ describe('DrKalla register/style + deterministic price (live call 2026-06-13 fix
     const catalogSearch = (text: string) =>
       /dauerwelle/i.test(text)
         ? [
-            { productId: 'perm', spokenName: 'Sanfte Dauerwelle für Wellen', shortName: 'Sanfte Dauerwelle', productType: 'Dauerwelle', priceText: '8,40 Euro', score: 4, categoryHit: true },
-            { productId: 'neutral', spokenName: 'Neutralisator', shortName: 'Neutralisator', productType: 'Styling', priceText: '12,00 Euro', score: 2, categoryHit: true },
+            { productId: 'perm', spokenName: 'Sanfte Dauerwelle für Wellen', shortName: 'Sanfte Dauerwelle', productType: 'Dauerwelle', priceText: '8,40 Euro', score: 4, categoryHit: true, typeHit: true },
+            { productId: 'perm2', spokenName: 'Kalte Dauerwelle', shortName: 'Kalte Dauerwelle', productType: 'Dauerwelle', priceText: '9,00 Euro', score: 4, categoryHit: true, typeHit: true },
           ]
         : [];
     const evidenceLookup = {
@@ -698,7 +698,7 @@ describe('DrKalla register/style + deterministic price (live call 2026-06-13 fix
     const prompts: string[] = [];
     const catalogSearch = (text: string) =>
       /spezielles/i.test(text)
-        ? [{ productId: 'x', spokenName: 'Irgendein langer Produkttitel 500 Ml', shortName: 'Irgendein Produkt', productType: 'Styling', priceText: '5,00 Euro', score: 1, categoryHit: false }]
+        ? [{ productId: 'x', spokenName: 'Irgendein langer Produkttitel 500 Ml', shortName: 'Irgendein Produkt', productType: 'Styling', priceText: '5,00 Euro', score: 1, categoryHit: false, typeHit: false }]
         : [];
     await buildDrkallaCustomLlmResponse({
       canary: CANARY,
@@ -742,13 +742,15 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
   // Stub catalog search returning 3 real-shaped products for the active type.
   // Text-aware like the real search: a bare "ja" has no content tokens and
   // returns nothing (so it cannot drive a deterministic product list).
+  // Real search treats "marken"/"auswahl" as stopwords, so only a real category
+  // word returns hits (the typeList path passes the activeType label here).
   const threeProductSearch = (text: string) =>
-    /haarfarbe|farbcreme|\bfarbe\b|marken|auswahl/i.test(text)
+    /haarfarbe|farbcreme|\bfarbe\b/i.test(text)
       ? [
-          { productId: 'koleston', spokenName: 'Koleston Perfect', shortName: 'Koleston Perfect', productType: 'Haarfarbe/Farbcreme', priceText: '9,90 Euro', score: 4, categoryHit: true },
-          { productId: 'majirel', spokenName: 'Majirel', shortName: 'Majirel', productType: 'Haarfarbe/Farbcreme', priceText: '11,50 Euro', score: 4, categoryHit: true },
-          { productId: 'igora', spokenName: 'Igora Royal', shortName: 'Igora Royal', productType: 'Haarfarbe/Farbcreme', priceText: '10,20 Euro', score: 4, categoryHit: true },
-          { productId: 'inoa', spokenName: 'Inoa', shortName: 'Inoa', productType: 'Haarfarbe/Farbcreme', priceText: '14,00 Euro', score: 4, categoryHit: true },
+          { productId: 'koleston', spokenName: 'Koleston Perfect', shortName: 'Koleston Perfect', productType: 'Haarfarbe/Farbcreme', priceText: '9,90 Euro', score: 4, categoryHit: true, typeHit: true },
+          { productId: 'majirel', spokenName: 'Majirel', shortName: 'Majirel', productType: 'Haarfarbe/Farbcreme', priceText: '11,50 Euro', score: 4, categoryHit: true, typeHit: true },
+          { productId: 'igora', spokenName: 'Igora Royal', shortName: 'Igora Royal', productType: 'Haarfarbe/Farbcreme', priceText: '10,20 Euro', score: 4, categoryHit: true, typeHit: true },
+          { productId: 'inoa', spokenName: 'Inoa', shortName: 'Inoa', productType: 'Haarfarbe/Farbcreme', priceText: '14,00 Euro', score: 4, categoryHit: true, typeHit: true },
         ]
       : [];
 

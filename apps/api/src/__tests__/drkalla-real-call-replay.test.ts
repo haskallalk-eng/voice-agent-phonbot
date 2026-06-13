@@ -11,7 +11,9 @@ import {
   loadDrkallaProductCatalogSearch,
   loadDrkallaProductEvidenceLookup,
   loadDrkallaProductNameDetector,
+  loadDrkallaProductNameEntries,
 } from '../retell-drkalla-custom-llm-ws.js';
+import { buildDrkallaAmbiguousProductNameDetector } from '../drkalla-product-name-detector.js';
 import { createTrustedScope } from '../trusted-scope.js';
 import type { AgentTurnRequestedEvent } from '../voice-runtime-contract.js';
 
@@ -32,6 +34,12 @@ const CANARY = { enabled: true, allowModelDirectives: true, allowLiveRollout: fa
 const catalogSearch = loadDrkallaProductCatalogSearch();
 const evidenceLookup = loadDrkallaProductEvidenceLookup();
 const detectProducts = loadDrkallaProductNameDetector();
+// Wire the ambiguous detector exactly like production — the live failure was a
+// generic "Shampoo" turn being treated as one ambiguous product line.
+const aliasEntries = loadDrkallaProductNameEntries();
+const detectAmbiguousProduct = aliasEntries.length
+  ? buildDrkallaAmbiguousProductNameDetector(aliasEntries)
+  : undefined;
 
 function turn(currentUserText: string): AgentTurnRequestedEvent {
   return {
@@ -64,6 +72,7 @@ describe('DrKalla real-call replay against the live catalog snapshot', () => {
         memory,
         client,
         detectProducts,
+        detectAmbiguousProduct,
         evidenceLookup,
         catalogSearch,
         executeSendLink,
