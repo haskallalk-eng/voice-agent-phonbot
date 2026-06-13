@@ -47,7 +47,7 @@ export type DrkallaCustomLlmClient = {
 // is wired into the custom runtime. The agent must never claim a link was
 // sent before a successful tool execution.
 export const DRKALLA_SMS_NOT_WIRED_TEXT =
-  'Der SMS-Versand ist in diesem Testanruf noch nicht freigeschaltet. Du findest das Produkt direkt auf drkalla punkt com. Kann ich sonst noch etwas klären?';
+  'Der SMS-Versand ist in diesem Testanruf noch nicht freigeschaltet. Sie finden das Produkt direkt auf drkalla punkt com. Kann ich sonst noch etwas klären?';
 
 export type DrkallaCustomLlmResponse = {
   blocked: boolean;
@@ -78,7 +78,7 @@ function sanitizeUserText(value: string): string {
 function compactSystemPrompt(directives: string[]): string {
   return [
     'Du bist der Dr.Kalla Voice-Agent fuer Friseurbedarf.',
-    'Antworte kurz, natuerlich und auf Deutsch.',
+    'Antworte kurz, natuerlich und auf Deutsch; sprich den Anrufer konsequent mit Sie an.',
     'Nutze diese Dialogsteuerung, aber behandle Memory nie als Faktenbeweis.',
     'Behaupte nie, eine SMS oder einen Link bereits gesendet zu haben.',
     ...directives,
@@ -97,12 +97,12 @@ export type DrkallaSendLinkExecutor = (input: {
 
 function fallbackText(userText: string): string {
   if (/\bunterschied|vergleich\b/i.test(userText)) {
-    return 'Ich prüfe das kurz: Meinst du den Unterschied zwischen den zuletzt genannten Produkten?';
+    return 'Ich prüfe das kurz: Meinen Sie den Unterschied zwischen den zuletzt genannten Produkten?';
   }
   if (/\blink|kauf|kaufe|bestell|sms\b/i.test(userText)) {
-    return 'Ich kann dir den passenden Produktlink per SMS schicken. Soll ich das machen?';
+    return 'Ich kann Ihnen den passenden Produktlink per SMS schicken. Soll ich das machen?';
   }
-  return 'Ich prüfe das kurz. Sag mir bitte, welches Produkt oder welche Produktart du meinst.';
+  return 'Ich prüfe das kurz. Sagen Sie mir bitte, welches Produkt oder welche Produktart Sie meinen.';
 }
 
 type DrkallaFallbackResult = {
@@ -121,7 +121,7 @@ function fallbackTextWithMemory(input: {
     const recent = input.memory.recentProducts.slice(-2);
     if (recent.length >= 2) {
       return {
-        text: `Ich pruefe den Unterschied zwischen ${recent[0]?.spokenName} und ${recent[1]?.spokenName}. Geht es dir um Anwendung oder Kaufentscheidung?`,
+        text: `Ich pruefe den Unterschied zwischen ${recent[0]?.spokenName} und ${recent[1]?.spokenName}. Geht es Ihnen um Anwendung oder Kaufentscheidung?`,
       };
     }
     return { text: fallbackText(userText) };
@@ -136,7 +136,7 @@ function fallbackTextWithMemory(input: {
       : '';
     if (input.memory.profiPriceDisclosureGiven && !/\bprofi/i.test(userText)) {
       return {
-        text: `${priceSentence}Soll ich dir den Produktlink zu ${lastProduct.spokenName} per SMS schicken?`,
+        text: `${priceSentence}Soll ich Ihnen den Produktlink zu ${lastProduct.spokenName} per SMS schicken?`,
         product: lastProduct,
       };
     }
@@ -147,13 +147,13 @@ function fallbackTextWithMemory(input: {
   }
   if (/\blink|kauf|kaufe|bestell|sms\b/i.test(userText) && lastProduct) {
     return {
-      text: `Soll ich dir den Produktlink zu ${lastProduct.spokenName} per SMS schicken?`,
+      text: `Soll ich Ihnen den Produktlink zu ${lastProduct.spokenName} per SMS schicken?`,
       product: lastProduct,
     };
   }
   if (input.memory.activeProductType) {
     return {
-      text: `Bei ${input.memory.activeProductType.label} kann ich dir eine kurze Auswahl nach Marken, Varianten oder Nuancen nennen. Soll ich mit Marken anfangen?`,
+      text: `Bei ${input.memory.activeProductType.label} kann ich Ihnen eine kurze Auswahl nach Marken, Varianten oder Nuancen nennen. Soll ich mit Marken anfangen?`,
     };
   }
   return { text: fallbackText(userText) };
@@ -242,12 +242,12 @@ export async function buildDrkallaCustomLlmResponse(input: {
         linkKind: 'product',
       }).catch(() => ({ smsSent: false as const }));
       if (outcome.smsSent) {
-        text = `Erledigt, ich habe dir den Produktlink zu ${activeProduct.spokenName} per SMS geschickt. Kann ich sonst noch etwas klären?`;
+        text = `Erledigt, ich habe Ihnen den Produktlink zu ${activeProduct.spokenName} per SMS geschickt. Kann ich sonst noch etwas klären?`;
         linkSentUrl = evidence.url;
       } else if ('duplicate' in outcome && outcome.duplicate) {
-        text = `Den Link zu ${activeProduct.spokenName} habe ich dir in diesem Anruf schon geschickt. Kann ich sonst noch etwas klären?`;
+        text = `Den Link zu ${activeProduct.spokenName} habe ich Ihnen in diesem Anruf schon geschickt. Kann ich sonst noch etwas klären?`;
       } else {
-        text = `Das hat gerade leider nicht geklappt, die SMS ging nicht raus. Du findest ${activeProduct.spokenName} auf drkalla punkt com.`;
+        text = `Das hat gerade leider nicht geklappt, die SMS ging nicht raus. Sie finden ${activeProduct.spokenName} auf drkalla punkt com.`;
       }
     }
     const agentEvent = deriveDrkallaAgentSpokeEvent({ text, turnIndex });
@@ -274,12 +274,12 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // resetting to generic discovery.
   const ambiguous = input.detectAmbiguousProduct?.(user) ?? null;
   if (ambiguous && (input.detectProducts?.(user) ?? []).length === 0) {
-    const clarifyText = `Von ${ambiguous.label} gibt es bei uns mehrere Ausführungen. Welche Größe oder Ausführung meinst du?`;
+    const clarifyText = `Von ${ambiguous.label} gibt es bei uns mehrere Ausführungen. Welche Größe oder Ausführung meinen Sie?`;
     const withPending = reduceDrkallaShortTermMemory(canaryTurn.runtime.memory, {
       type: 'pending_clarification',
       turnIndex,
       kind: 'product_variant',
-      prompt: `Welche Ausführung von ${ambiguous.label} meinst du?`,
+      prompt: `Welche Ausführung von ${ambiguous.label} meinen Sie?`,
     });
     return {
       blocked: false,

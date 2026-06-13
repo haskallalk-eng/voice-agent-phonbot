@@ -169,12 +169,35 @@ type RawAliasEntry = {
  * Fail-soft: a missing or invalid snapshot disables product-name detection
  * instead of breaking the canary route.
  */
+// Snapshot resolution order: explicit arg/env, then the tracked deploy
+// location (container cwd is /app, local API cwd is apps/api), then the
+// local-dev tmp scratch. First readable file wins; all paths fail soft.
+function resolveDrkallaSnapshotPath(fileName: string, explicit?: string): string[] {
+  return [
+    explicit,
+    path.join(process.cwd(), 'apps', 'api', 'data', 'drkalla-rag', fileName),
+    path.join(process.cwd(), 'data', 'drkalla-rag', fileName),
+    path.join(process.cwd(), 'tmp', 'drkalla-rag', fileName),
+  ].filter((candidate): candidate is string => Boolean(candidate));
+}
+
+function readFirstJson(candidates: string[]): unknown {
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(readFileSync(candidate, 'utf8'));
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 export function loadDrkallaProductNameEntries(aliasPath?: string): DrkallaProductNameEntry[] {
-  const resolved = aliasPath
-    ?? process.env.DRKALLA_PRODUCT_ALIAS_PATH
-    ?? path.join(process.cwd(), 'tmp', 'drkalla-rag', 'drkalla-product-voice-aliases.json');
   try {
-    const parsed = JSON.parse(readFileSync(resolved, 'utf8')) as { entries?: unknown };
+    const parsed = readFirstJson(
+      resolveDrkallaSnapshotPath('drkalla-product-voice-aliases.json', aliasPath ?? process.env.DRKALLA_PRODUCT_ALIAS_PATH),
+    ) as { entries?: unknown } | null;
+    if (!parsed) return [];
     if (!Array.isArray(parsed.entries)) return [];
     const entries: DrkallaProductNameEntry[] = [];
     for (const raw of parsed.entries as RawAliasEntry[]) {
@@ -216,12 +239,11 @@ export function redactDrkallaCanarySecretFromUrl(url: string): string {
  * canary simply runs without grounded price/brand evidence.
  */
 export function loadDrkallaProductEvidenceLookup(productsPath?: string): DrkallaProductEvidenceLookup | undefined {
-  const resolved = productsPath
-    ?? process.env.DRKALLA_PRODUCTS_PATH
-    ?? path.join(process.cwd(), 'tmp', 'drkalla-rag', 'drkalla-products.json');
   try {
-    const parsed = JSON.parse(readFileSync(resolved, 'utf8')) as { products?: unknown };
-    if (!Array.isArray(parsed.products) || !parsed.products.length) return undefined;
+    const parsed = readFirstJson(
+      resolveDrkallaSnapshotPath('drkalla-products.json', productsPath ?? process.env.DRKALLA_PRODUCTS_PATH),
+    ) as { products?: unknown } | null;
+    if (!parsed || !Array.isArray(parsed.products) || !parsed.products.length) return undefined;
     const lookup = buildDrkallaProductEvidenceLookup(parsed.products as DrkallaRawCatalogProduct[]);
     return lookup.size > 0 ? lookup : undefined;
   } catch {

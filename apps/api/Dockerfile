@@ -2,7 +2,7 @@ FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@9.15.3 --activate
 WORKDIR /app
 
-# ── build: install all deps + compile ────────────────────────────────────────
+# â”€â”€ build: install all deps + compile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 FROM base AS build
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json ./
 COPY apps/api/package.json apps/api/
@@ -14,12 +14,15 @@ COPY apps/api/ apps/api/
 COPY packages/ packages/
 RUN pnpm -r build
 
-# ── runtime: lean production image ────────────────────────────────────────────
+# â”€â”€ runtime: lean production image â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 FROM node:22-alpine AS runtime
 WORKDIR /app
 # Copy everything built (node_modules + dist)
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/api/dist ./apps/api/dist
+# DrKalla catalog snapshots (public shop data, no caller PII) for the
+# custom-runtime product-name detector and grounded price/brand evidence.
+COPY --from=build /app/apps/api/data ./apps/api/data
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build /app/packages/voice-core/dist ./packages/voice-core/dist
 COPY --from=build /app/apps/api/package.json ./apps/api/
@@ -31,7 +34,7 @@ ENV NODE_ENV=production
 ENV PORT=3001
 EXPOSE 3001
 
-# Drop root — the `node` user (uid 1000) is built into node:*-alpine images.
+# Drop root â€” the `node` user (uid 1000) is built into node:*-alpine images.
 # Prevents container-escape attacker from owning root on the host.
 USER node
 
