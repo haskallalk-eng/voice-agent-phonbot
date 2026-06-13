@@ -7,6 +7,7 @@ import type { WebSocket } from 'ws';
 import {
   buildDrkallaCustomLlmResponse,
   type DrkallaCustomLlmClient,
+  type DrkallaCustomLlmResponse,
   type DrkallaSendLinkExecutor,
 } from './drkalla-custom-llm-responder.js';
 import {
@@ -15,6 +16,10 @@ import {
   type DrkallaRawCatalogProduct,
 } from './drkalla-product-evidence.js';
 import { DRKALLA_LINK_TOOL_PATH, drkallaLinkToolSignature } from './drkalla-link-tool.js';
+import {
+  createDrkallaCanaryLatencyRecorder,
+  type DrkallaCanaryLatencyRecorder,
+} from './drkalla-canary-latency-stats.js';
 import {
   buildDrkallaAmbiguousProductNameDetector,
   buildDrkallaProductNameDetector,
@@ -271,6 +276,7 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
   callId?: string;
   memory?: DrkallaShortTermVoiceMemory;
   onMemory?: (memory: DrkallaShortTermVoiceMemory) => void;
+  onQuality?: (quality: DrkallaCustomLlmResponse['quality']) => void;
   complete: DrkallaCustomLlmClient['complete'];
   completeStream?: DrkallaCustomLlmClient['completeStream'];
   detectProducts?: DrkallaProductNameDetector;
@@ -326,6 +332,7 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
     signal: input.signal,
   });
   input.onMemory?.(response.memory);
+  input.onQuality?.(response.quality);
 
   // Never speak internal diagnostics ("Canary disabled: ...") to a caller.
   return reply(parsed.providerResponseId, response.blocked ? SAFE_UNAVAILABLE_TEXT : response.text);
@@ -454,6 +461,11 @@ export async function registerRetellDrkallaCustomLlmWs(
   // through the existing policied send_link tool endpoint (live-call verify,
   // URL allowlist, per-call dedupe, audit trace) via local injection.
   const smsToolEnabled = process.env.DRKALLA_CUSTOM_RUNTIME_SMS_TOOL_ENABLED === 'true';
+  // Process-wide rolling latency stats from the real WS turns (shared across
+  // calls). Only the two timings the custom-LLM socket truly observes are
+  // recorded; no ASR/provider timestamps are fabricated. See PLANS.md: p50<=
+  // 500ms is unmet on MODEL turns (TTFT-bound) but met on deterministic turns.
+  const latencyRecorder: DrkallaCanaryLatencyRecorder = createDrkallaCanaryLatencyRecorder();
   const handler = (socket: WebSocket, request: { query: unknown; params: unknown }) => {
     const query = request.query as { secret?: string; token?: string };
     const params = request.params as { secret?: string };
@@ -570,6 +582,7 @@ export async function registerRetellDrkallaCustomLlmWs(
           // live turn builds on. Capture the candidate and only commit if this
           // turn is still the newest when the reply is ready.
           let pendingMemory: DrkallaShortTermVoiceMemory | null = null;
+          let pendingQuality: DrkallaCustomLlmResponse['quality'] = undefined;
           const outbound = await buildRetellDrkallaCustomLlmWsReply({
             enabled,
             secretAccepted: secretOk,
@@ -578,6 +591,9 @@ export async function registerRetellDrkallaCustomLlmWs(
             memory,
             onMemory: (nextMemory) => {
               pendingMemory = nextMemory;
+            },
+            onQuality: (quality) => {
+              pendingQuality = quality;
             },
             complete: client.complete,
             completeStream: client.completeStream,
@@ -602,12 +618,35 @@ export async function registerRetellDrkallaCustomLlmWs(
           const tail = fullText.startsWith(sentText) ? fullText.slice(sentText.length) : fullText;
           sendFrame(tail, true);
 
+          // Surface the non-blocking Sie-consistency signal so live du-form
+          // slips are observable in logs (never alters the spoken answer).
+          const quality = pendingQuality as DrkallaCustomLlmResponse['quality'];
+          if (quality?.duFormDetected) {
+            app.log.warn(
+              { turn: turnCounter, duFormConfidence: quality.duFormConfidence, duFormSlips: quality.duFormSlips },
+              'drkalla canary du-form slip detected',
+            );
+          }
+          const turnFirstFrameMs = firstFrameMs ?? Date.now() - startedAt;
+          const turnTotalMs = Date.now() - startedAt;
+          latencyRecorder.record({
+            firstFrameMs: turnFirstFrameMs,
+            totalMs: turnTotalMs,
+            streamed: sentText.length > 0,
+          });
+          const rolling = latencyRecorder.summary();
           app.log.info(
             {
               turn: turnCounter,
-              firstFrameMs: firstFrameMs ?? Date.now() - startedAt,
-              totalMs: Date.now() - startedAt,
+              firstFrameMs: turnFirstFrameMs,
+              totalMs: turnTotalMs,
               streamedFrames: sentText.length > 0,
+              duFormDetected: quality?.duFormDetected ?? false,
+              rollingSamples: rolling.samples,
+              rollingFirstFrameP50: rolling.firstFrameP50,
+              rollingFirstFrameP90: rolling.firstFrameP90,
+              rollingFirstFrameP95: rolling.firstFrameP95,
+              rollingModelTurnShare: Number(rolling.modelTurnShare.toFixed(2)),
             },
             'drkalla canary turn latency',
           );
