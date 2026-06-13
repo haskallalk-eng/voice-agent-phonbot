@@ -212,6 +212,94 @@ function fallbackTextWithMemory(input: {
   return { text: fallbackText(userText) };
 }
 
+// Explicit request to see the brand/product selection for the active type
+// ("welche Marken habt ihr?", "zeig mir die Auswahl", "was habt ihr da?").
+const DRKALLA_TYPE_LIST_REQUEST = /(?:marken|auswahl|welche habt|was habt|zeig|liste)/i;
+
+/**
+ * Deterministic, grounded brand/product list for the "Soll ich mit Marken
+ * anfangen?" -> "Ja" funnel gap. The agent offers to list brands/products for
+ * an active product type; on a bare "Ja" the open-ended catalog search runs on
+ * "ja" and finds nothing, so the model loops on the same offer (live call).
+ * When an active product type is known and the caller either bare-affirms or
+ * explicitly asks for the selection, name up to three REAL catalog products
+ * for that type in full Sie sentences. Returns null when this is not that
+ * situation (then the normal model path handles it). Grounded: only real
+ * catalog names are spoken, never invented.
+ */
+function tryDeterministicTypeListReply(input: {
+  userText: string;
+  memory: DrkallaShortTermVoiceMemory;
+  catalogSearch?: DrkallaProductCatalogSearch;
+}): string | null {
+  const activeType = input.memory.activeProductType;
+  if (!activeType) return null;
+  const text = input.userText;
+  const wantsList = SHORT_AFFIRMATION.test(text) || DRKALLA_TYPE_LIST_REQUEST.test(text);
+  if (!wantsList) return null;
+  const hits = (input.catalogSearch?.(activeType.label, 4) ?? []).slice(0, 3);
+  if (!hits.length) return null;
+  const names = hits.map((p, index) =>
+    index === 0 && p.priceText ? `${p.spokenName} (${p.priceText})` : p.spokenName,
+  );
+  const list = names.length === 1
+    ? names[0]
+    : `${names.slice(0, -1).join(', ')} und ${names[names.length - 1]}`;
+  return `Bei ${activeType.label} haben wir zum Beispiel ${list}. Welches davon interessiert Sie?`;
+}
+
+// LATENCY fast-path matchers for low-content caller turns. Anchored to the
+// START of the (sanitized) utterance so they only fire on a turn that is
+// essentially nothing but the acknowledgement — never on a real question that
+// happens to begin with "ok" or "danke".
+// Pure thanks: "danke", "vielen Dank", "dankeschön", "merci".
+const SMALLTALK_THANKS = /^(?:vielen\s+)?(?:danke|dankesch(?:ö|oe)n|merci)/i;
+// Bare acknowledgement that fills the whole turn ("okay.", "alles klar", "passt").
+const SMALLTALK_ACK = /^(?:ok(?:ay)?|alles klar|super|gut|verstanden|in ordnung|passt)[.! ]*$/i;
+// Bare negation that fills the whole turn ("nein", "nö", "nee") — NOT a farewell.
+const SMALLTALK_NEGATION = /^(?:nein|n(?:ö|oe)|nee)[.! ]*$/i;
+// Any product/price/contact signal in the turn vetoes the smalltalk path so it
+// can never swallow a real request ("danke, was kostet das?" -> model/price).
+const SMALLTALK_VETO = /\?|\b(?:preis|preise|kostet|kosten|teuer|euro|kauf|kaufe|bestell|link|sms|produkt|marke|marken|auswahl|adresse|öffnungszeit|oeffnungszeit|email|e-mail|profi|unterschied|vergleich|verf[üu]gbar)\b/i;
+
+/**
+ * Deterministic Sie reply for very common low-content "smalltalk" caller turns
+ * (pure thanks, a bare acknowledgement, a bare non-farewell "nein"). These make
+ * up a large share of live turns and currently each costs a full model round
+ * trip (~95% of turns hit the model). Answering them deterministically removes
+ * that latency without ever inventing facts. Returns null whenever this is NOT
+ * a pure smalltalk turn, so anything with real content falls through to the
+ * normal model/price/funnel paths. Guards:
+ *   - vetoed if the turn carries a product/price/contact/comparison signal or a
+ *     question mark (so "danke, und der Preis?" is never swallowed);
+ *   - a bare "nein" is skipped while a send-link offer is pending (the existing
+ *     SMS-confirm logic must own that "nein"); farewells are handled earlier.
+ */
+function tryDeterministicSmalltalkReply(input: {
+  userText: string;
+  memory: DrkallaShortTermVoiceMemory;
+}): string | null {
+  const text = input.userText.trim();
+  if (!text) return null;
+  // Never let smalltalk swallow a turn that also asks for something concrete.
+  if (SMALLTALK_VETO.test(text)) return null;
+  if (detectDrkallaContactIntent(text)) return null;
+
+  if (SMALLTALK_THANKS.test(text)) {
+    return 'Sehr gern! Kann ich sonst noch etwas für Sie tun?';
+  }
+  if (SMALLTALK_ACK.test(text)) {
+    return 'Gern. Womit kann ich Ihnen weiterhelfen?';
+  }
+  if (SMALLTALK_NEGATION.test(text)) {
+    // A "nein" answering a pending SMS/link offer means "do not send" — leave it
+    // to the existing confirm logic / model, do NOT treat it as smalltalk.
+    if (SMS_OFFER_QUESTION.test(input.memory.lastAgentQuestion ?? '')) return null;
+    return 'Alles klar. Kann ich Ihnen sonst noch weiterhelfen?';
+  }
+  return null;
+}
+
 // A clear, simple price question (not a comparison, not a contact question).
 const DRKALLA_PRICE_INTENT = /\b(?:was\s+kostet|wie\s*viel|wie\s*teuer|preis|preise|kostet|kosten|teuer)\b/i;
 
@@ -406,6 +494,29 @@ export async function buildDrkallaCustomLlmResponse(input: {
     };
   }
 
+  // LATENCY fast-path: pure thanks / bare ack / bare non-farewell "nein" get a
+  // deterministic Sie reply with no model call. Placed AFTER the farewell and
+  // SMS-confirm short-circuits (so it cannot swallow a goodbye or a pending
+  // link answer) and BEFORE the ambiguous/price/funnel paths (its own veto
+  // already rules out any turn that carries a product/price/contact signal).
+  const smalltalkReply = tryDeterministicSmalltalkReply({
+    userText: user,
+    memory: canaryTurn.runtime.memory,
+  });
+  if (smalltalkReply) {
+    return {
+      blocked: false,
+      text: smalltalkReply,
+      memory: reduceDrkallaShortTermMemory(
+        canaryTurn.runtime.memory,
+        deriveDrkallaAgentSpokeEvent({ text: smalltalkReply, turnIndex }),
+      ),
+      metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
+      blockers: [],
+      quality: { duFormDetected: false, duFormConfidence: 'none', duFormSlips: [] },
+    };
+  }
+
   // A product name shared by several catalog products cannot resolve to one
   // product; ask a targeted variant question instead of guessing or
   // resetting to generic discovery.
@@ -454,6 +565,30 @@ export async function buildDrkallaCustomLlmResponse(input: {
           detectProducts: input.detectProducts,
           fallbackProduct: deterministicPrice.product,
         }),
+      ),
+      metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
+      blockers: [],
+      quality: { duFormDetected: false, duFormConfidence: 'none', duFormSlips: [] },
+    };
+  }
+
+  // Deterministic brand/product list for the "Soll ich mit Marken anfangen?"
+  // -> "Ja" funnel gap: when an active product type is known and the caller
+  // bare-affirms or asks for the selection, name real catalog products for that
+  // type instead of letting catalogSearch("ja") return nothing and the model
+  // loop on the same offer (live call). Grounded: only real catalog names.
+  const typeListReply = tryDeterministicTypeListReply({
+    userText: user,
+    memory: canaryTurn.runtime.memory,
+    catalogSearch: input.catalogSearch,
+  });
+  if (typeListReply) {
+    return {
+      blocked: false,
+      text: typeListReply,
+      memory: reduceDrkallaShortTermMemory(
+        canaryTurn.runtime.memory,
+        deriveDrkallaAgentSpokeEvent({ text: typeListReply, turnIndex }),
       ),
       metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
       blockers: [],

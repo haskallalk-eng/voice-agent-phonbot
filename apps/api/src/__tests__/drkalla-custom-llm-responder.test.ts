@@ -694,3 +694,171 @@ describe('DrKalla register/style + deterministic price (live call 2026-06-13 fix
     expect(modelCalls).toBe(1);
   });
 });
+
+describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfangen?" -> "Ja")', () => {
+  const CANARY = { enabled: true, allowModelDirectives: true, allowLiveRollout: false, maxDirectiveChars: 800 };
+
+  // Memory with an active product type but no resolved single product, mirroring
+  // the state right after the agent offered "Soll ich mit Marken anfangen?".
+  function activeTypeMemory() {
+    return reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'user_audio',
+      turnIndex: 1,
+      text: 'Ich suche eine Haarfarbe.',
+      audioState: 'heard',
+    });
+  }
+
+  // Stub catalog search returning 3 real-shaped products for the active type.
+  const threeProductSearch = (_text: string) => [
+    { productId: 'koleston', spokenName: 'Koleston Perfect', productType: 'Haarfarbe/Farbcreme', priceText: '9,90 Euro' },
+    { productId: 'majirel', spokenName: 'Majirel', productType: 'Haarfarbe/Farbcreme', priceText: '11,50 Euro' },
+    { productId: 'igora', spokenName: 'Igora Royal', productType: 'Haarfarbe/Farbcreme', priceText: '10,20 Euro' },
+    { productId: 'inoa', spokenName: 'Inoa', productType: 'Haarfarbe/Farbcreme', priceText: '14,00 Euro' },
+  ];
+
+  it('A-red: a bare "Ja" with an active product type names 3 real products, no model call', async () => {
+    const memory = activeTypeMemory();
+    expect(memory.activeProductType?.label).toBe('Haarfarbe/Farbcreme');
+
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Ja'),
+      memory,
+      client: { complete: async () => { modelCalls += 1; return 'should not be used'; } },
+      catalogSearch: threeProductSearch,
+    });
+
+    expect(modelCalls).toBe(0);
+    expect(response.metrics.extraLlmCalls).toBe(0);
+    expect(response.text).toContain('Haarfarbe/Farbcreme');
+    expect(response.text).toContain('Koleston Perfect');
+    expect(response.text).toContain('Majirel');
+    expect(response.text).toContain('Igora Royal');
+    expect(response.text).toContain('9,90 Euro'); // priceText only on the first item
+    expect(response.text).not.toContain('11,50 Euro');
+    expect(response.text).toContain('Welches davon interessiert Sie?');
+    expect(response.text).not.toMatch(/\b(?:du|dich|dir|dein)\b/i);
+  });
+
+  it('A-red: an explicit "welche Marken habt ihr?" lists the same 3 products, no model call', async () => {
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Welche Marken habt ihr?'),
+      memory: activeTypeMemory(),
+      client: { complete: async () => { modelCalls += 1; return 'should not be used'; } },
+      catalogSearch: threeProductSearch,
+    });
+
+    expect(modelCalls).toBe(0);
+    expect(response.metrics.extraLlmCalls).toBe(0);
+    expect(response.text).toContain('Koleston Perfect');
+    expect(response.text).toContain('Majirel');
+    expect(response.text).toContain('Igora Royal');
+    expect(response.text).toContain('Welches davon interessiert Sie?');
+  });
+
+  it('B: with NO active product type, a bare "Ja" falls through to the model path', async () => {
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Ja'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => { modelCalls += 1; return 'Worum darf ich mich kümmern?'; } },
+      catalogSearch: threeProductSearch,
+    });
+
+    expect(modelCalls).toBe(1);
+    expect(response.metrics.extraLlmCalls).toBe(1);
+    expect(response.text).toBe('Worum darf ich mich kümmern?');
+  });
+});
+
+describe('DrKalla deterministic smalltalk fast-paths (latency: low-content turns skip the model)', () => {
+  const CANARY = { enabled: true, allowModelDirectives: true, allowLiveRollout: false, maxDirectiveChars: 800 };
+
+  // Memory whose last agent question is an SMS/link offer, so a "nein" here must
+  // be owned by the existing confirm logic, NOT the smalltalk fast-path.
+  function smsOfferMemory() {
+    return reduceDrkallaShortTermMemory(productMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 2,
+      text: 'Soll ich Ihnen den Produktlink per SMS schicken?',
+      lastAgentQuestion: 'Soll ich Ihnen den Produktlink per SMS schicken?',
+    });
+  }
+
+  it('A-red: a pure "danke" is acknowledged deterministically, the model is NOT called', async () => {
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Danke!'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => { modelCalls += 1; return 'should not be used'; } },
+    });
+
+    expect(modelCalls).toBe(0);
+    expect(response.metrics.extraLlmCalls).toBe(0);
+    expect(response.text).toBe('Sehr gern! Kann ich sonst noch etwas für Sie tun?');
+    expect(response.text).not.toMatch(/\b(?:du|dich|dir|dein)\b/i);
+  });
+
+  it('A-red: a bare "okay" is acknowledged deterministically, no model call', async () => {
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Okay'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => { modelCalls += 1; return 'should not be used'; } },
+    });
+
+    expect(modelCalls).toBe(0);
+    expect(response.metrics.extraLlmCalls).toBe(0);
+    expect(response.text).toBe('Gern. Womit kann ich Ihnen weiterhelfen?');
+  });
+
+  it('A-red: a bare non-farewell "nein" is acknowledged deterministically, no model call', async () => {
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Nein.'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => { modelCalls += 1; return 'should not be used'; } },
+    });
+
+    expect(modelCalls).toBe(0);
+    expect(response.metrics.extraLlmCalls).toBe(0);
+    expect(response.text).toBe('Alles klar. Kann ich Ihnen sonst noch weiterhelfen?');
+  });
+
+  it('B: a real product/price question is NOT swallowed and still reaches the model', async () => {
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Danke, und was kostet die Pflege denn so?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => { modelCalls += 1; return 'Ich schaue das gern nach.'; } },
+    });
+
+    expect(modelCalls).toBe(1);
+    expect(response.metrics.extraLlmCalls).toBe(1);
+    expect(response.text).toBe('Ich schaue das gern nach.');
+  });
+
+  it('B: a "nein" right after an SMS offer is NOT swallowed by smalltalk', async () => {
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Nein.'),
+      memory: smsOfferMemory(),
+      client: { complete: async () => { modelCalls += 1; return 'Alles klar, dann nicht.'; } },
+    });
+
+    // The smalltalk ack must not own this turn; the existing confirm/model path does.
+    expect(response.text).not.toBe('Alles klar. Kann ich Ihnen sonst noch weiterhelfen?');
+    expect(modelCalls).toBe(1);
+    expect(response.metrics.extraLlmCalls).toBe(1);
+  });
+});
