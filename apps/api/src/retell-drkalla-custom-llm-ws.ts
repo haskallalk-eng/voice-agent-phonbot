@@ -651,8 +651,11 @@ export async function registerRetellDrkallaCustomLlmWs(
           // skipped the greeting (observed live: caller had to say "Hallo"
           // twice). If the caller opens with a real question, answer it instead.
           const openingText = (parsedPreview?.currentUserText ?? '').trim();
+          // Match an opener made up only of greeting/filler tokens, possibly
+          // repeated ("Hallo? Hallo.") — a real call opened that way and the
+          // single-token regex missed it, so the greeting never fired.
           const isOpeningUtterance = openingText === ''
-            || /^(?:hallo|hallo\?+|hi|hey|hej|moin|servus|gr(?:ü|ue)(?:zi|ss\s+gott)|guten\s+(?:tag|morgen|abend)|jo|ja|hm+|h(?:a|ä)|hallu)[\s.,!?]*$/i.test(openingText);
+            || /^(?:(?:hallo|hall[oö]chen|hi|hey|hej|moin|servus|gr(?:ü|ue)(?:zi|ss\s+gott)|guten\s+(?:tag|morgen|abend)|jo|ja+|hm+|h(?:a|ä)|hallu)[\s.,!?]*)+$/i.test(openingText);
           const isCallOpening = isResponseTurn && !greeted && turnCounter === 1 && isOpeningUtterance;
           if (isCallOpening) greeted = true;
           const startedAt = Date.now();

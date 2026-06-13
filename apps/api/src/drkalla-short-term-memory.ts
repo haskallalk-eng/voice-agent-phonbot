@@ -161,7 +161,13 @@ const TITLED_PERSON_NAME = /\b(?:Herr|Frau)\s+[A-ZÄÖÜ][\p{L}ÄÖÜäöüß-]+
 const FOR_PERSON_NAME = /\b(f(?:ue|ü)r)\s+[A-ZÄÖÜ][\p{L}ÄÖÜäöüß-]+\s+[A-ZÄÖÜ][\p{L}ÄÖÜäöüß-]+\b/gu;
 const LEADING_PERSON_NAME = /^[A-ZÄÖÜ][\p{L}ÄÖÜäöüß-]+\s+[A-ZÄÖÜ][\p{L}ÄÖÜäöüß-]+(?=,)/u;
 const REPEAT_REQUEST = /\b(?:(?:nochmal|noch mal)\s+(?:sagen|wiederholen|nennen|erkl[aä]ren|h[oö]ren)|wiederhol|sag.*noch|kannst du (?:das|es)\s+(?:nochmal|noch mal|wiederholen)|k[oö]nnen sie (?:das|es)\s+(?:nochmal|noch mal|wiederholen)|adresse nochmal|zeiten nochmal|wie war das|was war das|(?:wie|was) war (?:der|die|das) (?:preis|name|link|adresse|uhrzeit|telefonnummer|nummer|produkt))\b/i;
-const FAREWELL = /\b(?:tsch[uü]ss|ciao|auf wiederh[oö]ren|bis dann|sch[oö]nen tag noch|das war(?:'| e)?s|das war alles|nein danke,?\s+das war alles|leg auf|beende den anruf|du kannst auflegen)\b/i;
+// Real calls showed callers ending with forms the old literal "leg auf" missed
+// ("tschau", "leg einfach/bitte/doch auf", bare "auflegen"), so the agent never
+// hung up. Cover the common German farewell + hang-up phrasings; NOT_FAREWELL
+// below still vetoes negated/continuing turns ("leg nicht auf", "noch nicht").
+// Trailing guard is a letter-lookahead, not \b: umlaut-final tokens like
+// "tschö" have no \w on the right so \b would never match after them.
+const FAREWELL = /\b(?:tsch(?:[üu]ss?(?:i|le)?|au|ö|oe)|ciao|auf\s+wiederh[oö]ren|bis\s+dann|sch[oö]nen\s+tag\s+noch|das\s+war(?:'| e)?s|das\s+war\s+alles|nein\s+danke,?\s+das\s+war\s+alles|leg(?:e|st)?(?:\s+(?:bitte|doch|einfach|endlich|jetzt|mal|ruhig|gerne?|schon|halt|sofort|du))*\s+auf|(?:bitte\s+|einfach\s+|jetzt\s+|sofort\s+)?auflegen|beende(?:n)?\s+(?:bitte\s+)?(?:den\s+)?(?:anruf|gespr[äa]ch)|mach(?:\s+bitte)?\s+schluss|du\s+kannst\s+auflegen)(?![a-zäöüß])/i;
 // A farewell keyword inside a negated or continuing turn is NOT a goodbye:
 // "leg nicht auf", "nicht auflegen", "das war's noch nicht", "noch eine Frage".
 const NOT_FAREWELL = /\b(?:nicht|nie)\s+auf(?:legen|h[äa]ngen)|leg\s+nicht\s+auf|nicht\s+(?:beenden|auflegen)|noch\s+nicht\b|noch\s+(?:eine|ne|'?n)?\s*frage|warte|moment\b|ach\s+nein|doch\s+nicht|eine?\s+sache\s+noch|noch\s+(?:et)?was\b/i;

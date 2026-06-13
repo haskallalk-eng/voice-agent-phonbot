@@ -105,7 +105,12 @@ describe('DrKalla short-term voice memory', () => {
       text: 'die grosse Variante bitte',
       audioState: 'heard',
     });
-    const goodbyePhrases = ['ciao', 'bis dann', 'schönen Tag noch', 'das war es', 'nein danke, das war alles'];
+    const goodbyePhrases = [
+      'ciao', 'bis dann', 'schönen Tag noch', 'das war es', 'nein danke, das war alles',
+      // Real-call phrasings the old literal "leg auf" / "tschüss" missed:
+      'Nein, tschau.', 'tschö', 'Nein, leg einfach auf.', 'Leg bitte auf.', 'leg doch auf',
+      'beende den Anruf', 'bitte auflegen', 'mach Schluss',
+    ];
 
     expect(answered.pendingClarification).toBeNull();
     for (const phrase of goodbyePhrases) {
@@ -117,6 +122,24 @@ describe('DrKalla short-term voice memory', () => {
       });
       expect(afterGoodbye.endCallEligible).toBe(true);
       expect(afterGoodbye.endCallReason).toBe('caller_farewell');
+    }
+  });
+
+  it('does not hang up on negated or question hang-up phrasings', () => {
+    const notFarewell = [
+      'Bitte leg nicht auf, ich habe noch eine Frage.',
+      'nicht auflegen',
+      'Soll ich auflegen?',
+      'das war es noch nicht',
+    ];
+    for (const text of notFarewell) {
+      const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+        type: 'user_audio',
+        turnIndex: 1,
+        text,
+        audioState: 'heard',
+      });
+      expect(memory.endCallEligible, `should not end on: ${text}`).toBe(false);
     }
   });
 
