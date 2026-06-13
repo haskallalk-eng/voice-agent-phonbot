@@ -8,6 +8,7 @@ import {
   detectDrkallaContactIntent,
 } from './drkalla-contact-facts.js';
 import type { DrkallaProductEvidenceLookup } from './drkalla-product-evidence.js';
+import { detectDrkallaDuForm } from './drkalla-formality-detector.js';
 import { redactForPrompt } from './pii.js';
 import {
   deriveDrkallaAgentSpokeEvent,
@@ -72,6 +73,15 @@ export type DrkallaCustomLlmResponse = {
     directiveChars: number;
   };
   blockers: string[];
+  /**
+   * Non-blocking quality signal for observability. Only set on the model/
+   * fallback path (deterministic paths are hardcoded Sie). Never alters text.
+   */
+  quality?: {
+    duFormDetected: boolean;
+    duFormConfidence: 'high' | 'medium' | 'none';
+    duFormSlips: string[];
+  };
 };
 
 const RAW_PROVIDER_OR_SCOPE = /\b(?:orgId|tenantId|agentId|callId|response_required|update_only|transcript_with_tool_calls|authorization|Bearer)\b/gi;
@@ -397,6 +407,11 @@ export async function buildDrkallaCustomLlmResponse(input: {
     }),
   );
 
+  // Non-blocking Sie-consistency check on the only path that can slip into du
+  // (model-generated, or memory-driven fallback text). Logged upstream; never
+  // rewrites the answer.
+  const formality = detectDrkallaDuForm(spokenText);
+
   return {
     blocked: false,
     text: spokenText,
@@ -407,5 +422,10 @@ export async function buildDrkallaCustomLlmResponse(input: {
       directiveChars: canaryTurn.directiveChars,
     },
     blockers: [],
+    quality: {
+      duFormDetected: formality.hasDuForm,
+      duFormConfidence: formality.confidence,
+      duFormSlips: formality.slips,
+    },
   };
 }
