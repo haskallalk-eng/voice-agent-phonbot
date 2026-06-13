@@ -587,7 +587,7 @@ export function nextInaudibleRepair(memory: DrkallaShortTermVoiceMemory): string
   if (memory.inaudibleStreak === 2) {
     return 'Ich habe es akustisch nicht verstanden. Geht es um ein Produkt, eine Bestellung oder Kontakt?';
   }
-  return 'Die Verbindung ist gerade schwer zu verstehen. Sag es bitte noch einmal lauter und deutlicher.';
+  return 'Die Verbindung ist gerade schwer zu verstehen. Sagen Sie es bitte noch einmal lauter und deutlicher.';
 }
 
 export function nextDrkallaProductFunnelAction(

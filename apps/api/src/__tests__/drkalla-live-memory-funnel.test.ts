@@ -594,6 +594,39 @@ describe('DrKalla ambiguous product names', () => {
   });
 });
 
+describe('DrKalla Sie voice consistency', () => {
+  it('B: deterministic customer-facing replies never use du-form', async () => {
+    const replies: string[] = [];
+    const offer = await liveExchange({
+      memory: createDrkallaShortTermMemory(),
+      userText: 'Wie kaufe ich die Synthesis Color Cream?',
+      sequence: 1,
+      withEvidence: true,
+    });
+    replies.push(offer.text);
+    const price = await liveExchange({
+      memory: offer.memory,
+      userText: 'Und was kostet sie?',
+      sequence: 2,
+      withEvidence: true,
+    });
+    replies.push(price.text);
+    const confirm = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: liveTurn('Ja bitte.', 3),
+      memory: price.memory,
+      client: { complete: async () => '' },
+      detectProducts,
+      evidenceLookup,
+    });
+    replies.push(confirm.text);
+
+    for (const reply of replies) {
+      expect(reply, reply).not.toMatch(/\b(?:du|dir|dich|dein|deine|deinen)\b/i);
+    }
+  });
+});
+
 describe('DrKalla Profi price re-ask funnel', () => {
   it('B: an explicit Profi-price question reopens the Profi link offer after the one-time disclosure', () => {
     // A-red evidence: after profiPriceDisclosureGiven the funnel returned
