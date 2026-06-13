@@ -429,4 +429,94 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     ws.close();
     await app.close();
   });
+
+  it('suppresses streamed frames mid-stream once a newer caller turn arrives', async () => {
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
+    let releaseTurn1: () => void = () => {};
+    const turn1Gate = new Promise<void>((resolve) => { releaseTurn1 = resolve; });
+    let markFirstTurn1Frame: () => void = () => {};
+    const sawFirstTurn1Frame = new Promise<void>((resolve) => { markFirstTurn1Frame = resolve; });
+    const { app, url } = await testServer({
+      complete: async () => 'unused',
+      completeStream: async ({ onDelta }) => {
+        onDelta('Erster Teil der Antwort. '); // sent while turn 1 is still newest
+        await turn1Gate;                        // hold the stream open mid-turn
+        onDelta('Zweiter Teil der Antwort.');   // must be suppressed (turn 2 arrived)
+        return 'Erster Teil der Antwort. Zweiter Teil der Antwort.';
+      },
+    });
+    const ws = await connect(url);
+    const frames: Array<{ response_id: unknown; content: string; content_complete: boolean }> = [];
+    ws.on('message', (data) => {
+      const frame = JSON.parse(data.toString());
+      frames.push(frame);
+      if (frame.response_id === 1 && frame.content_complete === false) markFirstTurn1Frame();
+    });
+
+    // Open-ended question reaches the model (streaming path).
+    ws.send(JSON.stringify({
+      interaction_type: 'response_required', response_id: 1,
+      transcript: [{ role: 'user', content: 'Was empfehlen Sie mir denn?' }],
+    }));
+    await sawFirstTurn1Frame;          // turn 1 has streamed its first frame
+    ws.send(JSON.stringify({           // barge-in before turn 1 finishes streaming
+      interaction_type: 'response_required', response_id: 2,
+      transcript: [{ role: 'user', content: 'Stopp, neue Frage bitte.' }],
+    }));
+    // Let the server read turn 2 and bump latestArrival before turn 1 resumes,
+    // so turn 1's second frame is genuinely stale when it is emitted.
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    releaseTurn1();                    // let turn 1 try to stream its second frame
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    const t1 = frames.filter((f) => f.response_id === 1);
+    const t2 = frames.filter((f) => f.response_id === 2);
+    // Turn 1 only ever emitted its single pre-barge-in frame; nothing after,
+    // and it never completes (final frame suppressed).
+    expect(t1).toHaveLength(1);
+    expect(t1.every((f) => f.content_complete === false)).toBe(true);
+    // Turn 2 speaks: intermediate frames false, exactly one final true.
+    expect(t2.length).toBeGreaterThanOrEqual(1);
+    expect(t2[t2.length - 1]?.content_complete).toBe(true);
+    expect(t2.slice(0, -1).every((f) => f.content_complete === false)).toBe(true);
+    // No cross-turn response_id leakage.
+    expect(frames.every((f) => f.response_id === 1 || f.response_id === 2)).toBe(true);
+
+    ws.close();
+    await app.close();
+  });
+
+  it('falls back to one full final frame when streamed text is not a prefix of the final answer', async () => {
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
+    // The model streamed a partial chunk, but the resolved final text does not
+    // start with it (e.g. a trim/rewrite). The transport must not stitch a
+    // broken prefix — it sends the full correct answer as a single final frame.
+    const { app, url } = await testServer({
+      complete: async () => 'unused',
+      completeStream: async ({ onDelta }) => {
+        onDelta('Vorlaeufige Teilantwort. ');
+        return 'Ganz andere finale Antwort ohne gemeinsamen Anfang.';
+      },
+    });
+    const ws = await connect(url);
+    const frames: Array<{ response_id: unknown; content: string; content_complete: boolean }> = [];
+    ws.on('message', (data) => frames.push(JSON.parse(data.toString())));
+
+    ws.send(JSON.stringify({
+      interaction_type: 'response_required', response_id: 5,
+      transcript: [{ role: 'user', content: 'Was empfehlen Sie mir denn?' }],
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    const final = frames[frames.length - 1];
+    expect(final?.content_complete).toBe(true);
+    expect(final?.content).toBe('Ganz andere finale Antwort ohne gemeinsamen Anfang.');
+    expect(frames.some((f) => f.content_complete === false && f.content === 'Vorlaeufige Teilantwort. ')).toBe(true);
+    expect(frames.every((f) => f.response_id === 5)).toBe(true);
+
+    ws.close();
+    await app.close();
+  });
 });

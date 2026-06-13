@@ -954,7 +954,21 @@ Acceptance:
   Rationale: the latest DrKalla canary problem included inaudible/misheard turns and repeated fallback. Repair prompts are the lowest-risk guard action because they require no extra model/KB call, no provider timing delay, no facts, no tools, and no end-call authority. Delaying or overriding Retell endpointing for `wait_short`/`keep_listening` needs separate live timing evidence before it can affect calls.
   Date/Author: 2026-06-12 / Codex custom-runtime canary hardening.
 
+- Decision: the `e2e p50 <= 500 ms` SLO is met on the canary's DETERMINISTIC turns but is not reachable on MODEL turns with the current model, and chasing it must not be done with filler gaming.
+  Rationale: live measurement (gpt-4.1-mini, de-DE, 2026-06-13) shows model first-token latency ~560-760 ms and first spoken frame ~700-1500 ms, so even with zero prompt/transport overhead a model turn cannot hit 500 ms p50; deterministic paths (contact facts, variant clarification, repair, reminder, SMS confirm) stay 1-160 ms and do meet it. OpenAI prompt caching does not help here: it is automatic (no `cache_control` parameter — that is Anthropic-only) and only triggers for prompts >= ~1024 tokens, while the canary system prompt is ~330-520 tokens. Meeting p50 <= 500 ms on model turns therefore requires a faster model or a product change, neither of which is in scope without approval; filler-only "first safe audio" remains prohibited. The honest target is: deterministic turns p50 <= 500 ms; model turns best-effort, first frame ~700 ms typical. Real per-turn first-frame p50/p90/p95 are now recorded in-process (`drkalla-canary-latency-stats.ts`) and logged so the live distribution is observable rather than assumed. The custom-LLM WebSocket does not receive Retell ASR/provider-handoff timestamps, so the full `voice-latency-contract` cannot be populated from it without Retell webhook data (separate, out of scope this session).
+  Date/Author: 2026-06-13 / Claude custom-runtime latency-reality pass.
+
 ## Outcomes & Retrospective
+
+DrKalla custom-runtime quality + turn-taking build, 2026-06-13 (Claude, branch `drkalla-memory-ab-hardening`):
+
+- Barge-in: a newer caller turn now aborts the in-flight model call via an `AbortSignal` threaded through the client contract, so the serialized turn chain advances immediately instead of waiting out the stale turn's stream budget; a superseded turn's agent memory is no longer committed (it never spoke). Live-verified: a superseding turn spoke alone in 159 ms.
+- Contact-intent now matches oe/ae umlaut transliterations ("Oeffnungszeiten", "Geschaeft") that previously fell through to the model and abstained; live-verified grounded.
+- Added a non-mutating du/Sie formality detector (`drkalla-formality-detector.ts`) logged as a quality signal on model output; never rewrites text. Hardcoded outputs are locked Sie-clean by test.
+- Product-name detector data-hygiene fixed at the logic level (durable across catalog re-sync): a real-snapshot probe found 26 utterances where speaking one full product name pulled in a spurious second SKU (which then mis-grounded as `lastMentionedProduct`) and 2 generic single-word category tags ("Kopfhaut", "Ampullenkur") resolving to one SKU. Fixes: secondary exact-alias hits must be token-anchored and contribute a distinguishing token; single-word aliases shared across >=2 products (cross-product document frequency) are rejected as category tags. Snapshot probe now reports 0 spurious resolutions and 0 shared-alias mis-resolutions with unchanged spoken-name coverage (325/408). Residual: 18 duplicate spoken names remain catalog-data coverage gaps (safe: undetectable -> clarification).
+- Added in-process rolling latency stats (see the latency Decision above) and WS-transport stale-frame tests (mid-stream supersession, tail-frame fallback, response_id isolation, content_complete sequencing).
+- Verified: full `@vas/api` suite green; `drkalla:ab-memory --cases 1000 --seed drkalla-memory-v1` 1000/1000 B passed (memoryP95 ~0.12 ms, 0 extra LLM/KB); `drkalla:kb-audit` 1000/1000; typecheck clean.
+- No phone routing, Retell-KB, Own-KB-primary flag, runtime rollout flag, OpenAI Realtime, website (apps/web), or live SMS change. SMS live-send flag stays OFF.
 
 DrKalla catalog-complete product-type detector A/B outcome, 2026-06-12:
 
