@@ -571,6 +571,25 @@ export function shouldIncludeDrkallaProfiPriceDisclosure(
   return !PERFUME_PRICE_CONTEXT.test(productOrQuestionContext);
 }
 
+/**
+ * Deterministic re-engagement when the caller has gone silent (Retell
+ * reminder_required / no-input nudge). Sie-form, context-aware, never a model
+ * call and never an end-call: a soft silence prompt must not hang up. The
+ * count is the running reminder count for this call (1 = first nudge).
+ */
+export function nextDrkallaNoInputReminder(memory: DrkallaShortTermVoiceMemory, count: number): string {
+  if (count >= 2) {
+    return 'Ich höre gerade nichts von Ihnen. Melden Sie sich gern wieder, wenn Sie so weit sind.';
+  }
+  if (memory.lastMentionedProduct) {
+    return `Sind Sie noch dran? Wir waren bei ${memory.lastMentionedProduct.spokenName}. Soll ich dazu weitermachen?`;
+  }
+  if (memory.activeProductType) {
+    return `Sind Sie noch in der Leitung? Es ging um ${memory.activeProductType.label}. Wie kann ich Ihnen weiterhelfen?`;
+  }
+  return 'Sind Sie noch in der Leitung? Wobei darf ich Ihnen helfen — Produkt, Bestellung oder Kontakt?';
+}
+
 export function nextInaudibleRepair(memory: DrkallaShortTermVoiceMemory): string {
   if (memory.inaudibleStreak <= 1) {
     return 'Wie bitte?';

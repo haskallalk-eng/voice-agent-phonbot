@@ -210,6 +210,48 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     await app.close();
   });
 
+  it('answers silence reminders and escalates, then resets after the caller speaks', async () => {
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
+    let modelCalls = 0;
+    const { app, url } = await testServer({
+      complete: async () => {
+        modelCalls += 1;
+        return 'Gern, womit kann ich helfen?';
+      },
+    });
+    const ws = await connect(url);
+
+    ws.send(JSON.stringify({ interaction_type: 'reminder_required', response_id: 1 }));
+    const first = await receive(ws) as { content: string; end_call: boolean };
+    ws.send(JSON.stringify({ interaction_type: 'reminder_required', response_id: 2 }));
+    const second = await receive(ws) as { content: string };
+
+    // First nudge re-engages; second escalates to the softer closing line.
+    expect(first.content).toContain('noch in der Leitung');
+    expect(first.end_call).toBe(false);
+    expect(second.content).toContain('Melden Sie sich gern');
+
+    // Caller speaks → real answer, model used, silence counter resets.
+    ws.send(JSON.stringify({
+      interaction_type: 'response_required',
+      response_id: 3,
+      transcript: [{ role: 'user', content: 'Ich bin wieder da.' }],
+    }));
+    const third = await receive(ws) as { content: string };
+    expect(third.content).toContain('helfen');
+
+    // A later reminder starts again at the first (re-engagement) nudge.
+    ws.send(JSON.stringify({ interaction_type: 'reminder_required', response_id: 4 }));
+    const fourth = await receive(ws) as { content: string };
+    expect(fourth.content).toContain('noch in der Leitung');
+
+    expect(modelCalls).toBe(1); // only the real user turn called the model
+
+    ws.close();
+    await app.close();
+  });
+
   it('does not leak short-term memory across separate Retell websocket sessions', async () => {
     process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
     process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;

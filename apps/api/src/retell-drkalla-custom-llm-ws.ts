@@ -18,12 +18,15 @@ import { DRKALLA_LINK_TOOL_PATH, drkallaLinkToolSignature } from './drkalla-link
 import {
   buildDrkallaAmbiguousProductNameDetector,
   buildDrkallaProductNameDetector,
+  deriveDrkallaAgentSpokeEvent,
   type DrkallaAmbiguousProductNameDetector,
   type DrkallaProductNameDetector,
   type DrkallaProductNameEntry,
 } from './drkalla-product-name-detector.js';
 import {
   createDrkallaShortTermMemory,
+  nextDrkallaNoInputReminder,
+  reduceDrkallaShortTermMemory,
   type DrkallaShortTermVoiceMemory,
 } from './drkalla-short-term-memory.js';
 import { createTrustedScope } from './trusted-scope.js';
@@ -275,12 +278,26 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
   evidenceLookup?: DrkallaProductEvidenceLookup;
   executeSendLink?: DrkallaSendLinkExecutor;
   sequence?: number;
+  noInputReminderCount?: number;
   onDelta?: (chunk: string) => void;
 }): Promise<RetellDrkallaCustomLlmReply | null> {
   if (!input.secretAccepted) return null;
 
   const parsed = parseRetellDrkallaCustomLlmMessage(input.rawMessage);
   if (!parsed) return null;
+
+  // Caller went silent (Retell reminder). Re-engage deterministically: no
+  // model call, no end_call. Retell still owns the hard silence timeout.
+  if (parsed.interactionType === 'reminder_required') {
+    const memory = input.memory ?? createDrkallaShortTermMemory();
+    const reminderText = nextDrkallaNoInputReminder(memory, Math.max(1, input.noInputReminderCount ?? 1));
+    input.onMemory?.(reduceDrkallaShortTermMemory(
+      memory,
+      deriveDrkallaAgentSpokeEvent({ text: reminderText, turnIndex: input.sequence ?? 0 }),
+    ));
+    return reply(parsed.providerResponseId, reminderText);
+  }
+
   if (parsed.interactionType !== 'response_required') return null;
 
   const response = await buildDrkallaCustomLlmResponse({
@@ -431,6 +448,7 @@ export async function registerRetellDrkallaCustomLlmWs(
     let memory = createDrkallaShortTermMemory();
     let turnCounter = 0;
     let latestArrival = 0;
+    let noInputReminderCount = 0;
     let processing: Promise<void> = Promise.resolve();
 
     if (!secretOk) {
@@ -444,13 +462,20 @@ export async function registerRetellDrkallaCustomLlmWs(
       // is dropped once a newer user turn has arrived (barge-in safety).
       const parsedPreview = parseRetellDrkallaCustomLlmMessage(rawMessage);
       const isResponseTurn = parsedPreview?.interactionType === 'response_required';
-      const myArrival = isResponseTurn ? ++latestArrival : latestArrival;
+      const isReminderTurn = parsedPreview?.interactionType === 'reminder_required';
+      // Both response and reminder turns produce a spoken frame and so must
+      // claim arrival order; a reminder is dropped if the caller speaks first.
+      const myArrival = (isResponseTurn || isReminderTurn) ? ++latestArrival : latestArrival;
 
       // Serialize turns per socket so concurrent events cannot drop memory
       // updates (lost-update race on the shared per-session memory).
       processing = processing.then(async () => {
         try {
-          if (isResponseTurn) turnCounter += 1;
+          if (isResponseTurn) {
+            turnCounter += 1;
+            noInputReminderCount = 0; // the caller spoke; reset silence nudges
+          }
+          if (isReminderTurn) noInputReminderCount += 1;
           const startedAt = Date.now();
           let firstFrameMs: number | null = null;
           let sentText = '';
@@ -518,10 +543,11 @@ export async function registerRetellDrkallaCustomLlmWs(
             evidenceLookup,
             executeSendLink,
             sequence: turnCounter,
+            noInputReminderCount,
             onDelta: isResponseTurn ? onDelta : undefined,
           });
           if (!outbound) return;
-          if (isResponseTurn && myArrival !== latestArrival) return;
+          if ((isResponseTurn || isReminderTurn) && myArrival !== latestArrival) return;
 
           // Final frame carries whatever was not streamed yet. If trimming or
           // fallback changed the text so streamed chunks are no longer a

@@ -3,6 +3,11 @@ import {
   buildRetellDrkallaCustomLlmWsReply,
   parseRetellDrkallaCustomLlmMessage,
 } from '../retell-drkalla-custom-llm-ws.js';
+import {
+  createDrkallaShortTermMemory,
+  nextDrkallaNoInputReminder,
+  reduceDrkallaShortTermMemory,
+} from '../drkalla-short-term-memory.js';
 
 describe('Retell DrKalla custom LLM websocket handler', () => {
   it('parses Retell response_required messages into safe canonical input', () => {
@@ -118,6 +123,52 @@ describe('Retell DrKalla custom LLM websocket handler', () => {
       end_call: false,
     });
     expect(unauthorized).toBeNull();
+  });
+
+  it('answers a reminder_required (no-input) turn with a Sie re-engagement, no model call', async () => {
+    let modelCalls = 0;
+    const reply = await buildRetellDrkallaCustomLlmWsReply({
+      enabled: true,
+      secretAccepted: true,
+      rawMessage: JSON.stringify({ interaction_type: 'reminder_required', response_id: 9 }),
+      complete: async () => {
+        modelCalls += 1;
+        return 'darf nicht laufen';
+      },
+      noInputReminderCount: 1,
+    });
+
+    expect(modelCalls).toBe(0);
+    expect(reply?.response_id).toBe(9);
+    expect(reply?.end_call).toBe(false);
+    expect(reply?.content).toContain('noch in der Leitung');
+    expect(reply?.content).not.toMatch(/\b(?:du|dir|dich)\b/i);
+  });
+
+  it('re-engages on the active product context during silence', async () => {
+    const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 1,
+      text: 'Die Synthesis Color Cream ist eine Farbcreme.',
+      lastProduct: { spokenName: 'Synthesis Color Cream', productId: 'synthesis-color-cream', productKind: 'Haarfarbe/Farbcreme' },
+    });
+    const reply = await buildRetellDrkallaCustomLlmWsReply({
+      enabled: true,
+      secretAccepted: true,
+      rawMessage: JSON.stringify({ interaction_type: 'reminder_required', response_id: 10 }),
+      memory,
+      complete: async () => 'darf nicht laufen',
+      noInputReminderCount: 1,
+    });
+    expect(reply?.content).toContain('Synthesis Color Cream');
+  });
+
+  it('escalates to a softer closing nudge on repeated silence without ending the call', () => {
+    const memory = createDrkallaShortTermMemory();
+    expect(nextDrkallaNoInputReminder(memory, 1)).toContain('noch in der Leitung');
+    const second = nextDrkallaNoInputReminder(memory, 2);
+    expect(second).toContain('Melden Sie sich gern');
+    expect(second).not.toMatch(/\b(?:du|dir|dich)\b/i);
   });
 
   it('redacts the canary secret from request URLs before logging', async () => {
