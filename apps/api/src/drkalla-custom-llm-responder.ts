@@ -5,6 +5,7 @@ import {
 import type { DrkallaProductEvidenceLookup } from './drkalla-product-evidence.js';
 import {
   deriveDrkallaAgentSpokeEvent,
+  type DrkallaAmbiguousProductNameDetector,
   type DrkallaProductNameDetector,
 } from './drkalla-product-name-detector.js';
 import {
@@ -86,6 +87,13 @@ function compactSystemPrompt(directives: string[]): string {
 
 const SMS_OFFER_QUESTION = /per sms schicken\?/i;
 const SHORT_AFFIRMATION = /^(?:ja|ja,?\s*(?:bitte|gerne?)|gerne?|okay?|ok|bitte|mach das|machen sie das|klar)[.! ]*$/i;
+const PRODUCT_LINK_CHOICE = /^(?:ja,?\s*)?(?:den\s+)?produktlink(?:\s+bitte)?[.! ]*$/i;
+
+export type DrkallaSendLinkExecutor = (input: {
+  url: string;
+  label: string;
+  linkKind: 'product';
+}) => Promise<{ smsSent: boolean; duplicate?: boolean }>;
 
 function fallbackText(userText: string): string {
   if (/\bunterschied|vergleich\b/i.test(userText)) {
@@ -157,7 +165,9 @@ export async function buildDrkallaCustomLlmResponse(input: {
   memory: DrkallaShortTermVoiceMemory;
   client: DrkallaCustomLlmClient;
   detectProducts?: DrkallaProductNameDetector;
+  detectAmbiguousProduct?: DrkallaAmbiguousProductNameDetector;
   evidenceLookup?: DrkallaProductEvidenceLookup;
+  executeSendLink?: DrkallaSendLinkExecutor;
   onDelta?: (chunk: string) => void;
 }): Promise<DrkallaCustomLlmResponse> {
   const canaryTurn = buildDrkallaCustomRuntimeCanaryTurn({
@@ -210,20 +220,73 @@ export async function buildDrkallaCustomLlmResponse(input: {
     };
   }
 
-  // A confirmed SMS-link offer must never reach the model while no real SMS
-  // tool is wired: the model could claim a link was sent. Answer truthfully
-  // and deterministically (also saves the model call).
+  // A confirmed SMS-link offer must never reach the model: with the gated
+  // executor wired the server sends the real SMS through the policied
+  // send_link tool; without it the agent answers truthfully. Either way the
+  // model can never claim a send that did not happen.
   if (
     canaryTurn.runtime.memory.lastAgentQuestion
     && SMS_OFFER_QUESTION.test(canaryTurn.runtime.memory.lastAgentQuestion)
-    && SHORT_AFFIRMATION.test(user)
+    && (SHORT_AFFIRMATION.test(user) || PRODUCT_LINK_CHOICE.test(user))
   ) {
+    const activeProduct = canaryTurn.runtime.memory.lastMentionedProduct;
+    const evidence = activeProduct
+      ? input.evidenceLookup?.byKeyHash(activeProduct.productKeyHash) ?? null
+      : null;
+    let text = DRKALLA_SMS_NOT_WIRED_TEXT;
+    let linkSentUrl: string | null = null;
+    if (input.executeSendLink && activeProduct && evidence?.url) {
+      const outcome = await input.executeSendLink({
+        url: evidence.url,
+        label: activeProduct.spokenName,
+        linkKind: 'product',
+      }).catch(() => ({ smsSent: false as const }));
+      if (outcome.smsSent) {
+        text = `Erledigt, ich habe dir den Produktlink zu ${activeProduct.spokenName} per SMS geschickt. Kann ich sonst noch etwas klären?`;
+        linkSentUrl = evidence.url;
+      } else if ('duplicate' in outcome && outcome.duplicate) {
+        text = `Den Link zu ${activeProduct.spokenName} habe ich dir in diesem Anruf schon geschickt. Kann ich sonst noch etwas klären?`;
+      } else {
+        text = `Das hat gerade leider nicht geklappt, die SMS ging nicht raus. Du findest ${activeProduct.spokenName} auf drkalla punkt com.`;
+      }
+    }
+    const agentEvent = deriveDrkallaAgentSpokeEvent({ text, turnIndex });
     return {
       blocked: false,
-      text: DRKALLA_SMS_NOT_WIRED_TEXT,
+      text,
+      memory: reduceDrkallaShortTermMemory(canaryTurn.runtime.memory, {
+        ...agentEvent,
+        linksSent: linkSentUrl && activeProduct
+          ? [{ url: linkSentUrl, label: activeProduct.spokenName }]
+          : undefined,
+      }),
+      metrics: {
+        extraLlmCalls: 0,
+        extraKbCalls: 0,
+        directiveChars: canaryTurn.directiveChars,
+      },
+      blockers: [],
+    };
+  }
+
+  // A product name shared by several catalog products cannot resolve to one
+  // product; ask a targeted variant question instead of guessing or
+  // resetting to generic discovery.
+  const ambiguous = input.detectAmbiguousProduct?.(user) ?? null;
+  if (ambiguous && (input.detectProducts?.(user) ?? []).length === 0) {
+    const clarifyText = `Von ${ambiguous.label} gibt es bei uns mehrere Ausführungen. Welche Größe oder Ausführung meinst du?`;
+    const withPending = reduceDrkallaShortTermMemory(canaryTurn.runtime.memory, {
+      type: 'pending_clarification',
+      turnIndex,
+      kind: 'product_variant',
+      prompt: `Welche Ausführung von ${ambiguous.label} meinst du?`,
+    });
+    return {
+      blocked: false,
+      text: clarifyText,
       memory: reduceDrkallaShortTermMemory(
-        canaryTurn.runtime.memory,
-        deriveDrkallaAgentSpokeEvent({ text: DRKALLA_SMS_NOT_WIRED_TEXT, turnIndex }),
+        withPending,
+        deriveDrkallaAgentSpokeEvent({ text: clarifyText, turnIndex }),
       ),
       metrics: {
         extraLlmCalls: 0,

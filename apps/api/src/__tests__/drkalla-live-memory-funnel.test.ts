@@ -493,6 +493,107 @@ async function liveExchangeStreaming(input: { userText: string; received: string
   });
 }
 
+describe('DrKalla gated SMS link executor', () => {
+  async function offerThenConfirm(executor: Parameters<typeof buildDrkallaCustomLlmResponse>[0]['executeSendLink']) {
+    const offer = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: liveTurn('Wie kaufe ich die Synthesis Color Cream?', 1),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => '' },
+      detectProducts,
+      evidenceLookup,
+    });
+    expect(offer.text).toContain('per SMS schicken?');
+    return buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: liveTurn('Ja bitte.', 2),
+      memory: offer.memory,
+      client: { complete: async () => 'darf nicht laufen' },
+      detectProducts,
+      evidenceLookup,
+      executeSendLink: executor,
+    });
+  }
+
+  it('B: a confirmed offer sends through the executor and speaks the truthful success', async () => {
+    const sent: Array<{ url: string; label: string }> = [];
+    const confirm = await offerThenConfirm(async (link) => {
+      sent.push({ url: link.url, label: link.label });
+      return { smsSent: true };
+    });
+
+    expect(sent).toEqual([
+      { url: 'https://drkalla.com/products/synthesis-color-cream', label: 'Synthesis Color Cream' },
+    ]);
+    expect(confirm.text).toContain('per SMS geschickt');
+    expect(confirm.metrics.extraLlmCalls).toBe(0);
+    // The sent link lands in memory so it is never sent twice.
+    expect(Object.keys(confirm.memory.sentLinkHashes)).toHaveLength(1);
+  });
+
+  it('B: duplicate and failure outcomes are spoken truthfully without send claims', async () => {
+    const duplicate = await offerThenConfirm(async () => ({ smsSent: false, duplicate: true }));
+    expect(duplicate.text).toContain('schon geschickt');
+
+    const failed = await offerThenConfirm(async () => ({ smsSent: false }));
+    expect(failed.text).toContain('nicht geklappt');
+    expect(failed.text).not.toContain('per SMS geschickt');
+    expect(Object.keys(failed.memory.sentLinkHashes)).toHaveLength(0);
+  });
+
+  it('B: an explicit "Produktlink bitte" choice also triggers the executor', async () => {
+    const offer = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: liveTurn('Was kostet die Synthesis Color Cream?', 1),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => '' },
+      detectProducts,
+      evidenceLookup,
+    });
+    const confirm = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: liveTurn('Den Produktlink bitte.', 2),
+      memory: offer.memory,
+      client: { complete: async () => 'darf nicht laufen' },
+      detectProducts,
+      evidenceLookup,
+      executeSendLink: async () => ({ smsSent: true }),
+    });
+    expect(confirm.text).toContain('per SMS geschickt');
+    expect(confirm.metrics.extraLlmCalls).toBe(0);
+  });
+});
+
+describe('DrKalla ambiguous product names', () => {
+  it('B: a duplicate catalog name asks a variant question instead of guessing', async () => {
+    const { buildDrkallaAmbiguousProductNameDetector } = await import('../drkalla-product-name-detector.js');
+    const detectAmbiguousProduct = buildDrkallaAmbiguousProductNameDetector([
+      { productId: 'towel-small', spokenName: 'Universal Salonhandtuch', productKind: 'Salon-Verbrauchsmaterial', aliases: [] },
+      { productId: 'towel-big', spokenName: 'Universal Salonhandtuch', productKind: 'Salon-Verbrauchsmaterial', aliases: [] },
+    ]);
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: liveTurn('Ich suche das Universal Salonhandtuch.', 1),
+      memory: createDrkallaShortTermMemory(),
+      client: {
+        complete: async () => {
+          modelCalls += 1;
+          return 'sollte nicht laufen';
+        },
+      },
+      detectProducts,
+      detectAmbiguousProduct,
+    });
+
+    expect(modelCalls).toBe(0);
+    expect(response.text).toContain('mehrere Ausführungen');
+    expect(response.text).toContain('Universal Salonhandtuch');
+    expect(response.memory.pendingClarification?.kind).toBe('product_variant');
+    expect(response.metrics.extraLlmCalls).toBe(0);
+  });
+});
+
 describe('DrKalla Profi price re-ask funnel', () => {
   it('B: an explicit Profi-price question reopens the Profi link offer after the one-time disclosure', () => {
     // A-red evidence: after profiPriceDisclosureGiven the funnel returned

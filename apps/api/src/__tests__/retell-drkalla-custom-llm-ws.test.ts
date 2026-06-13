@@ -119,4 +119,15 @@ describe('Retell DrKalla custom LLM websocket handler', () => {
     });
     expect(unauthorized).toBeNull();
   });
+
+  it('redacts the canary secret from request URLs before logging', async () => {
+    const { redactDrkallaCanarySecretFromUrl } = await import('../retell-drkalla-custom-llm-ws.js');
+    expect(redactDrkallaCanarySecretFromUrl('/retell/custom-llm/drkalla/auth/super-secret-value-123/call-abc'))
+      .toBe('/retell/custom-llm/drkalla/auth/[redacted]/call-abc');
+    expect(redactDrkallaCanarySecretFromUrl('/retell/custom-llm/drkalla?secret=super-secret-value-123'))
+      .toBe('/retell/custom-llm/drkalla?secret=[redacted]');
+    expect(redactDrkallaCanarySecretFromUrl('/retell/custom-llm/drkalla/call-abc?token=abc&x=1'))
+      .toBe('/retell/custom-llm/drkalla/call-abc?token=[redacted]&x=1');
+    expect(redactDrkallaCanarySecretFromUrl('/healthz')).toBe('/healthz');
+  });
 });

@@ -98,6 +98,47 @@ export function buildDrkallaProductNameDetector(
   };
 }
 
+export type DrkallaAmbiguousProductNameHit = {
+  label: string;
+  productCount: number;
+};
+
+export type DrkallaAmbiguousProductNameDetector = (text: string) => DrkallaAmbiguousProductNameHit | null;
+
+/**
+ * Detects product names that are shared by multiple catalog products
+ * (duplicate spoken names fall out of the unique-alias product detector).
+ * Instead of silent zero detection the runtime can ask a variant question.
+ */
+export function buildDrkallaAmbiguousProductNameDetector(
+  entries: DrkallaProductNameEntry[],
+): DrkallaAmbiguousProductNameDetector {
+  const nameToProducts = new Map<string, { label: string; products: Set<string> }>();
+  for (const entry of entries) {
+    if (!entry.productId || !entry.spokenName) continue;
+    const normalized = normalize(entry.spokenName);
+    if (!isSpecificAlias(entry.spokenName, normalized)) continue;
+    const existing = nameToProducts.get(normalized) ?? { label: entry.spokenName, products: new Set<string>() };
+    existing.products.add(entry.productId);
+    nameToProducts.set(normalized, existing);
+  }
+  const ambiguous = [...nameToProducts.entries()]
+    .filter(([, value]) => value.products.size > 1)
+    .map(([normalized, value]) => ({ padded: ` ${normalized} `, label: value.label, productCount: value.products.size }))
+    .sort((left, right) => right.padded.length - left.padded.length);
+
+  return (text: string) => {
+    const normalizedText = ` ${normalize(text)} `;
+    if (normalizedText.trim().length < 6) return null;
+    for (const candidate of ambiguous) {
+      if (normalizedText.includes(candidate.padded)) {
+        return { label: candidate.label, productCount: candidate.productCount };
+      }
+    }
+    return null;
+  };
+}
+
 export type DrkallaProductNameCoverageReport = {
   totalProducts: number;
   detectableBySpokenName: number;

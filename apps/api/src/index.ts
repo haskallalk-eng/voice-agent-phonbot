@@ -34,7 +34,7 @@ import { registerVoices } from './voices.js';
 import { registerInsights } from './insights.js';
 import { registerOutbound, migrateOutbound } from './outbound-agent.js';
 import { registerTwilioBridge } from './twilio-openai-bridge.js';
-import { registerRetellDrkallaCustomLlmWs } from './retell-drkalla-custom-llm-ws.js';
+import { redactDrkallaCanarySecretFromUrl, registerRetellDrkallaCustomLlmWs } from './retell-drkalla-custom-llm-ws.js';
 import { registerCopilot } from './copilot.js';
 import { registerLearningApi } from './learning-api.js';
 import { registerTrainingExport } from './training-export.js';
@@ -92,6 +92,19 @@ const app = Fastify({
         'extracted', '*.extracted',
       ],
       censor: '[REDACTED]',
+    },
+    // req.url can carry the DrKalla canary WS auth secret as a path segment
+    // or query param; path-based redaction cannot rewrite substrings, so the
+    // request serializer masks it before the URL reaches any log sink.
+    serializers: {
+      req(request: { method: string; url: string; hostname: string; ip: string }) {
+        return {
+          method: request.method,
+          url: redactDrkallaCanarySecretFromUrl(request.url),
+          hostname: request.hostname,
+          remoteAddress: request.ip,
+        };
+      },
     },
   },
   trustProxy: true,
