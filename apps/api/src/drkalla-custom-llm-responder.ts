@@ -509,9 +509,12 @@ export async function buildDrkallaCustomLlmResponse(input: {
         } else if ('duplicate' in outcome && outcome.duplicate) {
           text = `Den Link habe ich Ihnen in diesem Anruf schon geschickt. Kann ich sonst noch etwas klären?`;
         } else {
+          // End with a question so lastAgentQuestion is no longer the SMS offer
+          // — otherwise a following "nee, alles gut" stays vetoed by the pending
+          // offer and never reaches the deterministic wind-down.
           text = kind === 'profi'
-            ? 'Das hat gerade leider nicht geklappt, die SMS ging nicht raus. Den Profi-Zugang finden Sie auf drkalla punkt com.'
-            : `Das hat gerade leider nicht geklappt, die SMS ging nicht raus. Sie finden ${target.label} auf drkalla punkt com.`;
+            ? 'Das hat gerade leider nicht geklappt, die SMS ging nicht raus. Den Profi-Zugang finden Sie auf drkalla punkt com. Kann ich sonst noch etwas klären?'
+            : `Das hat gerade leider nicht geklappt, die SMS ging nicht raus. Sie finden ${target.label} auf drkalla punkt com. Kann ich sonst noch etwas klären?`;
         }
       }
       const agentEvent = deriveDrkallaAgentSpokeEvent({ text, turnIndex });
