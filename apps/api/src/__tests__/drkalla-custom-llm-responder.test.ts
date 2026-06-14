@@ -669,8 +669,8 @@ describe('DrKalla register/style + deterministic price (live call 2026-06-13 fix
     const catalogSearch = (text: string) =>
       /dauerwelle/i.test(text)
         ? [
-            { productId: 'perm', spokenName: 'Sanfte Dauerwelle für Wellen', shortName: 'Sanfte Dauerwelle', productType: 'Dauerwelle', priceText: '8,40 Euro', score: 4, categoryHit: true, typeHit: true },
-            { productId: 'perm2', spokenName: 'Kalte Dauerwelle', shortName: 'Kalte Dauerwelle', productType: 'Dauerwelle', priceText: '9,00 Euro', score: 4, categoryHit: true, typeHit: true },
+            { productId: 'perm', spokenName: 'Sanfte Dauerwelle für Wellen', shortName: 'Sanfte Dauerwelle', productType: 'Dauerwelle', priceText: '8,40 Euro', score: 4, categoryHit: true, typeHit: true, priceValue: null },
+            { productId: 'perm2', spokenName: 'Kalte Dauerwelle', shortName: 'Kalte Dauerwelle', productType: 'Dauerwelle', priceText: '9,00 Euro', score: 4, categoryHit: true, typeHit: true, priceValue: null },
           ]
         : [];
     const evidenceLookup = {
@@ -698,7 +698,7 @@ describe('DrKalla register/style + deterministic price (live call 2026-06-13 fix
     const prompts: string[] = [];
     const catalogSearch = (text: string) =>
       /spezielles/i.test(text)
-        ? [{ productId: 'x', spokenName: 'Irgendein langer Produkttitel 500 Ml', shortName: 'Irgendein Produkt', productType: 'Styling', priceText: '5,00 Euro', score: 1, categoryHit: false, typeHit: false }]
+        ? [{ productId: 'x', spokenName: 'Irgendein langer Produkttitel 500 Ml', shortName: 'Irgendein Produkt', productType: 'Styling', priceText: '5,00 Euro', score: 1, categoryHit: false, typeHit: false, priceValue: null }]
         : [];
     await buildDrkallaCustomLlmResponse({
       canary: CANARY,
@@ -740,6 +740,51 @@ describe('DrKalla register/style + deterministic price (live call 2026-06-13 fix
     expect(response.text).not.toContain('Welche Größe oder Ausführung');
     expect(response.text).toContain('trockenes Haar');
   });
+
+  it('B: "günstigste" names the cheapest product in the category', async () => {
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Was ist die günstigste Haarfarbe?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => 'should not be used' },
+      catalogSearch: (t: string) => (/haarfarbe/i.test(t) ? [
+        { productId: 'a', spokenName: 'Teure Farbe', shortName: 'Teure Farbe', productType: 'Haarfarbe', priceText: '20 Euro', priceValue: 20, score: 4, categoryHit: true, typeHit: true },
+        { productId: 'b', spokenName: 'Günstige Farbe', shortName: 'Günstige Farbe', productType: 'Haarfarbe', priceText: '3 Euro', priceValue: 3, score: 4, categoryHit: true, typeHit: true },
+      ] : []),
+      evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
+    });
+    expect(response.text).toContain('Da kann ich Ihnen Günstige Farbe empfehlen');
+  });
+
+  it('B: a product-link confirm resolves the URL via the catalog when the grounded product lost its URL', async () => {
+    // The grounded product has no evidence URL (a turn re-grounded the spoken
+    // name to a URL-less duplicate); the spoken name resolves in the catalog to
+    // the real URL-having product, so the SMS still goes out (battery edge).
+    const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 1,
+      text: 'Soll ich Ihnen den Link zu Sintesis per SMS schicken?',
+      lastAgentQuestion: 'Soll ich Ihnen den Link zu Sintesis per SMS schicken?',
+      lastProduct: { spokenName: 'Sintesis', productId: 'sintesis-nourl' },
+    });
+    let sentUrl: string | null = null;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('ja'),
+      memory,
+      client: { complete: async () => 'should not be used' },
+      evidenceLookup: {
+        byId: (id: string) => (id === 'sintesis-real' ? { productId: 'sintesis-real', priceText: '9 Euro', hasUrl: true, url: 'https://drkalla.com/p/sintesis' } : null),
+        byKeyHash: () => null,
+      } as never,
+      catalogSearch: (t: string) => (/sintesis/i.test(t) ? [
+        { productId: 'sintesis-real', spokenName: 'Sintesis', shortName: 'Sintesis', productType: 'Haarfarbe', priceText: '9 Euro', priceValue: 9, score: 4, categoryHit: true, typeHit: true },
+      ] : []),
+      executeSendLink: async (l: { url: string }) => { sentUrl = l.url; return { smsSent: true as const }; },
+    });
+    expect(sentUrl).toBe('https://drkalla.com/p/sintesis');
+    expect(response.text).toContain('per SMS geschickt');
+  });
 });
 
 describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfangen?" -> "Ja")', () => {
@@ -764,10 +809,10 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
   const threeProductSearch = (text: string) =>
     /haarfarbe|farbcreme|\bfarbe\b/i.test(text)
       ? [
-          { productId: 'koleston', spokenName: 'Koleston Perfect', shortName: 'Koleston Perfect', productType: 'Haarfarbe/Farbcreme', priceText: '9,90 Euro', score: 4, categoryHit: true, typeHit: true },
-          { productId: 'majirel', spokenName: 'Majirel', shortName: 'Majirel', productType: 'Haarfarbe/Farbcreme', priceText: '11,50 Euro', score: 4, categoryHit: true, typeHit: true },
-          { productId: 'igora', spokenName: 'Igora Royal', shortName: 'Igora Royal', productType: 'Haarfarbe/Farbcreme', priceText: '10,20 Euro', score: 4, categoryHit: true, typeHit: true },
-          { productId: 'inoa', spokenName: 'Inoa', shortName: 'Inoa', productType: 'Haarfarbe/Farbcreme', priceText: '14,00 Euro', score: 4, categoryHit: true, typeHit: true },
+          { productId: 'koleston', spokenName: 'Koleston Perfect', shortName: 'Koleston Perfect', productType: 'Haarfarbe/Farbcreme', priceText: '9,90 Euro', score: 4, categoryHit: true, typeHit: true, priceValue: null },
+          { productId: 'majirel', spokenName: 'Majirel', shortName: 'Majirel', productType: 'Haarfarbe/Farbcreme', priceText: '11,50 Euro', score: 4, categoryHit: true, typeHit: true, priceValue: null },
+          { productId: 'igora', spokenName: 'Igora Royal', shortName: 'Igora Royal', productType: 'Haarfarbe/Farbcreme', priceText: '10,20 Euro', score: 4, categoryHit: true, typeHit: true, priceValue: null },
+          { productId: 'inoa', spokenName: 'Inoa', shortName: 'Inoa', productType: 'Haarfarbe/Farbcreme', priceText: '14,00 Euro', score: 4, categoryHit: true, typeHit: true, priceValue: null },
         ]
       : [];
 
