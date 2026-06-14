@@ -258,6 +258,11 @@ function tryDeterministicTypeListReply(input: {
 // instead of answering with a product list.
 const NEED_VETO = /\b(?:unterschied|vergleich|verglichen|wie\s+(?:wende|benutz|verwend|trag|oft|lange|viel)|warum|wieso|weshalb|anwend|inhaltsstoff|vertr[äa]glich|allergie|wof[üu]r|wozu)\b/i;
 
+// A generic hair-type descriptor ("trockenes Haar", "feines & coloriertes Haar")
+// is a NEED, not a specific product line — it must never drive a variant
+// clarification. Matches a hair-condition adjective somewhere before "Haar".
+const DRKALLA_HAIR_DESCRIPTOR = /\b(?:trocken|fein|lockig|kraus|gef[äa]rbt|coloriert|blond|grau|dunkl|hell|strapazier|gesund|normal|fettig|empfindlich|gereizt|spr(?:ö|oe)d|br(?:ü|ue)chig|gesch(?:ä|ae)digt|d(?:ü|ue)nn|krause)\w*\b[^.?!]*\bhaar/i;
+
 /**
  * Deterministic product discovery for a clear category need. On the real call
  * 2026-06-13 the model looped on clarifying questions and named long,
@@ -606,9 +611,13 @@ export async function buildDrkallaCustomLlmResponse(input: {
 
   // A product name shared by several catalog products cannot resolve to one
   // product; ask a targeted variant question instead of guessing or
-  // resetting to generic discovery.
+  // resetting to generic discovery. BUT a generic hair-type descriptor
+  // ("trockenes Haar", "feines Haar") is a NEED, not a product line — it must
+  // not trigger a "welche Ausführung?" clarification (real battery 2026-06-14);
+  // let it fall through to product discovery / the model instead.
   const ambiguous = input.detectAmbiguousProduct?.(user) ?? null;
-  if (ambiguous && (input.detectProducts?.(user) ?? []).length === 0) {
+  const ambiguousIsHairDescriptor = ambiguous ? DRKALLA_HAIR_DESCRIPTOR.test(ambiguous.label) : false;
+  if (ambiguous && !ambiguousIsHairDescriptor && (input.detectProducts?.(user) ?? []).length === 0) {
     const clarifyText = `Von ${ambiguous.label} gibt es bei uns mehrere Ausführungen. Welche Größe oder Ausführung meinen Sie?`;
     const withPending = reduceDrkallaShortTermMemory(canaryTurn.runtime.memory, {
       type: 'pending_clarification',

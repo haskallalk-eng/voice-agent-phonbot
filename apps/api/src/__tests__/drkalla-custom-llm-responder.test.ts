@@ -724,6 +724,22 @@ describe('DrKalla register/style + deterministic price (live call 2026-06-13 fix
     });
     expect(modelCalls).toBe(1);
   });
+
+  it('B: a generic hair descriptor is NOT treated as an ambiguous product (no variant clarification)', async () => {
+    // Real battery 2026-06-14: "trockenes Haar" hit the ambiguous-product path and
+    // asked "welche Ausführung?" — it is a NEED, not a product line.
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Was empfehlen Sie mir für trockenes Haar?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => 'Für trockenes Haar empfehle ich eine reichhaltige Pflegemaske.' },
+      detectAmbiguousProduct: () => ({ label: 'Trockenes Haar', productCount: 2 }),
+      catalogSearch: () => [],
+    });
+    expect(response.text).not.toContain('mehrere Ausführungen');
+    expect(response.text).not.toContain('Welche Größe oder Ausführung');
+    expect(response.text).toContain('trockenes Haar');
+  });
 });
 
 describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfangen?" -> "Ja")', () => {

@@ -84,6 +84,17 @@ describe('DrKalla product catalog category search', () => {
     expect(buildDrkallaShortName('CLR LCH').length).toBeGreaterThan(0);
   });
 
+  it('deduplicates results that share a spoken short name (no "X und X")', () => {
+    const dup = buildDrkallaProductCatalogSearch([
+      { handle: 'a', title: 'Black Professional Line Sintesis Color Cream 100 ml', productType: 'Haarfarbe und Blondierung', tags: ['Haarfarbe'], variants: [{ price: '9.00', available: true }] },
+      { handle: 'b', title: 'Black Professional Line Sintesis Color Cream 60 ml', productType: 'Haarfarbe und Blondierung', tags: ['Haarfarbe'], variants: [{ price: '7.00', available: true }] },
+      { handle: 'c', title: 'Igora Royal Permanent Coloration', productType: 'Haarfarbe und Blondierung', tags: ['Haarfarbe'], variants: [{ price: '11.00', available: true }] },
+    ]);
+    const names = dup('Haarfarbe', 5).map((x) => x.shortName);
+    expect(new Set(names).size).toBe(names.length); // every spoken name is unique
+    expect(names.filter((n) => n === 'Black Professional Line Sintesis')).toHaveLength(1);
+  });
+
   it('ranks a productType match above a comb that only carries a topical tag (shampoo != comb)', () => {
     const withComb = buildDrkallaProductCatalogSearch([
       ...products,
