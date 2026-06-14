@@ -40,7 +40,7 @@ describe('DrKalla product evidence lookup', () => {
   it('exposes price, brand, kind, and link facts per product', () => {
     const evidence = lookup.byId('synthesis-color-cream');
     expect(evidence?.spokenName).toBe('Synthesis Color Cream 100 Ml');
-    expect(evidence?.priceText).toBe('9,99 Euro');
+    expect(evidence?.priceText).toBe('9 Euro 99');
     expect(evidence?.brandName).toBe('Dr.Kalla Cosmetics');
     expect(evidence?.productKind).toBe('Haarfarbe/Farbcreme');
     expect(evidence?.hasUrl).toBe(true);
@@ -48,7 +48,7 @@ describe('DrKalla product evidence lookup', () => {
   });
 
   it('formats multi-variant prices as a German range', () => {
-    expect(lookup.byId('lattafa-fakhar')?.priceText).toBe('von 24,99 Euro bis 39,99 Euro');
+    expect(lookup.byId('lattafa-fakhar')?.priceText).toBe('von 24 Euro 99 bis 39 Euro 99');
     expect(lookup.byId('lattafa-fakhar')?.brandName).toBe('Lattafa');
   });
 
@@ -72,7 +72,7 @@ describe('DrKalla product evidence lookup', () => {
     const evidence = lookup.byId('synthesis-color-cream');
     const line = formatDrkallaProductEvidenceLine(evidence!);
     expect(line).toContain('Evidence (Shop-Datenstand)');
-    expect(line).toContain('9,99 Euro');
+    expect(line).toContain('9 Euro 99');
     expect(line).toContain('Marke Dr.Kalla Cosmetics');
     expect(line).not.toContain('https://');
     expect(line.length).toBeLessThanOrEqual(220);

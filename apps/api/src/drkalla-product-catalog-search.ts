@@ -70,8 +70,19 @@ function contentTokens(text: string): string[] {
     .filter((t) => t.length >= 3 && !STOPWORDS.has(t) && !SHADE_TOKEN.test(t));
 }
 
+// Speakable German money: low-latency neural TTS often has currency
+// normalization OFF, so "9,00 Euro" surfaces as "neun Komma null null Euro".
+// Pre-format to how Germans say it: "9 Euro" (whole), "11 Euro 99" (with cents,
+// leading zero dropped so "9,05" reads "neun Euro fünf").
+export function formatDrkallaPrice(value: number): string {
+  const cents = Math.round(value * 100);
+  const euros = Math.floor(cents / 100);
+  const rest = cents % 100;
+  return rest === 0 ? `${euros} Euro` : `${euros} Euro ${rest}`;
+}
+
 function formatEuro(value: number): string {
-  return `${value.toFixed(2).replace('.', ',')} Euro`;
+  return formatDrkallaPrice(value);
 }
 
 function priceTextFromVariants(variants: unknown): string | null {
@@ -94,12 +105,24 @@ function cleanSpokenName(title: string): string {
 // Size/volume/quantity tokens that make a spoken name long and unnatural.
 const SIZE_RE = /\b\d+[.,]?\d*\s?(?:ml|milliliter|liter|gramm|gr|kg|stk|st(?:ü|ue)ck|cm|mm|prozent|%|x)\b/gi;
 
+// A token a German voice cannot say as a word: an ALL-CAPS code (CLR, LCH, EDP,
+// ARGENT, BARCELONA), a vowel-less consonant cluster (Lch, CLR), or a token with
+// an embedded digit (B3-PLEX, 10in1). These read as letter-spelling and break
+// prosody, so they are stripped from the spoken short name.
+function isUnpronounceableToken(word: string): boolean {
+  if (/\d/.test(word)) return true;                      // embedded digit code
+  if (word.length >= 2 && /^[A-ZÄÖÜ]+$/.test(word)) return true; // ALL-CAPS code
+  if (word.length >= 2 && !/[aeiouäöüy]/i.test(word)) return true; // no vowel
+  return false;
+}
+
 /**
  * A short, speakable product name for voice: drop leading bullets, size/volume
- * tokens and standalone numeric codes, de-duplicate repeated words (e.g. "Pro
- * Pro") and keep the first few meaningful words. Falls back to the cleaned full
- * title if nothing speakable remains. The caller said the full catalog titles
- * ("... Haarmaske für häufige Haarpflege 500 Ml") were unspeakable.
+ * tokens, numeric and unpronounceable codes, de-duplicate repeated words (e.g.
+ * "Pro Pro") and keep the first few meaningful words. Falls back to the cleaned
+ * title (without codes, else the raw clean title) if nothing speakable remains.
+ * The caller said the full catalog titles ("... Haarmaske für häufige Haarpflege
+ * 500 Ml", "ARGENT Glanz-Shampoo & B3-PLEX") were unspeakable.
  */
 export function buildDrkallaShortName(title: string): string {
   // Titles often join two marketing phrases with & | / – — keep the first.
@@ -118,7 +141,11 @@ export function buildDrkallaShortName(title: string): string {
     seen.add(key);
     words.push(w);
   }
-  let short = words.slice(0, 4).join(' ').trim();
+  const speakable = words.filter((w) => !isUnpronounceableToken(w));
+  // Prefer the code-free words; if stripping leaves nothing, keep the originals
+  // so we never return an empty name.
+  const chosen = speakable.length ? speakable : words;
+  let short = chosen.slice(0, 4).join(' ').trim();
   if (short.length > 42) short = short.slice(0, 42).replace(/\s+\S*$/, '').trim();
   return short || cleanSpokenName(title);
 }
