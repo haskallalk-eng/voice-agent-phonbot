@@ -228,7 +228,16 @@ export function buildDrkallaProductCatalogSearch(
       || (b.catHits - a.catHits)
       || (b.p.available - a.p.available)
       || (a.p.shortName.length - b.p.shortName.length)); // shorter speakable name first
-    return scored.slice(0, Math.max(1, limit)).map(({ p, score, typeHits, catHits }) => ({
+    // Two different products can share a spoken short name; for voice that reads
+    // as "X und X", so keep only the first (highest-scored) of each spoken name.
+    const seenSpoken = new Set<string>();
+    const deduped = scored.filter((s) => {
+      const key = s.p.shortName.toLocaleLowerCase('de-DE');
+      if (seenSpoken.has(key)) return false;
+      seenSpoken.add(key);
+      return true;
+    });
+    return deduped.slice(0, Math.max(1, limit)).map(({ p, score, typeHits, catHits }) => ({
       productId: p.productId,
       spokenName: p.spokenName,
       shortName: p.shortName,
