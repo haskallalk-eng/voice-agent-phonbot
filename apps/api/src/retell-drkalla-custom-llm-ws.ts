@@ -40,7 +40,13 @@ import {
   type DrkallaShortTermVoiceMemory,
 } from './drkalla-short-term-memory.js';
 import { createTrustedScope } from './trusted-scope.js';
+import { looksIncompleteDrkallaUtterance } from './drkalla-turn-completeness.js';
 import type { AgentTurnRequestedEvent } from './voice-runtime-contract.js';
+
+// Content-aware turn hold: how many consecutive incomplete utterances we stay
+// silent on before answering anyway, so a misclassification can never make the
+// agent go permanently silent within one gap.
+const DRKALLA_MAX_CONSECUTIVE_HOLDS = 2;
 
 const SAFE_UNAVAILABLE_TEXT = 'Entschuldigung, ich kann gerade nicht weiterhelfen. Bitte versuchen Sie es später noch einmal oder schreiben Sie an kontakt at drkalla punkt com.';
 
@@ -565,6 +571,7 @@ export async function registerRetellDrkallaCustomLlmWs(
     let noInputReminderCount = 0;
     let greeted = false;
     let loggedCallDetails = false;
+    let consecutiveHolds = 0;
     let processing: Promise<void> = Promise.resolve();
     // The model call of the turn currently allowed to speak. A newer turn
     // aborts it on arrival (barge-in) so the serialized chain does not wait
@@ -619,6 +626,32 @@ export async function registerRetellDrkallaCustomLlmWs(
       const parsedPreview = parseRetellDrkallaCustomLlmMessage(rawMessage);
       const isResponseTurn = parsedPreview?.interactionType === 'response_required';
       const isReminderTurn = parsedPreview?.interactionType === 'reminder_required';
+
+      // Content-aware turn hold: if the caller's utterance clearly dangles
+      // (mid-sentence — ends on a conjunction, a bare article/preposition or a
+      // filler), stay SILENT for this turn and let them finish, instead of
+      // answering a fragment and getting cut off (real call 2026-06-14:
+      // "...kaufen. Und" -> agent started "Darf..." -> caller kept talking).
+      // This is content-based, not a global latency delay. Bounded: the caller's
+      // next words arrive as a fresh turn and Retell's silence reminder is the
+      // backstop, and we never hold the same gap more than twice. A held turn
+      // sends NO frame and does NOT advance turn/memory state.
+      const heldTurn = isResponseTurn
+        && consecutiveHolds < DRKALLA_MAX_CONSECUTIVE_HOLDS
+        && looksIncompleteDrkallaUtterance(parsedPreview?.currentUserText ?? '', {
+          pendingQuestion: Boolean(memory.lastAgentQuestion?.trim()) || Boolean(memory.pendingClarification),
+        });
+      if (heldTurn) {
+        // The caller is still talking — treat it as a barge-in over any in-flight
+        // answer, then say nothing. No arrival claim, no turnCounter, no memory.
+        consecutiveHolds += 1;
+        inFlightAbort?.abort();
+        inFlightAbort = null;
+        app.log.info({ callId, turn: turnCounter, holds: consecutiveHolds }, 'drkalla canary turn held (incomplete utterance)');
+        return;
+      }
+      if (isResponseTurn || isReminderTurn) consecutiveHolds = 0;
+
       // Both response and reminder turns produce a spoken frame and so must
       // claim arrival order; a reminder is dropped if the caller speaks first.
       const myArrival = (isResponseTurn || isReminderTurn) ? ++latestArrival : latestArrival;

@@ -702,6 +702,63 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     await app.close();
   });
 
+  it('holds (says nothing) on an incomplete utterance, then answers when the caller finishes', async () => {
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
+    let modelCalls = 0;
+    const { app, url } = await testServer({ complete: async ({ user }) => { modelCalls += 1; return `Antwort: ${user}`; } });
+    const ws = await connect(url);
+    const frames: Array<{ response_id?: unknown; content_complete?: boolean }> = [];
+    ws.on('message', (data) => frames.push(JSON.parse(data.toString())));
+    const resp = (id: number, content: string) => ws.send(JSON.stringify({ interaction_type: 'response_required', response_id: id, transcript: [{ role: 'user', content }] }));
+    const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    resp(1, 'Hallo');                 // opener greeting
+    await delay(150);
+    const afterGreet = frames.length;
+    expect(afterGreet).toBe(1);
+
+    resp(2, 'Ich möchte eine Haarfarbe und'); // dangling 'und' -> held, no frame, no model
+    await delay(200);
+    expect(frames.length).toBe(afterGreet);   // nothing said
+    expect(modelCalls).toBe(0);
+
+    resp(3, 'Ich möchte eine Haarfarbe kaufen.'); // completed -> answers
+    await delay(300);
+    expect(frames.some((f) => f.response_id === 3 && f.content_complete === true)).toBe(true);
+
+    ws.close();
+    await app.close();
+  });
+
+  it('answers anyway after two consecutive holds (never silent forever)', async () => {
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
+    const { app, url } = await testServer({ complete: async () => 'Womit kann ich helfen?' });
+    const ws = await connect(url);
+    const frames: Array<{ response_id?: unknown; content_complete?: boolean }> = [];
+    ws.on('message', (data) => frames.push(JSON.parse(data.toString())));
+    const resp = (id: number, content: string) => ws.send(JSON.stringify({ interaction_type: 'response_required', response_id: id, transcript: [{ role: 'user', content }] }));
+    const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    resp(1, 'Hallo');
+    await delay(150);
+    const afterGreet = frames.length;
+
+    resp(2, 'Ich suche etwas und'); // hold 1
+    await delay(150);
+    resp(3, 'am besten');          // hold 2
+    await delay(150);
+    expect(frames.length).toBe(afterGreet); // both held, silent
+
+    resp(4, 'oder');               // would be hold 3 -> cap reached, answers anyway
+    await delay(300);
+    expect(frames.some((f) => f.response_id === 4 && f.content_complete === true)).toBe(true);
+
+    ws.close();
+    await app.close();
+  });
+
   it('greets on a repeated-greeting opener and hangs up on "leg einfach auf" (real-call regressions)', async () => {
     process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
     process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
