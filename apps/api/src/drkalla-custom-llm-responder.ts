@@ -263,6 +263,9 @@ const NEED_VETO = /\b(?:unterschied|vergleich|verglichen|wie\s+(?:wende|benutz|v
 // clarification. Matches a hair-condition adjective somewhere before "Haar".
 const DRKALLA_HAIR_DESCRIPTOR = /\b(?:trocken|fein|lockig|kraus|gef[äa]rbt|coloriert|blond|grau|dunkl|hell|strapazier|gesund|normal|fettig|empfindlich|gereizt|spr(?:ö|oe)d|br(?:ü|ue)chig|gesch(?:ä|ae)digt|d(?:ü|ue)nn|krause)\w*\b[^.?!]*\bhaar/i;
 
+// "Was ist die günstigste/billigste …?" — rank the category by price ascending.
+const DRKALLA_CHEAP_INTENT = /\b(?:g[üu]nstig\w*|billig\w*|preiswert\w*|preisg[üu]nstig\w*|am\s+g[üu]nstigsten|am\s+billigsten)\b/i;
+
 /**
  * Deterministic product discovery for a clear category need. On the real call
  * 2026-06-13 the model looped on clarifying questions and named long,
@@ -280,11 +283,15 @@ function tryDeterministicNeedReply(input: {
 }): DrkallaFallbackResult | null {
   const text = input.userText;
   if (NEED_VETO.test(text) || detectDrkallaContactIntent(text)) return null;
-  const hits = input.catalogSearch?.(text, 4) ?? [];
+  const hits = input.catalogSearch?.(text, 8) ?? [];
   // Require a productType match (a clear product CATEGORY), not a tag/title hit,
   // so this names products for "ich suche ein Shampoo" but leaves a specific
   // ambiguous product line ("Koleston Perfect") to the variant clarification.
   const strong = hits.filter((h) => h.typeHit);
+  // "günstigste/billigste" -> rank the category by price so we name the cheapest.
+  if (DRKALLA_CHEAP_INTENT.test(text)) {
+    strong.sort((a, b) => (a.priceValue ?? Number.POSITIVE_INFINITY) - (b.priceValue ?? Number.POSITIVE_INFINITY));
+  }
   const top = strong[0];
   if (!top) return null;
   const evidence = input.evidenceLookup?.byId(top.productId) ?? null;
@@ -493,13 +500,23 @@ export async function buildDrkallaCustomLlmResponse(input: {
       const evidence = activeProduct
         ? input.evidenceLookup?.byKeyHash(activeProduct.productKeyHash) ?? null
         : null;
+      // Resolve the product link URL robustly: prefer the grounded product's
+      // evidence; if that product has no URL (a turn re-grounded the spoken name
+      // to a URL-less duplicate — real battery 2026-06-14), look the spoken name
+      // up in the catalog and take that product's URL. Never claim NOT_WIRED for
+      // a product we can actually link.
+      let productUrl = evidence?.url ?? null;
+      if (!productUrl && activeProduct && input.catalogSearch && input.evidenceLookup) {
+        const hit = input.catalogSearch(activeProduct.spokenName, 1)[0];
+        if (hit) productUrl = input.evidenceLookup.byId(hit.productId)?.url ?? null;
+      }
       // Choice resolution: explicit Profi wins; else explicit product; else a
       // bare yes on a single-option offer follows that offer (product).
       const kind: DrkallaSendLinkKind = wantsProfi ? 'profi' : 'product';
       const target = kind === 'profi'
         ? { url: DRKALLA_CONTACT_FACTS.profiUrl, label: 'Profi-Zugang' }
-        : activeProduct && evidence?.url
-          ? { url: evidence.url, label: activeProduct.spokenName }
+        : activeProduct && productUrl
+          ? { url: productUrl, label: activeProduct.spokenName }
           : null;
 
       let text = DRKALLA_SMS_NOT_WIRED_TEXT;

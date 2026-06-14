@@ -22,6 +22,7 @@ export type DrkallaCatalogMatch = {
   shortName: string;
   productType: string | null;
   priceText: string | null;
+  priceValue: number | null; // min variant price, for "cheapest" sorting
   score: number;
   categoryHit: boolean; // matched the productType or a tag (not title-only)
   typeHit: boolean;     // matched the productType itself (a clear category need)
@@ -85,17 +86,17 @@ function formatEuro(value: number): string {
   return formatDrkallaPrice(value);
 }
 
-function priceTextFromVariants(variants: unknown): string | null {
-  if (!Array.isArray(variants)) return null;
+function pricesFromVariants(variants: unknown): { text: string | null; min: number | null } {
+  if (!Array.isArray(variants)) return { text: null, min: null };
   const prices: number[] = [];
   for (const v of variants) {
     if (!v || typeof v !== 'object') continue;
     const p = Number(String((v as { price?: unknown }).price ?? '').replace(',', '.'));
     if (Number.isFinite(p) && p > 0) prices.push(p);
   }
-  if (!prices.length) return null;
+  if (!prices.length) return { text: null, min: null };
   const min = Math.min(...prices), max = Math.max(...prices);
-  return min === max ? formatEuro(min) : `von ${formatEuro(min)} bis ${formatEuro(max)}`;
+  return { text: min === max ? formatEuro(min) : `von ${formatEuro(min)} bis ${formatEuro(max)}`, min };
 }
 
 function cleanSpokenName(title: string): string {
@@ -156,6 +157,7 @@ type IndexedProduct = {
   shortName: string;
   productType: string | null;
   priceText: string | null;
+  priceValue: number | null;
   available: number;
   typeTokens: Set<string>; // productType only (strongest signal)
   catTokens: Set<string>;  // productType + tags (category-level)
@@ -189,12 +191,14 @@ export function buildDrkallaProductCatalogSearch(
         if (v && typeof v === 'object' && (v as { available?: unknown }).available === true) available += 1;
       }
     }
+    const prices = pricesFromVariants(product.variants);
     indexed.push({
       productId: product.handle,
       spokenName: cleanSpokenName(product.title),
       shortName: buildDrkallaShortName(product.title),
       productType,
-      priceText: priceTextFromVariants(product.variants),
+      priceText: prices.text,
+      priceValue: prices.min,
       available,
       typeTokens,
       catTokens,
@@ -243,6 +247,7 @@ export function buildDrkallaProductCatalogSearch(
       shortName: p.shortName,
       productType: p.productType,
       priceText: p.priceText,
+      priceValue: p.priceValue,
       score,
       categoryHit: catHits > 0,
       typeHit: typeHits > 0,
