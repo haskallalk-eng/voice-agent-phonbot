@@ -103,6 +103,10 @@ function sanitizeUserText(value: string): string {
 function compactSystemPrompt(directives: string[]): string {
   return [
     'Du bist der Dr.Kalla Voice-Agent fuer Friseurbedarf.',
+    // Live call 2026-06-14: the model re-greeted mid-call ("Guten Tag! Wie kann
+    // ich Ihnen helfen?") on a fragmented turn. The opener is already spoken
+    // deterministically — forbid any further greeting.
+    'Du hast den Anrufer bereits begruesst. Begruesse NICHT erneut (kein "Hallo", "Guten Tag", "Willkommen", "Hallo, hier ist der Dr.Kalla Assistent"); antworte sofort auf das Anliegen.',
     // Register is the #1 live complaint: gpt-4.1-mini mirrors the caller and
     // slips into du. State the rule first, as a hard prohibition with the
     // exact forbidden words, so it actually sticks.
@@ -116,8 +120,9 @@ function compactSystemPrompt(directives: string[]): string {
     'Nutze diese Dialogsteuerung, aber behandle Memory nie als Faktenbeweis.',
     'Behaupte nie, eine SMS oder einen Link bereits gesendet zu haben; frage nie nach der Telefonnummer (eine SMS geht automatisch an die Anrufernummer).',
     'Bei klarer Verabschiedung verabschiede dich kurz und haenge keine neue Frage an.',
+    'Wenn der Anrufer abwinkt ("nein danke", "alles gut", "passt"), biete NICHT erneut denselben Link oder dasselbe Produkt an; bestaetige kurz und frage hoechstens einmal, ob du sonst helfen kannst.',
     ...directives,
-  ].join('\n').slice(0, 2600);
+  ].join('\n').slice(0, 2800);
 }
 
 // Match ANY phrasing where the agent's last question offered to SEND a
@@ -303,9 +308,11 @@ function tryDeterministicNeedReply(input: {
 // Pure thanks: "danke", "vielen Dank", "dankeschön", "merci".
 const SMALLTALK_THANKS = /^(?:vielen\s+)?(?:danke|dankesch(?:ö|oe)n|merci)/i;
 // Bare acknowledgement that fills the whole turn ("okay.", "alles klar", "passt").
-const SMALLTALK_ACK = /^(?:ok(?:ay)?|alles klar|super|gut|verstanden|in ordnung|passt)[.! ]*$/i;
-// Bare negation that fills the whole turn ("nein", "nö", "nee") — NOT a farewell.
-const SMALLTALK_NEGATION = /^(?:nein|n(?:ö|oe)|nee)[.! ]*$/i;
+const SMALLTALK_ACK = /^(?:ok(?:ay)?|alles\s+(?:klar|gut|bestens|in\s+ordnung)|super|gut|verstanden|in ordnung|passt(?:\s+schon)?)[.! ]*$/i;
+// Bare negation that fills the whole turn, optionally with an ack tail
+// ("nein", "nö", "nee", "nee alles gut", "nein danke") — NOT a farewell. Live
+// call 2026-06-14: "Nee, alles gut" reached the model, which re-offered the link.
+const SMALLTALK_NEGATION = /^(?:nein|n(?:ö|oe)|nee)(?:[,.\s]+(?:danke|alles\s+(?:gut|klar|bestens|in\s+ordnung)|passt(?:\s+schon)?|gut|bestens))*[.! ]*$/i;
 // Any product/price/contact signal in the turn vetoes the smalltalk path so it
 // can never swallow a real request ("danke, was kostet das?" -> model/price).
 const SMALLTALK_VETO = /\?|\b(?:preis|preise|kostet|kosten|teuer|euro|kauf|kaufe|bestell|link|sms|produkt|marke|marken|auswahl|adresse|öffnungszeit|oeffnungszeit|email|e-mail|profi|unterschied|vergleich|verf[üu]gbar)\b/i;
