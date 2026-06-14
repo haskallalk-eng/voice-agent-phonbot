@@ -41,6 +41,7 @@ import {
 } from './drkalla-short-term-memory.js';
 import { createTrustedScope } from './trusted-scope.js';
 import { looksIncompleteDrkallaUtterance } from './drkalla-turn-completeness.js';
+import { speakDrkallaText } from './drkalla-speakable.js';
 import type { AgentTurnRequestedEvent } from './voice-runtime-contract.js';
 
 // Content-aware turn hold: how many consecutive incomplete utterances we stay
@@ -54,7 +55,10 @@ const SAFE_UNAVAILABLE_TEXT = 'Entschuldigung, ich kann gerade nicht weiterhelfe
 // first line via an empty response_required at call start. This deterministic
 // Sie greeting is spoken then (no model call), so the very first thing the
 // caller hears is on-brand and in the right register.
-export const DRKALLA_CUSTOM_RUNTIME_GREETING = 'Hallo, hier ist der Dr.Kalla Assistent. Wie kann ich Ihnen bei Friseurbedarf helfen?';
+// "Doktor Kalla" (not "Dr.Kalla") so the neural TTS reads it as one warm name
+// instead of an audible mid-name period/abbreviation; "der Assistent von Doktor
+// Kalla" flows better than the compound "der Dr.Kalla Assistent".
+export const DRKALLA_CUSTOM_RUNTIME_GREETING = 'Hallo, hier ist der Assistent von Doktor Kalla. Wie kann ich Ihnen beim Friseurbedarf helfen?';
 
 export type RetellDrkallaCustomLlmParsedMessage = {
   interactionType: string;
@@ -784,7 +788,13 @@ export async function registerRetellDrkallaCustomLlmWs(
           // Final frame carries whatever was not streamed yet. If trimming or
           // fallback changed the text so streamed chunks are no longer a
           // prefix, fall back to a single full final frame.
-          const fullText = String(outbound.content);
+          // Deterministic replies (nothing streamed yet) are TTS-normalized here
+          // — "Dr.Kalla" -> "Doktor Kalla", "&" -> "und", any "9,00 Euro" ->
+          // "9 Euro", etc. Streamed model frames are already sent, so leave the
+          // accumulated model text untouched (the prompt steers the model).
+          const fullText = sentText === ''
+            ? speakDrkallaText(String(outbound.content))
+            : String(outbound.content);
           const tail = fullText.startsWith(sentText) ? fullText.slice(sentText.length) : fullText;
           // Hard hang-up only on a clear caller farewell (response.endCall),
           // carried on the final frame; never on streamed/intermediate frames.

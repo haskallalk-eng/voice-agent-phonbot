@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { formatDrkallaPrice } from './drkalla-product-catalog-search.js';
 
 /**
  * Catalog-backed structured product facts for the DrKalla custom runtime.
@@ -53,7 +54,7 @@ function cleanSpokenName(title: string): string {
 }
 
 function formatEuro(value: number): string {
-  return `${value.toFixed(2).replace('.', ',')} Euro`;
+  return formatDrkallaPrice(value); // speakable German money ("9 Euro", "11 Euro 99")
 }
 
 function priceTextFromVariants(variants: unknown): {
