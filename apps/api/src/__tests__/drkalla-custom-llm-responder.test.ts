@@ -710,6 +710,7 @@ describe('DrKalla register/style + deterministic price (live call 2026-06-13 fix
     expect(prompts[0]).toContain('Katalog-Treffer');
     expect(prompts[0]).toContain('Irgendein Produkt');           // short name injected
     expect(prompts[0]).not.toContain('langer Produkttitel');     // not the full title
+    expect(prompts[0]).toContain('Begruesse NICHT erneut');      // model must not re-greet
   });
 
   it('B: a comparison price question still goes to the model (not the deterministic path)', async () => {
@@ -868,6 +869,28 @@ describe('DrKalla deterministic smalltalk fast-paths (latency: low-content turns
     expect(modelCalls).toBe(0);
     expect(response.metrics.extraLlmCalls).toBe(0);
     expect(response.text).toBe('Alles klar. Kann ich Ihnen sonst noch weiterhelfen?');
+  });
+
+  it('A-red: "Nee, alles gut" after a sent SMS winds down deterministically (no model, no link re-offer)', async () => {
+    // Mirrors the live call: after the SMS was sent the last question is "Kann ich
+    // sonst noch etwas klären?" (NOT an SMS offer), so "Nee, alles gut" must wind
+    // down instead of reaching the model, which re-offered the same link.
+    const memory = reduceDrkallaShortTermMemory(productMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 2,
+      text: 'Erledigt, ich habe Ihnen den Produktlink per SMS geschickt. Kann ich sonst noch etwas klären?',
+      lastAgentQuestion: 'Kann ich sonst noch etwas klären?',
+    });
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Nee, alles gut.'),
+      memory,
+      client: { complete: async () => { modelCalls += 1; return 'should not be used'; } },
+    });
+    expect(modelCalls).toBe(0);
+    expect(response.text).toBe('Alles klar. Kann ich Ihnen sonst noch weiterhelfen?');
+    expect(response.text).not.toMatch(/link|sms/i);
   });
 
   it('B: a real product/price question is NOT swallowed and still reaches the model', async () => {
