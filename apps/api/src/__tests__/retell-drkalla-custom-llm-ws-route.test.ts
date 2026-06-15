@@ -42,13 +42,48 @@ function connect(url: string): Promise<WebSocket> {
 
 function receive(ws: WebSocket): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    ws.once('message', (data) => {
+    const onMessage = (data: WebSocket.RawData) => {
+      let parsed: unknown;
       try {
-        resolve(JSON.parse(data.toString()));
+        parsed = JSON.parse(data.toString());
       } catch (error) {
+        ws.off('message', onMessage);
         reject(error);
+        return;
       }
+      // Skip the PROACTIVE begin message (response_id 0, sent on connect) so a
+      // test's receive() returns the reply to the turn it just sent, regardless
+      // of whether the begin arrived before or after this listener attached.
+      if (parsed && typeof parsed === 'object' && (parsed as { response_id?: unknown }).response_id === 0) return;
+      ws.off('message', onMessage);
+      resolve(parsed);
+    };
+    ws.on('message', onMessage);
+    ws.once('error', reject);
+  });
+}
+
+type WsFrame = {
+  response_type?: string;
+  response_id?: unknown;
+  content?: string;
+  content_complete?: boolean;
+  end_call?: boolean;
+  timestamp?: number;
+};
+
+// Collects every frame from connect onward — the message listener is attached
+// BEFORE 'open' resolves, so the PROACTIVE begin message (response_id 0, sent the
+// instant the socket opens) is captured deterministically instead of racing the
+// listener attachment.
+function connectCollecting(url: string): Promise<{ ws: WebSocket; frames: WsFrame[] }> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url);
+    const frames: WsFrame[] = [];
+    ws.on('message', (data) => {
+      try { frames.push(JSON.parse(data.toString()) as WsFrame); } catch { /* ignore non-JSON */ }
     });
+    ws.once('open', () => resolve({ ws, frames }));
     ws.once('error', reject);
   });
 }
@@ -546,22 +581,22 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     await app.close();
   });
 
-  it('greets in Sie on call open (empty first turn) without calling the model', async () => {
+  it('greets in Sie PROACTIVELY on connect (agent speaks first), no model call', async () => {
     process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
     process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
     let modelCalls = 0;
     const { app, url } = await testServer({ complete: async () => { modelCalls += 1; return 'unused'; } });
-    const ws = await connect(url);
+    const { ws, frames } = await connectCollecting(url);
 
-    // Real Retell may already include the caller's first words in the opening
-    // turn; the greeting must still fire on the first response turn.
-    ws.send(JSON.stringify({ interaction_type: 'response_required', response_id: 0, transcript: [{ role: 'user', content: 'Hallo' }] }));
-    const first = await receive(ws);
-
+    // Custom-llm has no begin_message (Retell drops it) and Retell sends no opener
+    // event; the server sends the begin message with response_id 0 PROACTIVELY
+    // right after connect so the agent speaks first (verified live 2026-06-15).
+    await new Promise((r) => setTimeout(r, 100));
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toMatchObject({ response_type: 'response', response_id: 0, content_complete: true, end_call: false });
+    expect(frames[0]?.content).toContain('Wie kann ich Ihnen');
+    expect(JSON.stringify(frames[0])).not.toMatch(/\b(?:du|dich|dir|dein)\b/i);
     expect(modelCalls).toBe(0);
-    expect(first).toMatchObject({ response_type: 'response', response_id: 0, content_complete: true, end_call: false });
-    expect(JSON.stringify(first)).toContain('Wie kann ich Ihnen');
-    expect(JSON.stringify(first)).not.toMatch(/\b(?:du|dich|dir|dein)\b/i);
 
     // A following real turn is handled normally (not greeted again).
     ws.send(JSON.stringify({
@@ -580,17 +615,15 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
     let modelCalls = 0;
     const { app, url } = await testServer({ complete: async () => { modelCalls += 1; return 'unused'; } });
-    const ws = await connect(url);
-    const frames: Array<{ response_type?: string; timestamp?: number }> = [];
-    ws.on('message', (data) => frames.push(JSON.parse(data.toString())));
+    const { ws, frames } = await connectCollecting(url);
+    await new Promise((resolve) => setTimeout(resolve, 50)); // let the proactive begin arrive
 
     // Retell sends a ping_pong with a timestamp; the server must echo the same
     // timestamp back so the socket is not judged dead — and call no model.
     ws.send(JSON.stringify({ interaction_type: 'ping_pong', timestamp: 1716250276547 }));
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    expect(frames).toHaveLength(1);
-    expect(frames[0]).toEqual({ response_type: 'ping_pong', timestamp: 1716250276547 });
+    expect(frames.filter((f) => f.response_type === 'ping_pong')).toEqual([{ response_type: 'ping_pong', timestamp: 1716250276547 }]);
     expect(modelCalls).toBe(0);
 
     ws.close();
@@ -602,25 +635,26 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
     let modelCalls = 0;
     const { app, url } = await testServer({ complete: async () => { modelCalls += 1; return 'unused'; } });
-    const ws = await connect(url);
-    const frames: Array<{ response_id?: unknown; content?: string; content_complete?: boolean }> = [];
-    ws.on('message', (data) => frames.push(JSON.parse(data.toString())));
+    const { ws, frames } = await connectCollecting(url);
+
+    // The server greets PROACTIVELY on connect (response_id 0).
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toMatchObject({ response_id: 0, content_complete: true });
+    expect(frames[0]?.content).toContain('Wie kann ich Ihnen');
 
     // Real connect order: call_details first, then an update_only transcript
-    // refresh. Neither requests a reply, so neither may produce a frame nor
-    // consume the one-shot greeting slot.
+    // refresh. Neither requests a reply, so neither may produce a frame.
     ws.send(JSON.stringify({ interaction_type: 'call_details', call: { call_id: 'call-x', from_number: '+490000000000' } }));
     ws.send(JSON.stringify({ interaction_type: 'update_only', transcript: [{ role: 'user', content: 'ähm' }] }));
     await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(frames).toHaveLength(0);
+    expect(frames).toHaveLength(1); // still just the proactive begin
     expect(modelCalls).toBe(0);
 
-    // The first genuine response turn still greets deterministically.
-    ws.send(JSON.stringify({ interaction_type: 'response_required', response_id: 1, transcript: [{ role: 'user', content: 'Hallo' }] }));
+    // A real turn is still handled (deterministic farewell -> hangup, no model).
+    ws.send(JSON.stringify({ interaction_type: 'response_required', response_id: 1, transcript: [{ role: 'user', content: 'Tschuess' }] }));
     await new Promise((resolve) => setTimeout(resolve, 150));
-    expect(frames).toHaveLength(1);
-    expect(frames[0]).toMatchObject({ response_id: 1, content_complete: true });
-    expect(frames[0]?.content).toContain('Wie kann ich Ihnen');
+    expect(frames.find((f) => f.response_id === 1)?.end_call).toBe(true);
     expect(modelCalls).toBe(0);
 
     ws.close();
@@ -667,9 +701,7 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
     let modelCalls = 0;
     const { app, url } = await testServer({ complete: async ({ user }) => { modelCalls += 1; return `Modellantwort: ${user}`; } });
-    const ws = await connect(url);
-    const frames: Array<{ response_type?: string; response_id?: unknown; content?: string; content_complete?: boolean; end_call?: boolean; timestamp?: number }> = [];
-    ws.on('message', (data) => frames.push(JSON.parse(data.toString())));
+    const { ws, frames } = await connectCollecting(url);
     const send = (m: Record<string, unknown>) => ws.send(JSON.stringify(m));
     const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -690,13 +722,14 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     // without hanging up; the farewell hangs up. call_details and update_only
     // produce no response frames, and nothing reached the model.
     expect(frames.find((f) => f.response_type === 'ping_pong')).toEqual({ response_type: 'ping_pong', timestamp: 7 });
-    expect(frames.find((f) => f.response_id === 1)?.content).toContain('Wie kann ich Ihnen');
+    expect(frames.find((f) => f.response_id === 0)?.content).toContain('Wie kann ich Ihnen'); // proactive begin
+    expect(frames.find((f) => f.response_id === 1)?.content).toContain('Modellantwort'); // "Hallo" now reaches the model
     expect(frames.find((f) => f.response_id === 2)?.end_call).toBe(false);
     const bye = frames.find((f) => f.response_id === 3 && f.content_complete === true);
     expect(bye?.end_call).toBe(true);
     const responseIds = frames.filter((f) => f.response_type === 'response').map((f) => f.response_id);
-    expect(new Set(responseIds)).toEqual(new Set([1, 2, 3]));
-    expect(modelCalls).toBe(0);
+    expect(new Set(responseIds)).toEqual(new Set([0, 1, 2, 3]));
+    expect(modelCalls).toBe(1);
 
     ws.close();
     await app.close();
@@ -707,16 +740,14 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
     let modelCalls = 0;
     const { app, url } = await testServer({ complete: async ({ user }) => { modelCalls += 1; return `Antwort: ${user}`; } });
-    const ws = await connect(url);
-    const frames: Array<{ response_id?: unknown; content_complete?: boolean }> = [];
-    ws.on('message', (data) => frames.push(JSON.parse(data.toString())));
+    const { ws, frames } = await connectCollecting(url);
     const resp = (id: number, content: string) => ws.send(JSON.stringify({ interaction_type: 'response_required', response_id: id, transcript: [{ role: 'user', content }] }));
     const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-    resp(1, 'Hallo');                 // opener greeting
-    await delay(150);
+    await delay(150);                 // proactive begin lands on connect
     const afterGreet = frames.length;
     expect(afterGreet).toBe(1);
+    expect(frames[0]?.content_complete).toBe(true);
 
     resp(2, 'Ich möchte eine Haarfarbe und'); // dangling 'und' -> held, no frame, no model
     await delay(200);
@@ -764,15 +795,12 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
     let modelCalls = 0;
     const { app, url } = await testServer({ complete: async () => { modelCalls += 1; return 'Gern, was suchen Sie?'; } });
-    const ws = await connect(url);
-    const frames: Array<{ response_id?: unknown; content?: string; content_complete?: boolean; end_call?: boolean }> = [];
-    ws.on('message', (data) => frames.push(JSON.parse(data.toString())));
+    const { ws, frames } = await connectCollecting(url);
 
-    // A real call opened with "Hallo? Hallo." and the single-token regex missed
-    // it, so the greeting never fired. It must greet now (no model).
-    ws.send(JSON.stringify({ interaction_type: 'response_required', response_id: 1, transcript: [{ role: 'user', content: 'Hallo? Hallo.' }] }));
-    await new Promise((r) => setTimeout(r, 150));
-    expect(frames.find((f) => f.response_id === 1)?.content).toContain('Wie kann ich Ihnen');
+    // The greeting is now PROACTIVE on connect (response_id 0) — no opener regex
+    // needed. It must greet without a model call.
+    await new Promise((r) => setTimeout(r, 100));
+    expect(frames.find((f) => f.response_id === 0)?.content).toContain('Wie kann ich Ihnen');
 
     // The caller repeatedly said "leg einfach auf" / "leg bitte auf" and the old
     // literal "leg auf" missed it, so the agent never hung up. It must now.
