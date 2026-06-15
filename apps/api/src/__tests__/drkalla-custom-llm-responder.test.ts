@@ -1023,6 +1023,46 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
     expect(modelCalls).toBe(0);
     expect(response.text).toContain('Da kann ich Ihnen Sparfarbe empfehlen');
   });
+
+  it('B: a comparison/advice question goes to the model, NOT the canned recommender', async () => {
+    // Real call 2026-06-15: "Was ist besser, X oder Y?" hit the deterministic
+    // recommender and repeated the same template. It must reach the model.
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Was ist besser, Koleston Perfect oder Majirel, für blondes Haar?'),
+      memory: activeTypeMemory(),
+      client: { complete: async () => { modelCalls += 1; return 'Für blondes Haar passt Majirel etwas besser.'; } },
+      catalogSearch: threeProductSearch,
+    });
+    expect(modelCalls).toBe(1);
+    expect(response.text).not.toContain('Da kann ich Ihnen');
+  });
+
+  it('B: the recommender never re-pitches the product it just recommended (anti-broken-record)', async () => {
+    // Real call 2026-06-15: the agent looped "Da kann ich Ihnen Glanz-Shampoo
+    // empfehlen … Soll ich den Link schicken?" verbatim every turn. A follow-up
+    // about the same product must vary via the model.
+    const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 1,
+      text: 'Da kann ich Ihnen Glanz-Shampoo empfehlen.',
+      lastProduct: { spokenName: 'Glanz-Shampoo', productId: 'gs', productKind: 'Shampoo' },
+    });
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Und haben Sie da noch etwas anderes?'),
+      memory,
+      client: { complete: async () => { modelCalls += 1; return 'Ja, wir haben noch weitere Shampoos.'; } },
+      catalogSearch: (t: string) => (/shampoo|anderes/i.test(t) ? [
+        { productId: 'gs', spokenName: 'Glanz-Shampoo', shortName: 'Glanz-Shampoo', productType: 'Shampoo', priceText: '12 Euro', priceValue: 12, score: 4, categoryHit: true, typeHit: true },
+      ] : []),
+      evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
+    });
+    expect(modelCalls).toBe(1);
+    expect(response.text).not.toContain('Da kann ich Ihnen Glanz-Shampoo empfehlen');
+  });
 });
 
 describe('DrKalla deterministic smalltalk fast-paths (latency: low-content turns skip the model)', () => {
