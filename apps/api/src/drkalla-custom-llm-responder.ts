@@ -11,6 +11,7 @@ import type { DrkallaProductEvidenceLookup } from './drkalla-product-evidence.js
 import type { DrkallaProductCatalogSearch } from './drkalla-product-catalog-search.js';
 import type { DrkallaFaqMatcher } from './drkalla-faq-match.js';
 import { detectDrkallaDuForm } from './drkalla-formality-detector.js';
+import { detectDrkallaUserProductType } from './drkalla-product-type-detector.js';
 import { redactForPrompt } from './pii.js';
 import {
   deriveDrkallaAgentSpokeEvent,
@@ -113,7 +114,7 @@ function compactSystemPrompt(directives: string[]): string {
     // exact forbidden words, so it actually sticks.
     'ANREDE (zwingend): Sprich den Anrufer ausschliesslich in der Sie-Form an — Sie, Ihnen, Ihr, Ihre. Verwende NIEMALS du, dich, dir, dein, deine, ihr (als Anrede), euch oder euer, auch wenn der Anrufer dich duzt.',
     'STIL: Antworte auf Deutsch in vollstaendigen, natuerlichen Saetzen. Niemals Stichpunkte, Aufzaehlungen, Doppelpunkt-Listen oder Telegrammstil. Fasse dich kurz, aber sprich in ganzen Saetzen.',
-    'Buchstabiere Web-Adressen oder E-Mails nicht. Nenne die Website gesprochen als "drkalla punkt com" und die E-Mail als "kontakt at drkalla punkt com" — niemals mit Punkt-Zeichen, Schraegstrich oder At-Zeichen.',
+    'Buchstabiere Web-Adressen oder E-Mails nicht. Nenne die Website gesprochen als "drkalla punkt com" und die E-Mail als "kontakt at drkalla punkt com" — niemals mit Punkt-Zeichen, Schraegstrich oder At-Zeichen. Erwaehne die Website nur, wenn es noetig ist, nicht in jeder Antwort.',
     'AUSSPRACHE: Sprich den Markennamen immer als "Doktor Kalla" aus, nie als "Dr.Kalla" oder buchstabiert. Nenne Preise so, wie man sie spricht ("neun Euro", "elf Euro neunundneunzig"), nie mit Komma und Nullen. Verwende keine Abkuerzungen zum Vorlesen (kein "z.B.", "bzw.", "usw.", "Nr.", "Str.", "&", "%").',
     'Dr.Kalla ist ein Friseurbedarf-Shop, kein Friseursalon: keine Termine, keine Haarschnitte oder Faerbe-Dienstleistungen; verweise hoeflich auf Produkte/Salonbedarf.',
     'Nenne Adresse, Oeffnungszeiten, E-Mail, Preise oder Verfuegbarkeit nur aus der gegebenen Evidence- oder Kontakt-Fakt-Zeile. Fehlt die Angabe, erfinde nichts und verweise auf drkalla.com oder den Kontakt.',
@@ -264,8 +265,17 @@ const NEED_VETO = /\b(?:unterschied|vergleich|verglichen|wie\s+(?:wende|benutz|v
 // clarification. Matches a hair-condition adjective somewhere before "Haar".
 const DRKALLA_HAIR_DESCRIPTOR = /\b(?:trocken|fein|lockig|kraus|gef[äa]rbt|coloriert|blond|grau|dunkl|hell|strapazier|gesund|normal|fettig|empfindlich|gereizt|spr(?:ö|oe)d|br(?:ü|ue)chig|gesch(?:ä|ae)digt|d(?:ü|ue)nn|krause)\w*\b[^.?!]*\bhaar/i;
 
-// "Was ist die günstigste/billigste …?" — rank the category by price ascending.
-const DRKALLA_CHEAP_INTENT = /\b(?:g[üu]nstig\w*|billig\w*|preiswert\w*|preisg[üu]nstig\w*|am\s+g[üu]nstigsten|am\s+billigsten)\b/i;
+// "Was ist die günstigste/billigste …?" AND price objections ("das ist mir zu
+// teuer", "haben Sie was Günstigeres", "geht das günstiger") — rank the category
+// by price ascending so the agent can NEGOTIATE: it names a cheaper alternative
+// instead of repeating the same product (caller: "er kann nicht verhandeln").
+const DRKALLA_CHEAP_INTENT = /\b(?:g[üu]nstig\w*|billig\w*|preiswert\w*|preisg[üu]nstig\w*|am\s+g[üu]nstigsten|am\s+billigsten|zu\s+teuer|zu\s+viel|zu\s+hoch|nicht\s+so\s+teuer)\b/i;
+
+// The agent's own variant-clarification question ("… mehrere Ausführungen.
+// Welche … Ausführung meinen Sie?"). If it was the last thing the agent asked,
+// the caller's reply must REACH a product, not trigger the same question again
+// (anti-loop: real call 2026-06-15 asked "welche Nuance?" seven times).
+const VARIANT_CLARIFY_MARKER = /ausf(?:ü|ue)hrung/i;
 
 /**
  * Deterministic product discovery for a clear category need. On the real call
@@ -625,7 +635,16 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // ambiguous line but otherwise fall back to the remembered category.
   const ambiguous = input.detectAmbiguousProduct?.(user) ?? null;
   const ambiguousIsHairDescriptor = ambiguous ? DRKALLA_HAIR_DESCRIPTOR.test(ambiguous.label) : false;
-  const ambiguousIsRealProduct = !!ambiguous && !ambiguousIsHairDescriptor;
+  // Once we know the category, a brand/line is a FILTER, not a variant choice —
+  // reach a concrete product instead of looping a clarification. We "know the
+  // category" when the caller named a product TYPE in THIS turn ("Haarfarbe von
+  // L'Oréal") or we already asked a variant question last turn and they answered.
+  // A bare ambiguous product LINE with neither ("Koleston Perfect", type only
+  // from an earlier turn) still gets the variant clarification.
+  const typeNamedThisTurn = detectDrkallaUserProductType(user) !== null;
+  const askedVariantLastTurn = VARIANT_CLARIFY_MARKER.test(canaryTurn.runtime.memory.lastAgentQuestion ?? '');
+  const ambiguousIsRealProduct =
+    !!ambiguous && !ambiguousIsHairDescriptor && !typeNamedThisTurn && !askedVariantLastTurn;
 
   // Deterministic discovery for a CATEGORY need: recommend the top SHORT product
   // and ground it, so the agent stops looping and a follow-up "ja" sends the SMS
@@ -657,7 +676,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
     }
   }
 
-  if (ambiguous && !ambiguousIsHairDescriptor && (input.detectProducts?.(user) ?? []).length === 0) {
+  if (ambiguousIsRealProduct && ambiguous && (input.detectProducts?.(user) ?? []).length === 0) {
     const clarifyText = `Von ${ambiguous.label} gibt es bei uns mehrere Ausführungen. Welche Größe oder Ausführung meinen Sie?`;
     const withPending = reduceDrkallaShortTermMemory(canaryTurn.runtime.memory, {
       type: 'pending_clarification',
@@ -759,7 +778,18 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // Fallback for an open need that did NOT hit a productType (handled above) but
   // still matches catalog products by tag/title: surface real products (short
   // names) so the model NAMES them instead of looping. Grounded: real names only.
-  const catalogHits = namedNow.length === 0 ? (input.catalogSearch?.(user, 4) ?? []) : [];
+  // HARD CATEGORY CONSTRAINT: when the caller's category is known
+  // (activeProductType), search the remembered category WITH this turn and keep
+  // only productType matches, so a cross-category item never reaches the model —
+  // e.g. a "Shampoo" request must never surface a "Friseur-Tool" comb that merely
+  // carries a "lockiges Haar" tag (real call 2026-06-15). Without a known
+  // category the open tag/title search is preserved.
+  const activeType = canaryTurn.runtime.memory.activeProductType;
+  const catalogHits = namedNow.length === 0
+    ? activeType
+      ? (input.catalogSearch?.(`${activeType.label} ${user}`, 4) ?? []).filter((h) => h.typeHit)
+      : (input.catalogSearch?.(user, 4) ?? [])
+    : [];
   let system = compactSystemPrompt(canaryTurn.modelDirectives);
   if (catalogHits.length) {
     const list = catalogHits

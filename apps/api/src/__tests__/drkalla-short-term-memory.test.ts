@@ -143,6 +143,35 @@ describe('DrKalla short-term voice memory', () => {
     }
   });
 
+  it('hangs up on a frustrated "why can\'t you hang up" (overrides the nicht-auflegen veto + trailing "?")', () => {
+    // Real call 2026-06-15: "warum kannst Du auch nicht auflegen?" reached the
+    // model, which answered "Ich kann nicht auflegen". An interrogative
+    // warum/wieso/weshalb + auflegen is a hang-up request, not a stay request.
+    const hangup = [
+      'Warum kannst du nicht auflegen?',
+      'Wieso kannst du nicht endlich auflegen?',
+      'Weshalb willst du denn nicht auflegen?',
+    ];
+    for (const text of hangup) {
+      const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+        type: 'user_audio',
+        turnIndex: 1,
+        text,
+        audioState: 'heard',
+      });
+      expect(memory.endCallEligible, `should end on: ${text}`).toBe(true);
+      expect(memory.endCallReason).toBe('caller_farewell');
+    }
+    // The genuine stay-request must still NOT hang up.
+    const stay = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'user_audio',
+      turnIndex: 1,
+      text: 'Können Sie bitte nicht auflegen?',
+      audioState: 'heard',
+    });
+    expect(stay.endCallEligible).toBe(false);
+  });
+
   it('does not clear a pending product clarification on ack-only filler words', () => {
     const pending = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
       type: 'pending_clarification',

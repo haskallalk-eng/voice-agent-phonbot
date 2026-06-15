@@ -171,6 +171,14 @@ const FAREWELL = /\b(?:tsch(?:[üu]ss?(?:i|le)?|au|ö|oe)|ciao|auf\s+wiederh[oö
 // A farewell keyword inside a negated or continuing turn is NOT a goodbye:
 // "leg nicht auf", "nicht auflegen", "das war's noch nicht", "noch eine Frage".
 const NOT_FAREWELL = /\b(?:nicht|nie)\s+auf(?:legen|h[äa]ngen)|leg\s+nicht\s+auf|nicht\s+(?:beenden|auflegen)|noch\s+nicht\b|noch\s+(?:eine|ne|'?n)?\s*frage|warte|moment\b|ach\s+nein|doch\s+nicht|eine?\s+sache\s+noch|noch\s+(?:et)?was\b/i;
+// A frustrated "why can't/won't you hang up" IS a request to end the call, but
+// it contains "nicht auflegen" (matched by NOT_FAREWELL) and usually a trailing
+// "?", so it would otherwise be vetoed and reach the model, which then says
+// "Ich kann nicht auflegen" (real call 2026-06-15). An interrogative
+// warum/wieso/weshalb + auflegen/aufhängen is unambiguously a hang-up request
+// and overrides both the NOT_FAREWELL veto and the trailing-"?" guard. The
+// genuine stay-request ("bitte nicht auflegen") has no such interrogative.
+const HANGUP_COMPLAINT = /\b(?:warum|wieso|weshalb)\b[^?!.]{0,40}\bauf(?:legen|h(?:ä|ae)ngen)\b/i;
 const ACK_ONLY = /^(?:alles klar|okay|ok|ja|genau|passt|danke)$/i;
 const PERFUME_PRICE_CONTEXT = /\b(?:parfum|eau de parfum|duft|herrenduft|damenduft|unisexduft|edp|cologne|lattafa)\b/i;
 const PRODUCT_FACT_KEY = /^product\.(.+)\.(description|size|price|location|availability|usage|brand|category|link)$/;
@@ -464,10 +472,11 @@ function reduceUserAudio(
     };
   }
   const text = event.text.trim();
-  const clearFarewell = FAREWELL.test(text)
+  const hangupComplaint = HANGUP_COMPLAINT.test(text);
+  const clearFarewell = (FAREWELL.test(text) || hangupComplaint)
     && !ACK_ONLY.test(text)
-    && !NOT_FAREWELL.test(text)
-    && !/\?\s*$/.test(text);
+    && (!NOT_FAREWELL.test(text) || hangupComplaint)
+    && (hangupComplaint || !/\?\s*$/.test(text));
   const clearsPending = text.length > 0 && !ACK_ONLY.test(text);
   const userProductType = detectUserProductType(text);
 

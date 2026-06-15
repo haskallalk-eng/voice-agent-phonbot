@@ -713,6 +713,34 @@ describe('DrKalla register/style + deterministic price (live call 2026-06-13 fix
     expect(prompts[0]).toContain('Begruesse NICHT erneut');      // model must not re-greet
   });
 
+  it('B: a cross-category item is NOT fed to the model when the category is known', async () => {
+    // Real call 2026-06-15: a "Shampoo … lockiges Haar" need surfaced a
+    // "Delrin-Kamm" (Friseur-Tool) because it carried a "lockiges Haar" tag. With
+    // a known activeProductType the model feed must filter to productType matches,
+    // so the comb (typeHit=false) can never reach the model.
+    const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'user_audio',
+      turnIndex: 1,
+      text: 'Ich suche ein Shampoo.',
+      audioState: 'heard',
+    });
+    expect(memory.activeProductType?.label).toBeTruthy();
+    const prompts: string[] = [];
+    // The comb tag-matches the query but is NOT a Shampoo (typeHit=false).
+    const catalogSearch = () => [
+      { productId: 'kamm', spokenName: 'Delrin-Kamm 4053', shortName: 'Delrin-Kamm', productType: 'Friseur-Tool', priceText: '4 Euro', priceValue: 4, score: 2, categoryHit: true, typeHit: false },
+    ];
+    await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Für lockiges Haar bitte.'),
+      memory,
+      client: { complete: async ({ system }) => { prompts.push(system); return 'Wie kann ich helfen?'; } },
+      catalogSearch: catalogSearch as never,
+    });
+    expect(prompts[0]).not.toContain('Delrin-Kamm');
+    expect(prompts[0]).not.toContain('Kamm');
+  });
+
   it('B: a comparison price question still goes to the model (not the deterministic path)', async () => {
     let modelCalls = 0;
     await buildDrkallaCustomLlmResponse({
@@ -932,6 +960,68 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
     expect(modelCalls).toBe(1);
     expect(response.metrics.extraLlmCalls).toBe(1);
     expect(response.text).toBe('Worum darf ich mich kümmern?');
+  });
+
+  it('A: a type + brand in ONE turn reaches a product, NOT a variant clarification', async () => {
+    // Real call 2026-06-15: "Haarfarbe von L'Oréal" asked "welche Nuance?" seven
+    // times. When the caller names the TYPE this turn, an ambiguous brand/line is
+    // a filter, not a variant choice — reach a product immediately.
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Ich möchte eine Haarfarbe von L’Oréal.'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => { modelCalls += 1; return 'should not be used'; } },
+      catalogSearch: threeProductSearch,
+      detectAmbiguousProduct: () => ({ label: 'L’Oréal', productCount: 4 }),
+      evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
+    });
+    expect(modelCalls).toBe(0);
+    expect(response.text).toContain('Da kann ich Ihnen');
+    expect(response.text).not.toContain('mehrere Ausführungen');
+  });
+
+  it('A: after a variant question was already asked, the next turn reaches a product (anti-loop)', async () => {
+    // Even a real ambiguous LINE must not loop the variant question: if we asked
+    // it last turn and the caller answered, reach a concrete product instead.
+    const asked = reduceDrkallaShortTermMemory(activeTypeMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 2,
+      text: 'Von Koleston Perfect gibt es bei uns mehrere Ausführungen. Welche Größe oder Ausführung meinen Sie?',
+      lastAgentQuestion: 'Welche Größe oder Ausführung meinen Sie?',
+    });
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Koleston Perfect bitte.'),
+      memory: asked,
+      client: { complete: async () => { modelCalls += 1; return 'should not be used'; } },
+      catalogSearch: threeProductSearch,
+      detectAmbiguousProduct: () => ({ label: 'Koleston Perfect', productCount: 2 }),
+      evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
+    });
+    expect(modelCalls).toBe(0);
+    expect(response.text).toContain('Da kann ich Ihnen');
+    expect(response.text).not.toContain('mehrere Ausführungen');
+  });
+
+  it('A: a price objection ("zu teuer") names the cheapest in the category (negotiation)', async () => {
+    // Caller complaint "er kann nicht verhandeln": a price objection must offer a
+    // cheaper alternative, not repeat the same product or dodge.
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Das ist mir ehrlich gesagt zu teuer.'),
+      memory: activeTypeMemory(),
+      client: { complete: async () => { modelCalls += 1; return 'should not be used'; } },
+      catalogSearch: (t: string) => (/haarfarbe|farbcreme|\bfarbe\b|teuer/i.test(t) ? [
+        { productId: 'a', spokenName: 'Teure Farbe', shortName: 'Teure Farbe', productType: 'Haarfarbe/Farbcreme', priceText: '20 Euro', priceValue: 20, score: 4, categoryHit: true, typeHit: true },
+        { productId: 'b', spokenName: 'Sparfarbe', shortName: 'Sparfarbe', productType: 'Haarfarbe/Farbcreme', priceText: '3 Euro', priceValue: 3, score: 4, categoryHit: true, typeHit: true },
+      ] : []),
+      evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
+    });
+    expect(modelCalls).toBe(0);
+    expect(response.text).toContain('Da kann ich Ihnen Sparfarbe empfehlen');
   });
 });
 

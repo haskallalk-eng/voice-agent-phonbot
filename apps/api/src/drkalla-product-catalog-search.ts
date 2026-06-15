@@ -131,6 +131,12 @@ export function buildDrkallaShortName(title: string): string {
   const base = firstSegment
     .replace(SIZE_RE, ' ')
     .replace(/\b\d{2,}\b/g, ' ')   // standalone numeric size/article codes
+    // Drop quality-tier / shop-channel suffixes that read as noise on a voice
+    // name ("Colorationscreme Haarfarbe Profi-Salonbedarf" -> "Colorationscreme
+    // Haarfarbe"). These trail many titles WITHOUT a leading "&", so the
+    // first-segment cut above does not remove them (real call 2026-06-15).
+    .replace(/\bProfi-?\s?(?:Salonbedarf|Qualit(?:ä|ae)t|Friseurbedarf)\b/gi, ' ')
+    .replace(/\b(?:Salonbedarf|Friseurbedarf|Salonqualit(?:ä|ae)t)\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   const seen = new Set<string>();

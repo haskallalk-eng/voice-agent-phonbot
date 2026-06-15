@@ -76,6 +76,17 @@ describe('DrKalla product catalog category search', () => {
     expect(buildDrkallaShortName('Delrin-Kamm 4053 Profi')).toBe('Delrin-Kamm Profi');
   });
 
+  it('buildDrkallaShortName strips quality-tier / shop-channel suffixes (real call 2026-06-15)', () => {
+    // These suffixes trail many titles WITHOUT a leading "&", so the first-segment
+    // cut does not remove them; they read as noise on a spoken name.
+    expect(buildDrkallaShortName('Colorationscreme Haarfarbe Grauabdeckung Profi-Salonbedarf'))
+      .not.toMatch(/salonbedarf/i);
+    expect(buildDrkallaShortName('Haarfarbe Ammoniakfrei Coloration Profi-Qualität'))
+      .not.toMatch(/profi-?\s?qualit/i);
+    expect(buildDrkallaShortName('Farbentwickler Oxidationsmittel Salonbedarf'))
+      .toBe('Farbentwickler Oxidationsmittel');
+  });
+
   it('buildDrkallaShortName strips unpronounceable codes (ALL-CAPS, vowel-less, digit-codes)', () => {
     expect(buildDrkallaShortName('ARGENT Glanz-Shampoo & B3-PLEX Keravis')).toBe('Glanz-Shampoo');
     expect(buildDrkallaShortName('Evelon Pro Hairspray Pro Lch 500 Ml')).toBe('Evelon Pro Hairspray');
