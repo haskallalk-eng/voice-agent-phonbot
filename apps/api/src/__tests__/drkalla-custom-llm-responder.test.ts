@@ -785,6 +785,36 @@ describe('DrKalla register/style + deterministic price (live call 2026-06-13 fix
     expect(sentUrl).toBe('https://drkalla.com/p/sintesis');
     expect(response.text).toContain('per SMS geschickt');
   });
+
+  it('B: a curated FAQ answers deterministically; an uncovered question still reaches the model (additive)', async () => {
+    const faqMatch = (t: string) => (/versand/i.test(t)
+      ? { id: 'shipping', answer: 'Die Versandkosten sehen Sie im Bestellvorgang auf drkalla.com.', tags: [] }
+      : null);
+    const covered = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Was kostet der Versand?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => { throw new Error('model must not run for a covered FAQ'); } },
+      faqMatch,
+    });
+    expect(covered.metrics.extraLlmCalls).toBe(0);
+    expect(covered.text).toContain('Versandkosten');
+
+    // No FAQ match -> the model answers exactly as before, and the question is
+    // captured as a candidate for later curation.
+    const captured: Array<{ q: string; a: string }> = [];
+    const uncovered = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Habt ihr ein cooles Gadget?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => 'Wir haben verschiedenes im Sortiment.' },
+      faqMatch,
+      onFaqCandidate: (q, a) => { captured.push({ q, a }); },
+    });
+    expect(uncovered.metrics.extraLlmCalls).toBe(1);
+    expect(uncovered.text).toBe('Wir haben verschiedenes im Sortiment.');
+    expect(captured[0]?.q).toBe('Habt ihr ein cooles Gadget?');
+  });
 });
 
 describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfangen?" -> "Ja")', () => {

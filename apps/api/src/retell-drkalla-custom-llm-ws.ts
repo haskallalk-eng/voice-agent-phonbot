@@ -20,6 +20,11 @@ import {
   type DrkallaProductCatalogSearch,
   type DrkallaCatalogSearchRawProduct,
 } from './drkalla-product-catalog-search.js';
+import {
+  buildDrkallaFaqMatcher,
+  type DrkallaFaqMatcher,
+  type DrkallaFaqRawEntry,
+} from './drkalla-faq-match.js';
 import { DRKALLA_LINK_TOOL_PATH, drkallaLinkToolSignature } from './drkalla-link-tool.js';
 import {
   createDrkallaCanaryLatencyRecorder,
@@ -329,6 +334,18 @@ export function loadDrkallaProductCatalogSearch(productsPath?: string): DrkallaP
   }
 }
 
+export function loadDrkallaFaqMatcher(faqPath?: string): DrkallaFaqMatcher | undefined {
+  try {
+    const parsed = readFirstJson(
+      resolveDrkallaSnapshotPath('drkalla-faq.json', faqPath ?? process.env.DRKALLA_FAQ_PATH),
+    ) as { entries?: unknown } | null;
+    if (!parsed || !Array.isArray(parsed.entries) || !parsed.entries.length) return undefined;
+    return buildDrkallaFaqMatcher(parsed.entries as DrkallaFaqRawEntry[]);
+  } catch {
+    return undefined;
+  }
+}
+
 function reply(responseId: string | number, content: string, endCall = false): RetellDrkallaCustomLlmReply {
   return {
     response_type: 'response',
@@ -353,10 +370,12 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
   detectAmbiguousProduct?: DrkallaAmbiguousProductNameDetector;
   evidenceLookup?: DrkallaProductEvidenceLookup;
   catalogSearch?: DrkallaProductCatalogSearch;
+  faqMatch?: DrkallaFaqMatcher;
   executeSendLink?: DrkallaSendLinkExecutor;
   sequence?: number;
   noInputReminderCount?: number;
   onDelta?: (chunk: string) => void;
+  onFaqCandidate?: (question: string, answer: string) => void;
   signal?: AbortSignal;
   isCallOpening?: boolean;
 }): Promise<RetellDrkallaCustomLlmReply | null> {
@@ -412,8 +431,10 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
     detectAmbiguousProduct: input.detectAmbiguousProduct,
     evidenceLookup: input.evidenceLookup,
     catalogSearch: input.catalogSearch,
+    faqMatch: input.faqMatch,
     executeSendLink: input.executeSendLink,
     onDelta: input.onDelta,
+    onFaqCandidate: input.onFaqCandidate,
     signal: input.signal,
   });
   input.onMemory?.(response.memory);
@@ -538,6 +559,7 @@ export async function registerRetellDrkallaCustomLlmWs(
     detectProducts?: DrkallaProductNameDetector;
     evidenceLookup?: DrkallaProductEvidenceLookup;
     catalogSearch?: DrkallaProductCatalogSearch;
+    faqMatch?: DrkallaFaqMatcher;
   } = {},
 ): Promise<void> {
   const aliasEntries = options.detectProducts ? [] : loadDrkallaProductNameEntries();
@@ -548,6 +570,7 @@ export async function registerRetellDrkallaCustomLlmWs(
     : undefined;
   const evidenceLookup = options.evidenceLookup ?? loadDrkallaProductEvidenceLookup();
   const catalogSearch = options.catalogSearch ?? loadDrkallaProductCatalogSearch();
+  const faqMatch = options.faqMatch ?? loadDrkallaFaqMatcher();
   // Real SMS sending stays off unless explicitly enabled; the executor goes
   // through the existing policied send_link tool endpoint (live-call verify,
   // URL allowlist, per-call dedupe, audit trace) via local injection.
@@ -773,10 +796,16 @@ export async function registerRetellDrkallaCustomLlmWs(
             detectAmbiguousProduct,
             evidenceLookup,
             catalogSearch,
+            faqMatch,
             executeSendLink,
             sequence: turnCounter,
             noInputReminderCount,
             onDelta: isResponseTurn ? onDelta : undefined,
+            onFaqCandidate: (question, answer) => {
+              // Offline curation signal: a general question the model had to
+              // answer. Logged only; the owner reviews via drkalla:faq-propose.
+              app.log.info({ event: 'faq_candidate', callId, question, answer }, 'drkalla canary faq candidate');
+            },
             signal: myAbort?.signal,
             isCallOpening,
           });
