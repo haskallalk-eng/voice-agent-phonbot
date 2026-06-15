@@ -279,16 +279,34 @@ const DRKALLA_CHEAP_INTENT = /\b(?:g[üu]nstig\w*|billig\w*|preiswert\w*|preisg[
  */
 function tryDeterministicNeedReply(input: {
   userText: string;
+  memory: DrkallaShortTermVoiceMemory;
   catalogSearch?: DrkallaProductCatalogSearch;
   evidenceLookup?: DrkallaProductEvidenceLookup;
+  allowActiveTypeFallback?: boolean;
 }): DrkallaFallbackResult | null {
   const text = input.userText;
   if (NEED_VETO.test(text) || detectDrkallaContactIntent(text)) return null;
-  const hits = input.catalogSearch?.(text, 8) ?? [];
   // Require a productType match (a clear product CATEGORY), not a tag/title hit,
   // so this names products for "ich suche ein Shampoo" but leaves a specific
   // ambiguous product line ("Koleston Perfect") to the variant clarification.
-  const strong = hits.filter((h) => h.typeHit);
+  const strong = (input.catalogSearch?.(text, 8) ?? []).filter((h) => h.typeHit);
+  // REACHABILITY: the caller already named a category earlier (activeProductType)
+  // but this turn alone has no category token — a brand only ("von Wella"), bare
+  // intent ("ich will ein Produkt") or garbled ASR ("Bällehaarfarbe"). Combine
+  // the remembered category WITH this turn so a brand/nuance still narrows it and
+  // we reliably reach products instead of looping (real call 2026-06-15). Skipped
+  // for a real ambiguous product line so the variant clarification still wins.
+  // (a bare "Ja" / "welche Marken" is owned by the brand-list path, not here.)
+  if (
+    !strong.length
+    && input.allowActiveTypeFallback
+    && input.memory.activeProductType
+    && !SHORT_AFFIRMATION.test(text)
+    && !DRKALLA_TYPE_LIST_REQUEST.test(text)
+  ) {
+    const combined = `${input.memory.activeProductType.label} ${text}`;
+    strong.push(...(input.catalogSearch?.(combined, 8) ?? []).filter((h) => h.typeHit));
+  }
   // "günstigste/billigste" -> rank the category by price so we name the cheapest.
   if (DRKALLA_CHEAP_INTENT.test(text)) {
     strong.sort((a, b) => (a.priceValue ?? Number.POSITIVE_INFINITY) - (b.priceValue ?? Number.POSITIVE_INFINITY));
@@ -601,18 +619,28 @@ export async function buildDrkallaCustomLlmResponse(input: {
     };
   }
 
-  // Deterministic discovery for a clear CATEGORY need (productType match) when
-  // the caller named no specific product: recommend the top SHORT product and
-  // ground it, so the agent stops looping and a follow-up "ja" sends the SMS.
-  // Runs BEFORE the ambiguous-variant clarification so "ich suche ein Shampoo"
-  // names shampoos instead of being treated as one ambiguous product line
-  // (real call 2026-06-13). No detectProducts in the reduce so the recommended
-  // TOP hit wins as lastMentionedProduct for a follow-up SMS confirm + price.
+  // A real ambiguous product LINE ("Koleston Perfect") gets a variant
+  // clarification; a generic hair-type descriptor ("trockenes Haar") does not
+  // (it is a NEED). Computed here so deterministic discovery can defer to a real
+  // ambiguous line but otherwise fall back to the remembered category.
+  const ambiguous = input.detectAmbiguousProduct?.(user) ?? null;
+  const ambiguousIsHairDescriptor = ambiguous ? DRKALLA_HAIR_DESCRIPTOR.test(ambiguous.label) : false;
+  const ambiguousIsRealProduct = !!ambiguous && !ambiguousIsHairDescriptor;
+
+  // Deterministic discovery for a CATEGORY need: recommend the top SHORT product
+  // and ground it, so the agent stops looping and a follow-up "ja" sends the SMS
+  // (real call 2026-06-13). When this turn alone has no category token it falls
+  // back to the remembered category + this turn (brand/garbled ASR) so it still
+  // reaches products (real call 2026-06-15) — unless it is a real ambiguous line.
+  // No detectProducts in the reduce so the recommended TOP hit wins as
+  // lastMentionedProduct for a follow-up SMS confirm + price.
   if ((input.detectProducts?.(user) ?? []).length === 0) {
     const needReply = tryDeterministicNeedReply({
       userText: user,
+      memory: canaryTurn.runtime.memory,
       catalogSearch: input.catalogSearch,
       evidenceLookup: input.evidenceLookup,
+      allowActiveTypeFallback: !ambiguousIsRealProduct,
     });
     if (needReply) {
       return {
@@ -629,14 +657,6 @@ export async function buildDrkallaCustomLlmResponse(input: {
     }
   }
 
-  // A product name shared by several catalog products cannot resolve to one
-  // product; ask a targeted variant question instead of guessing or
-  // resetting to generic discovery. BUT a generic hair-type descriptor
-  // ("trockenes Haar", "feines Haar") is a NEED, not a product line — it must
-  // not trigger a "welche Ausführung?" clarification (real battery 2026-06-14);
-  // let it fall through to product discovery / the model instead.
-  const ambiguous = input.detectAmbiguousProduct?.(user) ?? null;
-  const ambiguousIsHairDescriptor = ambiguous ? DRKALLA_HAIR_DESCRIPTOR.test(ambiguous.label) : false;
   if (ambiguous && !ambiguousIsHairDescriptor && (input.detectProducts?.(user) ?? []).length === 0) {
     const clarifyText = `Von ${ambiguous.label} gibt es bei uns mehrere Ausführungen. Welche Größe oder Ausführung meinen Sie?`;
     const withPending = reduceDrkallaShortTermMemory(canaryTurn.runtime.memory, {
