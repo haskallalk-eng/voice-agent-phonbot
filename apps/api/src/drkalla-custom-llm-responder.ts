@@ -331,7 +331,14 @@ function tryDeterministicNeedReply(input: {
   // via the model, not repeat the identical "Da kann ich Ihnen X empfehlen … Soll
   // ich den Link schicken?" template (real call 2026-06-15: the agent looped the
   // same line and the caller said "immer wieder das Gleiche, was ist mit dir los?").
-  if (top.shortName && top.shortName === input.memory.lastMentionedProduct?.spokenName) return null;
+  // Check lastAgentQuestion (the SMS offer naming the product), NOT just
+  // lastMentionedProduct — a re-mention of the same category clears the latter via
+  // the switched-type reset, which would otherwise let the loop through.
+  const justAsked = input.memory.lastAgentQuestion ?? '';
+  if (
+    top.shortName
+    && (top.shortName === input.memory.lastMentionedProduct?.spokenName || justAsked.includes(top.shortName))
+  ) return null;
   const evidence = input.evidenceLookup?.byId(top.productId) ?? null;
   const alts = strong.slice(1, 3).map((h) => h.shortName).filter((n) => n && n !== top.shortName);
   let reply = `Da kann ich Ihnen ${top.shortName} empfehlen.`;
