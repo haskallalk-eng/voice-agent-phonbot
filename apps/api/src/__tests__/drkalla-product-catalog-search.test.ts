@@ -76,6 +76,18 @@ describe('DrKalla product catalog category search', () => {
     expect(buildDrkallaShortName('Delrin-Kamm 4053 Profi')).toBe('Delrin-Kamm Profi');
   });
 
+  it('finds products by brand/vendor so "von Wella" is not falsely "nicht im Sortiment" (real call 2026-06-15)', () => {
+    const branded = buildDrkallaProductCatalogSearch([
+      { handle: 'blondor', title: 'Blondor Multi Blonde Powder', productType: 'Blondierung', tags: ['Blondierung'], vendor: 'Wella', variants: [{ price: '22.99', available: true }] },
+      { handle: 'house-sham', title: 'Pflege Shampoo', productType: 'Shampoo', tags: ['Shampoo'], vendor: 'Dr.Kalla Cosmetics', variants: [{ price: '9.00', available: true }] },
+    ]);
+    const r = branded('Haben Sie Produkte von Wella?', 3);
+    expect(r.map((p) => p.productId)).toContain('blondor');
+    // the house-brand vendor tokens are stopwords, so a generic brand probe does
+    // not pull every house product as a "brand" hit.
+    expect(branded('Wella', 3)[0]?.productId).toBe('blondor');
+  });
+
   it('buildDrkallaShortName strips quality-tier / shop-channel suffixes (real call 2026-06-15)', () => {
     // These suffixes trail many titles WITHOUT a leading "&", so the first-segment
     // cut does not remove them; they read as noise on a spoken name.

@@ -134,13 +134,17 @@ function compactSystemPrompt(directives: string[]): string {
 // so a caller's "ja" is caught by the deterministic confirm path instead of
 // reaching the model (which otherwise loops or invents asking for the number).
 // Covers "per SMS schicken/senden/zusenden/schreiben", "den Produktlink
-// senden", "schicke Ihnen den Link", "per Nachricht zusenden", etc.
-const SMS_OFFER_QUESTION = /(?:produktlink|\blink\b|per\s+sms|per\s+nachricht|\bsms\b)[^.?!]*\b(?:schick|sende|senden|zusend|zuschick|zukomm|schreib|versend)|\b(?:schick|sende|senden|zusend|zuschick|zukomm|schreib|versend)\w*[^.?!]*(?:produktlink|\blink\b|\bsms\b|nachricht)/i;
+// senden", "schicke Ihnen den Link", "per Nachricht zusenden", etc. Also catches
+// MODEL-phrased link offers without an explicit send verb ("Möchten Sie den Link
+// zu X?", "den Link erhalten") — otherwise a caller's "ja, schick" misses the
+// deterministic SMS path and the model hallucinates "Ich sende Ihnen den Link"
+// while no SMS actually goes out (real call 2026-06-15).
+const SMS_OFFER_QUESTION = /(?:produktlink|\blink\b|per\s+sms|per\s+nachricht|\bsms\b)[^.?!]*\b(?:schick|sende|senden|zusend|zuschick|zukomm|schreib|versend)|\b(?:schick|sende|senden|zusend|zuschick|zukomm|schreib|versend)\w*[^.?!]*(?:produktlink|\blink\b|\bsms\b|nachricht)|\b(?:m(?:ö|oe)chten|wollen|soll(?:en)?|darf|h(?:ä|ae)tten)\b[^.?!]*\b(?:produktlink|\blink\b)\b|\b(?:produktlink|\blink\b)\b[^.?!]*\b(?:erhalten|bekommen|zusenden|zugeschickt|zukommen)\b/i;
 // The two-option offer ("Produktlink ODER Profi-Zugang per SMS"): a bare "ja"
 // here is ambiguous and must be re-asked, not silently sent as product link.
 const TWO_OPTION_OFFER = /produktlink\s+oder\s+(?:den\s+link\s+(?:zum\s+)?)?profi/i;
 const SHORT_AFFIRMATION = /^(?:ja|ja,?\s*(?:bitte|gerne?)|gerne?|okay?|ok|bitte|mach das|machen sie das|klar)[.! ]*$/i;
-const PRODUCT_LINK_CHOICE = /\b(?:produktlink|den ersten|das erste|das produkt|zum produkt)\b/i;
+const PRODUCT_LINK_CHOICE = /\b(?:produktlink|den ersten|das erste|das produkt|zum produkt|den\s+link|schick|sende|zusend|zuschick|versend)\b/i;
 const PROFI_LINK_CHOICE = /\b(?:profi[\s-]?(?:zugang|link)|den profi|zum profi|das zweite|den zweiten|der zweite|registrier)\b/i;
 
 export type DrkallaSendLinkKind = 'product' | 'profi';
@@ -299,6 +303,15 @@ function tryDeterministicNeedReply(input: {
 }): DrkallaFallbackResult | null {
   const text = input.userText;
   if (NEED_VETO.test(text) || detectDrkallaContactIntent(text)) return null;
+  // A plain price question about the active product ("was kostet das?") belongs
+  // to the deterministic price path, which answers it from the catalog — not a
+  // fresh recommendation that pitches a DIFFERENT product (real call 2026-06-15).
+  // Cheap-intent ("günstigste", "zu teuer") stays here for the negotiation sort.
+  if (
+    DRKALLA_PRICE_INTENT.test(text)
+    && !DRKALLA_CHEAP_INTENT.test(text)
+    && input.memory.lastMentionedProduct
+  ) return null;
   // Require a productType match (a clear product CATEGORY), not a tag/title hit,
   // so this names products for "ich suche ein Shampoo" but leaves a specific
   // ambiguous product line ("Koleston Perfect") to the variant clarification.

@@ -35,6 +35,7 @@ export type DrkallaCatalogSearchRawProduct = {
   title?: unknown;
   productType?: unknown;
   tags?: unknown;
+  vendor?: unknown;
   variants?: unknown;
 };
 
@@ -188,6 +189,13 @@ export function buildDrkallaProductCatalogSearch(
     for (const tag of tags) {
       for (const tok of contentTokens(tag)) catTokens.add(tok);
     }
+    // Brand/vendor tokens are category-level (×2): so "von Wella" / "haben Sie
+    // L'Oréal?" finds the real Wella/L'Oréal products instead of the model
+    // hallucinating "führen wir nicht" (real call 2026-06-15: Wella IS stocked
+    // but the search ignored the vendor field). House-brand tokens (dr/kalla/
+    // cosmetics) are stopwords, so only external brands add a signal here.
+    const vendor = typeof product.vendor === 'string' ? product.vendor : '';
+    for (const tok of contentTokens(vendor)) catTokens.add(tok);
     const allTokens = new Set<string>(catTokens);
     for (const tok of contentTokens(product.title)) allTokens.add(tok);
     if (!allTokens.size) continue;

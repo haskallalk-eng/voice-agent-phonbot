@@ -108,7 +108,7 @@ describe('DrKalla short-term voice memory', () => {
     const goodbyePhrases = [
       'ciao', 'bis dann', 'schönen Tag noch', 'das war es', 'nein danke, das war alles',
       // Real-call phrasings the old literal "leg auf" / "tschüss" missed:
-      'Nein, tschau.', 'tschö', 'Nein, leg einfach auf.', 'Leg bitte auf.', 'leg doch auf',
+      'Nein, tschau.', 'tschö', 'Tschuess', 'Nein, leg einfach auf.', 'Leg bitte auf.', 'leg doch auf',
       'beende den Anruf', 'bitte auflegen', 'mach Schluss',
     ];
 

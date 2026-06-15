@@ -1090,6 +1090,61 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
     expect(modelCalls).toBe(1);
     expect(response.text).not.toContain('Da kann ich Ihnen Haarfarbe Ammoniakfrei empfehlen');
   });
+
+  it('B: "was kostet das?" gives the active product price, not a fresh recommendation', async () => {
+    // Real call 2026-06-15: a plain price question pitched a DIFFERENT product
+    // because the recommender ran before the price path.
+    const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 1,
+      text: 'Da kann ich Ihnen Glanz-Shampoo empfehlen.',
+      lastProduct: { spokenName: 'Glanz-Shampoo', productId: 'gs', productKind: 'Shampoo' },
+    });
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Was kostet das?'),
+      memory,
+      client: { complete: async () => { modelCalls += 1; return 'should not be used'; } },
+      evidenceLookup: { byId: () => null, byKeyHash: () => ({ priceText: '12 Euro' }) } as never,
+      catalogSearch: () => [
+        { productId: 'other', spokenName: 'Anderes Produkt', shortName: 'Anderes Produkt', productType: 'Shampoo', priceText: '99 Euro', priceValue: 99, score: 4, categoryHit: true, typeHit: true },
+      ],
+    });
+    expect(modelCalls).toBe(0);
+    expect(response.text).toContain('Glanz-Shampoo');
+    expect(response.text).toMatch(/kostet/);
+    expect(response.text).not.toContain('Anderes Produkt');
+  });
+
+  it('B: a model-phrased link offer + "ja, schick" sends via the SMS path, not the model', async () => {
+    // Real call 2026-06-15: after a model "Möchten Sie den Link?", "schick mir
+    // den Link" missed the confirm and the model hallucinated "Ich sende Ihnen
+    // den Link" while no SMS went out. The offer + the affirmation must both be
+    // recognized so the real send path runs.
+    const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 1,
+      text: 'Möchten Sie den Link zu Glanz-Shampoo?',
+      lastAgentQuestion: 'Möchten Sie den Link zu Glanz-Shampoo?',
+      lastProduct: { spokenName: 'Glanz-Shampoo', productId: 'gs', productKind: 'Shampoo' },
+    });
+    let sent = false; let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Ja, schick mir den Link.'),
+      memory,
+      client: { complete: async () => { modelCalls += 1; return 'should not be used'; } },
+      evidenceLookup: { byId: () => ({ url: 'https://drkalla.com/p/gs' }), byKeyHash: () => ({ url: 'https://drkalla.com/p/gs' }) } as never,
+      catalogSearch: () => [
+        { productId: 'gs', spokenName: 'Glanz-Shampoo', shortName: 'Glanz-Shampoo', productType: 'Shampoo', priceText: '12 Euro', priceValue: 12, score: 4, categoryHit: true, typeHit: true },
+      ],
+      executeSendLink: async () => { sent = true; return { smsSent: true as const }; },
+    });
+    expect(modelCalls).toBe(0);
+    expect(sent).toBe(true);
+    expect(response.text).toContain('per SMS geschickt');
+  });
 });
 
 describe('DrKalla deterministic smalltalk fast-paths (latency: low-content turns skip the model)', () => {
