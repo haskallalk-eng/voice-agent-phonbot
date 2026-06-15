@@ -871,6 +871,36 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
     expect(response.text).not.toMatch(/\b(?:du|dich|dir|dein)\b/i);
   });
 
+  it('A: a brand-only/garbled turn with an active product type still reaches products (reachability)', async () => {
+    // Real call 2026-06-15: after "Haarfarben?" the caller said "von Wella" /
+    // "ich will ein Produkt" and the agent looped instead of naming products.
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Ja, genau, ein Produkt würde ich nehmen, von Wella.'),
+      memory: activeTypeMemory(),
+      client: { complete: async () => { modelCalls += 1; return 'should not be used'; } },
+      catalogSearch: threeProductSearch,
+      evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
+    });
+    expect(modelCalls).toBe(0);
+    expect(response.text).toContain('Da kann ich Ihnen'); // named a product, did not loop
+    expect(response.text).toContain('Koleston Perfect');
+  });
+
+  it('A: a specific ambiguous product line still gets a variant clarification even with an active type', async () => {
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Koleston Perfect bitte.'),
+      memory: activeTypeMemory(),
+      client: { complete: async () => 'should not be used' },
+      catalogSearch: threeProductSearch,
+      detectAmbiguousProduct: () => ({ label: 'Koleston Perfect', productCount: 2 }),
+      evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
+    });
+    expect(response.text).toContain('mehrere Ausführungen');
+  });
+
   it('A-red: an explicit "welche Marken habt ihr?" lists the same 3 products, no model call', async () => {
     let modelCalls = 0;
     const response = await buildDrkallaCustomLlmResponse({
