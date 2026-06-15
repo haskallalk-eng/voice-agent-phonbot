@@ -12,8 +12,16 @@
  */
 export function speakDrkallaText(text: string): string {
   return text
-    // Brand: never let the literal "Dr.Kalla" period read as a sentence break.
-    .replace(/\bDr\.?\s?Kalla\b/gi, 'Doktor Kalla')
+    // Domain/email FIRST, so the brand rule never rewrites the URL handle.
+    // "drkalla.com" -> "drkalla punkt com" (the "." would read as a pause / the
+    // brand rule would wrongly turn the handle into "Doktor Kalla.com").
+    .replace(/\bdrkalla\.com\b/gi, 'drkalla punkt com')
+    .replace(/\s*@\s*/g, ' at ')
+    // Brand name in a sentence -> spoken name. Require the period or a space
+    // ("Dr.Kalla" / "Dr. Kalla") so the lowercase domain handle "drkalla" is
+    // left untouched.
+    .replace(/\bDr\.\s?Kalla\b/g, 'Doktor Kalla')
+    .replace(/\bDr\s+Kalla\b/g, 'Doktor Kalla')
     .replace(/\bDr\.\s?(?=[A-ZÄÖÜ])/g, 'Doktor ')
     // Symbols → spoken words.
     .replace(/\s*&\s*/g, ' und ')

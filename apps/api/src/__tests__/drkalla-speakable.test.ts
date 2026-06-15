@@ -8,6 +8,13 @@ describe('speakDrkallaText TTS normalization', () => {
     expect(speakDrkallaText('der Assistent von Dr. Kalla')).toBe('der Assistent von Doktor Kalla');
   });
 
+  it('speaks the domain/email without mangling the handle into the brand name', () => {
+    expect(speakDrkallaText('Sie finden das auf drkalla.com.')).toBe('Sie finden das auf drkalla punkt com.');
+    expect(speakDrkallaText('Schreiben Sie an kontakt@drkalla.com.')).toBe('Schreiben Sie an kontakt at drkalla punkt com.');
+    // the lowercase domain handle must NOT become "Doktor Kalla"
+    expect(speakDrkallaText('auf drkalla.com')).not.toContain('Doktor Kalla');
+  });
+
   it('speaks money naturally (no comma-zeros)', () => {
     expect(speakDrkallaText('Es kostet 9,00 Euro.')).toBe('Es kostet 9 Euro.');
     expect(speakDrkallaText('Es kostet 11,99 Euro.')).toBe('Es kostet 11 Euro 99.');
