@@ -610,8 +610,29 @@ export async function registerRetellDrkallaCustomLlmWs(
       return;
     }
 
+    let framesTraced = 0;
     socket.on('message', (message) => {
       const rawMessage = message.toString();
+
+      // Call-start diagnostic: trace the first few frames so we can see whether
+      // Retell ELICITS an opener at connect (an empty response_required => the
+      // agent can speak first) or only sends a turn AFTER the caller speaks
+      // (userTextLen>0 on the first turn => caller speaks first, no proactive
+      // greeting possible for custom-llm). Bounded to the first 4 frames/call.
+      if (framesTraced < 4) {
+        framesTraced += 1;
+        const ctl = parseRetellControlFrame(rawMessage);
+        const pre = parseRetellDrkallaCustomLlmMessage(rawMessage);
+        app.log.info(
+          {
+            callId,
+            seq: framesTraced,
+            type: ctl?.interactionType ?? pre?.interactionType ?? 'unknown',
+            userTextLen: (pre?.currentUserText ?? '').length,
+          },
+          'drkalla canary frame trace',
+        );
+      }
 
       // Real Retell custom-LLM control frames (no response_id) are handled here
       // and never enter the serialized turn chain or affect barge-in ordering.
