@@ -284,6 +284,29 @@ const DRKALLA_CHEAP_INTENT = /\b(?:g[üu]nstig\w*|billig\w*|preiswert\w*|preisg[
 // (anti-loop: real call 2026-06-15 asked "welche Nuance?" seven times).
 const VARIANT_CLARIFY_MARKER = /ausf(?:ü|ue)hrung/i;
 
+// The catalog "Haarpflege" productType is a junk catch-all that mixes real care
+// products with Blondierung/Entwickler CHEMICALS (real call 2026-06-15: "lieber
+// eine Pflege" -> Blondierungspulver Blau). A care/cleanse need must never
+// surface a bleach/developer; drop those titles for a care intent unless the
+// caller actually wants color/bleach. Title-based because the productType field
+// is unreliable (bleach is mis-typed "Haarpflege" in the Shopify data).
+const DRKALLA_CARE_INTENT = /\b(?:pflege|haarpflege|maske|kur|conditioner|sp(?:ü|ue)lung|leave[-\s]?in|serum|repair|reparatur|feuchtigkeit|n(?:ä|ae)hrend\w*|shampoo)\b/i;
+const DRKALLA_COLOR_BLEACH_INTENT = /\b(?:blondier\w*|aufhell\w*|haarfarbe|f(?:ä|ae)rb\w*|\bfarbe\b|t(?:ö|oe)nung|color|entwickler|oxidant)\b/i;
+const DRKALLA_CHEMICAL_TITLE = /\b(?:blondier\w*|aufhellung|entwickler|oxidant|wasserstoffperoxid|peroxid)\b/i;
+
+function dropChemicalForCareIntent<T extends { spokenName?: string; shortName?: string }>(
+  hits: T[],
+  userText: string,
+  activeTypeLabel: string | null,
+): T[] {
+  const careIntent = DRKALLA_CARE_INTENT.test(userText)
+    || (activeTypeLabel ? DRKALLA_CARE_INTENT.test(activeTypeLabel) : false);
+  if (!careIntent || DRKALLA_COLOR_BLEACH_INTENT.test(userText)) return hits;
+  return hits.filter(
+    (h) => !DRKALLA_CHEMICAL_TITLE.test(h.spokenName ?? '') && !DRKALLA_CHEMICAL_TITLE.test(h.shortName ?? ''),
+  );
+}
+
 /**
  * Deterministic product discovery for a clear category need. On the real call
  * 2026-06-13 the model looped on clarifying questions and named long,
@@ -315,7 +338,7 @@ function tryDeterministicNeedReply(input: {
   // Require a productType match (a clear product CATEGORY), not a tag/title hit,
   // so this names products for "ich suche ein Shampoo" but leaves a specific
   // ambiguous product line ("Koleston Perfect") to the variant clarification.
-  const strong = (input.catalogSearch?.(text, 8) ?? []).filter((h) => h.typeHit);
+  let strong = (input.catalogSearch?.(text, 8) ?? []).filter((h) => h.typeHit);
   // REACHABILITY: the caller already named a category earlier (activeProductType)
   // but this turn alone has no category token — a brand only ("von Wella"), bare
   // intent ("ich will ein Produkt") or garbled ASR ("Bällehaarfarbe"). Combine
@@ -333,6 +356,9 @@ function tryDeterministicNeedReply(input: {
     const combined = `${input.memory.activeProductType.label} ${text}`;
     strong.push(...(input.catalogSearch?.(combined, 8) ?? []).filter((h) => h.typeHit));
   }
+  // A care/cleanse need must never surface a Blondierung/Entwickler chemical from
+  // the junk "Haarpflege" type (real call 2026-06-15).
+  strong = dropChemicalForCareIntent(strong, text, input.memory.activeProductType?.label ?? null);
   // "günstigste/billigste" -> rank the category by price so we name the cheapest.
   if (DRKALLA_CHEAP_INTENT.test(text)) {
     strong.sort((a, b) => (a.priceValue ?? Number.POSITIVE_INFINITY) - (b.priceValue ?? Number.POSITIVE_INFINITY));
@@ -814,11 +840,13 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // carries a "lockiges Haar" tag (real call 2026-06-15). Without a known
   // category the open tag/title search is preserved.
   const activeType = canaryTurn.runtime.memory.activeProductType;
-  const catalogHits = namedNow.length === 0
+  const catalogHitsRaw = namedNow.length === 0
     ? activeType
       ? (input.catalogSearch?.(`${activeType.label} ${user}`, 4) ?? []).filter((h) => h.typeHit)
       : (input.catalogSearch?.(user, 4) ?? [])
     : [];
+  // Care need must not feed a Blondierung/Entwickler chemical to the model either.
+  const catalogHits = dropChemicalForCareIntent(catalogHitsRaw, user, activeType?.label ?? null);
   let system = compactSystemPrompt(canaryTurn.modelDirectives);
   if (catalogHits.length) {
     const list = catalogHits

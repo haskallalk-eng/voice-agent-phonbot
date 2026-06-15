@@ -1145,6 +1145,43 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
     expect(sent).toBe(true);
     expect(response.text).toContain('per SMS geschickt');
   });
+
+  it('B: a care need ("Pflege") never recommends a Blondierung/bleach chemical', async () => {
+    // Real call 2026-06-15: "lieber eine Pflege" -> Blondierungspulver Blau,
+    // because the catalog "Haarpflege" productType mixes bleach into care.
+    const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'user_audio', turnIndex: 1, text: 'Ich suche eine Pflege.', audioState: 'heard',
+    });
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Ich suche eine Pflege.'),
+      memory,
+      client: { complete: async () => { modelCalls += 1; return 'unused'; } },
+      catalogSearch: (t: string) => (/pflege/i.test(t) ? [
+        { productId: 'bleach', spokenName: 'Blondierungspulver Blau & Aufhellung', shortName: 'Blondierungspulver Blau', productType: 'Haarpflege', priceText: '0 Euro 99', priceValue: 0.99, score: 4, categoryHit: true, typeHit: true },
+        { productId: 'mask', spokenName: 'Pflegemaske Trockenes', shortName: 'Pflegemaske', productType: 'Haarpflege', priceText: '8 Euro 40', priceValue: 8.4, score: 4, categoryHit: true, typeHit: true },
+      ] : []),
+      evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
+    });
+    expect(modelCalls).toBe(0);
+    expect(response.text).not.toMatch(/Blondierung/i);
+    expect(response.text).toContain('Pflegemaske');
+  });
+
+  it('B: a genuine Blondierung request still returns the bleach (colorIntent bypasses the care filter)', async () => {
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Ich brauche eine Blondierung.'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => 'unused' },
+      catalogSearch: (t: string) => (/blondier/i.test(t) ? [
+        { productId: 'bleach', spokenName: 'Blondierungspulver Blau', shortName: 'Blondierungspulver Blau', productType: 'Blondierung', priceText: '1 Euro', priceValue: 1, score: 4, categoryHit: true, typeHit: true },
+      ] : []),
+      evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
+    });
+    expect(response.text).toContain('Blondierungspulver');
+  });
 });
 
 describe('DrKalla deterministic smalltalk fast-paths (latency: low-content turns skip the model)', () => {
