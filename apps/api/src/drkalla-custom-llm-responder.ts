@@ -9,6 +9,7 @@ import {
 } from './drkalla-contact-facts.js';
 import type { DrkallaProductEvidenceLookup } from './drkalla-product-evidence.js';
 import type { DrkallaProductCatalogSearch } from './drkalla-product-catalog-search.js';
+import type { DrkallaFaqMatcher } from './drkalla-faq-match.js';
 import { detectDrkallaDuForm } from './drkalla-formality-detector.js';
 import { redactForPrompt } from './pii.js';
 import {
@@ -415,8 +416,10 @@ export async function buildDrkallaCustomLlmResponse(input: {
   detectAmbiguousProduct?: DrkallaAmbiguousProductNameDetector;
   evidenceLookup?: DrkallaProductEvidenceLookup;
   catalogSearch?: DrkallaProductCatalogSearch;
+  faqMatch?: DrkallaFaqMatcher;
   executeSendLink?: DrkallaSendLinkExecutor;
   onDelta?: (chunk: string) => void;
+  onFaqCandidate?: (question: string, answer: string) => void;
   signal?: AbortSignal;
 }): Promise<DrkallaCustomLlmResponse> {
   const canaryTurn = buildDrkallaCustomRuntimeCanaryTurn({
@@ -711,6 +714,28 @@ export async function buildDrkallaCustomLlmResponse(input: {
 
   const namedNow = input.detectProducts?.(user) ?? [];
 
+  // Curated FAQ: a human-approved answer to a STABLE general question (shipping,
+  // returns, payment, profi access …) — instant, no model call, no hallucination.
+  // Runs AFTER all structured paths (contact/price/product) so those stay
+  // authoritative, and only on a high-confidence trigger match; otherwise null
+  // and the model answers as before. Additive, never a gate.
+  if (namedNow.length === 0) {
+    const faq = input.faqMatch?.(user) ?? null;
+    if (faq) {
+      return {
+        blocked: false,
+        text: faq.answer,
+        memory: reduceDrkallaShortTermMemory(
+          canaryTurn.runtime.memory,
+          deriveDrkallaAgentSpokeEvent({ text: faq.answer, turnIndex }),
+        ),
+        metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
+        blockers: [],
+        quality: { duFormDetected: false, duFormConfidence: 'none', duFormSlips: [] },
+      };
+    }
+  }
+
   // Fallback for an open need that did NOT hit a productType (handled above) but
   // still matches catalog products by tag/title: surface real products (short
   // names) so the model NAMES them instead of looping. Grounded: real names only.
@@ -752,6 +777,13 @@ export async function buildDrkallaCustomLlmResponse(input: {
         evidenceLookup: input.evidenceLookup,
       });
   const spokenText = modelText || (fallback?.text ?? '');
+
+  // FAQ-candidate capture: a general question (no product category matched) that
+  // the MODEL had to answer is a candidate for a future curated FAQ entry. Logged
+  // only; the owner reviews + approves via the propose loop. No live-call effect.
+  if (modelText && catalogHits.length === 0) {
+    input.onFaqCandidate?.(user, spokenText);
+  }
 
   // Reduce what the agent is about to say back into short-term memory so the
   // funnel, per-product fact dedupe, and the once-only Profi disclosure work
