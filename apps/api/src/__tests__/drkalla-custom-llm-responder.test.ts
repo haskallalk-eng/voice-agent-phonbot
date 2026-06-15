@@ -1063,6 +1063,33 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
     expect(modelCalls).toBe(1);
     expect(response.text).not.toContain('Da kann ich Ihnen Glanz-Shampoo empfehlen');
   });
+
+  it('B: no re-pitch even after a same-category re-mention clears lastMentionedProduct', async () => {
+    // Real call 2026-06-15: "Haben Sie auch Haarfarben von L'Oréal?" repeated the
+    // exact prior recommendation. The same-category re-mention clears
+    // lastMentionedProduct (switched-type reset), so the guard must rely on
+    // lastAgentQuestion (the SMS offer still naming the product).
+    const memory = reduceDrkallaShortTermMemory(activeTypeMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 2,
+      text: 'Da kann ich Ihnen Haarfarbe Ammoniakfrei empfehlen. Soll ich Ihnen den Link zu Haarfarbe Ammoniakfrei per SMS schicken?',
+      lastAgentQuestion: 'Soll ich Ihnen den Link zu Haarfarbe Ammoniakfrei per SMS schicken?',
+    });
+    expect(memory.lastMentionedProduct).toBeNull(); // no lastProduct on the event
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Haben Sie auch Haarfarben von L Oreal?'),
+      memory,
+      client: { complete: async () => { modelCalls += 1; return 'Von L Oreal führen wir nur INOA; sonst haben wir eigene Haarfarben.'; } },
+      catalogSearch: (t: string) => (/haarfarbe|oreal/i.test(t) ? [
+        { productId: 'ha', spokenName: 'Haarfarbe Ammoniakfrei', shortName: 'Haarfarbe Ammoniakfrei', productType: 'Haarfarbe/Farbcreme', priceText: '4 Euro 50', priceValue: 4.5, score: 4, categoryHit: true, typeHit: true },
+      ] : []),
+      evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
+    });
+    expect(modelCalls).toBe(1);
+    expect(response.text).not.toContain('Da kann ich Ihnen Haarfarbe Ammoniakfrei empfehlen');
+  });
 });
 
 describe('DrKalla deterministic smalltalk fast-paths (latency: low-content turns skip the model)', () => {
