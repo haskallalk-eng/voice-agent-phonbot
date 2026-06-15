@@ -120,12 +120,13 @@ function compactSystemPrompt(directives: string[]): string {
     'Nenne Adresse, Oeffnungszeiten, E-Mail, Preise oder Verfuegbarkeit nur aus der gegebenen Evidence- oder Kontakt-Fakt-Zeile. Fehlt die Angabe, erfinde nichts und verweise auf drkalla.com oder den Kontakt.',
     'Erklaere die Profi-Preise hoechstens einmal ausfuehrlich; wurde der Profi-Zugang schon erwaehnt, fasse dich knapp und biete nur kurz den Link an, ohne die Erklaerung zu wiederholen.',
     'Wenn der Bedarf oder die Produktart bekannt ist, NENNE konkrete Produkte aus der Katalog-Treffer-Zeile oder grenze nach Marke/Variante ein. Stelle nicht wiederholt dieselbe Kategorie-Frage; wenn der Anrufer den Bedarf schon genannt hat, gehe weiter, statt erneut zu fragen.',
+    'Bei Vergleichs- oder Beratungsfragen ("was ist besser", "welches passt") vergleiche die genannten Produkte konkret und gib eine klare Empfehlung; wiederhole nicht denselben Vorschlag.',
     'Nutze diese Dialogsteuerung, aber behandle Memory nie als Faktenbeweis.',
     'Behaupte nie, eine SMS oder einen Link bereits gesendet zu haben; frage nie nach der Telefonnummer (eine SMS geht automatisch an die Anrufernummer).',
     'Bei klarer Verabschiedung verabschiede dich kurz und haenge keine neue Frage an.',
     'Wenn der Anrufer abwinkt ("nein danke", "alles gut", "passt"), biete NICHT erneut denselben Link oder dasselbe Produkt an; bestaetige kurz und frage hoechstens einmal, ob du sonst helfen kannst.',
     ...directives,
-  ].join('\n').slice(0, 3200);
+  ].join('\n').slice(0, 3400);
 }
 
 // Match ANY phrasing where the agent's last question offered to SEND a
@@ -256,9 +257,11 @@ function tryDeterministicTypeListReply(input: {
   return `Bei ${activeType.label} haben wir zum Beispiel ${list}. Welches davon interessiert Sie?`;
 }
 
-// Comparison / usage / why turns need real reasoning — leave those to the model
-// instead of answering with a product list.
-const NEED_VETO = /\b(?:unterschied|vergleich|verglichen|wie\s+(?:wende|benutz|verwend|trag|oft|lange|viel)|warum|wieso|weshalb|anwend|inhaltsstoff|vertr[äa]glich|allergie|wof[üu]r|wozu)\b/i;
+// Comparison / advice / usage / why turns need real reasoning — leave those to
+// the model instead of answering with a canned product list. Real call
+// 2026-06-15: "Was ist besser, X oder Y?" / "welches für blondes Haar?" hit the
+// deterministic recommender, which repeated the same template and never compared.
+const NEED_VETO = /\b(?:unterschied|vergleich\w*|verglichen|besser|schlechter|empfehlenswert|ratsam|wie\s+(?:wende|benutz|verwend|trag|oft|lange|viel)|warum|wieso|weshalb|anwend|inhaltsstoff|vertr[äa]glich|allergie|wof[üu]r|wozu)\b/i;
 
 // A generic hair-type descriptor ("trockenes Haar", "feines & coloriertes Haar")
 // is a NEED, not a specific product line — it must never drive a variant
@@ -323,6 +326,12 @@ function tryDeterministicNeedReply(input: {
   }
   const top = strong[0];
   if (!top) return null;
+  // Anti-broken-record: never re-pitch the SAME product we just recommended.
+  // A follow-up about it ("und von L'Oréal?", "haben Sie noch andere?") must vary
+  // via the model, not repeat the identical "Da kann ich Ihnen X empfehlen … Soll
+  // ich den Link schicken?" template (real call 2026-06-15: the agent looped the
+  // same line and the caller said "immer wieder das Gleiche, was ist mit dir los?").
+  if (top.shortName && top.shortName === input.memory.lastMentionedProduct?.spokenName) return null;
   const evidence = input.evidenceLookup?.byId(top.productId) ?? null;
   const alts = strong.slice(1, 3).map((h) => h.shortName).filter((n) => n && n !== top.shortName);
   let reply = `Da kann ich Ihnen ${top.shortName} empfehlen.`;
