@@ -610,6 +610,33 @@ export async function registerRetellDrkallaCustomLlmWs(
       return;
     }
 
+    // AGENT SPEAKS FIRST. Custom-LLM has no begin_message (Retell silently drops
+    // it), and Retell sends NO opener event at connect — verified live
+    // 2026-06-15: ~10s of silence, the agent only greeted AFTER the caller spoke.
+    // Per Retell's custom-LLM protocol the server must send the begin message
+    // PROACTIVELY with response_id 0 right after the socket opens
+    // (https://docs.retellai.com/integrate-llm/setup-websocket-server). Mark
+    // greeted + commit the greeting to memory so the per-turn opening path never
+    // double-greets and the funnel knows the opener was already spoken.
+    if (enabled) {
+      greeted = true;
+      memory = reduceDrkallaShortTermMemory(
+        memory,
+        deriveDrkallaAgentSpokeEvent({ text: DRKALLA_CUSTOM_RUNTIME_GREETING, turnIndex: 0 }),
+      );
+      try {
+        socket.send(JSON.stringify({
+          response_type: 'response',
+          response_id: 0,
+          content: DRKALLA_CUSTOM_RUNTIME_GREETING,
+          content_complete: true,
+          end_call: false,
+        }));
+      } catch (error) {
+        app.log.warn({ callId, err: error instanceof Error ? error.message : String(error) }, 'drkalla canary begin-message send failed');
+      }
+    }
+
     let framesTraced = 0;
     socket.on('message', (message) => {
       const rawMessage = message.toString();
