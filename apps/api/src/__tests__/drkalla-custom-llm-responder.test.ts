@@ -946,9 +946,10 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
     expect(response.text).not.toMatch(/\b(?:du|dich|dir|dein)\b/i);
   });
 
-  it('A: a brand-only/garbled turn with an active product type still reaches products (reachability)', async () => {
-    // Real call 2026-06-15: after "Haarfarben?" the caller said "von Wella" /
-    // "ich will ein Produkt" and the agent looped instead of naming products.
+  it('A: an unstocked brand ("von Wella") is answered honestly + a house alternative, no loop', async () => {
+    // Real calls 2026-06-15/16: "von Wella" / "L'Oréal" looped a wrong-brand
+    // product. We do NOT carry Wella (verified: only L'Oréal/Lattafa/CJ are
+    // external vendors) — say so and offer a house alternative, deterministically.
     let modelCalls = 0;
     const response = await buildDrkallaCustomLlmResponse({
       canary: CANARY,
@@ -959,8 +960,8 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
       evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
     });
     expect(modelCalls).toBe(0);
-    expect(response.text).toContain('Da kann ich Ihnen'); // named a product, did not loop
-    expect(response.text).toContain('Koleston Perfect');
+    expect(response.text).toContain('führen wir leider nicht'); // honest about Wella
+    expect(response.text).toContain('Koleston Perfect'); // grounded house alternative
   });
 
   it('A: a specific ambiguous product line still gets a variant clarification even with an active type', async () => {
@@ -1009,10 +1010,10 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
     expect(response.text).toBe('Worum darf ich mich kümmern?');
   });
 
-  it('A: a type + brand in ONE turn reaches a product, NOT a variant clarification', async () => {
-    // Real call 2026-06-15: "Haarfarbe von L'Oréal" asked "welche Nuance?" seven
-    // times. When the caller names the TYPE this turn, an ambiguous brand/line is
-    // a filter, not a variant choice — reach a product immediately.
+  it('A: a type + unstocked brand ("Haarfarbe von L\'Oréal") gives the honest brand answer, no variant loop', async () => {
+    // Real calls 2026-06-15/16: "Haarfarbe von L'Oréal" looped ("welche Nuance?")
+    // or re-pitched a wrong-brand product. We don't carry the L'Oréal range:
+    // answer honestly + offer a grounded house alternative, deterministically.
     let modelCalls = 0;
     const response = await buildDrkallaCustomLlmResponse({
       canary: CANARY,
@@ -1024,8 +1025,26 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
       evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
     });
     expect(modelCalls).toBe(0);
-    expect(response.text).toContain('Da kann ich Ihnen');
+    expect(response.text).toContain('führen wir leider nicht');
+    expect(response.text).toContain('Koleston Perfect'); // grounded house alternative
     expect(response.text).not.toContain('mehrere Ausführungen');
+  });
+
+  it('A: every L\'Oréal ASR spelling (Loreal / Loyal / L\'Oréal) gets the same honest brand answer', async () => {
+    for (const spelling of ['Haben Sie Haarfarbe von Loreal?', 'Habt ihr was von Loyal?', 'Ich möchte eine Haarfarbe von L’Oréal.']) {
+      let modelCalls = 0;
+      const response = await buildDrkallaCustomLlmResponse({
+        canary: CANARY,
+        event: turn(spelling),
+        memory: activeTypeMemory(),
+        client: { complete: async () => { modelCalls += 1; return 'should not be used'; } },
+        catalogSearch: threeProductSearch,
+        evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
+      });
+      expect(modelCalls, spelling).toBe(0);
+      expect(response.text, spelling).toContain("L'Oréal");
+      expect(response.text, spelling).toContain('führen wir leider nicht');
+    }
   });
 
   it('A: after a variant question was already asked, the next turn reaches a product (anti-loop)', async () => {
@@ -1126,10 +1145,10 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
     let modelCalls = 0;
     const response = await buildDrkallaCustomLlmResponse({
       canary: CANARY,
-      event: turn('Haben Sie auch Haarfarben von L Oreal?'),
+      event: turn('Haben Sie da noch andere Haarfarben?'),
       memory,
-      client: { complete: async () => { modelCalls += 1; return 'Von L Oreal führen wir nur INOA; sonst haben wir eigene Haarfarben.'; } },
-      catalogSearch: (t: string) => (/haarfarbe|oreal/i.test(t) ? [
+      client: { complete: async () => { modelCalls += 1; return 'Wir haben noch weitere Haarfarben im Sortiment.'; } },
+      catalogSearch: (t: string) => (/haarfarbe/i.test(t) ? [
         { productId: 'ha', spokenName: 'Haarfarbe Ammoniakfrei', shortName: 'Haarfarbe Ammoniakfrei', productType: 'Haarfarbe/Farbcreme', priceText: '4 Euro 50', priceValue: 4.5, score: 4, categoryHit: true, typeHit: true },
       ] : []),
       evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,

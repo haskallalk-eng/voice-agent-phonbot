@@ -504,6 +504,61 @@ function tryDeterministicUsageAnswer(input: {
   };
 }
 
+// Brands customers commonly ask for that the shop does NOT stock as a range (it
+// is almost entirely the house brand Doktor Kalla). Real calls loop when a
+// caller asks for L'Oréal/"Loreal"/"Loyal": the recommender keeps naming a
+// wrong-brand product instead of answering. Give ONE honest, spelling-robust
+// answer + a grounded house alternative, consistently across ASR variants.
+const DRKALLA_BRANDS: Array<{ name: string; re: RegExp }> = [
+  { name: "L'Oréal", re: /\b(?:l\s*['’]?\s*or[ée]al|lor[ée]al|loreal|lorial|loriel|loyal|oreal)\b/i },
+  { name: 'Wella', re: /\bwella\b/i },
+  { name: 'Schwarzkopf', re: /\bschwarzkopf\b/i },
+  { name: 'Garnier', re: /\bgarnier\b/i },
+  { name: 'Syoss', re: /\bsyoss\b/i },
+  { name: 'Goldwell', re: /\bgoldwell\b/i },
+  { name: 'Redken', re: /\bredken\b/i },
+  { name: 'Olaplex', re: /\bolaplex\b/i },
+  { name: 'Indola', re: /\bindola\b/i },
+  { name: 'Alcina', re: /\balcina\b/i },
+];
+
+/**
+ * Deterministic, consistent answer when the caller names an external brand the
+ * shop does not stock as a range (real calls 2026-06-16: "L'Oréal / Loreal /
+ * Loyal" looped, the agent re-pitched a wrong-brand product). State honestly that
+ * we do not carry the brand and offer a grounded house alternative of the
+ * requested/active type — never invent a brand product. Returns null when no
+ * known brand is named or the turn is a comparison/usage question (-> model).
+ */
+function tryDeterministicBrandReply(input: {
+  userText: string;
+  memory: DrkallaShortTermVoiceMemory;
+  catalogSearch?: DrkallaProductCatalogSearch;
+}): DrkallaFallbackResult | null {
+  const text = input.userText;
+  if (NEED_VETO.test(text)) return null; // comparison/advice/usage -> model
+  const brand = DRKALLA_BRANDS.find((b) => b.re.test(text));
+  if (!brand) return null;
+  // Grounded house alternative of the requested/active type.
+  const typeLabel = detectDrkallaUserProductType(text) ?? input.memory.activeProductType?.label ?? null;
+  let alt = null as null | { shortName: string; priceText: string | null; productId: string; productType: string | null };
+  if (typeLabel && input.catalogSearch) {
+    const hits = input.catalogSearch(typeLabel, 8).filter((h) => h.typeHit);
+    const careOk = dropChemicalForCareIntent(hits, text, typeLabel);
+    alt = careOk[0] ?? hits[0] ?? null;
+  }
+  // Anti-loop: if we already steered the caller to this alternative last turn,
+  // let the model handle the insistence instead of repeating the brand line.
+  if (alt && input.memory.lastMentionedProduct?.spokenName === alt.shortName) return null;
+  const altClause = alt
+    ? ` Bei ${typeLabel} haben wir aber zum Beispiel ${alt.shortName}${alt.priceText ? ` für ${alt.priceText}` : ''}. Möchten Sie mehr dazu wissen?`
+    : ' Wir haben aber eine eigene Auswahl an Friseurbedarf. Wonach suchen Sie genau?';
+  return {
+    text: `Produkte von ${brand.name} führen wir leider nicht im Sortiment.${altClause}`,
+    product: alt ? { spokenName: alt.shortName, productId: alt.productId, productKind: alt.productType } : undefined,
+  };
+}
+
 export async function buildDrkallaCustomLlmResponse(input: {
   canary: DrkallaCustomRuntimeCanaryConfig;
   event: AgentTurnRequestedEvent;
@@ -746,6 +801,27 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // No detectProducts in the reduce so the recommended TOP hit wins as
   // lastMentionedProduct for a follow-up SMS confirm + price.
   if ((input.detectProducts?.(user) ?? []).length === 0) {
+    // A named external brand we do not stock (L'Oréal/Wella/...) is answered
+    // honestly + with a house alternative BEFORE the recommender, so it never
+    // loops a wrong-brand product (real calls 2026-06-16).
+    const brandReply = tryDeterministicBrandReply({
+      userText: user,
+      memory: canaryTurn.runtime.memory,
+      catalogSearch: input.catalogSearch,
+    });
+    if (brandReply) {
+      return {
+        blocked: false,
+        text: brandReply.text,
+        memory: reduceDrkallaShortTermMemory(
+          canaryTurn.runtime.memory,
+          deriveDrkallaAgentSpokeEvent({ text: brandReply.text, turnIndex, fallbackProduct: brandReply.product }),
+        ),
+        metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
+        blockers: [],
+        quality: { duFormDetected: false, duFormConfidence: 'none', duFormSlips: [] },
+      };
+    }
     const needReply = tryDeterministicNeedReply({
       userText: user,
       memory: canaryTurn.runtime.memory,
