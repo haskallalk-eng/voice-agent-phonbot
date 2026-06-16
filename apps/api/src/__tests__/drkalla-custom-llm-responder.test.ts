@@ -1079,6 +1079,30 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
     expect(response.text).not.toContain('für von');
   });
 
+  it('A: a second consecutive same-brand turn does not repeat the brand line (anti-repeat survives type-switch)', async () => {
+    // Turn 1 named the L'Oréal Inoa; a follow-up "und L'Oréal Shampoo?" switches
+    // activeProductType (clearing lastMentionedProduct), so the guard must also key
+    // off lastAgentQuestion (which still names the product) -> hand to the model.
+    const asked = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 2,
+      text: 'Von L\'Oréal haben wir nur Inoa Haarfärbemittel Ammoniakfrei für 13,00 Euro. Sonst führen wir überwiegend unsere Hausmarke. Möchten Sie mehr zu Inoa Haarfärbemittel Ammoniakfrei wissen?',
+      lastAgentQuestion: 'Möchten Sie mehr zu Inoa Haarfärbemittel Ammoniakfrei wissen?',
+    });
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Und L’Oréal Shampoo, habt ihr das?'),
+      memory: asked,
+      client: { complete: async () => { modelCalls += 1; return 'Ein L’Oréal Shampoo führen wir nicht, aber unsere Hausmarke hätte da etwas.'; } },
+      catalogSearch: () => [], // no house hit -> falls through to the model
+      brandStock: lorealStock,
+      evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
+    });
+    expect(modelCalls).toBe(1); // handed to the model, not repeated deterministically
+    expect(response.text).not.toContain('Von L\'Oréal haben wir'); // not the same line again
+  });
+
   it('A: a genuinely UNSTOCKED brand ("von Wella") still gets the honest deny + house alternative', async () => {
     // Vendor-strict stock returns [] for Wella -> the honest "führen wir nicht".
     const response = await buildDrkallaCustomLlmResponse({

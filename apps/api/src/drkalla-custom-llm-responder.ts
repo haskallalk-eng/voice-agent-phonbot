@@ -565,13 +565,17 @@ function tryDeterministicBrandReply(input: {
   const stock = (input.brandStock?.(brand.name) ?? []).filter((s) => s.shortName);
   const top = stock[0];
   if (top) {
-    // Anti-loop: if we already named this exact product, let the model take the
-    // insistence rather than repeating the same line.
-    if (input.memory.lastMentionedProduct?.spokenName === top.shortName) return null;
     const namePart = top.shortName.replace(BRAND_NAME_LEAD, '').trim() || top.shortName;
+    // Anti-repeat: if we already named this product last turn, hand the insistence
+    // to the model instead of repeating the identical line. Check lastAgentQuestion
+    // (which still carries the product name) too, because a follow-up that names a
+    // type ("und L'Oréal Shampoo?") switches activeProductType and clears
+    // lastMentionedProduct — that reset is why the bare check looped live.
+    const justAsked = input.memory.lastAgentQuestion ?? '';
+    if (input.memory.lastMentionedProduct?.spokenName === top.shortName || justAsked.includes(namePart)) return null;
     const lead = stock.length === 1 ? 'nur' : 'zum Beispiel';
     return {
-      text: `Von ${brand.name} haben wir ${lead} ${namePart}${joinDrkallaPriceClause(top.priceText)}. Sonst führen wir überwiegend unsere Hausmarke. Möchten Sie mehr dazu wissen?`,
+      text: `Von ${brand.name} haben wir ${lead} ${namePart}${joinDrkallaPriceClause(top.priceText)}. Sonst führen wir überwiegend unsere Hausmarke. Möchten Sie mehr zu ${namePart} wissen?`,
       product: { spokenName: top.shortName, productId: top.productId, productKind: top.productType },
     };
   }
