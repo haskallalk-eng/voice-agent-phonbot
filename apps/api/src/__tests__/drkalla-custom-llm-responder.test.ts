@@ -1157,6 +1157,74 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
     expect(response.text).not.toContain('Es kostet');
   });
 
+  it('B: declining a pending SMS offer ("nein danke, alles gut") winds down, never re-offers', async () => {
+    // Real battery 2026-06-16: a wave-off after the link offer reached the model,
+    // which RE-OFFERED the link. SMS-confirm only handled YES, and SMALLTALK_NEGATION
+    // is vetoed while an offer is pending — so a decline must wind down here.
+    const offered = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 1,
+      text: 'Da kann ich Ihnen Glanz-Shampoo empfehlen. Soll ich Ihnen den Link zu Glanz-Shampoo per SMS schicken?',
+      lastAgentQuestion: 'Soll ich Ihnen den Link zu Glanz-Shampoo per SMS schicken?',
+      lastProduct: { spokenName: 'Glanz-Shampoo', productId: 'gs', productKind: 'Shampoo' },
+    });
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Nein danke, alles gut'),
+      memory: offered,
+      client: { complete: async () => { modelCalls += 1; return 'Möchten Sie den Link?'; } },
+      evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
+      catalogSearch: () => [],
+    });
+    expect(modelCalls).toBe(0);
+    expect(response.text).toContain('Alles klar');
+    expect(response.text).not.toMatch(/link|sms/i); // never re-offers the link
+  });
+
+  it('B: "passt, brauche ich nicht" also declines a pending SMS offer (no re-offer)', async () => {
+    const offered = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 1,
+      text: 'Soll ich Ihnen den Link zu Glanz-Shampoo per SMS schicken?',
+      lastAgentQuestion: 'Soll ich Ihnen den Link zu Glanz-Shampoo per SMS schicken?',
+      lastProduct: { spokenName: 'Glanz-Shampoo', productId: 'gs', productKind: 'Shampoo' },
+    });
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Passt, brauche ich nicht'),
+      memory: offered,
+      client: { complete: async () => { modelCalls += 1; return 'Möchten Sie den Link?'; } },
+      evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
+      catalogSearch: () => [],
+    });
+    expect(modelCalls).toBe(0);
+    expect(response.text).not.toMatch(/link|sms/i);
+  });
+
+  it('B: a YES to a pending SMS offer still sends (decline branch does not swallow it)', async () => {
+    const offered = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 1,
+      text: 'Soll ich Ihnen den Link zu Glanz-Shampoo per SMS schicken?',
+      lastAgentQuestion: 'Soll ich Ihnen den Link zu Glanz-Shampoo per SMS schicken?',
+      lastProduct: { spokenName: 'Glanz-Shampoo', productId: 'gs', productKind: 'Shampoo' },
+    });
+    let sent = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Ja, gerne'),
+      memory: offered,
+      client: { complete: async () => 'should not be used' },
+      evidenceLookup: { byId: () => null, byKeyHash: () => ({ url: 'https://drkalla.com/p/gs' }) } as never,
+      catalogSearch: () => [],
+      executeSendLink: async () => { sent += 1; return { smsSent: true }; },
+    });
+    expect(sent).toBe(1);
+    expect(response.text).not.toContain('Alles klar, dann schicke ich nichts');
+  });
+
   it('A: after a variant question was already asked, the next turn reaches a product (anti-loop)', async () => {
     // Even a real ambiguous LINE must not loop the variant question: if we asked
     // it last turn and the caller answered, reach a concrete product instead.
@@ -1453,18 +1521,22 @@ describe('DrKalla deterministic smalltalk fast-paths (latency: low-content turns
     expect(response.text).toBe('Ich schaue das gern nach.');
   });
 
-  it('B: a "nein" right after an SMS offer is NOT swallowed by smalltalk', async () => {
+  it('B: a "nein" right after an SMS offer winds down deterministically (no model, no re-offer)', async () => {
+    // Updated 2026-06-16: previously this fell to the model, which RE-OFFERED the
+    // link (real battery). The SMS-confirm decline branch now owns the turn — the
+    // smalltalk ack is still vetoed by the pending offer, but the decline path
+    // handles it deterministically without ever re-offering.
     let modelCalls = 0;
     const response = await buildDrkallaCustomLlmResponse({
       canary: CANARY,
       event: turn('Nein.'),
       memory: smsOfferMemory(),
-      client: { complete: async () => { modelCalls += 1; return 'Alles klar, dann nicht.'; } },
+      client: { complete: async () => { modelCalls += 1; return 'Möchten Sie den Link doch?'; } },
     });
 
-    // The smalltalk ack must not own this turn; the existing confirm/model path does.
-    expect(response.text).not.toBe('Alles klar. Kann ich Ihnen sonst noch weiterhelfen?');
-    expect(modelCalls).toBe(1);
-    expect(response.metrics.extraLlmCalls).toBe(1);
+    expect(modelCalls).toBe(0);
+    expect(response.metrics.extraLlmCalls).toBe(0);
+    expect(response.text).not.toMatch(/link|sms/i);
+    expect(response.text).toContain('Alles klar');
   });
 });
