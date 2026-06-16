@@ -17,7 +17,9 @@ import {
 } from './drkalla-product-evidence.js';
 import {
   buildDrkallaProductCatalogSearch,
+  buildDrkallaExternalBrandStock,
   type DrkallaProductCatalogSearch,
+  type DrkallaExternalBrandStock,
   type DrkallaCatalogSearchRawProduct,
 } from './drkalla-product-catalog-search.js';
 import {
@@ -334,6 +336,24 @@ export function loadDrkallaProductCatalogSearch(productsPath?: string): DrkallaP
   }
 }
 
+/**
+ * One-time startup load of the vendor-strict external-brand stock lookup from the
+ * products snapshot (never per turn). Lets the agent answer a brand request
+ * honestly: name the real product when we carry the brand (e.g. the L'Oréal Inoa)
+ * and say "führen wir nicht" only when we genuinely do not.
+ */
+export function loadDrkallaExternalBrandStock(productsPath?: string): DrkallaExternalBrandStock | undefined {
+  try {
+    const parsed = readFirstJson(
+      resolveDrkallaSnapshotPath('drkalla-products.json', productsPath ?? process.env.DRKALLA_PRODUCTS_PATH),
+    ) as { products?: unknown } | null;
+    if (!parsed || !Array.isArray(parsed.products) || !parsed.products.length) return undefined;
+    return buildDrkallaExternalBrandStock(parsed.products as DrkallaCatalogSearchRawProduct[]);
+  } catch {
+    return undefined;
+  }
+}
+
 export function loadDrkallaFaqMatcher(faqPath?: string): DrkallaFaqMatcher | undefined {
   try {
     const parsed = readFirstJson(
@@ -370,6 +390,7 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
   detectAmbiguousProduct?: DrkallaAmbiguousProductNameDetector;
   evidenceLookup?: DrkallaProductEvidenceLookup;
   catalogSearch?: DrkallaProductCatalogSearch;
+  brandStock?: DrkallaExternalBrandStock;
   faqMatch?: DrkallaFaqMatcher;
   executeSendLink?: DrkallaSendLinkExecutor;
   sequence?: number;
@@ -431,6 +452,7 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
     detectAmbiguousProduct: input.detectAmbiguousProduct,
     evidenceLookup: input.evidenceLookup,
     catalogSearch: input.catalogSearch,
+    brandStock: input.brandStock,
     faqMatch: input.faqMatch,
     executeSendLink: input.executeSendLink,
     onDelta: input.onDelta,
@@ -559,6 +581,7 @@ export async function registerRetellDrkallaCustomLlmWs(
     detectProducts?: DrkallaProductNameDetector;
     evidenceLookup?: DrkallaProductEvidenceLookup;
     catalogSearch?: DrkallaProductCatalogSearch;
+    brandStock?: DrkallaExternalBrandStock;
     faqMatch?: DrkallaFaqMatcher;
   } = {},
 ): Promise<void> {
@@ -570,6 +593,7 @@ export async function registerRetellDrkallaCustomLlmWs(
     : undefined;
   const evidenceLookup = options.evidenceLookup ?? loadDrkallaProductEvidenceLookup();
   const catalogSearch = options.catalogSearch ?? loadDrkallaProductCatalogSearch();
+  const brandStock = options.brandStock ?? loadDrkallaExternalBrandStock();
   const faqMatch = options.faqMatch ?? loadDrkallaFaqMatcher();
   // Real SMS sending stays off unless explicitly enabled; the executor goes
   // through the existing policied send_link tool endpoint (live-call verify,
@@ -844,6 +868,7 @@ export async function registerRetellDrkallaCustomLlmWs(
             detectAmbiguousProduct,
             evidenceLookup,
             catalogSearch,
+            brandStock,
             faqMatch,
             executeSendLink,
             sequence: turnCounter,

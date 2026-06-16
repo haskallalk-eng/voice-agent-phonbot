@@ -8,7 +8,7 @@ import {
   detectDrkallaContactIntent,
 } from './drkalla-contact-facts.js';
 import type { DrkallaProductEvidenceLookup } from './drkalla-product-evidence.js';
-import type { DrkallaProductCatalogSearch } from './drkalla-product-catalog-search.js';
+import type { DrkallaProductCatalogSearch, DrkallaExternalBrandStock } from './drkalla-product-catalog-search.js';
 import type { DrkallaFaqMatcher } from './drkalla-faq-match.js';
 import { detectDrkallaDuForm } from './drkalla-formality-detector.js';
 import { detectDrkallaUserProductType } from './drkalla-product-type-detector.js';
@@ -381,7 +381,9 @@ function tryDeterministicNeedReply(input: {
   const evidence = input.evidenceLookup?.byId(top.productId) ?? null;
   const alts = strong.slice(1, 3).map((h) => h.shortName).filter((n) => n && n !== top.shortName);
   let reply = `Da kann ich Ihnen ${top.shortName} empfehlen.`;
-  if (top.priceText) reply += ` Es kostet ${top.priceText}.`;
+  // Gender-neutral "Das kostet" (not "Es kostet" — the product may be feminine,
+  // e.g. "die Haarmaske"). Range priceText already reads "von X bis Y".
+  if (top.priceText) reply += ` Das kostet ${top.priceText}.`;
   if (alts.length) {
     reply += alts.length === 1
       ? ` Alternativ haben wir ${alts[0]}.`
@@ -522,24 +524,60 @@ const DRKALLA_BRANDS: Array<{ name: string; re: RegExp }> = [
   { name: 'Alcina', re: /\balcina\b/i },
 ];
 
+// A leading brand word on a spoken short name, stripped so the brand line does
+// not echo the name twice ("Von L'Oréal haben wir nur L'Oréal Inoa ..." ->
+// "... haben wir nur Inoa ..."). Accent/apostrophe tolerant (ASR + curly quotes).
+const BRAND_NAME_LEAD = /^\s*(?:l['’]?\s*or[ée]al|lor[ée]al|loreal|wella|schwarzkopf|garnier|syoss|goldwell|redken|olaplex|indola|alcina|lattafa)\b[\s-]*/i;
+
+// Range priceText reads "von X bis Y" — prefixing "für" yields the ungrammatical
+// "für von 12 Euro bis 17 Euro", so a range is appended with a comma instead.
+function joinDrkallaPriceClause(priceText: string | null | undefined): string {
+  if (!priceText) return '';
+  return /^von\b/i.test(priceText) ? `, ${priceText}` : ` für ${priceText}`;
+}
+
 /**
- * Deterministic, consistent answer when the caller names an external brand the
- * shop does not stock as a range (real calls 2026-06-16: "L'Oréal / Loreal /
- * Loyal" looped, the agent re-pitched a wrong-brand product). State honestly that
- * we do not carry the brand and offer a grounded house alternative of the
- * requested/active type — never invent a brand product. Returns null when no
- * known brand is named or the turn is a comparison/usage question (-> model).
+ * Deterministic, consistent answer when the caller names a known external brand.
+ * Real calls 2026-06-16: "L'Oréal / Loreal / Loyal" looped — the recommender
+ * re-pitched a wrong-brand product. Two honest outcomes, never a wrong-brand loop:
+ *   - We DO carry the brand (vendor-strict check; e.g. the L'Oréal Inoa, in stock
+ *     at 13 Euro): name the real product. A flat "führen wir nicht" would be a
+ *     false denial of a product we actually sell.
+ *   - We do NOT carry it (Wella/Schwarzkopf/…): say so once and offer a grounded
+ *     house alternative of the requested/active type.
+ * Returns null when no known brand is named or the turn is a comparison/usage
+ * question (-> model), or when we would repeat last turn's product (anti-loop).
  */
 function tryDeterministicBrandReply(input: {
   userText: string;
   memory: DrkallaShortTermVoiceMemory;
   catalogSearch?: DrkallaProductCatalogSearch;
+  brandStock?: DrkallaExternalBrandStock;
 }): DrkallaFallbackResult | null {
   const text = input.userText;
   if (NEED_VETO.test(text)) return null; // comparison/advice/usage -> model
   const brand = DRKALLA_BRANDS.find((b) => b.re.test(text));
   if (!brand) return null;
-  // Grounded house alternative of the requested/active type.
+
+  // Do we actually carry this brand? Vendor-strict, so competitor SEO tags on
+  // house products can never fake a "yes", and the accent-folded key finds the
+  // L'Oréal vendor the token search drops.
+  const stock = (input.brandStock?.(brand.name) ?? []).filter((s) => s.shortName);
+  const top = stock[0];
+  if (top) {
+    // Anti-loop: if we already named this exact product, let the model take the
+    // insistence rather than repeating the same line.
+    if (input.memory.lastMentionedProduct?.spokenName === top.shortName) return null;
+    const namePart = top.shortName.replace(BRAND_NAME_LEAD, '').trim() || top.shortName;
+    const lead = stock.length === 1 ? 'nur' : 'zum Beispiel';
+    return {
+      text: `Von ${brand.name} haben wir ${lead} ${namePart}${joinDrkallaPriceClause(top.priceText)}. Sonst führen wir überwiegend unsere Hausmarke. Möchten Sie mehr dazu wissen?`,
+      product: { spokenName: top.shortName, productId: top.productId, productKind: top.productType },
+    };
+  }
+
+  // Not stocked: honest "we don't carry it" + a grounded house alternative of the
+  // requested/active type.
   const typeLabel = detectDrkallaUserProductType(text) ?? input.memory.activeProductType?.label ?? null;
   let alt = null as null | { shortName: string; priceText: string | null; productId: string; productType: string | null };
   if (typeLabel && input.catalogSearch) {
@@ -551,7 +589,7 @@ function tryDeterministicBrandReply(input: {
   // let the model handle the insistence instead of repeating the brand line.
   if (alt && input.memory.lastMentionedProduct?.spokenName === alt.shortName) return null;
   const altClause = alt
-    ? ` Bei ${typeLabel} haben wir aber zum Beispiel ${alt.shortName}${alt.priceText ? ` für ${alt.priceText}` : ''}. Möchten Sie mehr dazu wissen?`
+    ? ` Bei ${typeLabel} haben wir aber zum Beispiel ${alt.shortName}${joinDrkallaPriceClause(alt.priceText)}. Möchten Sie mehr dazu wissen?`
     : ' Wir haben aber eine eigene Auswahl an Friseurbedarf. Wonach suchen Sie genau?';
   return {
     text: `Produkte von ${brand.name} führen wir leider nicht im Sortiment.${altClause}`,
@@ -568,6 +606,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
   detectAmbiguousProduct?: DrkallaAmbiguousProductNameDetector;
   evidenceLookup?: DrkallaProductEvidenceLookup;
   catalogSearch?: DrkallaProductCatalogSearch;
+  brandStock?: DrkallaExternalBrandStock;
   faqMatch?: DrkallaFaqMatcher;
   executeSendLink?: DrkallaSendLinkExecutor;
   onDelta?: (chunk: string) => void;
@@ -808,6 +847,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
       userText: user,
       memory: canaryTurn.runtime.memory,
       catalogSearch: input.catalogSearch,
+      brandStock: input.brandStock,
     });
     if (brandReply) {
       return {

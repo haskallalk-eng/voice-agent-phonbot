@@ -184,11 +184,12 @@ export function buildDrkallaProductCatalogSearch(
     for (const tag of tags) {
       for (const tok of contentTokens(tag)) catTokens.add(tok);
     }
-    // Brand/vendor tokens are category-level (×2): so "von Wella" / "haben Sie
-    // L'Oréal?" finds the real Wella/L'Oréal products instead of the model
-    // hallucinating "führen wir nicht" (real call 2026-06-15: Wella IS stocked
-    // but the search ignored the vendor field). House-brand tokens (dr/kalla/
-    // cosmetics) are stopwords, so only external brands add a signal here.
+    // Vendor tokens are category-level (×2) so a vendor word can help rank. NOTE
+    // this is NOT a reliable "is this brand stocked" signal: normalize() splits
+    // accents (é) so the L'Oréal vendor token is lost, and house products carry
+    // competitor SEO tags ("wella"), so a token search for an unstocked brand
+    // still returns house hits. Vendor-strict brand stock lives in
+    // buildDrkallaExternalBrandStock below; use that for "do we carry brand X?".
     const vendor = typeof product.vendor === 'string' ? product.vendor : '';
     for (const tok of contentTokens(vendor)) catTokens.add(tok);
     const allTokens = new Set<string>(catTokens);
@@ -261,5 +262,88 @@ export function buildDrkallaProductCatalogSearch(
       categoryHit: catHits > 0,
       typeHit: typeHits > 0,
     }));
+  };
+}
+
+export type DrkallaBrandStockMatch = {
+  productId: string;
+  spokenName: string;
+  shortName: string;
+  productType: string | null;
+  priceText: string | null;
+  priceValue: number | null;
+  available: number;
+};
+
+export type DrkallaExternalBrandStock = (brandName: string) => DrkallaBrandStockMatch[];
+
+// Brand key: lowercase, fold accents (é -> e via NFD), drop every non-alphanumeric
+// so "L'Oréal" and a vendor "L'Oreal Professionnel Paris" collapse to comparable
+// "loreal" / "lorealprofessionnelparis". normalize() above only folds umlauts and
+// SPLITS on é, which silently dropped the L'Oréal vendor token; this keeps brand
+// matching independent of accents and punctuation.
+function brandKey(value: string): string {
+  return value
+    .toLocaleLowerCase('de-DE')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+// House/dropship vendors are never an external "brand the caller asked for".
+const DRKALLA_HOUSE_VENDOR = /(?:dr\.?\s*kalla|cj\s*dropshipping)/i;
+
+/**
+ * Vendor-strict external-brand stock lookup. Unlike the token search above it
+ * matches ONLY the product's vendor field (never tags/title), so competitor SEO
+ * tags (house products are tagged "Wella" for search) cannot make an unstocked
+ * brand look stocked, and the accent-folded key finds the L'Oréal vendor that
+ * normalize() drops. Returns the real products of a brand we actually carry, []
+ * for a brand we do not (-> the honest "führen wir nicht" path). Built once at
+ * startup; lookup is a pure in-memory scan.
+ */
+export function buildDrkallaExternalBrandStock(
+  products: DrkallaCatalogSearchRawProduct[],
+): DrkallaExternalBrandStock {
+  const indexed: Array<{ key: string; match: DrkallaBrandStockMatch }> = [];
+  for (const product of products) {
+    if (typeof product?.handle !== 'string' || !product.handle) continue;
+    if (typeof product.title !== 'string' || !product.title.trim()) continue;
+    const vendor = typeof product.vendor === 'string' ? product.vendor : '';
+    if (!vendor.trim() || DRKALLA_HOUSE_VENDOR.test(vendor)) continue;
+    const key = brandKey(vendor);
+    if (key.length < 3) continue;
+    let available = 0;
+    if (Array.isArray(product.variants)) {
+      for (const v of product.variants) {
+        if (v && typeof v === 'object' && (v as { available?: unknown }).available === true) available += 1;
+      }
+    }
+    const prices = pricesFromVariants(product.variants);
+    const productType = typeof product.productType === 'string' && product.productType.trim()
+      ? product.productType.trim()
+      : null;
+    indexed.push({
+      key,
+      match: {
+        productId: product.handle,
+        spokenName: cleanSpokenName(product.title),
+        shortName: buildDrkallaShortName(product.title),
+        productType,
+        priceText: prices.text,
+        priceValue: prices.min,
+        available,
+      },
+    });
+  }
+  return (brandName: string): DrkallaBrandStockMatch[] => {
+    const bk = brandKey(brandName);
+    if (bk.length < 3) return [];
+    const hits = indexed.filter((e) => e.key.includes(bk)).map((e) => e.match);
+    // Available first, then cheapest, so we name something the caller can buy.
+    hits.sort((a, b) =>
+      (b.available - a.available)
+      || ((a.priceValue ?? Number.POSITIVE_INFINITY) - (b.priceValue ?? Number.POSITIVE_INFINITY)));
+    return hits;
   };
 }
