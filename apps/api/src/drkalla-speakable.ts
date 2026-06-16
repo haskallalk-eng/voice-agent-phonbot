@@ -2,9 +2,9 @@
  * TTS-normalization for the DrKalla voice agent's DETERMINISTIC spoken replies.
  *
  * Low-latency neural voices (Flash-class, as Retell uses) frequently run with
- * text normalization OFF for latency, so abbreviations, symbols and decimal
- * commas surface literally ("Dr." spelled "De-Er", "&" silent, "9,00 Euro" as
- * "neun Komma null null"). We pre-render the text the way it should be spoken.
+ * text normalization OFF for latency, so abbreviations and symbols can surface
+ * literally ("Dr." spelled "De-Er", "&" silent). We pre-render only the parts
+ * known to break this voice stack.
  *
  * Applied only to deterministic single-frame replies (greeting, need-reply,
  * price, SMS, smalltalk, farewell, contact, reminders); streamed model frames
@@ -35,9 +35,7 @@ export function speakDrkallaText(text: string): string {
     .replace(/\bca\.\s?/gi, 'circa ')
     .replace(/\bNr\.\s?/gi, 'Nummer ')
     .replace(/\bStr\.\s?/g, 'Straße ')
-    // Money backup: any "9,00 Euro" that slipped through → "9 Euro" / "11 Euro 99".
-    .replace(/(\d+),(\d{2})\s*Euro/g, (_m, euros, cents) =>
-      (cents === '00' ? `${euros} Euro` : `${euros} Euro ${Number(cents)}`))
+    // Keep German comma prices intact; "11 Euro 99" sounded wrong in live calls.
     // Tidy whitespace and a stray space before sentence punctuation.
     .replace(/\s+([.,!?])/g, '$1')
     .replace(/\s{2,}/g, ' ')

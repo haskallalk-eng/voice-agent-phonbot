@@ -259,7 +259,7 @@ describe('DrKalla live funnel: memory is written by real turns, not test fixture
       memory: createDrkallaShortTermMemory(),
       userText: 'Erzähl mir was über die Synthesis Color Cream.',
       sequence: 1,
-      modelText: 'Die Synthesis Color Cream kostet laut Shop-Datenstand 9 Euro 99 bei 100 ml.',
+      modelText: 'Die Synthesis Color Cream kostet laut Shop-Datenstand 9,99 Euro bei 100 ml.',
     });
 
     const state = first.memory.productConversations[
@@ -352,7 +352,8 @@ describe('DrKalla grounded evidence answers (catalog facts, not memory)', () => 
       withEvidence: true,
     });
 
-    expect(response.text).toContain('kostet laut Shop-Datenstand 9 Euro 99');
+    expect(response.text).toContain('kostet laut Shop-Datenstand 9,99 Euro');
+    expect(response.text).not.toContain('9 Euro 99');
     expect(response.text).toContain(DRKALLA_PROFI_PRICE_DISCLOSURE);
     expect(response.metrics.extraKbCalls).toBe(0);
   });
@@ -375,7 +376,8 @@ describe('DrKalla grounded evidence answers (catalog facts, not memory)', () => 
 
     expect(response.blocked).toBe(false);
     expect(prompts[0]).toContain('Evidence (Shop-Datenstand)');
-    expect(prompts[0]).toContain('9 Euro 99');
+    expect(prompts[0]).toContain('9,99 Euro');
+    expect(prompts[0]).not.toContain('9 Euro 99');
     expect(prompts[0]).toContain('Behaupte nie, eine SMS oder einen Link bereits gesendet zu haben');
     expect(prompts[0]).toContain('frage nie nach der Telefonnummer');
     expect(response.metrics.directiveChars).toBeLessThanOrEqual(800);
@@ -755,7 +757,7 @@ describe('DrKalla Profi price re-ask funnel', () => {
     const withProduct = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
       type: 'agent_spoke',
       turnIndex: 1,
-      text: 'Die Synthesis Color Cream kostet laut Shop-Datenstand 9 Euro 99.',
+      text: 'Die Synthesis Color Cream kostet laut Shop-Datenstand 9,99 Euro.',
       lastProduct: {
         spokenName: 'Synthesis Color Cream',
         productId: 'synthesis-color-cream',

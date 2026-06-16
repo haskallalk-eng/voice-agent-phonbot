@@ -84,6 +84,24 @@ function twoProductMemory() {
   });
 }
 
+function volumeMaskMemory() {
+  return reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+    type: 'agent_spoke',
+    turnIndex: 1,
+    text: 'Volumen Haarmaske kostet 22,90 Euro. Soll ich Ihnen den Produktlink per SMS schicken?',
+    lastProduct: {
+      spokenName: 'Volumen Haarmaske',
+      productId: 'volumen-haarmaske',
+      productKind: 'Haarmaske',
+    },
+    factsMentioned: [
+      { key: 'product.volumen-haarmaske.price', label: 'Preis' },
+      { key: 'product.volumen-haarmaske.link', label: 'Link' },
+    ],
+    lastAgentQuestion: 'Soll ich Ihnen den Produktlink per SMS schicken?',
+  });
+}
+
 describe('DrKalla custom LLM responder', () => {
   it('does not call the model while the custom runtime canary is disabled', async () => {
     let calls = 0;
@@ -246,6 +264,35 @@ describe('DrKalla custom LLM responder', () => {
     expect(response.text).toContain('Luxe-Oel Serum');
     expect(response.text).toContain('Luxe-Oel Leave-in');
     expect(response.text).not.toContain('Produktkategorie');
+  });
+
+  it('keeps an application question on the active product and does not recommend a random other product', async () => {
+    let calls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: {
+        enabled: true,
+        allowModelDirectives: true,
+        allowLiveRollout: false,
+        maxDirectiveChars: 650,
+      },
+      event: turn('Wie ist die Anwendung dieser Maske?'),
+      memory: volumeMaskMemory(),
+      client: {
+        complete: async () => {
+          calls += 1;
+          return 'Da kann ich Ihnen Anti-Orange Maske empfehlen. Soll ich Ihnen den Link dazu senden?';
+        },
+      },
+    });
+
+    expect(calls).toBe(0);
+    expect(response.text).toContain('Volumen Haarmaske');
+    expect(response.text).toMatch(/Anwendung|anwenden/i);
+    expect(response.text).toMatch(/Produktseite|kontakt/i);
+    expect(response.text).not.toContain('Anti-Orange');
+    expect(response.text).not.toContain('empfehlen');
+    expect(response.metrics.extraLlmCalls).toBe(0);
+    expect(response.metrics.extraKbCalls).toBe(0);
   });
 
   it('uses first-price Profi funnel fallback instead of a category reset when model output is empty', async () => {
@@ -1159,8 +1206,8 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
       memory,
       client: { complete: async () => { modelCalls += 1; return 'unused'; } },
       catalogSearch: (t: string) => (/pflege/i.test(t) ? [
-        { productId: 'bleach', spokenName: 'Blondierungspulver Blau & Aufhellung', shortName: 'Blondierungspulver Blau', productType: 'Haarpflege', priceText: '0 Euro 99', priceValue: 0.99, score: 4, categoryHit: true, typeHit: true },
-        { productId: 'mask', spokenName: 'Pflegemaske Trockenes', shortName: 'Pflegemaske', productType: 'Haarpflege', priceText: '8 Euro 40', priceValue: 8.4, score: 4, categoryHit: true, typeHit: true },
+        { productId: 'bleach', spokenName: 'Blondierungspulver Blau & Aufhellung', shortName: 'Blondierungspulver Blau', productType: 'Haarpflege', priceText: '0,99 Euro', priceValue: 0.99, score: 4, categoryHit: true, typeHit: true },
+        { productId: 'mask', spokenName: 'Pflegemaske Trockenes', shortName: 'Pflegemaske', productType: 'Haarpflege', priceText: '8,40 Euro', priceValue: 8.4, score: 4, categoryHit: true, typeHit: true },
       ] : []),
       evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
     });

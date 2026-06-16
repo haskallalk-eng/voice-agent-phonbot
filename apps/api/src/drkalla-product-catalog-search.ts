@@ -72,15 +72,10 @@ function contentTokens(text: string): string[] {
     .filter((t) => t.length >= 3 && !STOPWORDS.has(t) && !SHADE_TOKEN.test(t));
 }
 
-// Speakable German money: low-latency neural TTS often has currency
-// normalization OFF, so "9,00 Euro" surfaces as "neun Komma null null Euro".
-// Pre-format to how Germans say it: "9 Euro" (whole), "11 Euro 99" (with cents,
-// leading zero dropped so "9,05" reads "neun Euro fünf").
+// TTS-safe German money for this voice stack.
+// Keep comma form so Retell does not say "22 Euro 90".
 export function formatDrkallaPrice(value: number): string {
-  const cents = Math.round(value * 100);
-  const euros = Math.floor(cents / 100);
-  const rest = cents % 100;
-  return rest === 0 ? `${euros} Euro` : `${euros} Euro ${rest}`;
+  return `${value.toFixed(2).replace('.', ',')} Euro`;
 }
 
 function formatEuro(value: number): string {

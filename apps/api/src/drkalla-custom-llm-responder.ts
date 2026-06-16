@@ -115,7 +115,7 @@ function compactSystemPrompt(directives: string[]): string {
     'ANREDE (zwingend): Sprich den Anrufer ausschliesslich in der Sie-Form an — Sie, Ihnen, Ihr, Ihre. Verwende NIEMALS du, dich, dir, dein, deine, ihr (als Anrede), euch oder euer, auch wenn der Anrufer dich duzt.',
     'STIL: Antworte auf Deutsch in vollstaendigen, natuerlichen Saetzen. Niemals Stichpunkte, Aufzaehlungen, Doppelpunkt-Listen oder Telegrammstil. Fasse dich kurz, aber sprich in ganzen Saetzen.',
     'Buchstabiere Web-Adressen oder E-Mails nicht. Nenne die Website gesprochen als "drkalla punkt com" und die E-Mail als "kontakt at drkalla punkt com" — niemals mit Punkt-Zeichen, Schraegstrich oder At-Zeichen. Erwaehne die Website nur, wenn es noetig ist, nicht in jeder Antwort.',
-    'AUSSPRACHE: Sprich den Markennamen immer als "Doktor Kalla" aus, nie als "Dr.Kalla" oder buchstabiert. Nenne Preise so, wie man sie spricht ("neun Euro", "elf Euro neunundneunzig"), nie mit Komma und Nullen. Verwende keine Abkuerzungen zum Vorlesen (kein "z.B.", "bzw.", "usw.", "Nr.", "Str.", "&", "%").',
+    'AUSSPRACHE: Sprich den Markennamen immer als "Doktor Kalla" aus, nie als "Dr.Kalla" oder buchstabiert. Nenne Preise im deutschen Kommaformat wie "22,90 Euro"; schreibe nie "22 Euro 90". Verwende keine Abkuerzungen zum Vorlesen (kein "z.B.", "bzw.", "usw.", "Nr.", "Str.", "&", "%").',
     'Dr.Kalla ist ein Friseurbedarf-Shop, kein Friseursalon: keine Termine, keine Haarschnitte oder Faerbe-Dienstleistungen; verweise hoeflich auf Produkte/Salonbedarf.',
     'Nenne Adresse, Oeffnungszeiten, E-Mail, Preise oder Verfuegbarkeit nur aus der gegebenen Evidence- oder Kontakt-Fakt-Zeile. Fehlt die Angabe, erfinde nichts und verweise auf drkalla.com oder den Kontakt.',
     'Erklaere die Profi-Preise hoechstens einmal ausfuehrlich; wurde der Profi-Zugang schon erwaehnt, fasse dich knapp und biete nur kurz den Link an, ohne die Erklaerung zu wiederholen.',
@@ -454,6 +454,7 @@ function tryDeterministicSmalltalkReply(input: {
 
 // A clear, simple price question (not a comparison, not a contact question).
 const DRKALLA_PRICE_INTENT = /\b(?:was\s+kostet|wie\s*viel|wie\s*teuer|preis|preise|kostet|kosten|teuer)\b/i;
+const DRKALLA_USAGE_INTENT = /\b(?:anwendung|anwenden|angewendet|verwenden|benutzen|auftragen|einwirk\w*|wie\s+(?:nimmt|nutzt|verwendet|wendet|traegt|tr[äa]gt)|wieviel|wie\s+viel\s+davon)\b/i;
 
 /**
  * Deterministic, grounded price answer in full Sie sentences. The model
@@ -486,6 +487,19 @@ function tryDeterministicPriceAnswer(input: {
   }
   return {
     text: `${priceSentence}${DRKALLA_PROFI_PRICE_DISCLOSURE} ${DRKALLA_PROFI_LINK_QUESTION}`,
+    product: lastProduct,
+  };
+}
+
+function tryDeterministicUsageAnswer(input: {
+  userText: string;
+  memory: DrkallaShortTermVoiceMemory;
+}): DrkallaFallbackResult | null {
+  if (!DRKALLA_USAGE_INTENT.test(input.userText)) return null;
+  const lastProduct = input.memory.lastMentionedProduct;
+  if (!lastProduct) return null;
+  return {
+    text: `Zur genauen Anwendung von ${lastProduct.spokenName} liegen mir im Shop-Datenstand gerade keine sicheren Details vor. Bitte pruefen Sie die Produktseite oder kontaktieren Sie uns fuer genaue Anwendungshinweise.`,
     product: lastProduct,
   };
 }
@@ -552,6 +566,29 @@ export async function buildDrkallaCustomLlmResponse(input: {
         directiveChars: canaryTurn.directiveChars,
       },
       blockers: [],
+    };
+  }
+
+  const usageAnswer = tryDeterministicUsageAnswer({
+    userText: user,
+    memory: canaryTurn.runtime.memory,
+  });
+  if (usageAnswer) {
+    return {
+      blocked: false,
+      text: usageAnswer.text,
+      memory: reduceDrkallaShortTermMemory(
+        canaryTurn.runtime.memory,
+        deriveDrkallaAgentSpokeEvent({
+          text: usageAnswer.text,
+          turnIndex,
+          detectProducts: input.detectProducts,
+          fallbackProduct: usageAnswer.product,
+        }),
+      ),
+      metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
+      blockers: [],
+      quality: { duFormDetected: false, duFormConfidence: 'none', duFormSlips: [] },
     };
   }
 
