@@ -15,11 +15,12 @@ describe('speakDrkallaText TTS normalization', () => {
     expect(speakDrkallaText('auf drkalla.com')).not.toContain('Doktor Kalla');
   });
 
-  it('speaks money naturally (no comma-zeros)', () => {
-    expect(speakDrkallaText('Es kostet 9,00 Euro.')).toBe('Es kostet 9 Euro.');
-    expect(speakDrkallaText('Es kostet 11,99 Euro.')).toBe('Es kostet 11 Euro 99.');
-    expect(speakDrkallaText('von 9,00 Euro bis 11,99 Euro')).toBe('von 9 Euro bis 11 Euro 99');
-    expect(speakDrkallaText('9,05 Euro')).toBe('9 Euro 5'); // drop the leading zero
+  it('keeps German comma prices intact', () => {
+    expect(speakDrkallaText('Es kostet 9,00 Euro.')).toBe('Es kostet 9,00 Euro.');
+    expect(speakDrkallaText('Es kostet 11,99 Euro.')).toBe('Es kostet 11,99 Euro.');
+    expect(speakDrkallaText('von 9,00 Euro bis 11,99 Euro')).toBe('von 9,00 Euro bis 11,99 Euro');
+    expect(speakDrkallaText('9,05 Euro')).toBe('9,05 Euro');
+    expect(speakDrkallaText('22,90 Euro')).not.toContain('22 Euro 90');
   });
 
   it('expands symbols and abbreviations', () => {
