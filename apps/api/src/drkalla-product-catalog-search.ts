@@ -150,6 +150,11 @@ export function buildDrkallaShortName(title: string): string {
   const chosen = speakable.length ? speakable : words;
   let short = chosen.slice(0, 4).join(' ').trim();
   if (short.length > 42) short = short.slice(0, 42).replace(/\s+\S*$/, '').trim();
+  // A truncated name must not dangle on a preposition/article/conjunction
+  // ("Feuchtigkeitsspendende Maske für" -> "Feuchtigkeitsspendende Maske"), which
+  // reads as an unfinished sentence in TTS (real battery 2026-06-16).
+  const trimmed = short.replace(/\s+(?:für|von|mit|und|oder|der|die|das|den|dem|im|in|am|an|auf|zu|aus|bei|ohne|gegen|pro|fuer)$/i, '').trim();
+  if (trimmed) short = trimmed;
   return short || cleanSpokenName(title);
 }
 

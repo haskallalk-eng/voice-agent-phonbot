@@ -103,6 +103,14 @@ describe('DrKalla product catalog category search', () => {
       .toBe('Farbentwickler Oxidationsmittel');
   });
 
+  it('buildDrkallaShortName does not dangle on a trailing preposition/article (real battery 2026-06-16)', () => {
+    expect(buildDrkallaShortName('Reparatur Maske für')).toBe('Reparatur Maske');
+    expect(buildDrkallaShortName('Pflege Serum mit')).toBe('Pflege Serum');
+    const n = buildDrkallaShortName('Feuchtigkeitsspendende Maske für coloriertes Haar');
+    expect(n).not.toMatch(/\b(?:für|von|mit|und|oder|der|die|das)$/i);
+    expect(n).toContain('Maske');
+  });
+
   it('buildDrkallaShortName strips unpronounceable codes (ALL-CAPS, vowel-less, digit-codes)', () => {
     expect(buildDrkallaShortName('ARGENT Glanz-Shampoo & B3-PLEX Keravis')).toBe('Glanz-Shampoo');
     expect(buildDrkallaShortName('Evelon Pro Hairspray Pro Lch 500 Ml')).toBe('Evelon Pro Hairspray');

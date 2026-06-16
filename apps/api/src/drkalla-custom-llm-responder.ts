@@ -146,6 +146,10 @@ const TWO_OPTION_OFFER = /produktlink\s+oder\s+(?:den\s+link\s+(?:zum\s+)?)?prof
 const SHORT_AFFIRMATION = /^(?:ja|ja,?\s*(?:bitte|gerne?)|gerne?|okay?|ok|bitte|mach das|machen sie das|klar)[.! ]*$/i;
 const PRODUCT_LINK_CHOICE = /\b(?:produktlink|den ersten|das erste|das produkt|zum produkt|den\s+link|schick|sende|zusend|zuschick|versend)\b/i;
 const PROFI_LINK_CHOICE = /\b(?:profi[\s-]?(?:zugang|link)|den profi|zum profi|das zweite|den zweiten|der zweite|registrier)\b/i;
+// An explicit decline of a pending link/SMS offer that is NOT a bare "nein"
+// (those are caught by SMALLTALK_NEGATION): "passt", "alles gut", "brauche ich
+// nicht", "lieber nicht", "kein Link", "reicht so". Wind down, never re-offer.
+const DRKALLA_LINK_DECLINE = /\b(?:nicht\s+n(?:ö|oe)tig|brauche?\s+(?:ich\s+)?(?:das\s+|den\s+)?nicht|lieber\s+nicht|kein(?:en)?\s+link|lass(?:en\s+sie)?\s+(?:das\s+)?(?:mal\s+)?(?:gut|stecken|sein)|passt(?:\s+schon)?|alles\s+(?:gut|klar|bestens)|reicht(?:\s+so)?|sp(?:ä|ae)ter)\b/i;
 
 export type DrkallaSendLinkKind = 'product' | 'profi';
 export type DrkallaSendLinkExecutor = (input: {
@@ -700,6 +704,28 @@ export async function buildDrkallaCustomLlmResponse(input: {
     const wantsProfi = PROFI_LINK_CHOICE.test(user);
     const wantsProduct = PRODUCT_LINK_CHOICE.test(user);
     const bareYes = SHORT_AFFIRMATION.test(user);
+
+    // Decline of the offer ("nein danke, alles gut", "passt", "brauche ich nicht").
+    // The SMS-confirm path only handled YES, and SMALLTALK_NEGATION is deliberately
+    // vetoed while an SMS offer is pending — so a decline fell through to the model,
+    // which RE-OFFERED the link (real battery 2026-06-16, the "immer wieder" feel).
+    // Wind down deterministically and end on a non-offer question so the pending
+    // offer is cleared.
+    const declinesLink = !wantsProfi && !wantsProduct && !bareYes && !/\?/.test(user)
+      && (SMALLTALK_NEGATION.test(user) || DRKALLA_LINK_DECLINE.test(user));
+    if (declinesLink) {
+      const text = 'Alles klar, dann schicke ich nichts. Kann ich sonst noch etwas für Sie tun?';
+      return {
+        blocked: false,
+        text,
+        memory: reduceDrkallaShortTermMemory(
+          canaryTurn.runtime.memory,
+          deriveDrkallaAgentSpokeEvent({ text, turnIndex }),
+        ),
+        metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
+        blockers: [],
+      };
+    }
 
     if (twoOption && bareYes && !wantsProfi && !wantsProduct) {
       // Ambiguous yes to a two-option offer: ask which link, never guess.
