@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildDrkallaProductCatalogSearch, buildDrkallaShortName } from '../drkalla-product-catalog-search.js';
+import {
+  buildDrkallaProductCatalogSearch,
+  buildDrkallaShortName,
+  buildDrkallaExternalBrandStock,
+} from '../drkalla-product-catalog-search.js';
 
 const products = [
   {
@@ -140,5 +144,54 @@ describe('DrKalla product catalog category search', () => {
     expect(r[0]?.productId).toBe('shampoo-curl');           // shampoo wins
     expect(r.findIndex((p) => p.productId === 'comb-curl'))  // comb ranks below, if present
       .toBeGreaterThan(0);
+  });
+});
+
+describe('DrKalla vendor-strict external-brand stock', () => {
+  // Mirrors the real catalog shape (2026-06-16): almost all house brand, one real
+  // L'Oréal product (the Inoa), and a house product carrying a competitor SEO tag.
+  const stock = buildDrkallaExternalBrandStock([
+    {
+      handle: 'inoa',
+      title: "L'Oréal Inoa Haarfärbemittel 6.8 Ammoniakfrei 60g",
+      productType: 'Haarfärbemittel',
+      tags: ["L'Oreal Professionnel Paris", 'Haarfärbemittel'],
+      vendor: 'L\'Oreal Professionnel Paris',
+      variants: [{ price: '13.00', available: true }],
+    },
+    {
+      // House product that carries a competitor name only as an SEO tag.
+      handle: 'house-blond',
+      title: 'Blondierpulver Bond-Schutz',
+      productType: 'Haarfarbe und Blondierung',
+      tags: ['Wella', 'Blondierung'],
+      vendor: 'Dr.Kalla Cosmetics',
+      variants: [{ price: '24.19', available: true }],
+    },
+  ]);
+
+  it('reports a genuinely stocked external brand by VENDOR, accent/spelling tolerant', () => {
+    for (const q of ["L'Oréal", 'L’Oréal', 'Loreal', 'oreal']) {
+      const hits = stock(q);
+      expect(hits, q).toHaveLength(1);
+      expect(hits[0]?.productId, q).toBe('inoa');
+      expect(hits[0]?.priceText, q).toBe('13,00 Euro');
+      expect(hits[0]?.available, q).toBe(1);
+      expect(hits[0]?.shortName, q).toMatch(/Inoa/);
+    }
+  });
+
+  it('does NOT report a brand that only appears as a competitor SEO tag on a house product', () => {
+    // The house "Blondierpulver" is tagged "Wella" but its vendor is the house
+    // brand — a vendor-strict lookup must return [] so we never falsely claim Wella.
+    expect(stock('Wella')).toEqual([]);
+    expect(stock('Schwarzkopf')).toEqual([]);
+    expect(stock('Garnier')).toEqual([]);
+  });
+
+  it('excludes the house vendor and ignores too-short brand probes', () => {
+    expect(stock('Dr.Kalla')).toEqual([]);
+    expect(stock('Kalla')).toEqual([]);
+    expect(stock('a')).toEqual([]); // < 3 chars after folding
   });
 });

@@ -921,6 +921,13 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
         ]
       : [];
 
+  // Vendor-strict brand stock: the shop carries exactly one L'Oréal product (the
+  // Inoa, in stock at 13 Euro). Wella et al. are NOT carried -> [] -> honest deny.
+  const lorealStock = (brandName: string) =>
+    /l['’]?\s*or[ée]al|lor[ée]al|loreal|oreal/i.test(brandName)
+      ? [{ productId: 'inoa', spokenName: "L'Oréal Inoa Haarfärbemittel Ammoniakfrei", shortName: "L'Oréal Inoa Haarfärbemittel Ammoniakfrei", productType: 'Haarfärbemittel', priceText: '13,00 Euro', priceValue: 13, available: 1 }]
+      : [];
+
   it('A-red: a bare "Ja" with an active product type names 3 real products, no model call', async () => {
     const memory = activeTypeMemory();
     expect(memory.activeProductType?.label).toBe('Haarfarbe/Farbcreme');
@@ -1010,10 +1017,10 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
     expect(response.text).toBe('Worum darf ich mich kümmern?');
   });
 
-  it('A: a type + unstocked brand ("Haarfarbe von L\'Oréal") gives the honest brand answer, no variant loop', async () => {
-    // Real calls 2026-06-15/16: "Haarfarbe von L'Oréal" looped ("welche Nuance?")
-    // or re-pitched a wrong-brand product. We don't carry the L'Oréal range:
-    // answer honestly + offer a grounded house alternative, deterministically.
+  it('A: a STOCKED brand ("Haarfarbe von L\'Oréal") names the real product, never a false denial', async () => {
+    // Real data 2026-06-16: we DO carry one L'Oréal product (the Inoa, ammoniakfrei,
+    // 13 Euro, in stock). The old flat "führen wir nicht" was a false denial; name
+    // the real product instead — honest, grounded, and it ends the loop.
     let modelCalls = 0;
     const response = await buildDrkallaCustomLlmResponse({
       canary: CANARY,
@@ -1021,16 +1028,20 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
       memory: createDrkallaShortTermMemory(),
       client: { complete: async () => { modelCalls += 1; return 'should not be used'; } },
       catalogSearch: threeProductSearch,
+      brandStock: lorealStock,
       detectAmbiguousProduct: () => ({ label: 'L’Oréal', productCount: 4 }),
       evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
     });
     expect(modelCalls).toBe(0);
-    expect(response.text).toContain('führen wir leider nicht');
-    expect(response.text).toContain('Koleston Perfect'); // grounded house alternative
+    expect(response.text).toContain('Von L\'Oréal haben wir');
+    expect(response.text).toContain('Inoa');
+    expect(response.text).toContain('13,00 Euro');
+    expect(response.text).not.toContain('führen wir leider nicht'); // not a false denial
     expect(response.text).not.toContain('mehrere Ausführungen');
+    expect(response.text).not.toContain("haben wir nur L'Oréal Inoa"); // brand echo stripped
   });
 
-  it('A: every L\'Oréal ASR spelling (Loreal / Loyal / L\'Oréal) gets the same honest brand answer', async () => {
+  it('A: every L\'Oréal ASR spelling (Loreal / Loyal / L\'Oréal) names the same stocked product', async () => {
     for (const spelling of ['Haben Sie Haarfarbe von Loreal?', 'Habt ihr was von Loyal?', 'Ich möchte eine Haarfarbe von L’Oréal.']) {
       let modelCalls = 0;
       const response = await buildDrkallaCustomLlmResponse({
@@ -1039,12 +1050,87 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
         memory: activeTypeMemory(),
         client: { complete: async () => { modelCalls += 1; return 'should not be used'; } },
         catalogSearch: threeProductSearch,
+        brandStock: lorealStock,
         evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
       });
       expect(modelCalls, spelling).toBe(0);
-      expect(response.text, spelling).toContain("L'Oréal");
-      expect(response.text, spelling).toContain('führen wir leider nicht');
+      expect(response.text, spelling).toContain("Von L'Oréal haben wir");
+      expect(response.text, spelling).toContain('Inoa');
     }
+  });
+
+  it('A: a STOCKED brand answer reads grammatically for a range price (no "für von")', async () => {
+    // If the stocked brand product had a price range, the clause must not read
+    // "für von 12 Euro bis 17 Euro" — a range is appended with a comma.
+    const rangeBrandStock = (brandName: string) =>
+      /or[ée]al/i.test(brandName)
+        ? [{ productId: 'inoa', spokenName: 'Inoa', shortName: 'Inoa', productType: 'Haarfärbemittel', priceText: 'von 12,00 Euro bis 17,00 Euro', priceValue: 12, available: 1 }]
+        : [];
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Haben Sie L’Oréal?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => 'should not be used' },
+      catalogSearch: threeProductSearch,
+      brandStock: rangeBrandStock,
+      evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
+    });
+    expect(response.text).toContain('Inoa, von 12,00 Euro bis 17,00 Euro');
+    expect(response.text).not.toContain('für von');
+  });
+
+  it('A: a genuinely UNSTOCKED brand ("von Wella") still gets the honest deny + house alternative', async () => {
+    // Vendor-strict stock returns [] for Wella -> the honest "führen wir nicht".
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Haben Sie eine Haarfarbe von Wella?'),
+      memory: activeTypeMemory(),
+      client: { complete: async () => 'should not be used' },
+      catalogSearch: threeProductSearch,
+      brandStock: lorealStock, // returns [] for Wella
+      evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
+    });
+    expect(response.text).toContain('Produkte von Wella führen wir leider nicht');
+    expect(response.text).toContain('Koleston Perfect'); // grounded house alternative
+  });
+
+  it('A: an unstocked brand with a range-priced house alternative reads grammatically (no "für von")', async () => {
+    // Range priceText reads "von X bis Y"; the brand alternative must not produce
+    // "für von 12 Euro bis 17 Euro" (real smoke 2026-06-16) — append with a comma.
+    const rangeSearch = (text: string) =>
+      /shampoo/i.test(text)
+        ? [{ productId: 'glanz', spokenName: 'Glanz-Shampoo', shortName: 'Glanz-Shampoo', productType: 'Shampoo', priceText: 'von 12,00 Euro bis 17,00 Euro', score: 4, categoryHit: true, typeHit: true, priceValue: null }]
+        : [];
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Habt ihr Shampoo von Wella?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => 'should not be used' },
+      catalogSearch: rangeSearch,
+      evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
+    });
+    expect(response.text).toContain('führen wir leider nicht');
+    expect(response.text).toContain('Glanz-Shampoo, von 12,00 Euro bis 17,00 Euro');
+    expect(response.text).not.toContain('für von');
+  });
+
+  it('B: the recommender states the price gender-neutrally ("Das kostet", never "Es kostet")', async () => {
+    // "die Haarmaske" is feminine — "Es kostet" was a genus slip (real smoke 2026-06-16).
+    const maskSearch = (text: string) =>
+      /haarmaske|maske/i.test(text)
+        ? [{ productId: 'volmask', spokenName: 'Volumen Haarmaske', shortName: 'Volumen Haarmaske', productType: 'Haarmaske', priceText: '22,90 Euro', score: 5, categoryHit: true, typeHit: true, priceValue: null }]
+        : [];
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Habt ihr Haarmasken?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => 'should not be used' },
+      catalogSearch: maskSearch,
+      evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
+    });
+    expect(response.text).toContain('Da kann ich Ihnen Volumen Haarmaske empfehlen');
+    expect(response.text).toContain('Das kostet 22,90 Euro');
+    expect(response.text).not.toContain('Es kostet');
   });
 
   it('A: after a variant question was already asked, the next turn reaches a product (anti-loop)', async () => {
