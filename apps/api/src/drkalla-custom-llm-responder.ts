@@ -9,6 +9,7 @@ import {
 } from './drkalla-contact-facts.js';
 import type { DrkallaProductEvidenceLookup } from './drkalla-product-evidence.js';
 import type { DrkallaProductCatalogSearch, DrkallaExternalBrandStock } from './drkalla-product-catalog-search.js';
+import type { DrkallaKnowledgeRetriever } from './drkalla-knowledge-chunks-retriever.js';
 import type { DrkallaFaqMatcher } from './drkalla-faq-match.js';
 import { detectDrkallaDuForm } from './drkalla-formality-detector.js';
 import { detectDrkallaUserProductType } from './drkalla-product-type-detector.js';
@@ -616,9 +617,11 @@ export async function buildDrkallaCustomLlmResponse(input: {
   catalogSearch?: DrkallaProductCatalogSearch;
   brandStock?: DrkallaExternalBrandStock;
   faqMatch?: DrkallaFaqMatcher;
+  knowledgeRetriever?: DrkallaKnowledgeRetriever;
   executeSendLink?: DrkallaSendLinkExecutor;
   onDelta?: (chunk: string) => void;
   onFaqCandidate?: (question: string, answer: string) => void;
+  onKnowledgeChunk?: (sourceId: string, chunkId: string, query: string, score: number) => void;
   signal?: AbortSignal;
 }): Promise<DrkallaCustomLlmResponse> {
   const canaryTurn = buildDrkallaCustomRuntimeCanaryTurn({
@@ -1036,6 +1039,26 @@ export async function buildDrkallaCustomLlmResponse(input: {
       .map((p) => (p.priceText ? `${p.shortName} (${p.priceText})` : p.shortName))
       .join('; ');
     system += `\nKatalog-Treffer zum Bedarf (nenne dem Anrufer konkret ein bis drei dieser echten Produkte mit genau diesen kurzen Namen, erfinde nichts dazu, und frage nicht erneut nach der Produktart): ${list}`;
+  }
+  // Free-text knowledge grounding (shop policies, product usage/info, ingested
+  // PDFs): additive + conservative. Fires ONLY when no product is named AND the
+  // catalog gave no structured grounding, so catalog/FAQ always win. Pure
+  // in-memory lexical retrieval (no network/DB) so the deterministic-turn p50 is
+  // untouched (this block only runs on a model turn). Injected as a SOURCE-LABELED
+  // line the model must answer FROM and nothing else — same anti-hallucination
+  // posture as the catalog line; it never speaks raw chunk text itself.
+  if (namedNow.length === 0 && catalogHits.length === 0 && input.knowledgeRetriever) {
+    const kb = input.knowledgeRetriever(user);
+    if (kb && kb.hits.length) {
+      const block = kb.hits
+        .slice(0, 2)
+        .map((h) => `Quelle ${h.sourceTitle}: ${h.text.slice(0, 300)}`)
+        .join(' | ')
+        .slice(0, 640);
+      system += `\nWissens-Beleg (beantworte die Frage NUR mit diesen Quellen, nenne keine Fakten, die hier nicht stehen, erfinde nichts; wenn die Antwort hier nicht steht, sage das ehrlich und verweise auf drkalla punkt com): ${block}`;
+      const lead = kb.hits[0]!;
+      input.onKnowledgeChunk?.(lead.sourceId, lead.chunkId, user, kb.confidence);
+    }
   }
   const maxOutputChars = 420;
   let modelText = '';
