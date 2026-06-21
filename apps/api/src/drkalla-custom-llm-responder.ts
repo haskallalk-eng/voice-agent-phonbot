@@ -272,6 +272,13 @@ function tryDeterministicTypeListReply(input: {
 // deterministic recommender, which repeated the same template and never compared.
 const NEED_VETO = /\b(?:unterschied|vergleich\w*|verglichen|besser|schlechter|empfehlenswert|ratsam|wie\s+(?:wende|benutz|verwend|trag|oft|lange|viel)|warum|wieso|weshalb|anwend|inhaltsstoff|vertr[äa]glich|allergie|wof[üu]r|wozu)\b/i;
 
+// A "how do I use/apply this?" turn. NEED_VETO's stems use a trailing \b, so an
+// inflected "wie trage ich ... auf" slips past it (trag\b != "trage") and the
+// recommender wrongly pitched a product instead of explaining application (live
+// smoke 2026-06-16). This catches the inflected how-to forms so a usage question
+// is answered from the knowledge layer, not pitched as a product.
+const DRKALLA_USAGE_HOWTO = /\bwie\s+(?:wende|benutz|verwend|trag|nutz|nehm|anwend|auftrag)\w*|\banwendung\b|\bauftrag\w*\b/i;
+
 // A generic hair-type descriptor ("trockenes Haar", "feines & coloriertes Haar")
 // is a NEED, not a specific product line — it must never drive a variant
 // clarification. Matches a hair-condition adjective somewhere before "Haar".
@@ -330,7 +337,9 @@ function tryDeterministicNeedReply(input: {
   allowActiveTypeFallback?: boolean;
 }): DrkallaFallbackResult | null {
   const text = input.userText;
-  if (NEED_VETO.test(text) || detectDrkallaContactIntent(text)) return null;
+  // A how-to/usage question ("wie trage ich ... auf") must not be answered with a
+  // product pitch — it falls through to the knowledge layer + model.
+  if (NEED_VETO.test(text) || DRKALLA_USAGE_HOWTO.test(text) || detectDrkallaContactIntent(text)) return null;
   // A plain price question about the active product ("was kostet das?") belongs
   // to the deterministic price path, which answers it from the catalog — not a
   // fresh recommendation that pitches a DIFFERENT product (real call 2026-06-15).
@@ -1033,8 +1042,11 @@ export async function buildDrkallaCustomLlmResponse(input: {
     : [];
   // Care need must not feed a Blondierung/Entwickler chemical to the model either.
   const catalogHits = dropChemicalForCareIntent(catalogHitsRaw, user, activeType?.label ?? null);
+  // A how-to/usage question wants the APPLICATION explained, not a product pitched
+  // — suppress the catalog grounding and let the knowledge layer ground it instead.
+  const isUsageHowto = DRKALLA_USAGE_HOWTO.test(user);
   let system = compactSystemPrompt(canaryTurn.modelDirectives);
-  if (catalogHits.length) {
+  if (catalogHits.length && !isUsageHowto) {
     const list = catalogHits
       .map((p) => (p.priceText ? `${p.shortName} (${p.priceText})` : p.shortName))
       .join('; ');
@@ -1047,7 +1059,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // untouched (this block only runs on a model turn). Injected as a SOURCE-LABELED
   // line the model must answer FROM and nothing else — same anti-hallucination
   // posture as the catalog line; it never speaks raw chunk text itself.
-  if (namedNow.length === 0 && catalogHits.length === 0 && input.knowledgeRetriever) {
+  if (namedNow.length === 0 && (catalogHits.length === 0 || isUsageHowto) && input.knowledgeRetriever) {
     const kb = input.knowledgeRetriever(user);
     if (kb && kb.hits.length) {
       const block = kb.hits

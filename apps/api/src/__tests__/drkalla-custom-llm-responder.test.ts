@@ -1584,7 +1584,7 @@ describe('DrKalla knowledge-chunk grounding injection (additive, model-path only
       knowledgeRetriever: () => { throw new Error('knowledgeRetriever must not run when catalog grounded'); },
       evidenceLookup: noEvidence,
     });
-    expect(captured).toContain('Katalog-Treffer');
+    expect(captured).toContain('Katalog-Treffer zum Bedarf'); // the injected line (not the base directive mention)
     expect(captured).not.toContain('Wissens-Beleg');
   });
 
@@ -1617,5 +1617,30 @@ describe('DrKalla knowledge-chunk grounding injection (additive, model-path only
     });
     expect(modelCalls).toBe(0);
     expect(response.text).toContain('Versand');
+  });
+
+  it('a how-to/usage question grounds from the knowledge layer instead of pitching a product', async () => {
+    // "Wie trage ich eine Haarmaske auf?" used to pitch a product (NEED_VETO's
+    // trag\b missed the inflected "trage"). Now it suppresses the catalog pitch and
+    // grounds from the knowledge layer so the model can explain the application.
+    let captured = '';
+    let kbHook = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Wie trage ich eine Haarmaske richtig auf?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async ({ system }) => { captured = system; return 'Tragen Sie die Maske ins handtuchtrockene Haar und lassen Sie sie einwirken.'; } },
+      catalogSearch: (t: string) => (/haarmaske|maske/i.test(t)
+        ? [{ productId: 'm', spokenName: 'Volumen Haarmaske', shortName: 'Volumen Haarmaske', productType: 'Haarmaske', priceText: '22,90 Euro', priceValue: 22.9, score: 5, categoryHit: true, typeHit: true }]
+        : []),
+      faqMatch: () => null,
+      knowledgeRetriever: kbHit('Die Haarmaske nach der Waesche ins handtuchtrockene Haar geben, einige Minuten einwirken lassen, dann ausspuelen.', 'Pflegende Haarmaske'),
+      onKnowledgeChunk: () => { kbHook += 1; },
+      evidenceLookup: noEvidence,
+    });
+    expect(response.text).not.toContain('Da kann ich Ihnen');     // NOT a product pitch
+    expect(captured).toContain('Wissens-Beleg');                  // grounded from the KB
+    expect(captured).not.toContain('Katalog-Treffer zum Bedarf'); // catalog injection suppressed for how-to
+    expect(kbHook).toBe(1);
   });
 });
