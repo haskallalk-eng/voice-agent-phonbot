@@ -27,6 +27,11 @@ import {
   type DrkallaFaqMatcher,
   type DrkallaFaqRawEntry,
 } from './drkalla-faq-match.js';
+import {
+  buildDrkallaKnowledgeRetriever,
+  type DrkallaKnowledgeRetriever,
+  type DrkallaKnowledgeChunksSnapshot,
+} from './drkalla-knowledge-chunks-retriever.js';
 import { DRKALLA_LINK_TOOL_PATH, drkallaLinkToolSignature } from './drkalla-link-tool.js';
 import {
   createDrkallaCanaryLatencyRecorder,
@@ -366,6 +371,24 @@ export function loadDrkallaFaqMatcher(faqPath?: string): DrkallaFaqMatcher | und
   }
 }
 
+/**
+ * One-time startup load of the in-memory chunked-document retriever (shop
+ * policies, product usage/info, ingested PDFs) from the chunk snapshot. Fail-soft:
+ * a missing/invalid snapshot disables the layer (the agent answers as before).
+ * The retriever is synchronous + pure in-memory — no per-turn network/DB.
+ */
+export function loadDrkallaKnowledgeRetriever(chunksPath?: string): DrkallaKnowledgeRetriever | undefined {
+  try {
+    const parsed = readFirstJson(
+      resolveDrkallaSnapshotPath('drkalla-knowledge-chunks.json', chunksPath ?? process.env.DRKALLA_KNOWLEDGE_CHUNKS_PATH),
+    ) as DrkallaKnowledgeChunksSnapshot | null;
+    if (!parsed || !Array.isArray(parsed.chunks) || !parsed.chunks.length) return undefined;
+    return buildDrkallaKnowledgeRetriever(parsed);
+  } catch {
+    return undefined;
+  }
+}
+
 function reply(responseId: string | number, content: string, endCall = false): RetellDrkallaCustomLlmReply {
   return {
     response_type: 'response',
@@ -392,11 +415,13 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
   catalogSearch?: DrkallaProductCatalogSearch;
   brandStock?: DrkallaExternalBrandStock;
   faqMatch?: DrkallaFaqMatcher;
+  knowledgeRetriever?: DrkallaKnowledgeRetriever;
   executeSendLink?: DrkallaSendLinkExecutor;
   sequence?: number;
   noInputReminderCount?: number;
   onDelta?: (chunk: string) => void;
   onFaqCandidate?: (question: string, answer: string) => void;
+  onKnowledgeChunk?: (sourceId: string, chunkId: string, query: string, score: number) => void;
   signal?: AbortSignal;
   isCallOpening?: boolean;
 }): Promise<RetellDrkallaCustomLlmReply | null> {
@@ -454,9 +479,11 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
     catalogSearch: input.catalogSearch,
     brandStock: input.brandStock,
     faqMatch: input.faqMatch,
+    knowledgeRetriever: input.knowledgeRetriever,
     executeSendLink: input.executeSendLink,
     onDelta: input.onDelta,
     onFaqCandidate: input.onFaqCandidate,
+    onKnowledgeChunk: input.onKnowledgeChunk,
     signal: input.signal,
   });
   input.onMemory?.(response.memory);
@@ -583,6 +610,7 @@ export async function registerRetellDrkallaCustomLlmWs(
     catalogSearch?: DrkallaProductCatalogSearch;
     brandStock?: DrkallaExternalBrandStock;
     faqMatch?: DrkallaFaqMatcher;
+    knowledgeRetriever?: DrkallaKnowledgeRetriever;
   } = {},
 ): Promise<void> {
   const aliasEntries = options.detectProducts ? [] : loadDrkallaProductNameEntries();
@@ -595,6 +623,7 @@ export async function registerRetellDrkallaCustomLlmWs(
   const catalogSearch = options.catalogSearch ?? loadDrkallaProductCatalogSearch();
   const brandStock = options.brandStock ?? loadDrkallaExternalBrandStock();
   const faqMatch = options.faqMatch ?? loadDrkallaFaqMatcher();
+  const knowledgeRetriever = options.knowledgeRetriever ?? loadDrkallaKnowledgeRetriever();
   // Real SMS sending stays off unless explicitly enabled; the executor goes
   // through the existing policied send_link tool endpoint (live-call verify,
   // URL allowlist, per-call dedupe, audit trace) via local injection.
@@ -870,6 +899,7 @@ export async function registerRetellDrkallaCustomLlmWs(
             catalogSearch,
             brandStock,
             faqMatch,
+            knowledgeRetriever,
             executeSendLink,
             sequence: turnCounter,
             noInputReminderCount,
@@ -878,6 +908,11 @@ export async function registerRetellDrkallaCustomLlmWs(
               // Offline curation signal: a general question the model had to
               // answer. Logged only; the owner reviews via drkalla:faq-propose.
               app.log.info({ event: 'faq_candidate', callId, question, answer }, 'drkalla canary faq candidate');
+            },
+            onKnowledgeChunk: (sourceId, chunkId, _query, score) => {
+              // Observability: which knowledge chunk grounded a turn (no query text
+              // logged — privacy). Lets us tune KB_CONFIDENCE + spot weak sources.
+              app.log.info({ event: 'kb_chunk', callId, sourceId, chunkId, score: Number(score.toFixed(3)) }, 'drkalla canary knowledge chunk');
             },
             signal: myAbort?.signal,
             isCallOpening,

@@ -1540,3 +1540,82 @@ describe('DrKalla deterministic smalltalk fast-paths (latency: low-content turns
     expect(response.text).toContain('Alles klar');
   });
 });
+
+describe('DrKalla knowledge-chunk grounding injection (additive, model-path only)', () => {
+  const CANARY = { enabled: true, allowModelDirectives: true, allowLiveRollout: false, maxDirectiveChars: 800 };
+  const noEvidence = { byId: () => null, byKeyHash: () => null } as never;
+  const kbHit = (text: string, title = 'Widerruf und Rueckgabe') => () => ({
+    hits: [{ chunkId: 'page:1', sourceId: 'page:1', sourceTitle: title, category: 'policies', text, score: 3 }],
+    confidence: 0.8,
+  });
+
+  it('injects source-labeled grounding on a knowledge question (no product, no catalog, no FAQ)', async () => {
+    let captured = '';
+    let hookCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Was passiert bei einer Reklamation?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async ({ system }) => { captured = system; return 'Sie haben ein Widerrufsrecht von vierzehn Tagen.'; } },
+      catalogSearch: () => [],
+      faqMatch: () => null,
+      knowledgeRetriever: kbHit('Sie haben ein gesetzliches Widerrufsrecht von vierzehn Tagen.'),
+      onKnowledgeChunk: () => { hookCalls += 1; },
+      evidenceLookup: noEvidence,
+    });
+    expect(captured).toContain('Wissens-Beleg');
+    expect(captured).toContain('Widerruf und Rueckgabe');
+    expect(captured).toContain('erfinde nichts'); // anti-hallucination instruction present
+    expect(hookCalls).toBe(1);
+    expect(response.text).toBeTruthy();
+  });
+
+  it('does NOT inject knowledge grounding when the catalog already grounded the turn (catalog wins)', async () => {
+    let captured = '';
+    await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Was ist besser für trockenes Haar?'), // NEED_VETO -> model, with catalog hits
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async ({ system }) => { captured = system; return 'Eine reichhaltige Pflegemaske ist ideal.'; } },
+      catalogSearch: (t: string) => (/haar|pflege|trocken/i.test(t)
+        ? [{ productId: 'm', spokenName: 'Pflegemaske', shortName: 'Pflegemaske', productType: 'Haarmaske', priceText: '9,00 Euro', priceValue: 9, score: 4, categoryHit: true, typeHit: true }]
+        : []),
+      faqMatch: () => null,
+      knowledgeRetriever: () => { throw new Error('knowledgeRetriever must not run when catalog grounded'); },
+      evidenceLookup: noEvidence,
+    });
+    expect(captured).toContain('Katalog-Treffer');
+    expect(captured).not.toContain('Wissens-Beleg');
+  });
+
+  it('adds no grounding when retrieval is below confidence (returns null)', async () => {
+    let captured = '';
+    await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Erzählen Sie mir bitte einen Witz'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async ({ system }) => { captured = system; return 'Gerne!'; } },
+      catalogSearch: () => [],
+      faqMatch: () => null,
+      knowledgeRetriever: () => null,
+      evidenceLookup: noEvidence,
+    });
+    expect(captured).not.toContain('Wissens-Beleg');
+  });
+
+  it('a curated FAQ answer still wins before the knowledge layer (no model, no injection)', async () => {
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Wie sind eure Versandkosten?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => { modelCalls += 1; return 'should not be used'; } },
+      catalogSearch: () => [],
+      faqMatch: () => ({ id: 'versand', answer: 'Der Versand ist ab dreißig Euro kostenlos.', tags: ['versand'] }),
+      knowledgeRetriever: () => { throw new Error('FAQ must short-circuit before the knowledge layer'); },
+      evidenceLookup: noEvidence,
+    });
+    expect(modelCalls).toBe(0);
+    expect(response.text).toContain('Versand');
+  });
+});
