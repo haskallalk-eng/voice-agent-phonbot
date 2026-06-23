@@ -32,6 +32,11 @@ import {
   type DrkallaKnowledgeRetriever,
   type DrkallaKnowledgeChunksSnapshot,
 } from './drkalla-knowledge-chunks-retriever.js';
+import {
+  buildDrkallaLiveOverlay,
+  type DrkallaLiveOverlay,
+  type DrkallaPublishPayload,
+} from './drkalla-faq-overlay.js';
 import { DRKALLA_LINK_TOOL_PATH, drkallaLinkToolSignature } from './drkalla-link-tool.js';
 import {
   createDrkallaCanaryLatencyRecorder,
@@ -71,6 +76,10 @@ const SAFE_UNAVAILABLE_TEXT = 'Entschuldigung, ich kann gerade nicht weiterhelfe
 // instead of an audible mid-name period/abbreviation; "der Assistent von Doktor
 // Kalla" flows better than the compound "der Dr.Kalla Assistent".
 export const DRKALLA_CUSTOM_RUNTIME_GREETING = 'Hallo, hier ist der Assistent von Doktor Kalla. Wie kann ich Ihnen beim Friseurbedarf helfen?';
+
+// Spoken when the agent is switched OFF (env gate or the platform's on/off toggle):
+// one short line, then hang up — the caller is never left in silence.
+export const DRKALLA_CUSTOM_RUNTIME_UNAVAILABLE = 'Hallo, der telefonische Assistent von Doktor Kalla ist im Moment leider nicht verfügbar. Bitte versuchen Sie es später noch einmal. Auf Wiederhören.';
 
 export type RetellDrkallaCustomLlmParsedMessage = {
   interactionType: string;
@@ -633,6 +642,62 @@ export async function registerRetellDrkallaCustomLlmWs(
   // recorded; no ASR/provider timestamps are fabricated. See PLANS.md: p50<=
   // 500ms is unmet on MODEL turns (TTFT-bound) but met on deterministic turns.
   const latencyRecorder: DrkallaCanaryLatencyRecorder = createDrkallaCanaryLatencyRecorder();
+
+  // Live "publish overlay": the platform (dr-kalla-ultimate-app) POSTs the
+  // approved FAQ + an on/off flag here; this in-memory overlay then overrides the
+  // baked FAQ matcher and the on/off, so an owner edit takes effect in seconds
+  // without a redeploy. In-memory only (v1): a restart reverts to baked snapshots
+  // until the next publish (the platform is the source of truth).
+  let liveOverlay: DrkallaLiveOverlay = { faqCount: 0 };
+
+  // Authenticated publish endpoint (reachable from the platform via Caddy's
+  // /retell* proxy). Shared-secret auth, timing-safe; reuses secretAccepted().
+  const publishSecret = process.env.DRKALLA_ADMIN_PUBLISH_SECRET;
+  app.post('/retell/custom-llm/drkalla/admin/publish', async (request, reply) => {
+    const header = typeof request.headers.authorization === 'string'
+      ? request.headers.authorization.replace(/^Bearer\s+/i, '')
+      : '';
+    const body = (request.body ?? {}) as DrkallaPublishPayload & { secret?: unknown };
+    const candidate = header || (typeof body.secret === 'string' ? body.secret : '');
+    if (!secretAccepted(publishSecret, candidate)) {
+      return reply.code(401).send({ ok: false, error: 'unauthorized' });
+    }
+    try {
+      liveOverlay = buildDrkallaLiveOverlay(body, new Date().toISOString());
+      app.log.info(
+        { event: 'drkalla_publish', faqCount: liveOverlay.faqCount, enabled: liveOverlay.enabled ?? null },
+        'drkalla canary publish applied',
+      );
+      return reply.send({
+        ok: true,
+        faqCount: liveOverlay.faqCount,
+        enabled: liveOverlay.enabled ?? null,
+        publishedAt: liveOverlay.publishedAt,
+      });
+    } catch (error) {
+      app.log.warn({ err: error instanceof Error ? error.message : String(error) }, 'drkalla canary publish failed');
+      return reply.code(400).send({ ok: false, error: 'invalid_payload' });
+    }
+  });
+
+  // Read-only status for the platform to confirm what is live.
+  app.get('/retell/custom-llm/drkalla/admin/status', async (request, reply) => {
+    const header = typeof request.headers.authorization === 'string'
+      ? request.headers.authorization.replace(/^Bearer\s+/i, '')
+      : '';
+    const q = request.query as { secret?: string };
+    if (!secretAccepted(publishSecret, header || q.secret || '')) {
+      return reply.code(401).send({ ok: false, error: 'unauthorized' });
+    }
+    return reply.send({
+      ok: true,
+      envEnabled: process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED === 'true',
+      overlayEnabled: liveOverlay.enabled ?? null,
+      faqCount: liveOverlay.faqCount,
+      publishedAt: liveOverlay.publishedAt ?? null,
+    });
+  });
+
   const handler = (socket: WebSocket, request: { query: unknown; params: unknown }) => {
     const query = request.query as { secret?: string; token?: string };
     const params = request.params as { secret?: string };
@@ -643,7 +708,10 @@ export async function registerRetellDrkallaCustomLlmWs(
       process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET,
       params.secret ?? query.secret ?? query.token,
     );
-    const enabled = process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED === 'true';
+    // Effective on/off: the env gate AND the platform's live override (the owner's
+    // "Agent ausschalten" sets overlay.enabled=false → calls are declined).
+    const enabled = process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED === 'true'
+      && liveOverlay.enabled !== false;
     const client = options.client ?? createOpenAiClient();
     let memory = createDrkallaShortTermMemory();
     let turnCounter = 0;
@@ -687,6 +755,22 @@ export async function registerRetellDrkallaCustomLlmWs(
         }));
       } catch (error) {
         app.log.warn({ callId, err: error instanceof Error ? error.message : String(error) }, 'drkalla canary begin-message send failed');
+      }
+    } else if (secretOk) {
+      // Agent is OFF (env gate or the platform's "ausschalten" toggle): do not run
+      // a conversation. Say one short unavailable line and hang up so the caller is
+      // not left in silence. ("Agent geht nicht mehr ans Telefon.")
+      greeted = true;
+      try {
+        socket.send(JSON.stringify({
+          response_type: 'response',
+          response_id: 0,
+          content: DRKALLA_CUSTOM_RUNTIME_UNAVAILABLE,
+          content_complete: true,
+          end_call: true,
+        }));
+      } catch (error) {
+        app.log.warn({ callId, err: error instanceof Error ? error.message : String(error) }, 'drkalla canary unavailable-message send failed');
       }
     }
 
@@ -898,7 +982,8 @@ export async function registerRetellDrkallaCustomLlmWs(
             evidenceLookup,
             catalogSearch,
             brandStock,
-            faqMatch,
+            // Live-published FAQ (from the platform) overrides the baked snapshot.
+            faqMatch: liveOverlay.faqMatch ?? faqMatch,
             knowledgeRetriever,
             executeSendLink,
             sequence: turnCounter,
