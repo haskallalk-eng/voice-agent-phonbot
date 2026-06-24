@@ -115,7 +115,14 @@ export async function buildKnowledgeRetrieverFromPublish(
   if (!seeds.length) return { chunkCount: 0 };
   const snapshot = await buildDrkallaKnowledgeChunks({ seeds, withEmbeddings: false, now: new Date(nowIso) });
   if (!snapshot.chunks.length) return { chunkCount: 0 };
-  return { retriever: buildDrkallaKnowledgeRetriever(snapshot), chunkCount: snapshot.chunks.length };
+  // Owner-curated + typically small: a looser confidence gate than the big baked
+  // corpus (whose corpus-wide IDF is high). Otherwise a freshly-published source
+  // with few chunks scores below the default gate and the model answers
+  // UNGROUNDED — i.e. can hallucinate the opposite of what was just published.
+  return {
+    retriever: buildDrkallaKnowledgeRetriever(snapshot, { confidence: 0.3 }),
+    chunkCount: snapshot.chunks.length,
+  };
 }
 
 /**
