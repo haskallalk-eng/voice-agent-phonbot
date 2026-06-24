@@ -425,6 +425,7 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
   brandStock?: DrkallaExternalBrandStock;
   faqMatch?: DrkallaFaqMatcher;
   knowledgeRetriever?: DrkallaKnowledgeRetriever;
+  knowledgePriority?: boolean;
   executeSendLink?: DrkallaSendLinkExecutor;
   sequence?: number;
   noInputReminderCount?: number;
@@ -489,6 +490,7 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
     brandStock: input.brandStock,
     faqMatch: input.faqMatch,
     knowledgeRetriever: input.knowledgeRetriever,
+    knowledgePriority: input.knowledgePriority,
     executeSendLink: input.executeSendLink,
     onDelta: input.onDelta,
     onFaqCandidate: input.onFaqCandidate,
@@ -987,6 +989,8 @@ export async function registerRetellDrkallaCustomLlmWs(
             // Live-published FAQ + knowledge (from the platform) override the baked snapshots.
             faqMatch: liveOverlay.faqMatch ?? faqMatch,
             knowledgeRetriever: liveOverlay.knowledgeRetriever ?? knowledgeRetriever,
+            // Owner-published knowledge grounds even over weak catalog tag-matches.
+            knowledgePriority: !!liveOverlay.knowledgeRetriever,
             executeSendLink,
             sequence: turnCounter,
             noInputReminderCount,
