@@ -1666,4 +1666,45 @@ describe('DrKalla knowledge-chunk grounding injection (additive, model-path only
     expect(captured).toContain('Reparatur-Service');
     expect(kbHook).toBe(1);
   });
+
+  it('a SERVICE question routes to knowledge even with a product word ("Föhn ... Reparatur")', async () => {
+    // "reparatur" also lives in DRKALLA_CARE_INTENT, so without the service veto a
+    // repair question with "Föhn" gets hijacked into a product pitch. It must route
+    // to the knowledge/FAQ layer instead.
+    let captured = '';
+    let kbHook = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Kann ich einen defekten Föhn zur Reparatur einschicken?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async ({ system }) => { captured = system; return 'Ja, das Einschicken ist möglich.'; } },
+      catalogSearch: (t: string) => (/föhn|foehn|haartrockner/i.test(t)
+        ? [{ productId: 'f', spokenName: 'Haartrockner', shortName: 'Haartrockner', productType: 'Haartrockner', priceText: '29,90 Euro', priceValue: 29.9, score: 5, categoryHit: true, typeHit: true }]
+        : []),
+      faqMatch: () => null,
+      knowledgeRetriever: kbHit('Defekte Geräte können kostenlos zur Reparatur eingeschickt werden; die Bearbeitung dauert etwa zehn Werktage.', 'Reparatur-Service'),
+      onKnowledgeChunk: () => { kbHook += 1; },
+      evidenceLookup: noEvidence,
+    });
+    expect(response.text).not.toContain('Da kann ich Ihnen');     // not a product pitch
+    expect(captured).not.toContain('Katalog-Treffer zum Bedarf'); // catalog suppressed
+    expect(captured).toContain('Wissens-Beleg');                  // grounded from knowledge
+    expect(kbHook).toBe(1);
+  });
+
+  it('a clear PRODUCT question still hits the catalog (service routing does not over-veto)', async () => {
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Habt ihr Shampoo?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => 'should not be used' },
+      catalogSearch: (t: string) => (/shampoo/i.test(t)
+        ? [{ productId: 's', spokenName: 'Glanz-Shampoo', shortName: 'Glanz-Shampoo', productType: 'Shampoo', priceText: '12,90 Euro', priceValue: 12.9, score: 5, categoryHit: true, typeHit: true }]
+        : []),
+      faqMatch: () => null,
+      knowledgeRetriever: () => { throw new Error('knowledge layer must not run for a clean product question'); },
+      evidenceLookup: noEvidence,
+    });
+    expect(response.text).toContain('Da kann ich Ihnen Glanz-Shampoo empfehlen'); // catalog need-reply still wins
+  });
 });

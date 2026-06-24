@@ -279,6 +279,15 @@ const NEED_VETO = /\b(?:unterschied|vergleich\w*|verglichen|besser|schlechter|em
 // is answered from the knowledge layer, not pitched as a product.
 const DRKALLA_USAGE_HOWTO = /\bwie\s+(?:wende|benutz|verwend|trag|nutz|nehm|anwend|auftrag)\w*|\banwendung\b|\bauftrag\w*\b/i;
 
+// A SERVICE/after-sales question (repair, warranty, return, exchange, spare parts,
+// cancellation). These read as a SERVICE intent, not a product need — but stems
+// like "reparatur" also live in DRKALLA_CARE_INTENT, so without this veto a
+// "kann ich den defekten Föhn zur Reparatur einschicken?" gets hijacked by the
+// catalog/care path and pitches a product. Vetoing routes it to the FAQ/knowledge
+// layer instead. None of these stems appear in a buy intent ("Föhn kaufen" has no
+// service token → still hits the catalog).
+const DRKALLA_SERVICE_INTENT = /\b(?:reparatur|reparier\w*|defekt\w*|kaputt\w*|garantie|gew(?:ä|ae)hrleistung|einschick\w*|einsend\w*|zur(?:ü|ue)cksend\w*|r(?:ü|ue)cksend\w*|retour\w*|umtausch\w*|reklamat\w*|reklamier\w*|storno|stornier\w*|nachbestell\w*|ersatzteil\w*|widerruf\w*)\b/i;
+
 // A generic hair-type descriptor ("trockenes Haar", "feines & coloriertes Haar")
 // is a NEED, not a specific product line — it must never drive a variant
 // clarification. Matches a hair-condition adjective somewhere before "Haar".
@@ -339,7 +348,7 @@ function tryDeterministicNeedReply(input: {
   const text = input.userText;
   // A how-to/usage question ("wie trage ich ... auf") must not be answered with a
   // product pitch — it falls through to the knowledge layer + model.
-  if (NEED_VETO.test(text) || DRKALLA_USAGE_HOWTO.test(text) || detectDrkallaContactIntent(text)) return null;
+  if (NEED_VETO.test(text) || DRKALLA_USAGE_HOWTO.test(text) || DRKALLA_SERVICE_INTENT.test(text) || detectDrkallaContactIntent(text)) return null;
   // A plain price question about the active product ("was kostet das?") belongs
   // to the deterministic price path, which answers it from the catalog — not a
   // fresh recommendation that pitches a DIFFERENT product (real call 2026-06-15).
@@ -1047,11 +1056,14 @@ export async function buildDrkallaCustomLlmResponse(input: {
     : [];
   // Care need must not feed a Blondierung/Entwickler chemical to the model either.
   const catalogHits = dropChemicalForCareIntent(catalogHitsRaw, user, activeType?.label ?? null);
-  // A how-to/usage question wants the APPLICATION explained, not a product pitched
-  // — suppress the catalog grounding and let the knowledge layer ground it instead.
+  // A how-to/usage OR service question wants an explanation / the right policy, not
+  // a product pitched — suppress the catalog grounding and let the knowledge/FAQ
+  // layer ground it instead (routing-index Stage 1: route by intent before the
+  // catalog can hijack a service question that merely contains a product word).
   const isUsageHowto = DRKALLA_USAGE_HOWTO.test(user);
+  const suppressCatalog = isUsageHowto || DRKALLA_SERVICE_INTENT.test(user);
   let system = compactSystemPrompt(canaryTurn.modelDirectives);
-  if (catalogHits.length && !isUsageHowto) {
+  if (catalogHits.length && !suppressCatalog) {
     const list = catalogHits
       .map((p) => (p.priceText ? `${p.shortName} (${p.priceText})` : p.shortName))
       .join('; ');
@@ -1064,7 +1076,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // untouched (this block only runs on a model turn). Injected as a SOURCE-LABELED
   // line the model must answer FROM and nothing else — same anti-hallucination
   // posture as the catalog line; it never speaks raw chunk text itself.
-  if (namedNow.length === 0 && (catalogHits.length === 0 || isUsageHowto || input.knowledgePriority) && input.knowledgeRetriever) {
+  if (namedNow.length === 0 && (catalogHits.length === 0 || suppressCatalog || input.knowledgePriority) && input.knowledgeRetriever) {
     const kb = input.knowledgeRetriever(user);
     if (kb && kb.hits.length) {
       const block = kb.hits
