@@ -93,6 +93,11 @@ const SYNONYM_GROUPS: string[][] = [
   ['vertraeglich', 'vertraeglichkeit', 'allergie', 'allergiker', 'allergisch'],
   ['oeffnungszeiten', 'oeffnungszeit', 'geoeffnet', 'offen'],
   ['adresse', 'standort', 'anschrift', 'filiale', 'geschaeft'],
+  // After-sales / service — German inflection (defekt/defekte, Föhn/Föhne,
+  // einschicken/eingeschickt) means exact-token BM25 misses most of a service
+  // question; cross-linking these stems so any one of them also gathers chunks
+  // indexed under the others lifts recall for repair/warranty/return questions.
+  ['reparatur', 'reparieren', 'repariert', 'werkstatt', 'defekt', 'defekte', 'defekten', 'kaputt', 'einschicken', 'eingeschickt', 'einsenden', 'einsendung', 'garantie', 'gewaehrleistung', 'ersatzteil', 'ersatzteile'],
 ];
 
 const SYNONYM_INDEX = new Map<string, string[]>();
