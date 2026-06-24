@@ -18,6 +18,11 @@ import {
   type DrkallaFaqMatcher,
   type DrkallaFaqRawEntry,
 } from './drkalla-faq-match.js';
+import {
+  buildDrkallaKnowledgeRetriever,
+  type DrkallaKnowledgeRetriever,
+} from './drkalla-knowledge-chunks-retriever.js';
+import { buildDrkallaKnowledgeChunks } from './scripts/build-drkalla-knowledge-chunks.js';
 
 export type DrkallaPublishFaqEntry = {
   id?: unknown;
@@ -27,16 +32,25 @@ export type DrkallaPublishFaqEntry = {
   tags?: unknown;
 };
 
+export type DrkallaPublishKnowledgeSource = {
+  id?: unknown;
+  title?: unknown;
+  content?: unknown;
+};
+
 export type DrkallaPublishPayload = {
-  enabled?: unknown; // boolean on/off override; omitted = no override
-  faq?: unknown;     // DrkallaPublishFaqEntry[]
+  enabled?: unknown;   // boolean on/off override; omitted = no override
+  faq?: unknown;       // DrkallaPublishFaqEntry[]
+  knowledge?: unknown; // DrkallaPublishKnowledgeSource[]
 };
 
 export type DrkallaLiveOverlay = {
-  faqMatch?: DrkallaFaqMatcher; // overrides the baked faqMatch when present
-  enabled?: boolean;            // on/off override; undefined = defer to env
+  faqMatch?: DrkallaFaqMatcher;                 // overrides the baked faqMatch when present
+  knowledgeRetriever?: DrkallaKnowledgeRetriever; // overrides the baked retriever when present
+  enabled?: boolean;                            // on/off override; undefined = defer to env
   publishedAt?: string;
   faqCount: number;
+  knowledgeChunks: number;
 };
 
 function asStringArray(value: unknown): string[] {
@@ -71,16 +85,52 @@ export function publishedFaqToEntries(faq: unknown): DrkallaFaqRawEntry[] {
   return entries;
 }
 
+function asString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
 /**
- * Build the live overlay from a publish payload. `nowIso` is injected (the caller
- * stamps the time) so this stays a pure function.
+ * Turn published knowledge sources (free text / PDF text) into a live retriever,
+ * reusing the same offline chunker the baked snapshot uses (no embeddings → no
+ * network). Returns null when there is nothing to index.
  */
-export function buildDrkallaLiveOverlay(payload: DrkallaPublishPayload, nowIso: string): DrkallaLiveOverlay {
+export async function buildKnowledgeRetrieverFromPublish(
+  knowledge: unknown,
+  nowIso: string,
+): Promise<{ retriever?: DrkallaKnowledgeRetriever; chunkCount: number }> {
+  const sources = Array.isArray(knowledge) ? knowledge : [];
+  const seeds = sources
+    .map((raw, i) => {
+      const s = raw as DrkallaPublishKnowledgeSource;
+      const content = asString(s?.content).trim();
+      if (content.length < 20) return null;
+      return {
+        sourceId: typeof s?.id === 'string' && s.id ? `pub:${s.id}` : `pub-doc:${i}`,
+        sourceTitle: asString(s?.title).trim().slice(0, 200) || 'Wissensquelle',
+        category: 'generic',
+        text: content,
+      };
+    })
+    .filter((v): v is { sourceId: string; sourceTitle: string; category: string; text: string } => v !== null);
+  if (!seeds.length) return { chunkCount: 0 };
+  const snapshot = await buildDrkallaKnowledgeChunks({ seeds, withEmbeddings: false, now: new Date(nowIso) });
+  if (!snapshot.chunks.length) return { chunkCount: 0 };
+  return { retriever: buildDrkallaKnowledgeRetriever(snapshot), chunkCount: snapshot.chunks.length };
+}
+
+/**
+ * Build the live overlay from a publish payload. `nowIso` is injected so the
+ * stamping stays deterministic. Async because knowledge chunking is async.
+ */
+export async function buildDrkallaLiveOverlay(payload: DrkallaPublishPayload, nowIso: string): Promise<DrkallaLiveOverlay> {
   const entries = publishedFaqToEntries(payload?.faq);
+  const knowledge = await buildKnowledgeRetrieverFromPublish(payload?.knowledge, nowIso);
   return {
     faqMatch: entries.length ? buildDrkallaFaqMatcher(entries) : undefined,
+    knowledgeRetriever: knowledge.retriever,
     enabled: typeof payload?.enabled === 'boolean' ? payload.enabled : undefined,
     publishedAt: nowIso,
     faqCount: entries.length,
+    knowledgeChunks: knowledge.chunkCount,
   };
 }
