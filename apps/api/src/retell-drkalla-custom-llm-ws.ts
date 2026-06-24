@@ -648,7 +648,7 @@ export async function registerRetellDrkallaCustomLlmWs(
   // baked FAQ matcher and the on/off, so an owner edit takes effect in seconds
   // without a redeploy. In-memory only (v1): a restart reverts to baked snapshots
   // until the next publish (the platform is the source of truth).
-  let liveOverlay: DrkallaLiveOverlay = { faqCount: 0 };
+  let liveOverlay: DrkallaLiveOverlay = { faqCount: 0, knowledgeChunks: 0 };
 
   // Authenticated publish endpoint (reachable from the platform via Caddy's
   // /retell* proxy). Shared-secret auth, timing-safe; reuses secretAccepted().
@@ -663,14 +663,15 @@ export async function registerRetellDrkallaCustomLlmWs(
       return reply.code(401).send({ ok: false, error: 'unauthorized' });
     }
     try {
-      liveOverlay = buildDrkallaLiveOverlay(body, new Date().toISOString());
+      liveOverlay = await buildDrkallaLiveOverlay(body, new Date().toISOString());
       app.log.info(
-        { event: 'drkalla_publish', faqCount: liveOverlay.faqCount, enabled: liveOverlay.enabled ?? null },
+        { event: 'drkalla_publish', faqCount: liveOverlay.faqCount, knowledgeChunks: liveOverlay.knowledgeChunks, enabled: liveOverlay.enabled ?? null },
         'drkalla canary publish applied',
       );
       return reply.send({
         ok: true,
         faqCount: liveOverlay.faqCount,
+        knowledgeChunks: liveOverlay.knowledgeChunks,
         enabled: liveOverlay.enabled ?? null,
         publishedAt: liveOverlay.publishedAt,
       });
@@ -694,6 +695,7 @@ export async function registerRetellDrkallaCustomLlmWs(
       envEnabled: process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED === 'true',
       overlayEnabled: liveOverlay.enabled ?? null,
       faqCount: liveOverlay.faqCount,
+      knowledgeChunks: liveOverlay.knowledgeChunks,
       publishedAt: liveOverlay.publishedAt ?? null,
     });
   });
@@ -982,9 +984,9 @@ export async function registerRetellDrkallaCustomLlmWs(
             evidenceLookup,
             catalogSearch,
             brandStock,
-            // Live-published FAQ (from the platform) overrides the baked snapshot.
+            // Live-published FAQ + knowledge (from the platform) override the baked snapshots.
             faqMatch: liveOverlay.faqMatch ?? faqMatch,
-            knowledgeRetriever,
+            knowledgeRetriever: liveOverlay.knowledgeRetriever ?? knowledgeRetriever,
             executeSendLink,
             sequence: turnCounter,
             noInputReminderCount,
