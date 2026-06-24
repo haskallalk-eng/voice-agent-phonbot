@@ -627,6 +627,11 @@ export async function buildDrkallaCustomLlmResponse(input: {
   brandStock?: DrkallaExternalBrandStock;
   faqMatch?: DrkallaFaqMatcher;
   knowledgeRetriever?: DrkallaKnowledgeRetriever;
+  // True when the knowledge comes from owner-published content (platform overlay):
+  // it then grounds even if the catalog has (weak) hits, so a service/knowledge
+  // question is not shadowed by a coincidental product tag-match. Baked knowledge
+  // keeps the catalog-first precedence.
+  knowledgePriority?: boolean;
   executeSendLink?: DrkallaSendLinkExecutor;
   onDelta?: (chunk: string) => void;
   onFaqCandidate?: (question: string, answer: string) => void;
@@ -1059,7 +1064,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // untouched (this block only runs on a model turn). Injected as a SOURCE-LABELED
   // line the model must answer FROM and nothing else — same anti-hallucination
   // posture as the catalog line; it never speaks raw chunk text itself.
-  if (namedNow.length === 0 && (catalogHits.length === 0 || isUsageHowto) && input.knowledgeRetriever) {
+  if (namedNow.length === 0 && (catalogHits.length === 0 || isUsageHowto || input.knowledgePriority) && input.knowledgeRetriever) {
     const kb = input.knowledgeRetriever(user);
     if (kb && kb.hits.length) {
       const block = kb.hits

@@ -1643,4 +1643,27 @@ describe('DrKalla knowledge-chunk grounding injection (additive, model-path only
     expect(captured).not.toContain('Katalog-Treffer zum Bedarf'); // catalog injection suppressed for how-to
     expect(kbHook).toBe(1);
   });
+
+  it('owner-published knowledge (knowledgePriority) grounds even when the catalog has weak hits', async () => {
+    // A service/knowledge question can coincidentally tag-match a product; published
+    // knowledge must still ground it instead of being shadowed by the catalog.
+    let captured = '';
+    let kbHook = 0;
+    await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Bietet ihr einen Reparatur-Service an?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async ({ system }) => { captured = system; return 'Ja, wir reparieren.'; } },
+      // Weak catalog hit (categoryHit only, no typeHit) — would normally shadow KB.
+      catalogSearch: () => [{ productId: 'x', spokenName: 'Ersatzteil', shortName: 'Ersatzteil', productType: 'Zubehör', priceText: '5,00 Euro', priceValue: 5, score: 2, categoryHit: true, typeHit: false }],
+      faqMatch: () => null,
+      knowledgeRetriever: kbHit('Wir bieten einen Reparatur-Service; die Bearbeitung dauert etwa zehn Werktage.', 'Reparatur-Service'),
+      knowledgePriority: true,
+      onKnowledgeChunk: () => { kbHook += 1; },
+      evidenceLookup: noEvidence,
+    });
+    expect(captured).toContain('Wissens-Beleg');
+    expect(captured).toContain('Reparatur-Service');
+    expect(kbHook).toBe(1);
+  });
 });
