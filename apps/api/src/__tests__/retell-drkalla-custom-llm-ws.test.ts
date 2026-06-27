@@ -118,7 +118,7 @@ describe('Retell DrKalla custom LLM websocket handler', () => {
     expect(gated).toEqual({
       response_type: 'response',
       response_id: 'response-1',
-      content: 'Entschuldigung, ich kann gerade nicht weiterhelfen. Bitte versuchen Sie es später noch einmal oder schreiben Sie an kontakt at drkalla punkt com.',
+      content: 'Entschuldigung, ich kann gerade nicht weiterhelfen. Bitte versuchen Sie es später noch einmal oder besuchen Sie uns auf Doktor Kalla punkt com.',
       content_complete: true,
       end_call: false,
     });

@@ -15,6 +15,39 @@ export const DRKALLA_CONTACT_FACTS = {
   profiUrl: DRKALLA_PROFI_ACCESS_URL,
 } as const;
 
+export type DrkallaContactFacts = {
+  addressSpoken: string;
+  hoursSpoken: string;
+  emailSpoken: string;
+  anfahrtSpoken: string;
+  profiUrl: string;
+};
+
+// The owner-editable subset (everything except the system Profi link). The
+// platform (dr-kalla-ultimate-app) publishes these so the owner can correct
+// hours/address/email without an agent redeploy.
+export type DrkallaContactOverrides = Partial<
+  Pick<DrkallaContactFacts, 'addressSpoken' | 'hoursSpoken' | 'emailSpoken' | 'anfahrtSpoken'>
+>;
+
+/**
+ * Merge owner overrides over the baked canonical facts. A field is overridden
+ * ONLY when it is a non-empty string — an empty/missing override can never blank
+ * out a governed fact, so the agent always has a real value to speak. profiUrl
+ * is system-owned and never overridable. Returns the full facts object.
+ */
+export function mergeDrkallaContactFacts(overrides?: DrkallaContactOverrides | null): DrkallaContactFacts {
+  const pick = (value: unknown, fallback: string): string =>
+    typeof value === 'string' && value.trim() ? value.trim() : fallback;
+  return {
+    addressSpoken: pick(overrides?.addressSpoken, DRKALLA_CONTACT_FACTS.addressSpoken),
+    hoursSpoken: pick(overrides?.hoursSpoken, DRKALLA_CONTACT_FACTS.hoursSpoken),
+    emailSpoken: pick(overrides?.emailSpoken, DRKALLA_CONTACT_FACTS.emailSpoken),
+    anfahrtSpoken: pick(overrides?.anfahrtSpoken, DRKALLA_CONTACT_FACTS.anfahrtSpoken),
+    profiUrl: DRKALLA_CONTACT_FACTS.profiUrl,
+  };
+}
+
 export type DrkallaContactIntent = 'address' | 'hours' | 'email' | 'anfahrt' | 'profi' | null;
 
 const ADDRESS_RE = /\b(?:adresse|anschrift|wo (?:seid|sind|ist|liegt|findet)|wo bei euch|standort|laden|gesch(?:ae|ä|Ä|a)ft|filiale|vorbeikommen|besuchen|vorbei(?:schauen|kommen))\b/i;
@@ -47,16 +80,19 @@ export function detectDrkallaContactIntent(text: string): DrkallaContactIntent {
  * Compact grounded directive line for the model, listing only the fact the
  * caller asked about so the prompt stays small. Verbatim-quote instruction.
  */
-export function buildDrkallaContactDirective(intent: DrkallaContactIntent): string | null {
+export function buildDrkallaContactDirective(
+  intent: DrkallaContactIntent,
+  facts: DrkallaContactFacts = DRKALLA_CONTACT_FACTS,
+): string | null {
   switch (intent) {
     case 'address':
-      return `Kontakt-Fakt (verbatim nennen, nicht erfinden): Adresse ${DRKALLA_CONTACT_FACTS.addressSpoken}.`;
+      return `Kontakt-Fakt (verbatim nennen, nicht erfinden): Adresse ${facts.addressSpoken}.`;
     case 'hours':
-      return `Kontakt-Fakt (verbatim nennen, nicht erfinden): Öffnungszeiten ${DRKALLA_CONTACT_FACTS.hoursSpoken}.`;
+      return `Kontakt-Fakt (verbatim nennen, nicht erfinden): Öffnungszeiten ${facts.hoursSpoken}.`;
     case 'email':
-      return `Kontakt-Fakt (verbatim nennen, nicht erfinden): E-Mail ${DRKALLA_CONTACT_FACTS.emailSpoken}.`;
+      return `Kontakt-Fakt (verbatim nennen, nicht erfinden): E-Mail ${facts.emailSpoken}.`;
     case 'anfahrt':
-      return `Kontakt-Fakt (verbatim nennen, nicht erfinden): Anfahrt ${DRKALLA_CONTACT_FACTS.anfahrtSpoken}.`;
+      return `Kontakt-Fakt (verbatim nennen, nicht erfinden): Anfahrt ${facts.anfahrtSpoken}.`;
     case 'profi':
       return 'Kontakt-Fakt: Profi-Preise nur ueber Profi-Zugang (ggf. Gewerbe-/Steuernachweis); Profi-Link per SMS anbieten, nie die URL vorlesen; keine Rabatte erfinden.';
     default:
@@ -68,16 +104,19 @@ export function buildDrkallaContactDirective(intent: DrkallaContactIntent): stri
  * Deterministic grounded spoken answer for a contact question (Sie form),
  * used as the safe fallback when the model returns nothing. Never invents.
  */
-export function buildDrkallaContactAnswer(intent: DrkallaContactIntent): string | null {
+export function buildDrkallaContactAnswer(
+  intent: DrkallaContactIntent,
+  facts: DrkallaContactFacts = DRKALLA_CONTACT_FACTS,
+): string | null {
   switch (intent) {
     case 'address':
-      return `Unsere Adresse ist ${DRKALLA_CONTACT_FACTS.addressSpoken}. Kann ich Ihnen sonst noch helfen?`;
+      return `Unsere Adresse ist ${facts.addressSpoken}. Kann ich Ihnen sonst noch helfen?`;
     case 'hours':
-      return `Wir haben ${DRKALLA_CONTACT_FACTS.hoursSpoken} geöffnet. Kann ich Ihnen sonst noch helfen?`;
+      return `Wir haben ${facts.hoursSpoken} geöffnet. Kann ich Ihnen sonst noch helfen?`;
     case 'email':
-      return `Sie erreichen uns per E-Mail unter ${DRKALLA_CONTACT_FACTS.emailSpoken}. Kann ich Ihnen sonst noch helfen?`;
+      return `Sie erreichen uns per E-Mail unter ${facts.emailSpoken}. Kann ich Ihnen sonst noch helfen?`;
     case 'anfahrt':
-      return `Wir sind in ${DRKALLA_CONTACT_FACTS.anfahrtSpoken}. Möchten Sie auch die genaue Adresse?`;
+      return `Wir sind in ${facts.anfahrtSpoken}. Möchten Sie auch die genaue Adresse?`;
     case 'profi':
       return 'Profi-Preise können Friseure und Gewerbetreibende über den Profi-Zugang anfragen; für die Freischaltung ist eventuell ein Gewerbe- oder Steuernachweis nötig. Soll ich Ihnen den Link zum Profi-Zugang per SMS schicken?';
     default:
