@@ -6,6 +6,7 @@ import OpenAI from 'openai';
 import type { WebSocket } from 'ws';
 import {
   buildDrkallaCustomLlmResponse,
+  type DrkallaConversationTurn,
   type DrkallaCustomLlmClient,
   type DrkallaCustomLlmResponse,
   type DrkallaSendLinkExecutor,
@@ -87,6 +88,7 @@ export type RetellDrkallaCustomLlmParsedMessage = {
   responseId: string;
   providerResponseId: string | number;
   currentUserText: string;
+  history: DrkallaConversationTurn[];
 };
 
 export type RetellDrkallaCustomLlmReply = {
@@ -144,6 +146,29 @@ function latestUserText(transcript: unknown): string {
   return '';
 }
 
+/**
+ * Extract the recent prior turns of the call from Retell's transcript so the
+ * model keeps the topic across turns. Retell already sends the full transcript
+ * in every message — we simply pass a short window through (no extra LLM/KB
+ * call, no added latency). The FINAL user turn is the current utterance (handled
+ * separately as currentUserText), so it is dropped here to avoid duplication.
+ */
+export function extractRetellDrkallaRecentTurns(transcript: unknown, maxTurns = 6): DrkallaConversationTurn[] {
+  if (!Array.isArray(transcript)) return [];
+  const turns: DrkallaConversationTurn[] = [];
+  for (const turn of transcript) {
+    const item = asObject(turn) as RetellTranscriptTurn | null;
+    if (!item) continue;
+    const text = firstString(item.content, item.text);
+    if (!text) continue;
+    const role: 'user' | 'agent' =
+      typeof item.role === 'string' && item.role.toLowerCase() === 'user' ? 'user' : 'agent';
+    turns.push({ role, text });
+  }
+  if (turns.length && turns[turns.length - 1]?.role === 'user') turns.pop();
+  return turns.slice(-Math.max(0, maxTurns));
+}
+
 export function parseRetellDrkallaCustomLlmMessage(raw: string): RetellDrkallaCustomLlmParsedMessage | null {
   let parsed: unknown;
   try {
@@ -170,6 +195,7 @@ export function parseRetellDrkallaCustomLlmMessage(raw: string): RetellDrkallaCu
     responseId,
     providerResponseId,
     currentUserText,
+    history: extractRetellDrkallaRecentTurns(message.transcript),
   };
 }
 
@@ -494,6 +520,8 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
     knowledgeRetriever: input.knowledgeRetriever,
     knowledgePriority: input.knowledgePriority,
     contactFacts: input.contactFacts,
+    // Recent prior turns of this call → the model keeps the topic (no extra call).
+    conversationHistory: parsed.history,
     executeSendLink: input.executeSendLink,
     onDelta: input.onDelta,
     onFaqCandidate: input.onFaqCandidate,
