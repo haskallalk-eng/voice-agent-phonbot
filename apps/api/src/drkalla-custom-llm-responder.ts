@@ -104,6 +104,35 @@ function sanitizeUserText(value: string): string {
     .slice(0, 500);
 }
 
+// One prior turn of the live call, supplied by the transport from Retell's
+// transcript. The model otherwise only sees the current utterance, so it
+// "forgot" the topic mid-call; feeding a short recent window restores context
+// with NO extra LLM/KB call and no added latency (the turns are already in the
+// inbound message — see extractRetellDrkallaRecentTurns).
+export type DrkallaConversationTurn = { role: 'user' | 'agent'; text: string };
+
+// Build a compact, PII-redacted recent-history block for the model's user
+// message. Newest turns are kept first under the char budget; each turn is run
+// through the same redactor as the current utterance. Returns '' when there is
+// no usable history (then the model just gets the current utterance, as before).
+function buildDrkallaHistoryBlock(history: DrkallaConversationTurn[] | undefined): string {
+  if (!history || !history.length) return '';
+  const kept: string[] = [];
+  let budget = 1200;
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const turn = history[i];
+    if (!turn) continue;
+    const text = sanitizeUserText(turn.text).slice(0, 180);
+    if (!text) continue;
+    const line = `${turn.role === 'agent' ? 'Sie' : 'Anrufer'}: ${text}`;
+    if (budget - line.length < 0) break;
+    budget -= line.length;
+    kept.unshift(line);
+  }
+  if (!kept.length) return '';
+  return `Bisheriger Gespraechsverlauf (nur zur Erinnerung; nicht erneut begruessen, nicht wiederholen):\n${kept.join('\n')}`;
+}
+
 function compactSystemPrompt(
   directives: string[],
   contactFacts: DrkallaContactFacts = DRKALLA_CONTACT_FACTS,
@@ -649,6 +678,10 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // Owner-published contact facts (platform overlay) that override the baked
   // canonical address/hours/email/anfahrt. Omitted = baked facts are used.
   contactFacts?: DrkallaContactFacts;
+  // Recent prior turns of THIS call (from Retell's transcript), fed to the model
+  // so it keeps the topic across turns. Deterministic paths still use only the
+  // current utterance; this is added to the model's user message only.
+  conversationHistory?: DrkallaConversationTurn[];
   executeSendLink?: DrkallaSendLinkExecutor;
   onDelta?: (chunk: string) => void;
   onFaqCandidate?: (question: string, answer: string) => void;
@@ -1099,6 +1132,13 @@ export async function buildDrkallaCustomLlmResponse(input: {
     }
   }
   const maxOutputChars = 420;
+  // The model sees a short recent-history block + the current utterance, so it
+  // keeps the topic across turns. Deterministic paths above used `user` (current
+  // utterance only) on purpose — only the generative model call gets history.
+  const historyBlock = buildDrkallaHistoryBlock(input.conversationHistory);
+  const modelUser = historyBlock
+    ? `${historyBlock}\n\nAktuelle Aussage des Anrufers: ${user}`
+    : user;
   let modelText = '';
   if (input.client.completeStream && input.onDelta) {
     // Stream chunks upward so TTS can start on the first sentence; enforce
@@ -1112,10 +1152,10 @@ export async function buildDrkallaCustomLlmResponse(input: {
     };
     // No trim here: forwarded deltas must stay an exact prefix of the final
     // text so the transport can compute the remaining tail frame.
-    const raw = await input.client.completeStream({ system, user, maxOutputChars, onDelta, signal: input.signal });
+    const raw = await input.client.completeStream({ system, user: modelUser, maxOutputChars, onDelta, signal: input.signal });
     modelText = raw.trim() ? raw.slice(0, maxOutputChars) : '';
   } else {
-    modelText = (await input.client.complete({ system, user, maxOutputChars, signal: input.signal }))
+    modelText = (await input.client.complete({ system, user: modelUser, maxOutputChars, signal: input.signal }))
       .trim()
       .slice(0, maxOutputChars);
   }
