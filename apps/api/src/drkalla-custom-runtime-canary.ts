@@ -7,6 +7,7 @@ import {
 import {
   buildDrkallaContactDirective,
   detectDrkallaContactIntent,
+  type DrkallaContactFacts,
 } from './drkalla-contact-facts.js';
 import {
   formatDrkallaProductEvidenceLine,
@@ -79,13 +80,14 @@ function evidenceLine(
 function modelDirectives(
   runtime: DrkallaMemoryRuntimeResult,
   evidenceLookup?: DrkallaProductEvidenceLookup,
+  contactFacts?: DrkallaContactFacts,
 ): string[] {
   const lines = [
     `Plan: ${runtime.responsePlan.plan}`,
     `Level: ${runtime.dialogueView.level}`,
     compactMemoryLine(runtime.memoryContext),
     evidenceLine(runtime, evidenceLookup),
-    buildDrkallaContactDirective(detectDrkallaContactIntent(runtime.currentUserText)),
+    buildDrkallaContactDirective(detectDrkallaContactIntent(runtime.currentUserText), contactFacts),
     compactLine('Do', runtime.responsePlan.mustDo),
     compactLine('Do not', runtime.responsePlan.mustNotDo),
     `Closing: ${runtime.responsePlan.suggestedClosingMove}`,
@@ -100,6 +102,9 @@ export function buildDrkallaCustomRuntimeCanaryTurn(input: {
   event: AgentTurnRequestedEvent;
   runtimeOptions?: DrkallaMemoryRuntimeOptions;
   evidenceLookup?: DrkallaProductEvidenceLookup;
+  // Owner-published contact facts (platform overlay); when omitted the
+  // directive builder falls back to the baked canonical facts.
+  contactFacts?: DrkallaContactFacts;
 }): DrkallaCustomRuntimeCanaryTurn {
   const runtime = applyDrkallaMemoryRuntimeEvent(
     createDrkallaMemoryRuntimeSession({
@@ -113,7 +118,7 @@ export function buildDrkallaCustomRuntimeCanaryTurn(input: {
   if (!input.canary.enabled) blockers.push('CANARY_NOT_ENABLED');
   if (input.canary.enabled && !input.canary.allowModelDirectives) blockers.push('MODEL_DIRECTIVES_NOT_ALLOWED');
 
-  let directives = blockers.length === 0 ? modelDirectives(runtime, input.evidenceLookup) : [];
+  let directives = blockers.length === 0 ? modelDirectives(runtime, input.evidenceLookup, input.contactFacts) : [];
   // Budget discipline without killing the turn: grounding (Evidence/Kontakt)
   // and plan lines are correctness-critical, but the Memory line is only a
   // dedupe hint. If the directives exceed the budget, drop the optional

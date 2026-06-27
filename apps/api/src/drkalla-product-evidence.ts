@@ -53,6 +53,11 @@ function cleanSpokenName(title: string): string {
 }
 
 function formatEuro(value: number): string {
+  // Whole-euro prices drop the cents so the TTS does not read ",00" as an extra
+  // "null null"/"o o" after the amount (live complaint 2026-06-27: "10 Euro o").
+  // Real decimal prices keep the German comma format ("11,99 Euro").
+  const cents = Math.round(value * 100);
+  if (cents % 100 === 0) return `${cents / 100} Euro`;
   return `${value.toFixed(2).replace('.', ',')} Euro`;
 }
 

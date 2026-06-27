@@ -23,6 +23,11 @@ import {
   type DrkallaKnowledgeRetriever,
 } from './drkalla-knowledge-chunks-retriever.js';
 import { buildDrkallaKnowledgeChunks } from './scripts/build-drkalla-knowledge-chunks.js';
+import {
+  mergeDrkallaContactFacts,
+  type DrkallaContactFacts,
+  type DrkallaContactOverrides,
+} from './drkalla-contact-facts.js';
 
 export type DrkallaPublishFaqEntry = {
   id?: unknown;
@@ -42,16 +47,48 @@ export type DrkallaPublishPayload = {
   enabled?: unknown;   // boolean on/off override; omitted = no override
   faq?: unknown;       // DrkallaPublishFaqEntry[]
   knowledge?: unknown; // DrkallaPublishKnowledgeSource[]
+  contact?: unknown;   // { addressSpoken?, hoursSpoken?, emailSpoken?, anfahrtSpoken? }
 };
 
 export type DrkallaLiveOverlay = {
   faqMatch?: DrkallaFaqMatcher;                 // overrides the baked faqMatch when present
   knowledgeRetriever?: DrkallaKnowledgeRetriever; // overrides the baked retriever when present
+  contactFacts?: DrkallaContactFacts;           // overrides the baked contact facts when present
   enabled?: boolean;                            // on/off override; undefined = defer to env
   publishedAt?: string;
   faqCount: number;
   knowledgeChunks: number;
 };
+
+/**
+ * Extract owner contact overrides from a publish payload. Returns null when the
+ * payload carries no usable contact field — so the overlay only overrides the
+ * baked facts when the owner actually published values. Each field is taken only
+ * when it is a non-empty string (mergeDrkallaContactFacts then fills any gap
+ * from the baked canonical facts, so a value is never blanked out).
+ */
+export function parseContactOverrides(value: unknown): DrkallaContactOverrides | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  // Collapse any whitespace (incl. newlines/tabs) to a single space, trim, and
+  // cap the length: an oversized or multiline paste must never blow the model's
+  // directive budget (which would block the whole turn) or carry injected line
+  // breaks into the prompt. 200 chars comfortably fits the longest real value
+  // (the anfahrt line).
+  const str = (v: unknown): string | undefined => {
+    if (typeof v !== 'string') return undefined;
+    const t = v.replace(/\s+/g, ' ').trim().slice(0, 200);
+    return t || undefined;
+  };
+  const overrides: DrkallaContactOverrides = {
+    addressSpoken: str(raw.addressSpoken),
+    hoursSpoken: str(raw.hoursSpoken),
+    emailSpoken: str(raw.emailSpoken),
+    anfahrtSpoken: str(raw.anfahrtSpoken),
+  };
+  const hasAny = Object.values(overrides).some((v) => typeof v === 'string');
+  return hasAny ? overrides : null;
+}
 
 function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
@@ -132,9 +169,11 @@ export async function buildKnowledgeRetrieverFromPublish(
 export async function buildDrkallaLiveOverlay(payload: DrkallaPublishPayload, nowIso: string): Promise<DrkallaLiveOverlay> {
   const entries = publishedFaqToEntries(payload?.faq);
   const knowledge = await buildKnowledgeRetrieverFromPublish(payload?.knowledge, nowIso);
+  const contactOverrides = parseContactOverrides(payload?.contact);
   return {
     faqMatch: entries.length ? buildDrkallaFaqMatcher(entries) : undefined,
     knowledgeRetriever: knowledge.retriever,
+    contactFacts: contactOverrides ? mergeDrkallaContactFacts(contactOverrides) : undefined,
     enabled: typeof payload?.enabled === 'boolean' ? payload.enabled : undefined,
     publishedAt: nowIso,
     faqCount: entries.length,

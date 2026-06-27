@@ -6,6 +6,7 @@ import {
   buildDrkallaContactAnswer,
   DRKALLA_CONTACT_FACTS,
   detectDrkallaContactIntent,
+  type DrkallaContactFacts,
 } from './drkalla-contact-facts.js';
 import type { DrkallaProductEvidenceLookup } from './drkalla-product-evidence.js';
 import type { DrkallaProductCatalogSearch, DrkallaExternalBrandStock } from './drkalla-product-catalog-search.js';
@@ -103,7 +104,10 @@ function sanitizeUserText(value: string): string {
     .slice(0, 500);
 }
 
-function compactSystemPrompt(directives: string[]): string {
+function compactSystemPrompt(
+  directives: string[],
+  contactFacts: DrkallaContactFacts = DRKALLA_CONTACT_FACTS,
+): string {
   return [
     'Du bist der Dr.Kalla Voice-Agent fuer Friseurbedarf.',
     // Live call 2026-06-14: the model re-greeted mid-call ("Guten Tag! Wie kann
@@ -115,10 +119,10 @@ function compactSystemPrompt(directives: string[]): string {
     // exact forbidden words, so it actually sticks.
     'ANREDE (zwingend): Sprich den Anrufer ausschliesslich in der Sie-Form an — Sie, Ihnen, Ihr, Ihre. Verwende NIEMALS du, dich, dir, dein, deine, ihr (als Anrede), euch oder euer, auch wenn der Anrufer dich duzt.',
     'STIL: Antworte auf Deutsch in vollstaendigen, natuerlichen Saetzen. Niemals Stichpunkte, Aufzaehlungen, Doppelpunkt-Listen oder Telegrammstil. Fasse dich kurz, aber sprich in ganzen Saetzen.',
-    'Buchstabiere Web-Adressen oder E-Mails nicht. Nenne die Website gesprochen als "drkalla punkt com" und die E-Mail als "kontakt at drkalla punkt com" — niemals mit Punkt-Zeichen, Schraegstrich oder At-Zeichen. Erwaehne die Website nur, wenn es noetig ist, nicht in jeder Antwort.',
-    'AUSSPRACHE: Sprich den Markennamen immer als "Doktor Kalla" aus, nie als "Dr.Kalla" oder buchstabiert. Nenne Preise im deutschen Kommaformat wie "22,90 Euro"; schreibe nie "22 Euro 90". Verwende keine Abkuerzungen zum Vorlesen (kein "z.B.", "bzw.", "usw.", "Nr.", "Str.", "&", "%").',
+    `Buchstabiere Web-Adressen oder E-Mails nicht. Nenne die Website gesprochen als "Doktor Kalla punkt com" und die E-Mail als "${contactFacts.emailSpoken}" — niemals mit Punkt-Zeichen, Schraegstrich oder At-Zeichen. Erwaehne die Website nur, wenn es noetig ist, nicht in jeder Antwort.`,
+    'AUSSPRACHE: Sprich den Markennamen immer als "Doktor Kalla" aus, nie als "Dr.Kalla" oder buchstabiert. Nenne Preise im deutschen Kommaformat wie "22,90 Euro"; schreibe nie "22 Euro 90". Bei vollen Euro-Betraegen ohne Cent sprich nur den Betrag ("10 Euro", nie "10,00 Euro" und nie "10 Komma null null Euro"). Verwende keine Abkuerzungen zum Vorlesen (kein "z.B.", "bzw.", "usw.", "Nr.", "Str.", "&", "%").',
     'Dr.Kalla ist ein Friseurbedarf-Shop, kein Friseursalon: keine Termine, keine Haarschnitte oder Faerbe-Dienstleistungen; verweise hoeflich auf Produkte/Salonbedarf.',
-    'Nenne Adresse, Oeffnungszeiten, E-Mail, Preise oder Verfuegbarkeit nur aus der gegebenen Evidence- oder Kontakt-Fakt-Zeile. Fehlt die Angabe, erfinde nichts und verweise auf drkalla.com oder den Kontakt.',
+    'Nenne Adresse, Oeffnungszeiten, E-Mail, Preise oder Verfuegbarkeit nur aus der gegebenen Evidence- oder Kontakt-Fakt-Zeile. Fehlt die Angabe, erfinde nichts und verweise hoeflich auf die Website oder den Kontakt.',
     'Erklaere die Profi-Preise hoechstens einmal ausfuehrlich; wurde der Profi-Zugang schon erwaehnt, fasse dich knapp und biete nur kurz den Link an, ohne die Erklaerung zu wiederholen.',
     'Wenn der Bedarf oder die Produktart bekannt ist, NENNE konkrete Produkte aus der Katalog-Treffer-Zeile oder grenze nach Marke/Variante ein. Stelle nicht wiederholt dieselbe Kategorie-Frage; wenn der Anrufer den Bedarf schon genannt hat, gehe weiter, statt erneut zu fragen.',
     'Bei Vergleichs- oder Beratungsfragen ("was ist besser", "welches passt") vergleiche die genannten Produkte konkret und gib eine klare Empfehlung; wiederhole nicht denselben Vorschlag.',
@@ -178,6 +182,7 @@ function fallbackTextWithMemory(input: {
   userText: string;
   memory: DrkallaShortTermVoiceMemory;
   evidenceLookup?: DrkallaProductEvidenceLookup;
+  contactFacts?: DrkallaContactFacts;
 }): DrkallaFallbackResult {
   const userText = input.userText;
   const lastProduct = input.memory.lastMentionedProduct;
@@ -185,7 +190,7 @@ function fallbackTextWithMemory(input: {
   // contact question with a generic discovery prompt, and never invent.
   const contactIntent = detectDrkallaContactIntent(userText);
   if (contactIntent) {
-    const contactAnswer = buildDrkallaContactAnswer(contactIntent);
+    const contactAnswer = buildDrkallaContactAnswer(contactIntent, input.contactFacts);
     if (contactAnswer) return { text: contactAnswer };
   }
   if (/\bunterschied|vergleich\b/i.test(userText)) {
@@ -641,6 +646,9 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // question is not shadowed by a coincidental product tag-match. Baked knowledge
   // keeps the catalog-first precedence.
   knowledgePriority?: boolean;
+  // Owner-published contact facts (platform overlay) that override the baked
+  // canonical address/hours/email/anfahrt. Omitted = baked facts are used.
+  contactFacts?: DrkallaContactFacts;
   executeSendLink?: DrkallaSendLinkExecutor;
   onDelta?: (chunk: string) => void;
   onFaqCandidate?: (question: string, answer: string) => void;
@@ -653,6 +661,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
     memory: input.memory,
     runtimeOptions: { detectProducts: input.detectProducts },
     evidenceLookup: input.evidenceLookup,
+    contactFacts: input.contactFacts,
   });
   const turnIndex = input.event.sequence ?? 0;
 
@@ -1062,7 +1071,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // catalog can hijack a service question that merely contains a product word).
   const isUsageHowto = DRKALLA_USAGE_HOWTO.test(user);
   const suppressCatalog = isUsageHowto || DRKALLA_SERVICE_INTENT.test(user);
-  let system = compactSystemPrompt(canaryTurn.modelDirectives);
+  let system = compactSystemPrompt(canaryTurn.modelDirectives, input.contactFacts);
   if (catalogHits.length && !suppressCatalog) {
     const list = catalogHits
       .map((p) => (p.priceText ? `${p.shortName} (${p.priceText})` : p.shortName))
@@ -1117,6 +1126,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
         userText: user,
         memory: canaryTurn.runtime.memory,
         evidenceLookup: input.evidenceLookup,
+        contactFacts: input.contactFacts,
       });
   const spokenText = modelText || (fallback?.text ?? '');
 

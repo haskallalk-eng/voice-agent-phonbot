@@ -37,6 +37,7 @@ import {
   type DrkallaLiveOverlay,
   type DrkallaPublishPayload,
 } from './drkalla-faq-overlay.js';
+import type { DrkallaContactFacts } from './drkalla-contact-facts.js';
 import { DRKALLA_LINK_TOOL_PATH, drkallaLinkToolSignature } from './drkalla-link-tool.js';
 import {
   createDrkallaCanaryLatencyRecorder,
@@ -66,7 +67,7 @@ import type { AgentTurnRequestedEvent } from './voice-runtime-contract.js';
 // agent go permanently silent within one gap.
 const DRKALLA_MAX_CONSECUTIVE_HOLDS = 2;
 
-const SAFE_UNAVAILABLE_TEXT = 'Entschuldigung, ich kann gerade nicht weiterhelfen. Bitte versuchen Sie es später noch einmal oder schreiben Sie an kontakt at drkalla punkt com.';
+const SAFE_UNAVAILABLE_TEXT = 'Entschuldigung, ich kann gerade nicht weiterhelfen. Bitte versuchen Sie es später noch einmal oder besuchen Sie uns auf Doktor Kalla punkt com.';
 
 // Custom-llm agents have no Retell begin_message; Retell elicits the agent's
 // first line via an empty response_required at call start. This deterministic
@@ -75,7 +76,7 @@ const SAFE_UNAVAILABLE_TEXT = 'Entschuldigung, ich kann gerade nicht weiterhelfe
 // "Doktor Kalla" (not "Dr.Kalla") so the neural TTS reads it as one warm name
 // instead of an audible mid-name period/abbreviation; "der Assistent von Doktor
 // Kalla" flows better than the compound "der Dr.Kalla Assistent".
-export const DRKALLA_CUSTOM_RUNTIME_GREETING = 'Hallo, hier ist der Assistent von Doktor Kalla. Wie kann ich Ihnen beim Friseurbedarf helfen?';
+export const DRKALLA_CUSTOM_RUNTIME_GREETING = 'Hallo, hier ist der Assistent von Doktor Kalla Cosmetics. Wie kann ich Ihnen beim Friseurbedarf helfen?';
 
 // Spoken when the agent is switched OFF (env gate or the platform's on/off toggle):
 // one short line, then hang up — the caller is never left in silence.
@@ -426,6 +427,7 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
   faqMatch?: DrkallaFaqMatcher;
   knowledgeRetriever?: DrkallaKnowledgeRetriever;
   knowledgePriority?: boolean;
+  contactFacts?: DrkallaContactFacts;
   executeSendLink?: DrkallaSendLinkExecutor;
   sequence?: number;
   noInputReminderCount?: number;
@@ -491,6 +493,7 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
     faqMatch: input.faqMatch,
     knowledgeRetriever: input.knowledgeRetriever,
     knowledgePriority: input.knowledgePriority,
+    contactFacts: input.contactFacts,
     executeSendLink: input.executeSendLink,
     onDelta: input.onDelta,
     onFaqCandidate: input.onFaqCandidate,
@@ -667,13 +670,14 @@ export async function registerRetellDrkallaCustomLlmWs(
     try {
       liveOverlay = await buildDrkallaLiveOverlay(body, new Date().toISOString());
       app.log.info(
-        { event: 'drkalla_publish', faqCount: liveOverlay.faqCount, knowledgeChunks: liveOverlay.knowledgeChunks, enabled: liveOverlay.enabled ?? null },
+        { event: 'drkalla_publish', faqCount: liveOverlay.faqCount, knowledgeChunks: liveOverlay.knowledgeChunks, contactOverride: !!liveOverlay.contactFacts, enabled: liveOverlay.enabled ?? null },
         'drkalla canary publish applied',
       );
       return reply.send({
         ok: true,
         faqCount: liveOverlay.faqCount,
         knowledgeChunks: liveOverlay.knowledgeChunks,
+        contactOverride: !!liveOverlay.contactFacts,
         enabled: liveOverlay.enabled ?? null,
         publishedAt: liveOverlay.publishedAt,
       });
@@ -698,6 +702,7 @@ export async function registerRetellDrkallaCustomLlmWs(
       overlayEnabled: liveOverlay.enabled ?? null,
       faqCount: liveOverlay.faqCount,
       knowledgeChunks: liveOverlay.knowledgeChunks,
+      contactOverride: !!liveOverlay.contactFacts,
       publishedAt: liveOverlay.publishedAt ?? null,
     });
   });
@@ -991,6 +996,8 @@ export async function registerRetellDrkallaCustomLlmWs(
             knowledgeRetriever: liveOverlay.knowledgeRetriever ?? knowledgeRetriever,
             // Owner-published knowledge grounds even over weak catalog tag-matches.
             knowledgePriority: !!liveOverlay.knowledgeRetriever,
+            // Owner-published contact facts (address/hours/email/anfahrt) override the baked ones.
+            contactFacts: liveOverlay.contactFacts,
             executeSendLink,
             sequence: turnCounter,
             noInputReminderCount,

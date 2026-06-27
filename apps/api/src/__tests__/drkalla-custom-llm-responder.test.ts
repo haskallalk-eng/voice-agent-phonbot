@@ -668,7 +668,9 @@ describe('DrKalla register/style + deterministic price (live call 2026-06-13 fix
     });
     expect(prompts[0]).toContain('NIEMALS du');
     expect(prompts[0]).toMatch(/Niemals Stichpunkte|vollstaendigen, natuerlichen Saetzen/);
-    expect(prompts[0]).toContain('drkalla.com');
+    // The website is referenced in spoken form (no literal "drkalla.com", which
+    // the TTS would read as letters).
+    expect(prompts[0]).toContain('Doktor Kalla punkt com');
   });
 
   it('B: a plain price question is answered deterministically in Sie, without the model', async () => {
