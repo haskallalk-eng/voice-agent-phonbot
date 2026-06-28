@@ -39,6 +39,11 @@ import {
   type DrkallaPublishPayload,
 } from './drkalla-faq-overlay.js';
 import type { DrkallaContactFacts } from './drkalla-contact-facts.js';
+import {
+  buildDrkallaSummaryMessages,
+  selectDrkallaOlderTurns,
+  shouldRefreshDrkallaSummary,
+} from './drkalla-conversation-summary.js';
 import { DRKALLA_LINK_TOOL_PATH, drkallaLinkToolSignature } from './drkalla-link-tool.js';
 import {
   createDrkallaCanaryLatencyRecorder,
@@ -89,6 +94,7 @@ export type RetellDrkallaCustomLlmParsedMessage = {
   providerResponseId: string | number;
   currentUserText: string;
   history: DrkallaConversationTurn[];
+  allTurns: DrkallaConversationTurn[];
 };
 
 export type RetellDrkallaCustomLlmReply = {
@@ -153,7 +159,7 @@ function latestUserText(transcript: unknown): string {
  * call, no added latency). The FINAL user turn is the current utterance (handled
  * separately as currentUserText), so it is dropped here to avoid duplication.
  */
-export function extractRetellDrkallaRecentTurns(transcript: unknown, maxTurns = 6): DrkallaConversationTurn[] {
+export function extractRetellDrkallaAllTurns(transcript: unknown): DrkallaConversationTurn[] {
   if (!Array.isArray(transcript)) return [];
   const turns: DrkallaConversationTurn[] = [];
   for (const turn of transcript) {
@@ -165,8 +171,13 @@ export function extractRetellDrkallaRecentTurns(transcript: unknown, maxTurns = 
       typeof item.role === 'string' && item.role.toLowerCase() === 'user' ? 'user' : 'agent';
     turns.push({ role, text });
   }
+  // The final user turn is the current utterance (handled separately) — drop it.
   if (turns.length && turns[turns.length - 1]?.role === 'user') turns.pop();
-  return turns.slice(-Math.max(0, maxTurns));
+  return turns;
+}
+
+export function extractRetellDrkallaRecentTurns(transcript: unknown, maxTurns = 6): DrkallaConversationTurn[] {
+  return extractRetellDrkallaAllTurns(transcript).slice(-Math.max(0, maxTurns));
 }
 
 export function parseRetellDrkallaCustomLlmMessage(raw: string): RetellDrkallaCustomLlmParsedMessage | null {
@@ -190,12 +201,14 @@ export function parseRetellDrkallaCustomLlmMessage(raw: string): RetellDrkallaCu
   );
   if (!interactionType || !responseId) return null;
 
+  const allTurns = extractRetellDrkallaAllTurns(message.transcript);
   return {
     interactionType,
     responseId,
     providerResponseId,
     currentUserText,
-    history: extractRetellDrkallaRecentTurns(message.transcript),
+    history: allTurns.slice(-6),
+    allTurns,
   };
 }
 
@@ -454,6 +467,7 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
   knowledgeRetriever?: DrkallaKnowledgeRetriever;
   knowledgePriority?: boolean;
   contactFacts?: DrkallaContactFacts;
+  conversationSummary?: string;
   executeSendLink?: DrkallaSendLinkExecutor;
   sequence?: number;
   noInputReminderCount?: number;
@@ -522,6 +536,8 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
     contactFacts: input.contactFacts,
     // Recent prior turns of this call → the model keeps the topic (no extra call).
     conversationHistory: parsed.history,
+    // Rolling note for the older part of long calls (built off the hot path).
+    conversationSummary: input.conversationSummary,
     executeSendLink: input.executeSendLink,
     onDelta: input.onDelta,
     onFaqCandidate: input.onFaqCandidate,
@@ -639,6 +655,28 @@ function createOpenAiClient(): DrkallaCustomLlmClient {
         signal?.removeEventListener('abort', onExternalAbort);
       }
       return accumulated;
+    },
+    // Background rolling-summary call. OFF the hot path, so it gets a generous
+    // timeout (it must never block a turn) and a small output budget.
+    summarize: async ({ system, user, signal }) => {
+      if (signal?.aborted) return '';
+      try {
+        const completion = await openai.chat.completions.create(
+          {
+            model,
+            messages: [
+              { role: 'system', content: system },
+              { role: 'user', content: user },
+            ],
+            max_completion_tokens: 220,
+            temperature: 0.2,
+          },
+          { signal, timeout: 10_000 },
+        );
+        return completion.choices[0]?.message?.content ?? '';
+      } catch {
+        return '';
+      }
     },
   };
 }
@@ -762,6 +800,14 @@ export async function registerRetellDrkallaCustomLlmWs(
     // aborts it on arrival (barge-in) so the serialized chain does not wait
     // out a stale turn's stream budget.
     let inFlightAbort: AbortController | null = null;
+    // Rolling background note for the OLDER part of long calls (Step 2). Built
+    // off the hot path; the turn only READS the last completed note, so it adds
+    // zero turn latency. Reverts to '' on a new call (per-socket).
+    let rollingSummary = '';
+    let summarizedThroughTurn = 0;
+    let summarizing = false;
+    const summaryAbort = new AbortController();
+    socket.on('close', () => summaryAbort.abort());
 
     if (!secretOk) {
       socket.close(1008, 'unauthorized');
@@ -1027,6 +1073,7 @@ export async function registerRetellDrkallaCustomLlmWs(
             // Owner-published contact facts (address/hours/email/anfahrt) override the baked ones.
             contactFacts: liveOverlay.contactFacts,
             executeSendLink,
+            conversationSummary: rollingSummary,
             sequence: turnCounter,
             noInputReminderCount,
             onDelta: isResponseTurn ? onDelta : undefined,
@@ -1095,6 +1142,30 @@ export async function registerRetellDrkallaCustomLlmWs(
             },
             'drkalla canary turn latency',
           );
+
+          // STEP 2 — rolling background summary for long calls. The reply is
+          // ALREADY sent above; this is fire-and-forget (never awaited) and only
+          // updates rollingSummary for FUTURE turns, so it adds zero turn
+          // latency. Guarded so at most one summary runs at a time.
+          if (isResponseTurn && client.summarize && !summarizing) {
+            const allTurns = parsedPreview?.allTurns ?? [];
+            const totalTurns = allTurns.length;
+            if (shouldRefreshDrkallaSummary({ totalTurns, summarizedThroughTurn })) {
+              summarizing = true;
+              const { system, user } = buildDrkallaSummaryMessages(selectDrkallaOlderTurns(allTurns), rollingSummary);
+              client.summarize({ system, user, signal: summaryAbort.signal })
+                .then((note) => {
+                  const trimmed = note.trim();
+                  if (trimmed) {
+                    rollingSummary = trimmed.slice(0, 600);
+                    summarizedThroughTurn = totalTurns;
+                    app.log.info({ callId, turn: turnCounter, summaryLen: rollingSummary.length }, 'drkalla rolling summary updated');
+                  }
+                })
+                .catch(() => {})
+                .finally(() => { summarizing = false; });
+            }
+          }
         } catch (error) {
           app.log.warn({ err: error instanceof Error ? error.message : String(error) }, 'DrKalla custom LLM canary failed');
         } finally {

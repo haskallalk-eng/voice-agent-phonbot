@@ -60,6 +60,12 @@ export type DrkallaCustomLlmClient = {
     onDelta: (chunk: string) => void;
     signal?: AbortSignal;
   }): Promise<string>;
+  /**
+   * Optional background summarizer for the rolling conversation note. NEVER
+   * called on a turn's hot path — only by the transport's off-path summary job
+   * (see drkalla-conversation-summary). May use a longer timeout than complete.
+   */
+  summarize?(input: { system: string; user: string; signal?: AbortSignal }): Promise<string>;
 };
 
 // Spoken when the caller confirms an SMS link offer while no real SMS tool
@@ -682,6 +688,10 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // so it keeps the topic across turns. Deterministic paths still use only the
   // current utterance; this is added to the model's user message only.
   conversationHistory?: DrkallaConversationTurn[];
+  // Rolling background note summarizing the OLDER part of a long call (built off
+  // the hot path; see drkalla-conversation-summary). Added to the model message
+  // only, before the verbatim recent window.
+  conversationSummary?: string;
   executeSendLink?: DrkallaSendLinkExecutor;
   onDelta?: (chunk: string) => void;
   onFaqCandidate?: (question: string, answer: string) => void;
@@ -1132,12 +1142,16 @@ export async function buildDrkallaCustomLlmResponse(input: {
     }
   }
   const maxOutputChars = 420;
-  // The model sees a short recent-history block + the current utterance, so it
-  // keeps the topic across turns. Deterministic paths above used `user` (current
-  // utterance only) on purpose — only the generative model call gets history.
+  // The model sees an optional rolling note (older context on long calls) + a
+  // short verbatim recent-history block + the current utterance, so it keeps the
+  // topic across turns. Deterministic paths above used `user` (current utterance
+  // only) on purpose — only the generative model call gets this context.
   const historyBlock = buildDrkallaHistoryBlock(input.conversationHistory);
-  const modelUser = historyBlock
-    ? `${historyBlock}\n\nAktuelle Aussage des Anrufers: ${user}`
+  const summaryNote = input.conversationSummary?.trim().slice(0, 600);
+  const summaryBlock = summaryNote ? `Gedaechtnisnotiz zum bisherigen Gespraech: ${summaryNote}` : '';
+  const contextParts = [summaryBlock, historyBlock].filter(Boolean);
+  const modelUser = contextParts.length
+    ? `${contextParts.join('\n\n')}\n\nAktuelle Aussage des Anrufers: ${user}`
     : user;
   let modelText = '';
   if (input.client.completeStream && input.onDelta) {
