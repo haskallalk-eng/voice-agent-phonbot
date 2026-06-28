@@ -64,7 +64,7 @@ import {
   type DrkallaShortTermVoiceMemory,
 } from './drkalla-short-term-memory.js';
 import { createTrustedScope } from './trusted-scope.js';
-import { looksIncompleteDrkallaUtterance } from './drkalla-turn-completeness.js';
+import { scoreDrkallaTurnReadiness } from './drkalla-turn-readiness.js';
 import { speakDrkallaText } from './drkalla-speakable.js';
 import type { AgentTurnRequestedEvent } from './voice-runtime-contract.js';
 
@@ -931,18 +931,22 @@ export async function registerRetellDrkallaCustomLlmWs(
       // next words arrive as a fresh turn and Retell's silence reminder is the
       // backstop, and we never hold the same gap more than twice. A held turn
       // sends NO frame and does NOT advance turn/memory state.
+      const turnReadiness = scoreDrkallaTurnReadiness(parsedPreview?.currentUserText ?? '', {
+        pendingQuestion: Boolean(memory.lastAgentQuestion?.trim()) || Boolean(memory.pendingClarification),
+      });
       const heldTurn = isResponseTurn
         && consecutiveHolds < DRKALLA_MAX_CONSECUTIVE_HOLDS
-        && looksIncompleteDrkallaUtterance(parsedPreview?.currentUserText ?? '', {
-          pendingQuestion: Boolean(memory.lastAgentQuestion?.trim()) || Boolean(memory.pendingClarification),
-        });
+        && turnReadiness.decision === 'hold';
       if (heldTurn) {
         // The caller is still talking — treat it as a barge-in over any in-flight
         // answer, then say nothing. No arrival claim, no turnCounter, no memory.
         consecutiveHolds += 1;
         inFlightAbort?.abort();
         inFlightAbort = null;
-        app.log.info({ callId, turn: turnCounter, holds: consecutiveHolds }, 'drkalla canary turn held (incomplete utterance)');
+        app.log.info(
+          { callId, turn: turnCounter, holds: consecutiveHolds, readiness: Number(turnReadiness.readiness.toFixed(2)), reasons: turnReadiness.reasons },
+          'drkalla canary turn held (low turn-readiness)',
+        );
         return;
       }
       if (isResponseTurn || isReminderTurn) consecutiveHolds = 0;
