@@ -194,7 +194,7 @@ const PROFI_LINK_CHOICE = /\b(?:profi[\s-]?(?:zugang|link)|den profi|zum profi|d
 // nicht", "lieber nicht", "kein Link", "reicht so". Wind down, never re-offer.
 const DRKALLA_LINK_DECLINE = /\b(?:nicht\s+n(?:ö|oe)tig|brauche?\s+(?:ich\s+)?(?:das\s+|den\s+)?nicht|lieber\s+nicht|kein(?:en)?\s+link|lass(?:en\s+sie)?\s+(?:das\s+)?(?:mal\s+)?(?:gut|stecken|sein)|passt(?:\s+schon)?|alles\s+(?:gut|klar|bestens)|reicht(?:\s+so)?|sp(?:ä|ae)ter)\b/i;
 
-export type DrkallaSendLinkKind = 'product' | 'profi';
+export type DrkallaSendLinkKind = 'product' | 'profi' | 'category';
 export type DrkallaSendLinkExecutor = (input: {
   url: string;
   label: string;
@@ -838,24 +838,38 @@ export async function buildDrkallaCustomLlmResponse(input: {
         const hit = input.catalogSearch(activeProduct.spokenName, 1)[0];
         if (hit) productUrl = input.evidenceLookup.byId(hit.productId)?.url ?? null;
       }
-      // Choice resolution: explicit Profi wins; else explicit product; else a
-      // bare yes on a single-option offer follows that offer (product).
-      const kind: DrkallaSendLinkKind = wantsProfi ? 'profi' : 'product';
-      const target = kind === 'profi'
-        ? { url: DRKALLA_CONTACT_FACTS.profiUrl, label: 'Profi-Zugang' }
-        : activeProduct && productUrl
-          ? { url: productUrl, label: activeProduct.spokenName }
-          : null;
+      // Resolve the link target: explicit Profi; else the grounded product; else,
+      // when the caller asked about a CATEGORY/"Sortiment" with no single product
+      // resolved, a category SEARCH link for the active product type (a valid
+      // drkalla.com link) instead of the misleading "noch nicht freigeschaltet"
+      // — makes links flexible enough for "schick mir das Scheren-Sortiment".
+      let target: { url: string; label: string; linkKind: DrkallaSendLinkKind } | null = null;
+      if (wantsProfi) {
+        target = { url: DRKALLA_CONTACT_FACTS.profiUrl, label: 'Profi-Zugang', linkKind: 'profi' };
+      } else if (activeProduct && productUrl) {
+        target = { url: productUrl, label: activeProduct.spokenName, linkKind: 'product' };
+      } else {
+        const categoryTerm = canaryTurn.runtime.memory.activeProductType?.label?.trim();
+        if (categoryTerm) {
+          target = {
+            url: `https://drkalla.com/search?q=${encodeURIComponent(categoryTerm)}`,
+            label: `${categoryTerm}-Auswahl`,
+            linkKind: 'category',
+          };
+        }
+      }
 
       let text = DRKALLA_SMS_NOT_WIRED_TEXT;
       let linkSentUrl: string | null = null;
       if (input.executeSendLink && target) {
-        const outcome = await input.executeSendLink({ url: target.url, label: target.label, linkKind: kind })
+        const outcome = await input.executeSendLink({ url: target.url, label: target.label, linkKind: target.linkKind })
           .catch(() => ({ smsSent: false as const }));
         if (outcome.smsSent) {
-          text = kind === 'profi'
+          text = target.linkKind === 'profi'
             ? 'Erledigt, ich habe Ihnen den Link zum Profi-Zugang per SMS geschickt. Kann ich sonst noch etwas klären?'
-            : `Erledigt, ich habe Ihnen den Produktlink zu ${target.label} per SMS geschickt. Kann ich sonst noch etwas klären?`;
+            : target.linkKind === 'category'
+              ? `Erledigt, ich habe Ihnen den Link zu unserer ${target.label} per SMS geschickt. Kann ich sonst noch etwas klären?`
+              : `Erledigt, ich habe Ihnen den Produktlink zu ${target.label} per SMS geschickt. Kann ich sonst noch etwas klären?`;
           linkSentUrl = target.url;
         } else if ('duplicate' in outcome && outcome.duplicate) {
           text = `Den Link habe ich Ihnen in diesem Anruf schon geschickt. Kann ich sonst noch etwas klären?`;
@@ -863,7 +877,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
           // End with a question so lastAgentQuestion is no longer the SMS offer
           // — otherwise a following "nee, alles gut" stays vetoed by the pending
           // offer and never reaches the deterministic wind-down.
-          text = kind === 'profi'
+          text = target.linkKind === 'profi'
             ? 'Das hat gerade leider nicht geklappt, die SMS ging nicht raus. Den Profi-Zugang finden Sie auf drkalla punkt com. Kann ich sonst noch etwas klären?'
             : `Das hat gerade leider nicht geklappt, die SMS ging nicht raus. Sie finden ${target.label} auf drkalla punkt com. Kann ich sonst noch etwas klären?`;
         }

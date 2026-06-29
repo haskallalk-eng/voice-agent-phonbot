@@ -863,6 +863,30 @@ describe('DrKalla register/style + deterministic price (live call 2026-06-13 fix
     expect(response.text).toContain('per SMS geschickt');
   });
 
+  it('B: a category/"Sortiment" confirm sends a category SEARCH link, not a wrong single product', async () => {
+    // Caller asked about a category (no single product grounded). Instead of the
+    // misleading "noch nicht freigeschaltet", send a valid drkalla.com category
+    // search link for the active product type (live call 2026-06-28: links not
+    // flexible enough — a "Scheren-Sortiment" request sent a random comb).
+    const memory = {
+      ...createDrkallaShortTermMemory(),
+      activeProductType: { label: 'Schere', turnIndex: 1 },
+      lastAgentQuestion: 'Soll ich Ihnen den Link zu unserem Scheren-Sortiment per SMS schicken?',
+    };
+    let captured: { url: string; linkKind: string } | null = null;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('ja, gerne'),
+      memory,
+      client: { complete: async () => 'should not be used' },
+      executeSendLink: async (l: { url: string; linkKind: string }) => { captured = l; return { smsSent: true as const }; },
+    });
+    expect(captured).not.toBeNull();
+    expect(captured!.linkKind).toBe('category');
+    expect(captured!.url).toBe('https://drkalla.com/search?q=Schere');
+    expect(response.text).toContain('per SMS geschickt');
+  });
+
   it('B: a curated FAQ answers deterministically; an uncovered question still reaches the model (additive)', async () => {
     const faqMatch = (t: string) => (/versand/i.test(t)
       ? { id: 'shipping', answer: 'Die Versandkosten sehen Sie im Bestellvorgang auf drkalla.com.', tags: [] }
