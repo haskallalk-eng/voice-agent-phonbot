@@ -693,6 +693,11 @@ export function buildDrkallaMemoryContext(memory: DrkallaShortTermVoiceMemory): 
   if (memory.lastMentionedProduct) parts.push(`active_product=${sanitizeMemoryText(memory.lastMentionedProduct.spokenName, 80)}`);
   if (memory.activeProductType) parts.push(`active_product_type=${sanitizeMemoryText(memory.activeProductType.label, 60)}`);
   if (activeProductFacts.length) parts.push(`product_facts=${activeProductFacts.join(',')}`);
+  // Products already named this call, so the model can SEE what not to re-pitch
+  // (live call: it re-offered the same Shampoo + its link several times). The
+  // anti-repeat prompt rule references this list explicitly.
+  const discussed = memory.recentProducts.map((p) => sanitizeMemoryText(p.spokenName, 40)).filter(Boolean);
+  if (discussed.length) parts.push(`discussed_products=${discussed.join(',')}`);
   if (memory.pendingClarification) parts.push(`pending=${memory.pendingClarification.kind}`);
   if (memory.endCallEligible && memory.endCallReason) parts.push(`end_call_candidate=${memory.endCallReason}`);
   return parts.join('; ').slice(0, 550);
