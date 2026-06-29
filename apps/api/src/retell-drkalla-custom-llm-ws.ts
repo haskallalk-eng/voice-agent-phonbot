@@ -1022,7 +1022,7 @@ export async function registerRetellDrkallaCustomLlmWs(
           };
 
           const executeSendLink = smsToolEnabled
-            ? async (link: { url: string; label: string; linkKind: 'product' | 'profi' }) => {
+            ? async (link: { url: string; label: string; linkKind: 'product' | 'profi' | 'category' }) => {
                 try {
                   const injected = await app.inject({
                     method: 'POST',
