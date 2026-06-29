@@ -233,6 +233,32 @@ describe('product-class consistency + plural matching (live call 2026-06-28)', (
   });
 });
 
+describe('compound decomposition + synonyms (varied caller phrasings, live 2026-06-29)', () => {
+  const catalog = buildDrkallaProductCatalogSearch([
+    { handle: 'locken-shampoo', title: 'Locken Shampoo', productType: 'Locken Shampoo', tags: ['Shampoo'], variants: [{ price: '9.00', available: true }] },
+    { handle: 'volumen-shampoo', title: 'Volumen Shampoo', productType: 'Volumen Shampoo', tags: ['Shampoo'], variants: [{ price: '11.00', available: true }] },
+    { handle: 'glaett-shampoo', title: 'Glättendes Shampoo', productType: 'Glättendes Shampoo', tags: ['Shampoo'], variants: [{ price: '12.00', available: true }] },
+    { handle: 'luxe-oel', title: 'Luxe-Öl Haaröl Serum', productType: 'Leave-in Öl', tags: ['Öl'], variants: [{ price: '14.00', available: true }] },
+    { handle: 'dryer', title: 'Sthauer Salon-Haartrockner Astro Ionic', productType: 'Hair Dryer', tags: ['Haartrockner'], variants: [{ price: '99.00', available: true }] },
+    { handle: 'bright-wax', title: 'Bright-Wax Glänzendes Styling', productType: 'Bright-Wax', tags: ['Wax', 'Styling'], variants: [{ price: '8.00', available: true }] },
+  ]);
+  const top = (q: string) => catalog(q, 2).map((m) => m.productId);
+
+  it('splits one-word compounds: Lockenshampoo / Volumenshampoo', () => {
+    expect(top('Lockenshampoo')).toContain('locken-shampoo');
+    expect(top('Volumenshampoo')).toContain('volumen-shampoo');
+  });
+  it('"Föhn" finds the Haartrockner (English productType)', () => {
+    expect(top('Föhn')[0]).toBe('dryer');
+  });
+  it('"Shampoo für glatte Haare" finds the Glättendes Shampoo', () => {
+    expect(top('Shampoo für glatte Haare')[0]).toBe('glaett-shampoo');
+  });
+  it('"Wachs" finds the Wax product', () => {
+    expect(top('Wachs')).toContain('bright-wax');
+  });
+});
+
 describe('formatDrkallaPrice (no "Euro ooo" on whole-euro prices)', () => {
   it('drops ,00 cents but keeps real decimals', () => {
     expect(formatDrkallaPrice(10)).toBe('10 Euro');

@@ -118,6 +118,48 @@ const PRODUCT_CLASS_STEMS = new Set(
   ].map(stem).filter((s) => s.length >= 4),
 );
 
+// Head nouns that close a German compound, so a one-word caller request can be
+// split into modifier + class ("Lockenshampoo" -> "locken" + "shampoo",
+// "Haaröl" -> "haar" + "oel", "Volumenshampoo" -> "volumen" + "shampoo"). The
+// caller says compounds the catalog stores as two words; without this split the
+// request matched nothing or the wrong product (verified live 2026-06-29).
+// Normalized spelling (ä/ö/ü folded), longest first so "haarmaske" splits on
+// "maske" not a shorter suffix.
+const COMPOUND_SPLIT_SUFFIXES = [
+  'haartrockner', 'conditioner', 'blondierung', 'lockenstab', 'spuelung', 'shampoo',
+  'haarmaske', 'balsam', 'serum', 'schaum', 'spray', 'puder', 'creme', 'lotion',
+  'maske', 'farbe', 'wachs', 'kur', 'oel', 'gel', 'wax',
+].sort((a, b) => b.length - a.length);
+
+// Spoken synonyms / morphology the catalog does not spell the caller's way:
+// "Föhn" (catalog: Haartrockner/"Hair Dryer"), "Wachs" (catalog: "Wax"),
+// "glatt(e)" (catalog: "glättend"). Mapped to the catalog's tokens so the
+// request reaches the right products. Keys are normalized (umlauts folded).
+const QUERY_SYNONYMS: Record<string, string[]> = {
+  foehn: ['haartrockner', 'trockner', 'dryer'],
+  haarfoehn: ['haartrockner', 'trockner', 'dryer'],
+  wachs: ['wax'],
+  glatt: ['glaettend', 'glaettendes'],
+  glatte: ['glaettend', 'glaettendes'],
+  glatten: ['glaettend', 'glaettendes'],
+  glaetten: ['glaettend', 'glaettendes'],
+  trockenshampoo: ['trockenshampoo', 'trocken', 'shampoo'],
+};
+
+// Expand a caller token into itself + any compound split + any synonyms, so the
+// scorer + class filter see the catalog's vocabulary. Pure, in-memory.
+function expandQueryToken(token: string): string[] {
+  const out = [token];
+  for (const suffix of COMPOUND_SPLIT_SUFFIXES) {
+    if (token.length > suffix.length + 2 && token.endsWith(suffix)) {
+      out.push(token.slice(0, token.length - suffix.length), suffix);
+      break;
+    }
+  }
+  for (const syn of QUERY_SYNONYMS[token] ?? []) out.push(syn);
+  return out;
+}
+
 // TTS-safe German money for this voice stack. Whole-euro prices drop the ",00"
 // cents so the voice does not read an extra "null null"/"o o" after the amount
 // (live complaint: "Euro ooo"); real decimal prices keep the comma form so
@@ -284,7 +326,10 @@ export function buildDrkallaProductCatalogSearch(
   }
 
   return (text: string, limit = 4): DrkallaCatalogMatch[] => {
-    const userTokens = [...new Set(contentTokens(text))];
+    // Expand caller tokens: split German one-word compounds into modifier+class
+    // and add catalog synonyms, so "Lockenshampoo"/"Haaröl"/"Föhn" reach the
+    // right products.
+    const userTokens = [...new Set(contentTokens(text).flatMap(expandQueryToken))];
     if (!userTokens.length) return [];
     // Each user token contributes its raw form AND its stem, so a plural/inflected
     // request matches the singular catalog word ("Scheren" -> "scher").
