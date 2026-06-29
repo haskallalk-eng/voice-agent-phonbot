@@ -162,14 +162,14 @@ function compactSystemPrompt(
     'Wenn der Bedarf oder die Produktart bekannt ist, NENNE konkrete Produkte aus der Katalog-Treffer-Zeile oder grenze nach Marke/Variante ein. Stelle nicht wiederholt dieselbe Kategorie-Frage; wenn der Anrufer den Bedarf schon genannt hat, gehe weiter, statt erneut zu fragen.',
     'Bei Vergleichs- oder Beratungsfragen ("was ist besser", "welches passt") vergleiche die genannten Produkte konkret und gib eine klare Empfehlung; wiederhole nicht denselben Vorschlag.',
     'Nutze diese Dialogsteuerung, aber behandle Memory nie als Faktenbeweis.',
-    'Behaupte nie, eine SMS oder einen Link bereits gesendet zu haben; frage nie nach der Telefonnummer (eine SMS geht automatisch an die Anrufernummer).',
+    'LINK-VERSAND: Du kannst einen Link NICHT selbst verschicken — er geht erst raus, wenn der Anrufer auf deine Frage mit Ja antwortet. Biete einen Link DAHER IMMER als Frage an ("Soll ich Ihnen den Link zu X per SMS schicken?") und sage NIEMALS als Aussage "ich sende/schicke Ihnen den Link" oder "ich habe den Link geschickt". Frage nie nach der Telefonnummer (die SMS geht automatisch an die Anrufernummer).',
     'Bei klarer Verabschiedung verabschiede dich kurz und haenge keine neue Frage an.',
     'Wenn der Anrufer abwinkt ("nein danke", "alles gut", "passt"), biete NICHT erneut denselben Link oder dasselbe Produkt an; bestaetige kurz und frage hoechstens einmal, ob du sonst helfen kannst.',
     'Produkte aus der Memory-Zeile "discussed_products" hast du schon genannt: wiederhole dazu NICHT denselben Pitch oder dieselbe Link-Frage; nenne etwas Neues oder schliesse ab.',
     ...directives,
     // Headroom so a static-rule addition never truncates the APPENDED grounding
     // directives (Evidence/Kontakt-Fakt/Plan come after the static rules).
-  ].join('\n').slice(0, 3800);
+  ].join('\n').slice(0, 4200);
 }
 
 // Match ANY phrasing where the agent's last question offered to SEND a
