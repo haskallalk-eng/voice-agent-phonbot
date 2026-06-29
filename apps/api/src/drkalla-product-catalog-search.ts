@@ -72,9 +72,61 @@ function contentTokens(text: string): string[] {
     .filter((t) => t.length >= 3 && !STOPWORDS.has(t) && !SHADE_TOKEN.test(t));
 }
 
-// TTS-safe German money for this voice stack.
-// Keep comma form so Retell does not say "22 Euro 90".
+// Add each token AND its stem to a set, so a stemmed query token matches.
+function addTokensWithStems(set: Set<string>, tokens: string[]): void {
+  for (const t of tokens) {
+    set.add(t);
+    const s = stem(t);
+    if (s !== t) set.add(s);
+  }
+}
+
+// Light German plural/inflection stem so a plural request matches a singular
+// catalog word: "Scheren" -> "scher" matches "Schere" -> "scher" (live call:
+// "Scheren" found no scissors because the token stayed plural). Conservative:
+// strips ONE common suffix and only when the stem stays >= 4 chars, so it never
+// collapses short distinct words. Applied symmetrically to catalog + query
+// tokens, so it only ever helps recall on inflection.
+function stem(token: string): string {
+  for (const suffix of ['ern', 'en', 'er', 'es', 'e', 'n', 's']) {
+    if (token.length - suffix.length >= 4 && token.endsWith(suffix)) {
+      return token.slice(0, -suffix.length);
+    }
+  }
+  return token;
+}
+
+// Spoken product-CLASS words. When the caller names one, results are restricted
+// to products of that class, so a "Shampoo" request can never surface a
+// Lockenstab and a "Schere" request can never surface a Kamm (live call
+// 2026-06-28: both leaked because they shared a modifier token like "Locken").
+// Stems are precomputed so plural/inflected requests ("Scheren", "Masken") map
+// to the same class. The filter only narrows; if the class has no match it does
+// not fire (the honest "haben wir nicht / clarify" path stays intact).
+// Only DISTINCTIVE class stems (>= 4 chars) are hard-filtered. Short, collision-
+// prone stems (gel/oel/wax/kur — "gel" lives inside "spiegel"/"gelb"/"Gelée")
+// and umlaut-spelling-fragile ones (tönung vs the catalog's "Tonung…") are
+// deliberately EXCLUDED: they fall back to the type-weighted scoring instead of a
+// brittle hard filter, so a genuine "Haargel"/"Stylingwax" is never dropped.
+const PRODUCT_CLASS_STEMS = new Set(
+  [
+    'shampoo', 'conditioner', 'spuelung', 'maske', 'serum', 'schaum',
+    'spray', 'puder', 'farbe', 'blondierung', 'schere',
+    'effilierschere', 'kamm', 'buerste', 'foehn', 'haartrockner', 'lockenstab',
+    'glaetteisen', 'rasierer', 'klinge', 'handtuch', 'umhang', 'handschuh', 'folie',
+    'creme', 'lotion', 'fixierer', 'booster',
+  ].map(stem).filter((s) => s.length >= 4),
+);
+
+// TTS-safe German money for this voice stack. Whole-euro prices drop the ",00"
+// cents so the voice does not read an extra "null null"/"o o" after the amount
+// (live complaint: "Euro ooo"); real decimal prices keep the comma form so
+// Retell does not say "22 Euro 90". This is the price the model is grounded on
+// for the Katalog-Treffer list, so it fixes the model path too (model frames
+// bypass the deterministic TTS layer).
 export function formatDrkallaPrice(value: number): string {
+  const cents = Math.round(value * 100);
+  if (cents % 100 === 0) return `${cents / 100} Euro`;
   return `${value.toFixed(2).replace('.', ',')} Euro`;
 }
 
@@ -169,6 +221,7 @@ type IndexedProduct = {
   typeTokens: Set<string>; // productType only (strongest signal)
   catTokens: Set<string>;  // productType + tags (category-level)
   allTokens: Set<string>;  // + title (product-level)
+  classTokens: Set<string>; // productType + TITLE only (what the product genuinely IS — excludes SEO tags)
 };
 
 export function buildDrkallaProductCatalogSearch(
@@ -184,10 +237,11 @@ export function buildDrkallaProductCatalogSearch(
     const tags = Array.isArray(product.tags)
       ? product.tags.filter((t): t is string => typeof t === 'string')
       : [];
-    const typeTokens = new Set<string>(contentTokens(productType ?? ''));
+    const typeTokens = new Set<string>();
+    addTokensWithStems(typeTokens, contentTokens(productType ?? ''));
     const catTokens = new Set<string>(typeTokens);
     for (const tag of tags) {
-      for (const tok of contentTokens(tag)) catTokens.add(tok);
+      addTokensWithStems(catTokens, contentTokens(tag));
     }
     // Vendor tokens are category-level (×2) so a vendor word can help rank. NOTE
     // this is NOT a reliable "is this brand stocked" signal: normalize() splits
@@ -196,9 +250,16 @@ export function buildDrkallaProductCatalogSearch(
     // still returns house hits. Vendor-strict brand stock lives in
     // buildDrkallaExternalBrandStock below; use that for "do we carry brand X?".
     const vendor = typeof product.vendor === 'string' ? product.vendor : '';
-    for (const tok of contentTokens(vendor)) catTokens.add(tok);
+    addTokensWithStems(catTokens, contentTokens(vendor));
+    const titleTokens = new Set<string>();
+    addTokensWithStems(titleTokens, contentTokens(product.title));
     const allTokens = new Set<string>(catTokens);
-    for (const tok of contentTokens(product.title)) allTokens.add(tok);
+    for (const tok of titleTokens) allTokens.add(tok);
+    // What the product genuinely IS = productType + title, deliberately EXCLUDING
+    // SEO/competitor tags (a Friseurstuhl tagged "Schere" is not a scissors). Used
+    // only by the product-class filter so a class request stays on-category.
+    const classTokens = new Set<string>(typeTokens);
+    for (const tok of titleTokens) classTokens.add(tok);
     if (!allTokens.size) continue;
     let available = 0;
     if (Array.isArray(product.variants)) {
@@ -218,21 +279,32 @@ export function buildDrkallaProductCatalogSearch(
       typeTokens,
       catTokens,
       allTokens,
+      classTokens,
     });
   }
 
   return (text: string, limit = 4): DrkallaCatalogMatch[] => {
     const userTokens = [...new Set(contentTokens(text))];
     if (!userTokens.length) return [];
+    // Each user token contributes its raw form AND its stem, so a plural/inflected
+    // request matches the singular catalog word ("Scheren" -> "scher").
+    const userStems = userTokens.map(stem);
+    // Product classes the caller explicitly named (Shampoo, Schere, …). If any,
+    // results are restricted to that class so a styling tool can't answer a
+    // shampoo request and a comb can't answer a scissors request.
+    const requestedClasses = userStems.filter((s) => PRODUCT_CLASS_STEMS.has(s));
+    const matchesHit = (set: Set<string>, raw: string, s: string): boolean => set.has(raw) || set.has(s);
     const scored: Array<{ p: IndexedProduct; score: number; typeHits: number; catHits: number; allHits: number }> = [];
     for (const p of indexed) {
       let typeHits = 0;
       let catHits = 0;
       let allHits = 0;
-      for (const t of userTokens) {
-        if (p.typeTokens.has(t)) typeHits += 1;
-        if (p.catTokens.has(t)) catHits += 1;
-        if (p.allTokens.has(t)) allHits += 1;
+      for (let i = 0; i < userTokens.length; i += 1) {
+        const t = userTokens[i]!;
+        const s = userStems[i]!;
+        if (matchesHit(p.typeTokens, t, s)) typeHits += 1;
+        if (matchesHit(p.catTokens, t, s)) catHits += 1;
+        if (matchesHit(p.allTokens, t, s)) allHits += 1;
       }
       if (allHits === 0) continue;
       // A productType match is the strongest "this is the right kind of product"
@@ -242,6 +314,31 @@ export function buildDrkallaProductCatalogSearch(
       scored.push({ p, score, typeHits, catHits, allHits });
     }
     if (!scored.length) return [];
+
+    // Hard product-class filter: when the caller named a class, drop every result
+    // that does not actually belong to that class (its tokens lack the class
+    // word). Only applied when it leaves at least one match, so an unstocked
+    // class still falls through to the honest clarify/"haben wir nicht" path
+    // rather than silently offering the wrong category.
+    if (requestedClasses.length) {
+      // A product is in class `c` if a productType/title token equals `c` or ENDS
+      // WITH it. German compounds are head-final and the class word is the head
+      // noun ("Locken·shampoo", "Effilier·schere", "Haar·farbe", "Styling·schaum"),
+      // so an endsWith match is both compound-correct and collision-safe (it does
+      // not match a class word sitting at the front/middle, e.g. "Tonungs·aktivator"
+      // is not a Tönung). The candidate set is already query-matched, so this only
+      // narrows genuine candidates to the requested class.
+      const inClass = scored.filter(({ p }) =>
+        requestedClasses.some((c) => {
+          if (p.classTokens.has(c)) return true;
+          for (const t of p.classTokens) if (t.endsWith(c)) return true;
+          return false;
+        }));
+      if (inClass.length) {
+        scored.length = 0;
+        scored.push(...inClass);
+      }
+    }
     scored.sort((a, b) =>
       (b.score - a.score)
       || (b.catHits - a.catHits)
