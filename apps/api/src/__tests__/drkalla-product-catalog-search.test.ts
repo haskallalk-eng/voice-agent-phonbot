@@ -3,6 +3,7 @@ import {
   buildDrkallaProductCatalogSearch,
   buildDrkallaShortName,
   buildDrkallaExternalBrandStock,
+  formatDrkallaPrice,
 } from '../drkalla-product-catalog-search.js';
 
 const products = [
@@ -149,9 +150,11 @@ describe('DrKalla product catalog category search', () => {
       },
     ]);
     const r = withComb('Ich suche ein Shampoo für lockiges Haar', 3);
-    expect(r[0]?.productId).toBe('shampoo-curl');           // shampoo wins
-    expect(r.findIndex((p) => p.productId === 'comb-curl'))  // comb ranks below, if present
-      .toBeGreaterThan(0);
+    expect(r[0]?.productId).toBe('shampoo-curl'); // shampoo wins
+    // The product-class filter now EXCLUDES the comb entirely from a "Shampoo"
+    // request (stronger than just ranking it below) — a Shampoo request never
+    // returns a comb.
+    expect(r.some((p) => p.productId === 'comb-curl')).toBe(false);
   });
 });
 
@@ -183,7 +186,7 @@ describe('DrKalla vendor-strict external-brand stock', () => {
       const hits = stock(q);
       expect(hits, q).toHaveLength(1);
       expect(hits[0]?.productId, q).toBe('inoa');
-      expect(hits[0]?.priceText, q).toBe('13,00 Euro');
+      expect(hits[0]?.priceText, q).toBe('13 Euro'); // whole-euro: ,00 cents dropped
       expect(hits[0]?.available, q).toBe(1);
       expect(hits[0]?.shortName, q).toMatch(/Inoa/);
     }
@@ -201,5 +204,41 @@ describe('DrKalla vendor-strict external-brand stock', () => {
     expect(stock('Dr.Kalla')).toEqual([]);
     expect(stock('Kalla')).toEqual([]);
     expect(stock('a')).toEqual([]); // < 3 chars after folding
+  });
+});
+
+describe('product-class consistency + plural matching (live call 2026-06-28)', () => {
+  const catalog = buildDrkallaProductCatalogSearch([
+    { handle: 'locken-shampoo', title: 'Locken Shampoo mit Baobaböl', productType: 'Locken Shampoo', tags: ['Locken', 'Shampoo'], variants: [{ price: '7.60', available: true }, { price: '12.40', available: true }] },
+    { handle: 'curling-iron', title: 'Sthauer Profi Lockenstab konisch', productType: 'Konischer Heizstab für präzise, engere Locken', tags: ['Locken', 'Styling'], variants: [{ price: '29.00', available: true }] },
+    { handle: 'schere', title: 'Basis Schere 6 Zoll', productType: 'Friseur-Tool', tags: ['Schere', 'Friseur'], variants: [{ price: '19.00', available: true }] },
+    { handle: 'kamm', title: 'Delrin Hair Comb Professional Kamm', productType: 'Barber-Bedarf', tags: ['Kamm', 'Comb'], variants: [{ price: '5.00', available: true }] },
+  ]);
+
+  it('a Shampoo request never surfaces a Lockenstab (curling iron)', () => {
+    const r = catalog('Ich suche ein Locken Shampoo', 4);
+    expect(r[0]?.productId).toBe('locken-shampoo');
+    expect(r.some((p) => p.productId === 'curling-iron')).toBe(false);
+  });
+
+  it('a plural "Scheren" request matches the singular Schere (and not a Kamm)', () => {
+    const r = catalog('Habt ihr Scheren?', 4);
+    expect(r.some((p) => p.productId === 'schere')).toBe(true);
+    expect(r.some((p) => p.productId === 'kamm')).toBe(false);
+  });
+
+  it('a "Schere" request does not return a comb', () => {
+    const r = catalog('Ich brauche eine Schere', 4);
+    expect(r.every((p) => p.productId !== 'kamm')).toBe(true);
+  });
+});
+
+describe('formatDrkallaPrice (no "Euro ooo" on whole-euro prices)', () => {
+  it('drops ,00 cents but keeps real decimals', () => {
+    expect(formatDrkallaPrice(10)).toBe('10 Euro');
+    expect(formatDrkallaPrice(12)).toBe('12 Euro');
+    expect(formatDrkallaPrice(7.6)).toBe('7,60 Euro');
+    expect(formatDrkallaPrice(12.4)).toBe('12,40 Euro');
+    expect(formatDrkallaPrice(22.9)).toBe('22,90 Euro');
   });
 });
