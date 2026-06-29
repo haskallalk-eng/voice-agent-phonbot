@@ -165,8 +165,11 @@ function compactSystemPrompt(
     'Behaupte nie, eine SMS oder einen Link bereits gesendet zu haben; frage nie nach der Telefonnummer (eine SMS geht automatisch an die Anrufernummer).',
     'Bei klarer Verabschiedung verabschiede dich kurz und haenge keine neue Frage an.',
     'Wenn der Anrufer abwinkt ("nein danke", "alles gut", "passt"), biete NICHT erneut denselben Link oder dasselbe Produkt an; bestaetige kurz und frage hoechstens einmal, ob du sonst helfen kannst.',
+    'Produkte aus der Memory-Zeile "discussed_products" hast du schon genannt: wiederhole dazu NICHT denselben Pitch oder dieselbe Link-Frage; nenne etwas Neues oder schliesse ab.',
     ...directives,
-  ].join('\n').slice(0, 3400);
+    // Headroom so a static-rule addition never truncates the APPENDED grounding
+    // directives (Evidence/Kontakt-Fakt/Plan come after the static rules).
+  ].join('\n').slice(0, 3800);
 }
 
 // Match ANY phrasing where the agent's last question offered to SEND a

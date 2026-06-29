@@ -290,6 +290,22 @@ describe('DrKalla short-term voice memory', () => {
     expect(buildDrkallaMemoryContext(memory)).toContain('product_facts=description,size,price,location');
   });
 
+  it('surfaces already-discussed products in the memory context (anti-repeat)', () => {
+    let memory = createDrkallaShortTermMemory();
+    memory = reduceDrkallaShortTermMemory(memory, {
+      type: 'agent_spoke', turnIndex: 1, text: 'Glanz-Shampoo empfehle ich Ihnen.',
+      lastProduct: { spokenName: 'Glanz-Shampoo', productId: 'glanz-shampoo', productKind: 'Shampoo' },
+    });
+    memory = reduceDrkallaShortTermMemory(memory, {
+      type: 'agent_spoke', turnIndex: 2, text: 'Alternativ das Volumen Shampoo.',
+      lastProduct: { spokenName: 'Volumen Shampoo', productId: 'volumen-shampoo', productKind: 'Shampoo' },
+    });
+    const context = buildDrkallaMemoryContext(memory);
+    expect(context).toContain('discussed_products=');
+    expect(context).toContain('Glanz-Shampoo');
+    expect(context).toContain('Volumen Shampoo');
+  });
+
   it('keeps product memory and model-facing context free of raw URL, phone, and email values', () => {
     const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
       type: 'agent_spoke',
