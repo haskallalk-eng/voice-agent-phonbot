@@ -378,8 +378,8 @@ describe('DrKalla grounded evidence answers (catalog facts, not memory)', () => 
     expect(prompts[0]).toContain('Evidence (Shop-Datenstand)');
     expect(prompts[0]).toContain('9,99 Euro');
     expect(prompts[0]).not.toContain('9 Euro 99');
-    expect(prompts[0]).toContain('Behaupte nie, eine SMS oder einen Link bereits gesendet zu haben');
-    expect(prompts[0]).toContain('frage nie nach der Telefonnummer');
+    expect(prompts[0]).toContain('Biete einen Link DAHER IMMER als Frage an'); // always-offer link rule
+    expect(prompts[0]).toContain('nie nach der Telefonnummer');
     expect(response.metrics.directiveChars).toBeLessThanOrEqual(800);
   });
 });
