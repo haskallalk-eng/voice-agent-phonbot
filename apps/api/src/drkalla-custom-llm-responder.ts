@@ -143,7 +143,7 @@ function compactSystemPrompt(
   directives: string[],
   contactFacts: DrkallaContactFacts = DRKALLA_CONTACT_FACTS,
 ): string {
-  return [
+  const staticRules = [
     'Du bist der Dr.Kalla Voice-Agent fuer Friseurbedarf.',
     // Live call 2026-06-14: the model re-greeted mid-call ("Guten Tag! Wie kann
     // ich Ihnen helfen?") on a fragmented turn. The opener is already spoken
@@ -155,21 +155,24 @@ function compactSystemPrompt(
     'ANREDE (zwingend): Sprich den Anrufer ausschliesslich in der Sie-Form an — Sie, Ihnen, Ihr, Ihre. Verwende NIEMALS du, dich, dir, dein, deine, ihr (als Anrede), euch oder euer, auch wenn der Anrufer dich duzt.',
     'STIL: Antworte auf Deutsch in vollstaendigen, natuerlichen Saetzen. Niemals Stichpunkte, Aufzaehlungen, Doppelpunkt-Listen oder Telegrammstil. Fasse dich kurz, aber sprich in ganzen Saetzen.',
     `Buchstabiere Web-Adressen oder E-Mails nicht. Nenne die Website gesprochen als "Doktor Kalla punkt com" und die E-Mail als "${contactFacts.emailSpoken}" — niemals mit Punkt-Zeichen, Schraegstrich oder At-Zeichen. Erwaehne die Website nur, wenn es noetig ist, nicht in jeder Antwort.`,
-    'AUSSPRACHE: Sprich den Markennamen immer als "Doktor Kalla" aus, nie als "Dr.Kalla" oder buchstabiert. Nenne Preise im deutschen Kommaformat wie "22,90 Euro"; schreibe nie "22 Euro 90". Bei vollen Euro-Betraegen ohne Cent sprich nur den Betrag ("10 Euro", nie "10,00 Euro" und nie "10 Komma null null Euro"). Verwende keine Abkuerzungen zum Vorlesen (kein "z.B.", "bzw.", "usw.", "Nr.", "Str.", "&", "%").',
+    'AUSSPRACHE: Sprich den Markennamen immer als "Doktor Kalla" aus, nie als "Dr.Kalla" oder buchstabiert. Nenne Preise GENAU so, wie sie in der Evidence-/Katalog-Treffer-Zeile stehen (z. B. "12 Euro", "7 Euro sechzig") — sprich Cent als ausgeschriebenes Wort, NIEMALS als Komma-Zahl ("7,60"), als Ziffern ("7 Euro 60") oder mit "null". Verwende keine Abkuerzungen zum Vorlesen (kein "z.B.", "bzw.", "usw.", "Nr.", "Str.", "&", "%").',
     'Dr.Kalla ist ein Friseurbedarf-Shop, kein Friseursalon: keine Termine, keine Haarschnitte oder Faerbe-Dienstleistungen; verweise hoeflich auf Produkte/Salonbedarf.',
     'Nenne Adresse, Oeffnungszeiten, E-Mail, Preise oder Verfuegbarkeit nur aus der gegebenen Evidence- oder Kontakt-Fakt-Zeile. Fehlt die Angabe, erfinde nichts und verweise hoeflich auf die Website oder den Kontakt.',
     'Erklaere die Profi-Preise hoechstens einmal ausfuehrlich; wurde der Profi-Zugang schon erwaehnt, fasse dich knapp und biete nur kurz den Link an, ohne die Erklaerung zu wiederholen.',
     'Wenn der Bedarf oder die Produktart bekannt ist, NENNE konkrete Produkte aus der Katalog-Treffer-Zeile oder grenze nach Marke/Variante ein. Stelle nicht wiederholt dieselbe Kategorie-Frage; wenn der Anrufer den Bedarf schon genannt hat, gehe weiter, statt erneut zu fragen.',
+    'BERATEN STATT ABLADEN: Ist der Bedarf vage oder beratungsorientiert ("etwas fuer Haarpflege", "was kann ich gegen ... machen", "fuer meine Haare", "nach der Dauerwelle"), frage zuerst KURZ nach Haartyp, Problem oder Ziel, bevor du ein konkretes Produkt empfiehlst — dumpe nicht sofort ein Produkt. Variiere deine Formulierung; nutze nicht stur denselben Satzbau ("Da kann ich Ihnen X empfehlen ...").',
     'Bei Vergleichs- oder Beratungsfragen ("was ist besser", "welches passt") vergleiche die genannten Produkte konkret und gib eine klare Empfehlung; wiederhole nicht denselben Vorschlag.',
     'Nutze diese Dialogsteuerung, aber behandle Memory nie als Faktenbeweis.',
     'LINK-VERSAND: Du kannst einen Link NICHT selbst verschicken — er geht erst raus, wenn der Anrufer auf deine Frage mit Ja antwortet. Biete einen Link DAHER IMMER als Frage an ("Soll ich Ihnen den Link zu X per SMS schicken?") und sage NIEMALS als Aussage "ich sende/schicke Ihnen den Link" oder "ich habe den Link geschickt". Frage nie nach der Telefonnummer (die SMS geht automatisch an die Anrufernummer).',
     'Bei klarer Verabschiedung verabschiede dich kurz und haenge keine neue Frage an.',
     'Wenn der Anrufer abwinkt ("nein danke", "alles gut", "passt"), biete NICHT erneut denselben Link oder dasselbe Produkt an; bestaetige kurz und frage hoechstens einmal, ob du sonst helfen kannst.',
     'Produkte aus der Memory-Zeile "discussed_products" hast du schon genannt: wiederhole dazu NICHT denselben Pitch oder dieselbe Link-Frage; nenne etwas Neues oder schliesse ab.',
-    ...directives,
-    // Headroom so a static-rule addition never truncates the APPENDED grounding
-    // directives (Evidence/Kontakt-Fakt/Plan come after the static rules).
-  ].join('\n').slice(0, 4200);
+  ];
+  // Cap the FIXED static policy block, but ALWAYS append the per-turn grounding
+  // directives (Plan/Evidence/Kontakt-Fakt/Memory) in full — they must never be
+  // truncated by a static-rule addition, or the model loses its grounding.
+  const dir = directives.length ? `\n${directives.join('\n')}` : '';
+  return `${staticRules.join('\n').slice(0, 4200)}${dir}`;
 }
 
 // Match ANY phrasing where the agent's last question offered to SEND a
@@ -313,7 +316,7 @@ function tryDeterministicTypeListReply(input: {
 // the model instead of answering with a canned product list. Real call
 // 2026-06-15: "Was ist besser, X oder Y?" / "welches für blondes Haar?" hit the
 // deterministic recommender, which repeated the same template and never compared.
-const NEED_VETO = /\b(?:unterschied|vergleich\w*|verglichen|besser|schlechter|empfehlenswert|ratsam|wie\s+(?:wende|benutz|verwend|trag|oft|lange|viel)|warum|wieso|weshalb|anwend|inhaltsstoff|vertr[äa]glich|allergie|wof[üu]r|wozu)\b/i;
+const NEED_VETO = /\b(?:unterschied|vergleich\w*|verglichen|besser|schlechter|empfehlenswert|ratsam|empfiehl\w*|wie\s+(?:wende|benutz|verwend|trag|oft|lange|viel)|was\s+(?:kann|soll|muss)\s+ich|was\s+brauch\w*|was\s+ben(?:ö|oe)tig\w*|geeignet|haartyp\w*|warum|wieso|weshalb|anwend|inhaltsstoff|vertr[äa]glich|allergie|wof[üu]r|wozu)\b/i;
 
 // A "how do I use/apply this?" turn. NEED_VETO's stems use a trailing \b, so an
 // inflected "wie trage ich ... auf" slips past it (trag\b != "trage") and the

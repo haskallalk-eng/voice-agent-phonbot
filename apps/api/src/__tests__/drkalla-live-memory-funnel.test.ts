@@ -352,8 +352,9 @@ describe('DrKalla grounded evidence answers (catalog facts, not memory)', () => 
       withEvidence: true,
     });
 
-    expect(response.text).toContain('kostet laut Shop-Datenstand 9,99 Euro');
+    expect(response.text).toContain('kostet laut Shop-Datenstand 9 Euro neunundneunzig');
     expect(response.text).not.toContain('9 Euro 99');
+    expect(response.text).not.toContain('9,99');
     expect(response.text).toContain(DRKALLA_PROFI_PRICE_DISCLOSURE);
     expect(response.metrics.extraKbCalls).toBe(0);
   });
@@ -376,7 +377,7 @@ describe('DrKalla grounded evidence answers (catalog facts, not memory)', () => 
 
     expect(response.blocked).toBe(false);
     expect(prompts[0]).toContain('Evidence (Shop-Datenstand)');
-    expect(prompts[0]).toContain('9,99 Euro');
+    expect(prompts[0]).toContain('9 Euro neunundneunzig');
     expect(prompts[0]).not.toContain('9 Euro 99');
     expect(prompts[0]).toContain('Biete einen Link DAHER IMMER als Frage an'); // always-offer link rule
     expect(prompts[0]).toContain('nie nach der Telefonnummer');
