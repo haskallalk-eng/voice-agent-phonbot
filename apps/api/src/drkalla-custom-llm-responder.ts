@@ -334,6 +334,31 @@ const DRKALLA_USAGE_HOWTO = /\bwie\s+(?:wende|benutz|verwend|trag|nutz|nehm|anwe
 // service token → still hits the catalog).
 const DRKALLA_SERVICE_INTENT = /\b(?:reparatur|reparier\w*|defekt\w*|kaputt\w*|garantie|gew(?:ä|ae)hrleistung|einschick\w*|einsend\w*|zur(?:ü|ue)cksend\w*|r(?:ü|ue)cksend\w*|retour\w*|umtausch\w*|reklamat\w*|reklamier\w*|storno|stornier\w*|nachbestell\w*|ersatzteil\w*|widerruf\w*)\b/i;
 
+// A store-VISIT / browse-in-person / pickup question is NOT a product search. We
+// are a reiner Versandhandel, so the honest answer ("kein Ladenverkauf, nur
+// Versand") comes from the model/contact layer — never the recommender. Without
+// this veto the active-category fallback fused the remembered type onto the
+// question and dumped a random product (live 2026-06-30: caller asked "kann man
+// bei euch vorbeischauen und Sachen gucken?" and the agent pitched a Färbepinsel).
+// NOTE: bare browse verbs (ansehen/anschauen/angucken/besichtigen) were removed —
+// they are ordinary PRODUCT verbs ("ich möchte mir ein Shampoo ansehen") and
+// over-vetoing them sent a legit product request to the model instead of the
+// grounded recommender (review 2026-06-30). Only unambiguous store-visit / pickup
+// tokens remain; the disaster turn ("...vorbeischauen und angucken?") is still
+// caught by "vorbeischau*".
+const DRKALLA_STORE_VISIT_INTENT = /\b(?:vorbei(?:schau|komm|kommen|geschaut)\w*|vorbeizuschauen|reinschau\w*|vor\s?ort|abhol\w*|abzuhol\w*|filiale|ladengesch(?:ä|ae)ft|ladenlokal|showroom|ausstellungsraum|pers(?:ö|oe)nlich\s+(?:vorbei|abhol|komm|da))\b/i;
+
+// An explicit buy/continuation signal. The active-category fallback (which fuses
+// the remembered category onto a turn that alone has no category token) may only
+// fire for a SHORT brand/nuance turn ("von Wella", caught by the <=4-word gate)
+// or one of these GENUINE buy verbs — never for a long off-topic sentence. We
+// deliberately EXCLUDE ambient fillers ("noch", "von", "gern", "weiter",
+// "ander"): they appear in ordinary off-topic chatter ("ich überlege noch …",
+// "das erinnert mich an … von früher") and let it hijack a remembered category
+// into a non-sequitur pitch (review 2026-06-30). Brand-only turns are short, so
+// the word-count gate still reaches them without these fillers.
+const DRKALLA_BUY_CONTINUATION = /\b(?:kauf\w*|m(?:ö|oe)cht\w*|woll\w*|will\b|h(?:ä|ae)tt\w*|brauch\w*|such\w*|nehm\w*|zeig\w*|bestell\w*)\b/i;
+
 // A generic hair-type descriptor ("trockenes Haar", "feines & coloriertes Haar")
 // is a NEED, not a specific product line — it must never drive a variant
 // clarification. Matches a hair-condition adjective somewhere before "Haar".
@@ -392,9 +417,17 @@ function tryDeterministicNeedReply(input: {
   allowActiveTypeFallback?: boolean;
 }): DrkallaFallbackResult | null {
   const text = input.userText;
-  // A how-to/usage question ("wie trage ich ... auf") must not be answered with a
-  // product pitch — it falls through to the knowledge layer + model.
-  if (NEED_VETO.test(text) || DRKALLA_USAGE_HOWTO.test(text) || DRKALLA_SERVICE_INTENT.test(text) || detectDrkallaContactIntent(text)) return null;
+  // A how-to/usage question ("wie trage ich ... auf"), a service/after-sales
+  // matter, a store-visit/browse question, or a contact lookup must NOT be
+  // answered with a product pitch — they fall through to the knowledge/contact
+  // layer + model, which answer in context and vary their phrasing.
+  if (
+    NEED_VETO.test(text)
+    || DRKALLA_USAGE_HOWTO.test(text)
+    || DRKALLA_SERVICE_INTENT.test(text)
+    || DRKALLA_STORE_VISIT_INTENT.test(text)
+    || detectDrkallaContactIntent(text)
+  ) return null;
   // A plain price question about the active product ("was kostet das?") belongs
   // to the deterministic price path, which answers it from the catalog — not a
   // fresh recommendation that pitches a DIFFERENT product (real call 2026-06-15).
@@ -421,6 +454,13 @@ function tryDeterministicNeedReply(input: {
     && input.memory.activeProductType
     && !SHORT_AFFIRMATION.test(text)
     && !DRKALLA_TYPE_LIST_REQUEST.test(text)
+    // Only fall back for a genuine product continuation: a SHORT brand/nuance
+    // turn ("von Wella", garbled ASR) or an explicit buy token — never a question
+    // or a long off-topic sentence that merely follows a product turn. This stops
+    // the recommender from dumping a remembered-category product onto an unrelated
+    // question (live 2026-06-30).
+    && !text.includes('?')
+    && (text.trim().split(/\s+/).filter(Boolean).length <= 4 || DRKALLA_BUY_CONTINUATION.test(text))
   ) {
     const combined = `${input.memory.activeProductType.label} ${text}`;
     strong.push(...(input.catalogSearch?.(combined, 8) ?? []).filter((h) => h.typeHit));
@@ -459,8 +499,12 @@ function tryDeterministicNeedReply(input: {
       : ` Alternativ haben wir ${alts[0]} und ${alts[1]}.`;
   }
   // Offer the SMS link only when a sendable URL exists, so we never promise a
-  // link we cannot deliver (the old fallback claimed SMS, then it failed).
-  reply += evidence?.url
+  // link we cannot deliver (the old fallback claimed SMS, then it failed). And
+  // ANTI-LINK-SPAM: if the agent's last question already offered a link/SMS, do
+  // not pile on yet another link offer (live 2026-06-30: caller snapped "wie oft
+  // fragst du denn nach Link?"). Offer more info instead; they can still ask.
+  const justOfferedLink = /\b(?:link|sms)\b/i.test(input.memory.lastAgentQuestion ?? '');
+  reply += evidence?.url && !justOfferedLink
     ? ` Soll ich Ihnen den Link zu ${top.shortName} per SMS schicken?`
     : ` Möchten Sie zu ${top.shortName} mehr wissen?`;
   return {

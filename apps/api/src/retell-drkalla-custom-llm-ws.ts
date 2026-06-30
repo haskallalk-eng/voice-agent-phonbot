@@ -65,7 +65,7 @@ import {
 } from './drkalla-short-term-memory.js';
 import { createTrustedScope } from './trusted-scope.js';
 import { scoreDrkallaTurnReadiness } from './drkalla-turn-readiness.js';
-import { speakDrkallaText } from './drkalla-speakable.js';
+import { speakDrkallaText, speakDrkallaPriceText } from './drkalla-speakable.js';
 import type { AgentTurnRequestedEvent } from './voice-runtime-contract.js';
 
 // Content-aware turn hold: how many consecutive incomplete utterances we stay
@@ -993,6 +993,14 @@ export async function registerRetellDrkallaCustomLlmWs(
           const startedAt = Date.now();
           let firstFrameMs: number | null = null;
           let sentText = '';
+          // RAW (pre-normalization) text streamed so far. The final tail is
+          // computed by diffing against the RAW model text, NOT the normalized
+          // sentText — otherwise per-chunk vs whole-text price normalization can
+          // diverge, fullText.startsWith(sentText) goes false, and the WHOLE
+          // answer is re-sent on the final frame (caller hears it twice — review
+          // finding 2026-06-30). Raw chunks are exact slices of the stream, so a
+          // raw-vs-raw prefix check is exact.
+          let rawStreamed = '';
           let deltaBuffer = '';
 
           const sendFrame = (content: string, complete: boolean, endCall = false) => {
@@ -1011,13 +1019,46 @@ export async function registerRetellDrkallaCustomLlmWs(
             if (!complete) sentText += content;
           };
 
-          // Buffer streamed deltas to sentence boundaries (or ~60 chars) so
+          // Buffer streamed deltas to sentence boundaries (or ~80 chars) so
           // Retell TTS gets natural prosody chunks instead of single tokens.
+          // Each flushed chunk is price-normalized ("7,60 Euro" -> "7 Euro
+          // sechzig") because streamed MODEL frames otherwise reach the wire raw
+          // and the voice reads decimal cents digit-by-digit (the live "Euro O"
+          // complaint). Normalization is per-token-local, so flushing must never
+          // split a number/price across chunks — the length backoff guards that.
+          const flushChunk = (raw: string) => {
+            rawStreamed += raw;
+            sendFrame(speakDrkallaPriceText(raw), false);
+          };
           const onDelta = (chunk: string) => {
             deltaBuffer += chunk;
-            if (/[.!?]\s*$/.test(deltaBuffer) || deltaBuffer.length >= 60) {
-              sendFrame(deltaBuffer, false);
+            // A real sentence break = sentence punctuation NOT preceded by a digit
+            // (so a decimal "7.60" is never treated as a sentence end and split).
+            if (/(?<!\d)[.!?]["')\]]?$/.test(deltaBuffer.trimEnd())) {
+              flushChunk(deltaBuffer);
               deltaBuffer = '';
+              return;
+            }
+            if (deltaBuffer.length >= 80) {
+              let cut = deltaBuffer.lastIndexOf(' ');
+              if (cut <= 0) return; // no safe word boundary yet — keep buffering
+              let head = deltaBuffer.slice(0, cut);
+              // Never end a flush inside/right after a price's numeric part: a head
+              // ending in a number could be a price whose currency word ("Euro"/"€")
+              // is still coming in the next chunk ("...24,50" | " €,"), which would
+              // split the price and read it digit-by-digit. Step back through EVERY
+              // trailing number token (one space is not enough — review 2026-06-30).
+              while (cut > 0 && /\d[\d.,]*$/.test(head)) {
+                const prev = head.lastIndexOf(' ');
+                if (prev <= 0) { cut = -1; break; }
+                cut = prev;
+                head = deltaBuffer.slice(0, cut);
+              }
+              if (cut <= 0) return; // still unsafe — wait for the rest of the price
+              if (head.trim()) {
+                flushChunk(head);
+                deltaBuffer = deltaBuffer.slice(cut);
+              }
             }
           };
 
@@ -1099,17 +1140,25 @@ export async function registerRetellDrkallaCustomLlmWs(
           if (!outbound) return;
           if (superseded) return;
 
-          // Final frame carries whatever was not streamed yet. If trimming or
-          // fallback changed the text so streamed chunks are no longer a
-          // prefix, fall back to a single full final frame.
-          // Deterministic replies (nothing streamed yet) are TTS-normalized here
-          // — "Dr.Kalla" -> "Doktor Kalla", "&" -> "und", any "9,00 Euro" ->
-          // "9 Euro", etc. Streamed model frames are already sent, so leave the
-          // accumulated model text untouched (the prompt steers the model).
-          const fullText = sentText === ''
-            ? speakDrkallaText(String(outbound.content))
-            : String(outbound.content);
-          const tail = fullText.startsWith(sentText) ? fullText.slice(sentText.length) : fullText;
+          // Final frame carries whatever was not streamed yet.
+          // - Deterministic replies (nothing streamed) get the FULL TTS
+          //   normalization: "Dr.Kalla" -> "Doktor Kalla", "&" -> "und",
+          //   "9,00 Euro" -> "9 Euro", etc.
+          // - Streamed model replies: diff the model text against the RAW streamed
+          //   text (exact prefix) and price-normalize only the remaining tail, so
+          //   the streamed chunks and the final frame can never diverge and the
+          //   answer is never re-sent (no double-speak — review 2026-06-30). If
+          //   trimming/fallback changed the text so the raw prefix no longer
+          //   matches, fall back to a single full final frame.
+          let tail: string;
+          if (sentText === '') {
+            tail = speakDrkallaText(String(outbound.content));
+          } else {
+            const rawFull = String(outbound.content);
+            tail = speakDrkallaPriceText(
+              rawFull.startsWith(rawStreamed) ? rawFull.slice(rawStreamed.length) : rawFull,
+            );
+          }
           // Hard hang-up only on a clear caller farewell (response.endCall),
           // carried on the final frame; never on streamed/intermediate frames.
           sendFrame(tail, true, outbound.end_call === true);

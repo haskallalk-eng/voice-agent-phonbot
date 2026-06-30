@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { speakDrkallaText } from '../drkalla-speakable.js';
+import { speakDrkallaText, speakDrkallaPriceText } from '../drkalla-speakable.js';
 
 describe('speakDrkallaText TTS normalization', () => {
   it('renders the brand as "Doktor Kalla"', () => {
@@ -17,14 +17,32 @@ describe('speakDrkallaText TTS normalization', () => {
     expect(speakDrkallaText('Schreiben Sie an kontakt@drkalla.com.')).toBe('Schreiben Sie an kontakt at Doktor Kalla punkt com.');
   });
 
-  it('drops ,00 cents (no "null null") but keeps real decimal prices', () => {
-    // Live complaint 2026-06-27: a whole-euro price read ",00" as an extra "o o".
+  it('spells decimal cents as words so the voice never reads "Euro O"', () => {
+    // Live complaints 2026-06-27 .. 2026-06-30: a whole-euro price read ",00" as
+    // an extra "o o", and decimal cents ("7,60") were read digit-by-digit
+    // ("...sechs null"). Whole euros drop the cents; decimals spell them out.
     expect(speakDrkallaText('Es kostet 9,00 Euro.')).toBe('Es kostet 9 Euro.');
     expect(speakDrkallaText('10,00 €')).toBe('10 Euro');
-    expect(speakDrkallaText('von 9,00 Euro bis 11,99 Euro')).toBe('von 9 Euro bis 11,99 Euro');
-    expect(speakDrkallaText('Es kostet 11,99 Euro.')).toBe('Es kostet 11,99 Euro.');
-    expect(speakDrkallaText('9,05 Euro')).toBe('9,05 Euro');
-    expect(speakDrkallaText('22,90 Euro')).not.toContain('22 Euro 90');
+    expect(speakDrkallaText('von 9,00 Euro bis 11,99 Euro')).toBe('von 9 Euro bis 11 Euro neunundneunzig');
+    expect(speakDrkallaText('Es kostet 11,99 Euro.')).toBe('Es kostet 11 Euro neunundneunzig.');
+    expect(speakDrkallaText('7,60 Euro')).toBe('7 Euro sechzig');
+    expect(speakDrkallaText('9,05 Euro')).toBe('9 Euro fünf');
+    expect(speakDrkallaText('22,90 Euro')).toBe('22 Euro neunzig');
+    // A SINGLE cent digit is tenths: "7,5 Euro" = 7 Euro 50 (review fix 2026-06-30).
+    expect(speakDrkallaText('7,5 Euro')).toBe('7 Euro fünfzig');
+    expect(speakDrkallaText('9,5 EUR')).toBe('9 Euro fünfzig');
+    // A bare "EUR" abbreviation is said as the word, never spelled "E-U-R".
+    expect(speakDrkallaText('Das macht 9 EUR.')).toBe('Das macht 9 Euro.');
+    // The "Euro O" shapes — a comma-decimal or a digit AFTER "Euro" — never survive
+    // (the spoken euro amount "8 Euro" is fine; only "8,40" / "Euro 40" are wrong).
+    expect(speakDrkallaText('8,40 Euro')).not.toMatch(/,\d|Euro\s*\d/);
+  });
+
+  it('speakDrkallaPriceText normalizes a price mid-sentence for streamed model frames', () => {
+    expect(speakDrkallaPriceText('Das Locken Shampoo kostet 7,60 Euro und pflegt.'))
+      .toBe('Das Locken Shampoo kostet 7 Euro sechzig und pflegt.');
+    expect(speakDrkallaPriceText('Der Neutralisator kostet 12 Euro.')).toBe('Der Neutralisator kostet 12 Euro.');
+    expect(speakDrkallaPriceText('Das gibt es ab 8.40 EUR.')).toBe('Das gibt es ab 8 Euro vierzig.');
   });
 
   it('expands symbols and abbreviations', () => {

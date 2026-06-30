@@ -52,6 +52,38 @@ const DANGLING_PREP = new Set([
 // Trailing hesitation/filler → still buffering.
 const TRAILING_FILLER = new Set(['äh', 'ähm', 'öhm', 'ähem', 'hmm', 'also', 'tja']);
 
+// A trailing KNOWN hair/condition descriptor adjective in an ATTRIBUTIVE form is
+// a mid-build dangle: the head noun ("Haare") is still coming. Live 2026-06-29:
+// the caller said "…sind meine lockigen" and the agent jumped in on "Da" and was
+// cut off by "Haare." We cannot use a generic "-e ending" test — most feminine/
+// plural nouns end the same way ("eine Maske", "meine Haare", "meine Locken"),
+// and holding on those would be the one harmful error (false hold). So we require
+// BOTH: (1) the root is a known descriptor adjective (never a noun in this
+// domain) AND (2) it carries an attributive inflection -e/-en/-es/-em. German
+// PREDICATIVE adjectives are always BARE ("die Haare sind trocken"), so an
+// inflected descriptor can only be attributive ("trockene …") → a noun follows.
+// -er is deliberately excluded (it doubles as the predicative comparative
+// "heller"/"feiner", which DOES end a clause).
+// Roots are written so that root + one of -e/-en/-es/-em is exactly the
+// ATTRIBUTIVE form ("trocken"+"e"="trockene", "strapaziert"+"e"="strapazierte").
+// The bare predicative form (root with no ending, e.g. "strapaziert",
+// "trocken") never matches, so "die Haare sind trocken" is correctly NOT held.
+// Adjectives whose lemma itself ends in -e (spröde, müde) are excluded — they can
+// be predicative AND already end in -e, which we cannot tell apart safely.
+const TRAILING_DESCRIPTOR_ADJ =
+  /^(?:trocken|feucht|fettig|lockig|wellig|glatt|kraus|fein|dick|d(?:ü|ue)nn|kaputt|blond|braun|schwarz|grau|dunkl|gef(?:ä|ae)rbt|coloriert|gestr(?:ä|ae)hnt|strapaziert|gesch(?:ä|ae)digt|br(?:ü|ue)chig|empfindlich|gereizt|stumpf)(?:e|en|es|em)$/i;
+
+// A definite article / demonstrative right before the descriptor marks a
+// NOMINALIZED ELLIPTICAL answer ("nimm die schwarze" = the black one), which is a
+// COMPLETE turn — not the attributive dangle ("meine lockigen" → "Haare" coming).
+// We must never hold these (a false hold is the only harmful error). Possessives /
+// indefinites (meine, eine, keine) are NOT here — those ARE the mid-build signal.
+const DEFINITE_BEFORE_ADJ = new Set([
+  'die', 'der', 'das', 'den', 'dem', 'des',
+  'dies', 'diese', 'dieser', 'dieses', 'diesen', 'diesem',
+  'welche', 'welcher', 'welches', 'welchen', 'welchem',
+]);
+
 function tokenize(text: string): string[] {
   return text
     .toLocaleLowerCase('de-DE')
@@ -64,7 +96,6 @@ export function looksIncompleteDrkallaUtterance(
   text: string,
   opts: { pendingQuestion?: boolean } = {},
 ): boolean {
-  void opts; // reserved: a pending agent question makes short answers complete
   const raw = (text ?? '').trim();
   if (!raw) return false; // empty = call opener, handled by the greeting path
   if (raw.includes('?')) return false; // a question is a complete turn
@@ -85,6 +116,20 @@ export function looksIncompleteDrkallaUtterance(
   if (toks.length >= 2) {
     const lastTwo = `${toks[toks.length - 2]} ${last}`;
     if (lastTwo === 'am besten' || lastTwo === 'am liebsten') return true;
+  }
+
+  // Trailing attributive descriptor adjective with the head noun still to come
+  // ("…meine lockigen", "ich habe trockene"). Multi-word so a single bare adjective
+  // ("trocken.") is never wrongly held. NOT held when a definite article precedes
+  // it (nominalized elliptical answer "die schwarze") or a question is pending
+  // (the descriptor is the caller's complete reply) — both would be false holds.
+  if (
+    toks.length >= 2
+    && TRAILING_DESCRIPTOR_ADJ.test(last)
+    && !opts.pendingQuestion
+    && !DEFINITE_BEFORE_ADJ.has(toks[toks.length - 2]!)
+  ) {
+    return true;
   }
 
   return false;
