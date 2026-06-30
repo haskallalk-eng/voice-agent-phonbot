@@ -260,11 +260,13 @@ describe('compound decomposition + synonyms (varied caller phrasings, live 2026-
 });
 
 describe('formatDrkallaPrice (no "Euro ooo" on whole-euro prices)', () => {
-  it('drops ,00 cents but keeps real decimals', () => {
+  it('whole euros read plainly; decimal cents are spoken as a word (no "null"/comma)', () => {
     expect(formatDrkallaPrice(10)).toBe('10 Euro');
     expect(formatDrkallaPrice(12)).toBe('12 Euro');
-    expect(formatDrkallaPrice(7.6)).toBe('7,60 Euro');
-    expect(formatDrkallaPrice(12.4)).toBe('12,40 Euro');
-    expect(formatDrkallaPrice(22.9)).toBe('22,90 Euro');
+    expect(formatDrkallaPrice(7.6)).toBe('7 Euro sechzig');
+    expect(formatDrkallaPrice(12.4)).toBe('12 Euro vierzig');
+    expect(formatDrkallaPrice(22.9)).toBe('22 Euro neunzig');
+    expect(formatDrkallaPrice(9.99)).toBe('9 Euro neunundneunzig');
+    expect(formatDrkallaPrice(11.5)).toBe('11 Euro fünfzig');
   });
 });

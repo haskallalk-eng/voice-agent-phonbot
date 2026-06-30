@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { formatDrkallaPrice } from './drkalla-product-catalog-search.js';
 
 /**
  * Catalog-backed structured product facts for the DrKalla custom runtime.
@@ -53,12 +54,9 @@ function cleanSpokenName(title: string): string {
 }
 
 function formatEuro(value: number): string {
-  // Whole-euro prices drop the cents so the TTS does not read ",00" as an extra
-  // "null null"/"o o" after the amount (live complaint 2026-06-27: "10 Euro o").
-  // Real decimal prices keep the German comma format ("11,99 Euro").
-  const cents = Math.round(value * 100);
-  if (cents % 100 === 0) return `${cents / 100} Euro`;
-  return `${value.toFixed(2).replace('.', ',')} Euro`;
+  // Spoken German price ("12 Euro" / "7 Euro sechzig") — no comma, no digit-by-
+  // digit cents that the TTS reads as "null"/"o" (live complaints 2026-06-27/30).
+  return formatDrkallaPrice(value);
 }
 
 function priceTextFromVariants(variants: unknown): {

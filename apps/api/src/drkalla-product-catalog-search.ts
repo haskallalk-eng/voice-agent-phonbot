@@ -160,16 +160,29 @@ function expandQueryToken(token: string): string[] {
   return out;
 }
 
-// TTS-safe German money for this voice stack. Whole-euro prices drop the ",00"
-// cents so the voice does not read an extra "null null"/"o o" after the amount
-// (live complaint: "Euro ooo"); real decimal prices keep the comma form so
-// Retell does not say "22 Euro 90". This is the price the model is grounded on
-// for the Katalog-Treffer list, so it fixes the model path too (model frames
-// bypass the deterministic TTS layer).
+// German cent words so a decimal price is SPOKEN naturally ("7 Euro sechzig")
+// instead of digit-by-digit ("sieben Komma sechs null" — the trailing "null"
+// is the "Euro o" the caller kept hearing, live 2026-06-30). Cents 1..99.
+const CENT_ONES = ['', 'eins', 'zwei', 'drei', 'vier', 'fünf', 'sechs', 'sieben', 'acht', 'neun', 'zehn', 'elf', 'zwölf', 'dreizehn', 'vierzehn', 'fünfzehn', 'sechzehn', 'siebzehn', 'achtzehn', 'neunzehn'];
+const CENT_TENS = ['', '', 'zwanzig', 'dreißig', 'vierzig', 'fünfzig', 'sechzig', 'siebzig', 'achtzig', 'neunzig'];
+function germanCents(n: number): string {
+  if (n < 20) return CENT_ONES[n] ?? '';
+  const tens = Math.floor(n / 10);
+  const ones = n % 10;
+  if (ones === 0) return CENT_TENS[tens] ?? '';
+  return `${ones === 1 ? 'ein' : (CENT_ONES[ones] ?? '')}und${CENT_TENS[tens] ?? ''}`;
+}
+
+// TTS-safe German money for this voice stack: whole euros read "12 Euro", decimal
+// prices read the cents as a WORD ("7 Euro sechzig") so the flash TTS never reads
+// the cents digit-by-digit (no "null"/"o", no "Komma"). This is the price the
+// model is grounded on for the Katalog-Treffer list, so it fixes the model path
+// too (model frames bypass the deterministic TTS layer).
 export function formatDrkallaPrice(value: number): string {
   const cents = Math.round(value * 100);
-  if (cents % 100 === 0) return `${cents / 100} Euro`;
-  return `${value.toFixed(2).replace('.', ',')} Euro`;
+  const euros = Math.floor(cents / 100);
+  const c = cents % 100;
+  return c === 0 ? `${euros} Euro` : `${euros} Euro ${germanCents(c)}`;
 }
 
 function formatEuro(value: number): string {
