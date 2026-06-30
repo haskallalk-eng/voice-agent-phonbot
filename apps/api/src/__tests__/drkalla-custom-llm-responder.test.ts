@@ -790,6 +790,87 @@ describe('DrKalla register/style + deterministic price (live call 2026-06-13 fix
     expect(prompts[0]).not.toContain('Kamm');
   });
 
+  it('B: a store-visit / browse question is NOT hijacked by the recommender (routes to the model)', async () => {
+    // Live 2026-06-30: with activeProductType=Haarfarbe remembered, the caller
+    // asked "kann man bei euch vorbeischauen und Sachen gucken?" and the agent
+    // fused the remembered category onto the question and dumped a Färbepinsel.
+    // A store-visit question must reach the model (we are a reiner Versandhandel).
+    const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'user_audio',
+      turnIndex: 1,
+      text: 'Ich möchte eine Haarfarbe kaufen.',
+      audioState: 'heard',
+    });
+    expect(memory.activeProductType?.label).toMatch(/haarfarbe/i);
+    let modelCalls = 0;
+    // Would surface a product if the remembered "Haarfarbe" were fused onto the turn.
+    const catalogSearch = (text: string) =>
+      /haarfarbe|pinsel/i.test(text)
+        ? [{ productId: 'pinsel', spokenName: 'Färbepinsel klassisch', shortName: 'Färbepinsel', productType: 'Haarfarbe-Zubehör', priceText: '1 Euro siebzig', priceValue: 1.7, score: 3, categoryHit: true, typeHit: true }]
+        : [];
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Kann man bei euch vorbeischauen und sich die Sachen angucken?'),
+      memory,
+      client: { complete: async () => { modelCalls += 1; return 'Wir sind ein reiner Versandhandel, ein Besuch vor Ort ist leider nicht möglich.'; } },
+      catalogSearch: catalogSearch as never,
+    });
+    expect(modelCalls).toBe(1);
+    expect(response.text).not.toContain('Färbepinsel');
+    expect(response.text).not.toMatch(/Da kann ich Ihnen .* empfehlen/);
+  });
+
+  it('B: a plain product-browse verb ("ein Shampoo ansehen") is NOT vetoed — it still reaches the grounded recommender', async () => {
+    // Review 2026-06-30: the store-visit veto must not swallow ordinary product
+    // verbs (ansehen/anschauen/angucken). "ein Shampoo ansehen" is a real buy
+    // intent and must get the grounded deterministic pitch, not fall to the model.
+    let modelCalls = 0;
+    const catalogSearch = (text: string) =>
+      /shampoo/i.test(text)
+        ? [{ productId: 'gs', spokenName: 'Glanz-Shampoo Argent', shortName: 'Glanz-Shampoo', productType: 'Shampoo', priceText: '12 Euro', priceValue: 12, score: 5, categoryHit: true, typeHit: true }]
+        : [];
+    const evidenceLookup = {
+      byId: (id: string) => (id === 'gs' ? { productId: 'gs', priceText: '12 Euro', hasUrl: true, url: 'https://drkalla.com/products/glanz-shampoo' } : null),
+      byKeyHash: () => null,
+    };
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Ich möchte mir mal ein Shampoo ansehen.'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => { modelCalls += 1; return 'should not be used'; } },
+      catalogSearch: catalogSearch as never,
+      evidenceLookup: evidenceLookup as never,
+    });
+    expect(modelCalls).toBe(0);
+    expect(response.text).toContain('Glanz-Shampoo');
+  });
+
+  it('B: long off-topic chatter does NOT hijack a remembered category (ambient filler removed from continuation)', async () => {
+    // Review 2026-06-30: "noch"/"von"/"gern" used to satisfy the buy-continuation
+    // gate, so an off-topic non-question with a remembered category got a product
+    // dumped on it. Such turns must now reach the model.
+    const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'user_audio',
+      turnIndex: 1,
+      text: 'Ich möchte eine Haarfarbe kaufen.',
+      audioState: 'heard',
+    });
+    let modelCalls = 0;
+    const catalogSearch = (text: string) =>
+      /haarfarbe|pinsel/i.test(text)
+        ? [{ productId: 'pinsel', spokenName: 'Färbepinsel klassisch', shortName: 'Färbepinsel', productType: 'Haarfarbe-Zubehör', priceText: '1 Euro siebzig', priceValue: 1.7, score: 3, categoryHit: true, typeHit: true }]
+        : [];
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('ich bin gerade noch ein bisschen am überlegen und rede mit meinem mann'),
+      memory,
+      client: { complete: async () => { modelCalls += 1; return 'Kein Problem, lassen Sie sich Zeit.'; } },
+      catalogSearch: catalogSearch as never,
+    });
+    expect(modelCalls).toBe(1);
+    expect(response.text).not.toContain('Färbepinsel');
+  });
+
   it('B: a comparison price question still goes to the model (not the deterministic path)', async () => {
     let modelCalls = 0;
     await buildDrkallaCustomLlmResponse({

@@ -201,9 +201,57 @@ describe('Retell DrKalla custom LLM websocket route smoke', () => {
     expect(frames.slice(0, -1).every((frame) => frame.content_complete === false)).toBe(true);
     expect(frames[frames.length - 1]?.content_complete).toBe(true);
     expect(frames.every((frame) => frame.response_id === 7)).toBe(true);
+    // Streamed MODEL frames are price-normalized on the wire: the model emitted
+    // "9,99 Euro" but the voice must never read decimal cents digit-by-digit
+    // ("...neun neun" = the live "Euro O" complaint), so it becomes spoken cents.
     expect(frames.map((frame) => frame.content).join('')).toBe(
-      'Die Synthesis Color Cream kostet 9,99 Euro. Soll ich dir den Produktlink per SMS schicken?',
+      'Die Synthesis Color Cream kostet 9 Euro neunundneunzig. Soll ich dir den Produktlink per SMS schicken?',
     );
+    expect(frames.some((frame) => frame.content.includes(',99'))).toBe(false);
+
+    ws.close();
+    await app.close();
+  });
+
+  it('a symbol-price split across the streaming flush boundary is spoken ONCE and normalized (no double-speak)', async () => {
+    // Review 2026-06-30: per-chunk vs whole-text price normalization could diverge
+    // when "24,50 €," straddled the 80-char flush, making startsWith() false and
+    // re-sending the WHOLE answer on the final frame (caller hears it twice). The
+    // final tail is now diffed against the RAW streamed text, and the flush backs
+    // off through every trailing number token, so the price stays whole + the
+    // answer is spoken exactly once.
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_ENABLED = 'true';
+    process.env.DRKALLA_CUSTOM_RUNTIME_CANARY_SECRET = TEST_SECRET;
+    const fullText = 'Die hochwertige Anti-Aging-Tagescreme aus unserem ganz besonders großen Sortiment kostet 24,50 €, ganz ohne Versandkosten.';
+    const { app, url } = await testServer({
+      complete: async () => fullText,
+      completeStream: async ({ onDelta }) => {
+        // The price's digits and its "€," arrive in separate chunks. The first
+        // chunk is >80 chars and ends in the bare number, so the length-flush must
+        // back off PAST "24,50" (not split it) — the exact review reproduction.
+        onDelta('Die hochwertige Anti-Aging-Tagescreme aus unserem ganz besonders großen Sortiment kostet 24,50');
+        onDelta(' €, ganz ohne Versandkosten.');
+        return fullText;
+      },
+    });
+    const ws = await connect(url);
+    const frames: Array<{ content: string; content_complete: boolean }> = [];
+    ws.on('message', (data) => frames.push(JSON.parse(data.toString())));
+    ws.send(JSON.stringify({
+      interaction_type: 'response_required',
+      response_id: 9,
+      transcript: [{ role: 'user', content: 'Was empfehlen Sie mir denn?' }],
+    }));
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    const joined = frames.map((frame) => frame.content).join('');
+    // Spoken exactly once — the answer's distinctive phrase must not appear twice.
+    expect(joined.split('Anti-Aging-Tagescreme').length - 1).toBe(1);
+    // Price normalized and whole; no decimal/symbol survives.
+    expect(joined).toContain('24 Euro fünfzig');
+    expect(joined).not.toContain('24,50');
+    expect(joined).not.toContain('€');
+    expect(joined).toBe('Die hochwertige Anti-Aging-Tagescreme aus unserem ganz besonders großen Sortiment kostet 24 Euro fünfzig, ganz ohne Versandkosten.');
 
     ws.close();
     await app.close();

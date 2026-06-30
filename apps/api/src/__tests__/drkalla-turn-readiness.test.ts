@@ -23,6 +23,54 @@ describe('scoreDrkallaTurnReadiness — holds while the caller is mid-build', ()
     expect(r.decision).toBe('hold');
     expect(r.reasons).toContain('dangling-contracted');
   });
+
+  it.each([
+    'sind meine lockigen',   // live 2026-06-29: agent jumped in on "Da", cut off by "Haare"
+    'Ich habe trockene',
+    'Das sind so krause',
+    'Meine Haare sind ziemlich strapazierte', // attributive inflection still mid-build
+  ])('holds on a trailing attributive descriptor adjective (noun still to come): "%s"', (text) => {
+    expect(scoreDrkallaTurnReadiness(text).decision).toBe('hold');
+  });
+
+  it('holds on an utterance that ends on a comma (list/clause in progress)', () => {
+    const r = scoreDrkallaTurnReadiness('Ich suche ein Shampoo, ein Serum,');
+    expect(r.decision).toBe('hold');
+    expect(r.reasons).toContain('trailing-comma');
+  });
+});
+
+describe('scoreDrkallaTurnReadiness — descriptor heuristic stays precise (no false holds)', () => {
+  it.each([
+    'Meine Haare sind trocken',   // PREDICATIVE bare adjective — a complete turn
+    'Ich wasche meine Haare',     // plural noun ending -e is NOT an adjective
+    'Ich möchte eine Maske',      // feminine noun ending -e is NOT an adjective
+    'Ich nehme die rote Farbe',   // adjective is not the LAST token
+    'Ich hätte gern eine Spülung',
+  ])('does NOT hold a complete noun phrase / predicative adjective: "%s"', (text) => {
+    expect(scoreDrkallaTurnReadiness(text).decision).toBe('respond');
+  });
+
+  it.each([
+    'nimm die schwarze',          // nominalized elliptical answer = "the black one"
+    'ich will die blonde',
+    'eher die dunkle',
+  ])('does NOT hold a nominalized elliptical answer (definite article + descriptor): "%s"', (text) => {
+    expect(scoreDrkallaTurnReadiness(text).decision).toBe('respond');
+  });
+
+  it('a descriptor reply to the agent\'s OWN question is a complete answer (not held)', () => {
+    // The agent asked e.g. "Wie sind Ihre Haare?" — "voll trockene" / "die schwarze"
+    // is the caller's complete elliptical answer; never go silent on it.
+    expect(scoreDrkallaTurnReadiness('voll trockene', { pendingQuestion: true }).decision).toBe('respond');
+    expect(scoreDrkallaTurnReadiness('die schwarze', { pendingQuestion: true }).decision).toBe('respond');
+    // A short answer with a trailing ASR comma is likewise complete with a pending question.
+    expect(scoreDrkallaTurnReadiness('Eher das günstige,', { pendingQuestion: true }).decision).toBe('respond');
+  });
+
+  it('but a possessive + attributive descriptor still holds (the noun is genuinely coming)', () => {
+    expect(scoreDrkallaTurnReadiness('sind meine lockigen').decision).toBe('hold');
+  });
 });
 
 describe('scoreDrkallaTurnReadiness — responds when the turn is complete', () => {

@@ -84,15 +84,23 @@ export function scoreDrkallaTurnReadiness(
     // A question is a complete turn.
     readiness = 0.97;
     reasons.push('question');
-  } else if (looksIncompleteDrkallaUtterance(raw)) {
+  } else if (looksIncompleteDrkallaUtterance(raw, { pendingQuestion: opts.pendingQuestion })) {
     // Proven unambiguous dangle (conjunction / indefinite determiner / object
-    // preposition / filler / "am besten").
+    // preposition / filler / "am besten" / attributive descriptor). A pending
+    // question relaxes the soft descriptor case (an elliptical answer is complete).
     readiness = 0.15;
     reasons.push('dangling');
   } else if (DANGLING_CONTRACTED.has(lastToken(raw))) {
     // Trailing contracted preposition demanding a noun ("zum", "vom", …).
     readiness = 0.2;
     reasons.push('dangling-contracted');
+  } else if (/,\s*$/.test(raw) && wordCount(raw) >= 2 && !opts.pendingQuestion) {
+    // An utterance that ends on a comma is a list/clause still in progress
+    // ("ich suche ein Shampoo, ein Serum,") — let the caller continue. But a
+    // short answer to the agent's OWN question is complete even with a trailing
+    // ASR comma ("Eher das günstige,"), so the pendingQuestion escape wins there.
+    readiness = 0.3;
+    reasons.push('trailing-comma');
   } else if (opts.pendingQuestion && wordCount(raw) <= 4) {
     // Short reply to the agent's own question → complete (avoid a false hold).
     readiness = 0.92;
