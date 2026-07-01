@@ -845,6 +845,31 @@ describe('DrKalla register/style + deterministic price (live call 2026-06-13 fix
     expect(response.text).toContain('Glanz-Shampoo');
   });
 
+  it('B: an ASSORTMENT/attribute question ("was habt ihr für Farben?") goes to the model, not the robotic template', async () => {
+    // Live 2026-07-01: with activeProductType=Haarfarbe, "Was habt ihr denn für
+    // Farben?" got "Da kann ich Ihnen Haarfarbe Ammoniakfrei empfehlen. Das kostet
+    // 4 Euro fünfzig …" twice — the caller wanted the RANGE of colors, not a pitch.
+    const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'user_audio',
+      turnIndex: 1,
+      text: 'Ich möchte eine Haarfarbe kaufen.',
+      audioState: 'heard',
+    });
+    let modelCalls = 0;
+    const catalogSearch = () => [
+      { productId: 'af', spokenName: 'Haarfarbe Ammoniakfrei', shortName: 'Haarfarbe Ammoniakfrei', productType: 'Haarfarbe', priceText: '4 Euro fünfzig', priceValue: 4.5, score: 4, categoryHit: true, typeHit: true },
+    ];
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Was habt ihr denn für Farben?'),
+      memory,
+      client: { complete: async () => { modelCalls += 1; return 'Wir haben verschiedene Nuancen von Naturtönen bis Intensivfarben. Welche Farbe suchen Sie denn?'; } },
+      catalogSearch: catalogSearch as never,
+    });
+    expect(modelCalls).toBe(1);
+    expect(response.text).not.toMatch(/Da kann ich Ihnen .* empfehlen/);
+  });
+
   it('B: long off-topic chatter does NOT hijack a remembered category (ambient filler removed from continuation)', async () => {
     // Review 2026-06-30: "noch"/"von"/"gern" used to satisfy the buy-continuation
     // gate, so an off-topic non-question with a remembered category got a product

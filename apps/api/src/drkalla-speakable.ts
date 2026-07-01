@@ -57,7 +57,20 @@ export function speakDrkallaPriceText(text: string): string {
     .replace(/€/g, ' Euro')
     // A bare "EUR" abbreviation (e.g. an integer "9 EUR") would be spelled out
     // letter-by-letter by the voice — say the word instead.
-    .replace(/\bEUR\b/g, 'Euro');
+    .replace(/\bEUR\b/g, 'Euro')
+    // Last-resort net: a decimal in the German MONEY format (comma + exactly two
+    // digits) with NO currency word. The model sometimes drops "Euro" ("das macht
+    // 24,50"), which the voice reads "...fünf null" — the recurring "Euro O". Spell
+    // the cents / drop ",00". Excludes measurement & percent units ("1,50 m",
+    // "3,50 %") so only prices are touched; we do NOT invent "Euro" (unit unknown),
+    // "24 fünfzig" reads as a price colloquially.
+    .replace(
+      /\b(\d{1,4}),(\d{2})\b(?!\s*(?:€|EUR|Euro|ml|milliliter|liter|gramm|kg|prozent|%|cm|mm|meter|st(?:ü|ue)ck|stk|l\b|g\b|m\b))/gi,
+      (_m, euro: string, cents: string) => {
+        const c = Number(cents);
+        return c === 0 ? euro : `${euro} ${spokenCents(c)}`;
+      },
+    );
 }
 
 export function speakDrkallaText(text: string): string {
