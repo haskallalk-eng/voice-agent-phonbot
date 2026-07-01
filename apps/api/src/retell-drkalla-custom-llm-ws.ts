@@ -563,6 +563,19 @@ function secretAccepted(configuredSecret: string | undefined, candidate: unknown
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
+// GPT-5.x chat models run internal reasoning BY DEFAULT, which adds hundreds of ms
+// to seconds of time-to-first-token — fatal for a live voice turn (it blows past
+// DRKALLA_CUSTOM_RUNTIME_MODEL_TIMEOUT_MS and every turn falls back to a robotic
+// deterministic template). Force reasoning OFF for any gpt-5* model unless an env
+// override is set. gpt-4.x/4o do not accept the field, but a `undefined` value is
+// omitted from the request body, so this is safe for every model. Verified live
+// (2026-07-01): gpt-5.4-mini needs reasoning_effort 'none' (not 'minimal').
+function drkallaReasoningEffort(model: string): string | undefined {
+  const override = process.env.DRKALLA_CUSTOM_RUNTIME_REASONING_EFFORT?.trim();
+  if (override) return override;
+  return /^gpt-5/i.test(model) ? 'none' : undefined;
+}
+
 function createOpenAiClient(): DrkallaCustomLlmClient {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -578,6 +591,10 @@ function createOpenAiClient(): DrkallaCustomLlmClient {
   // streaming, the stream may run up to this total wall-clock budget.
   const streamTotalMs = Math.max(800, Number(process.env.DRKALLA_CUSTOM_RUNTIME_STREAM_TOTAL_MS ?? 3500));
   const model = process.env.DRKALLA_CUSTOM_RUNTIME_MODEL || 'gpt-4.1-mini';
+  // Cast: the SDK's typed union lags the API's accepted values ('none'/'xhigh');
+  // undefined (for gpt-4.x) is dropped from the request body.
+  const reasoningEffort = drkallaReasoningEffort(model) as
+    OpenAI.Chat.Completions.ChatCompletionCreateParams['reasoning_effort'];
   const openai = new OpenAI({
     apiKey,
     maxRetries: 0,
@@ -596,6 +613,7 @@ function createOpenAiClient(): DrkallaCustomLlmClient {
             ],
             max_completion_tokens: Math.max(80, Math.ceil(maxOutputChars / 3)),
             temperature: 0.2,
+            reasoning_effort: reasoningEffort,
           },
           { signal },
         );
@@ -631,6 +649,7 @@ function createOpenAiClient(): DrkallaCustomLlmClient {
             ],
             max_completion_tokens: Math.max(80, Math.ceil(maxOutputChars / 3)),
             temperature: 0.2,
+            reasoning_effort: reasoningEffort,
             stream: true,
           },
           { signal: controller.signal, timeout: streamTotalMs },
@@ -670,6 +689,7 @@ function createOpenAiClient(): DrkallaCustomLlmClient {
             ],
             max_completion_tokens: 220,
             temperature: 0.2,
+            reasoning_effort: reasoningEffort,
           },
           { signal, timeout: 10_000 },
         );

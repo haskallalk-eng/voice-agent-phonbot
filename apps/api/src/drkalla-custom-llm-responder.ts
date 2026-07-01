@@ -299,6 +299,10 @@ function tryDeterministicTypeListReply(input: {
   const activeType = input.memory.activeProductType;
   if (!activeType) return null;
   const text = input.userText;
+  // An attribute question ("was habt ihr für FARBEN / welche Nuancen?") needs the
+  // model to list the options or ask which one — a product-LINE list does not
+  // answer it (live 2026-07-01: "was für Farben" got a product list, not colors).
+  if (DRKALLA_ATTRIBUTE_QUESTION.test(text)) return null;
   const wantsList = SHORT_AFFIRMATION.test(text) || DRKALLA_TYPE_LIST_REQUEST.test(text);
   if (!wantsList) return null;
   const hits = (input.catalogSearch?.(activeType.label, 4) ?? []).slice(0, 3);
@@ -347,6 +351,17 @@ const DRKALLA_SERVICE_INTENT = /\b(?:reparatur|reparier\w*|defekt\w*|kaputt\w*|g
 // tokens remain; the disaster turn ("...vorbeischauen und angucken?") is still
 // caught by "vorbeischau*".
 const DRKALLA_STORE_VISIT_INTENT = /\b(?:vorbei(?:schau|komm|kommen|geschaut)\w*|vorbeizuschauen|reinschau\w*|vor\s?ort|abhol\w*|abzuhol\w*|filiale|ladengesch(?:ä|ae)ft|ladenlokal|showroom|ausstellungsraum|pers(?:ö|oe)nlich\s+(?:vorbei|abhol|komm|da))\b/i;
+
+// An ASSORTMENT / attribute question ("was habt ihr für FARBEN?", "welche NUANCEN
+// gibt es?", "welche Sorten/Varianten?") — the caller wants the RANGE of an
+// attribute, NOT a single product pitch. Route to the grounded model, which can
+// list the options or ask which one. Live 2026-07-01: "Was habt ihr denn für
+// Farben?" got the robotic template ("Da kann ich Ihnen Haarfarbe Ammoniakfrei
+// empfehlen. Das kostet 4 Euro fünfzig …") instead of an answer, twice in a row.
+// Scoped to ATTRIBUTE nouns (farbe/nuance/ton/sorte/variante/…) so a genuine
+// product-CATEGORY question ("was habt ihr für Dauerwelle/Shampoo?") still names a
+// product deterministically.
+const DRKALLA_ATTRIBUTE_QUESTION = /\b(?:f(?:ü|ue)r|welche[rsmn]?)\s+(?:farbe|farben|farbt(?:o|ö|oe)ne?|nuance|nuancen|t(?:o|ö|oe)ne?|t(?:o|ö|oe)nung(?:en)?|schattierung(?:en)?|sorte|sorten|variante|varianten|ausf(?:ü|ue)hrung(?:en)?|gr(?:ö|oe)(?:ß|ss)e[n]?|d(?:ü|ue)fte?|geruch|ger(?:ü|ue)che)\b/i;
 
 // An explicit buy/continuation signal. The active-category fallback (which fuses
 // the remembered category onto a turn that alone has no category token) may only
@@ -426,6 +441,7 @@ function tryDeterministicNeedReply(input: {
     || DRKALLA_USAGE_HOWTO.test(text)
     || DRKALLA_SERVICE_INTENT.test(text)
     || DRKALLA_STORE_VISIT_INTENT.test(text)
+    || DRKALLA_ATTRIBUTE_QUESTION.test(text)
     || detectDrkallaContactIntent(text)
   ) return null;
   // A plain price question about the active product ("was kostet das?") belongs

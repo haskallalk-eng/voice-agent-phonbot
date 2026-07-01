@@ -45,6 +45,16 @@ describe('speakDrkallaText TTS normalization', () => {
     expect(speakDrkallaPriceText('Das gibt es ab 8.40 EUR.')).toBe('Das gibt es ab 8 Euro vierzig.');
   });
 
+  it('spells a BARE decimal price (model dropped the "Euro" word) so it is never read digit-by-digit', () => {
+    // Review/live 2026-06-30..07-01: the model occasionally emits a price without a
+    // currency word ("das macht 24,50") — the voice read ",50" as "...fünf null".
+    expect(speakDrkallaPriceText('Das macht dann 24,50.')).toBe('Das macht dann 24 fünfzig.');
+    expect(speakDrkallaPriceText('Der Preis ist 12,00 zusammen.')).toBe('Der Preis ist 12 zusammen.');
+    // Measurement / percent units are NOT prices — leave them untouched.
+    expect(speakDrkallaPriceText('Die Flasche hat 1,50 l Inhalt.')).toBe('Die Flasche hat 1,50 l Inhalt.');
+    expect(speakDrkallaPriceText('Enthält 3,50 % Wirkstoff.')).toBe('Enthält 3,50 % Wirkstoff.');
+  });
+
   it('expands symbols and abbreviations', () => {
     expect(speakDrkallaText('Glanz & Pflege')).toBe('Glanz und Pflege');
     expect(speakDrkallaText('20% Rabatt')).toBe('20 Prozent Rabatt');
