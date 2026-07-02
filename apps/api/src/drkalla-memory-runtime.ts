@@ -45,7 +45,10 @@ export function createDrkallaMemoryRuntimeSession(input: {
 }
 
 function audioStateFromText(text: string): 'heard' | 'inaudible' {
-  return /\(inaudible speech\)|unverständlich|unverstaendlich/i.test(text)
+  // Retell emits BOTH "(inaudible speech)" and "(unintelligible audio)" — the
+  // latter slipped past this check live, so the literal marker text reached the
+  // model instead of the deterministic repair ladder (real call 2026-06-30).
+  return /\((?:inaudible|unintelligible)[^)]*\)|unverständlich|unverstaendlich/i.test(text)
     ? 'inaudible'
     : 'heard';
 }

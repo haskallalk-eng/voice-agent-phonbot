@@ -59,7 +59,9 @@ const TRAILING_CONNECTOR =
   /\b(?:und|oder|aber|weil|wenn|also|äh|ähm|ehm|aehm|hm|ich meine|ich wollte|warte|moment)\s*$/i;
 const CORRECTION_OR_INTERRUPTION =
   /\b(?:nein|warte|moment|stopp|stop|falsch|ich meinte|korrektur|anders|nicht das)\b/i;
-const INAUDIBLE_MARKER = /\b(?:inaudible|unverständlich|akustisch nicht verstanden)\b/i;
+// Retell emits both "(inaudible speech)" and "(unintelligible audio)"; the
+// latter slipped past this marker live and reached the model verbatim.
+const INAUDIBLE_MARKER = /\b(?:inaudible|unintelligible|unverständlich|akustisch nicht verstanden)\b/i;
 
 function finiteNumber(value: number | null | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;

@@ -45,6 +45,13 @@ const DANGLING_CONTRACTED = new Set([
   'zum', 'zur', 'beim', 'vom', 'ins', 'ans', 'aufs', 'fuers', 'fürs', 'uebers', 'übers',
 ]);
 
+// A ONE-word turn that is just a bare subject pronoun is an endpointing
+// fragment, never a complete answer ("Ihr" — live 2026-07-01: the agent
+// started "Bei" into it and was cut off by "alle Farben in diese").
+// Object/demonstrative forms (das, die, den) are deliberately EXCLUDED — they
+// are legitimate elliptical answers ("Das." = I'll take that one).
+const BARE_SUBJECT_PRONOUN = new Set(['ich', 'du', 'er', 'wir', 'ihr', 'man']);
+
 function lastToken(text: string): string {
   const toks = text
     .toLocaleLowerCase('de-DE')
@@ -101,6 +108,10 @@ export function scoreDrkallaTurnReadiness(
     // ASR comma ("Eher das günstige,"), so the pendingQuestion escape wins there.
     readiness = 0.3;
     reasons.push('trailing-comma');
+  } else if (wordCount(raw) === 1 && BARE_SUBJECT_PRONOUN.has(lastToken(raw))) {
+    // A bare subject pronoun cannot be a complete turn — hold for the rest.
+    readiness = 0.25;
+    reasons.push('bare-pronoun-fragment');
   } else if (opts.pendingQuestion && wordCount(raw) <= 4) {
     // Short reply to the agent's own question → complete (avoid a false hold).
     readiness = 0.92;

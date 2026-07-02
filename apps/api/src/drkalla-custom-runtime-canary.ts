@@ -60,7 +60,7 @@ function compactMemoryLine(memoryContext: string | null): string | null {
     .split(';')
     .map((part) => part.trim())
     .filter((part) =>
-      /^(active_product=|active_product_type=|product_facts=|discussed_products=|inaudible_streak=|pending=|links_sent=|profi_price_disclosure_given=|end_call_candidate=)/.test(part)
+      /^(active_product=|active_product_type=|caller_hair=|topic_closed=|product_facts=|discussed_products=|inaudible_streak=|pending=|links_sent=|profi_price_disclosure_given=|end_call_candidate=)/.test(part)
     );
   if (!keep.length) return null;
   return `Memory: ${keep.join('; ')}`.slice(0, 220);
@@ -77,6 +77,26 @@ function evidenceLine(
   return formatDrkallaProductEvidenceLine(evidence);
 }
 
+// Evidence for the PREVIOUS product still in play. With only the active
+// product grounded, the model contradicted itself across turns — it named the
+// Haarschneidemaschine with the right price, then two turns later (after a
+// comb had become the active product) claimed "wir führen keine Maschinen"
+// (real call 2026-06-27). Shed before the Memory line when over budget.
+function recentEvidenceLine(
+  runtime: DrkallaMemoryRuntimeResult,
+  evidenceLookup?: DrkallaProductEvidenceLookup,
+): string | null {
+  if (!evidenceLookup) return null;
+  const active = runtime.memory.lastMentionedProduct;
+  const prev = [...runtime.memory.recentProducts]
+    .reverse()
+    .find((p) => p.productKeyHash !== active?.productKeyHash);
+  if (!prev) return null;
+  const evidence = evidenceLookup.byKeyHash(prev.productKeyHash);
+  if (!evidence) return null;
+  return `Zuvor besprochen (weiterhin gültig): ${formatDrkallaProductEvidenceLine(evidence)}`;
+}
+
 function modelDirectives(
   runtime: DrkallaMemoryRuntimeResult,
   evidenceLookup?: DrkallaProductEvidenceLookup,
@@ -87,6 +107,7 @@ function modelDirectives(
     `Level: ${runtime.dialogueView.level}`,
     compactMemoryLine(runtime.memoryContext),
     evidenceLine(runtime, evidenceLookup),
+    recentEvidenceLine(runtime, evidenceLookup),
     buildDrkallaContactDirective(detectDrkallaContactIntent(runtime.currentUserText), contactFacts),
     compactLine('Do', runtime.responsePlan.mustDo),
     compactLine('Do not', runtime.responsePlan.mustNotDo),
@@ -127,6 +148,11 @@ export function buildDrkallaCustomRuntimeCanaryTurn(input: {
   // shedding the optional line.
   if (directives.length && directives.join('\n').length > input.canary.maxDirectiveChars) {
     directives = directives.filter((line) => !line.startsWith('Memory:'));
+  }
+  // Still over: shed the previous-product evidence next (helpful for cross-turn
+  // consistency, but the ACTIVE product's evidence is the correctness-critical one).
+  if (directives.length && directives.join('\n').length > input.canary.maxDirectiveChars) {
+    directives = directives.filter((line) => !line.startsWith('Zuvor besprochen'));
   }
   const directiveChars = directives.join('\n').length;
   if (directives.length && directiveChars > input.canary.maxDirectiveChars) {

@@ -73,11 +73,24 @@ function contentTokens(text: string): string[] {
 }
 
 // Add each token AND its stem to a set, so a stemmed query token matches.
+// Catalog tokens are additionally decomposed on their compound HEAD NOUN
+// ("Haarschneidemaschine" also indexes "maschine"), so a caller's bare class
+// word reaches the compound-titled product. Without this, "eine Maschine"
+// matched ONLY a Friseurstuhl via its SEO tag and the agent pitched a comb,
+// then denied stocking machines at all (real call 2026-06-27).
 function addTokensWithStems(set: Set<string>, tokens: string[]): void {
   for (const t of tokens) {
     set.add(t);
     const s = stem(t);
     if (s !== t) set.add(s);
+    for (const suffix of HEAD_NOUN_INDEX_SUFFIXES) {
+      if (t.length > suffix.length + 2 && t.endsWith(suffix)) {
+        set.add(suffix);
+        const ss = stem(suffix);
+        if (ss !== suffix) set.add(ss);
+        break;
+      }
+    }
   }
 }
 
@@ -114,7 +127,7 @@ const PRODUCT_CLASS_STEMS = new Set(
     'spray', 'puder', 'farbe', 'blondierung', 'schere',
     'effilierschere', 'kamm', 'buerste', 'foehn', 'haartrockner', 'lockenstab',
     'glaetteisen', 'rasierer', 'klinge', 'handtuch', 'umhang', 'handschuh', 'folie',
-    'creme', 'lotion', 'fixierer', 'booster',
+    'creme', 'lotion', 'fixierer', 'booster', 'maschine', 'pinsel',
   ].map(stem).filter((s) => s.length >= 4),
 );
 
@@ -128,7 +141,18 @@ const PRODUCT_CLASS_STEMS = new Set(
 const COMPOUND_SPLIT_SUFFIXES = [
   'haartrockner', 'conditioner', 'blondierung', 'lockenstab', 'spuelung', 'shampoo',
   'haarmaske', 'balsam', 'serum', 'schaum', 'spray', 'puder', 'creme', 'lotion',
-  'maske', 'farbe', 'wachs', 'kur', 'oel', 'gel', 'wax',
+  'maske', 'farbe', 'wachs', 'kur', 'oel', 'gel', 'wax', 'sortiment', 'maschine',
+].sort((a, b) => b.length - a.length);
+
+// Head nouns used to DECOMPOSE catalog tokens at index time (superset of the
+// query-side split list, plus tool classes). "Haarschneidemaschine" indexes
+// "maschine", "Rundbürste" indexes "buerste" — so the caller's bare class word
+// finds the compound-titled product ("Scherensortiment"/"Maschine", live
+// 2026-06-27/-29). Symmetric with the class filter: the decomposed head lands
+// in classTokens too, so the hard class filter keeps working.
+const HEAD_NOUN_INDEX_SUFFIXES = [
+  ...COMPOUND_SPLIT_SUFFIXES.filter((s) => s !== 'sortiment'),
+  'buerste', 'kamm', 'schere', 'pinsel',
 ].sort((a, b) => b.length - a.length);
 
 // Spoken synonyms / morphology the catalog does not spell the caller's way:
@@ -144,6 +168,20 @@ const QUERY_SYNONYMS: Record<string, string[]> = {
   glatten: ['glaettend', 'glaettendes'],
   glaetten: ['glaettend', 'glaettendes'],
   trockenshampoo: ['trockenshampoo', 'trocken', 'shampoo'],
+  // The caller describes curly hair with the ADJECTIVE ("lockige Haare"), the
+  // catalog tags the NOUN ("Locken") — the one-suffix stemmer cannot unify
+  // lockig/locken, so "lockige Haare" matched ONLY a comb via its "Lockiges"
+  // SEO tag and the agent recommended a brush for a curly-hair need (real call
+  // 2026-07-02). Map the adjective family onto the catalog noun.
+  lockig: ['locken'],
+  lockige: ['locken'],
+  lockigen: ['locken'],
+  lockiges: ['locken'],
+  lockiger: ['locken'],
+  kraus: ['locken'],
+  krause: ['locken'],
+  krausen: ['locken'],
+  krauses: ['locken'],
 };
 
 // Expand a caller token into itself + any compound split + any synonyms, so the
@@ -228,9 +266,27 @@ function isUnpronounceableToken(word: string): boolean {
  * The caller said the full catalog titles ("... Haarmaske für häufige Haarpflege
  * 500 Ml", "ARGENT Glanz-Shampoo & B3-PLEX") were unspeakable.
  */
+// Strip a dangling tail so a truncated name never ends on a preposition/
+// article ("Delrin Kamm in") or a spoken-unfriendly abbreviation ("versch.",
+// "inkl."). Looped: "Delrin Kamm in versch." drops "versch." THEN "in"
+// (real call 2026-07-02: the literal "in versch." was read out by the TTS).
+function trimDanglingTail(name: string): string {
+  let short = name;
+  for (;;) {
+    const next = short
+      .replace(/\s+(?:für|von|mit|und|oder|der|die|das|den|dem|im|in|am|an|auf|zu|aus|bei|ohne|gegen|pro|fuer)$/i, '')
+      .replace(/\s+\p{L}{1,7}\.$/u, '')
+      .trim();
+    if (!next || next === short) break;
+    short = next;
+  }
+  return short || name;
+}
+
 export function buildDrkallaShortName(title: string): string {
   // Titles often join two marketing phrases with & | / – — keep the first.
-  const firstSegment = cleanSpokenName(title).split(/\s*[&|/–—]+\s*/)[0] ?? '';
+  const segments = cleanSpokenName(title).split(/\s*[&|/–—]+\s*/);
+  const firstSegment = segments[0] ?? '';
   const base = firstSegment
     .replace(SIZE_RE, ' ')
     .replace(/\b\d{2,}\b/g, ' ')   // standalone numeric size/article codes
@@ -240,12 +296,18 @@ export function buildDrkallaShortName(title: string): string {
     // first-segment cut above does not remove them (real call 2026-06-15).
     .replace(/\bProfi-?\s?(?:Salonbedarf|Qualit(?:ä|ae)t|Friseurbedarf)\b/gi, ' ')
     .replace(/\b(?:Salonbedarf|Friseurbedarf|Salonqualit(?:ä|ae)t)\b/gi, ' ')
+    // Re-close a bracket whose tail was stripped ("(Haarschneiden, )" ->
+    // "(Haarschneiden)"), drop brackets left empty — the orphan ", )" was
+    // spoken aloud on the Doppelfunktionskamm (real call 2026-06-27).
+    .replace(/\(\s*([^)]*?)[\s,;]*\)/g, (_m, inner: string) => (inner.trim() ? `(${inner.trim()})` : ' '))
     .replace(/\s+/g, ' ')
     .trim();
   const seen = new Set<string>();
   const words: string[] = [];
   for (const w of base.split(' ')) {
     if (!w) continue;
+    // A token with no letter or digit at all (⌀, stray dashes) is never speakable.
+    if (!/[\p{L}\p{N}]/u.test(w)) continue;
     const key = w.toLocaleLowerCase('de-DE');
     if (seen.has(key)) continue;
     seen.add(key);
@@ -260,8 +322,46 @@ export function buildDrkallaShortName(title: string): string {
   // A truncated name must not dangle on a preposition/article/conjunction
   // ("Feuchtigkeitsspendende Maske für" -> "Feuchtigkeitsspendende Maske"), which
   // reads as an unfinished sentence in TTS (real battery 2026-06-16).
-  const trimmed = short.replace(/\s+(?:für|von|mit|und|oder|der|die|das|den|dem|im|in|am|an|auf|zu|aus|bei|ohne|gegen|pro|fuer)$/i, '').trim();
-  if (trimmed) short = trimmed;
+  short = trimDanglingTail(short);
+  // A single-word name is usually a bare marketing line ("PSN", "Noir") that
+  // tells the caller NOTHING about the product class — the descriptive part
+  // lives in the next title segment ("Noir – Reparaturmaske mit ..."). Append
+  // up to two speakable words from it; SHOUTING-case real words are re-cased
+  // ("REPARATUR" -> "Reparatur") so the code filter does not eat them.
+  // (Live 2026-06-30: "Alternativ haben wir PSN und Noir" was meaningless.)
+  const shortHasClassWord = normalize(short).split(' ').some((t) => {
+    const s = stem(t);
+    for (const c of PRODUCT_CLASS_STEMS) {
+      if (s === c || s.endsWith(c)) return true;
+    }
+    return false;
+  });
+  if (short && !short.includes(' ') && !shortHasClassWord && segments.length > 1) {
+    const extras = segments.slice(1).join(' ')
+      .replace(SIZE_RE, ' ')
+      .replace(/\b\d{2,}\b/g, ' ')
+      .split(/\s+/)
+      .map((w) => (/^[A-ZÄÖÜ]{5,}$/.test(w) && /[AEIOUÄÖÜY]/.test(w)
+        ? w.charAt(0) + w.slice(1).toLocaleLowerCase('de-DE')
+        : w))
+      .filter((w) => w
+        && /[\p{L}]/u.test(w)
+        && !isUnpronounceableToken(w)
+        && w.toLocaleLowerCase('de-DE') !== short.toLocaleLowerCase('de-DE'));
+    // Make sure the product-CLASS word (Maske/Shampoo/...) survives the 2-word
+    // cap — otherwise two sibling products collapse to the same short name
+    // ("PSN Essense Reparatur" for both the Maske AND the Shampoo) and the
+    // spoken-name dedup silently drops one of them.
+    const classWord = extras.find((w) => {
+      const s = stem(normalize(w));
+      for (const c of PRODUCT_CLASS_STEMS) {
+        if (s === c || s.endsWith(c)) return true;
+      }
+      return false;
+    });
+    const picked = [...new Set(classWord && extras[0] !== classWord ? [extras[0]!, classWord] : extras.slice(0, 2))];
+    if (picked.length) short = trimDanglingTail(`${short} ${picked.join(' ')}`.trim());
+  }
   return short || cleanSpokenName(title);
 }
 
@@ -378,6 +478,7 @@ export function buildDrkallaProductCatalogSearch(
     // word). Only applied when it leaves at least one match, so an unstocked
     // class still falls through to the honest clarify/"haben wir nicht" path
     // rather than silently offering the wrong category.
+    let classFiltered = false;
     if (requestedClasses.length) {
       // A product is in class `c` if a productType/title token equals `c` or ENDS
       // WITH it. German compounds are head-final and the class word is the head
@@ -395,6 +496,7 @@ export function buildDrkallaProductCatalogSearch(
       if (inClass.length) {
         scored.length = 0;
         scored.push(...inClass);
+        classFiltered = true;
       }
     }
     scored.sort((a, b) =>
@@ -420,8 +522,79 @@ export function buildDrkallaProductCatalogSearch(
       priceValue: p.priceValue,
       score,
       categoryHit: catHits > 0,
-      typeHit: typeHits > 0,
+      // The caller naming a product CLASS ("Scheren") is as strong a category
+      // signal as a productType hit — scissors are typed "Friseur-Tool", so
+      // pure typeHits left every scissors request un-answerable by the
+      // deterministic recommender AND stripped them from the model grounding
+      // (live 2026-06-29: the caller got a comb link for "Scherensortiment").
+      typeHit: typeHits > 0 || classFiltered,
     }));
+  };
+}
+
+// EN/DE variant-title tokens -> spoken German color family. The Shopify color
+// products carry their shades ONLY in variant titles ("1.0 Black", "6.0 Dark
+// Blond", "4.5 Mahegony Medium Brown" — typos included), which no injection
+// path ever surfaced: "Was habt ihr für Farben?" was unanswerable (live
+// 2026-07-01, asked twice). Mapped offline at index build; purely additive.
+const COLOR_FAMILY_TOKENS: Array<{ re: RegExp; family: string }> = [
+  { re: /\bblack\b|\bschwarz\w*/i, family: 'Schwarz' },
+  { re: /\bbrown\b|\bbraun\w*|\bchoc?olate\b|\bchoclate\b/i, family: 'Braun' },
+  { re: /\bblond\w*/i, family: 'Blond' },
+  { re: /\bred\b|\brot\w*/i, family: 'Rot' },
+  { re: /\bcopper\b|\bkupfer\w*/i, family: 'Kupfer' },
+  { re: /\bmah?[ae]gon\w*/i, family: 'Mahagoni' },
+  { re: /\bviolett?\b|\bpurple\b|\blila\b/i, family: 'Violett' },
+  { re: /\bash\b|\basch\w*/i, family: 'Asch' },
+  { re: /\bgr[ae]y\b|\bgrau\w*|\bsilver\b|\bsilber\w*/i, family: 'Grau und Silber' },
+  { re: /\bplatin\w*/i, family: 'Platinblond' },
+  { re: /\bgold\w*/i, family: 'Gold' },
+  { re: /\bgreen\b|\bgr(?:ü|ue)n\w*/i, family: 'Grün' },
+  { re: /\bblue\b|\bblau\w*/i, family: 'Blau' },
+];
+
+const COLOR_PRODUCT_TYPE = /haarfarbe|blondierung|coloration|t(?:ö|oe)nung|farbcreme/i;
+
+export type DrkallaColorShadeSummary = {
+  totalShades: number;
+  families: string[];
+  /** Ready-to-speak fragment: "über 140 Nuancen, zum Beispiel Schwarz, Braun, …" */
+  spoken: string;
+};
+
+/**
+ * Aggregate the color products' variant titles into a SPOKEN shade summary, so
+ * the agent can actually answer "Was habt ihr für Farben?" instead of pitching
+ * an arbitrary product line. Built once at startup; null when the catalog has
+ * no recognizable shades (the honest abstain path stays intact).
+ */
+export function buildDrkallaColorShadeSummary(
+  products: DrkallaCatalogSearchRawProduct[],
+): DrkallaColorShadeSummary | null {
+  const families: string[] = [];
+  let totalShades = 0;
+  for (const product of products) {
+    const type = typeof product?.productType === 'string' ? product.productType : '';
+    const title = typeof product?.title === 'string' ? product.title : '';
+    if (!COLOR_PRODUCT_TYPE.test(type) && !COLOR_PRODUCT_TYPE.test(title)) continue;
+    if (!Array.isArray(product.variants)) continue;
+    for (const v of product.variants) {
+      if (!v || typeof v !== 'object') continue;
+      const variantTitle = String((v as { title?: unknown }).title ?? '');
+      if (!variantTitle || variantTitle === 'Default Title') continue;
+      totalShades += 1;
+      for (const { re, family } of COLOR_FAMILY_TOKENS) {
+        if (re.test(variantTitle) && !families.includes(family)) families.push(family);
+      }
+    }
+  }
+  if (totalShades < 5 || families.length < 3) return null;
+  const spokenFamilies = families.slice(0, 7);
+  const list = `${spokenFamilies.slice(0, -1).join(', ')} und ${spokenFamilies[spokenFamilies.length - 1]}`;
+  return {
+    totalShades,
+    families,
+    spoken: `über ${Math.floor(totalShades / 10) * 10} Nuancen, zum Beispiel in ${list}`,
   };
 }
 

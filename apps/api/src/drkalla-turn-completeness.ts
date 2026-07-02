@@ -84,6 +84,17 @@ const DEFINITE_BEFORE_ADJ = new Set([
   'welche', 'welcher', 'welches', 'welchen', 'welchem',
 ]);
 
+// A VERB-INITIAL fragment ("sind meine lockigen", "habe trockene") is never an
+// elliptical ANSWER to the agent's question — German answers do not start with
+// a bare finite verb. So the pending-question escape must not disable the
+// descriptor hold for these. Live 2026-06-29: the agent's funnel ends nearly
+// every turn with a question, which made the descriptor hold dead code — the
+// agent jumped into "sind meine lockigen" and was cut off by "Haare."
+const LEADING_FINITE_VERB = new Set([
+  'ist', 'sind', 'war', 'waren', 'bin', 'wird', 'werden',
+  'hab', 'habe', 'haben', 'hat', 'hatte', 'hatten',
+]);
+
 function tokenize(text: string): string[] {
   return text
     .toLocaleLowerCase('de-DE')
@@ -123,10 +134,12 @@ export function looksIncompleteDrkallaUtterance(
   // ("trocken.") is never wrongly held. NOT held when a definite article precedes
   // it (nominalized elliptical answer "die schwarze") or a question is pending
   // (the descriptor is the caller's complete reply) — both would be false holds.
+  // EXCEPTION to the pending-question escape: a verb-initial fragment ("sind
+  // meine lockigen") is never an elliptical answer, so it still holds.
   if (
     toks.length >= 2
     && TRAILING_DESCRIPTOR_ADJ.test(last)
-    && !opts.pendingQuestion
+    && (!opts.pendingQuestion || LEADING_FINITE_VERB.has(toks[0]!))
     && !DEFINITE_BEFORE_ADJ.has(toks[toks.length - 2]!)
   ) {
     return true;
