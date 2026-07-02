@@ -1522,11 +1522,39 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
     expect(response.text).toContain('per SMS geschickt');
   });
 
-  it('B: a care need ("Pflege") never recommends a Blondierung/bleach chemical', async () => {
-    // Real call 2026-06-15: "lieber eine Pflege" -> Blondierungspulver Blau,
-    // because the catalog "Haarpflege" productType mixes bleach into care.
+  it('B: a bare care need ("Pflege", no hair profile) goes to the model CONSULTATIVELY, bleach filtered from its grounding', async () => {
+    // Real calls 2026-06-15/2026-06-30: "lieber eine Pflege"/"Etwas für
+    // Haarpflege" got an arbitrary junk-type top hit (bleach, hairspray). A
+    // vague care need with NO stated hair profile now routes to the model,
+    // which asks for hair type/problem first ("BERATEN STATT ABLADEN") — and
+    // its catalog grounding must still never contain a bleach chemical.
     const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
       type: 'user_audio', turnIndex: 1, text: 'Ich suche eine Pflege.', audioState: 'heard',
+    });
+    let modelCalls = 0;
+    let seenSystem = '';
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Ich suche eine Pflege.'),
+      memory,
+      client: { complete: async ({ system }) => { modelCalls += 1; seenSystem = system; return 'Für welchen Haartyp suchen Sie die Pflege?'; } },
+      catalogSearch: (t: string) => (/pflege/i.test(t) ? [
+        { productId: 'bleach', spokenName: 'Blondierungspulver Blau & Aufhellung', shortName: 'Blondierungspulver Blau', productType: 'Haarpflege', priceText: '0,99 Euro', priceValue: 0.99, score: 4, categoryHit: true, typeHit: true },
+        { productId: 'mask', spokenName: 'Pflegemaske Trockenes', shortName: 'Pflegemaske', productType: 'Haarpflege', priceText: '8,40 Euro', priceValue: 8.4, score: 4, categoryHit: true, typeHit: true },
+      ] : []),
+      evidenceLookup: { byId: () => null, byKeyHash: () => null } as never,
+    });
+    expect(modelCalls).toBe(1);
+    expect(seenSystem).not.toMatch(/Blondierung/i);
+    expect(seenSystem).toContain('Pflegemaske');
+    expect(response.text).not.toMatch(/Blondierung/i);
+  });
+
+  it('B: a care need WITH a stated hair profile answers deterministically, bleach never recommended', async () => {
+    // With the caller's hair profile known (stated earlier in the call), the
+    // recommender may answer directly — profile-enriched, bleach still filtered.
+    const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'user_audio', turnIndex: 1, text: 'Ich habe sehr trockene Haare und suche eine Pflege.', audioState: 'heard',
     });
     let modelCalls = 0;
     const response = await buildDrkallaCustomLlmResponse({

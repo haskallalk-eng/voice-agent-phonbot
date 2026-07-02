@@ -88,6 +88,15 @@ export type DrkallaShortTermMemoryEvent =
         label: string;
       }>;
       profiPriceDisclosureGiven?: boolean;
+      /**
+       * The agent spoke a wind-down turn ("Kann ich Ihnen sonst noch
+       * weiterhelfen?" after a decline/bare Nein). Increments windDownStreak and
+       * closes the topic, so a repeated "Nein" escalates to a goodbye instead of
+       * looping the identical question (real call 2026-06-30: 4x "Nein" -> 4x
+       * the same sentence), and the silence reminder stops resurrecting the
+       * declined product.
+       */
+      windDown?: boolean;
     }
   | {
       type: 'user_audio';
@@ -149,6 +158,23 @@ export type DrkallaShortTermVoiceMemory = {
   endCallEligible: boolean;
   endCallReason: null | 'caller_farewell' | 'long_silence';
   profiPriceDisclosureGiven: boolean;
+  /**
+   * Hair type/problem descriptors the caller stated ("lockige", "trockenes").
+   * A caller's hair profile holds for the WHOLE call: it survives product-type
+   * switches and steers later product selection, so "ich habe lockige Haare"
+   * in turn 1 still picks the Locken Shampoo when the caller asks for "ein
+   * Shampoo" in turn 5 (real calls 2026-06-27/2026-07-02: the agent had no
+   * memory of the hair type and pitched the wrong shampoo repeatedly).
+   */
+  callerNeeds: Array<{ label: string; turnIndex: number }>;
+  /** Consecutive wind-down turns the agent spoke (see agent_spoke.windDown). */
+  windDownStreak: number;
+  /**
+   * The caller declined the pending offer / wound the call down. Cleared as
+   * soon as either side brings up a product again. The silence reminder must
+   * NOT resurrect the declined product while this is set.
+   */
+  topicClosed: boolean;
 };
 
 const RAW_URL = /https?:\/\/\S+/gi;
@@ -180,6 +206,30 @@ const NOT_FAREWELL = /\b(?:nicht|nie)\s+auf(?:legen|h[äa]ngen)|leg\s+nicht\s+au
 // genuine stay-request ("bitte nicht auflegen") has no such interrogative.
 const HANGUP_COMPLAINT = /\b(?:warum|wieso|weshalb)\b[^?!.]{0,40}\bauf(?:legen|h(?:ä|ae)ngen)\b/i;
 const ACK_ONLY = /^(?:alles klar|okay|ok|ja|genau|passt|danke)$/i;
+
+// Hair-condition descriptors a caller uses to describe their OWN hair. Only
+// captured when the turn is actually about hair (HAIR_CONTEXT), so "blond" in
+// a bare color wish is not misread as a hair profile. The stored label is the
+// verbatim adjective ("lockige"), which the catalog search maps onto catalog
+// vocabulary (lockig -> Locken) via its query synonyms.
+const HAIR_NEED_DESCRIPTOR = /\b(?:trocken|fein|lockig|kraus|coloriert|gef(?:ä|ae)rbt|blond|grau|dunkl|strapazier|fettig|empfindlich|gereizt|spr(?:ö|oe)d|br(?:ü|ue)chig|gesch(?:ä|ae)digt|d(?:ü|ue)nn|schuppen|spliss|frizz|glanzlos|kaputt)\w*/gi;
+const HAIR_CONTEXT = /\b(?:haar\w*|locken|frisur|kopfhaut|spitzen|spliss|schuppen)\b/i;
+const MAX_CALLER_NEEDS = 3;
+
+function detectCallerHairNeeds(text: string): string[] {
+  if (!HAIR_CONTEXT.test(text)) return [];
+  const out: string[] = [];
+  for (const match of text.matchAll(HAIR_NEED_DESCRIPTOR)) {
+    const label = match[0].toLocaleLowerCase('de-DE').slice(0, 24);
+    if (!out.includes(label)) out.push(label);
+  }
+  return out.slice(0, MAX_CALLER_NEEDS);
+}
+
+// Inflection-tolerant key so "lockige"/"lockigen" update one entry, not two.
+function callerNeedKey(label: string): string {
+  return label.slice(0, 5);
+}
 const PERFUME_PRICE_CONTEXT = /\b(?:parfum|eau de parfum|duft|herrenduft|damenduft|unisexduft|edp|cologne|lattafa)\b/i;
 const PRODUCT_FACT_KEY = /^product\.(.+)\.(description|size|price|location|availability|usage|brand|category|link)$/;
 const PRODUCT_FACT_ORDER: DrkallaProductFactKind[] = [
@@ -339,6 +389,9 @@ export function createDrkallaShortTermMemory(): DrkallaShortTermVoiceMemory {
     endCallEligible: false,
     endCallReason: null,
     profiPriceDisclosureGiven: false,
+    callerNeeds: [],
+    windDownStreak: 0,
+    topicClosed: false,
   };
 }
 
@@ -447,6 +500,14 @@ function reduceAgentSpoke(
       ? sanitizeMemoryText(event.lastAgentQuestion, 160)
       : memory.lastAgentQuestion,
     profiPriceDisclosureGiven: memory.profiPriceDisclosureGiven || event.profiPriceDisclosureGiven === true,
+    // A wind-down turn stacks; ANY other agent turn breaks the streak. A turn
+    // that names a product re-opens the topic; a wind-down closes it.
+    windDownStreak: event.windDown ? memory.windDownStreak + 1 : 0,
+    topicClosed: event.windDown
+      ? true
+      : event.lastProduct || (event.productsMentioned?.length ?? 0) > 0
+        ? false
+        : memory.topicClosed,
   };
 }
 
@@ -522,6 +583,24 @@ function reduceUserAudio(
     recentProducts = [];
   }
 
+  // The caller's hair profile persists across the whole call (deliberately NOT
+  // reset by switchedType — curly hair stays curly when the caller moves from
+  // Shampoo to Maske). Inflection variants update one entry.
+  let callerNeeds = memory.callerNeeds;
+  const hairNeeds = detectCallerHairNeeds(text);
+  if (hairNeeds.length) {
+    const byKey = new Map(callerNeeds.map((n) => [callerNeedKey(n.label), n]));
+    for (const label of hairNeeds) {
+      byKey.set(callerNeedKey(label), { label: sanitizeMemoryText(label, 24), turnIndex: event.turnIndex });
+    }
+    callerNeeds = [...byKey.values()].slice(-MAX_CALLER_NEEDS);
+  }
+
+  // A caller turn that brings up a product/type/need re-opens a wound-down call.
+  const reopensTopic = Boolean(
+    userProductType || mentionedProductKind || (event.productsMentioned?.length ?? 0) > 0 || hairNeeds.length,
+  );
+
   return {
     ...memory,
     pendingClarification: clearsPending ? null : memory.pendingClarification,
@@ -533,6 +612,9 @@ function reduceUserAudio(
       : mentionedProductKind
         ? { label: mentionedProductKind, turnIndex: event.turnIndex }
         : memory.activeProductType,
+    callerNeeds,
+    topicClosed: reopensTopic ? false : memory.topicClosed,
+    windDownStreak: reopensTopic ? 0 : memory.windDownStreak,
     inaudibleStreak: 0,
     silenceMs: 0,
     endCallEligible: clearFarewell,
@@ -555,6 +637,11 @@ export function reduceDrkallaShortTermMemory(
       turnIndex: event.turnIndex,
     },
   };
+}
+
+/** The caller explicitly asks to repeat something — repeats are then allowed. */
+export function isDrkallaRepeatRequest(text: string): boolean {
+  return REPEAT_REQUEST.test(text);
 }
 
 export function isFactMentionAllowed(
@@ -608,6 +695,13 @@ export function shouldIncludeDrkallaProfiPriceDisclosure(
  * count is the running reminder count for this call (1 = first nudge).
  */
 export function nextDrkallaNoInputReminder(memory: DrkallaShortTermVoiceMemory, count: number): string {
+  // A wound-down call must NOT resurrect the declined product ("Wir waren bei
+  // Black Professional Line Sintesis. Soll ich dazu weitermachen?" came after
+  // the caller had said Nein four times, real call 2026-06-30). Offer a
+  // graceful exit instead.
+  if (memory.topicClosed) {
+    return 'Sind Sie noch dran? Wenn Sie nichts mehr brauchen, wünsche ich Ihnen einen schönen Tag.';
+  }
   if (count >= 2) {
     return 'Ich höre gerade nichts von Ihnen. Melden Sie sich gern wieder, wenn Sie so weit sind.';
   }
@@ -692,6 +786,10 @@ export function buildDrkallaMemoryContext(memory: DrkallaShortTermVoiceMemory): 
   ];
   if (memory.lastMentionedProduct) parts.push(`active_product=${sanitizeMemoryText(memory.lastMentionedProduct.spokenName, 80)}`);
   if (memory.activeProductType) parts.push(`active_product_type=${sanitizeMemoryText(memory.activeProductType.label, 60)}`);
+  // The caller's stated hair profile ("lockige", "trockenes") — the model must
+  // tailor recommendations to it instead of forgetting it after one turn.
+  if (memory.callerNeeds.length) parts.push(`caller_hair=${memory.callerNeeds.map((n) => sanitizeMemoryText(n.label, 24)).join(',')}`);
+  if (memory.topicClosed) parts.push('topic_closed=true');
   if (activeProductFacts.length) parts.push(`product_facts=${activeProductFacts.join(',')}`);
   // Products already named this call, so the model can SEE what not to re-pitch
   // (live call: it re-offered the same Shampoo + its link several times). The

@@ -19,9 +19,11 @@ import {
 import {
   buildDrkallaProductCatalogSearch,
   buildDrkallaExternalBrandStock,
+  buildDrkallaColorShadeSummary,
   type DrkallaProductCatalogSearch,
   type DrkallaExternalBrandStock,
   type DrkallaCatalogSearchRawProduct,
+  type DrkallaColorShadeSummary,
 } from './drkalla-product-catalog-search.js';
 import {
   buildDrkallaFaqMatcher,
@@ -83,6 +85,40 @@ const SAFE_UNAVAILABLE_TEXT = 'Entschuldigung, ich kann gerade nicht weiterhelfe
 // instead of an audible mid-name period/abbreviation; "der Assistent von Doktor
 // Kalla" flows better than the compound "der Dr.Kalla Assistent".
 export const DRKALLA_CUSTOM_RUNTIME_GREETING = 'Hallo, hier ist der Assistent von Doktor Kalla Cosmetics. Wie kann ich Ihnen beim Friseurbedarf helfen?';
+
+// Only the deterministic confirm path can actually send an SMS — a MODEL
+// sentence that PROMISES a send ("Ich sende Ihnen gleich den Link …") is a
+// false claim: it reached the TTS raw and no SMS ever went out, three times in
+// one call (live 2026-06-29). Promise sentences are rewritten into the
+// compliant OFFER question; committing that offer as lastAgentQuestion (see
+// the turn body) makes the caller's following "Ja" trigger a REAL send.
+// Truthful past confirmations after a real send ("ich habe … geschickt",
+// "wurde soeben verschickt") are deliberately NOT matched.
+const DRKALLA_SEND_PROMISE = /\bich\s+(?:sende|schicke|werde\b[^.?!]*\b(?:send|schick)\w*)\b[^.?!]*\b(?:link|sms|nachricht)\b/i;
+
+export function rewriteDrkallaSendPromise(text: string, offer: string): { text: string; rewritten: boolean } {
+  if (!DRKALLA_SEND_PROMISE.test(text)) return { text, rewritten: false };
+  let rewritten = false;
+  const out = text
+    .split(/(?<=[.!?])/)
+    .map((sentence) => {
+      if (sentence.includes('?')) return sentence; // already an offer/question
+      if (!DRKALLA_SEND_PROMISE.test(sentence)) return sentence;
+      rewritten = true;
+      const lead = /^\s*/.exec(sentence)?.[0] ?? '';
+      return `${lead}${offer}`;
+    })
+    .join('');
+  return { text: out, rewritten };
+}
+
+export function buildDrkallaSendOfferQuestion(memory: DrkallaShortTermVoiceMemory): string {
+  const product = memory.lastMentionedProduct?.spokenName;
+  if (product) return `Soll ich Ihnen den Link zu ${product} per SMS schicken?`;
+  const category = memory.activeProductType?.label;
+  if (category) return `Soll ich Ihnen den Link zu unserer ${category}-Auswahl per SMS schicken?`;
+  return 'Soll ich Ihnen den Link per SMS schicken?';
+}
 
 // Spoken when the agent is switched OFF (env gate or the platform's on/off toggle):
 // one short line, then hang up — the caller is never left in silence.
@@ -408,6 +444,23 @@ export function loadDrkallaExternalBrandStock(productsPath?: string): DrkallaExt
   }
 }
 
+/**
+ * Spoken color-shade summary aggregated from the color products' variant
+ * titles, built once at startup. Lets the agent ANSWER "Was habt ihr für
+ * Farben?" (live 2026-07-01: asked twice, got a product pitch both times).
+ */
+export function loadDrkallaColorShadeSummary(productsPath?: string): DrkallaColorShadeSummary | undefined {
+  try {
+    const parsed = readFirstJson(
+      resolveDrkallaSnapshotPath('drkalla-products.json', productsPath ?? process.env.DRKALLA_PRODUCTS_PATH),
+    ) as { products?: unknown } | null;
+    if (!parsed || !Array.isArray(parsed.products) || !parsed.products.length) return undefined;
+    return buildDrkallaColorShadeSummary(parsed.products as DrkallaCatalogSearchRawProduct[]) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function loadDrkallaFaqMatcher(faqPath?: string): DrkallaFaqMatcher | undefined {
   try {
     const parsed = readFirstJson(
@@ -463,6 +516,7 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
   evidenceLookup?: DrkallaProductEvidenceLookup;
   catalogSearch?: DrkallaProductCatalogSearch;
   brandStock?: DrkallaExternalBrandStock;
+  colorShadeSummary?: DrkallaColorShadeSummary;
   faqMatch?: DrkallaFaqMatcher;
   knowledgeRetriever?: DrkallaKnowledgeRetriever;
   knowledgePriority?: boolean;
@@ -495,10 +549,23 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
   }
 
   // Caller went silent (Retell reminder). Re-engage deterministically: no
-  // model call, no end_call. Retell still owns the hard silence timeout.
+  // model call. Retell still owns the hard silence timeout — EXCEPT after a
+  // completed wind-down (caller declined, said Nein, then went silent): a
+  // second reminder then says goodbye and ends the call instead of nagging a
+  // caller who is clearly done (live 2026-06-30: the reminder resurrected the
+  // four-times-declined product). Never fires without a prior explicit decline.
   if (parsed.interactionType === 'reminder_required') {
     const memory = input.memory ?? createDrkallaShortTermMemory();
-    const reminderText = nextDrkallaNoInputReminder(memory, Math.max(1, input.noInputReminderCount ?? 1));
+    const count = Math.max(1, input.noInputReminderCount ?? 1);
+    if (memory.topicClosed && count >= 2) {
+      const byeText = 'Dann wünsche ich Ihnen einen schönen Tag. Auf Wiederhören!';
+      input.onMemory?.(reduceDrkallaShortTermMemory(
+        memory,
+        deriveDrkallaAgentSpokeEvent({ text: byeText, turnIndex: input.sequence ?? 0 }),
+      ));
+      return reply(parsed.providerResponseId, byeText, true);
+    }
+    const reminderText = nextDrkallaNoInputReminder(memory, count);
     input.onMemory?.(reduceDrkallaShortTermMemory(
       memory,
       deriveDrkallaAgentSpokeEvent({ text: reminderText, turnIndex: input.sequence ?? 0 }),
@@ -530,6 +597,7 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
     evidenceLookup: input.evidenceLookup,
     catalogSearch: input.catalogSearch,
     brandStock: input.brandStock,
+    colorShadeSummary: input.colorShadeSummary,
     faqMatch: input.faqMatch,
     knowledgeRetriever: input.knowledgeRetriever,
     knowledgePriority: input.knowledgePriority,
@@ -709,6 +777,7 @@ export async function registerRetellDrkallaCustomLlmWs(
     evidenceLookup?: DrkallaProductEvidenceLookup;
     catalogSearch?: DrkallaProductCatalogSearch;
     brandStock?: DrkallaExternalBrandStock;
+    colorShadeSummary?: DrkallaColorShadeSummary;
     faqMatch?: DrkallaFaqMatcher;
     knowledgeRetriever?: DrkallaKnowledgeRetriever;
   } = {},
@@ -722,6 +791,7 @@ export async function registerRetellDrkallaCustomLlmWs(
   const evidenceLookup = options.evidenceLookup ?? loadDrkallaProductEvidenceLookup();
   const catalogSearch = options.catalogSearch ?? loadDrkallaProductCatalogSearch();
   const brandStock = options.brandStock ?? loadDrkallaExternalBrandStock();
+  const colorShadeSummary = options.colorShadeSummary ?? loadDrkallaColorShadeSummary();
   const faqMatch = options.faqMatch ?? loadDrkallaFaqMatcher();
   const knowledgeRetriever = options.knowledgeRetriever ?? loadDrkallaKnowledgeRetriever();
   // Real SMS sending stays off unless explicitly enabled; the executor goes
@@ -1048,7 +1118,11 @@ export async function registerRetellDrkallaCustomLlmWs(
           // split a number/price across chunks — the length backoff guards that.
           const flushChunk = (raw: string) => {
             rawStreamed += raw;
-            sendFrame(speakDrkallaPriceText(raw), false);
+            // rawStreamed accumulates the RAW model text (the final-tail prefix
+            // diff depends on it); only the SPOKEN side is price-normalized and
+            // send-promise-rewritten.
+            const safe = rewriteDrkallaSendPromise(raw, buildDrkallaSendOfferQuestion(memory)).text;
+            sendFrame(speakDrkallaPriceText(safe), false);
           };
           const onDelta = (chunk: string) => {
             deltaBuffer += chunk;
@@ -1130,6 +1204,7 @@ export async function registerRetellDrkallaCustomLlmWs(
             evidenceLookup,
             catalogSearch,
             brandStock,
+            colorShadeSummary,
             // Live-published FAQ + knowledge (from the platform) override the baked snapshots.
             faqMatch: liveOverlay.faqMatch ?? faqMatch,
             knowledgeRetriever: liveOverlay.knowledgeRetriever ?? knowledgeRetriever,
@@ -1172,12 +1247,31 @@ export async function registerRetellDrkallaCustomLlmWs(
           //   matches, fall back to a single full final frame.
           let tail: string;
           if (sentText === '') {
-            tail = speakDrkallaText(String(outbound.content));
+            tail = speakDrkallaText(
+              rewriteDrkallaSendPromise(String(outbound.content), buildDrkallaSendOfferQuestion(memory)).text,
+            );
           } else {
             const rawFull = String(outbound.content);
+            const rawTail = rawFull.startsWith(rawStreamed) ? rawFull.slice(rawStreamed.length) : rawFull;
             tail = speakDrkallaPriceText(
-              rawFull.startsWith(rawStreamed) ? rawFull.slice(rawStreamed.length) : rawFull,
+              rewriteDrkallaSendPromise(rawTail, buildDrkallaSendOfferQuestion(memory)).text,
             );
+          }
+          // A rewritten send-promise must ALSO become the pending question in
+          // memory, so the caller's following "Ja" hits the deterministic send
+          // path and a real SMS goes out (the spoken rewrite alone would leave
+          // "Ja" answering a question the memory never saw).
+          if (isResponseTurn) {
+            const promiseOffer = buildDrkallaSendOfferQuestion(memory);
+            if (rewriteDrkallaSendPromise(String(outbound.content), promiseOffer).rewritten) {
+              memory = reduceDrkallaShortTermMemory(memory, {
+                type: 'agent_spoke',
+                turnIndex: turnCounter,
+                text: promiseOffer,
+                lastAgentQuestion: promiseOffer,
+              });
+              app.log.warn({ event: 'send_claim_rewritten', callId }, 'drkalla canary: model send-promise converted to offer');
+            }
           }
           // Hard hang-up only on a clear caller farewell (response.endCall),
           // carried on the final frame; never on streamed/intermediate frames.

@@ -9,7 +9,11 @@ import {
   type DrkallaContactFacts,
 } from './drkalla-contact-facts.js';
 import type { DrkallaProductEvidenceLookup } from './drkalla-product-evidence.js';
-import type { DrkallaProductCatalogSearch, DrkallaExternalBrandStock } from './drkalla-product-catalog-search.js';
+import type {
+  DrkallaProductCatalogSearch,
+  DrkallaExternalBrandStock,
+  DrkallaColorShadeSummary,
+} from './drkalla-product-catalog-search.js';
 import type { DrkallaKnowledgeRetriever } from './drkalla-knowledge-chunks-retriever.js';
 import type { DrkallaFaqMatcher } from './drkalla-faq-match.js';
 import { detectDrkallaDuForm } from './drkalla-formality-detector.js';
@@ -21,6 +25,8 @@ import {
   type DrkallaProductNameDetector,
 } from './drkalla-product-name-detector.js';
 import {
+  getDrkallaProductConversationState,
+  isDrkallaRepeatRequest,
   nextInaudibleRepair,
   reduceDrkallaShortTermMemory,
   type DrkallaShortTermVoiceMemory,
@@ -158,6 +164,7 @@ function compactSystemPrompt(
     'AUSSPRACHE: Sprich den Markennamen immer als "Doktor Kalla" aus, nie als "Dr.Kalla" oder buchstabiert. Nenne Preise GENAU so, wie sie in der Evidence-/Katalog-Treffer-Zeile stehen (z. B. "12 Euro", "7 Euro sechzig") — sprich Cent als ausgeschriebenes Wort, NIEMALS als Komma-Zahl ("7,60"), als Ziffern ("7 Euro 60") oder mit "null". Verwende keine Abkuerzungen zum Vorlesen (kein "z.B.", "bzw.", "usw.", "Nr.", "Str.", "&", "%").',
     'Dr.Kalla ist ein Friseurbedarf-Shop, kein Friseursalon: keine Termine, keine Haarschnitte oder Faerbe-Dienstleistungen; verweise hoeflich auf Produkte/Salonbedarf.',
     'Nenne Adresse, Oeffnungszeiten, E-Mail, Preise oder Verfuegbarkeit nur aus der gegebenen Evidence- oder Kontakt-Fakt-Zeile. Fehlt die Angabe, erfinde nichts und verweise hoeflich auf die Website oder den Kontakt.',
+    'Behaupte NIEMALS, dass ein Produkt oder eine Kategorie nicht im Sortiment ist, nur weil dir gerade keine Treffer-Zeile dazu vorliegt. Sage dann ehrlich, dass du es nicht sicher sagen kannst, und verweise auf die Website. Erfinde umgekehrt auch keine Marken oder Modelle, die nicht in einer Treffer-Zeile stehen.',
     'Erklaere die Profi-Preise hoechstens einmal ausfuehrlich; wurde der Profi-Zugang schon erwaehnt, fasse dich knapp und biete nur kurz den Link an, ohne die Erklaerung zu wiederholen.',
     'Wenn der Bedarf oder die Produktart bekannt ist, NENNE konkrete Produkte aus der Katalog-Treffer-Zeile oder grenze nach Marke/Variante ein. Stelle nicht wiederholt dieselbe Kategorie-Frage; wenn der Anrufer den Bedarf schon genannt hat, gehe weiter, statt erneut zu fragen.',
     'BERATEN STATT ABLADEN: Ist der Bedarf vage oder beratungsorientiert ("etwas fuer Haarpflege", "was kann ich gegen ... machen", "fuer meine Haare", "nach der Dauerwelle"), frage zuerst KURZ nach Haartyp, Problem oder Ziel, bevor du ein konkretes Produkt empfiehlst — dumpe nicht sofort ein Produkt. Variiere deine Formulierung; nutze nicht stur denselben Satzbau ("Da kann ich Ihnen X empfehlen ...").',
@@ -196,6 +203,14 @@ const PROFI_LINK_CHOICE = /\b(?:profi[\s-]?(?:zugang|link)|den profi|zum profi|d
 // (those are caught by SMALLTALK_NEGATION): "passt", "alles gut", "brauche ich
 // nicht", "lieber nicht", "kein Link", "reicht so". Wind down, never re-offer.
 const DRKALLA_LINK_DECLINE = /\b(?:nicht\s+n(?:ö|oe)tig|brauche?\s+(?:ich\s+)?(?:das\s+|den\s+)?nicht|lieber\s+nicht|kein(?:en)?\s+link|lass(?:en\s+sie)?\s+(?:das\s+)?(?:mal\s+)?(?:gut|stecken|sein)|passt(?:\s+schon)?|alles\s+(?:gut|klar|bestens)|reicht(?:\s+so)?|sp(?:ä|ae)ter)\b/i;
+// The caller claims the link was already sent ("hast du ja schon", "haben Sie
+// mir doch schon geschickt") — needs an honest ledger answer, not a re-pitch.
+const DRKALLA_ALREADY_SENT_CLAIM = /\b(?:schon|bereits|doch)\b[^.?!]*\b(?:geschickt|gesendet|gesandt|bekommen|erhalten)\b|\bha(?:st|ben)\s+(?:du|sie)\s+(?:ja\s+|doch\s+)?schon\b/i;
+// A compound turn that STARTS with a yes to the pending link offer but carries
+// a follow-up question ("Ja, gerne. Aber was ist das genau?"). The all-or-
+// nothing SHORT_AFFIRMATION missed it, so neither the send nor an answer
+// happened (live 2026-06-29). The send runs, the model answers the rest.
+const DRKALLA_LEADING_YES = /^(?:ja|gerne|ja,?\s*(?:bitte|gerne?))\b[\s,.!]+\S/i;
 
 export type DrkallaSendLinkKind = 'product' | 'profi' | 'category';
 export type DrkallaSendLinkExecutor = (input: {
@@ -391,6 +406,47 @@ const DRKALLA_CHEAP_INTENT = /\b(?:g[üu]nstig\w*|billig\w*|preiswert\w*|preisg[
 // (anti-loop: real call 2026-06-15 asked "welche Nuance?" seven times).
 const VARIANT_CLARIFY_MARKER = /ausf(?:ü|ue)hrung/i;
 
+// A frustrated META-complaint about the agent's behaviour ("wie oft fragst du
+// denn nach Link?", "immer wieder das Gleiche", "was ist mit dir los") must
+// NEVER be answered with yet another product pitch — the live 2026-06-30 caller
+// complained about link spam and got the identical pitch + link question as a
+// reply. Routed to the model, which sees the history and can de-escalate.
+const DRKALLA_FRUSTRATION_META = /\b(?:wie\s+oft|immer\s+wieder|schon\s+wieder|jede[rs]?\s+frage|nervt|nervig|h(?:ö|oe)r(?:\s+doch)?\s+auf|spinn\w*|krank(?:e[srn]?)?\b|kapierst|verstehst\s+(?:du|sie)\s+nicht|falsch\s+verstanden|was\s+ist\s+mit\s+dir\s+los|frage\s+war\s+(?:ja\s+)?(?:komplett\s+)?anders)\b/i;
+
+// A vague "anything-ish" need without a concrete product class ("irgendwas so
+// Flüssiges", "sowas für die Haare") — the consultative model should ask ONE
+// short clarifying question instead of the recommender dumping a random top hit.
+const DRKALLA_VAGUE_NEED = /\b(?:irgendwas|irgendetwas|irgendein\w*|sowas|so\s?was|oder\s+so)\b/i;
+
+// Concrete product-class words, used to detect (a) an ENUMERATION of several
+// classes in one turn ("Shampoo oder eine Kur oder eine Maske") — those go to
+// the model, which can answer across categories naturally instead of pitching
+// one arbitrary class (live 2026-07-02) — and (b) a bare "Pflege" turn with no
+// concrete class, which needs a consultative question first.
+const DRKALLA_CLASS_WORD = /\b(?:shampoo|maske|masken|kur|kuren|sp(?:ü|ue)lung|conditioner|farbe|farben|blondierung|spray|haar(?:ö|oe)l|(?:ö|oe)l|serum|creme|lotion|schaum|wax|wachs|schere|scheren|kamm|b(?:ü|ue)rste|f(?:ö|oe)hn|haartrockner|lockenstab|gl(?:ä|ae)tteisen|maschine|fixierer)\b/gi;
+
+function countDistinctClassWords(text: string): number {
+  const found = new Set<string>();
+  for (const match of text.matchAll(DRKALLA_CLASS_WORD)) {
+    found.add(match[0].toLocaleLowerCase('de-DE').replace(/n$/, ''));
+  }
+  return found.size;
+}
+
+// Auxiliary chemistry/tools (developer, peroxide, brushes, foil) are honest
+// CROSS-SELL items, not primary answers to a category question — "Habt ihr
+// Haarfarben?" must not present Wasserstoffperoxid as an "alternative" to a
+// hair color (live 2026-07-01). Stable partition: core products first,
+// auxiliaries keep their relative order behind them (never dropped — "was
+// brauche ich noch dazu?" still finds them).
+const DRKALLA_AUXILIARY_TITLE = /\b(?:peroxid|wasserstoffperoxid|entwickler|oxidant|oxidations\w*|fixier\w*|pinsel|folie|schale|haube)\b/i;
+
+function deprioritizeAuxiliary<T extends { spokenName?: string; shortName?: string }>(hits: T[], userText: string): T[] {
+  if (DRKALLA_AUXILIARY_TITLE.test(userText)) return hits; // explicitly asked for
+  const isAux = (h: T) => DRKALLA_AUXILIARY_TITLE.test(h.shortName ?? '') || DRKALLA_AUXILIARY_TITLE.test(h.spokenName ?? '');
+  return [...hits.filter((h) => !isAux(h)), ...hits.filter(isAux)];
+}
+
 // The catalog "Haarpflege" productType is a junk catch-all that mixes real care
 // products with Blondierung/Entwickler CHEMICALS (real call 2026-06-15: "lieber
 // eine Pflege" -> Blondierungspulver Blau). A care/cleanse need must never
@@ -430,19 +486,37 @@ function tryDeterministicNeedReply(input: {
   catalogSearch?: DrkallaProductCatalogSearch;
   evidenceLookup?: DrkallaProductEvidenceLookup;
   allowActiveTypeFallback?: boolean;
+  turnIndex?: number;
+  /** True when OUR last turn asked a variant question — the caller is answering it. */
+  variantAnswerTurn?: boolean;
 }): DrkallaFallbackResult | null {
   const text = input.userText;
   // A how-to/usage question ("wie trage ich ... auf"), a service/after-sales
-  // matter, a store-visit/browse question, or a contact lookup must NOT be
-  // answered with a product pitch — they fall through to the knowledge/contact
-  // layer + model, which answer in context and vary their phrasing.
+  // matter, a store-visit/browse question, a frustrated meta-complaint, or a
+  // contact lookup must NOT be answered with a product pitch — they fall
+  // through to the knowledge/contact layer + model, which answer in context
+  // and vary their phrasing.
   if (
     NEED_VETO.test(text)
     || DRKALLA_USAGE_HOWTO.test(text)
     || DRKALLA_SERVICE_INTENT.test(text)
     || DRKALLA_STORE_VISIT_INTENT.test(text)
     || DRKALLA_ATTRIBUTE_QUESTION.test(text)
+    || DRKALLA_FRUSTRATION_META.test(text)
     || detectDrkallaContactIntent(text)
+  ) return null;
+  const distinctClasses = countDistinctClassWords(text);
+  // An ENUMERATION across several classes ("Shampoo oder eine Kur oder eine
+  // Maske") or a vague no-class need ("irgendwas so Flüssiges", "etwas für
+  // Haarpflege" without stated hair needs) is a CONSULTATION, not a category
+  // pick — the model answers naturally / asks one clarifying question instead
+  // of the template dumping an arbitrary top hit (live 2026-07-02/06-30).
+  if (distinctClasses >= 2) return null;
+  if (distinctClasses === 0 && DRKALLA_VAGUE_NEED.test(text)) return null;
+  if (
+    distinctClasses === 0
+    && /\b(?:haarpflege|pflege)\b/i.test(text)
+    && !input.memory.callerNeeds.length
   ) return null;
   // A plain price question about the active product ("was kostet das?") belongs
   // to the deterministic price path, which answers it from the catalog — not a
@@ -453,17 +527,23 @@ function tryDeterministicNeedReply(input: {
     && !DRKALLA_CHEAP_INTENT.test(text)
     && input.memory.lastMentionedProduct
   ) return null;
+  // The caller's stated hair profile ("lockige", "trockenes") enriches every
+  // category search, so "ein Shampoo" after "ich habe lockige Haare" ranks the
+  // Locken Shampoo above the generic tie-break winner (real calls 2026-06-27/
+  // 2026-07-02: the profile was forgotten and the wrong shampoo pitched).
+  const needTerms = input.memory.callerNeeds.map((n) => n.label).join(' ');
+  const enrich = (query: string): string => (needTerms ? `${query} ${needTerms}` : query);
   // Require a productType match (a clear product CATEGORY), not a tag/title hit,
   // so this names products for "ich suche ein Shampoo" but leaves a specific
   // ambiguous product line ("Koleston Perfect") to the variant clarification.
-  let strong = (input.catalogSearch?.(text, 8) ?? []).filter((h) => h.typeHit);
+  let strong = (input.catalogSearch?.(enrich(text), 8) ?? []).filter((h) => h.typeHit);
   // REACHABILITY: the caller already named a category earlier (activeProductType)
-  // but this turn alone has no category token — a brand only ("von Wella"), bare
-  // intent ("ich will ein Produkt") or garbled ASR ("Bällehaarfarbe"). Combine
-  // the remembered category WITH this turn so a brand/nuance still narrows it and
-  // we reliably reach products instead of looping (real call 2026-06-15). Skipped
-  // for a real ambiguous product line so the variant clarification still wins.
-  // (a bare "Ja" / "welche Marken" is owned by the brand-list path, not here.)
+  // but this turn alone has no category token — a brand only ("von Wella") or
+  // garbled ASR ("Bällehaarfarbe"). Combine the remembered category WITH this
+  // turn so a brand/nuance still narrows it and we reliably reach products
+  // instead of looping (real call 2026-06-15). Skipped for a real ambiguous
+  // product line so the variant clarification still wins. (a bare "Ja" /
+  // "welche Marken" is owned by the brand-list path, not here.)
   if (
     !strong.length
     && input.allowActiveTypeFallback
@@ -478,41 +558,74 @@ function tryDeterministicNeedReply(input: {
     && !text.includes('?')
     && (text.trim().split(/\s+/).filter(Boolean).length <= 4 || DRKALLA_BUY_CONTINUATION.test(text))
   ) {
-    const combined = `${input.memory.activeProductType.label} ${text}`;
-    strong.push(...(input.catalogSearch?.(combined, 8) ?? []).filter((h) => h.typeHit));
+    const label = input.memory.activeProductType.label;
+    const combinedHits = (input.catalogSearch?.(enrich(`${label} ${text}`), 8) ?? []).filter((h) => h.typeHit);
+    // The remembered label ALONE always type-hits its own category, so a pure
+    // filler/rant turn ("Ist ja wirklich hecheloskrank") used to fuse into a
+    // non-sequitur pitch. Only accept the fallback when THIS TURN actually adds
+    // catalog signal (combined top outscores a label-only search) — UNLESS the
+    // caller is answering our own variant question or states a genuine buy
+    // intent; those are real continuations even when their tokens (a brand we
+    // do not stock, garbled ASR) add no catalog signal.
+    const genuineContinuation = input.variantAnswerTurn === true || DRKALLA_BUY_CONTINUATION.test(text);
+    const labelOnlyTop = (input.catalogSearch?.(enrich(label), 1) ?? [])[0];
+    if (combinedHits[0] && (genuineContinuation || !labelOnlyTop || combinedHits[0].score > labelOnlyTop.score)) {
+      strong.push(...combinedHits);
+    }
   }
   // A care/cleanse need must never surface a Blondierung/Entwickler chemical from
-  // the junk "Haarpflege" type (real call 2026-06-15).
+  // the junk "Haarpflege" type (real call 2026-06-15), and auxiliary chemistry
+  // (Peroxid/Entwickler/Pinsel) never OUTRANKS a core product for a category
+  // need (live 2026-07-01: Wasserstoffperoxid as "alternative" to Haarfarbe).
   strong = dropChemicalForCareIntent(strong, text, input.memory.activeProductType?.label ?? null);
+  strong = deprioritizeAuxiliary(strong, text);
   // "günstigste/billigste" -> rank the category by price so we name the cheapest.
   if (DRKALLA_CHEAP_INTENT.test(text)) {
     strong.sort((a, b) => (a.priceValue ?? Number.POSITIVE_INFINITY) - (b.priceValue ?? Number.POSITIVE_INFINITY));
   }
   const top = strong[0];
   if (!top) return null;
-  // Anti-broken-record: never re-pitch the SAME product we just recommended.
-  // A follow-up about it ("und von L'Oréal?", "haben Sie noch andere?") must vary
-  // via the model, not repeat the identical "Da kann ich Ihnen X empfehlen … Soll
-  // ich den Link schicken?" template (real call 2026-06-15: the agent looped the
-  // same line and the caller said "immer wieder das Gleiche, was ist mit dir los?").
-  // Check lastAgentQuestion (the SMS offer naming the product), NOT just
-  // lastMentionedProduct — a re-mention of the same category clears the latter via
-  // the switched-type reset, which would otherwise let the loop through.
+  // Anti-broken-record, CALL-scoped: never re-pitch a product this call already
+  // discussed. The old 1-turn lookback (lastAgentQuestion + lastMentionedProduct)
+  // was defeated by any intervening turn or a switched-type reset — the live
+  // caller got the identical pitch again and said "immer wieder das Gleiche,
+  // was ist mit dir los?" (2026-06-29). productConversations survives both, so
+  // it is the right ledger; an explicit "sag nochmal" is still allowed, and the
+  // model (which varies and sees discussed_products) handles the re-mention.
   const justAsked = input.memory.lastAgentQuestion ?? '';
+  const discussedBefore = getDrkallaProductConversationState(input.memory, top.productId)
+    ?? getDrkallaProductConversationState(input.memory, top.shortName);
   if (
     top.shortName
-    && (top.shortName === input.memory.lastMentionedProduct?.spokenName || justAsked.includes(top.shortName))
+    && !isDrkallaRepeatRequest(text)
+    && (
+      discussedBefore
+      || top.shortName === input.memory.lastMentionedProduct?.spokenName
+      || justAsked.includes(top.shortName)
+    )
   ) return null;
   const evidence = input.evidenceLookup?.byId(top.productId) ?? null;
   const alts = strong.slice(1, 3).map((h) => h.shortName).filter((n) => n && n !== top.shortName);
-  let reply = `Da kann ich Ihnen ${top.shortName} empfehlen.`;
+  // Deterministic PHRASE VARIATION: the identical "Da kann ich Ihnen X
+  // empfehlen …"-Satzbau on every pitch was the callers' top "robotic" signal.
+  // Rotated by turn index — still fully deterministic and testable.
+  const variant = Math.abs(input.turnIndex ?? 0) % 3;
+  const leads = [
+    `Da kann ich Ihnen ${top.shortName} empfehlen.`,
+    `Dafür passt zum Beispiel ${top.shortName} gut.`,
+    `Ich würde Ihnen ${top.shortName} vorschlagen.`,
+  ];
+  const altsLine = (list: string) => [
+    ` Alternativ haben wir ${list}.`,
+    ` Daneben gibt es noch ${list}.`,
+    ` Sonst wären ${list} eine Option.`,
+  ];
+  let reply = leads[variant]!;
   // Gender-neutral "Das kostet" (not "Es kostet" — the product may be feminine,
   // e.g. "die Haarmaske"). Range priceText already reads "von X bis Y".
   if (top.priceText) reply += ` Das kostet ${top.priceText}.`;
   if (alts.length) {
-    reply += alts.length === 1
-      ? ` Alternativ haben wir ${alts[0]}.`
-      : ` Alternativ haben wir ${alts[0]} und ${alts[1]}.`;
+    reply += altsLine(alts.length === 1 ? `${alts[0]}` : `${alts[0]} und ${alts[1]}`)[variant]!;
   }
   // Offer the SMS link only when a sendable URL exists, so we never promise a
   // link we cannot deliver (the old fallback claimed SMS, then it failed). And
@@ -520,9 +633,17 @@ function tryDeterministicNeedReply(input: {
   // not pile on yet another link offer (live 2026-06-30: caller snapped "wie oft
   // fragst du denn nach Link?"). Offer more info instead; they can still ask.
   const justOfferedLink = /\b(?:link|sms)\b/i.test(input.memory.lastAgentQuestion ?? '');
-  reply += evidence?.url && !justOfferedLink
-    ? ` Soll ich Ihnen den Link zu ${top.shortName} per SMS schicken?`
-    : ` Möchten Sie zu ${top.shortName} mehr wissen?`;
+  const linkOffers = [
+    ` Soll ich Ihnen den Link zu ${top.shortName} per SMS schicken?`,
+    ` Wenn Sie mögen, schicke ich Ihnen den Link zu ${top.shortName} per SMS — soll ich?`,
+    ` Möchten Sie den Link zu ${top.shortName} per SMS?`,
+  ];
+  const infoOffers = [
+    ` Möchten Sie zu ${top.shortName} mehr wissen?`,
+    ` Soll ich Ihnen mehr zu ${top.shortName} erzählen?`,
+    ` Darf ich Ihnen kurz mehr zu ${top.shortName} sagen?`,
+  ];
+  reply += evidence?.url && !justOfferedLink ? linkOffers[variant]! : infoOffers[variant]!;
   return {
     text: reply,
     product: { spokenName: top.shortName, productId: top.productId, productKind: top.productType },
@@ -558,10 +679,12 @@ const SMALLTALK_VETO = /\?|\b(?:preis|preise|kostet|kosten|teuer|euro|kauf|kaufe
  *   - a bare "nein" is skipped while a send-link offer is pending (the existing
  *     SMS-confirm logic must own that "nein"); farewells are handled earlier.
  */
+type DrkallaSmalltalkReply = { text: string; windDown?: boolean; endCall?: boolean };
+
 function tryDeterministicSmalltalkReply(input: {
   userText: string;
   memory: DrkallaShortTermVoiceMemory;
-}): string | null {
+}): DrkallaSmalltalkReply | null {
   const text = input.userText.trim();
   if (!text) return null;
   // Never let smalltalk swallow a turn that also asks for something concrete.
@@ -569,16 +692,34 @@ function tryDeterministicSmalltalkReply(input: {
   if (detectDrkallaContactIntent(text)) return null;
 
   if (SMALLTALK_THANKS.test(text)) {
-    return 'Sehr gern! Kann ich sonst noch etwas für Sie tun?';
+    // After OUR OWN wind-down question a bare "danke" is a closing signal too.
+    if (input.memory.windDownStreak >= 1) {
+      return {
+        text: 'Sehr gern! Dann wünsche ich Ihnen einen schönen Tag. Auf Wiederhören!',
+        endCall: true,
+      };
+    }
+    return { text: 'Sehr gern! Kann ich sonst noch etwas für Sie tun?', windDown: true };
   }
   if (SMALLTALK_ACK.test(text)) {
-    return 'Gern. Womit kann ich Ihnen weiterhelfen?';
+    return { text: 'Gern. Womit kann ich Ihnen weiterhelfen?' };
   }
   if (SMALLTALK_NEGATION.test(text)) {
     // A "nein" answering a pending SMS/link offer means "do not send" — leave it
     // to the existing confirm logic / model, do NOT treat it as smalltalk.
     if (SMS_OFFER_QUESTION.test(input.memory.lastAgentQuestion ?? '')) return null;
-    return 'Alles klar. Kann ich Ihnen sonst noch weiterhelfen?';
+    // CLOSING ESCALATION: the caller already answered our wind-down question
+    // ("Kann ich sonst noch …?") with Nein — a second identical loop turn is
+    // hostile UX (live 2026-06-30: four identical "Alles klar. Kann ich Ihnen
+    // sonst noch weiterhelfen?" in a row). Say goodbye and hang up. Never fires
+    // on silence: it requires an explicit spoken Nein after our own question.
+    if (input.memory.windDownStreak >= 1) {
+      return {
+        text: 'Alles klar. Dann wünsche ich Ihnen einen schönen Tag. Auf Wiederhören!',
+        endCall: true,
+      };
+    }
+    return { text: 'Alles klar. Kann ich Ihnen sonst noch weiterhelfen?', windDown: true };
   }
   return null;
 }
@@ -740,6 +881,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
   evidenceLookup?: DrkallaProductEvidenceLookup;
   catalogSearch?: DrkallaProductCatalogSearch;
   brandStock?: DrkallaExternalBrandStock;
+  colorShadeSummary?: DrkallaColorShadeSummary;
   faqMatch?: DrkallaFaqMatcher;
   knowledgeRetriever?: DrkallaKnowledgeRetriever;
   // True when the knowledge comes from owner-published content (platform overlay):
@@ -843,11 +985,19 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // send_link tool; without it the agent answers truthfully. Either way the
   // model can never claim a send that did not happen.
   const lastQ = canaryTurn.runtime.memory.lastAgentQuestion ?? '';
+  // Set when a compound "Ja, gerne. Aber …"-turn confirmed the pending link
+  // offer: the send is executed HERE, and the model then answers the rest of
+  // the turn (told what just happened, so it never invents a send).
+  let justExecutedSend: { outcome: 'sent' | 'duplicate' | 'failed'; label: string; url: string | null } | null = null;
   if (SMS_OFFER_QUESTION.test(lastQ)) {
     const twoOption = TWO_OPTION_OFFER.test(lastQ);
     const wantsProfi = PROFI_LINK_CHOICE.test(user);
     const wantsProduct = PRODUCT_LINK_CHOICE.test(user);
     const bareYes = SHORT_AFFIRMATION.test(user);
+    const leadingYes = !bareYes && !wantsProfi && !wantsProduct && !twoOption
+      && DRKALLA_LEADING_YES.test(user)
+      && !SMALLTALK_NEGATION.test(user)
+      && !DRKALLA_LINK_DECLINE.test(user);
 
     // Decline of the offer ("nein danke, alles gut", "passt", "brauche ich nicht").
     // The SMS-confirm path only handled YES, and SMALLTALK_NEGATION is deliberately
@@ -855,6 +1005,27 @@ export async function buildDrkallaCustomLlmResponse(input: {
     // which RE-OFFERED the link (real battery 2026-06-16, the "immer wieder" feel).
     // Wind down deterministically and end on a non-offer question so the pending
     // offer is cleared.
+    // The caller claims the link was ALREADY sent ("hast du ja schon") — answer
+    // honestly from the send ledger instead of re-pitching (live 2026-06-29:
+    // the model promised sends that never happened and the claim was met with
+    // a fresh product pitch).
+    if (DRKALLA_ALREADY_SENT_CLAIM.test(user) && !bareYes) {
+      const anySent = Object.keys(canaryTurn.runtime.memory.sentLinkHashes).length > 0;
+      const text = anySent
+        ? 'Genau, der Link ist bereits per SMS an Sie rausgegangen. Kann ich sonst noch etwas für Sie tun?'
+        : 'Bisher ist noch kein Link rausgegangen — das ging vorhin leider nicht raus. Soll ich es jetzt noch einmal per SMS versuchen?';
+      return {
+        blocked: false,
+        text,
+        memory: reduceDrkallaShortTermMemory(
+          canaryTurn.runtime.memory,
+          deriveDrkallaAgentSpokeEvent({ text, turnIndex }),
+        ),
+        metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
+        blockers: [],
+      };
+    }
+
     const declinesLink = !wantsProfi && !wantsProduct && !bareYes && !/\?/.test(user)
       && (SMALLTALK_NEGATION.test(user) || DRKALLA_LINK_DECLINE.test(user));
     if (declinesLink) {
@@ -864,7 +1035,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
         text,
         memory: reduceDrkallaShortTermMemory(
           canaryTurn.runtime.memory,
-          deriveDrkallaAgentSpokeEvent({ text, turnIndex }),
+          { ...deriveDrkallaAgentSpokeEvent({ text, turnIndex }), windDown: true },
         ),
         metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
         blockers: [],
@@ -886,7 +1057,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
       };
     }
 
-    if (wantsProfi || wantsProduct || bareYes) {
+    if (wantsProfi || wantsProduct || bareYes || leadingYes) {
       const activeProduct = canaryTurn.runtime.memory.lastMentionedProduct;
       const evidence = activeProduct
         ? input.evidenceLookup?.byKeyHash(activeProduct.productKeyHash) ?? null
@@ -924,10 +1095,15 @@ export async function buildDrkallaCustomLlmResponse(input: {
 
       let text = DRKALLA_SMS_NOT_WIRED_TEXT;
       let linkSentUrl: string | null = null;
-      if (input.executeSendLink && target) {
+      let sendOutcome: 'sent' | 'duplicate' | 'failed' = 'failed';
+      // A superseded (barged-in) turn must not fire a REAL SMS whose confirm
+      // frame and memory commit are then discarded — the caller would get a
+      // silent send with no dedupe entry.
+      if (input.executeSendLink && target && !input.signal?.aborted) {
         const outcome = await input.executeSendLink({ url: target.url, label: target.label, linkKind: target.linkKind })
           .catch(() => ({ smsSent: false as const }));
         if (outcome.smsSent) {
+          sendOutcome = 'sent';
           text = target.linkKind === 'profi'
             ? 'Erledigt, ich habe Ihnen den Link zum Profi-Zugang per SMS geschickt. Kann ich sonst noch etwas klären?'
             : target.linkKind === 'category'
@@ -935,6 +1111,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
               : `Erledigt, ich habe Ihnen den Produktlink zu ${target.label} per SMS geschickt. Kann ich sonst noch etwas klären?`;
           linkSentUrl = target.url;
         } else if ('duplicate' in outcome && outcome.duplicate) {
+          sendOutcome = 'duplicate';
           text = `Den Link habe ich Ihnen in diesem Anruf schon geschickt. Kann ich sonst noch etwas klären?`;
         } else {
           // End with a question so lastAgentQuestion is no longer the SMS offer
@@ -944,6 +1121,19 @@ export async function buildDrkallaCustomLlmResponse(input: {
             ? 'Das hat gerade leider nicht geklappt, die SMS ging nicht raus. Den Profi-Zugang finden Sie auf drkalla punkt com. Kann ich sonst noch etwas klären?'
             : `Das hat gerade leider nicht geklappt, die SMS ging nicht raus. Sie finden ${target.label} auf drkalla punkt com. Kann ich sonst noch etwas klären?`;
         }
+      }
+      // Compound "Ja, gerne. Aber …": the send is done; the MODEL answers the
+      // rest of the turn (it is told below what just happened). No early return.
+      if (leadingYes) {
+        justExecutedSend = { outcome: sendOutcome, label: target?.label ?? 'dem Produkt', url: linkSentUrl };
+      } else {
+      // Combined intent "Ja, schick den Link — und leg dann auf": honour BOTH.
+      // The send confirm must not swallow the goodbye (live 2026-06-27: the
+      // agent hung up and the send intent was lost in the reverse case).
+      const callerSaidBye = canaryTurn.runtime.memory.endCallEligible
+        && canaryTurn.runtime.memory.endCallReason === 'caller_farewell';
+      if (callerSaidBye) {
+        text = `${text.replace(/\s*Kann ich sonst noch etwas klären\?$/, '')} Vielen Dank für Ihren Anruf bei Doktor Kalla. Auf Wiederhören!`;
       }
       const agentEvent = deriveDrkallaAgentSpokeEvent({ text, turnIndex });
       return {
@@ -955,7 +1145,9 @@ export async function buildDrkallaCustomLlmResponse(input: {
         }),
         metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
         blockers: [],
+        endCall: callerSaidBye,
       };
+      }
     }
   }
 
@@ -966,13 +1158,38 @@ export async function buildDrkallaCustomLlmResponse(input: {
     canaryTurn.runtime.memory.endCallEligible
     && canaryTurn.runtime.memory.endCallReason === 'caller_farewell'
   ) {
-    const byeText = 'Vielen Dank für Ihren Anruf bei Dr.Kalla. Auf Wiederhören!';
+    let byeText = 'Vielen Dank für Ihren Anruf bei Dr.Kalla. Auf Wiederhören!';
+    let farewellLinksSent: Array<{ url: string; label: string }> | undefined;
+    // Combined intent WITHOUT a pending offer: "Ja, schick mir den Link und dann
+    // leg bitte auf." The farewell used to win and the send intent was silently
+    // dropped (live 2026-06-27). Send to the grounded product, then say goodbye.
+    const wantsSendNow = /\b(?:schick|send|zusend|zuschick|versend)\w*/i.test(user) && /\b(?:link|sms)\b/i.test(user);
+    const farewellProduct = canaryTurn.runtime.memory.lastMentionedProduct;
+    if (wantsSendNow && farewellProduct && input.executeSendLink && !input.signal?.aborted) {
+      let url = input.evidenceLookup?.byKeyHash(farewellProduct.productKeyHash)?.url ?? null;
+      if (!url && input.catalogSearch && input.evidenceLookup) {
+        const hit = input.catalogSearch(farewellProduct.spokenName, 1)[0];
+        if (hit) url = input.evidenceLookup.byId(hit.productId)?.url ?? null;
+      }
+      if (url) {
+        const outcome = await input.executeSendLink({ url, label: farewellProduct.spokenName, linkKind: 'product' })
+          .catch(() => ({ smsSent: false as const }));
+        if (outcome.smsSent) {
+          byeText = `Erledigt, der Link zu ${farewellProduct.spokenName} ist per SMS unterwegs. ${byeText}`;
+          farewellLinksSent = [{ url, label: farewellProduct.spokenName }];
+        } else if ('duplicate' in outcome && outcome.duplicate) {
+          byeText = `Den Link hatte ich Ihnen bereits geschickt. ${byeText}`;
+        } else {
+          byeText = `Die SMS ging gerade leider nicht raus — Sie finden ${farewellProduct.spokenName} auf drkalla punkt com. ${byeText}`;
+        }
+      }
+    }
     return {
       blocked: false,
       text: byeText,
       memory: reduceDrkallaShortTermMemory(
         canaryTurn.runtime.memory,
-        deriveDrkallaAgentSpokeEvent({ text: byeText, turnIndex }),
+        { ...deriveDrkallaAgentSpokeEvent({ text: byeText, turnIndex }), linksSent: farewellLinksSent },
       ),
       metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
       blockers: [],
@@ -992,13 +1209,17 @@ export async function buildDrkallaCustomLlmResponse(input: {
   if (smalltalkReply) {
     return {
       blocked: false,
-      text: smalltalkReply,
+      text: smalltalkReply.text,
       memory: reduceDrkallaShortTermMemory(
         canaryTurn.runtime.memory,
-        deriveDrkallaAgentSpokeEvent({ text: smalltalkReply, turnIndex }),
+        {
+          ...deriveDrkallaAgentSpokeEvent({ text: smalltalkReply.text, turnIndex }),
+          windDown: smalltalkReply.windDown === true,
+        },
       ),
       metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
       blockers: [],
+      endCall: smalltalkReply.endCall === true,
       quality: { duFormDetected: false, duFormConfidence: 'none', duFormSlips: [] },
     };
   }
@@ -1056,6 +1277,8 @@ export async function buildDrkallaCustomLlmResponse(input: {
       catalogSearch: input.catalogSearch,
       evidenceLookup: input.evidenceLookup,
       allowActiveTypeFallback: !ambiguousIsRealProduct,
+      turnIndex,
+      variantAnswerTurn: askedVariantLastTurn,
     });
     if (needReply) {
       return {
@@ -1171,6 +1394,33 @@ export async function buildDrkallaCustomLlmResponse(input: {
     }
   }
 
+  // "Was habt ihr für Farben?" — the RANGE question about shades. The variant
+  // data can answer it (aggregated offline into colorShadeSummary); the old
+  // behaviour pitched an arbitrary product line instead, twice in a row (live
+  // 2026-07-01). Deterministic, grounded, and consultative: name the families,
+  // then ask for the caller's direction. A follow-up goes to the model, which
+  // gets the same summary as a directive below.
+  if (
+    namedNow.length === 0
+    && input.colorShadeSummary
+    && DRKALLA_ATTRIBUTE_QUESTION.test(user)
+    && /farb|nuance|t(?:ö|oe)n|schattierung/i.test(user)
+    && !/fantasiefarbe/i.test(canaryTurn.runtime.memory.lastAgentQuestion ?? '')
+  ) {
+    const colorText = `Bei unseren Haarfarben haben wir ${input.colorShadeSummary.spoken}. Suchen Sie eher etwas Dunkles, Blondes oder eine Fantasiefarbe?`;
+    return {
+      blocked: false,
+      text: colorText,
+      memory: reduceDrkallaShortTermMemory(
+        canaryTurn.runtime.memory,
+        deriveDrkallaAgentSpokeEvent({ text: colorText, turnIndex }),
+      ),
+      metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
+      blockers: [],
+      quality: { duFormDetected: false, duFormConfidence: 'none', duFormSlips: [] },
+    };
+  }
+
   // Fallback for an open need that did NOT hit a productType (handled above) but
   // still matches catalog products by tag/title: surface real products (short
   // names) so the model NAMES them instead of looping. Grounded: real names only.
@@ -1181,20 +1431,74 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // carries a "lockiges Haar" tag (real call 2026-06-15). Without a known
   // category the open tag/title search is preserved.
   const activeType = canaryTurn.runtime.memory.activeProductType;
+  // Enrich model-turn catalog grounding with the caller's stated hair profile
+  // too, so "ein Shampoo" after "lockige Haare" feeds Locken products.
+  const callerNeedTerms = canaryTurn.runtime.memory.callerNeeds.map((n) => n.label).join(' ');
+  const withNeeds = (query: string): string => (callerNeedTerms ? `${query} ${callerNeedTerms}` : query);
   const catalogHitsRaw = namedNow.length === 0
     ? activeType
-      ? (input.catalogSearch?.(`${activeType.label} ${user}`, 4) ?? []).filter((h) => h.typeHit)
-      : (input.catalogSearch?.(user, 4) ?? [])
+      ? (input.catalogSearch?.(withNeeds(`${activeType.label} ${user}`), 4) ?? []).filter((h) => h.typeHit)
+      : (input.catalogSearch?.(withNeeds(user), 4) ?? [])
     : [];
-  // Care need must not feed a Blondierung/Entwickler chemical to the model either.
-  const catalogHits = dropChemicalForCareIntent(catalogHitsRaw, user, activeType?.label ?? null);
+  // Care need must not feed a Blondierung/Entwickler chemical to the model
+  // either, and auxiliary chemistry never leads the grounding list.
+  const catalogHits = deprioritizeAuxiliary(
+    dropChemicalForCareIntent(catalogHitsRaw, user, activeType?.label ?? null),
+    user,
+  );
   // A how-to/usage OR service question wants an explanation / the right policy, not
   // a product pitched — suppress the catalog grounding and let the knowledge/FAQ
   // layer ground it instead (routing-index Stage 1: route by intent before the
   // catalog can hijack a service question that merely contains a product word).
+  // A META turn about the conversation itself (link already sent, frustration
+  // about repeats) must not be re-grounded into yet another pitch either
+  // (live 2026-06-29: "Hast Du ja schon, Bro" got a fresh Glanz-Shampoo pitch).
   const isUsageHowto = DRKALLA_USAGE_HOWTO.test(user);
-  const suppressCatalog = isUsageHowto || DRKALLA_SERVICE_INTENT.test(user);
+  const isMetaTurn = DRKALLA_ALREADY_SENT_CLAIM.test(user) || DRKALLA_FRUSTRATION_META.test(user);
+  const suppressCatalog = isUsageHowto || DRKALLA_SERVICE_INTENT.test(user) || isMetaTurn;
   let system = compactSystemPrompt(canaryTurn.modelDirectives, input.contactFacts);
+  // Referent guard: "Ist das jetzt ein Lockenshampoo?" names a product INSIDE
+  // an identity question about the PREVIOUSLY recommended product. The name
+  // detector used to steal the referent, and the agent answered about the
+  // wrong product ("Ja, das ist ein Locken Shampoo …" about the Glanz-Shampoo,
+  // live 2026-07-02). Tell the model who "das" is; memory is restored below.
+  const priorProduct = input.memory.lastMentionedProduct;
+  const referentAsk = /\bist\s+(?:das|es|der|die|dies(?:es)?)\b/i.test(user);
+  // The identity question's candidate: an exactly-named product, or — when the
+  // caller says a COMPOUND the name detector cannot resolve ("Lockenshampoo") —
+  // the catalog's compound-split top hit (that is exactly the product the model
+  // would otherwise wrongly confirm from its Katalog-Treffer line).
+  const referentNamed = namedNow[0]?.spokenName
+    ?? (referentAsk && priorProduct ? (input.catalogSearch?.(user, 1) ?? [])[0]?.shortName : undefined);
+  const referentConflict = Boolean(
+    referentAsk
+    && priorProduct
+    && referentNamed
+    && referentNamed !== priorProduct.spokenName,
+  );
+  if (referentConflict && priorProduct) {
+    system += `\nReferenz-Hinweis: Der Anrufer meint mit "das" das zuletzt empfohlene Produkt ${priorProduct.spokenName} und fragt, ob es ${referentNamed} ist. Antworte ehrlich über ${priorProduct.spokenName} und verwechsle die beiden Produkte nicht; wenn es nicht dasselbe ist, sage das klar und nenne die passende Alternative.`;
+  }
+  // A COLOR-direction reply ("Rot, grün.") or follow-up while a color category
+  // is active: ground the model on the real shade range so it answers about
+  // colors instead of re-pitching a product line (live 2026-07-01: "Rot, grün."
+  // got the identical Haarfarbe-Ammoniakfrei pitch again).
+  const colorContext = /haarfarbe|blondierung|coloration|t(?:ö|oe)nung|farbcreme/i.test(activeType?.label ?? '')
+    || /\bfarbe|farben\b/i.test(user);
+  if (
+    input.colorShadeSummary
+    && colorContext
+    && /\b(?:rot|gr(?:ü|ue)n|blau|schwarz|braun|blond|grau|silber|kupfer|mahagoni|violett|lila|asch|gold|platin)\w*/i.test(user)
+  ) {
+    system += `\nFarb-Beleg: Unsere Haarfarben umfassen ${input.colorShadeSummary.spoken}. Sage ehrlich, ob die gewünschte Farbrichtung dabei ist, und empfiehl dann konkret ein Produkt aus der Katalog-Treffer-Zeile in dieser Nuance.`;
+  }
+  if (justExecutedSend) {
+    system += `\nSoeben ausgeführt: ${justExecutedSend.outcome === 'sent'
+      ? `Der Link zu ${justExecutedSend.label} wurde gerade per SMS an den Anrufer verschickt — bestätige das in einem kurzen Satz`
+      : justExecutedSend.outcome === 'duplicate'
+        ? `Der Link zu ${justExecutedSend.label} war in diesem Anruf bereits verschickt — erwähne das kurz`
+        : 'Der SMS-Versand hat gerade leider NICHT geklappt — sage das ehrlich und verweise auf drkalla punkt com'}, und beantworte dann die eigentliche Frage des Anrufers.`;
+  }
   if (catalogHits.length && !suppressCatalog) {
     const list = catalogHits
       .map((p) => (p.priceText ? `${p.shortName} (${p.priceText})` : p.shortName))
@@ -1274,15 +1578,27 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // Reduce what the agent is about to say back into short-term memory so the
   // funnel, per-product fact dedupe, and the once-only Profi disclosure work
   // across live turns. Pure text analysis: no extra LLM call, no KB call.
-  const memoryAfterAgentTurn = reduceDrkallaShortTermMemory(
+  // A compound-yes turn that just executed a send commits its link here too.
+  let memoryAfterAgentTurn = reduceDrkallaShortTermMemory(
     canaryTurn.runtime.memory,
-    deriveDrkallaAgentSpokeEvent({
-      text: spokenText,
-      turnIndex,
-      detectProducts: input.detectProducts,
-      fallbackProduct: fallback?.product,
-    }),
+    {
+      ...deriveDrkallaAgentSpokeEvent({
+        text: spokenText,
+        turnIndex,
+        detectProducts: input.detectProducts,
+        fallbackProduct: fallback?.product,
+      }),
+      linksSent: justExecutedSend?.url
+        ? [{ url: justExecutedSend.url, label: justExecutedSend.label }]
+        : undefined,
+    },
   );
+  // Referent guard, part 2: the identity question must not permanently steal
+  // the active product — "Ist das ein Lockenshampoo?" keeps the Glanz-Shampoo
+  // as the product under discussion (the caller asked ABOUT it).
+  if (referentConflict && priorProduct) {
+    memoryAfterAgentTurn = { ...memoryAfterAgentTurn, lastMentionedProduct: priorProduct };
+  }
 
   // Non-blocking Sie-consistency check on the only path that can slip into du
   // (model-generated, or memory-driven fallback text). Logged upstream; never
