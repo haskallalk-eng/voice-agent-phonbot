@@ -1479,6 +1479,18 @@ export async function buildDrkallaCustomLlmResponse(input: {
   if (referentConflict && priorProduct) {
     system += `\nReferenz-Hinweis: Der Anrufer meint mit "das" das zuletzt empfohlene Produkt ${priorProduct.spokenName} und fragt, ob es ${referentNamed} ist. Antworte ehrlich über ${priorProduct.spokenName} und verwechsle die beiden Produkte nicht; wenn es nicht dasselbe ist, sage das klar und nenne die passende Alternative.`;
   }
+  // A store-visit question needs the WHOLE truth, not just the address: we are
+  // a pure mail-order shop. The judge flagged that an address-only answer
+  // rebuilds the live frustration ("kann man vorbeischauen?" -> half answers,
+  // live 2026-06-30).
+  if (DRKALLA_STORE_VISIT_INTENT.test(user)) {
+    system += '\nFakt Vertriebsform: Dr.Kalla ist ein reiner Online-Versandhandel — es gibt KEINEN Ladenverkauf und kein Anschauen vor Ort. Sage das freundlich und biete die Website als Alternative an.';
+  }
+  // A frustrated caller needs de-escalation BEFORE facts: apologize briefly,
+  // no link offers, ask what they actually need.
+  if (DRKALLA_FRUSTRATION_META.test(user)) {
+    system += '\nDer Anrufer ist gerade verärgert über den Gesprächsverlauf: Entschuldige dich in EINEM kurzen, aufrichtigen Satz, biete KEINEN Link an, wiederhole keinen Produktvorschlag, und frage offen, womit du wirklich helfen kannst.';
+  }
   // A COLOR-direction reply ("Rot, grün.") or follow-up while a color category
   // is active: ground the model on the real shade range so it answers about
   // colors instead of re-pitching a product line (live 2026-07-01: "Rot, grün."
