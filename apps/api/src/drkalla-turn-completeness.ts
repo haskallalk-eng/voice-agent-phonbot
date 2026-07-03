@@ -109,6 +109,13 @@ export function looksIncompleteDrkallaUtterance(
 ): boolean {
   const raw = (text ?? '').trim();
   if (!raw) return false; // empty = call opener, handled by the greeting path
+  // A trailing subject pronoun right after a comma ("… will doch, ich") is a
+  // restart mid-build: German main clauses never END on comma + nominative
+  // pronoun. Checked on the RAW text (commas survive ASR reliably) and BEFORE
+  // the question escape — the live 2026-07-03 turn ("Nee, was? Ich will doch,
+  // ich") carried an internal "?" and was answered mid-thought. V2 inversions
+  // ("das mach ich") have no comma and stay complete.
+  if (/,\s*(?:ich|du|wir)\s*$/i.test(raw)) return true;
   if (raw.includes('?')) return false; // a question is a complete turn
   const toks = tokenize(raw);
   if (!toks.length) return false;

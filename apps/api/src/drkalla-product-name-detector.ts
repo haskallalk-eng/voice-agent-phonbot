@@ -35,9 +35,30 @@ function normalize(value: string): string {
     .trim();
 }
 
+// A hair-CONDITION token ("lockig", "coloriert") — Shopify tags leak bare
+// condition fragments like "Lockiges", "coloriertes Haar." or "pflegt
+// trockenes" into the alias snapshot. Those describe the CALLER's hair, not a
+// product: the live 2026-07-03 call resolved "ich habe lockiges Haar" to a
+// Delrin-Kamm via exactly such an alias and pitched the comb as turn one.
+const HAIR_CONDITION_TOKEN = /^(?:trocken|fein|lockig|kraus|coloriert|gefaerbt|blond|grau|dunkl|hell|strapazier|fettig|empfindlich|gereizt|sproed|bruechig|geschaedigt|duenn|glanzlos|kaputt|schuppig|spliss)\w*$/;
+const HAIR_CONTEXT_TOKEN = new Set(['haar', 'haare', 'kopfhaut', 'pflegt', 'fuer', 'ideal']);
+
+function isHairConditionAlias(normalized: string): boolean {
+  const toks = normalized.split(' ').filter(Boolean);
+  if (!toks.length) return false;
+  let hasCondition = false;
+  for (const t of toks) {
+    if (HAIR_CONDITION_TOKEN.test(t)) { hasCondition = true; continue; }
+    if (HAIR_CONTEXT_TOKEN.has(t)) continue;
+    return false; // a genuinely distinctive token -> real alias
+  }
+  return hasCondition;
+}
+
 function isSpecificAlias(alias: string, normalized: string): boolean {
   if (!normalized || normalized.length < 6) return false;
   if (SHOP_CONTEXT_ALIAS.test(alias.trim())) return false;
+  if (isHairConditionAlias(normalized)) return false;
   const isSingleWord = !normalized.includes(' ');
   if (isSingleWord && normalized.length < 8) return false;
   // A single word that the product-type detector already understands is a
