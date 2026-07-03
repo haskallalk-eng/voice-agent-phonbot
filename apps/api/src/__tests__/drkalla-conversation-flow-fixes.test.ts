@@ -865,3 +865,37 @@ describe('hair-condition tag fragments are never product aliases (live 2026-07-0
     expect(detect('Ich meine den Delrin-Kamm 4053.').map((p) => p.productId)).toContain('delrin');
   });
 });
+
+describe('a link-decline that is also a farewell hangs up (live smoke 2026-07-03: dead air after "hat sich alles geklärt")', () => {
+  function pendingOfferMemory() {
+    return reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 5,
+      text: 'Gern. Möchten Sie den Produktlink oder den Link zum Profi-Zugang?',
+      lastAgentQuestion: 'Möchten Sie den Produktlink oder den Link zum Profi-Zugang?',
+    });
+  }
+
+  it('"Alles klar, hat sich alles geklärt." with a pending offer declines AND says goodbye with end_call', async () => {
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Alles klar, hat sich alles geklärt.'),
+      memory: pendingOfferMemory(),
+      client: { complete: async () => 'unused' },
+    });
+    expect(response.text).toContain('schicke ich nichts');
+    expect(response.text).toContain('Auf Wiederhören');
+    expect(response.endCall).toBe(true);
+  });
+
+  it('a plain decline without a farewell still winds down WITHOUT hanging up', async () => {
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Nee, lieber nicht.'),
+      memory: pendingOfferMemory(),
+      client: { complete: async () => 'unused' },
+    });
+    expect(response.text).toContain('schicke ich nichts');
+    expect(response.endCall).not.toBe(true);
+  });
+});
