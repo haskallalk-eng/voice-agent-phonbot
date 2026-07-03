@@ -1123,7 +1123,15 @@ export async function buildDrkallaCustomLlmResponse(input: {
     const declinesLink = !wantsProfi && !wantsProduct && !bareYes && !/\?/.test(user)
       && (SMALLTALK_NEGATION.test(user) || DRKALLA_LINK_DECLINE.test(user));
     if (declinesLink) {
-      const text = 'Alles klar, dann schicke ich nichts. Kann ich sonst noch etwas für Sie tun?';
+      // A decline that is ALSO a farewell ("Alles klar, hat sich alles
+      // geklärt.", "Nein danke, tschüss") must hang up — this branch runs
+      // BEFORE the farewell block and used to swallow the goodbye (live smoke
+      // 2026-07-03: the call was left in dead air).
+      const declineSaidBye = canaryTurn.runtime.memory.endCallEligible
+        && canaryTurn.runtime.memory.endCallReason === 'caller_farewell';
+      const text = declineSaidBye
+        ? 'Alles klar, dann schicke ich nichts. Vielen Dank für Ihren Anruf bei Doktor Kalla. Auf Wiederhören!'
+        : 'Alles klar, dann schicke ich nichts. Kann ich sonst noch etwas für Sie tun?';
       return {
         blocked: false,
         text,
@@ -1133,6 +1141,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
         ),
         metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
         blockers: [],
+        endCall: declineSaidBye,
       };
     }
 
