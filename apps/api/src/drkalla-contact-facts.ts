@@ -84,15 +84,23 @@ export function buildDrkallaContactDirective(
   intent: DrkallaContactIntent,
   facts: DrkallaContactFacts = DRKALLA_CONTACT_FACTS,
 ): string | null {
+  // A contact question is a topic CHANGE: the caller wants the fact, not a
+  // return to the product funnel. Live 2026-07-03: the hours answer got an
+  // unasked product pitch appended ("… kann ich Ihnen auch direkt noch die
+  // passende Haarfarbe nennen") and the caller snapped ("ich frag grad nach
+  // Öffnungszeiten"). Offer further CONTACT facts at most, never a product.
+  // Kept SHORT: the canary directive budget is 800 chars, a long suffix
+  // disables the whole canary turn (sim regression DIRECTIVES_OVER_BUDGET).
+  const noUpsell = ' Danach KEIN Produktangebot; biete höchstens weitere Kontaktdaten an.';
   switch (intent) {
     case 'address':
-      return `Kontakt-Fakt (verbatim nennen, nicht erfinden): Adresse ${facts.addressSpoken}.`;
+      return `Kontakt-Fakt (verbatim nennen, nicht erfinden): Adresse ${facts.addressSpoken}.${noUpsell}`;
     case 'hours':
-      return `Kontakt-Fakt (verbatim nennen, nicht erfinden): Öffnungszeiten ${facts.hoursSpoken}.`;
+      return `Kontakt-Fakt (verbatim nennen, nicht erfinden): Öffnungszeiten ${facts.hoursSpoken}.${noUpsell}`;
     case 'email':
-      return `Kontakt-Fakt (verbatim nennen, nicht erfinden): E-Mail ${facts.emailSpoken}.`;
+      return `Kontakt-Fakt (verbatim nennen, nicht erfinden): E-Mail ${facts.emailSpoken}.${noUpsell}`;
     case 'anfahrt':
-      return `Kontakt-Fakt (verbatim nennen, nicht erfinden): Anfahrt ${facts.anfahrtSpoken}.`;
+      return `Kontakt-Fakt (verbatim nennen, nicht erfinden): Anfahrt ${facts.anfahrtSpoken}.${noUpsell}`;
     case 'profi':
       return 'Kontakt-Fakt: Profi-Preise nur ueber Profi-Zugang (ggf. Gewerbe-/Steuernachweis); Profi-Link per SMS anbieten, nie die URL vorlesen; keine Rabatte erfinden.';
     default:

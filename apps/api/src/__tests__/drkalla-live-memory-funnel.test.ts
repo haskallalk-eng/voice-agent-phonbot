@@ -536,9 +536,15 @@ describe('DrKalla gated SMS link executor', () => {
     expect(Object.keys(confirm.memory.sentLinkHashes)).toHaveLength(1);
   });
 
-  it('B: duplicate and failure outcomes are spoken truthfully without send claims', async () => {
+  it('B: duplicate and failure outcomes are spoken truthfully', async () => {
+    // Executor dedupe + CLEAN memory ledger = the SAME turn already fired the
+    // send (Retell re-issued the turn, live 2026-07-03) — the truthful answer
+    // is the send confirmation, and the link lands in the ledger. The
+    // committed-ledger duplicate ("schon geschickt") is covered in
+    // drkalla-custom-runtime-sms-integration + drkalla-conversation-flow-fixes.
     const duplicate = await offerThenConfirm(async () => ({ smsSent: false, duplicate: true }));
-    expect(duplicate.text).toContain('schon geschickt');
+    expect(duplicate.text).toContain('per SMS geschickt');
+    expect(Object.keys(duplicate.memory.sentLinkHashes)).toHaveLength(1);
 
     const failed = await offerThenConfirm(async () => ({ smsSent: false }));
     expect(failed.text).toContain('nicht geklappt');

@@ -153,6 +153,19 @@ export type DrkallaShortTermVoiceMemory = {
     turnIndex: number;
   };
   lastAgentQuestion: string | null;
+  /**
+   * The link the agent OFFERED to send — question OR statement form, from any
+   * path (deterministic or model). A following "ja"/"schick" must send EXACTLY
+   * this target: the live 2026-07-03 call resolved a "Ja, gerne." after a
+   * Profi-Link offer to the remembered PRODUCT instead, and the caller got the
+   * wrong SMS. Survives repair turns ("Wie bitte?"); cleared by a send, a
+   * decline wind-down, or a product-type switch.
+   */
+  pendingLinkOffer: null | {
+    kind: 'product' | 'profi' | 'category';
+    label: string;
+    turnIndex: number;
+  };
   inaudibleStreak: number;
   silenceMs: number;
   endCallEligible: boolean;
@@ -193,7 +206,7 @@ const REPEAT_REQUEST = /\b(?:(?:nochmal|noch mal)\s+(?:sagen|wiederholen|nennen|
 // below still vetoes negated/continuing turns ("leg nicht auf", "noch nicht").
 // Trailing guard is a letter-lookahead, not \b: umlaut-final tokens like
 // "tschö" have no \w on the right so \b would never match after them.
-const FAREWELL = /\b(?:tsch(?:[üu]ss?(?:i|le)?|uess?|au|ö|oe)|ciao|auf\s+wiederh[oö]ren|bis\s+dann|sch[oö]nen\s+tag\s+noch|das\s+war(?:'| e)?s|das\s+war\s+alles|nein\s+danke,?\s+das\s+war\s+alles|leg(?:e|st)?(?:\s+(?:bitte|doch|einfach|endlich|jetzt|mal|ruhig|gerne?|schon|halt|sofort|du))*\s+auf|(?:bitte\s+|einfach\s+|jetzt\s+|sofort\s+)?auflegen|beende(?:n)?\s+(?:bitte\s+)?(?:den\s+)?(?:anruf|gespr[äa]ch)|mach(?:\s+bitte)?\s+schluss|du\s+kannst\s+auflegen)(?![a-zäöüß])/i;
+const FAREWELL = /\b(?:tsch(?:[üu]ss?(?:i|le)?|uess?|au|ö|oe)|ciao|auf\s+wiederh[oö]ren|bis\s+dann|sch[oö]nen\s+tag\s+noch|das\s+war(?:'| e)?s|das\s+war\s+alles|nein\s+danke,?\s+das\s+war\s+alles|(?:hat\s+sich\s+)?alles\s+gekl[äa]rt|hat\s+sich\s+(?:das|es|'?s)\s+gekl[äa]rt|leg(?:e|st)?(?:\s+(?:bitte|doch|einfach|endlich|jetzt|mal|ruhig|gerne?|schon|halt|sofort|du))*\s+auf|(?:bitte\s+|einfach\s+|jetzt\s+|sofort\s+)?auflegen|beende(?:n)?\s+(?:bitte\s+)?(?:den\s+)?(?:anruf|gespr[äa]ch)|mach(?:\s+bitte)?\s+schluss|du\s+kannst\s+auflegen)(?![a-zäöüß])/i;
 // A farewell keyword inside a negated or continuing turn is NOT a goodbye:
 // "leg nicht auf", "nicht auflegen", "das war's noch nicht", "noch eine Frage".
 const NOT_FAREWELL = /\b(?:nicht|nie)\s+auf(?:legen|h[äa]ngen)|leg\s+nicht\s+auf|nicht\s+(?:beenden|auflegen)|noch\s+nicht\b|noch\s+(?:eine|ne|'?n)?\s*frage|warte|moment\b|ach\s+nein|doch\s+nicht|eine?\s+sache\s+noch|noch\s+(?:et)?was\b/i;
@@ -206,6 +219,38 @@ const NOT_FAREWELL = /\b(?:nicht|nie)\s+auf(?:legen|h[äa]ngen)|leg\s+nicht\s+au
 // genuine stay-request ("bitte nicht auflegen") has no such interrogative.
 const HANGUP_COMPLAINT = /\b(?:warum|wieso|weshalb)\b[^?!.]{0,40}\bauf(?:legen|h(?:ä|ae)ngen)\b/i;
 const ACK_ONLY = /^(?:alles klar|okay|ok|ja|genau|passt|danke)$/i;
+
+// An agent sentence that OFFERS to send a link/SMS — question ("Soll ich Ihnen
+// den Link per SMS schicken?") or statement form ("Wenn Sie möchten, kann ich
+// Ihnen den Profi-Link noch einmal per SMS schicken."). Past confirmations
+// ("… habe ich Ihnen geschickt") never match: the send verbs are matched at a
+// word boundary, so participles (geschickt/gesendet) stay out. [^.?!]* keeps
+// each alternation inside one sentence.
+const AGENT_LINK_OFFER = /(?:produktlink|\blink\b|per\s+sms|per\s+nachricht)[^.?!]*\b(?:schick|send|zusend|zuschick|zukomm|schreib|versend)\w*|\b(?:schick|send|zusend|zuschick|zukomm|schreib|versend)\w*[^.?!]*(?:produktlink|\blink\b|\bsms\b|nachricht)|\b(?:m(?:ö|oe)chten|wollen|soll(?:en)?|darf|h(?:ä|ae)tten)\b[^.?!]*\b(?:produktlink|\blink\b)\b[^.?!]*\?/i;
+// A two-option offer ("Produktlink oder Profi-Zugang") stays ambiguous — the
+// SMS-confirm path re-asks on a bare yes, so no pending target is recorded.
+const AGENT_TWO_OPTION_OFFER = /produktlink\s+oder\s+(?:den\s+link\s+(?:zum\s+)?)?profi/i;
+const AGENT_PROFI_OFFER = /\bprofi[\s-]?(?:link|zugang)\b/i;
+const AGENT_CATEGORY_OFFER = /\b([\p{L}-]+)-auswahl\b/iu;
+
+function detectAgentLinkOffer(
+  text: string,
+  productLabel: string | null,
+  turnIndex: number,
+): NonNullable<DrkallaShortTermVoiceMemory['pendingLinkOffer']> | null {
+  if (!AGENT_LINK_OFFER.test(text) || AGENT_TWO_OPTION_OFFER.test(text)) return null;
+  if (AGENT_PROFI_OFFER.test(text)) {
+    return { kind: 'profi', label: 'Profi-Zugang', turnIndex };
+  }
+  const category = text.match(AGENT_CATEGORY_OFFER);
+  if (category?.[1]) {
+    return { kind: 'category', label: sanitizeMemoryText(`${category[1]}-Auswahl`, 60), turnIndex };
+  }
+  if (productLabel) {
+    return { kind: 'product', label: sanitizeMemoryText(productLabel, 80), turnIndex };
+  }
+  return null;
+}
 
 // Hair-condition descriptors a caller uses to describe their OWN hair. Only
 // captured when the turn is actually about hair (HAIR_CONTEXT), so "blond" in
@@ -384,6 +429,7 @@ export function createDrkallaShortTermMemory(): DrkallaShortTermVoiceMemory {
     activeProductType: null,
     pendingClarification: null,
     lastAgentQuestion: null,
+    pendingLinkOffer: null,
     inaudibleStreak: 0,
     silenceMs: 0,
     endCallEligible: false,
@@ -488,6 +534,15 @@ function reduceAgentSpoke(
     };
   }
 
+  // Record what link the agent just OFFERED (question or statement form). A
+  // turn that actually SENT a link resolves any pending offer; a wind-down
+  // (offer declined) clears it; a non-offer turn ("Wie bitte?") keeps it, so
+  // "Ja, schick, gerne." after a repair still finds the right target.
+  const pendingLinkOffer = (event.linksSent?.length ?? 0) > 0 || event.windDown
+    ? null
+    : detectAgentLinkOffer(event.text, lastMentionedProduct?.spokenName ?? null, event.turnIndex)
+      ?? memory.pendingLinkOffer;
+
   return {
     ...withNoEndCall(memory),
     heardFacts: capHeardFacts(heardFacts),
@@ -499,6 +554,7 @@ function reduceAgentSpoke(
     lastAgentQuestion: event.lastAgentQuestion
       ? sanitizeMemoryText(event.lastAgentQuestion, 160)
       : memory.lastAgentQuestion,
+    pendingLinkOffer,
     profiPriceDisclosureGiven: memory.profiPriceDisclosureGiven || event.profiPriceDisclosureGiven === true,
     // A wind-down turn stacks; ANY other agent turn breaks the streak. A turn
     // that names a product re-opens the topic; a wind-down closes it.
@@ -604,6 +660,11 @@ function reduceUserAudio(
   return {
     ...memory,
     pendingClarification: clearsPending ? null : memory.pendingClarification,
+    // A switched product type makes a stale PRODUCT-link offer moot; a Profi/
+    // category offer stays valid across a topic change.
+    pendingLinkOffer: switchedType && memory.pendingLinkOffer?.kind === 'product'
+      ? null
+      : memory.pendingLinkOffer,
     productConversations: capRecord(productConversations, MAX_PRODUCT_CONVERSATIONS, (entry) => entry.lastMentionedTurn),
     lastMentionedProduct,
     recentProducts,
@@ -797,6 +858,11 @@ export function buildDrkallaMemoryContext(memory: DrkallaShortTermVoiceMemory): 
   const discussed = memory.recentProducts.map((p) => sanitizeMemoryText(p.spokenName, 40)).filter(Boolean);
   if (discussed.length) parts.push(`discussed_products=${discussed.join(',')}`);
   if (memory.pendingClarification) parts.push(`pending=${memory.pendingClarification.kind}`);
+  // The OFFERED link target — the model must keep the referent ("Ja, schick"
+  // after a Profi-Link offer means the Profi link, never a remembered product).
+  if (memory.pendingLinkOffer) {
+    parts.push(`pending_link=${memory.pendingLinkOffer.kind}:${sanitizeMemoryText(memory.pendingLinkOffer.label, 40)}`);
+  }
   if (memory.endCallEligible && memory.endCallReason) parts.push(`end_call_candidate=${memory.endCallReason}`);
   return parts.join('; ').slice(0, 550);
 }

@@ -60,7 +60,7 @@ function compactMemoryLine(memoryContext: string | null): string | null {
     .split(';')
     .map((part) => part.trim())
     .filter((part) =>
-      /^(active_product=|active_product_type=|caller_hair=|topic_closed=|product_facts=|discussed_products=|inaudible_streak=|pending=|links_sent=|profi_price_disclosure_given=|end_call_candidate=)/.test(part)
+      /^(active_product=|active_product_type=|caller_hair=|topic_closed=|product_facts=|discussed_products=|inaudible_streak=|pending=|pending_link=|links_sent=|profi_price_disclosure_given=|end_call_candidate=)/.test(part)
     );
   if (!keep.length) return null;
   return `Memory: ${keep.join('; ')}`.slice(0, 220);
