@@ -80,14 +80,21 @@ export function speakDrkallaText(text: string): string {
     // "Doktor Kalla punkt com" (live complaint 2026-06-27 — it was read as the
     // letters "de-er-kalla").
     .replace(/\bdrkalla\.com\b/gi, 'Doktor Kalla punkt com')
+    // Texts that already carry the SPOKEN handle ("… auf drkalla punkt com")
+    // get the same brand treatment — the voice read the bare handle as
+    // "Der Kalla" (owner complaint live 2026-07-04).
+    .replace(/\bdrkalla\s+punkt\s+com\b/gi, 'Doktor Kalla punkt com')
     .replace(/\s*@\s*/g, ' at ')
     // Brand name in a sentence -> spoken name. Require the period or a space
     // ("Dr.Kalla" / "Dr. Kalla") so a bare lowercase handle is left untouched.
     .replace(/\bDr\.\s?Kalla\b/g, 'Doktor Kalla')
     .replace(/\bDr\s+Kalla\b/g, 'Doktor Kalla')
     .replace(/\bDr\.\s?(?=[A-ZÄÖÜ])/g, 'Doktor ')
-    // Symbols → spoken words.
+    // Symbols → spoken words. A slash between words made the voice SPELL the
+    // whole token (live 2026-07-04: the category "Entwickler/Oxidant-Auswahl"
+    // was read letter by letter).
     .replace(/\s*&\s*/g, ' und ')
+    .replace(/(\p{L})\s*\/\s*(\p{L})/gu, '$1 und $2')
     .replace(/(\d)\s*%/g, '$1 Prozent')
     // Common German abbreviations the voice would otherwise spell or mangle.
     .replace(/\bz\.\s?B\.\s?/gi, 'zum Beispiel ')

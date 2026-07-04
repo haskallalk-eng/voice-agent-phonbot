@@ -99,6 +99,14 @@ export type DrkallaShortTermMemoryEvent =
        * declined product.
        */
       windDown?: boolean;
+      /**
+       * The agent answered a deterministic contact/about question this turn
+       * ('hours' | 'address' | … | 'about'). The contact path uses it to stop
+       * repeating the IDENTICAL fact when the caller immediately asks again
+       * with a different actual question (live 2026-07-04: "Was macht ihr?"
+       * got the address 4x in a row).
+       */
+      contactIntent?: string;
     }
   | {
       type: 'user_audio';
@@ -181,6 +189,12 @@ export type DrkallaShortTermVoiceMemory = {
    * recommender and the model (via avoid=) must not re-offer them.
    */
   rejectedProducts: Array<{ label: string; turnIndex: number }>;
+  /**
+   * The last deterministic contact/about answer the agent gave ('hours',
+   * 'address', …, 'about') and when. An immediate SAME-intent repeat routes to
+   * the model instead of speaking the identical sentence again.
+   */
+  lastContactIntent: null | { intent: string; turnIndex: number };
   inaudibleStreak: number;
   silenceMs: number;
   endCallEligible: boolean;
@@ -252,9 +266,45 @@ const AGENT_CATEGORY_OFFER = /\b([\p{L}-]+)-auswahl\b/iu;
 // and the caller got the wrong link twice.
 const AGENT_PAGE_OFFER = /\bkontakt(?:seite|daten|informationen|infos)?\b/i;
 
+// Extracting the offered product from the OFFER TURN's own text. A model turn
+// often names the product and then offers with a PRONOUN ("… unser
+// Farbentwickler Oxidationsmittel. Soll ich Ihnen den Link dazu per SMS
+// schicken?") — lastMentionedProduct can be stale or null at that point, and
+// the live 2026-07-04 yes then sent an old CATEGORY link instead. Two
+// conservative forms: the explicit "Link zu <Name>", else the last run of >=2
+// consecutive capitalized tokens (German product names) outside stop words.
+const OFFER_NAME_STOPWORD = /^(?:ihnen|ihre?[mnrs]?|sie|sms|link|links|produktlink|produktlinks|euro|doktor|kalla|profi(?:-zugang)?|auswahl|kontaktseite|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|soll|wenn|gern|gerne|erledigt|alles|guten|hallo|vielen|dank|danke|ok(?:ay)?|uhr|berlin)$/i;
+const OFFER_LINK_ZU_NAME = /\blink\s+zu[mr]?\s+(?:unser(?:em|er|e)?\s+|dem\s+|der\s+|den\s+|die\s+|das\s+)?([A-ZÄÖÜ][\p{L}\d&'’-]*(?:\s+[A-ZÄÖÜ][\p{L}\d&'’-]*)+)/u;
+
+function guessOfferedProductName(text: string): string | null {
+  const explicit = text.match(OFFER_LINK_ZU_NAME);
+  const explicitFirstToken = explicit?.[1]?.split(/\s+/)[0] ?? '';
+  if (explicit?.[1] && !OFFER_NAME_STOPWORD.test(explicitFirstToken)) return explicit[1];
+  let best: string | null = null;
+  let run: string[] = [];
+  const flush = () => {
+    if (run.length >= 2) best = run.join(' ');
+    run = [];
+  };
+  let sentenceStart = true;
+  for (const raw of text.split(/\s+/)) {
+    if (!raw) continue;
+    const word = raw.replace(/^[„“"'(]+/u, '').replace(/[.,!?;:„“"')—-]+$/u, '');
+    const endsSentence = /[.!?]["')]*$/.test(raw);
+    const isNameToken = /^[A-ZÄÖÜ][\p{L}\d&'’-]*$/u.test(word) && !OFFER_NAME_STOPWORD.test(word);
+    if (isNameToken && !sentenceStart) run.push(word);
+    else flush();
+    if (endsSentence) flush();
+    sentenceStart = endsSentence;
+  }
+  flush();
+  return best;
+}
+
 function detectAgentLinkOffer(
   text: string,
   productLabel: string | null,
+  turnProducts: string[],
   turnIndex: number,
 ): NonNullable<DrkallaShortTermVoiceMemory['pendingLinkOffer']> | null {
   if (!AGENT_LINK_OFFER.test(text) || AGENT_TWO_OPTION_OFFER.test(text)) return null;
@@ -268,8 +318,19 @@ function detectAgentLinkOffer(
   if (category?.[1]) {
     return { kind: 'category', label: sanitizeMemoryText(`${category[1]}-Auswahl`, 60), turnIndex };
   }
-  if (productLabel) {
-    return { kind: 'product', label: sanitizeMemoryText(productLabel, 80), turnIndex };
+  // Label priority: the explicit "Link zu <Name>" in the offer text, then a
+  // catalog-verified product named in THIS turn, then the grounded product,
+  // then the capitalized-run guess — the offer turn's own words beat any
+  // remembered state.
+  const explicit = text.match(OFFER_LINK_ZU_NAME);
+  const explicitFirstToken = explicit?.[1]?.split(/\s+/)[0] ?? '';
+  const label =
+    (explicit?.[1] && !OFFER_NAME_STOPWORD.test(explicitFirstToken) ? explicit[1] : null)
+    ?? turnProducts[turnProducts.length - 1]
+    ?? productLabel
+    ?? guessOfferedProductName(text);
+  if (label) {
+    return { kind: 'product', label: sanitizeMemoryText(label, 80), turnIndex };
   }
   return null;
 }
@@ -457,6 +518,7 @@ export function createDrkallaShortTermMemory(): DrkallaShortTermVoiceMemory {
     pendingLinkOffer: null,
     askedQuestionLastTurn: false,
     rejectedProducts: [],
+    lastContactIntent: null,
     inaudibleStreak: 0,
     silenceMs: 0,
     endCallEligible: false,
@@ -578,8 +640,12 @@ function reduceAgentSpoke(
   // "Ja, schick, gerne." after a repair still finds the right target.
   const pendingLinkOffer = (event.linksSent?.length ?? 0) > 0 || windDown
     ? null
-    : detectAgentLinkOffer(event.text, lastMentionedProduct?.spokenName ?? null, event.turnIndex)
-      ?? memory.pendingLinkOffer;
+    : detectAgentLinkOffer(
+      event.text,
+      lastMentionedProduct?.spokenName ?? null,
+      (event.productsMentioned ?? []).map((p) => p.spokenName),
+      event.turnIndex,
+    ) ?? memory.pendingLinkOffer;
 
   // The caller declined this product — cap-bounded, inflection-tolerant dedupe.
   let rejectedProducts = memory.rejectedProducts;
@@ -608,6 +674,9 @@ function reduceAgentSpoke(
     // about the IMMEDIATELY preceding turn.
     askedQuestionLastTurn: Boolean(event.lastAgentQuestion),
     rejectedProducts,
+    lastContactIntent: event.contactIntent
+      ? { intent: event.contactIntent, turnIndex: event.turnIndex }
+      : memory.lastContactIntent,
     profiPriceDisclosureGiven: memory.profiPriceDisclosureGiven || event.profiPriceDisclosureGiven === true,
     // A wind-down turn stacks; ANY other agent turn breaks the streak. A turn
     // that names a product re-opens the topic; a wind-down closes it.

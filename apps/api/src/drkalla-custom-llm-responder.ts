@@ -73,6 +73,13 @@ export type DrkallaCustomLlmClient = {
    * (see drkalla-conversation-summary). May use a longer timeout than complete.
    */
   summarize?(input: { system: string; user: string; signal?: AbortSignal }): Promise<string>;
+  /**
+   * Optional fire-and-forget provider warm-up, called once at CALL START (off
+   * the turn path). After idle hours the first real model turn paid the full
+   * cold TLS/route setup (live 2026-07-04: turn 1 took ~4.4s and nearly hit
+   * the first-token budget); warming while the greeting plays absorbs that.
+   */
+  warmup?(): void;
 };
 
 // Spoken when the caller confirms an SMS link offer while no real SMS tool
@@ -80,6 +87,20 @@ export type DrkallaCustomLlmClient = {
 // sent before a successful tool execution.
 export const DRKALLA_SMS_NOT_WIRED_TEXT =
   'Der SMS-Versand ist in diesem Testanruf noch nicht freigeschaltet. Sie finden das Produkt direkt auf drkalla punkt com. Kann ich sonst noch etwas klären?';
+
+// Shopify type labels carry raw slashes ("Haarfarbe/Farbcreme") which the TTS
+// voice spells out letter by letter (owner complaint live 2026-07-04) — spoken
+// and SMS category labels get the human form.
+export function humanizeDrkallaCategoryLabel(label: string): string {
+  return label
+    .split('/')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => (part.length > 2 && part === part.toUpperCase()
+      ? part.charAt(0) + part.slice(1).toLocaleLowerCase('de-DE')
+      : part))
+    .join(' und ');
+}
 
 export type DrkallaCustomLlmResponse = {
   blocked: boolean;
@@ -443,6 +464,13 @@ const DRKALLA_SERVICE_INTENT = /\b(?:reparatur|reparier\w*|defekt\w*|kaputt\w*|g
 // tokens remain; the disaster turn ("...vorbeischauen und angucken?") is still
 // caught by "vorbeischau*".
 const DRKALLA_STORE_VISIT_INTENT = /\b(?:vorbei(?:schau|komm|kommen|geschaut)\w*|vorbeizuschauen|reinschau\w*|vor\s?ort|abhol\w*|abzuhol\w*|filiale|ladengesch(?:ä|ae)ft|ladenlokal|showroom|ausstellungsraum|pers(?:ö|oe)nlich\s+(?:vorbei|abhol|komm|da))\b/i;
+// "Was macht ihr? Was ist euer Laden?" is an ABOUT question, not an address
+// question — but ADDRESS_RE matches the bare "laden", so the live 2026-07-04
+// call got the identical address answer FOUR times in a row. Answered
+// deterministically with the shop one-liner instead.
+const DRKALLA_ABOUT_QUESTION = /\bwas\s+(?:macht|machen|verkauft|verkaufen|bietet|bieten)\s+(?:ihr|sie)\b|\bwas\s+(?:ist|sind)\b[^.?!]*\b(?:laden|gesch(?:ä|ae)ft|shop|unternehmen|firma)\b|\bwas\s+f(?:ü|ue)r\s+ein\s+(?:laden|gesch(?:ä|ae)ft|shop)\b|\bwer\s+(?:seid|sind)\s+(?:ihr|sie)\b|\bworum\s+geht\b/i;
+const DRKALLA_ABOUT_ANSWER =
+  'Wir sind Doktor Kalla Cosmetics, ein Online-Shop für professionellen Friseurbedarf — von Haarfarben und Haarpflege bis zu Scheren und Salonbedarf. Bestellen können Sie alles auf drkalla.com. Womit kann ich Ihnen helfen?';
 
 // An ASSORTMENT / attribute question ("was habt ihr für FARBEN?", "welche NUANCEN
 // gibt es?", "welche Sorten/Varianten?") — the caller wants the RANGE of an
@@ -1255,7 +1283,13 @@ export async function buildDrkallaCustomLlmResponse(input: {
       || (lastQIsRepair && (SHORT_AFFIRMATION.test(user) || DRKALLA_LEADING_YES.test(user)))
     ),
   );
-  if (SMS_OFFER_QUESTION.test(lastQ) || offerRevival) {
+  // The offer must be CURRENT: lastAgentQuestion deliberately persists across
+  // no-question turns, so an old offer could re-arm on ANY later "Ja, …" turn
+  // (live 2026-07-04: a feedback monologue starting with "Ja," triggered a
+  // phantom "hatten Sie schon bekommen" reply). Current = the immediately
+  // preceding agent turn asked it, OR a fresh pendingLinkOffer exists.
+  const offerIsCurrent = canaryTurn.runtime.memory.askedQuestionLastTurn || Boolean(offerFresh);
+  if ((SMS_OFFER_QUESTION.test(lastQ) && offerIsCurrent) || offerRevival) {
     const twoOption = TWO_OPTION_OFFER.test(lastQ);
     const wantsProfi = PROFI_LINK_CHOICE.test(user);
     const wantsProduct = PRODUCT_LINK_CHOICE.test(user);
@@ -1359,6 +1393,28 @@ export async function buildDrkallaCustomLlmResponse(input: {
         const hit = input.catalogSearch(activeProduct.spokenName, 1)[0];
         if (hit) productUrl = input.evidenceLookup.byId(hit.productId)?.url ?? null;
       }
+      // The freshly OFFERED product, resolved by NAME from the offer turn. Only
+      // trusted when the catalog hit actually overlaps the offer wording —
+      // catalogSearch returns SOMETHING for any label, and a junk guess must
+      // never out-vote the remembered product.
+      let offeredProductTarget: { url: string; label: string; linkKind: DrkallaSendLinkKind } | null = null;
+      if (
+        offerFresh?.kind === 'product'
+        && input.catalogSearch && input.evidenceLookup
+        && (!activeProduct || !productUrl
+          || activeProduct.spokenName.toLocaleLowerCase('de-DE') !== offerFresh.label.toLocaleLowerCase('de-DE'))
+      ) {
+        const hit = input.catalogSearch(offerFresh.label, 1)[0];
+        const url = hit ? input.evidenceLookup.byId(hit.productId)?.url ?? null : null;
+        const hitText = `${hit?.shortName ?? ''} ${hit?.spokenName ?? ''}`.toLocaleLowerCase('de-DE');
+        const overlap = offerFresh.label
+          .toLocaleLowerCase('de-DE')
+          .split(/\s+/)
+          .some((token) => token.length > 3 && hitText.includes(token));
+        if (url && overlap) {
+          offeredProductTarget = { url, label: hit!.shortName || offerFresh.label, linkKind: 'product' };
+        }
+      }
       // Resolve the link target: explicit Profi; else the grounded product; else,
       // when the caller asked about a CATEGORY/"Sortiment" with no single product
       // resolved, a category SEARCH link for the active product type (a valid
@@ -1376,6 +1432,12 @@ export async function buildDrkallaCustomLlmResponse(input: {
         || /\bkontakt(?:seite|daten|informationen|infos)?\b/i.test(user)
       ) {
         target = { url: DRKALLA_PAGE_LINKS.kontakt, label: 'Kontaktseite', linkKind: 'page' };
+      } else if (offeredProductTarget) {
+        // The OFFER TURN named this product ("… unser Farbentwickler
+        // Oxidationsmittel. Soll ich Ihnen den Link dazu schicken?") — it beats
+        // both the remembered product and the category fallback (live
+        // 2026-07-04: the yes sent a stale Haarfarbe-CATEGORY link instead).
+        target = offeredProductTarget;
       } else if (activeProduct && productUrl) {
         target = { url: productUrl, label: activeProduct.spokenName, linkKind: 'product' };
       } else {
@@ -1383,7 +1445,9 @@ export async function buildDrkallaCustomLlmResponse(input: {
         if (categoryTerm) {
           target = {
             url: `https://drkalla.com/search?q=${encodeURIComponent(categoryTerm)}`,
-            label: `${categoryTerm}-Auswahl`,
+            // Shopify type labels carry slashes ("Haarfarbe/Farbcreme") which
+            // the voice spells letter by letter — humanized for speech + SMS.
+            label: `${humanizeDrkallaCategoryLabel(categoryTerm)}-Auswahl`,
             linkKind: 'category',
           };
         }
@@ -1400,11 +1464,18 @@ export async function buildDrkallaCustomLlmResponse(input: {
       // frame and memory commit are then discarded — the caller would get a
       // silent send with no dedupe entry.
       if (input.executeSendLink && target && !input.signal?.aborted) {
+        // A category send must SAY it is the overview page — and when the
+        // caller was expecting a SPECIFIC product, name it so the downgrade is
+        // transparent (owner feedback live 2026-07-04: "wenn Du mir die
+        // Auswahl schickst, dann sag mir, dass Du die Auswahl schickst").
+        const expectedProductLabel = offerFresh?.kind === 'product' ? offerFresh.label : null;
         const sentConfirmText = (t: { label: string; linkKind: DrkallaSendLinkKind }): string =>
           t.linkKind === 'profi'
             ? 'Erledigt, ich habe Ihnen den Link zum Profi-Zugang per SMS geschickt. Kann ich sonst noch etwas klären?'
             : t.linkKind === 'category'
-              ? `Erledigt, ich habe Ihnen den Link zu unserer ${t.label} per SMS geschickt. Kann ich sonst noch etwas klären?`
+              ? expectedProductLabel
+                ? `Erledigt, ich habe Ihnen den Link zu unserer ${t.label} per SMS geschickt — dort finden Sie ${expectedProductLabel} und ähnliche Produkte im Detail. Kann ich sonst noch etwas klären?`
+                : `Erledigt, ich habe Ihnen den Link zu unserer ${t.label} per SMS geschickt — dort finden Sie alle passenden Produkte im Detail. Kann ich sonst noch etwas klären?`
               : t.linkKind === 'page'
                 ? `Erledigt, ich habe Ihnen den Link zur ${t.label} per SMS geschickt. Kann ich sonst noch etwas klären?`
                 : `Erledigt, ich habe Ihnen den Produktlink zu ${t.label} per SMS geschickt. Kann ich sonst noch etwas klären?`;
@@ -1562,10 +1633,41 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // improvise product upsells (live 2026-07-03/04). 0ms path. Store-visit
   // questions still need the mail-order truth from the model, and a turn that
   // names a product stays with the product paths.
+  // "Was macht ihr / was ist euer Laden?" is answered with the ABOUT one-liner
+  // BEFORE the contact detector (whose ADDRESS_RE matches the bare "laden" —
+  // live 2026-07-04 that caller got the identical address answer 4x).
+  const lastContact = canaryTurn.runtime.memory.lastContactIntent;
+  const contactRepeats = (intent: string): boolean =>
+    lastContact?.intent === intent && turnIndex - lastContact.turnIndex <= 2;
+  if (
+    !justExecutedSend
+    && DRKALLA_ABOUT_QUESTION.test(user)
+    && !contactRepeats('about')
+    && (input.detectProducts?.(user) ?? []).length === 0
+    && detectDrkallaUserProductType(user) === null
+  ) {
+    return {
+      blocked: false,
+      text: DRKALLA_ABOUT_ANSWER,
+      memory: reduceDrkallaShortTermMemory(
+        canaryTurn.runtime.memory,
+        { ...deriveDrkallaAgentSpokeEvent({ text: DRKALLA_ABOUT_ANSWER, turnIndex }), contactIntent: 'about' },
+      ),
+      metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
+      blockers: [],
+      quality: { duFormDetected: false, duFormConfidence: 'none', duFormSlips: [] },
+    };
+  }
+
   const deterministicContactIntent = justExecutedSend ? null : detectDrkallaContactIntent(user);
   if (
     deterministicContactIntent
     && !DRKALLA_STORE_VISIT_INTENT.test(user)
+    && !DRKALLA_ABOUT_QUESTION.test(user)
+    // The SAME deterministic answer twice in a row means the caller is really
+    // asking something else (or wants it rephrased) — hand the turn to the
+    // model, which still gets the Kontakt-Fakt directive.
+    && !contactRepeats(deterministicContactIntent)
     && (input.detectProducts?.(user) ?? []).length === 0
   ) {
     const contactText = buildDrkallaContactAnswer(deterministicContactIntent, input.contactFacts);
@@ -1575,7 +1677,10 @@ export async function buildDrkallaCustomLlmResponse(input: {
         text: contactText,
         memory: reduceDrkallaShortTermMemory(
           canaryTurn.runtime.memory,
-          deriveDrkallaAgentSpokeEvent({ text: contactText, turnIndex }),
+          {
+            ...deriveDrkallaAgentSpokeEvent({ text: contactText, turnIndex }),
+            contactIntent: deterministicContactIntent,
+          },
         ),
         metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
         blockers: [],

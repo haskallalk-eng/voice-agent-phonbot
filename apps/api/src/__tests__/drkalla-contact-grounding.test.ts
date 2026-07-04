@@ -59,7 +59,9 @@ describe('DrKalla contact facts are canonical and Sie-form', () => {
   });
   it('uses the real address and spoken email', () => {
     expect(buildDrkallaContactAnswer('address')).toContain('Silbersteinstraße 83, 12051 Berlin');
-    expect(buildDrkallaContactAnswer('email')).toContain('kontakt at drkalla punkt com');
+    // Spoken brand form — the TTS voice read the bare handle as "Der Kalla"
+    // (owner complaint live 2026-07-04).
+    expect(buildDrkallaContactAnswer('email')).toContain('kontakt at Doktor Kalla punkt com');
   });
   it('directives instruct verbatim quoting and never read a URL for Profi', () => {
     expect(buildDrkallaContactDirective('hours')).toContain('verbatim');
