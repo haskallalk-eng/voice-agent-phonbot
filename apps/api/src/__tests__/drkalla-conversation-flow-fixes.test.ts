@@ -6,8 +6,13 @@
  * send+farewell intents, "(unintelligible audio)" marker, template variation.
  */
 import { describe, expect, it } from 'vitest';
-import { buildDrkallaContactDirective } from '../drkalla-contact-facts.js';
-import { buildDrkallaCustomLlmResponse } from '../drkalla-custom-llm-responder.js';
+import {
+  DRKALLA_CONTACT_FACTS,
+  buildDrkallaContactDirective,
+  detectDrkallaContactIntent,
+} from '../drkalla-contact-facts.js';
+import { buildDrkallaCustomLlmResponse, humanizeDrkallaCategoryLabel } from '../drkalla-custom-llm-responder.js';
+import { speakDrkallaText } from '../drkalla-speakable.js';
 import { buildDrkallaProductNameDetector } from '../drkalla-product-name-detector.js';
 import { looksIncompleteDrkallaUtterance } from '../drkalla-turn-completeness.js';
 import {
@@ -1145,5 +1150,136 @@ describe('layer-review fixes 2026-07-04 (contact 0ms, wieviel, usage->KB, repair
     });
     expect(response.blocked).toBe(false);
     expect(response.text).toContain('10 bis 18 Uhr');
+  });
+});
+
+describe('live call 2026-07-04 (call_c6273b86): first-turn routing, offer targets, about-loop, TTS', () => {
+  it('detects hours intent in subordinate clauses and "offen" phrasings', () => {
+    expect(detectDrkallaContactIntent('Hai, ich möchte gerne wissen, wann ihr offen habt.')).toBe('hours');
+    expect(detectDrkallaContactIntent('Seid ihr samstags offen?')).toBe('hours');
+    expect(detectDrkallaContactIntent('Habt ihr heute offen?')).toBe('hours');
+    expect(detectDrkallaContactIntent('Ich bin offen für alles, was Sie empfehlen.')).toBeNull();
+  });
+
+  it('the subordinate-clause hours question answers deterministically (turn 1 went to the model without facts)', async () => {
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Hai, ich möchte gerne wissen, wann ihr offen habt.'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => { modelCalls += 1; return 'unused'; } },
+    });
+    expect(modelCalls).toBe(0);
+    expect(response.text).toContain('Montag bis Freitag von 10 bis 18 Uhr');
+  });
+
+  it('"Was ist euer Laden? Was macht ihr?" gets the ABOUT answer, never the address', async () => {
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Was ist denn euer Laden für ein Laden? Was macht ihr?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => 'unused' },
+    });
+    expect(response.text).toContain('Online-Shop');
+    expect(response.text).not.toContain('Silbersteinstraße');
+    expect(response.memory.lastContactIntent?.intent).toBe('about');
+  });
+
+  it('an immediate same-intent contact repeat routes to the model instead of the identical sentence (address 4x live)', async () => {
+    const justAnswered = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 2,
+      text: 'Unsere Adresse ist Silbersteinstraße 83, 12051 Berlin. Kann ich Ihnen sonst noch helfen?',
+      lastAgentQuestion: 'Kann ich Ihnen sonst noch helfen?',
+      contactIntent: 'address',
+    });
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Ich will nicht die Adresse wissen.', 3),
+      memory: justAnswered,
+      client: { complete: async () => 'Wir sind ein Friseurbedarf-Onlineshop. Was genau möchten Sie wissen?' },
+    });
+    expect(response.text).not.toContain('Unsere Adresse ist');
+  });
+
+  it('a pronoun offer ("… den Link dazu …") records the product NAMED in the offer turn', () => {
+    const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 5,
+      text: 'Für stärkere Abdeckung passt als Entwickler unser Farbentwickler Oxidationsmittel. Soll ich Ihnen den Link dazu per SMS schicken?',
+      lastAgentQuestion: 'Soll ich Ihnen den Link dazu per SMS schicken?',
+    });
+    expect(memory.pendingLinkOffer).toMatchObject({ kind: 'product', label: 'Farbentwickler Oxidationsmittel' });
+  });
+
+  it('"Ja." after the pronoun offer sends the OFFERED product, not the stale category (live: Haarfarbe-Auswahl SMS)', async () => {
+    const offered = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 5,
+      text: 'Für stärkere Abdeckung passt als Entwickler unser Farbentwickler Oxidationsmittel. Soll ich Ihnen den Link dazu per SMS schicken?',
+      lastAgentQuestion: 'Soll ich Ihnen den Link dazu per SMS schicken?',
+    });
+    const sends: Array<{ url: string; linkKind: string }> = [];
+    const catalogSearch = ((text: string) =>
+      /farbentwickler|oxidationsmittel/i.test(text)
+        ? [hit('farbentwickler-oxidationsmittel', 'Farbentwickler Oxidationsmittel', 'Entwickler/Oxidant', 8)]
+        : [hit('haarfarbe-ammoniakfrei', 'Haarfarbe Ammoniakfrei', 'Haarfarbe/Farbcreme', 4.5)]) as never;
+    const evidence = {
+      byId: (id: string) => ({ url: `https://drkalla.com/products/${id}` }),
+      byKeyHash: () => null,
+    } as never;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Ja.', 6),
+      memory: offered,
+      client: { complete: async () => 'unused' },
+      catalogSearch,
+      evidenceLookup: evidence,
+      executeSendLink: async ({ url, linkKind }) => { sends.push({ url, linkKind }); return { smsSent: true as const }; },
+    });
+    expect(sends).toEqual([{ url: 'https://drkalla.com/products/farbentwickler-oxidationsmittel', linkKind: 'product' }]);
+    expect(response.text).toContain('Farbentwickler Oxidationsmittel');
+  });
+
+  it('a later "Ja, …" feedback turn with a STALE offer question fires no phantom send (live: "hatten Sie schon bekommen")', async () => {
+    // Turn A sent a link and (deliberately) left lastAgentQuestion as the old
+    // offer; turn B was a statement with no question. The confirm path must
+    // not re-arm on the caller\'s unrelated "Ja, …" feedback monologue.
+    let memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 3,
+      text: 'Erledigt, ich habe Ihnen den Link geschickt.',
+      lastAgentQuestion: 'Soll ich Ihnen den Link zu einem anderen Entwickler per SMS schicken?',
+      lastProduct: { spokenName: 'Farbentwickler Oxidationsmittel', productId: 'feo', productKind: 'Entwickler/Oxidant' },
+      linksSent: [{ url: 'https://drkalla.com/search?q=Entwickler', label: 'Entwickler-Auswahl' }],
+    });
+    memory = reduceDrkallaShortTermMemory(memory, {
+      type: 'agent_spoke',
+      turnIndex: 5,
+      text: 'Gern, dort kann er sich im Detail informieren.',
+    });
+    let sent = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Ja, die Du hast ja vorhin einfach nur die Kategorie buchstabiert.', 6),
+      memory,
+      client: { complete: async () => 'Verstanden, ich formuliere Kategorien künftig normal. Wobei kann ich helfen?' },
+      evidenceLookup: noEvidence,
+      executeSendLink: async () => { sent += 1; return { smsSent: true as const }; },
+    });
+    expect(sent).toBe(0);
+    expect(response.text).not.toContain('hatte ich Ihnen vorhin schon geschickt');
+    expect(response.text).not.toContain('Erledigt');
+  });
+
+  it('category labels are humanized and slashes never reach the voice (live: "Entwickler/Oxidant" was spelled out)', () => {
+    expect(humanizeDrkallaCategoryLabel('Haarfarbe/Farbcreme')).toBe('Haarfarbe und Farbcreme');
+    expect(humanizeDrkallaCategoryLabel('ENTWICKLER/OXIDANT')).toBe('Entwickler und Oxidant');
+    expect(speakDrkallaText('Den Link zu unserer Entwickler/Oxidant-Auswahl.')).toBe('Den Link zu unserer Entwickler und Oxidant-Auswahl.');
+  });
+
+  it('the spoken e-mail and any "drkalla punkt com" text use the brand form (live: read as "Der Kalla")', () => {
+    expect(DRKALLA_CONTACT_FACTS.emailSpoken).toBe('kontakt at Doktor Kalla punkt com');
+    expect(speakDrkallaText('Sie finden alles direkt auf drkalla punkt com.')).toContain('auf Doktor Kalla punkt com');
   });
 });

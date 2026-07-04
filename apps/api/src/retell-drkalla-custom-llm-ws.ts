@@ -657,6 +657,11 @@ function drkallaVerbosity(model: string): string | undefined {
   return /^gpt-5/i.test(model) ? 'low' : undefined;
 }
 
+// Provider warm-up throttle, module-level: the client is per-connection, but
+// the cold-start being warmed (TLS/route to OpenAI) is process-wide.
+let drkallaLastModelWarmAt = 0;
+const DRKALLA_MODEL_WARM_INTERVAL_MS = 5 * 60_000;
+
 function createOpenAiClient(): DrkallaCustomLlmClient {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -782,6 +787,27 @@ function createOpenAiClient(): DrkallaCustomLlmClient {
       } catch {
         return '';
       }
+    },
+    // Fire-and-forget provider warm-up at call start: after idle hours the
+    // first real model turn paid the full cold TLS/route setup (live
+    // 2026-07-04: turn 1 took ~4.4s against a 4s first-token budget). One
+    // 1-token request while the greeting plays absorbs it; throttled so busy
+    // periods do not re-warm on every call.
+    warmup: () => {
+      const now = Date.now();
+      if (now - drkallaLastModelWarmAt < DRKALLA_MODEL_WARM_INTERVAL_MS) return;
+      drkallaLastModelWarmAt = now;
+      void openai.chat.completions
+        .create(
+          {
+            model,
+            messages: [{ role: 'user', content: 'OK' }],
+            max_completion_tokens: 1,
+            reasoning_effort: reasoningEffort,
+          },
+          { timeout: 8_000 },
+        )
+        .catch(() => {});
     },
   };
 }
@@ -931,6 +957,9 @@ export async function registerRetellDrkallaCustomLlmWs(
     // double-greets and the funnel knows the opener was already spoken.
     if (enabled) {
       greeted = true;
+      // Warm the model path while the greeting plays — the caller's first real
+      // turn then finds a warm connection instead of paying the cold start.
+      client.warmup?.();
       memory = reduceDrkallaShortTermMemory(
         memory,
         deriveDrkallaAgentSpokeEvent({ text: DRKALLA_CUSTOM_RUNTIME_GREETING, turnIndex: 0 }),

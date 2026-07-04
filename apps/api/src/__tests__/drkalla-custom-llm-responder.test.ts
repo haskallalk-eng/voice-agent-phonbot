@@ -978,6 +978,9 @@ describe('DrKalla register/style + deterministic price (live call 2026-06-13 fix
       ...createDrkallaShortTermMemory(),
       activeProductType: { label: 'Schere', turnIndex: 1 },
       lastAgentQuestion: 'Soll ich Ihnen den Link zu unserem Scheren-Sortiment per SMS schicken?',
+      // The offer is the IMMEDIATELY preceding agent turn — a stale offer
+      // question no longer re-arms the confirm path (live 2026-07-04).
+      askedQuestionLastTurn: true,
     };
     let captured: { url: string; linkKind: string } | null = null;
     const response = await buildDrkallaCustomLlmResponse({
