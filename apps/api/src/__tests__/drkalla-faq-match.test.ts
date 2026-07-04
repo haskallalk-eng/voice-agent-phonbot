@@ -39,9 +39,11 @@ describe('DrKalla curated FAQ matcher', () => {
     });
   }
 
-  it('does not match disabled (draft) entries', () => {
-    expect(match('Gibt es einen Mindestbestellwert?')).toBeNull(); // min-order enabled:false
-    expect(match('Ab wann ist der Versand kostenlos?')).toBeNull(); // free-shipping enabled:false
+  it('matches the owner-approved policy entries (2026-07-04)', () => {
+    expect(match('Gibt es einen Mindestbestellwert?')?.id).toBe('min-order');
+    expect(match('Ab wann ist der Versand kostenlos?')?.id).toBe('free-shipping-threshold');
+    expect(match('Gibt es einen Mindestbestellwert?')?.answer).toContain('Mindestbestellwert gibt es bei uns nicht');
+    expect(match('Ab wann ist der Versand kostenlos?')?.answer).toContain('49 Euro');
   });
 
   it('returns curated, Sie-form answers with no abbreviations/symbols', () => {

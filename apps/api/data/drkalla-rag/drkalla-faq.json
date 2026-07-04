@@ -12,7 +12,7 @@
     {
       "id": "shipping-cost",
       "triggers": ["versandkosten", "was kostet der versand", "wie teuer ist der versand", "porto", "lieferkosten", "kostet die lieferung"],
-      "answer": "Die Versandkosten werden Ihnen direkt im Bestellvorgang auf drkalla.com angezeigt, sobald Ihre Produkte im Warenkorb liegen.",
+      "answer": "Die Versandkosten werden Ihnen direkt im Bestellvorgang auf drkalla.com angezeigt. Ab 49 Euro Bestellwert ist der Versand kostenlos.",
       "tags": ["versand"],
       "enabled": true
     },
@@ -74,17 +74,17 @@
     },
     {
       "id": "min-order",
-      "triggers": ["mindestbestellwert", "mindestbestellmenge", "muss ich mindestens"],
-      "answer": "Einen Mindestbestellwert sehen Sie, falls vorhanden, im Warenkorb auf drkalla.com.",
+      "triggers": ["mindestbestellwert", "mindestbestellmenge", "mindestabnahme", "muss ich mindestens"],
+      "answer": "Nein, einen Mindestbestellwert gibt es bei uns nicht. Sie können auf drkalla.com auch einzelne Produkte bestellen.",
       "tags": ["bestellung"],
-      "enabled": false
+      "enabled": true
     },
     {
       "id": "free-shipping-threshold",
-      "triggers": ["versandkostenfrei", "kostenloser versand", "gratis versand", "ab wann versandkostenfrei"],
-      "answer": "Ab welchem Bestellwert der Versand kostenlos ist, sehen Sie im Bestellvorgang auf drkalla.com.",
+      "triggers": ["versandkostenfrei", "kostenloser versand", "gratis versand", "versand gratis", "versand kostenlos", "ab wann versandkostenfrei"],
+      "answer": "Ab 49 Euro Bestellwert ist der Versand kostenlos. Darunter werden Ihnen die Versandkosten im Bestellvorgang auf drkalla.com angezeigt.",
       "tags": ["versand"],
-      "enabled": false
+      "enabled": true
     }
   ]
 }
