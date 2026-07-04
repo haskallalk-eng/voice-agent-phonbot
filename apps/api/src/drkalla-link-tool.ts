@@ -51,7 +51,7 @@ export function buildDrkallaLinkSmsBody(input: {
 }): string {
   const label = compact(input.label).slice(0, 90) || 'Dr.Kalla Link';
   const kind = compact(input.linkKind).toLowerCase();
-  const intro = kind === 'contact'
+  const intro = kind === 'contact' || kind === 'page'
     ? 'Hier ist der Kontaktlink von Dr.Kalla'
     : kind === 'profi'
       ? 'Hier ist der Profi-Zugang von Dr.Kalla'

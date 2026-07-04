@@ -50,6 +50,10 @@ export const DRKALLA_SUMMARY_SYSTEM = [
   'Du pflegst das Kurzzeitgedaechtnis des Telefon-Assistenten eines Friseurbedarf-Haendlers (Dr.Kalla).',
   'Fasse den AELTEREN Teil des laufenden Telefonats zu einer KOMPAKTEN Notiz zusammen (hoechstens 4 kurze Saetze, Deutsch).',
   'Halte fest: worum es dem Anrufer geht, welche Produkte/Marken/Themen schon genannt wurden, welche Zusagen/Entscheidungen gefallen sind und welche Frage offen ist.',
+  // Live 2026-07-03: the note carried early-call topics (Oeffnungszeiten, the
+  // first product) forever, and the model resurrected them many turns later
+  // ("Ja, gerne." was answered with the hours again). Closed topics must DECAY.
+  'STREICHE Erledigtes und Abgelehntes: bereits beantwortete Fragen (z.B. genannte Oeffnungszeiten), abgelehnte Produkte und abgeschlossene Themen gehoeren NICHT mehr in die Notiz — nur das aktuell relevante Anliegen und offene Punkte.',
   'Nur Fakten aus dem Gespraech — nichts erfinden, keine Anrede, keine Begruessung, kein Vorlesen, keine Aufzaehlungszeichen. Reine Gedaechtnisnotiz.',
 ].join('\n');
 

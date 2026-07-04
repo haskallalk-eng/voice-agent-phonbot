@@ -131,7 +131,10 @@ export type DrkallaConversationTurn = { role: 'user' | 'agent'; text: string };
 function buildDrkallaHistoryBlock(history: DrkallaConversationTurn[] | undefined): string {
   if (!history || !history.length) return '';
   const kept: string[] = [];
-  let budget = 1200;
+  // 800, not 1200: the Memory: directive already carries the structured state
+  // (discussed_products, active_product, …) — ~4 verbatim turns suffice for
+  // topic continuity and the prefill shrinks on every generative turn.
+  let budget = 800;
   for (let i = history.length - 1; i >= 0; i -= 1) {
     const turn = history[i];
     if (!turn) continue;
@@ -164,7 +167,7 @@ function compactSystemPrompt(
     `Buchstabiere Web-Adressen oder E-Mails nicht. Nenne die Website gesprochen als "Doktor Kalla punkt com" und die E-Mail als "${contactFacts.emailSpoken}" — niemals mit Punkt-Zeichen, Schraegstrich oder At-Zeichen. Erwaehne die Website nur, wenn es noetig ist, nicht in jeder Antwort.`,
     'AUSSPRACHE: Sprich den Markennamen immer als "Doktor Kalla" aus, nie als "Dr.Kalla" oder buchstabiert. Nenne Preise GENAU so, wie sie in der Evidence-/Katalog-Treffer-Zeile stehen (z. B. "12 Euro", "7 Euro sechzig") — sprich Cent als ausgeschriebenes Wort, NIEMALS als Komma-Zahl ("7,60"), als Ziffern ("7 Euro 60") oder mit "null". Verwende keine Abkuerzungen zum Vorlesen (kein "z.B.", "bzw.", "usw.", "Nr.", "Str.", "&", "%").',
     'Dr.Kalla ist ein Friseurbedarf-Shop, kein Friseursalon: keine Termine, keine Haarschnitte oder Faerbe-Dienstleistungen; verweise hoeflich auf Produkte/Salonbedarf.',
-    'Nenne Adresse, Oeffnungszeiten, E-Mail, Preise oder Verfuegbarkeit nur aus der gegebenen Evidence- oder Kontakt-Fakt-Zeile. Fehlt die Angabe, erfinde nichts und verweise hoeflich auf die Website oder den Kontakt.',
+    'Nenne Adresse, Oeffnungszeiten, E-Mail, Preise oder Verfuegbarkeit nur aus den gegebenen Belegzeilen (Evidence, Kontakt-Fakt, Katalog-Treffer, Wissens-Beleg, Farb-Beleg). Fehlt die Angabe, erfinde nichts und verweise hoeflich auf die Website oder den Kontakt.',
     'Behaupte NIEMALS, dass ein Produkt oder eine Kategorie nicht im Sortiment ist, nur weil dir gerade keine Treffer-Zeile dazu vorliegt. Sage dann ehrlich, dass du es nicht sicher sagen kannst, und verweise auf die Website. Erfinde umgekehrt auch keine Marken oder Modelle, die nicht in einer Treffer-Zeile stehen.',
     'Erklaere die Profi-Preise hoechstens einmal ausfuehrlich; wurde der Profi-Zugang schon erwaehnt, fasse dich knapp und biete nur kurz den Link an, ohne die Erklaerung zu wiederholen.',
     'Wenn der Bedarf oder die Produktart bekannt ist, NENNE konkrete Produkte aus der Katalog-Treffer-Zeile oder grenze nach Marke/Variante ein. Stelle nicht wiederholt dieselbe Kategorie-Frage; wenn der Anrufer den Bedarf schon genannt hat, gehe weiter, statt erneut zu fragen.',
@@ -193,7 +196,12 @@ function compactSystemPrompt(
 // zu X?", "den Link erhalten") — otherwise a caller's "ja, schick" misses the
 // deterministic SMS path and the model hallucinates "Ich sende Ihnen den Link"
 // while no SMS actually goes out (real call 2026-06-15).
-const SMS_OFFER_QUESTION = /(?:produktlink|\blink\b|per\s+sms|per\s+nachricht|\bsms\b)[^.?!]*\b(?:schick|sende|senden|zusend|zuschick|zukomm|schreib|versend)|\b(?:schick|sende|senden|zusend|zuschick|zukomm|schreib|versend)\w*[^.?!]*(?:produktlink|\blink\b|\bsms\b|nachricht)|\b(?:m(?:ö|oe)chten|wollen|soll(?:en)?|darf|h(?:ä|ae)tten)\b[^.?!]*\b(?:produktlink|\blink\b)\b|\b(?:produktlink|\blink\b)\b[^.?!]*\b(?:erhalten|bekommen|zusenden|zugeschickt|zukommen)\b/i;
+// The modal-verb alternation additionally requires a send/SMS signal in the
+// same sentence — "Möchten Sie noch den Link zur Größentabelle sehen?" must
+// never arm the confirm path (review 2026-07-04: a following "Ja" would fire
+// a real SMS). The pronoun form ("Soll ich ihn Ihnen senden?") is a common
+// MODEL phrasing that used to slip through and cost an extra confirm round.
+const SMS_OFFER_QUESTION = /(?:produktlink|\blink\b|per\s+sms|per\s+nachricht|\bsms\b)[^.?!]*\b(?:schick|sende|senden|zusend|zuschick|zukomm|schreib|versend)|\b(?:schick|sende|senden|zusend|zuschick|zukomm|schreib|versend)\w*[^.?!]*(?:produktlink|\blink\b|\bsms\b|nachricht)|\b(?:m(?:ö|oe)chten|wollen|soll(?:en)?|darf|h(?:ä|ae)tten)\b[^.?!]*\bproduktlink\b|\b(?:m(?:ö|oe)chten|wollen|soll(?:en)?|darf|h(?:ä|ae)tten)\b[^.?!]*\blink\b[^.?!]*(?:per\s+sms|\bsms\b|\bschick|\bsend|\bzusend|\bzukomm|\bhaben\b)|\bsoll\s+ich\s+(?:ihn|sie|es)\s+(?:ihnen\s+)?[^.?!]*\b(?:schick|send|zusend)\w*|\b(?:produktlink|\blink\b)\b[^.?!]*\b(?:erhalten|bekommen|zusenden|zugeschickt|zukommen)\b/i;
 // The two-option offer ("Produktlink ODER Profi-Zugang per SMS"): a bare "ja"
 // here is ambiguous and must be re-asked, not silently sent as product link.
 const TWO_OPTION_OFFER = /produktlink\s+oder\s+(?:den\s+link\s+(?:zum\s+)?)?profi/i;
@@ -231,21 +239,35 @@ const DRKALLA_REFERS_BACK = /\b(?:die|das|den)\s+(?:du|sie)\s+mir\b|\bgenannt\s+
 // 'locken' profile made a Lockenstab outrank every Schere (live 2026-07-03).
 const DRKALLA_TOOL_CLASS = /\b(?:schere|scheren|effilierschere|kamm|k(?:ä|ae)mme|b(?:ü|ue)rste|b(?:ü|ue)rsten|f(?:ö|oe)hn|haartrockner|gl(?:ä|ae)tteisen|lockenstab|lockenst(?:ä|ae)be|maschine|maschinen|schneidemaschine|trimmer|rasierer|pinsel|folie|schale|stuhl|st(?:ü|ue)hle)\b/i;
 
-export type DrkallaSendLinkKind = 'product' | 'profi' | 'category';
+export type DrkallaSendLinkKind = 'product' | 'profi' | 'category' | 'page';
+
+// Sendable shop PAGES (not products). Live 2026-07-04: the caller asked twice
+// for the Kontaktseite link and got first a "nicht freigeschaltet" default,
+// then the remembered PRODUCT as a wrong-referent duplicate. URL verified 200.
+export const DRKALLA_PAGE_LINKS = {
+  kontakt: 'https://drkalla.com/pages/kontakt',
+} as const;
 export type DrkallaSendLinkExecutor = (input: {
   url: string;
   label: string;
   linkKind: DrkallaSendLinkKind;
 }) => Promise<{ smsSent: boolean; duplicate?: boolean }>;
 
-function fallbackText(userText: string): string {
+function fallbackText(userText: string, variant = 0): string {
   if (/\bunterschied|vergleich\b/i.test(userText)) {
     return 'Ich prüfe das kurz: Meinen Sie den Unterschied zwischen den zuletzt genannten Produkten?';
   }
   if (/\blink|kauf|kaufe|bestell|sms\b/i.test(userText)) {
     return 'Ich kann Ihnen den passenden Produktlink per SMS schicken. Soll ich das machen?';
   }
-  return 'Ich prüfe das kurz. Sagen Sie mir bitte, welches Produkt oder welche Produktart Sie meinen.';
+  // Rotated like the recommender leads — the identical sentence on every
+  // fallback was a top "robotic" signal (review 2026-07-04).
+  const generic = [
+    'Ich prüfe das kurz. Sagen Sie mir bitte, welches Produkt oder welche Produktart Sie meinen.',
+    'Da schaue ich gern nach — um welches Produkt oder welche Produktart geht es Ihnen?',
+    'Gern. Sagen Sie mir kurz, welches Produkt oder welche Art von Produkt Sie interessiert.',
+  ];
+  return generic[Math.abs(variant) % generic.length]!;
 }
 
 type DrkallaFallbackResult = {
@@ -258,8 +280,10 @@ function fallbackTextWithMemory(input: {
   memory: DrkallaShortTermVoiceMemory;
   evidenceLookup?: DrkallaProductEvidenceLookup;
   contactFacts?: DrkallaContactFacts;
+  turnIndex?: number;
 }): DrkallaFallbackResult {
   const userText = input.userText;
+  const variant = Math.abs(input.turnIndex ?? 0);
   const lastProduct = input.memory.lastMentionedProduct;
   // Grounded contact answer takes precedence: never let the fallback dodge a
   // contact question with a generic discovery prompt, and never invent.
@@ -275,7 +299,7 @@ function fallbackTextWithMemory(input: {
         text: `Ich pruefe den Unterschied zwischen ${recent[0]?.spokenName} und ${recent[1]?.spokenName}. Geht es Ihnen um Anwendung oder Kaufentscheidung?`,
       };
     }
-    return { text: fallbackText(userText) };
+    return { text: fallbackText(userText, variant) };
   }
   if (/\b(?:preis|kostet|kosten|teuer|euro)\b/i.test(userText) && lastProduct) {
     // Catalog evidence lets the fallback answer the actual price truthfully
@@ -303,11 +327,16 @@ function fallbackTextWithMemory(input: {
     };
   }
   if (input.memory.activeProductType) {
-    return {
-      text: `Bei ${input.memory.activeProductType.label} kann ich Ihnen eine kurze Auswahl nach Marken, Varianten oder Nuancen nennen. Soll ich mit Marken anfangen?`,
-    };
+    const label = input.memory.activeProductType.label;
+    // Both variants keep a list-offer word (Marken/Auswahl/anfangen) so a
+    // following bare "Ja" still reaches the deterministic type list.
+    const lines = [
+      `Bei ${label} kann ich Ihnen eine kurze Auswahl nach Marken, Varianten oder Nuancen nennen. Soll ich mit Marken anfangen?`,
+      `Zu ${label} nenne ich Ihnen gern konkrete Produkte. Soll ich mit einer kleinen Auswahl anfangen?`,
+    ];
+    return { text: lines[variant % lines.length]! };
   }
-  return { text: fallbackText(userText) };
+  return { text: fallbackText(userText, variant) };
 }
 
 // Explicit request to see the brand/product selection for the active type
@@ -340,6 +369,14 @@ function tryDeterministicTypeListReply(input: {
   // A back-reference to the just-given answer is a question ABOUT the list,
   // never a request FOR the list (live 2026-07-03).
   if (DRKALLA_REFERS_BACK.test(text)) return null;
+  // Policy/service/contact questions that merely contain "was habt ihr" must
+  // never get a product list ("Was habt ihr für Rückgabebedingungen?" —
+  // review 2026-07-04). Those belong to FAQ/contact/model.
+  if (
+    detectDrkallaContactIntent(text)
+    || DRKALLA_SERVICE_INTENT.test(text)
+    || /\b(?:versand\w*|liefer\w*|r(?:ü|ue)ckgabe|retour\w*|zahlung\w*|bezahl\w*|rabatt\w*|gutschein\w*|bedingungen)\b/i.test(text)
+  ) return null;
   // A bare "Ja" only means "list them" when OUR last question actually offered
   // a list/selection — a yes to "Darf ich Ihnen mehr zu X sagen?" wants details
   // about X, not X's siblings (live 2026-07-03). With NO recorded question the
@@ -351,10 +388,16 @@ function tryDeterministicTypeListReply(input: {
   // Same hygiene as the recommender: no bleach for a care category, and
   // auxiliary chemistry (Entwickler/Oxidationsmittel) never inside the short
   // list (live 2026-07-03: "Farbentwickler Oxidationsmittel" listed as a color).
+  // "Nenn mir mal bitte ALLE" widens the list (live 2026-07-04: three items +
+  // "welches interessiert Sie?" felt like stonewalling); sold-out items never
+  // make the short list.
+  const listCap = /\balle[ns]?\b/i.test(text) ? 5 : 3;
   const hits = deprioritizeAuxiliary(
-    dropChemicalForCareIntent(input.catalogSearch?.(activeType.label, 6) ?? [], text, activeType.label),
+    dropChemicalForCareIntent(input.catalogSearch?.(activeType.label, 8) ?? [], text, activeType.label),
     text,
-  ).slice(0, 3);
+  )
+    .filter((h) => h.availableCount === undefined || h.availableCount > 0)
+    .slice(0, listCap);
   if (!hits.length) return null;
   const names = hits.map((p, index) =>
     index === 0 && p.priceText ? `${p.shortName} (${p.priceText})` : p.shortName,
@@ -637,6 +680,9 @@ function tryDeterministicNeedReply(input: {
   // need (live 2026-07-01: Wasserstoffperoxid as "alternative" to Haarfarbe).
   strong = dropChemicalForCareIntent(strong, text, input.memory.activeProductType?.label ?? null);
   strong = deprioritizeAuxiliary(strong, text);
+  // Never recommend a fully sold-out product (8 such products in the live
+  // snapshot; availability was only a ranking tiebreak before).
+  strong = strong.filter((h) => h.availableCount === undefined || h.availableCount > 0);
   // "günstigste/billigste" -> rank the category by price so we name the cheapest.
   if (DRKALLA_CHEAP_INTENT.test(text)) {
     strong.sort((a, b) => (a.priceValue ?? Number.POSITIVE_INFINITY) - (b.priceValue ?? Number.POSITIVE_INFINITY));
@@ -666,6 +712,8 @@ function tryDeterministicNeedReply(input: {
       discussedBefore
       || top.shortName === input.memory.lastMentionedProduct?.spokenName
       || justAsked.includes(top.shortName)
+      // The caller explicitly DECLINED this product earlier — never re-pitch.
+      || input.memory.rejectedProducts.some((r) => r.label === top.shortName)
     )
   ) return null;
   const evidence = input.evidenceLookup?.byId(top.productId) ?? null;
@@ -728,8 +776,11 @@ function tryDeterministicNeedReply(input: {
 // START of the (sanitized) utterance so they only fire on a turn that is
 // essentially nothing but the acknowledgement — never on a real question that
 // happens to begin with "ok" or "danke".
-// Pure thanks: "danke", "vielen Dank", "dankeschön", "merci".
-const SMALLTALK_THANKS = /^(?:vielen\s+)?(?:danke|dankesch(?:ö|oe)n|merci)/i;
+// Pure thanks: "danke", "vielen Dank", "dankeschön", "merci" — plus the
+// ack+thanks combo ("Alles klar, danke.", "Okay, danke") that filled whole
+// closing turns live 2026-07-04 and slipped to the model, breaking the
+// wind-down escalation.
+const SMALLTALK_THANKS = /^(?:vielen\s+)?(?:danke|dankesch(?:ö|oe)n|merci)|^(?:alles\s+(?:klar|gut)|ok(?:ay)?|gut|passt)[,.!\s]+(?:vielen\s+)?dank\w*[.! ]*$/i;
 // Bare acknowledgement that fills the whole turn ("okay.", "alles klar", "passt").
 const SMALLTALK_ACK = /^(?:ok(?:ay)?|alles\s+(?:klar|gut|bestens|in\s+ordnung)|super|gut|verstanden|in ordnung|passt(?:\s+schon)?)[.! ]*$/i;
 // Bare negation that fills the whole turn, optionally with an ack tail
@@ -840,12 +891,81 @@ function tryDeterministicPriceAnswer(input: {
 function tryDeterministicUsageAnswer(input: {
   userText: string;
   memory: DrkallaShortTermVoiceMemory;
+  /** True when a knowledge retriever is wired — then the MODEL answers usage
+   * questions FROM the product descriptions (97% of products carry one) and
+   * this canned non-answer is only the honest floor without a knowledge layer. */
+  hasKnowledge?: boolean;
 }): DrkallaFallbackResult | null {
   if (!DRKALLA_USAGE_INTENT.test(input.userText)) return null;
+  // "Wieviel kostet das?" is a PRICE question, not usage — the bare "wieviel"
+  // in the intent regex hijacked every colloquial price turn into this branch
+  // (review 2026-07-04).
+  if (/\b(?:kostet|kosten|preis|preise|teuer|euro)\b/i.test(input.userText)) return null;
   const lastProduct = input.memory.lastMentionedProduct;
   if (!lastProduct) return null;
+  if (input.hasKnowledge) return null;
   return {
     text: `Zur genauen Anwendung von ${lastProduct.spokenName} liegen mir im Shop-Datenstand gerade keine sicheren Details vor. Bitte pruefen Sie die Produktseite oder kontaktieren Sie uns fuer genaue Anwendungshinweise.`,
+    product: lastProduct,
+  };
+}
+
+// Order-status questions ("Wo bleibt meine Bestellung?", "Sendungsverfolgung")
+// have NO lookup integration — an honest 0ms answer beats a model turn that
+// can only waffle (review 2026-07-04: no branch recognized them at all).
+const DRKALLA_ORDER_STATUS = /\b(?:wo\s+(?:bleibt|ist))\b[^.?!]*\b(?:bestellung|paket|lieferung)\b|\bbestellung\b[^.?!]*\b(?:status|unterwegs|angekommen|verschickt|raus|los)\b|\bbestellstatus\b|\bsendungsverfolgung\b|\btracking\b|\bmeine?\s+bestellung\b/i;
+const DRKALLA_ORDER_STATUS_TEXT =
+  'Zum Status einer laufenden Bestellung kann ich am Telefon leider nichts Verlässliches nachschauen. Die Versandbestätigung mit der Sendungsverfolgung kommt per E-Mail — Sie erreichen uns dazu auch unter kontakt at drkalla punkt com. Kann ich Ihnen sonst weiterhelfen?';
+
+// Ingredients/INCI questions: only ~2% of the catalog carries an ingredients
+// list, so the honest deterministic answer + the product-page link beats a
+// model turn that would waffle or wrongly deny (data audit 2026-07-04).
+const DRKALLA_INGREDIENTS_INTENT = /\binhaltsstoffe?\b|\binci\b|\bzusammensetzung\b|\bwas\s+ist\s+(?:alles\s+)?(?:da\s+|in\s+dem\s+|in\s+der\s+)?drin\b/i;
+
+function tryDeterministicIngredientsAnswer(input: {
+  userText: string;
+  memory: DrkallaShortTermVoiceMemory;
+}): DrkallaFallbackResult | null {
+  if (!DRKALLA_INGREDIENTS_INTENT.test(input.userText)) return null;
+  const lastProduct = input.memory.lastMentionedProduct;
+  if (lastProduct) {
+    return {
+      text: `Die vollständige Inhaltsstoffliste von ${lastProduct.spokenName} habe ich am Telefon nicht vorliegen — sie steht auf der Produktseite. Soll ich Ihnen den Link zu ${lastProduct.spokenName} per SMS schicken?`,
+      product: lastProduct,
+    };
+  }
+  return {
+    text: 'Die Inhaltsstoffe stehen jeweils auf der Produktseite auf drkalla punkt com. Um welches Produkt geht es Ihnen?',
+  };
+}
+
+// Availability question about the resolved product — the snapshot KNOWS the
+// answer (availableVariantCount), it was just never read (review 2026-07-04).
+const DRKALLA_AVAILABILITY_INTENT = /\b(?:lieferbar|verf(?:ü|ue)gbar|vorr(?:ä|ae)tig|auf\s+lager|lagernd|ausverkauft)\b/i;
+
+function tryDeterministicAvailabilityAnswer(input: {
+  userText: string;
+  memory: DrkallaShortTermVoiceMemory;
+  evidenceLookup?: DrkallaProductEvidenceLookup;
+}): DrkallaFallbackResult | null {
+  if (!DRKALLA_AVAILABILITY_INTENT.test(input.userText)) return null;
+  const lastProduct = input.memory.lastMentionedProduct;
+  if (!lastProduct) return null;
+  const evidence = input.evidenceLookup?.byKeyHash(lastProduct.productKeyHash) as
+    | { availableVariantCount?: number; variantCount?: number; url?: string | null }
+    | null
+    | undefined;
+  if (!evidence || typeof evidence.availableVariantCount !== 'number') return null;
+  if (evidence.availableVariantCount > 0) {
+    const partial = typeof evidence.variantCount === 'number'
+      && evidence.variantCount > evidence.availableVariantCount;
+    return {
+      text: `Ja, ${lastProduct.spokenName} ist nach aktuellem Shop-Datenstand lieferbar${partial ? ', einzelne Ausführungen können aber vergriffen sein' : ''}. Soll ich Ihnen den Link per SMS schicken?`,
+      product: lastProduct,
+    };
+  }
+  return {
+    text: `${lastProduct.spokenName} ist nach aktuellem Shop-Datenstand leider gerade nicht lieferbar. Soll ich Ihnen eine Alternative nennen?`,
     product: lastProduct,
   };
 }
@@ -900,6 +1020,17 @@ function tryDeterministicBrandReply(input: {
 }): DrkallaFallbackResult | null {
   const text = input.userText;
   if (NEED_VETO.test(text)) return null; // comparison/advice/usage -> model
+  // Same veto set as the recommender — brandReply runs FIRST in the chain, so
+  // a weaker set let it hijack usage/service/attribute/contact turns that
+  // merely mention a brand (review 2026-07-04).
+  if (
+    DRKALLA_USAGE_HOWTO.test(text)
+    || DRKALLA_SERVICE_INTENT.test(text)
+    || DRKALLA_STORE_VISIT_INTENT.test(text)
+    || DRKALLA_ATTRIBUTE_QUESTION.test(text)
+    || DRKALLA_FRUSTRATION_META.test(text)
+    || detectDrkallaContactIntent(text)
+  ) return null;
   const brand = DRKALLA_BRANDS.find((b) => b.re.test(text));
   if (!brand) return null;
 
@@ -991,6 +1122,36 @@ export async function buildDrkallaCustomLlmResponse(input: {
   const turnIndex = input.event.sequence ?? 0;
 
   if (!canaryTurn.enabled) {
+    // A RUNTIME blocker (directive budget, PII edge) must not cost the caller
+    // the whole turn: degrade to the grounded deterministic fallback — a
+    // contact question still gets the real hours, a product turn a safe funnel
+    // line. (Sim 2026-07-03: DIRECTIVES_OVER_BUDGET spoke the generic "kann
+    // gerade nicht weiterhelfen".) A CONFIG-disabled canary keeps the blocked
+    // contract — the transport routes non-canary traffic elsewhere.
+    if (input.canary.enabled) {
+      const degraded = fallbackTextWithMemory({
+        userText: sanitizeUserText(input.event.currentUserText ?? ''),
+        memory: canaryTurn.runtime.memory,
+        evidenceLookup: input.evidenceLookup,
+        contactFacts: input.contactFacts,
+        turnIndex,
+      });
+      return {
+        blocked: false,
+        text: degraded.text,
+        memory: reduceDrkallaShortTermMemory(
+          canaryTurn.runtime.memory,
+          deriveDrkallaAgentSpokeEvent({
+            text: degraded.text,
+            turnIndex,
+            detectProducts: input.detectProducts,
+            fallbackProduct: degraded.product,
+          }),
+        ),
+        metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
+        blockers: canaryTurn.blockers,
+      };
+    }
     return {
       blocked: true,
       text: `Canary disabled: ${canaryTurn.blockers.join(', ') || 'unknown'}`,
@@ -1031,10 +1192,21 @@ export async function buildDrkallaCustomLlmResponse(input: {
     };
   }
 
+  // Deterministic 0ms answers for usage (only without a knowledge layer),
+  // order status, ingredients and availability — all four are honest,
+  // grounded and were previously either mis-routed or cost a model turn.
   const usageAnswer = tryDeterministicUsageAnswer({
     userText: user,
     memory: canaryTurn.runtime.memory,
-  });
+    hasKnowledge: Boolean(input.knowledgeRetriever),
+  })
+    ?? (DRKALLA_ORDER_STATUS.test(user) ? { text: DRKALLA_ORDER_STATUS_TEXT } : null)
+    ?? tryDeterministicIngredientsAnswer({ userText: user, memory: canaryTurn.runtime.memory })
+    ?? tryDeterministicAvailabilityAnswer({
+      userText: user,
+      memory: canaryTurn.runtime.memory,
+      evidenceLookup: input.evidenceLookup,
+    });
   if (usageAnswer) {
     return {
       blocked: false,
@@ -1070,11 +1242,18 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // an unrelated product).
   const pendingOffer = canaryTurn.runtime.memory.pendingLinkOffer;
   const offerFresh = pendingOffer && turnIndex - pendingOffer.turnIndex <= 4 ? pendingOffer : null;
+  // Our OWN repair prompt replaced lastQ — a bare "Ja, gerne." then answers the
+  // PRE-repair offer (live 2026-07-04: it reached the model, which repeated
+  // the opening hours instead of sending the offered link).
+  const lastQIsRepair = /^wie bitte\?*$|akustisch nicht verstanden|schwer zu verstehen/i.test(lastQ);
   const offerRevival = Boolean(
     offerFresh
     && !SMS_OFFER_QUESTION.test(lastQ)
-    && /\b(?:link|sms|schick\w*|send\w*|zusend\w*|zuschick\w*)\b/i.test(user)
-    && (SHORT_AFFIRMATION.test(user) || DRKALLA_LEADING_YES.test(user) || PROFI_LINK_CHOICE.test(user)),
+    && (
+      (/\b(?:link|sms|schick\w*|send\w*|zusend\w*|zuschick\w*)\b/i.test(user)
+        && (SHORT_AFFIRMATION.test(user) || DRKALLA_LEADING_YES.test(user) || PROFI_LINK_CHOICE.test(user)))
+      || (lastQIsRepair && (SHORT_AFFIRMATION.test(user) || DRKALLA_LEADING_YES.test(user)))
+    ),
   );
   if (SMS_OFFER_QUESTION.test(lastQ) || offerRevival) {
     const twoOption = TWO_OPTION_OFFER.test(lastQ);
@@ -1132,12 +1311,17 @@ export async function buildDrkallaCustomLlmResponse(input: {
       const text = declineSaidBye
         ? 'Alles klar, dann schicke ich nichts. Vielen Dank für Ihren Anruf bei Doktor Kalla. Auf Wiederhören!'
         : 'Alles klar, dann schicke ich nichts. Kann ich sonst noch etwas für Sie tun?';
+      // Remember WHAT was declined so neither the recommender nor the model
+      // re-offers it (avoid= directive).
+      const declinedLabel = offerFresh?.kind === 'product'
+        ? offerFresh.label
+        : canaryTurn.runtime.memory.lastMentionedProduct?.spokenName;
       return {
         blocked: false,
         text,
         memory: reduceDrkallaShortTermMemory(
           canaryTurn.runtime.memory,
-          { ...deriveDrkallaAgentSpokeEvent({ text, turnIndex }), windDown: true },
+          { ...deriveDrkallaAgentSpokeEvent({ text, turnIndex }), windDown: true, rejectedProduct: declinedLabel },
         ),
         metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
         blockers: [],
@@ -1183,6 +1367,15 @@ export async function buildDrkallaCustomLlmResponse(input: {
       let target: { url: string; label: string; linkKind: DrkallaSendLinkKind } | null = null;
       if (wantsProfi || (offeredProfi && !DRKALLA_EXPLICIT_PRODUCT_CHOICE.test(user))) {
         target = { url: DRKALLA_CONTACT_FACTS.profiUrl, label: 'Profi-Zugang', linkKind: 'profi' };
+      } else if (
+        // A shop PAGE was offered or asked for — it must beat the remembered
+        // product (live 2026-07-04: "Ja" to the Kontaktseite offer resolved to
+        // the Blondier-Pulver).
+        offerFresh?.kind === 'page'
+        || /\bkontakt(?:seite|daten|informationen|infos)\b/i.test(lastQ)
+        || /\bkontakt(?:seite|daten|informationen|infos)?\b/i.test(user)
+      ) {
+        target = { url: DRKALLA_PAGE_LINKS.kontakt, label: 'Kontaktseite', linkKind: 'page' };
       } else if (activeProduct && productUrl) {
         target = { url: productUrl, label: activeProduct.spokenName, linkKind: 'product' };
       } else {
@@ -1196,7 +1389,11 @@ export async function buildDrkallaCustomLlmResponse(input: {
         }
       }
 
-      let text = DRKALLA_SMS_NOT_WIRED_TEXT;
+      // Target unresolvable (no product, no page, no category): say so honestly
+      // — the old NOT_WIRED default claimed a "Testanruf" on live calls.
+      let text = target
+        ? DRKALLA_SMS_NOT_WIRED_TEXT
+        : 'Diesen Link kann ich leider nicht per SMS schicken — Sie finden alles direkt auf drkalla punkt com. Kann ich sonst noch etwas klären?';
       let linkSentUrl: string | null = null;
       let sendOutcome: 'sent' | 'duplicate' | 'failed' = 'failed';
       // A superseded (barged-in) turn must not fire a REAL SMS whose confirm
@@ -1208,7 +1405,9 @@ export async function buildDrkallaCustomLlmResponse(input: {
             ? 'Erledigt, ich habe Ihnen den Link zum Profi-Zugang per SMS geschickt. Kann ich sonst noch etwas klären?'
             : t.linkKind === 'category'
               ? `Erledigt, ich habe Ihnen den Link zu unserer ${t.label} per SMS geschickt. Kann ich sonst noch etwas klären?`
-              : `Erledigt, ich habe Ihnen den Produktlink zu ${t.label} per SMS geschickt. Kann ich sonst noch etwas klären?`;
+              : t.linkKind === 'page'
+                ? `Erledigt, ich habe Ihnen den Link zur ${t.label} per SMS geschickt. Kann ich sonst noch etwas klären?`
+                : `Erledigt, ich habe Ihnen den Produktlink zu ${t.label} per SMS geschickt. Kann ich sonst noch etwas klären?`;
         const outcome = await input.executeSendLink({ url: target.url, label: target.label, linkKind: target.linkKind })
           .catch(() => ({ smsSent: false as const }));
         if (outcome.smsSent) {
@@ -1355,6 +1554,34 @@ export async function buildDrkallaCustomLlmResponse(input: {
       endCall: smalltalkReply.endCall === true,
       quality: { duFormDetected: false, duFormConfidence: 'none', duFormSlips: [] },
     };
+  }
+
+  // CONTACT questions (Adresse/Öffnungszeiten/E-Mail/Anfahrt/Profi) are the
+  // most frequent non-product intent and have a governed deterministic answer
+  // — routing them through the model cost ~700ms per turn and let it
+  // improvise product upsells (live 2026-07-03/04). 0ms path. Store-visit
+  // questions still need the mail-order truth from the model, and a turn that
+  // names a product stays with the product paths.
+  const deterministicContactIntent = justExecutedSend ? null : detectDrkallaContactIntent(user);
+  if (
+    deterministicContactIntent
+    && !DRKALLA_STORE_VISIT_INTENT.test(user)
+    && (input.detectProducts?.(user) ?? []).length === 0
+  ) {
+    const contactText = buildDrkallaContactAnswer(deterministicContactIntent, input.contactFacts);
+    if (contactText) {
+      return {
+        blocked: false,
+        text: contactText,
+        memory: reduceDrkallaShortTermMemory(
+          canaryTurn.runtime.memory,
+          deriveDrkallaAgentSpokeEvent({ text: contactText, turnIndex }),
+        ),
+        metrics: { extraLlmCalls: 0, extraKbCalls: 0, directiveChars: canaryTurn.directiveChars },
+        blockers: [],
+        quality: { duFormDetected: false, duFormConfidence: 'none', duFormSlips: [] },
+      };
+    }
   }
 
   // A real ambiguous product LINE ("Koleston Perfect") gets a variant
@@ -1601,7 +1828,10 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // A META turn about the conversation itself (link already sent, frustration
   // about repeats) must not be re-grounded into yet another pitch either
   // (live 2026-06-29: "Hast Du ja schon, Bro" got a fresh Glanz-Shampoo pitch).
-  const isUsageHowto = DRKALLA_USAGE_HOWTO.test(user);
+  // Usage questions now include the broader intent set (they reach the model
+  // since the knowledge layer answers them from product descriptions).
+  const isUsageHowto = DRKALLA_USAGE_HOWTO.test(user)
+    || (DRKALLA_USAGE_INTENT.test(user) && Boolean(input.knowledgeRetriever));
   const isMetaTurn = DRKALLA_ALREADY_SENT_CLAIM.test(user) || DRKALLA_FRUSTRATION_META.test(user);
   const suppressCatalog = isUsageHowto || DRKALLA_SERVICE_INTENT.test(user) || isMetaTurn;
   let system = compactSystemPrompt(canaryTurn.modelDirectives, input.contactFacts);
@@ -1717,20 +1947,35 @@ export async function buildDrkallaCustomLlmResponse(input: {
     // the output cap across the whole stream.
     if (announcePrefix) input.onDelta(announcePrefix);
     let forwardedChars = 0;
+    // The cap must never cut mid-word (the caller HEARS the fragment): when it
+    // hits, back off to the last sentence/word boundary and remember that as
+    // the effective cap, so the final text is sliced to EXACTLY what was
+    // forwarded (prefix invariant for the transport's tail frame).
+    let effectiveCap = maxOutputChars;
     const onDelta = (chunk: string) => {
-      if (!chunk || forwardedChars >= maxOutputChars) return;
-      const allowed = chunk.slice(0, maxOutputChars - forwardedChars);
+      if (!chunk || forwardedChars >= effectiveCap) return;
+      let allowed = chunk.slice(0, effectiveCap - forwardedChars);
+      if (allowed.length < chunk.length) {
+        const boundary = Math.max(
+          allowed.lastIndexOf('. '), allowed.lastIndexOf('! '), allowed.lastIndexOf('? '),
+          allowed.lastIndexOf(' '),
+        );
+        if (boundary > 0) allowed = allowed.slice(0, boundary + 1);
+        effectiveCap = forwardedChars + allowed.length;
+      }
       forwardedChars += allowed.length;
       input.onDelta?.(allowed);
     };
-    // No trim here: forwarded deltas must stay an exact prefix of the final
-    // text so the transport can compute the remaining tail frame.
     const raw = await input.client.completeStream({ system, user: modelUser, maxOutputChars, onDelta, signal: input.signal });
-    modelText = raw.trim() ? `${announcePrefix}${raw.slice(0, maxOutputChars)}` : '';
+    modelText = raw.trim() ? `${announcePrefix}${raw.slice(0, effectiveCap)}` : '';
   } else {
-    const raw = (await input.client.complete({ system, user: modelUser, maxOutputChars, signal: input.signal }))
-      .trim()
-      .slice(0, maxOutputChars);
+    let raw = (await input.client.complete({ system, user: modelUser, maxOutputChars, signal: input.signal }))
+      .trim();
+    if (raw.length > maxOutputChars) {
+      const cut = raw.slice(0, maxOutputChars);
+      const boundary = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '), cut.lastIndexOf(' '));
+      raw = boundary > 0 ? cut.slice(0, boundary + 1).trimEnd() : cut;
+    }
     modelText = raw ? `${announcePrefix}${raw}` : '';
   }
 
@@ -1741,6 +1986,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
         memory: canaryTurn.runtime.memory,
         evidenceLookup: input.evidenceLookup,
         contactFacts: input.contactFacts,
+        turnIndex,
       });
   // An executed send is announced even when the model returned nothing.
   const spokenText = modelText || `${announcePrefix}${fallback?.text ?? ''}`.trim();

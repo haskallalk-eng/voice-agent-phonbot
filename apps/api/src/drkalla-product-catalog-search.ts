@@ -26,6 +26,8 @@ export type DrkallaCatalogMatch = {
   score: number;
   categoryHit: boolean; // matched the productType or a tag (not title-only)
   typeHit: boolean;     // matched the productType itself (a clear category need)
+  /** Number of currently available variants — 0 = fully sold out. */
+  availableCount?: number;
 };
 
 export type DrkallaProductCatalogSearch = (text: string, limit?: number) => DrkallaCatalogMatch[];
@@ -163,6 +165,10 @@ const QUERY_SYNONYMS: Record<string, string[]> = {
   foehn: ['haartrockner', 'trockner', 'dryer'],
   haarfoehn: ['haartrockner', 'trockner', 'dryer'],
   wachs: ['wax'],
+  // "Möbel kaufen" found nothing although 73 products are typed Salonmöbel
+  // (live 2026-07-04: the agent first denied carrying furniture).
+  moebel: ['salonmoebel', 'stuhl', 'sessel'],
+  salonmoebel: ['salonmoebel', 'stuhl', 'sessel'],
   glatt: ['glaettend', 'glaettendes'],
   glatte: ['glaettend', 'glaettendes'],
   glatten: ['glaettend', 'glaettendes'],
@@ -379,6 +385,31 @@ type IndexedProduct = {
   classTokens: Set<string>; // productType + TITLE only (what the product genuinely IS — excludes SEO tags)
 };
 
+// Shopify data hygiene at INDEX time: the live snapshot has 18 products with
+// an EMPTY productType and a couple of English ones — those were unreachable
+// for every type-weighted query (typeHits=0 forever). Map known English types
+// to German; derive a usable type from the title's head noun when empty.
+const ENGLISH_TYPE_MAP: Record<string, string> = {
+  'delrin hair comb / professional comb': 'Kamm',
+  'salon display stand / floor display': 'Salon-Zubehör',
+};
+
+function normalizeDrkallaProductType(rawType: string | null, title: string): string | null {
+  if (rawType) {
+    return ENGLISH_TYPE_MAP[rawType.toLocaleLowerCase('de-DE')] ?? rawType;
+  }
+  for (const tok of contentTokens(title)) {
+    const s = stem(tok);
+    if (PRODUCT_CLASS_STEMS.has(s)) return tok.charAt(0).toUpperCase() + tok.slice(1);
+    for (const suffix of HEAD_NOUN_INDEX_SUFFIXES) {
+      if (s.endsWith(suffix) && s.length > suffix.length) {
+        return tok.charAt(0).toUpperCase() + tok.slice(1);
+      }
+    }
+  }
+  return null;
+}
+
 export function buildDrkallaProductCatalogSearch(
   products: DrkallaCatalogSearchRawProduct[],
 ): DrkallaProductCatalogSearch {
@@ -386,9 +417,10 @@ export function buildDrkallaProductCatalogSearch(
   for (const product of products) {
     if (typeof product?.handle !== 'string' || !product.handle) continue;
     if (typeof product.title !== 'string' || !product.title.trim()) continue;
-    const productType = typeof product.productType === 'string' && product.productType.trim()
+    const rawProductType = typeof product.productType === 'string' && product.productType.trim()
       ? product.productType.trim()
       : null;
+    const productType = normalizeDrkallaProductType(rawProductType, product.title);
     const tags = Array.isArray(product.tags)
       ? product.tags.filter((t): t is string => typeof t === 'string')
       : [];
@@ -521,6 +553,7 @@ export function buildDrkallaProductCatalogSearch(
       priceText: p.priceText,
       priceValue: p.priceValue,
       score,
+      availableCount: p.available,
       categoryHit: catHits > 0,
       // The caller naming a product CLASS ("Scheren") is as strong a category
       // signal as a productType hit — scissors are typed "Friseur-Tool", so

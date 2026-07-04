@@ -581,7 +581,10 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
           enabled: true,
           allowModelDirectives: true,
           allowLiveRollout: false,
-          maxDirectiveChars: 800,
+          // 1100, not 800: owner-overridable Kontakt-Fakt lines (bis 200 Zeichen)
+          // plus both evidence lines could exceed 800 even after shedding; the
+          // ~10-15ms extra prefill is far cheaper than a degraded turn.
+          maxDirectiveChars: 1100,
         }
       : {
           enabled: false,
@@ -644,6 +647,16 @@ function drkallaReasoningEffort(model: string): string | undefined {
   return /^gpt-5/i.test(model) ? 'none' : undefined;
 }
 
+// GPT-5.x native verbosity steering: 'low' pushes the model toward the "two
+// short sentences" voice style at the source instead of relying only on the
+// 420-char cap — fewer generated tokens, shorter generation time. Omitted for
+// gpt-4.x (undefined is dropped from the request body).
+function drkallaVerbosity(model: string): string | undefined {
+  const override = process.env.DRKALLA_CUSTOM_RUNTIME_VERBOSITY?.trim();
+  if (override) return override;
+  return /^gpt-5/i.test(model) ? 'low' : undefined;
+}
+
 function createOpenAiClient(): DrkallaCustomLlmClient {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -663,6 +676,8 @@ function createOpenAiClient(): DrkallaCustomLlmClient {
   // undefined (for gpt-4.x) is dropped from the request body.
   const reasoningEffort = drkallaReasoningEffort(model) as
     OpenAI.Chat.Completions.ChatCompletionCreateParams['reasoning_effort'];
+  const verbosity = drkallaVerbosity(model) as
+    OpenAI.Chat.Completions.ChatCompletionCreateParams['verbosity'];
   const openai = new OpenAI({
     apiKey,
     maxRetries: 0,
@@ -682,6 +697,7 @@ function createOpenAiClient(): DrkallaCustomLlmClient {
             max_completion_tokens: Math.max(80, Math.ceil(maxOutputChars / 3)),
             temperature: 0.2,
             reasoning_effort: reasoningEffort,
+            verbosity,
           },
           { signal },
         );
@@ -718,6 +734,7 @@ function createOpenAiClient(): DrkallaCustomLlmClient {
             max_completion_tokens: Math.max(80, Math.ceil(maxOutputChars / 3)),
             temperature: 0.2,
             reasoning_effort: reasoningEffort,
+            verbosity,
             stream: true,
           },
           { signal: controller.signal, timeout: streamTotalMs },
@@ -1022,7 +1039,11 @@ export async function registerRetellDrkallaCustomLlmWs(
       // backstop, and we never hold the same gap more than twice. A held turn
       // sends NO frame and does NOT advance turn/memory state.
       const turnReadiness = scoreDrkallaTurnReadiness(parsedPreview?.currentUserText ?? '', {
-        pendingQuestion: Boolean(memory.lastAgentQuestion?.trim()) || Boolean(memory.pendingClarification),
+        // askedQuestionLastTurn, NOT lastAgentQuestion: the latter deliberately
+        // persists across statement turns (for the pending-offer logic), so it
+        // stayed "true" long after the question was answered and disabled the
+        // content holds exactly when they were needed (review 2026-07-04).
+        pendingQuestion: memory.askedQuestionLastTurn || Boolean(memory.pendingClarification),
       });
       const heldTurn = isResponseTurn
         && consecutiveHolds < DRKALLA_MAX_CONSECUTIVE_HOLDS
@@ -1157,7 +1178,7 @@ export async function registerRetellDrkallaCustomLlmWs(
           };
 
           const executeSendLink = smsToolEnabled
-            ? async (link: { url: string; label: string; linkKind: 'product' | 'profi' | 'category' }) => {
+            ? async (link: { url: string; label: string; linkKind: 'product' | 'profi' | 'category' | 'page' }) => {
                 try {
                   const injected = await app.inject({
                     method: 'POST',

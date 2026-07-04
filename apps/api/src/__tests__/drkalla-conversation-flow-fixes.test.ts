@@ -899,3 +899,251 @@ describe('a link-decline that is also a farewell hangs up (live smoke 2026-07-03
     expect(response.endCall).not.toBe(true);
   });
 });
+
+describe('layer-review fixes 2026-07-04 (contact 0ms, wieviel, usage->KB, repair-Ja, page link, wind-down)', () => {
+  it('"Wieviel kostet das?" reaches the PRICE path, never the usage dead-end', async () => {
+    const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 1,
+      text: 'Da kann ich Ihnen Locken Shampoo empfehlen.',
+      lastProduct: { spokenName: 'Locken Shampoo', productId: 'ls', productKind: 'Shampoo' },
+    });
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Wieviel kostet das?'),
+      memory,
+      client: { complete: async () => 'unused' },
+      evidenceLookup: {
+        byId: () => ({ priceText: '8,90 Euro' }),
+        byKeyHash: () => ({ priceText: '8,90 Euro' }),
+      } as never,
+    });
+    expect(response.text).toContain('8,90 Euro');
+    expect(response.text).not.toContain('keine sicheren Details');
+  });
+
+  it('a usage question goes to the MODEL with knowledge grounding when a retriever is wired', async () => {
+    const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 1,
+      text: 'Da kann ich Ihnen Locken Shampoo empfehlen.',
+      lastProduct: { spokenName: 'Locken Shampoo', productId: 'ls', productKind: 'Shampoo' },
+    });
+    let seenSystem = '';
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Wie wende ich das Locken Shampoo an?'),
+      memory,
+      client: { complete: async ({ system }) => { seenSystem = system; return 'Ins nasse Haar einmassieren und ausspülen.'; } },
+      knowledgeRetriever: () => ({
+        hits: [{ sourceId: 's', chunkId: 'c', sourceTitle: 'Locken Shampoo', text: 'Anwendung: ins nasse Haar einmassieren.' }],
+        confidence: 0.9,
+      }) as never,
+      evidenceLookup: noEvidence,
+    });
+    expect(seenSystem).toContain('Wissens-Beleg (beantworte');
+    expect(response.text).toContain('einmassieren');
+    expect(response.text).not.toContain('keine sicheren Details');
+  });
+
+  it('order-status questions get the honest deterministic answer (no lookup exists)', async () => {
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Wo bleibt denn meine Bestellung?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => { modelCalls += 1; return 'unused'; } },
+    });
+    expect(modelCalls).toBe(0);
+    expect(response.text).toContain('Sendungsverfolgung');
+  });
+
+  it('ingredients questions answer honestly and funnel to the product-page link', async () => {
+    const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 1,
+      text: 'Da kann ich Ihnen Locken Shampoo empfehlen.',
+      lastProduct: { spokenName: 'Locken Shampoo', productId: 'ls', productKind: 'Shampoo' },
+    });
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Was ist denn da alles drin? Inhaltsstoffe?'),
+      memory,
+      client: { complete: async () => 'unused' },
+    });
+    expect(response.text).toContain('Inhaltsstoffliste');
+    expect(response.text).toContain('per SMS schicken?');
+  });
+
+  it('availability questions are answered from the snapshot (availableVariantCount)', async () => {
+    const memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 1,
+      text: 'Da kann ich Ihnen Locken Shampoo empfehlen.',
+      lastProduct: { spokenName: 'Locken Shampoo', productId: 'ls', productKind: 'Shampoo' },
+    });
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Ist das denn gerade lieferbar?'),
+      memory,
+      client: { complete: async () => 'unused' },
+      evidenceLookup: {
+        byId: () => null,
+        byKeyHash: () => ({ availableVariantCount: 3, variantCount: 4 }),
+      } as never,
+    });
+    expect(response.text).toContain('lieferbar');
+    expect(response.text).toContain('Ja,');
+  });
+
+  it('a bare "Ja, gerne." after OUR repair prompt revives the pre-repair link offer', async () => {
+    let memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 4,
+      text: 'Dafür passt Schützendes Blondier Pulver gut. Wenn Sie mögen, schicke ich Ihnen den Link zu Schützendes Blondier Pulver per SMS — soll ich?',
+      lastProduct: { spokenName: 'Schützendes Blondier Pulver', productId: 'sbp', productKind: 'Blondierung' },
+      lastAgentQuestion: 'Wenn Sie mögen, schicke ich Ihnen den Link zu Schützendes Blondier Pulver per SMS — soll ich?',
+    });
+    memory = reduceDrkallaShortTermMemory(memory, {
+      type: 'agent_spoke', turnIndex: 5, text: 'Wie bitte?', lastAgentQuestion: 'Wie bitte?',
+    });
+    let sent = 0;
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Ja, gerne.'),
+      memory,
+      client: { complete: async () => 'unused' },
+      evidenceLookup: {
+        byId: () => ({ url: 'https://drkalla.com/products/sbp' }),
+        byKeyHash: () => ({ url: 'https://drkalla.com/products/sbp' }),
+      } as never,
+      executeSendLink: async () => { sent += 1; return { smsSent: true as const }; },
+    });
+    expect(sent).toBe(1);
+    expect(response.text).toContain('per SMS geschickt');
+  });
+
+  it('a Kontaktseiten-Link offer is sent as a PAGE link, never the remembered product', async () => {
+    const memory = reduceDrkallaShortTermMemory(
+      reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+        type: 'agent_spoke',
+        turnIndex: 3,
+        text: 'Dafür passt Schützendes Blondier Pulver gut.',
+        lastProduct: { spokenName: 'Schützendes Blondier Pulver', productId: 'sbp', productKind: 'Blondierung' },
+      }),
+      {
+        type: 'agent_spoke',
+        turnIndex: 5,
+        text: 'Gern, soll ich Ihnen den Link zur Kontaktseite per SMS schicken?',
+        lastAgentQuestion: 'Soll ich Ihnen den Link zur Kontaktseite per SMS schicken?',
+      },
+    );
+    expect(memory.pendingLinkOffer?.kind).toBe('page');
+    const sends: Array<{ url: string; linkKind: string }> = [];
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Ja.'),
+      memory,
+      client: { complete: async () => 'unused' },
+      evidenceLookup: {
+        byId: () => ({ url: 'https://drkalla.com/products/sbp' }),
+        byKeyHash: () => ({ url: 'https://drkalla.com/products/sbp' }),
+      } as never,
+      executeSendLink: async ({ url, linkKind }) => { sends.push({ url, linkKind }); return { smsSent: true as const }; },
+    });
+    expect(sends).toEqual([{ url: 'https://drkalla.com/pages/kontakt', linkKind: 'page' }]);
+    expect(response.text).toContain('Kontaktseite');
+    expect(response.text).not.toContain('Blondier');
+  });
+
+  it('a MODEL wind-down turn counts toward the streak (text-derived), so the closing loop escalates', async () => {
+    // Live 2026-07-04: model said "… Wenn Sie später noch etwas brauchen, helfe
+    // ich Ihnen gern weiter." (no windDown flag) → streak stayed 0 → the caller
+    // heard the identical sentence three times.
+    let memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 8,
+      text: 'Alles klar, dann lasse ich es dabei. Wenn Sie später noch etwas brauchen, helfe ich Ihnen gern weiter.',
+    });
+    expect(memory.windDownStreak).toBe(1);
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Alles klar, danke.'),
+      memory,
+      client: { complete: async () => 'unused' },
+    });
+    expect(response.endCall).toBe(true);
+    expect(response.text).toContain('schönen Tag');
+  });
+
+  it('turn-taking: elliptical answers to a pending question are not held; bare modals are', () => {
+    // "Eine."/"Ohne." answer the agent's own question -> complete.
+    expect(looksIncompleteDrkallaUtterance('Eine', { pendingQuestion: true })).toBe(false);
+    expect(looksIncompleteDrkallaUtterance('Ohne', { pendingQuestion: true })).toBe(false);
+    // Without a pending question they still dangle.
+    expect(looksIncompleteDrkallaUtterance('Ich nehme eine')).toBe(true);
+    // Bare volition verb -> more is coming.
+    expect(looksIncompleteDrkallaUtterance('Ich möchte')).toBe(true);
+    expect(looksIncompleteDrkallaUtterance('Ich brauche')).toBe(true);
+    // Trailing "wenn" now dangles like the other subordinators.
+    expect(looksIncompleteDrkallaUtterance('Ich nehme es, wenn')).toBe(true);
+  });
+
+  it('a rejected product is never re-pitched by the recommender', async () => {
+    let memory = reduceDrkallaShortTermMemory(createDrkallaShortTermMemory(), {
+      type: 'agent_spoke',
+      turnIndex: 2,
+      text: 'Da kann ich Ihnen Glanz-Shampoo empfehlen. Soll ich Ihnen den Link zu Glanz-Shampoo per SMS schicken?',
+      lastProduct: { spokenName: 'Glanz-Shampoo', productId: 'gs', productKind: 'Shampoo' },
+      lastAgentQuestion: 'Soll ich Ihnen den Link zu Glanz-Shampoo per SMS schicken?',
+    });
+    const declined = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Nein danke, das brauche ich nicht.'),
+      memory,
+      client: { complete: async () => 'unused' },
+    });
+    expect(declined.memory.rejectedProducts.map((r) => r.label)).toContain('Glanz-Shampoo');
+    // A later shampoo request must pitch something else even if Glanz-Shampoo ranks first.
+    let modelCalls = 0;
+    const later = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Ich möchte doch noch ein Shampoo kaufen.'),
+      memory: declined.memory,
+      client: { complete: async () => { modelCalls += 1; return 'Wie wäre Farbschutz Shampoo?'; } },
+      catalogSearch: () => [
+        hit('gs', 'Glanz-Shampoo', 'Shampoo', 12, 9),
+        hit('fs', 'Farbschutz Shampoo Sulfatfrei', 'Shampoo', 11, 8),
+      ],
+      evidenceLookup: noEvidence,
+    });
+    expect(later.text).not.toContain('Glanz-Shampoo empfehlen');
+  });
+
+  it('sold-out products never reach the deterministic pitch', async () => {
+    const soldOut = { ...hit('so', 'Altes Shampoo', 'Shampoo', 5, 12), availableCount: 0 };
+    const inStock = { ...hit('ns', 'Neues Shampoo', 'Shampoo', 9, 8), availableCount: 4 };
+    const response = await buildDrkallaCustomLlmResponse({
+      canary: CANARY,
+      event: turn('Ich suche ein Shampoo.'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => 'unused' },
+      catalogSearch: () => [soldOut, inStock],
+      evidenceLookup: noEvidence,
+    });
+    expect(response.text).toContain('Neues Shampoo');
+    expect(response.text).not.toContain('Altes Shampoo');
+  });
+
+  it('runtime canary blockers degrade to the grounded fallback, never a dead turn', async () => {
+    const response = await buildDrkallaCustomLlmResponse({
+      // maxDirectiveChars 1 forces DIRECTIVES_OVER_BUDGET even after shedding.
+      canary: { enabled: true, allowModelDirectives: true, allowLiveRollout: false, maxDirectiveChars: 1 },
+      event: turn('Wann habt ihr geöffnet?'),
+      memory: createDrkallaShortTermMemory(),
+      client: { complete: async () => 'unused' },
+    });
+    expect(response.blocked).toBe(false);
+    expect(response.text).toContain('10 bis 18 Uhr');
+  });
+});

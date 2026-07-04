@@ -69,19 +69,22 @@ describe('DrKalla contact facts are canonical and Sie-form', () => {
 });
 
 describe('DrKalla custom runtime grounds contact facts (A: invents, B: grounded)', () => {
-  it('B: an hours question feeds the model the grounded hours fact', async () => {
-    const prompts: string[] = [];
-    await buildDrkallaCustomLlmResponse({
+  it('B: an hours question is answered DETERMINISTICALLY with the grounded fact (0ms, no model)', async () => {
+    // A-red evidence: before this change the custom runtime fed no contact
+    // facts, so the model invented hours (live smoke produced "9 bis 18 Uhr").
+    // Since 2026-07-04 contact questions do not even reach the model: the
+    // governed deterministic answer wins (~700ms saved, no upsell drift).
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
       canary: CANARY,
       event: turn('Wann habt ihr geöffnet?'),
       memory: createDrkallaShortTermMemory(),
-      client: { complete: async ({ system }) => { prompts.push(system); return 'Wir haben Montag bis Freitag von 10 bis 18 Uhr geöffnet.'; } },
+      client: { complete: async () => { modelCalls += 1; return 'unused'; } },
     });
-    // A-red evidence: before this change the custom runtime fed no contact
-    // facts, so the model invented hours (live smoke produced "9 bis 18 Uhr").
-    expect(prompts[0]).toContain('Kontakt-Fakt');
-    expect(prompts[0]).toContain('10 bis 18');
-    expect(prompts[0]).toContain('erfinde nichts');
+    expect(modelCalls).toBe(0);
+    expect(response.metrics.extraLlmCalls).toBe(0);
+    expect(response.text).toContain('10 bis 18 Uhr');
+    expect(response.text).not.toMatch(/\b9 bis 18\b/);
   });
 
   it('B: when the model is empty, the hours fallback states the real hours (no invention)', async () => {

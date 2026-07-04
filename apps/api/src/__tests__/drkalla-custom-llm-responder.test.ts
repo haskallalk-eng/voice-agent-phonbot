@@ -1663,7 +1663,12 @@ describe('DrKalla deterministic smalltalk fast-paths (latency: low-content turns
       client: { complete: async () => { modelCalls += 1; return 'should not be used'; } },
     });
     expect(modelCalls).toBe(0);
-    expect(response.text).toBe('Alles klar. Kann ich Ihnen sonst noch weiterhelfen?');
+    // The send-confirm turn ("… Kann ich sonst noch etwas klären?") already
+    // counts as a wind-down (derived from the text since 2026-07-04), so the
+    // decline escalates straight to the goodbye instead of looping the same
+    // closing question (live complaint: "musst du nicht zehnmal wiederholen").
+    expect(response.text).toContain('schönen Tag');
+    expect(response.endCall).toBe(true);
     expect(response.text).not.toMatch(/link|sms/i);
   });
 
@@ -1745,7 +1750,9 @@ describe('DrKalla knowledge-chunk grounding injection (additive, model-path only
       evidenceLookup: noEvidence,
     });
     expect(captured).toContain('Katalog-Treffer zum Bedarf'); // the injected line (not the base directive mention)
-    expect(captured).not.toContain('Wissens-Beleg');
+    // The static source-consolidation rule now NAMES "Wissens-Beleg", so assert
+    // on the injected line's marker instead of the bare token.
+    expect(captured).not.toContain('Wissens-Beleg (beantworte');
   });
 
   it('adds no grounding when retrieval is below confidence (returns null)', async () => {
@@ -1760,7 +1767,7 @@ describe('DrKalla knowledge-chunk grounding injection (additive, model-path only
       knowledgeRetriever: () => null,
       evidenceLookup: noEvidence,
     });
-    expect(captured).not.toContain('Wissens-Beleg');
+    expect(captured).not.toContain('Wissens-Beleg (beantworte');
   });
 
   it('a curated FAQ answer still wins before the knowledge layer (no model, no injection)', async () => {

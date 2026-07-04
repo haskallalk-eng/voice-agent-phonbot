@@ -60,7 +60,7 @@ function compactMemoryLine(memoryContext: string | null): string | null {
     .split(';')
     .map((part) => part.trim())
     .filter((part) =>
-      /^(active_product=|active_product_type=|caller_hair=|topic_closed=|product_facts=|discussed_products=|inaudible_streak=|pending=|pending_link=|links_sent=|profi_price_disclosure_given=|end_call_candidate=)/.test(part)
+      /^(active_product=|active_product_type=|caller_hair=|topic_closed=|product_facts=|discussed_products=|inaudible_streak=|pending=|pending_link=|avoid=|links_sent=|profi_price_disclosure_given=|end_call_candidate=)/.test(part)
     );
   if (!keep.length) return null;
   return `Memory: ${keep.join('; ')}`.slice(0, 220);
@@ -153,6 +153,16 @@ export function buildDrkallaCustomRuntimeCanaryTurn(input: {
   // consistency, but the ACTIVE product's evidence is the correctness-critical one).
   if (directives.length && directives.join('\n').length > input.canary.maxDirectiveChars) {
     directives = directives.filter((line) => !line.startsWith('Zuvor besprochen'));
+  }
+  // Still over: the trailing memory-vs-evidence hint is a static reminder, and
+  // Do/Do-not are style steering — both are dispensable BEFORE giving up the
+  // whole turn (the old two-stage shedding still hit DIRECTIVES_OVER_BUDGET
+  // with a long owner-overridden Kontakt-Fakt, sim 2026-07-03).
+  if (directives.length && directives.join('\n').length > input.canary.maxDirectiveChars) {
+    directives = directives.filter((line) => !line.startsWith('Memory is conversation state'));
+  }
+  if (directives.length && directives.join('\n').length > input.canary.maxDirectiveChars) {
+    directives = directives.filter((line) => !line.startsWith('Do') && !line.startsWith('Closing:'));
   }
   const directiveChars = directives.join('\n').length;
   if (directives.length && directiveChars > input.canary.maxDirectiveChars) {

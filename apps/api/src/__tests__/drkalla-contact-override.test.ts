@@ -94,34 +94,34 @@ describe('end-to-end: a published hours override is spoken by the live responder
     expect(response.text).toContain('Montag bis Samstag von 9 bis 20 Uhr');
     expect(response.text).not.toContain('10 bis 18');
   });
-  it('the model is fed the published hours as the verbatim grounding fact', async () => {
+  it('the deterministic contact path speaks the published hours (no model call at all)', async () => {
     const contactFacts = mergeDrkallaContactFacts({ hoursSpoken: 'Montag bis Samstag von 9 bis 20 Uhr' });
-    const prompts: string[] = [];
-    await buildDrkallaCustomLlmResponse({
+    let modelCalls = 0;
+    const response = await buildDrkallaCustomLlmResponse({
       canary: CANARY,
       event: turn('Wann habt ihr geöffnet?'),
       memory: createDrkallaShortTermMemory(),
-      client: { complete: async ({ system }) => { prompts.push(system); return 'ok'; } },
+      client: { complete: async () => { modelCalls += 1; return 'unused'; } },
       contactFacts,
     });
-    expect(prompts[0]).toContain('Montag bis Samstag von 9 bis 20 Uhr');
-    expect(prompts[0]).not.toContain('10 bis 18');
+    expect(modelCalls).toBe(0);
+    expect(response.text).toContain('Montag bis Samstag von 9 bis 20 Uhr');
+    expect(response.text).not.toContain('10 bis 18');
   });
 });
 
 describe('email override does not leak the baked email into the model prompt', () => {
-  it('the system prompt carries the overridden email and NOT the baked default', async () => {
+  it('the deterministic answer carries the overridden email and NOT the baked default', async () => {
     const contactFacts = mergeDrkallaContactFacts({ emailSpoken: 'info at drkalla punkt de' });
-    const prompts: string[] = [];
-    await buildDrkallaCustomLlmResponse({
+    const response = await buildDrkallaCustomLlmResponse({
       canary: CANARY,
       event: turn('Wie ist eure E-Mail-Adresse?'),
       memory: createDrkallaShortTermMemory(),
-      client: { complete: async ({ system }) => { prompts.push(system); return 'ok'; } },
+      client: { complete: async () => 'unused' },
       contactFacts,
     });
-    expect(prompts[0]).toContain('info at drkalla punkt de');
-    expect(prompts[0]).not.toContain('kontakt at drkalla punkt com');
+    expect(response.text).toContain('info at drkalla punkt de');
+    expect(response.text).not.toContain('kontakt at drkalla punkt com');
   });
 
   it('the deterministic fallback speaks the overridden email', async () => {

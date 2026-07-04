@@ -698,7 +698,9 @@ describe('DrKalla funnel: product-type switch + repeat gate (Codex rank 11/12)',
       type: 'user_audio', turnIndex: 2, text: 'Und habt ihr auch Shampoos?', audioState: 'heard',
     });
     expect(switched.lastMentionedProduct).toBeNull();
-    expect(switched.recentProducts).toHaveLength(0);
+    // recentProducts is KEPT on a type switch (2026-07-04): wiping it emptied
+    // the discussed_products anti-repeat hint for everything said before.
+    expect(switched.recentProducts).toHaveLength(1);
     expect(switched.activeProductType?.label).toContain('Shampoo');
   });
 

@@ -34,7 +34,7 @@ const COMPLETE_SHORT = new Set([
 const DANGLING_CONJ = new Set([
   'und', 'oder', 'aber', 'sondern', 'denn', 'sowie', 'beziehungsweise', 'bzw', 'zwar',
   'weil', 'dass', 'daß', 'damit', 'obwohl', 'sodass', 'sobald', 'bevor', 'nachdem',
-  'falls', 'während', 'indem', 'ob', 'wobei', 'sofern', 'sowohl', 'entweder',
+  'falls', 'während', 'indem', 'ob', 'wobei', 'sofern', 'sowohl', 'entweder', 'wenn',
 ]);
 // Indefinite/negation determiners demand a following noun (definite der/die/das are
 // excluded — they double as demonstratives that DO end a clause, e.g. "Ich nehme das").
@@ -51,6 +51,17 @@ const DANGLING_PREP = new Set([
 ]);
 // Trailing hesitation/filler → still buffering.
 const TRAILING_FILLER = new Set(['äh', 'ähm', 'öhm', 'ähem', 'hmm', 'also', 'tja']);
+
+// A trailing MODAL/volition verb with no infinitive complement ("Ich möchte",
+// "ich brauche") — the object clause is still coming. Same class of utterance
+// as the documented 2026-06-14 incident, just without the trailing "Und".
+// Guarded by the pendingQuestion escape below: "Ich kann." as a yes/no answer
+// to the agent's own question must never be held (predicative use).
+const DANGLING_MODAL = new Set([
+  'möchte', 'möchten', 'moechte', 'moechten', 'will', 'wollen', 'wollte',
+  'brauche', 'brauch', 'brauchen', 'bräuchte', 'braeuchte',
+  'suche', 'suchen', 'hätte', 'haette',
+]);
 
 // A trailing KNOWN hair/condition descriptor adjective in an ATTRIBUTIVE form is
 // a mid-build dangle: the head noun ("Haare") is still coming. Live 2026-06-29:
@@ -124,11 +135,21 @@ export function looksIncompleteDrkallaUtterance(
   // A bare known short answer ("ja", "danke", "tschüss") is always complete.
   if (toks.length === 1 && COMPLETE_SHORT.has(last)) return false;
 
-  // Unambiguous "more is coming" signals on the LAST token.
+  // Unambiguous "more is coming" signals on the LAST token. Conjunctions and
+  // fillers never end a German turn, question pending or not. Determiners,
+  // prepositions and modal/volition verbs get the SAME pendingQuestion escape
+  // as the descriptor rule below: "Eine." / "Keine." / "Ohne." are complete
+  // elliptical answers to the agent's own question (a false hold is the only
+  // harmful error) — but a verb-initial fragment is never such an answer and
+  // still holds.
   if (DANGLING_CONJ.has(last)) return true;
-  if (DANGLING_DET.has(last)) return true;
-  if (DANGLING_PREP.has(last)) return true;
   if (TRAILING_FILLER.has(last)) return true;
+  const ellipticalAnswerLikely = opts.pendingQuestion === true && !LEADING_FINITE_VERB.has(toks[0]!);
+  if (!ellipticalAnswerLikely) {
+    if (DANGLING_DET.has(last)) return true;
+    if (DANGLING_PREP.has(last)) return true;
+    if (toks.length >= 2 && DANGLING_MODAL.has(last)) return true;
+  }
 
   // Trailing "am besten" / "am liebsten" with no head noun yet.
   if (toks.length >= 2) {
