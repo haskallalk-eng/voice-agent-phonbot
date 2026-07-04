@@ -59,7 +59,10 @@ const ADDRESS_RE = /\b(?:adresse|anschrift|wo (?:seid|sind|ist|liegt|findet)|wo 
 const HOURS_RE = /(?:oe|ö|Ö|o)ffnungszeit|ge(?:oe|ö|Ö|o)ffnet|wann (?:habt|haben|macht|hat)|wie lange (?:habt|haben)|uhrzeit|wann (?:zu|geschlossen)|geschlossen|feiertag|habt ihr[^.?!]*\bauf\b|\b(?:heute|morgen|jetzt|noch|schon|gerade)\b[^.?!]*\bauf\b/i;
 const EMAIL_RE = /\b(?:e-?mail|email|mail(?:adresse)?|anschreiben|schreiben an)\b/i;
 const ANFAHRT_RE = /\b(?:anfahrt|wie komme ich|welche (?:bahn|linie|u-?bahn|s-?bahn)|(?:oe|ö|Ö|o)ffentliche|parken|parkplatz|verbindung)\b/i;
-const PROFI_RE = /\bprofi[\s-]?(?:zugang|preis|preise|preisen|konto|login|registr|freischalt|konditionen)|friseur[\s-]?(?:preis|konto|registr)|gewerbe(?:konto|preis|kunde)/i;
+// Mengenrabatt/Staffelpreise: the honest answer IS the Profi-Zugang (no other
+// bulk-pricing mechanism exists) — routed here so it gets the deterministic
+// profi answer instead of a waffling model turn (review 2026-07-04).
+const PROFI_RE = /\bprofi[\s-]?(?:zugang|preis|preise|preisen|konto|login|registr|freischalt|konditionen)|friseur[\s-]?(?:preis|konto|registr)|gewerbe(?:konto|preis|kunde)|\bmengenrabatt\w*|\bstaffelpreis\w*|\bgrossabnahme|\bgroßabnahme/i;
 
 /**
  * Pure contact-intent detector over the latest user utterance. Profi takes

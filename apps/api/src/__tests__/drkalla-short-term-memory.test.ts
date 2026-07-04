@@ -382,7 +382,7 @@ describe('DrKalla short-term voice memory', () => {
     expect(Object.keys(memory.productConversations)).toHaveLength(6);
     expect(Object.keys(memory.heardFacts).length).toBeLessThanOrEqual(40);
     expect(Object.keys(memory.sentLinkHashes)).toHaveLength(12);
-    expect(memory.recentProducts).toHaveLength(3);
+    expect(memory.recentProducts).toHaveLength(5);
     expect(buildDrkallaMemoryContext(memory).length).toBeLessThanOrEqual(550);
     expect(isDrkallaMemorySafeForModel(memory)).toBe(true);
   });

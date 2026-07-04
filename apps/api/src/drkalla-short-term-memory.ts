@@ -87,6 +87,8 @@ export type DrkallaShortTermMemoryEvent =
         url: string;
         label: string;
       }>;
+      /** The caller just DECLINED this product/offer — remember to not re-offer. */
+      rejectedProduct?: string;
       profiPriceDisclosureGiven?: boolean;
       /**
        * The agent spoke a wind-down turn ("Kann ich Ihnen sonst noch
@@ -162,10 +164,23 @@ export type DrkallaShortTermVoiceMemory = {
    * decline wind-down, or a product-type switch.
    */
   pendingLinkOffer: null | {
-    kind: 'product' | 'profi' | 'category';
+    kind: 'product' | 'profi' | 'category' | 'page';
     label: string;
     turnIndex: number;
   };
+  /**
+   * True iff the agent's IMMEDIATELY PRECEDING turn asked a question. Unlike
+   * lastAgentQuestion (which deliberately persists so pending offers survive
+   * interim statements), this flag is refreshed on EVERY agent turn — it is the
+   * correct signal for the turn-taking pendingQuestion escape (live: a stale
+   * question from turns ago disabled holds long after it was answered).
+   */
+  askedQuestionLastTurn: boolean;
+  /**
+   * Products the caller explicitly DECLINED this call (label + turn). The
+   * recommender and the model (via avoid=) must not re-offer them.
+   */
+  rejectedProducts: Array<{ label: string; turnIndex: number }>;
   inaudibleStreak: number;
   silenceMs: number;
   endCallEligible: boolean;
@@ -232,6 +247,10 @@ const AGENT_LINK_OFFER = /(?:produktlink|\blink\b|per\s+sms|per\s+nachricht)[^.?
 const AGENT_TWO_OPTION_OFFER = /produktlink\s+oder\s+(?:den\s+link\s+(?:zum\s+)?)?profi/i;
 const AGENT_PROFI_OFFER = /\bprofi[\s-]?(?:link|zugang)\b/i;
 const AGENT_CATEGORY_OFFER = /\b([\p{L}-]+)-auswahl\b/iu;
+// A shop PAGE (not a product): "Soll ich Ihnen den Link zur Kontaktseite
+// schicken?" — live 2026-07-04 the yes was resolved to the remembered PRODUCT
+// and the caller got the wrong link twice.
+const AGENT_PAGE_OFFER = /\bkontakt(?:seite|daten|informationen|infos)?\b/i;
 
 function detectAgentLinkOffer(
   text: string,
@@ -241,6 +260,9 @@ function detectAgentLinkOffer(
   if (!AGENT_LINK_OFFER.test(text) || AGENT_TWO_OPTION_OFFER.test(text)) return null;
   if (AGENT_PROFI_OFFER.test(text)) {
     return { kind: 'profi', label: 'Profi-Zugang', turnIndex };
+  }
+  if (AGENT_PAGE_OFFER.test(text)) {
+    return { kind: 'page', label: 'Kontaktseite', turnIndex };
   }
   const category = text.match(AGENT_CATEGORY_OFFER);
   if (category?.[1]) {
@@ -291,7 +313,10 @@ const PRODUCT_FACT_ORDER: DrkallaProductFactKind[] = [
 const MAX_HEARD_FACTS = 40;
 const MAX_SENT_LINKS = 12;
 const MAX_PRODUCT_CONVERSATIONS = 6;
-const MAX_RECENT_PRODUCTS = 3;
+// 5, not 3: a genuine 3-4-way comparison call evicted the first product and
+// broke both compare_recent_products and the discussed_products anti-repeat.
+const MAX_RECENT_PRODUCTS = 5;
+const MAX_REJECTED_PRODUCTS = 3;
 const STATIC_FACT_KEYS = new Set<DrkallaStoredMemoryFactKey>([
   'contact.address',
   'contact.hours',
@@ -430,6 +455,8 @@ export function createDrkallaShortTermMemory(): DrkallaShortTermVoiceMemory {
     pendingClarification: null,
     lastAgentQuestion: null,
     pendingLinkOffer: null,
+    askedQuestionLastTurn: false,
+    rejectedProducts: [],
     inaudibleStreak: 0,
     silenceMs: 0,
     endCallEligible: false,
@@ -534,14 +561,35 @@ function reduceAgentSpoke(
     };
   }
 
+  // A wind-down turn can come from ANY path (deterministic smalltalk sets the
+  // flag; MODEL turns phrase the same thing without it — live 2026-07-04 the
+  // streak broke on a model wind-down and the closing loop repeated 3x).
+  // Derive it from the text as well: a product-free turn ending in the
+  // canonical closing question counts.
+  const windDown = event.windDown === true || (
+    !event.lastProduct
+    && (event.productsMentioned?.length ?? 0) === 0
+    && /\b(?:kann ich (?:ihnen )?sonst noch|wenn sie sp(?:ä|ae)ter noch etwas brauchen|dann lasse ich es dabei)\b/i.test(event.text)
+  );
+
   // Record what link the agent just OFFERED (question or statement form). A
   // turn that actually SENT a link resolves any pending offer; a wind-down
   // (offer declined) clears it; a non-offer turn ("Wie bitte?") keeps it, so
   // "Ja, schick, gerne." after a repair still finds the right target.
-  const pendingLinkOffer = (event.linksSent?.length ?? 0) > 0 || event.windDown
+  const pendingLinkOffer = (event.linksSent?.length ?? 0) > 0 || windDown
     ? null
     : detectAgentLinkOffer(event.text, lastMentionedProduct?.spokenName ?? null, event.turnIndex)
       ?? memory.pendingLinkOffer;
+
+  // The caller declined this product — cap-bounded, inflection-tolerant dedupe.
+  let rejectedProducts = memory.rejectedProducts;
+  if (event.rejectedProduct) {
+    const label = sanitizeMemoryText(event.rejectedProduct, 80);
+    rejectedProducts = [
+      ...rejectedProducts.filter((r) => r.label !== label),
+      { label, turnIndex: event.turnIndex },
+    ].slice(-MAX_REJECTED_PRODUCTS);
+  }
 
   return {
     ...withNoEndCall(memory),
@@ -555,11 +603,16 @@ function reduceAgentSpoke(
       ? sanitizeMemoryText(event.lastAgentQuestion, 160)
       : memory.lastAgentQuestion,
     pendingLinkOffer,
+    // Refreshed EVERY agent turn (unlike lastAgentQuestion, which persists for
+    // the offer logic) — the turn-taking pendingQuestion escape needs the truth
+    // about the IMMEDIATELY preceding turn.
+    askedQuestionLastTurn: Boolean(event.lastAgentQuestion),
+    rejectedProducts,
     profiPriceDisclosureGiven: memory.profiPriceDisclosureGiven || event.profiPriceDisclosureGiven === true,
     // A wind-down turn stacks; ANY other agent turn breaks the streak. A turn
     // that names a product re-opens the topic; a wind-down closes it.
-    windDownStreak: event.windDown ? memory.windDownStreak + 1 : 0,
-    topicClosed: event.windDown
+    windDownStreak: windDown ? memory.windDownStreak + 1 : 0,
+    topicClosed: windDown
       ? true
       : event.lastProduct || (event.productsMentioned?.length ?? 0) > 0
         ? false
@@ -635,8 +688,10 @@ function reduceUserAudio(
       !== userProductType.toLocaleLowerCase('de-DE'),
   );
   if (switchedType) {
+    // Only the ACTIVE product goes stale on a type switch. recentProducts stays:
+    // wiping it emptied the discussed_products anti-repeat hint, so a caller who
+    // returned to the earlier topic could get the identical pitch again.
     lastMentionedProduct = null;
-    recentProducts = [];
   }
 
   // The caller's hair profile persists across the whole call (deliberately NOT
@@ -862,6 +917,10 @@ export function buildDrkallaMemoryContext(memory: DrkallaShortTermVoiceMemory): 
   // after a Profi-Link offer means the Profi link, never a remembered product).
   if (memory.pendingLinkOffer) {
     parts.push(`pending_link=${memory.pendingLinkOffer.kind}:${sanitizeMemoryText(memory.pendingLinkOffer.label, 40)}`);
+  }
+  // Products the caller declined — the model must not re-offer them.
+  if (memory.rejectedProducts.length) {
+    parts.push(`avoid=${memory.rejectedProducts.map((r) => sanitizeMemoryText(r.label, 40)).join(',')}`);
   }
   if (memory.endCallEligible && memory.endCallReason) parts.push(`end_call_candidate=${memory.endCallReason}`);
   return parts.join('; ').slice(0, 550);
