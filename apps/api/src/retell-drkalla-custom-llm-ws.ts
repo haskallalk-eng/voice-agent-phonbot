@@ -20,6 +20,7 @@ import {
   buildDrkallaProductCatalogSearch,
   buildDrkallaExternalBrandStock,
   buildDrkallaColorShadeSummary,
+  drkallaVarietySeedFromCallId,
   type DrkallaProductCatalogSearch,
   type DrkallaExternalBrandStock,
   type DrkallaCatalogSearchRawProduct,
@@ -619,6 +620,10 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
   executeSendLink?: DrkallaSendLinkExecutor;
   sequence?: number;
   noInputReminderCount?: number;
+  // Per-call variety seed for the catalog tie rotation. Only the LIVE handler
+  // sets it (hash of the Retell call id); sims/tests omit it, so their outputs
+  // stay byte-identical to the unrotated baseline.
+  varietySeed?: number;
   onDelta?: (chunk: string) => void;
   onFaqCandidate?: (question: string, answer: string) => void;
   onKnowledgeChunk?: (sourceId: string, chunkId: string, query: string, score: number) => void;
@@ -699,6 +704,7 @@ export async function buildRetellDrkallaCustomLlmWsReply(input: {
     knowledgeRetriever: input.knowledgeRetriever,
     knowledgePriority: input.knowledgePriority,
     contactFacts: input.contactFacts,
+    varietySeed: input.varietySeed,
     // Recent prior turns of this call → the model keeps the topic (no extra call).
     conversationHistory: parsed.history,
     // Rolling note for the older part of long calls (built off the hot path).
@@ -1039,7 +1045,9 @@ export async function registerRetellDrkallaCustomLlmWs(
     if (centralRefreshRunning) return { status: 'already_running' as const };
     centralRefreshRunning = true;
     try {
-      const result = await refreshDrkallaCentralKnowledge();
+      // The curated FAQ syncs into the central store (kind 'faq') alongside the
+      // scrape, so ALL agents share the same human-approved answers.
+      const result = await refreshDrkallaCentralKnowledge(undefined, { faqEntries: loadDrkallaFaqRawEntries() });
       if (result.status === 'ok') {
         await applyCentralSnapshot(result.snapshot, `refresh:${trigger}`);
         app.log.info(
@@ -1442,6 +1450,9 @@ export async function registerRetellDrkallaCustomLlmWs(
             secretAccepted: secretOk,
             rawMessage,
             callId,
+            // Live calls rotate score-tied catalog candidates by a stable hash
+            // of the call id, so different callers hear different examples.
+            varietySeed: drkallaVarietySeedFromCallId(callId),
             memory,
             onMemory: (nextMemory) => {
               pendingMemory = nextMemory;

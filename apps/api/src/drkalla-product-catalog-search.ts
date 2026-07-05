@@ -129,7 +129,7 @@ const PRODUCT_CLASS_STEMS = new Set(
     'spray', 'puder', 'farbe', 'blondierung', 'schere',
     'effilierschere', 'kamm', 'buerste', 'foehn', 'haartrockner', 'lockenstab',
     'glaetteisen', 'rasierer', 'klinge', 'handtuch', 'umhang', 'handschuh', 'folie',
-    'creme', 'lotion', 'fixierer', 'booster', 'maschine', 'pinsel',
+    'creme', 'lotion', 'fixierer', 'booster', 'maschine', 'pinsel', 'parfum',
   ].map(stem).filter((s) => s.length >= 4),
 );
 
@@ -202,6 +202,13 @@ const QUERY_SYNONYMS: Record<string, string[]> = {
   // direction answer must stay with the Farb-Beleg model path, not get a
   // color-protect shampoo pitched (sim regression). The aftercare context
   // words above are enough to reach the Anti-Fading products.
+  // The caller says "Parfüm"/"Duft" (folded: parfuem), the catalog spells the
+  // French "Parfum" — 39 Eau-de-Parfum products were unreachable by the spoken
+  // German word (audit 2026-07-05).
+  parfuem: ['parfum'],
+  parfuems: ['parfum'],
+  duft: ['parfum'],
+  duefte: ['parfum'],
 };
 
 // Expand a caller token into itself + any compound split + any synonyms, so the
@@ -273,9 +280,25 @@ const SIZE_RE = /\b\d+[.,]?\d*\s?(?:ml|milliliter|liter|gramm|gr|kg|stk|st(?:ü|
 // prosody, so they are stripped from the spoken short name.
 function isUnpronounceableToken(word: string): boolean {
   if (/\d/.test(word)) return true;                      // embedded digit code
+  if (word.length === 1 && /\p{L}/u.test(word)) return true; // stray single letter ("I AM THE KING")
   if (word.length >= 2 && /^[A-ZÄÖÜ]+$/.test(word)) return true; // ALL-CAPS code
   if (word.length >= 2 && !/[aeiouäöüy]/i.test(word)) return true; // no vowel
   return false;
+}
+
+// A SHOUTING-case real word ("OSCAR", "LÉONIE", "MATT-EFFEKTWACHS") is a NAME,
+// not a letter code — the perfume lines carry their distinguishing name in caps,
+// and dropping it left meaningless short names like "I Eau de" or a bare
+// "Herrenparfum" shared by 39 products (audit 2026-07-05). Re-cased to title
+// case (per hyphen part) when it is long enough to be a word and has vowels;
+// short vowel-less codes (EDP, PSN, CLR, AISI) stay dropped by the code filter.
+function recaseShoutedWord(word: string): string {
+  if (word.length < 5) return word;
+  if (!/^\p{Lu}[\p{Lu}-]+$/u.test(word)) return word;
+  if (!/[AEIOUYÄÖÜÉÈÁÀÍÓÚ]/.test(word)) return word;
+  return word
+    .toLocaleLowerCase('de-DE')
+    .replace(/(^|-)(\p{L})/gu, (_m, sep: string, ch: string) => `${sep}${ch.toLocaleUpperCase('de-DE')}`);
 }
 
 /**
@@ -324,7 +347,8 @@ export function buildDrkallaShortName(title: string): string {
     .trim();
   const seen = new Set<string>();
   const words: string[] = [];
-  for (const w of base.split(' ')) {
+  for (const raw of base.split(' ')) {
+    const w = recaseShoutedWord(raw);
     if (!w) continue;
     // A token with no letter or digit at all (⌀, stray dashes) is never speakable.
     if (!/[\p{L}\p{N}]/u.test(w)) continue;
@@ -336,7 +360,11 @@ export function buildDrkallaShortName(title: string): string {
   const speakable = words.filter((w) => !isUnpronounceableToken(w));
   // Prefer the code-free words; if stripping leaves nothing, keep the originals
   // so we never return an empty name.
-  const chosen = speakable.length ? speakable : words;
+  const chosen = [...(speakable.length ? speakable : words)];
+  // A leading article/filler must not eat the 4-word budget before the class
+  // noun ("Ein Set aus zehn Kämmen …" got sliced to "Ein Set aus zehn" and the
+  // caller never heard WHAT the set contains, audit 2026-07-05).
+  while (chosen.length > 4 && /^(?:ein|eine|einen|der|die|das)$/i.test(chosen[0] ?? '')) chosen.shift();
   let short = chosen.slice(0, 4).join(' ').trim();
   if (short.length > 42) short = short.slice(0, 42).replace(/\s+\S*$/, '').trim();
   // A truncated name must not dangle on a preposition/article/conjunction
@@ -367,6 +395,10 @@ export function buildDrkallaShortName(title: string): string {
       .filter((w) => w
         && /[\p{L}]/u.test(w)
         && !isUnpronounceableToken(w)
+        // Foreign particles ("Eau de Parfum", "pour homme") read as broken
+        // German when a 2-word cap chops the phrase ("Malik Eau de") — keep
+        // the content nouns, skip the particles (audit 2026-07-05).
+        && !/^(?:eau|de|du|le|la|les|pour|el|al)$/i.test(w)
         && w.toLocaleLowerCase('de-DE') !== short.toLocaleLowerCase('de-DE'));
     // Make sure the product-CLASS word (Maske/Shampoo/...) survives the 2-word
     // cap — otherwise two sibling products collapse to the same short name
@@ -577,6 +609,48 @@ export function buildDrkallaProductCatalogSearch(
       typeHit: typeHits > 0 || classFiltered,
     }));
   };
+}
+
+/**
+ * Rotate products WITHIN equal-score groups by a per-call seed, so score-tied
+ * candidates share exposure across calls instead of one product always winning
+ * the deterministic tie-break (audit 2026-07-05: 75/188 category queries had a
+ * top-score tie, and the shortest-name winner — e.g. the Glanz-Shampoo — was
+ * the example on every single call). Order BETWEEN score groups is unchanged,
+ * so ranking quality is untouched; a 0/undefined seed is the identity, which
+ * keeps every existing test and simulation byte-identical. Within one call the
+ * seed is constant, so answers stay consistent and anti-repeat keeps working.
+ */
+export function rotateDrkallaEqualScoreGroups(hits: DrkallaCatalogMatch[], seed?: number): DrkallaCatalogMatch[] {
+  const s = Math.trunc(Math.abs(seed ?? 0));
+  if (!s || hits.length < 2) return hits;
+  const out: DrkallaCatalogMatch[] = [];
+  let i = 0;
+  while (i < hits.length) {
+    let j = i + 1;
+    while (j < hits.length && hits[j]!.score === hits[i]!.score) j += 1;
+    const group = hits.slice(i, j);
+    const k = s % group.length;
+    out.push(...group.slice(k), ...group.slice(0, k));
+    i = j;
+  }
+  return out;
+}
+
+/**
+ * Stable per-call seed for the tie rotation: FNV-1a over the call id, reduced
+ * to a small positive int. Same call -> same seed (answers stay consistent
+ * within a call); different calls -> different seeds (tied products share
+ * exposure). Empty input -> 0 (identity rotation).
+ */
+export function drkallaVarietySeedFromCallId(callId: string): number {
+  if (!callId) return 0;
+  let h = 0x811c9dc5;
+  for (let i = 0; i < callId.length; i += 1) {
+    h ^= callId.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0) % 997; // small prime keeps the modulo well-distributed
 }
 
 // EN/DE variant-title tokens -> spoken German color family. The Shopify color

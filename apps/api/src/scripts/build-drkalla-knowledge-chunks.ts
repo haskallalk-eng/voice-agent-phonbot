@@ -105,6 +105,25 @@ function chunkText(input: string, maxChars: number, overlapChars: number): strin
 
 const POLICY_PAGE_RE = /versand|lieferung|widerruf|r(ü|ue)ckgab|agb|gesch(ä|ae)ftsbeding|kontakt|impressum|datenschutz|(ü|ue)ber\s+dr/i;
 
+// Scrape-artifact boilerplate (audit 2026-07-05): every shop page carries the
+// same cart/currency-picker/nav fragments, so identical junk chunks appeared up
+// to 7x across sources and inflated their BM25 weight over real policy text.
+// Chunks containing these normalized phrases are UI template text, never answers.
+const BOILERPLATE_PHRASES = [
+  'geschaetzte gesamtkosten',
+  'land region aktualisieren',
+  'warenkorb ansehen',
+];
+// A currency/country picker chunk reads "belgien eur bulgarien eur daenemark
+// dkk …" — 5+ currency tokens never occur in genuine prose (a price sentence
+// carries 1-2), so this drops the picker without touching real content.
+const CURRENCY_TOKEN_RE = /\b(?:eur|dkk|sek|nok|chf|pln|czk|huf|ron|bgn)\b/g;
+
+function isBoilerplateChunk(normalizedText: string): boolean {
+  if (BOILERPLATE_PHRASES.some((p) => normalizedText.includes(p))) return true;
+  return (normalizedText.match(CURRENCY_TOKEN_RE) ?? []).length >= 5;
+}
+
 // Data-based seed builder, shared by this CLI and the in-process central-
 // knowledge refresh (drkalla-central-knowledge.ts) so both derive IDENTICAL
 // chunks from the same catalog state.
@@ -245,16 +264,28 @@ export async function buildDrkallaKnowledgeChunks(opts: {
     });
   }
 
+  // Boilerplate hygiene: drop UI-template chunks and keep only the FIRST copy of
+  // text repeated verbatim across sources (nav/footer fragments on every page).
+  // Without this, duplicated boilerplate both wastes index weight and can
+  // outrank genuine policy text (audit 2026-07-05: 14 texts appeared 2-7x).
+  const seenNormalized = new Set<string>();
+  const kept = built.filter((b) => {
+    if (isBoilerplateChunk(b.chunk.normalizedText)) return false;
+    if (seenNormalized.has(b.chunk.normalizedText)) return false;
+    seenNormalized.add(b.chunk.normalizedText);
+    return true;
+  });
+
   // Corpus stats for BM25 + tf-idf keyword extraction.
   const df: Record<string, number> = {};
-  for (const b of built) for (const t of b.uniqueTokens) df[t] = (df[t] ?? 0) + 1;
-  const docCount = built.length;
-  const avgDocLen = docCount ? built.reduce((s, b) => s + b.tokens.length, 0) / docCount : 1;
+  for (const b of kept) for (const t of b.uniqueTokens) df[t] = (df[t] ?? 0) + 1;
+  const docCount = kept.length;
+  const avgDocLen = docCount ? kept.reduce((s, b) => s + b.tokens.length, 0) / docCount : 1;
   const idf = (t: string) => { const n = df[t] ?? 0; return n > 0 ? Math.log(1 + (docCount - n + 0.5) / (n + 0.5)) : 0; };
 
-  const embeddings = opts.withEmbeddings ? await embedBatch(built.map((b) => b.chunk.text)) : built.map(() => null);
+  const embeddings = opts.withEmbeddings ? await embedBatch(kept.map((b) => b.chunk.text)) : kept.map(() => null);
 
-  const chunks: DrkallaKnowledgeChunk[] = built.map((b, i) => {
+  const chunks: DrkallaKnowledgeChunk[] = kept.map((b, i) => {
     const tf = new Map<string, number>();
     for (const t of b.tokens) tf.set(t, (tf.get(t) ?? 0) + 1);
     const keywords = [...tf.entries()]

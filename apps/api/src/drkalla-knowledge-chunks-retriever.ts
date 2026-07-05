@@ -97,8 +97,26 @@ const SYNONYM_GROUPS: string[][] = [
   // einschicken/eingeschickt) means exact-token BM25 misses most of a service
   // question; cross-linking these stems so any one of them also gathers chunks
   // indexed under the others lifts recall for repair/warranty/return questions.
-  ['reparatur', 'reparieren', 'repariert', 'werkstatt', 'defekt', 'defekte', 'defekten', 'kaputt', 'einschicken', 'eingeschickt', 'einsenden', 'einsendung', 'garantie', 'gewaehrleistung', 'ersatzteil', 'ersatzteile'],
+  // Split into repair-ish vs warranty-ish groups: a single symmetric group let a
+  // "Garantie" query expand to "repariert", which matched PRODUCT marketing copy
+  // ("Reparierende Haarmaske") instead of service content (audit 2026-07-05).
+  ['reparatur', 'reparieren', 'repariert', 'werkstatt', 'einschicken', 'eingeschickt', 'einsenden', 'einsendung'],
+  ['garantie', 'gewaehrleistung', 'defekt', 'defekte', 'defekten', 'kaputt', 'ersatzteil', 'ersatzteile'],
+  ['gutschein', 'gutscheincode', 'rabatt', 'rabattcode', 'aktionscode', 'aktion'],
 ];
+
+// Policy-intent stems: when the query carries one of these, chunks from POLICY
+// pages get a rank boost over product usage copy. Without it, generic tokens let
+// a product description outrank the actual policy page (audit 2026-07-05: "Was
+// macht ihr mit meinen Daten?" surfaced a Waschbeckenstuhl chunk instead of the
+// Datenschutzerklärung). Prefix-matched against query tokens (incl. synonyms).
+const POLICY_INTENT_STEMS = [
+  'versand', 'liefer', 'zustellung', 'rueckgabe', 'ruecksend', 'widerruf', 'retour', 'umtausch',
+  'zahlung', 'bezahl', 'rechnung', 'datenschutz', 'daten', 'dsgvo', 'agb', 'impressum',
+  'garantie', 'gewaehrleistung', 'reparatur', 'defekt', 'kaputt', 'gutschein', 'rabatt',
+  'bestell', 'abhol', 'oeffnungszeit', 'reklam', 'storn', 'newsletter', 'konto', 'porto',
+];
+const POLICY_BOOST = 1.5;
 
 const SYNONYM_INDEX = new Map<string, string[]>();
 for (const group of SYNONYM_GROUPS) {
@@ -215,6 +233,7 @@ export function buildDrkallaKnowledgeRetriever(
     }
     if (!candidates.size) return null;
 
+    const policyIntent = [...queryTokens].some((t) => POLICY_INTENT_STEMS.some((s) => t.startsWith(s)));
     const scored: DrkallaKnowledgeChunkHit[] = [];
     for (const pos of candidates) {
       const c = indexed[pos];
@@ -229,6 +248,7 @@ export function buildDrkallaKnowledgeRetriever(
           score += KEYWORD_BONUS * idf(t);
         }
       }
+      if (score > 0 && policyIntent && c.hit.category === 'policies') score *= POLICY_BOOST;
       if (score > 0) scored.push({ ...c.hit, score });
     }
     if (!scored.length) return null;

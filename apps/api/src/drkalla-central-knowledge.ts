@@ -17,6 +17,7 @@
 import crypto from 'node:crypto';
 import { pool } from './db.js';
 import { scrapeDrkallaSite } from './scripts/scrape-drkalla-site.js';
+import type { DrkallaFaqRawEntry } from './drkalla-faq-match.js';
 import type { DrkallaKnowledgeSnapshot, DrkallaPageFact, DrkallaProduct } from './drkalla-rag-agent.js';
 
 export type DrkallaCentralValidation = { ok: boolean; reasons: string[] };
@@ -77,18 +78,27 @@ export async function readDrkallaCentralActiveProductCount(): Promise<number> {
 
 export async function upsertDrkallaCentralKnowledge(
   snapshot: Pick<DrkallaKnowledgeSnapshot, 'products' | 'pages'>,
+  // Curated FAQ (human-approved Q&A) syncs into the central store as kind
+  // 'faq', so EVERY agent — not just the voice runtime — answers general
+  // questions from the same approved set. Omitted = FAQ rows are left as-is
+  // (a scrape-only refresh must never wipe them).
+  faqEntries?: DrkallaFaqRawEntry[],
 ): Promise<DrkallaCentralUpsertCounts> {
   if (!pool) throw new Error('DB_UNAVAILABLE');
-  const incoming: Array<{ kind: 'product' | 'page'; ref: string; payload: unknown }> = [
+  const enabledFaq = (faqEntries ?? []).filter(
+    (e): e is DrkallaFaqRawEntry & { id: string } => typeof e?.id === 'string' && !!e.id && e.enabled !== false,
+  );
+  const incoming: Array<{ kind: 'product' | 'page' | 'faq'; ref: string; payload: unknown }> = [
     ...(snapshot.products ?? []).map((p) => ({ kind: 'product' as const, ref: p.handle, payload: p })),
     ...(snapshot.pages ?? []).map((p) => ({ kind: 'page' as const, ref: p.url, payload: p })),
+    ...(faqEntries ? enabledFaq.map((e) => ({ kind: 'faq' as const, ref: e.id, payload: e })) : []),
   ];
   const client = await pool.connect();
   const counts: DrkallaCentralUpsertCounts = { added: 0, changed: 0, unchanged: 0, removed: 0, activeProducts: 0, activePages: 0 };
   try {
     await client.query('BEGIN');
     const existing = await client.query(
-      `SELECT kind, ref, content_hash, active FROM drkalla_central_knowledge WHERE kind IN ('product', 'page')`,
+      `SELECT kind, ref, content_hash, active FROM drkalla_central_knowledge WHERE kind IN ('product', 'page', 'faq')`,
     );
     const byKey = new Map<string, { content_hash: string; active: boolean }>(
       existing.rows.map((r: { kind: string; ref: string; content_hash: string; active: boolean }) => [
@@ -128,7 +138,17 @@ export async function upsertDrkallaCentralKnowledge(
        WHERE kind = 'page' AND active AND NOT (ref = ANY($1::text[]))`,
       [pageRefs],
     );
-    counts.removed = (removedProducts.rowCount ?? 0) + (removedPages.rowCount ?? 0);
+    let removedFaq = 0;
+    if (faqEntries) {
+      const faqRefs = enabledFaq.map((e) => e.id);
+      const res = await client.query(
+        `UPDATE drkalla_central_knowledge SET active = FALSE, updated_at = now()
+         WHERE kind = 'faq' AND active AND NOT (ref = ANY($1::text[]))`,
+        [faqRefs],
+      );
+      removedFaq = res.rowCount ?? 0;
+    }
+    counts.removed = (removedProducts.rowCount ?? 0) + (removedPages.rowCount ?? 0) + removedFaq;
     counts.activeProducts = productRefs.length;
     counts.activePages = pageRefs.length;
     await client.query('COMMIT');
@@ -208,6 +228,7 @@ async function recordRefreshRun(run: {
  */
 export async function refreshDrkallaCentralKnowledge(
   scrape: () => Promise<DrkallaKnowledgeSnapshot> = scrapeDrkallaSite,
+  options: { faqEntries?: DrkallaFaqRawEntry[] } = {},
 ): Promise<DrkallaCentralRefreshResult> {
   const startedAt = new Date();
   try {
@@ -234,7 +255,7 @@ export async function refreshDrkallaCentralKnowledge(
       // The derive consumes the validated scrape directly; central
       // persistence resumes automatically once the DB is back.
       try {
-        counts = await upsertDrkallaCentralKnowledge(scraped);
+        counts = await upsertDrkallaCentralKnowledge(scraped, options.faqEntries);
         snapshot = (await readDrkallaCentralSnapshot()) ?? scraped;
         dbPersisted = true;
       } catch (error) {
