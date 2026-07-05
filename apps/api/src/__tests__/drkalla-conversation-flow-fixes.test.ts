@@ -1158,7 +1158,12 @@ describe('live call 2026-07-04 (call_c6273b86): first-turn routing, offer target
     expect(detectDrkallaContactIntent('Hai, ich möchte gerne wissen, wann ihr offen habt.')).toBe('hours');
     expect(detectDrkallaContactIntent('Seid ihr samstags offen?')).toBe('hours');
     expect(detectDrkallaContactIntent('Habt ihr heute offen?')).toBe('hours');
+    expect(detectDrkallaContactIntent('Habt ihr jetzt auf?')).toBe('hours');
     expect(detectDrkallaContactIntent('Ich bin offen für alles, was Sie empfehlen.')).toBeNull();
+    // "auf" MID-clause is the preposition, not an hours question — live
+    // 2026-07-05 this complaint got the OPENING HOURS as answer.
+    expect(detectDrkallaContactIntent('Warum reden wir jetzt auf einmal über Haarfarben? Es geht doch um Nachpflege.')).toBeNull();
+    expect(detectDrkallaContactIntent('Habt ihr noch was auf Lager?')).toBeNull();
   });
 
   it('the subordinate-clause hours question answers deterministically (turn 1 went to the model without facts)', async () => {

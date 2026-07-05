@@ -332,6 +332,71 @@ async function main() {
   }
   results.push(declined);
 
+  // TRAINING REPLAY: the owner's real test call 2026-07-05 00:40 (call_c17af91c),
+  // condensed to its failure moments. New real calls get appended here the same
+  // way — the sim is the regression-training loop over live transcripts.
+  results.push(await runScenario(
+    'Replay 2026-07-05: Nachpflege, was-noch, Non-Sequitur, Abschied',
+    'Real-Call 2026-07-05 00:40 (Haarfarbe als Nachpflege gepitcht, Entwickler-Wiederholung, Öffnungszeiten auf Meta-Beschwerde, "Danke für den Anruf" nicht erkannt)',
+    [
+      {
+        say: 'Was habt ihr denn immer offen?',
+        expect: contains('Montag bis Freitag')('Öffnungszeiten deterministisch'),
+      },
+      { say: 'Habt ihr irgendwie auch Haarfarbe bei euch?' },
+      {
+        say: 'Ich möchte eher für die Nachpflege.',
+        expect: (spoken, r) => [
+          {
+            name: 'Nachpflege bekommt NIE eine Haarfarbe gepitcht',
+            pass: !/haarfarbe ammoniakfrei|colorationscreme|evelon professionelle haarfarbe/i.test(spoken),
+            detail: `${r.path}: ${spoken.slice(0, 140)}`,
+          },
+        ],
+      },
+      {
+        say: 'Farbe und Entwickler haben ja schon besprochen, was noch.',
+        expect: (spoken, r) => [
+          {
+            name: '"schon besprochen, was noch" → Model statt Template-Re-Pitch',
+            pass: r.path === 'model',
+            detail: `${r.path}: ${spoken.slice(0, 120)}`,
+          },
+        ],
+      },
+      {
+        say: 'Aber auch was ist das denn, warum warum wir jetzt auf einmal Haarfarben an Also ich es geht doch gar um Nachpflege.',
+        expect: (spoken) => [
+          {
+            name: 'Meta-Beschwerde bekommt KEINE Öffnungszeiten (auf-einmal-Bug)',
+            pass: !/montag bis freitag|ge(ö|oe)ffnet/i.test(spoken),
+            detail: spoken.slice(0, 140),
+          },
+        ],
+      },
+      {
+        say: 'Was benutzt man für die Nachpflege bei rot gefärbten Haaren?',
+        expect: (spoken, r) => [
+          {
+            name: 'Rot-Nachpflege erreicht die Farbschutz/Anti-Fading-Produkte',
+            pass: /farbschutz|anti[-\s]?fading/i.test(spoken) || r.grounding.some((g) => /farbschutz|fading/i.test(g)),
+            detail: `${r.path}: ${spoken.slice(0, 100)} | ${r.grounding.join(' ').slice(0, 140)}`,
+          },
+        ],
+      },
+      {
+        say: 'Okay, danke dir für den Anruf.',
+        expect: (spoken, r) => [
+          {
+            name: '"Danke für den Anruf" wird als Abschied erkannt (Auflegen)',
+            pass: r.endCall === true,
+            detail: `endCall=${String(r.endCall)}: ${spoken.slice(0, 100)}`,
+          },
+        ],
+      },
+    ],
+  ));
+
   // Report
   let passCount = 0;
   let failCount = 0;

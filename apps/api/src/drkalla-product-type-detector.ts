@@ -71,7 +71,10 @@ const DRKALLA_PRODUCT_TYPE_RULES: DrkallaProductTypeRule[] = [
   },
   {
     label: 'Haarpflege',
-    patterns: [/\b(?:pflege|haarpflege|spezialpflege|hitzeschutz|ampullen?|vials?|8[-\s]?sekunden[-\s]?kur|anti gelb|anti orange)\b/u],
+    // Compound "…pflege" forms included: "Nachpflege" missed the bare \bpflege\b
+    // and the color category stayed active — the caller asking for aftercare got
+    // a HAARFARBE recommended (live 2026-07-05).
+    patterns: [/\b(?:(?:nach|farb|haar|spezial|farbnach)?pflege|hitzeschutz|ampullen?|vials?|8[-\s]?sekunden[-\s]?kur|anti gelb|anti orange)\b/u],
   },
   {
     label: 'Parfum/Duft',
