@@ -1281,7 +1281,9 @@ describe('DrKalla deterministic brand/product list ("Soll ich mit Marken anfange
         : [];
     const response = await buildDrkallaCustomLlmResponse({
       canary: CANARY,
-      event: turn('Habt ihr Haarmasken?'),
+      // Need-form phrasing keeps this on the PITCH path (the yes/no
+      // availability form now gets the Ja-funnel instead, 2026-07-05).
+      event: turn('Ich suche eine Haarmaske.'),
       memory: createDrkallaShortTermMemory(),
       client: { complete: async () => 'should not be used' },
       catalogSearch: maskSearch,
@@ -1875,6 +1877,9 @@ describe('DrKalla knowledge-chunk grounding injection (additive, model-path only
       knowledgeRetriever: () => { throw new Error('knowledge layer must not run for a clean product question'); },
       evidenceLookup: noEvidence,
     });
-    expect(response.text).toContain('Da kann ich Ihnen Glanz-Shampoo empfehlen'); // catalog need-reply still wins
+    // The yes/no availability form gets the Ja-funnel (2026-07-05); the point
+    // of this test is unchanged: the CATALOG answers, the knowledge layer
+    // (which would throw) is never consulted.
+    expect(response.text).toMatch(/^Ja, das haben wir: Glanz-Shampoo/);
   });
 });

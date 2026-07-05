@@ -222,6 +222,16 @@ function expandQueryToken(token: string): string[] {
     }
   }
   for (const syn of QUERY_SYNONYMS[token] ?? []) out.push(syn);
+  // German UMLAUT PLURALS ("Kämme" -> Kamm, "Lockenstäbe" -> Lockenstab,
+  // "Färbeschäume" -> Schaum): after umlaut folding the plural reads kaemme/
+  // staebe, which the one-suffix stemmer can never unify with the singular
+  // kamm/stab. Adding the de-umlauted variant lets the shared stemmer close
+  // the gap (funnel battery 2026-07-05: "Verkauft ihr auch Kämme?" and "Gibt
+  // es bei euch Lockenstäbe?" found nothing). Additive only — the original
+  // token stays, so nothing that matched before stops matching.
+  if (/(?:ae|oe|ue)/.test(token)) {
+    out.push(token.replace(/ae/g, 'a').replace(/oe/g, 'o').replace(/ue/g, 'u'));
+  }
   return out;
 }
 

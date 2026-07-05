@@ -612,6 +612,12 @@ function dropChemicalForCareIntent<T extends { spokenName?: string; shortName?: 
  * SMS it. Returns the top product so the caller's "ja" can confirm an SMS and a
  * follow-up price is grounded. Grounded: only real catalog names; never invents.
  */
+// Yes/no availability question about a category: "Habt ihr …?", "Führen Sie
+// …?", "Gibt es bei euch …?", "Verkauft ihr …?", "… im Sortiment?". The W-forms
+// ("Was habt ihr an X?") are deliberately NOT here — a "Ja" would not answer
+// them; they keep the list/consult paths.
+const DRKALLA_CATEGORY_AVAILABILITY = /\b(?:habt|haben|hab)\s+(?:ihr|sie)\b|\bf(?:ü|ue)hr(?:t|en)\s+(?:ihr|sie)\b|\bverkauf(?:t|en)\s+(?:ihr|sie)\b|\bgibt\s+es\b|\bgibt'?s\b|\bbekomm(?:e|t)\s+man\b|\bim\s+sortiment\b/i;
+
 function tryDeterministicNeedReply(input: {
   userText: string;
   memory: DrkallaShortTermVoiceMemory;
@@ -749,10 +755,64 @@ function tryDeterministicNeedReply(input: {
   if (DRKALLA_CHEAP_INTENT.test(text)) {
     strong.sort((a, b) => (a.priceValue ?? Number.POSITIVE_INFINITY) - (b.priceValue ?? Number.POSITIVE_INFINITY));
   }
-  const top = strong[0];
-  if (!top) return null;
   const isToolHit = (h: { shortName?: string; productType?: string | null }): boolean =>
     DRKALLA_TOOL_CLASS.test(h.shortName ?? '') || DRKALLA_TOOL_CLASS.test(h.productType ?? '');
+  // AVAILABILITY FUNNEL: "Habt ihr (auch) Parfüm?" is a YES/NO question about a
+  // CATEGORY — the intuitive answer is a Ja + a short range + ONE counter-
+  // question, not a single-product pitch with price and SMS offer (owner review
+  // 2026-07-05: "Habt ihr auch Parfüm im Sortiment?" got "Dafür passt zum
+  // Beispiel Malik Parfum gut. Das kostet …"). Fires only on the yes/no FORM
+  // (verb + ihr/Sie), never on W-questions ("Was habt ihr an X?" keeps the
+  // list/consult paths). A repeat for the same examples falls through to the
+  // normal pitch, whose anti-repeat ledger then applies.
+  if (
+    DRKALLA_CATEGORY_AVAILABILITY.test(text)
+    && !/\b(?:was|welche[rsnm]?|wie\s+viel\w*)\b/i.test(text)
+    // "Haben Sie da noch etwas ANDERES / andere Haarfarben?" asks for
+    // ALTERNATIVES to what was already discussed — that is a history-aware
+    // turn for the pitch/model (with its anti-repeat ledger), not a fresh
+    // availability question (regression caught by the anti-broken-record
+    // tests when the funnel launched).
+    && !/\b(?:noch\s+(?:etwas\s+)?ander\w*|was\s+anderes|andere[nrs]?)\b/i.test(text)
+    && strong.length > 0
+  ) {
+    // Examples stay in the top hit's WORLD — the same same-kind hygiene as the
+    // pitch: a Lockenstab must never be listed as a shampoo example just
+    // because it shares a "Locken" tag (regression caught by the existing
+    // alternatives test when the funnel launched).
+    const topIsToolFunnel = isToolHit(strong[0]!);
+    const sameKind = strong.filter((h) => isToolHit(h) === topIsToolFunnel);
+    const names = sameKind.slice(0, 3).map((h) => h.shortName).filter(Boolean);
+    // The counter-question carries the CATEGORY, so asking about a second
+    // category still funnels while the identical repeat (same question string
+    // in lastAgentQuestion) falls through to the pitch/model instead of
+    // sounding like a broken record.
+    const label = input.memory.activeProductType
+      ? humanizeDrkallaCategoryLabel(input.memory.activeProductType.label)
+      : null;
+    const funnelQuestion = label ? `Suchen Sie bei ${label} etwas Bestimmtes?` : 'Suchen Sie etwas Bestimmtes?';
+    if (names.length && (input.memory.lastAgentQuestion ?? '') !== funnelQuestion) {
+      if (names.length === 1) {
+        const only = sameKind[0]!;
+        return {
+          text: `Ja, das haben wir: ${only.shortName}${joinDrkallaPriceClause(only.priceText)}. Möchten Sie mehr dazu wissen?`,
+          product: { spokenName: only.shortName, productId: only.productId, productKind: only.productType },
+        };
+      }
+      const list = `${names.slice(0, -1).join(', ')} und ${names[names.length - 1]}`;
+      // Bind the FIRST example as the reference product: a follow-up "schick
+      // mir mal den Link" / "was kostet das?" needs a resolvable referent
+      // (flow-sim: the link request after the funnel found no target and fell
+      // to a generic model question). The spoken text stays a pure funnel.
+      const lead = sameKind[0]!;
+      return {
+        text: `Ja, das haben wir! Zum Beispiel ${list}. ${funnelQuestion}`,
+        product: { spokenName: lead.shortName, productId: lead.productId, productKind: lead.productType },
+      };
+    }
+  }
+  const top = strong[0];
+  if (!top) return null;
   // A descriptor-driven search (no product class in the turn) whose top hit is
   // a hardware TOOL is a tag artefact ("lockiges Haar" → Delrin-Kamm via its
   // Locken tag) — that consultation belongs to the model, never a tool pitch.

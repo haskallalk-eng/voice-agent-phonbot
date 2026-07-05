@@ -257,10 +257,21 @@ async function main() {
         say: 'Ich möchte paar Scheren kaufen. Habt ihr auch Scheren?',
         expect: (spoken) => [
           { name: 'Scheren-Anfrage nennt echte Scheren', pass: /schere/i.test(spoken) && !/kamm/i.test(spoken), detail: spoken.slice(0, 140) },
+          // Availability funnel (owner review 2026-07-05): a yes/no category
+          // question gets a Ja + range + counter-question, never a price pitch.
+          { name: 'Verfügbarkeits-Frage → Ja-Funnel statt Einzelpitch', pass: /^Ja, das haben wir/.test(spoken) && !/kostet/i.test(spoken), detail: spoken.slice(0, 140) },
         ],
       },
       {
+        // After a funnel that named THREE products, a bare link request is
+        // ambiguous — the agent confirms WHICH product before sending.
         say: 'Ja, schick mir mal den Link.',
+        expect: (spoken) => [
+          { name: 'Link-Anfrage nach Funnel → Bestätigungsfrage mit echter Schere', pass: /schere/i.test(spoken) && /sms/i.test(spoken) && /\?/.test(spoken), detail: spoken.slice(0, 140) },
+        ],
+      },
+      {
+        say: 'Ja, bitte.',
         expect: (spoken) => [
           { name: 'Link-Bestätigung → echter Send bestätigt', pass: /per sms geschickt/i.test(spoken), detail: spoken.slice(0, 140) },
         ],
