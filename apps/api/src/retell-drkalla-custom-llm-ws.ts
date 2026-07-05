@@ -66,6 +66,14 @@ import {
   type DrkallaShortTermVoiceMemory,
 } from './drkalla-short-term-memory.js';
 import { createTrustedScope } from './trusted-scope.js';
+import {
+  buildDrkallaKnowledgeChunks,
+  buildDrkallaKnowledgeSeedsFromData,
+} from './scripts/build-drkalla-knowledge-chunks.js';
+import {
+  readDrkallaCentralSnapshot,
+  refreshDrkallaCentralKnowledge,
+} from './drkalla-central-knowledge.js';
 import { scoreDrkallaTurnReadiness } from './drkalla-turn-readiness.js';
 import { speakDrkallaText, speakDrkallaPriceText } from './drkalla-speakable.js';
 import type { AgentTurnRequestedEvent } from './voice-runtime-contract.js';
@@ -491,6 +499,92 @@ export function loadDrkallaKnowledgeRetriever(chunksPath?: string): DrkallaKnowl
   }
 }
 
+function loadDrkallaFaqRawEntries(faqPath?: string): DrkallaFaqRawEntry[] {
+  try {
+    const parsed = readFirstJson(
+      resolveDrkallaSnapshotPath('drkalla-faq.json', faqPath ?? process.env.DRKALLA_FAQ_PATH),
+    ) as { entries?: unknown } | null;
+    return parsed && Array.isArray(parsed.entries) ? (parsed.entries as DrkallaFaqRawEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function loadDrkallaBakedSnapshotScrapedAt(productsPath?: string): number | null {
+  try {
+    const parsed = readFirstJson(
+      resolveDrkallaSnapshotPath('drkalla-products.json', productsPath ?? process.env.DRKALLA_PRODUCTS_PATH),
+    ) as { scrapedAt?: unknown } | null;
+    const ts = typeof parsed?.scrapedAt === 'string' ? Date.parse(parsed.scrapedAt) : NaN;
+    return Number.isFinite(ts) ? ts : null;
+  } catch {
+    return null;
+  }
+}
+
+export type DrkallaVoiceRuntimeParts = {
+  aliasEntries: DrkallaProductNameEntry[];
+  detectProducts?: DrkallaProductNameDetector;
+  detectAmbiguousProduct?: DrkallaAmbiguousProductNameDetector;
+  evidenceLookup?: DrkallaProductEvidenceLookup;
+  catalogSearch?: DrkallaProductCatalogSearch;
+  brandStock?: DrkallaExternalBrandStock;
+  colorShadeSummary?: DrkallaColorShadeSummary;
+  knowledgeRetriever?: DrkallaKnowledgeRetriever;
+};
+
+/**
+ * DETERMINISTIC derivation central snapshot → voice-optimized in-memory
+ * structures. Same inputs, same result — the central DB rows are the source of
+ * truth, this is the voice agent's latency-shaped projection of them (owner
+ * architecture 2026-07-05). Curated alias entries survive for products still
+ * live, new products get conservative exact-title entries, dead handles drop
+ * (this automates the 2026-07-05 manual alias patch).
+ */
+export async function deriveDrkallaVoiceRuntimeFromSnapshot(input: {
+  snapshot: { products?: unknown[]; pages?: Array<{ title?: string; url?: string; text?: string }> };
+  bakedAliasEntries: DrkallaProductNameEntry[];
+  faqEntries?: DrkallaFaqRawEntry[];
+}): Promise<DrkallaVoiceRuntimeParts> {
+  const products = (input.snapshot.products ?? []) as Array<{
+    handle?: string; title?: string; url?: string; productType?: string | null; description?: string;
+  }>;
+  const liveHandles = new Set(products.map((p) => p.handle).filter(Boolean));
+  const aliasEntries: DrkallaProductNameEntry[] = input.bakedAliasEntries.filter((e) => liveHandles.has(e.productId));
+  const known = new Set(aliasEntries.map((e) => e.productId));
+  for (const p of products) {
+    if (!p.handle || !p.title || known.has(p.handle)) continue;
+    aliasEntries.push({
+      productId: p.handle,
+      spokenName: p.title,
+      productKind: p.productType ?? null,
+      url: typeof p.url === 'string' ? p.url : undefined,
+      aliases: [],
+    });
+  }
+  const rawProducts = products as DrkallaCatalogSearchRawProduct[];
+  const evidence = products.length
+    ? buildDrkallaProductEvidenceLookup(products as unknown as DrkallaRawCatalogProduct[])
+    : undefined;
+  const chunksSnapshot = await buildDrkallaKnowledgeChunks({
+    seeds: buildDrkallaKnowledgeSeedsFromData({
+      products,
+      pages: input.snapshot.pages,
+      faqEntries: input.faqEntries,
+    }),
+  });
+  return {
+    aliasEntries,
+    detectProducts: aliasEntries.length ? buildDrkallaProductNameDetector(aliasEntries) : undefined,
+    detectAmbiguousProduct: aliasEntries.length ? buildDrkallaAmbiguousProductNameDetector(aliasEntries) : undefined,
+    evidenceLookup: evidence && evidence.size > 0 ? evidence : undefined,
+    catalogSearch: products.length ? buildDrkallaProductCatalogSearch(rawProducts) : undefined,
+    brandStock: products.length ? buildDrkallaExternalBrandStock(rawProducts) : undefined,
+    colorShadeSummary: products.length ? buildDrkallaColorShadeSummary(rawProducts) ?? undefined : undefined,
+    knowledgeRetriever: chunksSnapshot.chunks.length ? buildDrkallaKnowledgeRetriever(chunksSnapshot) : undefined,
+  };
+}
+
 function reply(responseId: string | number, content: string, endCall = false): RetellDrkallaCustomLlmReply {
   return {
     response_type: 'response',
@@ -825,18 +919,22 @@ export async function registerRetellDrkallaCustomLlmWs(
     knowledgeRetriever?: DrkallaKnowledgeRetriever;
   } = {},
 ): Promise<void> {
-  const aliasEntries = options.detectProducts ? [] : loadDrkallaProductNameEntries();
-  const detectProducts = options.detectProducts
+  // The voice runtime deps are MUTABLE (let): the central-knowledge refresh
+  // re-derives and swaps them in place, so a data update needs NO restart and
+  // in-flight calls simply see the fresh catalog on their next turn.
+  const bakedAliasEntries = options.detectProducts ? [] : loadDrkallaProductNameEntries();
+  let aliasEntries = bakedAliasEntries;
+  let detectProducts = options.detectProducts
     ?? (aliasEntries.length ? buildDrkallaProductNameDetector(aliasEntries) : undefined);
-  const detectAmbiguousProduct: DrkallaAmbiguousProductNameDetector | undefined = aliasEntries.length
+  let detectAmbiguousProduct: DrkallaAmbiguousProductNameDetector | undefined = aliasEntries.length
     ? buildDrkallaAmbiguousProductNameDetector(aliasEntries)
     : undefined;
-  const evidenceLookup = options.evidenceLookup ?? loadDrkallaProductEvidenceLookup();
-  const catalogSearch = options.catalogSearch ?? loadDrkallaProductCatalogSearch();
-  const brandStock = options.brandStock ?? loadDrkallaExternalBrandStock();
-  const colorShadeSummary = options.colorShadeSummary ?? loadDrkallaColorShadeSummary();
+  let evidenceLookup = options.evidenceLookup ?? loadDrkallaProductEvidenceLookup();
+  let catalogSearch = options.catalogSearch ?? loadDrkallaProductCatalogSearch();
+  let brandStock = options.brandStock ?? loadDrkallaExternalBrandStock();
+  let colorShadeSummary = options.colorShadeSummary ?? loadDrkallaColorShadeSummary();
   const faqMatch = options.faqMatch ?? loadDrkallaFaqMatcher();
-  const knowledgeRetriever = options.knowledgeRetriever ?? loadDrkallaKnowledgeRetriever();
+  let knowledgeRetriever = options.knowledgeRetriever ?? loadDrkallaKnowledgeRetriever();
   // Real SMS sending stays off unless explicitly enabled; the executor goes
   // through the existing policied send_link tool endpoint (live-call verify,
   // URL allowlist, per-call dedupe, audit trace) via local injection.
@@ -905,6 +1003,110 @@ export async function registerRetellDrkallaCustomLlmWs(
       publishedAt: liveOverlay.publishedAt ?? null,
     });
   });
+
+  // ── CENTRAL-KNOWLEDGE AUTO-REFRESH (owner architecture 2026-07-05) ────────
+  // website → central Postgres (canonical, all agents) → deterministic derive
+  // → in-place swap of the voice deps above. Gated by env; every step fail-soft
+  // (a bad scrape or DB outage keeps the last good in-memory state).
+  const faqEntriesForSeeds = loadDrkallaFaqRawEntries();
+  let lastVoiceReload: { at: string; source: string; products: number } | null = null;
+  const applyCentralSnapshot = async (
+    snapshot: { products?: unknown[]; pages?: Array<{ title?: string; url?: string; text?: string }>; productCount?: number; scrapedAt?: string },
+    source: string,
+  ): Promise<void> => {
+    const parts = await deriveDrkallaVoiceRuntimeFromSnapshot({
+      snapshot,
+      bakedAliasEntries,
+      faqEntries: faqEntriesForSeeds,
+    });
+    aliasEntries = parts.aliasEntries;
+    detectProducts = parts.detectProducts;
+    detectAmbiguousProduct = parts.detectAmbiguousProduct;
+    evidenceLookup = parts.evidenceLookup;
+    catalogSearch = parts.catalogSearch;
+    brandStock = parts.brandStock;
+    colorShadeSummary = parts.colorShadeSummary;
+    knowledgeRetriever = parts.knowledgeRetriever;
+    lastVoiceReload = { at: new Date().toISOString(), source, products: (snapshot.products ?? []).length };
+    app.log.info(
+      { event: 'drkalla_voice_reload', source, products: (snapshot.products ?? []).length, aliases: parts.aliasEntries.length, snapshotAt: snapshot.scrapedAt ?? null },
+      'drkalla voice runtime deps swapped',
+    );
+  };
+
+  let centralRefreshRunning = false;
+  const runCentralRefresh = async (trigger: string) => {
+    if (centralRefreshRunning) return { status: 'already_running' as const };
+    centralRefreshRunning = true;
+    try {
+      const result = await refreshDrkallaCentralKnowledge();
+      if (result.status === 'ok') {
+        await applyCentralSnapshot(result.snapshot, `refresh:${trigger}`);
+        app.log.info(
+          { event: 'drkalla_central_refresh', trigger, status: result.status, products: result.snapshot.productCount, added: result.counts.added, changed: result.counts.changed, removed: result.counts.removed, dbPersisted: result.dbPersisted, durationMs: result.durationMs },
+          'drkalla central knowledge refreshed',
+        );
+      } else {
+        app.log.warn(
+          { event: 'drkalla_central_refresh', trigger, status: result.status, durationMs: result.durationMs, ...(result.status === 'validation_failed' ? { reasons: result.reasons } : {}), ...(result.status === 'error' ? { error: result.error } : {}) },
+          'drkalla central knowledge refresh did not apply',
+        );
+      }
+      return result;
+    } finally {
+      centralRefreshRunning = false;
+    }
+  };
+
+  // Manual trigger + status for ops (same shared-secret auth as publish).
+  app.post('/retell/custom-llm/drkalla/admin/refresh-central', async (request, reply) => {
+    const header = typeof request.headers.authorization === 'string'
+      ? request.headers.authorization.replace(/^Bearer\s+/i, '')
+      : '';
+    const body = (request.body ?? {}) as { secret?: unknown };
+    if (!secretAccepted(publishSecret, header || (typeof body.secret === 'string' ? body.secret : ''))) {
+      return reply.code(401).send({ ok: false, error: 'unauthorized' });
+    }
+    const result = await runCentralRefresh('manual');
+    return reply.send({
+      ok: result.status === 'ok',
+      status: result.status,
+      ...(result.status === 'ok'
+        ? { products: result.snapshot.productCount, added: result.counts.added, changed: result.counts.changed, removed: result.counts.removed, dbPersisted: result.dbPersisted, durationMs: result.durationMs }
+        : {}),
+      ...(result.status === 'validation_failed' ? { reasons: result.reasons } : {}),
+      ...(result.status === 'error' ? { error: result.error } : {}),
+      lastVoiceReload,
+    });
+  });
+
+  const centralRefreshEnabled = process.env.DRKALLA_CENTRAL_REFRESH_ENABLED === 'true';
+  if (centralRefreshEnabled) {
+    // Boot: adopt fresher CENTRAL rows immediately (no network) — the DB
+    // outlives deploys, so a restart keeps yesterday's refresh instead of
+    // silently reverting to the baked snapshot.
+    void (async () => {
+      try {
+        const central = await readDrkallaCentralSnapshot();
+        const bakedAt = loadDrkallaBakedSnapshotScrapedAt();
+        if (central && (!bakedAt || Date.parse(central.scrapedAt) > bakedAt)) {
+          await applyCentralSnapshot(central, 'boot:central-db');
+        }
+      } catch (error) {
+        app.log.warn({ err: error instanceof Error ? error.message : String(error) }, 'drkalla central boot adoption failed');
+      }
+    })();
+    const intervalHours = Math.max(1, Number(process.env.DRKALLA_CENTRAL_REFRESH_HOURS ?? 24) || 24);
+    const bootDelayMs = Math.max(10_000, Number(process.env.DRKALLA_CENTRAL_REFRESH_BOOT_DELAY_MS ?? 300_000) || 300_000);
+    const intervalTimer = setInterval(() => { void runCentralRefresh('interval'); }, intervalHours * 3_600_000);
+    const bootTimer = setTimeout(() => { void runCentralRefresh('boot'); }, bootDelayMs);
+    intervalTimer.unref?.();
+    bootTimer.unref?.();
+    app.addHook('onClose', async () => {
+      clearInterval(intervalTimer);
+      clearTimeout(bootTimer);
+    });
+  }
 
   const handler = (socket: WebSocket, request: { query: unknown; params: unknown }) => {
     const query = request.query as { secret?: string; token?: string };

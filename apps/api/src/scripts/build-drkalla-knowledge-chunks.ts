@@ -33,7 +33,7 @@ const EMBED_DIM = 1536;
 const EXPIRES_DAYS = 90;
 const KEYWORDS_PER_CHUNK = 6;
 
-type KnowledgeSeed = { sourceId: string; sourceTitle: string; category: string; text: string };
+export type KnowledgeSeed = { sourceId: string; sourceTitle: string; category: string; text: string };
 
 function dataDir(): string {
   // Script lives in apps/api/src/scripts; data is apps/api/data/drkalla-rag.
@@ -105,19 +105,22 @@ function chunkText(input: string, maxChars: number, overlapChars: number): strin
 
 const POLICY_PAGE_RE = /versand|lieferung|widerruf|r(ü|ue)ckgab|agb|gesch(ä|ae)ftsbeding|kontakt|impressum|datenschutz|(ü|ue)ber\s+dr/i;
 
-function seedsFromProducts(productsPath: string): KnowledgeSeed[] {
-  const raw = JSON.parse(readFileSync(productsPath, 'utf8')) as {
-    products?: Array<{ handle?: string; title?: string; description?: string; productType?: string; vendor?: string }>;
-    pages?: Array<{ title?: string; url?: string; text?: string }>;
-  };
+// Data-based seed builder, shared by this CLI and the in-process central-
+// knowledge refresh (drkalla-central-knowledge.ts) so both derive IDENTICAL
+// chunks from the same catalog state.
+export function buildDrkallaKnowledgeSeedsFromData(input: {
+  products?: Array<{ handle?: string; title?: string; description?: string }>;
+  pages?: Array<{ title?: string; url?: string; text?: string }>;
+  faqEntries?: DrkallaFaqRawEntry[];
+}): KnowledgeSeed[] {
   const seeds: KnowledgeSeed[] = [];
-  for (const page of raw.pages ?? []) {
+  for (const page of input.pages ?? []) {
     if (typeof page?.text !== 'string' || page.text.trim().length < 40) continue;
     const title = cleanTitle(page.title ?? 'Information');
     if (!POLICY_PAGE_RE.test(title)) continue; // skip home / nav index pages
     seeds.push({ sourceId: `page:${sha256(page.url ?? title).slice(0, 10)}`, sourceTitle: title, category: 'policies', text: cleanText(page.text) });
   }
-  for (const p of raw.products ?? []) {
+  for (const p of input.products ?? []) {
     if (typeof p?.handle !== 'string' || !p.handle) continue;
     if (typeof p.description !== 'string' || p.description.trim().length < 40) continue;
     const title = cleanTitle(p.title ?? p.handle);
@@ -128,20 +131,27 @@ function seedsFromProducts(productsPath: string): KnowledgeSeed[] {
       text: cleanText(`${title}. ${p.description}`),
     });
   }
-  return seeds;
-}
-
-function seedsFromFaq(faqPath: string): KnowledgeSeed[] {
-  let parsed: { entries?: DrkallaFaqRawEntry[] };
-  try { parsed = JSON.parse(readFileSync(faqPath, 'utf8')); } catch { return []; }
-  const seeds: KnowledgeSeed[] = [];
-  for (const e of parsed.entries ?? []) {
+  for (const e of input.faqEntries ?? []) {
     if (e?.enabled === false) continue;
     if (typeof e?.id !== 'string' || typeof e?.answer !== 'string' || e.answer.trim().length < 20) continue;
     const tag = Array.isArray(e.tags) && typeof e.tags[0] === 'string' ? e.tags[0] : e.id;
     seeds.push({ sourceId: `faq:${e.id}`, sourceTitle: cleanTitle(String(tag)), category: 'policies', text: cleanText(e.answer) });
   }
   return seeds;
+}
+
+function seedsFromProducts(productsPath: string): KnowledgeSeed[] {
+  const raw = JSON.parse(readFileSync(productsPath, 'utf8')) as {
+    products?: Array<{ handle?: string; title?: string; description?: string; productType?: string; vendor?: string }>;
+    pages?: Array<{ title?: string; url?: string; text?: string }>;
+  };
+  return buildDrkallaKnowledgeSeedsFromData({ products: raw.products, pages: raw.pages });
+}
+
+function seedsFromFaq(faqPath: string): KnowledgeSeed[] {
+  let parsed: { entries?: DrkallaFaqRawEntry[] };
+  try { parsed = JSON.parse(readFileSync(faqPath, 'utf8')); } catch { return []; }
+  return buildDrkallaKnowledgeSeedsFromData({ faqEntries: parsed.entries });
 }
 
 function seedFromDoc(docPath: string): KnowledgeSeed {
