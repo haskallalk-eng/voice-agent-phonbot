@@ -1384,6 +1384,40 @@ async function runMigrationBody() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_training_industry ON training_examples(industry, quality_label);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_training_org ON training_examples(org_id);`);
 
+  // ── DrKalla central knowledge (canonical company/agent knowledge) ────────
+  // The website scrape lands HERE first (versioned, hash-diffed); the voice
+  // agent's in-memory snapshots are derived DETERMINISTICALLY from these rows
+  // (drkalla-central-knowledge.ts). Other agents/platform features read the
+  // same rows — this is the single source of truth between site scrapes.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS drkalla_central_knowledge (
+      id            BIGSERIAL PRIMARY KEY,
+      kind          TEXT NOT NULL,
+      ref           TEXT NOT NULL,
+      payload       JSONB NOT NULL,
+      content_hash  TEXT NOT NULL,
+      active        BOOLEAN NOT NULL DEFAULT TRUE,
+      first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (kind, ref)
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_drkalla_central_active ON drkalla_central_knowledge(kind, active);`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS drkalla_central_refresh_runs (
+      id            BIGSERIAL PRIMARY KEY,
+      started_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      finished_at   TIMESTAMPTZ,
+      status        TEXT NOT NULL DEFAULT 'running',
+      product_count INT,
+      page_count    INT,
+      added         INT,
+      changed       INT,
+      removed       INT,
+      note          TEXT
+    );
+  `);
+
   // ── DSGVO Art. 5 retention comment on call_transcripts ─────────────────
   await pool.query(`COMMENT ON TABLE call_transcripts IS 'DSGVO Art. 5: retention follows agent_configs.dataRetentionDays (default 30 days, 0 = delete immediately); orphaned legacy rows are capped at 90 days by cleanupOldTranscripts().';`);
 
