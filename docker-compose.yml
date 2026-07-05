@@ -1,5 +1,5 @@
 # SECURITY: only Caddy is exposed to the public internet.
-# API, Web, Redis, dbproxy are only reachable via the Docker network (caddy → api:3001, caddy → web:80).
+# API, Web, Redis, DB are only reachable via the Docker network (caddy → api:3001, caddy → web:80).
 # See Caddyfile for routing. To debug locally: "docker compose exec api sh" etc.
 
 services:
@@ -18,6 +18,34 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      # Start order only — NO health condition: the API must boot (and serve
+      # the DB-free voice path) even when the DB is down; migrate() retries.
+      db:
+        condition: service_started
+
+  # Self-hosted Postgres (2026-07-05: replaces the paused Supabase project).
+  # Internal-only (expose, never ports). DATABASE_URL in apps/api/.env points
+  # at db:5432 with ?sslmode=disable; POSTGRES_PASSWORD comes from the
+  # gitignored /opt/phonbot/.env (compose interpolation). Nightly pg_dump
+  # backups via host cron into ./backups (see docs). RAM-capped for the 2GB VPS.
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    command: postgres -c shared_buffers=128MB -c max_connections=60
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_DB: phonbot
+      POSTGRES_USER: phonbot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in /opt/phonbot/.env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U phonbot -d phonbot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 384m
 
   web:
     build:
@@ -65,3 +93,4 @@ volumes:
   redis-data:
   caddy-data:
   caddy-config:
+  db-data:

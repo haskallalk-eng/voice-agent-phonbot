@@ -50,13 +50,19 @@ async function resolveHost(dbUrl: string): Promise<pg.PoolConfig> {
 
   }
 
+  // A LOCAL Postgres (docker-compose service on the same host, 2026-07-05
+  // self-hosted cutover) speaks no TLS — `?sslmode=disable` in DATABASE_URL
+  // turns SSL off; anything else keeps the strict remote default.
+  const sslDisabled = parsed.searchParams.get('sslmode') === 'disable';
   return {
     host: resolvedHost,
     port: parsed.port ? parseInt(parsed.port, 10) : 5432,
     user: decodeURIComponent(parsed.username),
     password: decodeURIComponent(parsed.password),
     database: parsed.pathname.slice(1),
-    ssl: { rejectUnauthorized: process.env.DB_REJECT_UNAUTHORIZED === 'false' ? false : true, servername: hostname },
+    ssl: sslDisabled
+      ? false
+      : { rejectUnauthorized: process.env.DB_REJECT_UNAUTHORIZED === 'false' ? false : true, servername: hostname },
     max: Number(process.env.PG_POOL_MAX ?? 20),
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,

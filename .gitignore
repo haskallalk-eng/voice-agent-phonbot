@@ -7,6 +7,8 @@ coverage
 .env
 .env.*
 !.env.example
+# Nightly pg_dump archives of the self-hosted Postgres (host cron, 2026-07-05).
+backups/
 .DS_Store
 logs & Database
 .sqlite
