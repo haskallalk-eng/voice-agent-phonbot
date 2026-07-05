@@ -64,7 +64,10 @@ const ADDRESS_RE = /\b(?:adresse|anschrift|wo (?:seid|sind|ist|liegt|findet)|wo 
 // deterministic path AND the fact injection, and the model claimed it had no
 // hours. "offen" needs a haben/sein verb in the same clause so "offen gesagt"
 // or "ich bin offen für alles" never match.
-const HOURS_RE = /(?:oe|ö|Ö|o)ffnungszeit|ge(?:oe|ö|Ö|o)ffnet|wann (?:habt|haben|macht|hat)|wie lange (?:habt|haben)|uhrzeit|wann (?:zu|geschlossen)|geschlossen|feiertag|habt ihr[^.?!]*\bauf\b|\b(?:heute|morgen|jetzt|noch|schon|gerade)\b[^.?!]*\bauf\b|\b(?:habt|haben|hat|seid|sind|ist)\b[^.?!]*\boffen\b|\boffen\b[^.?!]*\b(?:habt|haben|hat|seid|sind|ist)\b|\bwann\b[^.?!]*\b(?:aufmacht|zumacht|schlie(?:ß|ss)t|(?:oe|ö|Ö|o)ffnet)\b|\bwann\b[^.?!]*\b(?:macht|habt|haben|hat)\b[^.?!]*\bauf\b/i;
+// The bare-"auf" alternations are anchored to the CLAUSE END: "auf" mid-clause
+// is almost always the preposition ("jetzt AUF einmal Haarfarben" got the
+// OPENING HOURS as answer to an aftercare complaint, live 2026-07-05).
+const HOURS_RE = /(?:oe|ö|Ö|o)ffnungszeit|ge(?:oe|ö|Ö|o)ffnet|wann (?:habt|haben|macht|hat)|wie lange (?:habt|haben)|uhrzeit|wann (?:zu|geschlossen)|geschlossen|feiertag|habt ihr[^.?!]*\bauf\b(?=\s*(?:[.,!?]|$))|\b(?:heute|morgen|jetzt|noch|schon|gerade)\b[^.?!]*\bauf\b(?=\s*(?:[.,!?]|$))|\b(?:habt|haben|hat|seid|sind|ist)\b[^.?!]*\boffen\b|\boffen\b[^.?!]*\b(?:habt|haben|hat|seid|sind|ist)\b|\bwann\b[^.?!]*\b(?:aufmacht|zumacht|schlie(?:ß|ss)t|(?:oe|ö|Ö|o)ffnet)\b|\bwann\b[^.?!]*\b(?:macht|habt|haben|hat)\b[^.?!]*\bauf\b(?=\s*(?:[.,!?]|$))/i;
 const EMAIL_RE = /\b(?:e-?mail|email|mail(?:adresse)?|anschreiben|schreiben an)\b/i;
 const ANFAHRT_RE = /\b(?:anfahrt|wie komme ich|welche (?:bahn|linie|u-?bahn|s-?bahn)|(?:oe|ö|Ö|o)ffentliche|parken|parkplatz|verbindung)\b/i;
 // Mengenrabatt/Staffelpreise: the honest answer IS the Profi-Zugang (no other

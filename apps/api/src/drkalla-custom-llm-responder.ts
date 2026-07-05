@@ -194,6 +194,9 @@ function compactSystemPrompt(
     'Wenn der Bedarf oder die Produktart bekannt ist, NENNE konkrete Produkte aus der Katalog-Treffer-Zeile oder grenze nach Marke/Variante ein. Stelle nicht wiederholt dieselbe Kategorie-Frage; wenn der Anrufer den Bedarf schon genannt hat, gehe weiter, statt erneut zu fragen.',
     'BERATEN STATT ABLADEN: Ist der Bedarf vage oder beratungsorientiert ("etwas fuer Haarpflege", "was kann ich gegen ... machen", "fuer meine Haare", "nach der Dauerwelle"), frage zuerst KURZ nach Haartyp, Problem oder Ziel, bevor du ein konkretes Produkt empfiehlst — dumpe nicht sofort ein Produkt. Variiere deine Formulierung; nutze nicht stur denselben Satzbau ("Da kann ich Ihnen X empfehlen ...").',
     'Bei Vergleichs- oder Beratungsfragen ("was ist besser", "welches passt") vergleiche die genannten Produkte konkret und gib eine klare Empfehlung; wiederhole nicht denselben Vorschlag.',
+    // Live 2026-07-05: a follow-up "habt ihr eine grosse Farbauswahl?" was
+    // re-clarified generically instead of read against the product just named.
+    'KONTEXT: Folgefragen (Auswahl, Farben, Groessen, Preis, "und das?") beziehen sich auf das ZULETZT besprochene Produkt oder Thema — beantworte sie dafuer direkt, statt allgemein nachzufragen, ausser der Anrufer nennt ausdruecklich etwas anderes.',
     'Nutze diese Dialogsteuerung, aber behandle Memory nie als Faktenbeweis.',
     'LINK-VERSAND: Du kannst einen Link NICHT selbst verschicken — er geht erst raus, wenn der Anrufer auf deine Frage mit Ja antwortet. Biete einen Link DAHER IMMER als Frage an ("Soll ich Ihnen den Link zu X per SMS schicken?") und sage NIEMALS als Aussage "ich sende/schicke Ihnen den Link" oder "ich habe den Link geschickt". Frage nie nach der Telefonnummer (die SMS geht automatisch an die Anrufernummer).',
     'Bei klarer Verabschiedung verabschiede dich kurz und haenge keine neue Frage an.',
@@ -204,7 +207,9 @@ function compactSystemPrompt(
   // directives (Plan/Evidence/Kontakt-Fakt/Memory) in full — they must never be
   // truncated by a static-rule addition, or the model loses its grounding.
   const dir = directives.length ? `\n${directives.join('\n')}` : '';
-  return `${staticRules.join('\n').slice(0, 4200)}${dir}`;
+  // 4600: the KONTEXT rule (2026-07-05) pushed the block past the old 4200 and
+  // the slice would have silently cut the discussed_products anti-repeat rule.
+  return `${staticRules.join('\n').slice(0, 4600)}${dir}`;
 }
 
 // Match ANY phrasing where the agent's last question offered to SEND a
@@ -433,7 +438,11 @@ function tryDeterministicTypeListReply(input: {
 // the model instead of answering with a canned product list. Real call
 // 2026-06-15: "Was ist besser, X oder Y?" / "welches für blondes Haar?" hit the
 // deterministic recommender, which repeated the same template and never compared.
-const NEED_VETO = /\b(?:unterschied|vergleich\w*|verglichen|besser|schlechter|empfehlenswert|ratsam|empfiehl\w*|wie\s+(?:wende|benutz|verwend|trag|oft|lange|viel)|was\s+(?:kann|soll|muss)\s+ich|was\s+brauch\w*|was\s+ben(?:ö|oe)tig\w*|geeignet|haartyp\w*|warum|wieso|weshalb|anwend|inhaltsstoff|vertr[äa]glich|allergie|wof[üu]r|wozu)\b/i;
+// "was noch" / "schon besprochen" are HISTORY-aware turns: the caller refers to
+// what was already covered — the template recommender re-pitched the very
+// product the caller just called out as besprochen (live 2026-07-05); the model
+// sees discussed_products and the caller's own words instead.
+const NEED_VETO = /\b(?:unterschied|vergleich\w*|verglichen|besser|schlechter|empfehlenswert|ratsam|empfiehl\w*|wie\s+(?:wende|benutz|verwend|trag|oft|lange|viel)|was\s+(?:kann|soll|muss)\s+ich|was\s+brauch\w*|was\s+ben(?:ö|oe)tig\w*|was\s+noch\b|was\s+fehlt|(?:schon|bereits)\s+(?:besprochen|genannt|gesagt|erw(?:ä|ae)hnt)|geeignet|haartyp\w*|warum|wieso|weshalb|anwend|inhaltsstoff|vertr[äa]glich|allergie|wof[üu]r|wozu)\b/i;
 
 // A "how do I use/apply this?" turn. NEED_VETO's stems use a trailing \b, so an
 // inflected "wie trage ich ... auf" slips past it (trag\b != "trage") and the
@@ -558,9 +567,15 @@ function deprioritizeAuxiliary<T extends { spokenName?: string; shortName?: stri
 // surface a bleach/developer; drop those titles for a care intent unless the
 // caller actually wants color/bleach. Title-based because the productType field
 // is unreliable (bleach is mis-typed "Haarpflege" in the Shopify data).
-const DRKALLA_CARE_INTENT = /\b(?:pflege|haarpflege|maske|kur|conditioner|sp(?:ü|ue)lung|leave[-\s]?in|serum|repair|reparatur|feuchtigkeit|n(?:ä|ae)hrend\w*|shampoo)\b/i;
+// Compound "…pflege" forms included ("Nachpflege" missed the bare \bpflege\b —
+// live 2026-07-05 the aftercare request got a HAARFARBE recommended).
+const DRKALLA_CARE_INTENT = /\b(?:(?:nach|farb|haar|farbnach)?pflege|farbschutz|anti[-\s]?fading|maske|kur|conditioner|sp(?:ü|ue)lung|leave[-\s]?in|serum|repair|reparatur|feuchtigkeit|n(?:ä|ae)hrend\w*|shampoo)\b/i;
 const DRKALLA_COLOR_BLEACH_INTENT = /\b(?:blondier\w*|aufhell\w*|haarfarbe|f(?:ä|ae)rb\w*|\bfarbe\b|t(?:ö|oe)nung|color|entwickler|oxidant)\b/i;
 const DRKALLA_CHEMICAL_TITLE = /\b(?:blondier\w*|aufhellung|entwickler|oxidant|wasserstoffperoxid|peroxid)\b/i;
+// A COLOR product is not care either: the sticky Haarfarbe category fused onto
+// the "Nachpflege" turn and the recommender pitched Haarfarbe Ammoniakfrei as
+// aftercare (live 2026-07-05).
+const DRKALLA_COLOR_TITLE = /\bhaarfarben?\b|\bfarbcremes?\b|\bcoloration\w*|\bt(?:ö|oe)nung\b|haarf(?:ä|ae)rbemittel/i;
 
 function dropChemicalForCareIntent<T extends { spokenName?: string; shortName?: string }>(
   hits: T[],
@@ -570,8 +585,10 @@ function dropChemicalForCareIntent<T extends { spokenName?: string; shortName?: 
   const careIntent = DRKALLA_CARE_INTENT.test(userText)
     || (activeTypeLabel ? DRKALLA_CARE_INTENT.test(activeTypeLabel) : false);
   if (!careIntent || DRKALLA_COLOR_BLEACH_INTENT.test(userText)) return hits;
+  const wrongClass = (name: string): boolean =>
+    DRKALLA_CHEMICAL_TITLE.test(name) || DRKALLA_COLOR_TITLE.test(name);
   return hits.filter(
-    (h) => !DRKALLA_CHEMICAL_TITLE.test(h.spokenName ?? '') && !DRKALLA_CHEMICAL_TITLE.test(h.shortName ?? ''),
+    (h) => !wrongClass(h.spokenName ?? '') && !wrongClass(h.shortName ?? ''),
   );
 }
 

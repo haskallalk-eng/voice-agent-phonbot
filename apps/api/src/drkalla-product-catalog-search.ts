@@ -188,6 +188,20 @@ const QUERY_SYNONYMS: Record<string, string[]> = {
   krause: ['locken'],
   krausen: ['locken'],
   krauses: ['locken'],
+  // Color AFTERCARE lives in the "Farbschutz …" products (Anti-Fading), but the
+  // caller says "Nachpflege" / "rot gefärbte Haare" — those tokens never reached
+  // them and the agent looped on Glanz-Shampoo (live 2026-07-05: "es gibt doch
+  // was für Rotfarben").
+  nachpflege: ['farbschutz', 'pflege', 'coloriert', 'fading'],
+  farbnachpflege: ['farbschutz', 'pflege', 'coloriert', 'fading'],
+  gefaerbt: ['coloriert', 'farbschutz'],
+  gefaerbte: ['coloriert', 'farbschutz'],
+  gefaerbten: ['coloriert', 'farbschutz'],
+  gefaerbtes: ['coloriert', 'farbschutz'],
+  // Deliberately NO bare rot->farbschutz mapping: "Rot, grün." as a COLOR
+  // direction answer must stay with the Farb-Beleg model path, not get a
+  // color-protect shampoo pitched (sim regression). The aftercare context
+  // words above are enough to reach the Anti-Fading products.
 };
 
 // Expand a caller token into itself + any compound split + any synonyms, so the
