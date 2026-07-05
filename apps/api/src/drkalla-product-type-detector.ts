@@ -107,7 +107,10 @@ const DRKALLA_PRODUCT_TYPE_RULES: DrkallaProductTypeRule[] = [
   {
     label: 'Friseur-Tool',
     patterns: [
-      /\b(?:kamm|k(?:\u00e4|ae)mme|b(?:\u00fc|ue)rsten?|scheren?|friseurscheren?|haarscheren?|delrin\s+hair\s+comb|professional\s+comb|clipper|trimmer|friseurtools?|tools?|barber[-\s]?bedarf|f(?:\u00e4|ae)rbeschalen?|farbschalen?|f(?:\u00e4|ae)rbepinsel|farbpinsel|alufolie|str(?:\u00e4|ae)hnenfolie|str(?:\u00e4|ae)hnchenfolie|str(?:\u00e4|ae)hnenhauben?|f(?:\u00e4|ae)rbefolie|gl(?:\u00e4|ae)tteisen|haartrockner|hair\s+dryer|f(?:\u00f6|oe)hn|haarsauger|clean\s+all|heizstab|uvc\s+lampen?|ersatzlampen?|shaver|rasierer|barttrimmer|haartrimmer|rasierpinsel|rasierklingen?|haarschneidemaschinen?|schneidemaschinen?|haarstaubwedel|nackenwedel)\b/u,
+      // Compound heads included (\p{L}* prefix): "Hitze-Gl\u00e4ttkamm" and other
+      // compound tool names missed the bare \bkamm\b, stayed under the sticky
+      // previous category and were unreachable (live 2026-07-05, a NEW product).
+      /\b(?:\p{L}*kamm|\p{L}*k(?:\u00e4|ae)mme|\p{L}*b(?:\u00fc|ue)rsten?|\p{L}*scheren?|delrin\s+hair\s+comb|professional\s+comb|clipper|trimmer|friseurtools?|tools?|barber[-\s]?bedarf|f(?:\u00e4|ae)rbeschalen?|farbschalen?|f(?:\u00e4|ae)rbepinsel|farbpinsel|alufolie|str(?:\u00e4|ae)hnenfolie|str(?:\u00e4|ae)hnchenfolie|str(?:\u00e4|ae)hnenhauben?|f(?:\u00e4|ae)rbefolie|gl(?:\u00e4|ae)tteisen|kreppeisen|haartrockner|hair\s+dryer|f(?:\u00f6|oe)hn|haarsauger|clean\s+all|heizstab|uvc\s+lampen?|ersatzlampen?|shaver|rasierer|barttrimmer|haartrimmer|rasierpinsel|rasierklingen?|haarschneidemaschinen?|schneidemaschinen?|haarstaubwedel|nackenwedel)\b/u,
     ],
   },
 ];
