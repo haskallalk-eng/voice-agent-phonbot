@@ -206,11 +206,13 @@ async function recordRefreshRun(run: {
  * the voice derivation must consume (DB readback when persisted; the raw
  * validated scrape only when the DB is unavailable).
  */
-export async function refreshDrkallaCentralKnowledge(): Promise<DrkallaCentralRefreshResult> {
+export async function refreshDrkallaCentralKnowledge(
+  scrape: () => Promise<DrkallaKnowledgeSnapshot> = scrapeDrkallaSite,
+): Promise<DrkallaCentralRefreshResult> {
   const startedAt = new Date();
   try {
     const previousActive = await readDrkallaCentralActiveProductCount().catch(() => 0);
-    const scraped = await scrapeDrkallaSite();
+    const scraped = await scrape();
     const validation = validateDrkallaCentralScrape(scraped, previousActive);
     if (!validation.ok) {
       await recordRefreshRun({
@@ -225,10 +227,19 @@ export async function refreshDrkallaCentralKnowledge(): Promise<DrkallaCentralRe
     let counts: DrkallaCentralUpsertCounts = { added: 0, changed: 0, unchanged: 0, removed: 0, activeProducts: scraped.products.length, activePages: scraped.pages.length };
     let snapshot: DrkallaKnowledgeSnapshot = scraped;
     let dbPersisted = false;
+    let dbNote: string | undefined;
     if (pool) {
-      counts = await upsertDrkallaCentralKnowledge(scraped);
-      snapshot = (await readDrkallaCentralSnapshot()) ?? scraped;
-      dbPersisted = true;
+      // A dead/paused DB must not stop the VOICE refresh (live 2026-07-05:
+      // the Supabase project was paused and the whole refresh hard-failed).
+      // The derive consumes the validated scrape directly; central
+      // persistence resumes automatically once the DB is back.
+      try {
+        counts = await upsertDrkallaCentralKnowledge(scraped);
+        snapshot = (await readDrkallaCentralSnapshot()) ?? scraped;
+        dbPersisted = true;
+      } catch (error) {
+        dbNote = `db_error:${error instanceof Error ? error.message : String(error)}`.slice(0, 200);
+      }
     }
     await recordRefreshRun({
       startedAt,
@@ -238,6 +249,7 @@ export async function refreshDrkallaCentralKnowledge(): Promise<DrkallaCentralRe
       added: counts.added,
       changed: counts.changed,
       removed: counts.removed,
+      note: dbNote,
     });
     return { status: 'ok', snapshot, counts, dbPersisted, durationMs: Date.now() - startedAt.getTime() };
   } catch (error) {

@@ -6,8 +6,9 @@
  * derive step (aliases patched, search/evidence/chunks rebuilt, deterministic).
  */
 import { describe, expect, it } from 'vitest';
-import { validateDrkallaCentralScrape } from '../drkalla-central-knowledge.js';
+import { refreshDrkallaCentralKnowledge, validateDrkallaCentralScrape } from '../drkalla-central-knowledge.js';
 import { deriveDrkallaVoiceRuntimeFromSnapshot } from '../retell-drkalla-custom-llm-ws.js';
+import type { DrkallaKnowledgeSnapshot } from '../drkalla-rag-agent.js';
 
 function product(handle: string, title: string, opts?: { price?: string; type?: string; description?: string }) {
   return {
@@ -111,5 +112,36 @@ describe('deterministic voice derivation from the central snapshot', () => {
     expect(a.catalogSearch?.('Shampoo', 3).map((h) => h.productId)).toEqual(
       b.catalogSearch?.('Shampoo', 3).map((h) => h.productId),
     );
+  });
+});
+
+describe('refresh cycle without a database (fail-soft — live 2026-07-05: paused Supabase)', () => {
+  function asFullSnapshot(input: { products: unknown[]; pages: unknown[] }): DrkallaKnowledgeSnapshot {
+    return {
+      scrapedAt: '2026-07-05T12:00:00.000Z',
+      source: 'test',
+      productCount: input.products.length,
+      products: input.products,
+      pages: input.pages,
+      categories: [],
+      vendors: [],
+    } as unknown as DrkallaKnowledgeSnapshot;
+  }
+
+  it('a valid scrape still refreshes the voice data when no DB is configured/reachable', async () => {
+    const result = await refreshDrkallaCentralKnowledge(async () => asFullSnapshot(bigSnapshot(200)));
+    expect(result.status).toBe('ok');
+    if (result.status === 'ok') {
+      expect(result.dbPersisted).toBe(false);
+      expect(result.snapshot.products.length).toBe(200);
+    }
+  });
+
+  it('a broken scrape is rejected and applies nothing', async () => {
+    const result = await refreshDrkallaCentralKnowledge(async () => asFullSnapshot(bigSnapshot(5)));
+    expect(result.status).toBe('validation_failed');
+    if (result.status === 'validation_failed') {
+      expect(result.reasons.join(',')).toContain('too_few_products');
+    }
   });
 });
