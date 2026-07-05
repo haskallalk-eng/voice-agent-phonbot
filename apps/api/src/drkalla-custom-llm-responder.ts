@@ -9,10 +9,11 @@ import {
   type DrkallaContactFacts,
 } from './drkalla-contact-facts.js';
 import type { DrkallaProductEvidenceLookup } from './drkalla-product-evidence.js';
-import type {
-  DrkallaProductCatalogSearch,
-  DrkallaExternalBrandStock,
-  DrkallaColorShadeSummary,
+import {
+  rotateDrkallaEqualScoreGroups,
+  type DrkallaProductCatalogSearch,
+  type DrkallaExternalBrandStock,
+  type DrkallaColorShadeSummary,
 } from './drkalla-product-catalog-search.js';
 import type { DrkallaKnowledgeRetriever } from './drkalla-knowledge-chunks-retriever.js';
 import type { DrkallaFaqMatcher } from './drkalla-faq-match.js';
@@ -384,6 +385,7 @@ function tryDeterministicTypeListReply(input: {
   userText: string;
   memory: DrkallaShortTermVoiceMemory;
   catalogSearch?: DrkallaProductCatalogSearch;
+  varietySeed?: number;
 }): string | null {
   const activeType = input.memory.activeProductType;
   if (!activeType) return null;
@@ -418,8 +420,16 @@ function tryDeterministicTypeListReply(input: {
   // "welches interessiert Sie?" felt like stonewalling); sold-out items never
   // make the short list.
   const listCap = /\balle[ns]?\b/i.test(text) ? 5 : 3;
+  // Rotation happens on the RAW ranked list, BEFORE the hygiene passes: those
+  // are order-preserving, so a demoted auxiliary can never rotate back to the
+  // front. Score-tied products then share the example slots across calls
+  // instead of the same trio being read out on every call (audit 2026-07-05).
   const hits = deprioritizeAuxiliary(
-    dropChemicalForCareIntent(input.catalogSearch?.(activeType.label, 8) ?? [], text, activeType.label),
+    dropChemicalForCareIntent(
+      rotateDrkallaEqualScoreGroups(input.catalogSearch?.(activeType.label, 8) ?? [], input.varietySeed),
+      text,
+      activeType.label,
+    ),
     text,
   )
     .filter((h) => h.availableCount === undefined || h.availableCount > 0)
@@ -611,6 +621,7 @@ function tryDeterministicNeedReply(input: {
   turnIndex?: number;
   /** True when OUR last turn asked a variant question — the caller is answering it. */
   variantAnswerTurn?: boolean;
+  varietySeed?: number;
 }): DrkallaFallbackResult | null {
   const text = input.userText;
   // A how-to/usage question ("wie trage ich ... auf"), a service/after-sales
@@ -682,7 +693,10 @@ function tryDeterministicNeedReply(input: {
   // Require a productType match (a clear product CATEGORY), not a tag/title hit,
   // so this names products for "ich suche ein Shampoo" but leaves a specific
   // ambiguous product line ("Koleston Perfect") to the variant clarification.
-  let strong = (input.catalogSearch?.(enrich(text), 8) ?? []).filter((h) => h.typeHit);
+  // Rotate score-ties by the per-call seed BEFORE filtering (filters preserve
+  // order), so tied candidates share the recommendation slot across calls.
+  let strong = rotateDrkallaEqualScoreGroups(input.catalogSearch?.(enrich(text), 8) ?? [], input.varietySeed)
+    .filter((h) => h.typeHit);
   // REACHABILITY: the caller already named a category earlier (activeProductType)
   // but this turn alone has no category token — a brand only ("von Wella") or
   // garbled ASR ("Bällehaarfarbe"). Combine the remembered category WITH this
@@ -705,7 +719,10 @@ function tryDeterministicNeedReply(input: {
     && (text.trim().split(/\s+/).filter(Boolean).length <= 4 || DRKALLA_BUY_CONTINUATION.test(text))
   ) {
     const label = input.memory.activeProductType.label;
-    const combinedHits = (input.catalogSearch?.(enrich(`${label} ${text}`), 8) ?? []).filter((h) => h.typeHit);
+    const combinedHits = rotateDrkallaEqualScoreGroups(
+      input.catalogSearch?.(enrich(`${label} ${text}`), 8) ?? [],
+      input.varietySeed,
+    ).filter((h) => h.typeHit);
     // The remembered label ALONE always type-hits its own category, so a pure
     // filler/rant turn ("Ist ja wirklich hecheloskrank") used to fuse into a
     // non-sequitur pitch. Only accept the fallback when THIS TURN actually adds
@@ -1062,6 +1079,7 @@ function tryDeterministicBrandReply(input: {
   memory: DrkallaShortTermVoiceMemory;
   catalogSearch?: DrkallaProductCatalogSearch;
   brandStock?: DrkallaExternalBrandStock;
+  varietySeed?: number;
 }): DrkallaFallbackResult | null {
   const text = input.userText;
   if (NEED_VETO.test(text)) return null; // comparison/advice/usage -> model
@@ -1105,7 +1123,8 @@ function tryDeterministicBrandReply(input: {
   const typeLabel = detectDrkallaUserProductType(text) ?? input.memory.activeProductType?.label ?? null;
   let alt = null as null | { shortName: string; priceText: string | null; productId: string; productType: string | null };
   if (typeLabel && input.catalogSearch) {
-    const hits = input.catalogSearch(typeLabel, 8).filter((h) => h.typeHit);
+    const hits = rotateDrkallaEqualScoreGroups(input.catalogSearch(typeLabel, 8), input.varietySeed)
+      .filter((h) => h.typeHit);
     const careOk = dropChemicalForCareIntent(hits, text, typeLabel);
     alt = careOk[0] ?? hits[0] ?? null;
   }
@@ -1150,6 +1169,12 @@ export async function buildDrkallaCustomLlmResponse(input: {
   // the hot path; see drkalla-conversation-summary). Added to the model message
   // only, before the verbatim recent window.
   conversationSummary?: string;
+  // Per-CALL variety seed (stable hash of the call id). Score-tied catalog
+  // candidates are rotated by it, so different calls hear different examples
+  // while one call stays fully deterministic (audit 2026-07-05: the same
+  // Glanz-Shampoo led every tied category answer on every call). 0/undefined
+  // is the identity — tests and simulations stay byte-identical.
+  varietySeed?: number;
   executeSendLink?: DrkallaSendLinkExecutor;
   onDelta?: (chunk: string) => void;
   onFaqCandidate?: (question: string, answer: string) => void;
@@ -1739,6 +1764,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
       memory: canaryTurn.runtime.memory,
       catalogSearch: input.catalogSearch,
       brandStock: input.brandStock,
+      varietySeed: input.varietySeed,
     });
     if (brandReply) {
       return {
@@ -1761,6 +1787,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
       allowActiveTypeFallback: !ambiguousIsRealProduct,
       turnIndex,
       variantAnswerTurn: askedVariantLastTurn,
+      varietySeed: input.varietySeed,
     });
     if (needReply) {
       return {
@@ -1837,6 +1864,7 @@ export async function buildDrkallaCustomLlmResponse(input: {
     userText: user,
     memory: canaryTurn.runtime.memory,
     catalogSearch: input.catalogSearch,
+    varietySeed: input.varietySeed,
   });
   if (typeListReply) {
     return {
@@ -1930,12 +1958,18 @@ export async function buildDrkallaCustomLlmResponse(input: {
     && DRKALLA_INFO_OFFER_QUESTION.test(canaryTurn.runtime.memory.lastAgentQuestion ?? '')
     && (SHORT_AFFIRMATION.test(user) || DRKALLA_LEADING_YES.test(user)),
   );
+  // The model grounding rotates score-ties by the call seed too, so the model
+  // sees (and names) different tied products on different calls — the exact-
+  // name info-offer lookup stays untouched (it must resolve THAT product).
   const catalogHitsRaw = infoOfferAccepted && infoOfferProduct
     ? (input.catalogSearch?.(infoOfferProduct.spokenName, 1) ?? [])
     : namedNow.length === 0
       ? activeType
-        ? (input.catalogSearch?.(withNeeds(`${activeType.label} ${user}`), 4) ?? []).filter((h) => h.typeHit)
-        : (input.catalogSearch?.(withNeeds(user), 4) ?? [])
+        ? rotateDrkallaEqualScoreGroups(
+            input.catalogSearch?.(withNeeds(`${activeType.label} ${user}`), 4) ?? [],
+            input.varietySeed,
+          ).filter((h) => h.typeHit)
+        : rotateDrkallaEqualScoreGroups(input.catalogSearch?.(withNeeds(user), 4) ?? [], input.varietySeed)
       : [];
   // Care need must not feed a Blondierung/Entwickler chemical to the model
   // either, and auxiliary chemistry never leads the grounding list.

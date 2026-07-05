@@ -64,9 +64,11 @@ export function buildDrkallaFaqMatcher(entries: DrkallaFaqRawEntry[]): DrkallaFa
     let bestLen = 0;
     for (const entry of indexed) {
       for (const trigger of entry.triggers) {
-        // Pad triggers so a multi-word trigger matches as a phrase; the most
+        // Left boundary REQUIRED (a trigger must start a word — "rechnung" must
+        // not fire inside "Berechnung"), right side open so German compounds
+        // still match ("versandkosten" hits "Versandkostenpauschale"). The most
         // specific (longest) matched trigger wins, which keeps it conservative.
-        if (haystack.includes(` ${trigger} `) || haystack.includes(trigger)) {
+        if (haystack.includes(` ${trigger}`)) {
           if (trigger.length > bestLen) { best = entry; bestLen = trigger.length; }
         }
       }

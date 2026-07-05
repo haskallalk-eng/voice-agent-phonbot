@@ -112,10 +112,13 @@ describe('DrKalla product catalog category search', () => {
     expect(n).toContain('Maske');
   });
 
-  it('buildDrkallaShortName strips unpronounceable codes (ALL-CAPS, vowel-less, digit-codes)', () => {
-    expect(buildDrkallaShortName('ARGENT Glanz-Shampoo & B3-PLEX Keravis')).toBe('Glanz-Shampoo');
+  it('buildDrkallaShortName strips codes but keeps shout-cased NAMES re-cased (audit 2026-07-05)', () => {
+    // ARGENT/BARCELONA are speakable product NAMES in shouting case — dropping
+    // them collapsed distinct products onto one generic name ("Glanz-Shampoo").
+    expect(buildDrkallaShortName('ARGENT Glanz-Shampoo & B3-PLEX Keravis')).toBe('Argent Glanz-Shampoo');
+    expect(buildDrkallaShortName('BARCELONA Friseur-Salonwagen mit Schubladen')).toBe('Barcelona Friseur-Salonwagen');
+    // Short vowel-less letter codes stay dropped (Lch, CLR, B3-PLEX).
     expect(buildDrkallaShortName('Evelon Pro Hairspray Pro Lch 500 Ml')).toBe('Evelon Pro Hairspray');
-    expect(buildDrkallaShortName('BARCELONA Friseur-Salonwagen mit Schubladen')).toBe('Friseur-Salonwagen mit Schubladen');
     // never returns empty even if every token is a code
     expect(buildDrkallaShortName('CLR LCH').length).toBeGreaterThan(0);
   });

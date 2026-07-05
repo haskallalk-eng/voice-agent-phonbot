@@ -1,89 +1,117 @@
 {
-  "version": "drkalla-faq-v1",
-  "note": "Curated question->answer pairs for the DrKalla voice agent. Only human-approved, true answers. Each entry: triggers (normalized substrings that, if any appears in the caller turn, match), answer (spoken, Sie, TTS-clean), tags, enabled. enabled:false entries are drafts awaiting a real policy value from the owner.",
+  "version": "drkalla-faq-v2",
+  "note": "Curated question->answer pairs for the DrKalla voice agent. Only human-approved, true answers. Each entry: triggers (normalized word-start substrings; multi-word triggers match as a phrase, single words also match German compound prefixes; the longest matched trigger wins), answer (spoken, Sie, TTS-clean), tags, enabled. enabled:false entries are drafts awaiting a real policy value from the owner. v2 2026-07-05: paraphrase-widened triggers (measured recall 4% -> see __tests__/drkalla-faq-paraphrases.test.ts) + discount/newsletter/account/privacy entries.",
   "entries": [
     {
       "id": "phone-order",
-      "triggers": ["telefonisch bestellen", "am telefon bestellen", "bestellung am telefon", "telefonische bestellung", "direkt bei ihnen bestellen", "kann ich das bestellen", "kann ich die bestellen", "bei euch bestellen", "bei ihnen bestellen"],
+      "triggers": ["telefonisch bestellen", "am telefon bestellen", "bestellung am telefon", "telefonische bestellung", "direkt bei ihnen bestellen", "kann ich das bestellen", "kann ich die bestellen", "bei euch bestellen", "bei ihnen bestellen", "bestellung aufnehmen", "bestellung aufgeben", "fuer mich bestellen", "bestellung entgegen", "bestellungen entgegen", "warenkorb", "am telefon kaufen", "telefonisch kaufen", "ueber das telefon bestellen"],
       "answer": "Telefonisch nehme ich keine Bestellungen auf. Sie bestellen ganz bequem selbst auf drkalla.com, und ich schicke Ihnen gern den passenden Produktlink per SMS.",
       "tags": ["bestellung"],
       "enabled": true
     },
     {
       "id": "shipping-cost",
-      "triggers": ["versandkosten", "was kostet der versand", "wie teuer ist der versand", "porto", "lieferkosten", "kostet die lieferung"],
+      "triggers": ["versandkosten", "was kostet der versand", "wie teuer ist der versand", "porto", "lieferkosten", "kostet die lieferung", "kostet der transport", "kostet die zustellung", "fuers schicken", "fuer den transport", "transportkosten", "frachtkosten", "kostet das verschicken"],
       "answer": "Die Versandkosten werden Ihnen direkt im Bestellvorgang auf drkalla.com angezeigt. Ab 49 Euro Bestellwert ist der Versand kostenlos.",
       "tags": ["versand"],
       "enabled": true
     },
     {
       "id": "delivery-time",
-      "triggers": ["lieferzeit", "wie lange dauert die lieferung", "wann kommt mein paket", "wann ist die lieferung da", "wie lange dauert der versand"],
+      "triggers": ["lieferzeit", "wie lange dauert die lieferung", "wann kommt mein paket", "wann kommt das paket", "wann ist das paket", "paket bei mir", "kommt mein paket", "wann ist die lieferung da", "wie lange dauert der versand", "wie schnell bekomme", "wie schnell bekommt", "wie schnell kriege", "wie schnell geliefert", "wie schnell seid ihr mit der lieferung", "bis das ankommt", "wann das ankommt", "wann es ankommt"],
       "answer": "Die Lieferzeit sehen Sie bei der Bestellung auf drkalla.com; den genauen Status bekommen Sie danach per E-Mail.",
       "tags": ["versand"],
       "enabled": true
     },
     {
       "id": "delivery-countries",
-      "triggers": ["liefert ihr nach", "liefern sie nach", "versand nach oesterreich", "versand nach der schweiz", "liefert ihr ins ausland", "auch nach oesterreich", "auch in die schweiz"],
+      "triggers": ["liefert ihr nach", "liefern sie nach", "versand nach oesterreich", "versand nach der schweiz", "liefert ihr ins ausland", "auch nach oesterreich", "auch in die schweiz", "oesterreich", "schweiz", "ausland", "europa", "liefern sie ins", "liefert ihr in"],
       "answer": "Ob wir in Ihr Land liefern, sehen Sie im Bestellvorgang auf drkalla.com, oder Sie fragen kurz per E-Mail an kontakt@drkalla.com.",
       "tags": ["versand"],
       "enabled": true
     },
     {
       "id": "returns",
-      "triggers": ["rueckgabe", "zurueckschicken", "zurueckgeben", "widerruf", "umtausch", "umtauschen", "retoure", "kann ich zurueck"],
+      "triggers": ["rueckgabe", "zurueckschicken", "zurueckgeben", "widerruf", "umtausch", "umtauschen", "retoure", "kann ich zurueck", "geld zurueck", "geld wieder", "zuruecksenden", "ruecksendung", "gefaellt mir nicht", "nicht gefaellt"],
       "answer": "Sie haben ein gesetzliches Widerrufsrecht von vierzehn Tagen. Die Einzelheiten zur Rückgabe finden Sie auf drkalla.com unter den Widerrufsbedingungen.",
       "tags": ["rueckgabe"],
       "enabled": true
     },
     {
       "id": "payment",
-      "triggers": ["zahlungsarten", "wie kann ich bezahlen", "womit kann ich zahlen", "welche zahlungsmoeglichkeiten", "kann ich mit paypal", "auf rechnung zahlen", "zahlungsmethoden"],
+      "triggers": ["zahlungsarten", "wie kann ich bezahlen", "womit kann ich zahlen", "welche zahlungsmoeglichkeiten", "paypal", "klarna", "kreditkarte", "ueberweisung", "vorkasse", "lastschrift", "apple pay", "google pay", "giropay", "auf rechnung zahlen", "auf rechnung kaufen", "auf rechnung bestellen", "zahlungsmethoden", "bezahlmoeglichkeiten", "bezahlarten", "bezahlung"],
       "answer": "Welche Zahlungsarten möglich sind, sehen Sie an der Kasse auf drkalla.com, wenn Sie Ihre Bestellung abschließen.",
       "tags": ["zahlung"],
       "enabled": true
     },
     {
       "id": "profi-access",
-      "triggers": ["profi zugang", "profizugang", "als friseur registrieren", "gewerbe", "profikunde", "friseurpreise", "profi konditionen", "als profi"],
+      "triggers": ["profi zugang", "profizugang", "als friseur registrieren", "gewerbe", "profikunde", "friseurpreise", "profi konditionen", "als profi", "rabatt fuer friseure", "bessere preise", "sonderkonditionen", "grosshandel", "wiederverkaeufer", "habe einen salon", "haben einen salon", "besitze einen salon", "friseurmeister", "friseursalon", "haendlerpreise", "haendlerkonditionen", "mengenrabatt", "einkaufskonditionen"],
       "answer": "Als Friseurin, Friseur oder Gewerbe können Sie sich über den Profi-Zugang registrieren und erhalten dann Ihre Konditionen. Ich kann Ihnen den Link dazu gern per SMS schicken.",
       "tags": ["profi"],
       "enabled": true
     },
     {
       "id": "vegan-cruelty-free",
-      "triggers": ["vegan", "tierversuchsfrei", "ohne tierversuche", "tierversuche"],
+      "triggers": ["vegan", "tierversuchsfrei", "ohne tierversuche", "tierversuche", "an tieren", "tieren getestet"],
       "answer": "Ob ein Produkt vegan oder tierversuchsfrei ist, steht jeweils in der Produktbeschreibung auf drkalla.com.",
       "tags": ["produktinfo"],
       "enabled": true
     },
     {
       "id": "invoice",
-      "triggers": ["rechnung", "mehrwertsteuer", "umsatzsteuer", "quittung"],
+      "triggers": ["rechnung", "mehrwertsteuer", "umsatzsteuer", "quittung", "beleg"],
       "answer": "Eine Rechnung erhalten Sie automatisch per E-Mail, sobald Ihre Bestellung auf drkalla.com abgeschlossen ist.",
       "tags": ["bestellung"],
       "enabled": true
     },
     {
       "id": "pickup",
-      "triggers": ["abholen", "abholung", "vorbeikommen", "vor ort kaufen", "im laden kaufen", "im geschaeft kaufen"],
+      "triggers": ["abholen", "abholung", "vorbeikommen", "vor ort kaufen", "im laden kaufen", "im geschaeft kaufen", "im laden", "im geschaeft", "einen laden", "ladengeschaeft", "vorbeischauen", "selbst abholen", "selbstabholung", "click and collect"],
       "answer": "Wir sind ein Friseurbedarf-Shop; ob eine Abholung möglich ist, klären Sie am besten kurz per E-Mail an kontakt@drkalla.com. Online bestellen können Sie jederzeit auf drkalla.com.",
       "tags": ["bestellung"],
       "enabled": true
     },
     {
       "id": "min-order",
-      "triggers": ["mindestbestellwert", "mindestbestellmenge", "mindestabnahme", "muss ich mindestens"],
+      "triggers": ["mindestbestellwert", "mindestbestellmenge", "mindestabnahme", "muss ich mindestens", "auch einzeln", "einzeln bestellen", "einzeln kaufen", "kleine bestellung", "kleine menge", "kleinen mengen", "nur ein produkt bestellen", "nur ein produkt kaufen"],
       "answer": "Nein, einen Mindestbestellwert gibt es bei uns nicht. Sie können auf drkalla.com auch einzelne Produkte bestellen.",
       "tags": ["bestellung"],
       "enabled": true
     },
     {
       "id": "free-shipping-threshold",
-      "triggers": ["versandkostenfrei", "kostenloser versand", "gratis versand", "versand gratis", "versand kostenlos", "ab wann versandkostenfrei"],
+      "triggers": ["versandkostenfrei", "kostenloser versand", "gratis versand", "versand gratis", "versand kostenlos", "ab wann versandkostenfrei", "ab welchem betrag", "ab welchem bestellwert", "ab wieviel", "ab wie viel", "ohne versandkosten", "keine versandkosten", "versand umsonst", "versand nichts kostet"],
       "answer": "Ab 49 Euro Bestellwert ist der Versand kostenlos. Darunter werden Ihnen die Versandkosten im Bestellvorgang auf drkalla.com angezeigt.",
       "tags": ["versand"],
+      "enabled": true
+    },
+    {
+      "id": "discount",
+      "triggers": ["rabatt", "gutschein", "rabattcode", "gutscheincode", "aktionscode", "gerade eine aktion", "aktuelle aktion", "sale"],
+      "answer": "Ob es gerade eine Aktion oder einen Rabattcode gibt, sehen Sie direkt auf drkalla.com. Für Friseurinnen, Friseure und Gewerbe gibt es außerdem den Profi-Zugang mit eigenen Konditionen.",
+      "tags": ["bestellung"],
+      "enabled": true
+    },
+    {
+      "id": "newsletter",
+      "triggers": ["newsletter", "abmelden", "abbestellen"],
+      "answer": "Am einfachsten nutzen Sie den Abmeldelink unten in jeder Newsletter-E-Mail. Alternativ schreiben Sie kurz an kontakt@drkalla.com, dann trägt das Team Sie aus.",
+      "tags": ["service"],
+      "enabled": true
+    },
+    {
+      "id": "account-deletion",
+      "triggers": ["konto loeschen", "kundenkonto", "account loeschen", "konto entfernen", "daten loeschen", "account entfernen"],
+      "answer": "Schreiben Sie dazu bitte kurz eine E-Mail an kontakt@drkalla.com, dann kümmert sich das Team um die Löschung Ihres Kundenkontos.",
+      "tags": ["service"],
+      "enabled": true
+    },
+    {
+      "id": "privacy",
+      "triggers": ["datenschutz", "datenschutzerklaerung", "meinen daten", "meine daten", "dsgvo", "personenbezogene daten"],
+      "answer": "Alle Einzelheiten zum Datenschutz finden Sie in der Datenschutzerklärung auf drkalla.com.",
+      "tags": ["service"],
       "enabled": true
     }
   ]
