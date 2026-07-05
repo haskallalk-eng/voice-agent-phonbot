@@ -78,7 +78,10 @@ const DRKALLA_PRODUCT_TYPE_RULES: DrkallaProductTypeRule[] = [
   },
   {
     label: 'Parfum/Duft',
-    patterns: [/\b(?:parfum|duft|eau de parfum|herrenduft|damenduft|unisexduft)\b/u],
+    // The caller SAYS the German "Parfüm"/"Düfte"; the catalog spells the
+    // French "Parfum" — without the umlaut variants the spoken word never
+    // set this type (audit follow-up 2026-07-05).
+    patterns: [/\b(?:parf(?:u|ü|ue)ms?|d(?:ü|ue)fte|duft|eau de parfum|herrenduft|damenduft|unisexduft)\b/u],
   },
   {
     label: 'Styling',
