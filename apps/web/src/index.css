@@ -454,39 +454,25 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   mix-blend-mode: screen;
   transform-origin: center center;
   object-position: center 50%;
-  transform: translateY(var(--crystal-settle-y, 0%)) scale(calc(var(--crystal-scale, 1) * var(--crystal-settle-scale, 1)));
+  transform: translateY(var(--crystal-settle-y, 0%)) scale(var(--crystal-scale, 1));
   filter:
     drop-shadow(0 0 42px rgba(32, 217, 255, 0.22))
     drop-shadow(0 0 32px rgba(255, 91, 10, 0.18));
-  transition:
-    transform 1.4s cubic-bezier(0.16, 1, 0.3, 1),
-    filter 1.4s ease,
-    opacity 1.4s ease;
+  transition: filter 1.4s ease;
 }
 
-/* Once the crystal has landed it recedes into the background: slightly
-   smaller, dimmer, so the copy in front owns the stage. */
+/* Owner-Regel 2026-07-11: das Video bewegt sich beim Settle KEINEN Pixel —
+   kein Scale, kein Translate, kein Parallax, kein Opacity-Fade. Nur ein
+   sanfter Brightness-Dim (bewegungsfrei) plus der Scrim davor, damit die
+   Schrift lesbar ist. */
 [data-hero-phase="settled"] .hero-crystal-video {
-  --crystal-settle-scale: 0.94;
-  opacity: 0.88;
   filter:
-    brightness(0.6) saturate(1.08)
+    brightness(0.72) saturate(1.05)
     drop-shadow(0 0 42px rgba(32, 217, 255, 0.16))
     drop-shadow(0 0 32px rgba(255, 91, 10, 0.12));
 }
 
 /* ─── Hero entrance sequence (driven by data-hero-phase) ─── */
-
-/* Cursor parallax layer — JS feeds --hero-par-x/y, the slow transition
-   turns raw mousemove into a heavy, floaty drift. */
-.hero-crystal-parallax {
-  transform: translate3d(var(--hero-par-x, 0px), var(--hero-par-y, 0px), 0);
-  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform;
-}
-
-/* Clean-Pass 2026-07: kein Idle-Schweben mehr — der Kristall steht nach dem
-   Settle ruhig im Hintergrund. Nur der dezente Cursor-Parallax bleibt. */
 
 /* Legibility scrim between crystal and copy — invisible during the fly-in,
    fades in on settle so the headline never fights the bright facets. */
@@ -537,22 +523,8 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   filter: blur(8px);
 }
 
-/* One-off light sweep right after the copy lands — a refraction pass over
-   the scene. Only on the cinematic entrance, never on repeat visits. */
-[data-hero-phase="settled"][data-hero-entrance="cinematic"] .hero-crystal-stage::after {
-  content: "";
-  position: absolute;
-  inset: -20%;
-  z-index: 20;
-  pointer-events: none;
-  background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.09) 50%, transparent 58%);
-  animation: hero-light-sweep 1.5s cubic-bezier(0.4, 0, 0.2, 1) 0.9s 1 both;
-}
-
-@keyframes hero-light-sweep {
-  from { transform: translateX(-70%); opacity: 0.95; }
-  to { transform: translateX(70%); opacity: 0; }
-}
+/* (Der einmalige Licht-Sweep wurde 2026-07-11 entfernt — Owner-Regel:
+   nach dem Settle bewegt sich in der Hero-Szene nichts mehr.) */
 
 @media (max-width: 639px) {
   .hero-crystal-video {
@@ -789,7 +761,7 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 @keyframes crystal-drop-in {
   0% {
     opacity: 0;
-    transform: translateY(-48%) scale(calc(var(--crystal-scale, 1) * var(--crystal-settle-scale, 1)));
+    transform: translateY(-48%) scale(var(--crystal-scale, 1));
     filter:
       blur(6px)
       drop-shadow(0 0 24px rgba(32, 217, 255, 0.12))
@@ -797,14 +769,14 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   }
   58% {
     opacity: 1;
-    transform: translateY(var(--crystal-settle-y, 0%)) scale(calc(var(--crystal-scale, 1) * var(--crystal-settle-scale, 1)));
+    transform: translateY(var(--crystal-settle-y, 0%)) scale(var(--crystal-scale, 1));
   }
   76% {
-    transform: translateY(calc(var(--crystal-settle-y, 0%) - 2%)) scale(calc(var(--crystal-scale, 1) * var(--crystal-settle-scale, 1)));
+    transform: translateY(calc(var(--crystal-settle-y, 0%) - 2%)) scale(var(--crystal-scale, 1));
   }
   100% {
     opacity: 1;
-    transform: translateY(var(--crystal-settle-y, 0%)) scale(calc(var(--crystal-scale, 1) * var(--crystal-settle-scale, 1)));
+    transform: translateY(var(--crystal-settle-y, 0%)) scale(var(--crystal-scale, 1));
     filter:
       blur(0)
       drop-shadow(0 0 42px rgba(32, 217, 255, 0.22))
@@ -1108,17 +1080,11 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   .hero-line-inner,
   .hero-copy-item,
   .hero-crystal-video,
-  .hero-crystal-scrim,
-  .hero-crystal-parallax {
+  .hero-crystal-scrim {
     transition: none !important;
   }
 
   .hero-crystal-poster {
     animation: none !important;
-  }
-
-  [data-hero-phase="settled"][data-hero-entrance="cinematic"] .hero-crystal-stage::after {
-    animation: none !important;
-    content: none;
   }
 }
