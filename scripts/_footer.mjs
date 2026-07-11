@@ -38,7 +38,7 @@ export const FOOTER_HTML = `<!--footer-html-begin-->
     <div class="footer-grid">
       <div class="col-brand">
         <a href="/" class="brand-row">${CRYSTAL_LOGO_HTML}<span class="brand"><span class="w">Phon</span><span class="o">bot</span></span></a>
-        <p>KI-Telefonassistent.<br>Immer erreichbar.</p>
+        <p>Der KI-Telefonassistent für Friseursalons.<br>Immer erreichbar.</p>
       </div>
       <div>
         <p class="footer-heading">Produkt</p>
@@ -46,27 +46,8 @@ export const FOOTER_HTML = `<!--footer-html-begin-->
           <li><a href="/#features">Features</a></li>
           <li><a href="/#demo">Demo</a></li>
           <li><a href="/#preise">Preise</a></li>
+          <li><a href="/friseur/">Für Friseure</a></li>
           <li><a href="/blog/">Blog</a></li>
-        </ul>
-      </div>
-      <div>
-        <p class="footer-heading">Branchen</p>
-        <ul class="links">
-          <li><a href="/branchen/">Alle Branchen</a></li>
-          <li><a href="/friseur/">Friseur</a></li>
-          <li><a href="/handwerker/">Handwerker</a></li>
-          <li><a href="/reinigung/">Reinigung</a></li>
-          <li><a href="/restaurant/">Restaurant</a></li>
-          <li><a href="/autowerkstatt/">Autowerkstatt</a></li>
-          <li><a href="/kosmetikstudio/">Kosmetik</a></li>
-          <li><a href="/fahrschule/">Fahrschule</a></li>
-          <li><a href="/immobilienmakler/">Immobilien</a></li>
-          <li><a href="/versicherungsmakler/">Versicherung</a></li>
-          <li><a href="/fitnessstudio/">Fitness</a></li>
-          <li><a href="/energieberater/">Energieberater</a></li>
-          <li><a href="/hausverwaltung/">Hausverwaltung</a></li>
-          <li><a href="/ferienwohnung/">Ferienwohnung</a></li>
-          <li><a href="/selbststaendig/">Selbstständige</a></li>
         </ul>
       </div>
       <div>

@@ -398,7 +398,9 @@ function writePage(slug, html) {
   console.log(`✓ ${slug}/index.html`);
 }
 
-writePage('branchen', renderHubPage());
+// Friseur-only (2026-07): der /branchen/-Hub entfaellt (nginx 301 → /friseur/),
+// SEO_NICHE_PAGES ist leer gefiltert. renderHubPage bleibt fuer Reaktivierung.
+void renderHubPage;
 writePage('kontakt', renderContactPage());
 for (const page of SEO_NICHE_PAGES) writePage(page.slug, renderNichePage(page));
-console.log(`\nGenerated ${SEO_NICHE_PAGES.length + 2} SEO cluster pages`);
+console.log(`\nGenerated ${SEO_NICHE_PAGES.length + 1} SEO cluster pages`);

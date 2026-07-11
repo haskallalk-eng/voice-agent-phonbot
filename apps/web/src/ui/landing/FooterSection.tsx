@@ -13,9 +13,9 @@ export function FooterSection({ onShowLegal, onGoToContact }: FooterSectionProps
         {/* Top row: brand + link columns */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-8 mb-10">
           {/* Brand */}
-          <div className="sm:col-span-2 lg:col-span-1">
+          <div className="sm:col-span-2 lg:col-span-2">
             <PhonbotBrand size="sm" />
-            <p className="text-xs text-white/60 mt-2 leading-relaxed">Phonbot — dein KI-Telefonassistent.<br />Immer erreichbar.</p>
+            <p className="text-xs text-white/60 mt-2 leading-relaxed">Phonbot — der KI-Telefonassistent für Friseursalons.<br />Immer erreichbar.</p>
           </div>
 
           {/* Produkt */}
@@ -25,19 +25,7 @@ export function FooterSection({ onShowLegal, onGoToContact }: FooterSectionProps
               <li><a href="/#features" className="text-sm text-white/60 hover:text-white/90 transition-colors">Features</a></li>
               <li><a href="/#demo" className="text-sm text-white/60 hover:text-white/90 transition-colors">Demo</a></li>
               <li><a href="/#preise" className="text-sm text-white/60 hover:text-white/90 transition-colors">Preise</a></li>
-            </ul>
-          </div>
-
-          {/* Branchen */}
-          <div>
-            <p className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3">Branchen</p>
-            <ul className="space-y-2">
-              <li><a href="/friseur/" className="text-sm text-white/60 hover:text-white/90 transition-colors">Friseur</a></li>
-              <li><a href="/handwerker/" className="text-sm text-white/60 hover:text-white/90 transition-colors">Handwerker</a></li>
-              <li><a href="/reinigung/" className="text-sm text-white/60 hover:text-white/90 transition-colors">Reinigung</a></li>
-              <li><a href="/restaurant/" className="text-sm text-white/60 hover:text-white/90 transition-colors">Restaurant</a></li>
-              <li><a href="/autowerkstatt/" className="text-sm text-white/60 hover:text-white/90 transition-colors">Autowerkstatt</a></li>
-              <li><a href="/selbststaendig/" className="text-sm text-white/60 hover:text-white/90 transition-colors">Selbstständige</a></li>
+              <li><a href="/friseur/" className="text-sm text-white/60 hover:text-white/90 transition-colors">Für Friseure</a></li>
             </ul>
           </div>
 

@@ -1,14 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { PhonbotBrand } from '../FoxLogo.js';
-import { TEMPLATES } from './shared.js';
 
 type NavHeaderProps = {
   onGoToRegister: () => void;
   onGoToLogin: () => void;
   onGoToContact?: () => void;
-  /** Called when a branche is chosen from the dropdown. Parent decides how to route
-   *  (for example navigate to landing and scroll to #demo). */
-  onSelectIndustry?: (templateId: string) => void;
   /** Called when a nav anchor (demo/features/preise/faq) is clicked. Needed on pages
    *  other than the landing page so in-page `#anchor` hrefs still work — parent
    *  can navigate back to the landing page first. If omitted, plain anchor links
@@ -29,25 +25,10 @@ export function NavHeader({
   onGoToRegister,
   onGoToLogin,
   onGoToContact,
-  onSelectIndustry,
   onNavigate,
   activePage = 'landing',
 }: NavHeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [branchenOpen, setBranchenOpen] = useState(false);
-  const branchenRef = useRef<HTMLDivElement | null>(null);
-
-  // Close the desktop dropdown when clicking outside.
-  useEffect(() => {
-    if (!branchenOpen) return;
-    function onDoc(e: MouseEvent) {
-      if (branchenRef.current && !branchenRef.current.contains(e.target as Node)) {
-        setBranchenOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [branchenOpen]);
 
   const handleNav = (anchor: 'demo' | 'features' | 'preise' | 'faq') => (e: React.MouseEvent) => {
     if (onNavigate) {
@@ -55,12 +36,6 @@ export function NavHeader({
       onNavigate(anchor);
     }
     // else: plain anchor link (landing page) — default behaviour
-  };
-
-  const handleIndustry = (id: string) => {
-    setBranchenOpen(false);
-    setMobileMenuOpen(false);
-    onSelectIndustry?.(id);
   };
 
   const navLinkClass = 'text-sm text-white/60 hover:text-white transition-colors duration-200';
@@ -79,43 +54,9 @@ export function NavHeader({
             </a>
           ))}
 
-          {/* Branchen dropdown */}
-          <div className="relative" ref={branchenRef}>
-            <button
-              type="button"
-              onClick={() => setBranchenOpen((v) => !v)}
-              className={`${navLinkClass} flex items-center gap-1`}
-              aria-haspopup="true"
-              aria-expanded={branchenOpen}
-            >
-              Branchen
-              <svg width="10" height="10" viewBox="0 0 10 10" className={`transition-transform ${branchenOpen ? 'rotate-180' : ''}`} aria-hidden="true">
-                <path d="M1 3l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            {branchenOpen && (
-              <div
-                className="absolute left-1/2 -translate-x-1/2 top-full mt-3 w-64 rounded-2xl border border-white/10 bg-[#0A0A0F]/95 backdrop-blur-xl shadow-xl py-2 z-30"
-                role="menu"
-              >
-                {TEMPLATES.map((t) => {
-                  const Icon = t.Icon;
-                  return (
-                    <a
-                      key={t.id}
-                      href={`/${t.slug}/`}
-                      onClick={() => { setBranchenOpen(false); setMobileMenuOpen(false); }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm text-white/80 hover:bg-white/5 hover:text-white transition-colors"
-                      role="menuitem"
-                    >
-                      <Icon size={18} className="text-orange-400 shrink-0" />
-                      <span className="flex-1">{t.name}</span>
-                    </a>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <a href="/friseur/" className={navLinkClass}>
+            Für Friseure
+          </a>
 
           <button
             onClick={onGoToContact}
@@ -172,31 +113,13 @@ export function NavHeader({
             </a>
           ))}
 
-          {/* Branchen — collapsible group */}
-          <details className="group border-b border-white/5">
-            <summary className="flex items-center justify-between py-3 text-sm text-white/60 hover:text-white transition-colors cursor-pointer list-none">
-              <span>Branchen</span>
-              <svg width="10" height="10" viewBox="0 0 10 10" className="transition-transform group-open:rotate-180" aria-hidden="true">
-                <path d="M1 3l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </summary>
-            <div className="pb-2">
-              {TEMPLATES.map((t) => {
-                const Icon = t.Icon;
-                return (
-                  <a
-                    key={t.id}
-                    href={`/${t.slug}/`}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="w-full flex items-center gap-3 px-2 py-2 text-left text-sm text-white/70 hover:text-white transition-colors"
-                  >
-                    <Icon size={16} className="text-orange-400 shrink-0" />
-                    <span>{t.name}</span>
-                  </a>
-                );
-              })}
-            </div>
-          </details>
+          <a
+            href="/friseur/"
+            onClick={() => setMobileMenuOpen(false)}
+            className="block py-3 text-sm text-white/60 hover:text-white transition-colors border-b border-white/5"
+          >
+            Für Friseure
+          </a>
 
           <button
             onClick={() => { setMobileMenuOpen(false); onGoToContact?.(); }}

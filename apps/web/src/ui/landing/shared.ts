@@ -1,5 +1,5 @@
 import React from 'react';
-import { IconScissors, IconWrench, IconBroom, IconRestaurant, IconCar, IconHeadphones, IconPhone, IconBolt, IconStar, IconCalendar, IconTickets, IconCalls, IconSettings, IconInsights } from '../PhonbotIcons.js';
+import { IconScissors, IconPhone, IconBolt, IconStar, IconCalendar, IconTickets, IconCalls, IconSettings, IconInsights } from '../PhonbotIcons.js';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -13,22 +13,14 @@ export type FeatureItem = {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
+// Phonbot ist auf Friseursalons fokussiert — bewusst nur ein Template.
+// (Weitere Branchen-Daten leben in der Git-History, falls wir wieder öffnen.)
 export const TEMPLATES = [
-  { id: 'hairdresser',  slug: 'friseur',        Icon: IconScissors,   name: 'Friseur',        description: 'Terminbuchungen & Öffnungszeiten' },
-  { id: 'tradesperson', slug: 'handwerker',     Icon: IconWrench,     name: 'Handwerker',     description: 'Auftragsannahme & Notdienst' },
-  { id: 'cleaning',     slug: 'reinigung',      Icon: IconBroom,      name: 'Reinigung',      description: 'Angebote & Terminplanung' },
-  { id: 'restaurant',   slug: 'restaurant',     Icon: IconRestaurant, name: 'Restaurant',     description: 'Reservierungen & Bestellungen' },
-  { id: 'auto',         slug: 'autowerkstatt',  Icon: IconCar,        name: 'Autowerkstatt',  description: 'Terminvereinbarung & Kostenvoranschläge' },
-  { id: 'solo',         slug: 'selbststaendig', Icon: IconHeadphones, name: 'Selbstständige', description: 'Freelancer, Coaches, Kreative & Solo-Betriebe' },
+  { id: 'hairdresser',  slug: 'friseur',        Icon: IconScissors,   name: 'Friseur',        description: 'Terminbuchungen, Services & Öffnungszeiten' },
 ] as const;
 
 export const TEMPLATE_PREVIEWS: Record<string, string> = {
   hairdresser: '"Hallo! Salon Müller, wie kann ich helfen? Termin buchen?"',
-  tradesperson: '"Handwerk Müller! Notfall oder regulärer Termin?"',
-  cleaning: '"Reinigung Müller! Für welche Räume suchen Sie Hilfe?"',
-  restaurant: '"Willkommen! Tisch reservieren oder Fragen zur Karte?"',
-  auto: '"Guten Tag, Werkstatt Schmidt! Für welches Fahrzeug benötigen Sie einen Termin?"',
-  solo: '"Hi, du bist mit Max\' Assistentin verbunden — wie kann ich helfen?"',
 };
 
 export const DEMO_PHONE_NUMBER = '+493075937286';
@@ -36,8 +28,8 @@ export const DEMO_PHONE_LABEL = '+49 30 75937286';
 export const DEMO_PHONE_HREF = `tel:${DEMO_PHONE_NUMBER}`;
 
 export const FEATURES: FeatureItem[] = [
-  { Icon: IconBolt, title: 'In 2 Minuten live', desc: 'Template wählen, Daten eintragen, fertig. Kein Techniker, kein Setup-Marathon.' },
-  { Icon: IconPhone, title: 'Weniger Anrufe verpassen', desc: '24/7 erreichbar — auch nachts und am Wochenende. Viele Anrufe sind mögliche Aufträge.' },
+  { Icon: IconBolt, title: 'In 2 Minuten live', desc: 'Salon-Daten eintragen, fertig. Kein Techniker, kein Setup-Marathon.' },
+  { Icon: IconPhone, title: 'Weniger Anrufe verpassen', desc: '24/7 erreichbar — auch während du schneidest, färbst oder föhnst. Jeder verpasste Anruf ist ein verpasster Termin.' },
   { Icon: IconSettings, title: 'Deine Nummer bleibt', desc: 'Einfach weiterleiten. Kein Nummernwechsel, keine Unterbrechung für deine Kunden.' },
   { Icon: IconCalendar, title: 'Termine? Strukturiert.', desc: 'Phonbot prüft freie Slots und bucht erst, wenn der Kalender die Buchung bestätigt.' },
   { Icon: IconTickets, title: 'Nichts bleibt liegen', desc: 'Was Phonbot nicht sofort löst, wird zum strukturierten Ticket. Kein Zettelchaos.' },
@@ -45,8 +37,8 @@ export const FEATURES: FeatureItem[] = [
 ];
 
 export const STEPS = [
-  { num: '1', title: 'Template wählen', desc: 'Friseur, Handwerker, Reinigung oder Restaurant — wähle ein passendes Template.' },
-  { num: '2', title: 'Business-Daten eingeben', desc: 'Name, Öffnungszeiten, Services. Dauert unter 2 Minuten.' },
+  { num: '1', title: 'Salon anlegen', desc: 'Das Friseur-Template ist vorbereitet: Termine, Services, Preise, Öffnungszeiten.' },
+  { num: '2', title: 'Salon-Daten eingeben', desc: 'Name, Öffnungszeiten, Leistungen. Dauert unter 2 Minuten.' },
   { num: '3', title: 'Agent ist live', desc: 'Dein Agent beantwortet Anrufe sofort. Rund um die Uhr.' },
 ];
 
@@ -72,8 +64,8 @@ export const FAQ_ITEMS = [
     a: 'Phonbot ist DSGVO-fokussiert: AVV verfügbar, Hosting in Deutschland/EU und verschlüsselte Speicherung. Für Telefonie und KI werden einzelne Subprozessoren mit USA-Bezug über SCC/DPF abgesichert.',
   },
   {
-    q: 'Für welche Branchen ist Phonbot geeignet?',
-    a: 'Phonbot ist optimiert für Friseure, Handwerker, Reinigung, Gastronomie, Autowerkstätten, Kosmetikstudios und andere kleine Unternehmen mit vielen Anrufen und Terminwünschen. Reguliertere Berufsgruppen mit besonderen Vertraulichkeits- oder Sensibeldaten-Pflichten sind aktuell nicht freigegeben. Der Agent passt sich deiner Branche über den Agent Builder an.',
+    q: 'Für wen ist Phonbot geeignet?',
+    a: 'Phonbot ist auf Friseursalons spezialisiert. Terminbuchung mit Wunschfriseur, Leistungen, Preise, Öffnungszeiten und Rückruf-Tickets sind auf Salon-Abläufe zugeschnitten — vom Einzelstuhl bis zum Team-Salon mit Mitarbeiterkalendern.',
   },
   {
     q: 'Kann ich den Agenten auf mehrere Sprachen einstellen?',

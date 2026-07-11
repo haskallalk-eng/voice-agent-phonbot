@@ -1,7 +1,14 @@
 export const SITE = 'https://phonbot.de';
-export const TODAY = '2026-05-11';
+export const TODAY = '2026-07-11';
 
-export const CORE_INDUSTRY_PAGES = [
+// Phonbot ist seit 2026-07 ausschliesslich auf Friseursalons fokussiert.
+// Die uebrigen Branchen-Datensaetze bleiben unten erhalten (Reaktivierung =
+// Slug wieder in ACTIVE_SLUGS aufnehmen), generiert und verlinkt wird aber
+// nur noch friseur. Alte Branchen-URLs leitet nginx per 301 auf /friseur/
+// um (apps/web/nginx.conf).
+const ACTIVE_SLUGS = new Set(['friseur']);
+
+const CORE_INDUSTRY_PAGES_ALL = [
   {
     slug: 'friseur',
     name: 'Friseure',
@@ -40,7 +47,7 @@ export const CORE_INDUSTRY_PAGES = [
   },
 ];
 
-export const SEO_NICHE_PAGES = [
+const SEO_NICHE_PAGES_ALL = [
   {
     slug: 'kosmetikstudio',
     name: 'Kosmetikstudios',
@@ -243,13 +250,8 @@ export const SEO_NICHE_PAGES = [
   },
 ];
 
+// Die /branchen/-Uebersicht entfaellt im Friseur-only-Setup (301 → /friseur/).
 export const SUPPORT_PAGES = [
-  {
-    slug: 'branchen',
-    name: 'Branchenuebersicht',
-    title: 'KI-Telefonassistent nach Branche | Phonbot',
-    description: 'Alle Phonbot-Branchen: Friseure, Handwerker, Reinigung, Restaurants, Kosmetikstudios, Fahrschulen, Immobilienmakler und weitere Nischen.',
-  },
   {
     slug: 'kontakt',
     name: 'Kontakt',
@@ -257,6 +259,9 @@ export const SUPPORT_PAGES = [
     description: 'Kontakt zu Phonbot: Demo anfragen, KI-Telefonassistent testen oder Fragen zu Preisen, DSGVO und Einrichtung klaeren.',
   },
 ];
+
+export const CORE_INDUSTRY_PAGES = CORE_INDUSTRY_PAGES_ALL.filter((page) => ACTIVE_SLUGS.has(page.slug));
+export const SEO_NICHE_PAGES = SEO_NICHE_PAGES_ALL.filter((page) => ACTIVE_SLUGS.has(page.slug));
 
 export const ALL_INDUSTRY_PAGES = [...CORE_INDUSTRY_PAGES, ...SEO_NICHE_PAGES];
 export const ALL_SEO_PAGE_SLUGS = [

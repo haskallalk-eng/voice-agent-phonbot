@@ -5,7 +5,7 @@
 
   <url>
     <loc>https://phonbot.de/</loc>
-    <lastmod>2026-05-11</lastmod>
+    <lastmod>2026-07-11</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/" />
@@ -18,18 +18,8 @@
   </url>
 
   <url>
-    <loc>https://phonbot.de/branchen/</loc>
-    <lastmod>2026-05-11</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.95</priority>
-    <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/branchen/" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/branchen/" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/branchen/" />
-  </url>
-
-  <url>
     <loc>https://phonbot.de/kontakt/</loc>
-    <lastmod>2026-05-11</lastmod>
+    <lastmod>2026-07-11</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/kontakt/" />
@@ -39,7 +29,7 @@
 
   <url>
     <loc>https://phonbot.de/blog/</loc>
-    <lastmod>2026-05-20</lastmod>
+    <lastmod>2026-07-11</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.78</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/blog/" />
@@ -63,7 +53,7 @@
 
   <url>
     <loc>https://phonbot.de/blog/rufweiterleitung-einrichten-typische-fehler/</loc>
-    <lastmod>2026-05-11</lastmod>
+    <lastmod>2026-07-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.72</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/blog/rufweiterleitung-einrichten-typische-fehler/" />
@@ -77,7 +67,7 @@
 
   <url>
     <loc>https://phonbot.de/blog/ki-anrufannahme-handwerker-notdienst-tickets/</loc>
-    <lastmod>2026-05-11</lastmod>
+    <lastmod>2026-07-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.72</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/blog/ki-anrufannahme-handwerker-notdienst-tickets/" />
@@ -91,7 +81,7 @@
 
   <url>
     <loc>https://phonbot.de/blog/ki-telefonassistent-kosten-roi-kleine-unternehmen/</loc>
-    <lastmod>2026-05-11</lastmod>
+    <lastmod>2026-07-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.72</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/blog/ki-telefonassistent-kosten-roi-kleine-unternehmen/" />
@@ -105,7 +95,7 @@
 
   <url>
     <loc>https://phonbot.de/blog/ki-telefonassistent-friseur-terminbuchung/</loc>
-    <lastmod>2026-05-11</lastmod>
+    <lastmod>2026-07-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.72</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/blog/ki-telefonassistent-friseur-terminbuchung/" />
@@ -119,7 +109,7 @@
 
   <url>
     <loc>https://phonbot.de/blog/dsgvo-ki-telefonassistent-aufzeichnung/</loc>
-    <lastmod>2026-05-11</lastmod>
+    <lastmod>2026-07-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.72</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/blog/dsgvo-ki-telefonassistent-aufzeichnung/" />
@@ -133,7 +123,7 @@
 
   <url>
     <loc>https://phonbot.de/blog/rufweiterleitung-ki-telefonnummer/</loc>
-    <lastmod>2026-05-11</lastmod>
+    <lastmod>2026-07-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.72</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/blog/rufweiterleitung-ki-telefonnummer/" />
@@ -147,7 +137,7 @@
 
   <url>
     <loc>https://phonbot.de/friseur/</loc>
-    <lastmod>2026-05-11</lastmod>
+    <lastmod>2026-07-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/friseur/" />
@@ -160,190 +150,8 @@
   </url>
 
   <url>
-    <loc>https://phonbot.de/handwerker/</loc>
-    <lastmod>2026-05-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-    <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/handwerker/" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/handwerker/" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/handwerker/" />
-    <image:image>
-      <image:loc>https://phonbot.de/og-image.png</image:loc>
-      <image:title>KI-Telefonassistent fuer Handwerker</image:title>
-    </image:image>
-  </url>
-
-  <url>
-    <loc>https://phonbot.de/reinigung/</loc>
-    <lastmod>2026-05-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-    <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/reinigung/" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/reinigung/" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/reinigung/" />
-    <image:image>
-      <image:loc>https://phonbot.de/og-image.png</image:loc>
-      <image:title>KI-Telefonassistent fuer Reinigungsfirmen</image:title>
-    </image:image>
-  </url>
-
-  <url>
-    <loc>https://phonbot.de/restaurant/</loc>
-    <lastmod>2026-05-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-    <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/restaurant/" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/restaurant/" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/restaurant/" />
-    <image:image>
-      <image:loc>https://phonbot.de/og-image.png</image:loc>
-      <image:title>KI-Telefonassistent fuer Restaurants</image:title>
-    </image:image>
-  </url>
-
-  <url>
-    <loc>https://phonbot.de/autowerkstatt/</loc>
-    <lastmod>2026-05-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-    <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/autowerkstatt/" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/autowerkstatt/" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/autowerkstatt/" />
-    <image:image>
-      <image:loc>https://phonbot.de/og-image.png</image:loc>
-      <image:title>KI-Telefonassistent fuer Autowerkstaetten</image:title>
-    </image:image>
-  </url>
-
-  <url>
-    <loc>https://phonbot.de/selbststaendig/</loc>
-    <lastmod>2026-05-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-    <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/selbststaendig/" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/selbststaendig/" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/selbststaendig/" />
-    <image:image>
-      <image:loc>https://phonbot.de/og-image.png</image:loc>
-      <image:title>KI-Telefonassistent fuer Selbststaendige</image:title>
-    </image:image>
-  </url>
-
-  <url>
-    <loc>https://phonbot.de/kosmetikstudio/</loc>
-    <lastmod>2026-05-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.82</priority>
-    <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/kosmetikstudio/" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/kosmetikstudio/" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/kosmetikstudio/" />
-    <image:image>
-      <image:loc>https://phonbot.de/og-image.png</image:loc>
-      <image:title>KI-Telefonassistent fuer Kosmetikstudios</image:title>
-    </image:image>
-  </url>
-
-  <url>
-    <loc>https://phonbot.de/fahrschule/</loc>
-    <lastmod>2026-05-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.82</priority>
-    <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/fahrschule/" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/fahrschule/" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/fahrschule/" />
-    <image:image>
-      <image:loc>https://phonbot.de/og-image.png</image:loc>
-      <image:title>KI-Telefonassistent fuer Fahrschulen</image:title>
-    </image:image>
-  </url>
-
-  <url>
-    <loc>https://phonbot.de/immobilienmakler/</loc>
-    <lastmod>2026-05-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.82</priority>
-    <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/immobilienmakler/" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/immobilienmakler/" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/immobilienmakler/" />
-    <image:image>
-      <image:loc>https://phonbot.de/og-image.png</image:loc>
-      <image:title>KI-Telefonassistent fuer Immobilienmakler</image:title>
-    </image:image>
-  </url>
-
-  <url>
-    <loc>https://phonbot.de/versicherungsmakler/</loc>
-    <lastmod>2026-05-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.82</priority>
-    <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/versicherungsmakler/" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/versicherungsmakler/" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/versicherungsmakler/" />
-    <image:image>
-      <image:loc>https://phonbot.de/og-image.png</image:loc>
-      <image:title>KI-Telefonassistent fuer Versicherungsmakler</image:title>
-    </image:image>
-  </url>
-
-  <url>
-    <loc>https://phonbot.de/fitnessstudio/</loc>
-    <lastmod>2026-05-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.82</priority>
-    <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/fitnessstudio/" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/fitnessstudio/" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/fitnessstudio/" />
-    <image:image>
-      <image:loc>https://phonbot.de/og-image.png</image:loc>
-      <image:title>KI-Telefonassistent fuer Fitnessstudios</image:title>
-    </image:image>
-  </url>
-
-  <url>
-    <loc>https://phonbot.de/energieberater/</loc>
-    <lastmod>2026-05-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.82</priority>
-    <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/energieberater/" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/energieberater/" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/energieberater/" />
-    <image:image>
-      <image:loc>https://phonbot.de/og-image.png</image:loc>
-      <image:title>KI-Telefonassistent fuer Energieberater</image:title>
-    </image:image>
-  </url>
-
-  <url>
-    <loc>https://phonbot.de/hausverwaltung/</loc>
-    <lastmod>2026-05-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.82</priority>
-    <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/hausverwaltung/" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/hausverwaltung/" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/hausverwaltung/" />
-    <image:image>
-      <image:loc>https://phonbot.de/og-image.png</image:loc>
-      <image:title>KI-Telefonassistent fuer Hausverwaltungen</image:title>
-    </image:image>
-  </url>
-
-  <url>
-    <loc>https://phonbot.de/ferienwohnung/</loc>
-    <lastmod>2026-05-11</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.82</priority>
-    <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/ferienwohnung/" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://phonbot.de/ferienwohnung/" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://phonbot.de/ferienwohnung/" />
-    <image:image>
-      <image:loc>https://phonbot.de/og-image.png</image:loc>
-      <image:title>KI-Telefonassistent fuer Ferienwohnungen</image:title>
-    </image:image>
-  </url>
-
-  <url>
     <loc>https://phonbot.de/impressum/</loc>
-    <lastmod>2026-05-11</lastmod>
+    <lastmod>2026-07-11</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/impressum/" />
@@ -353,7 +161,7 @@
 
   <url>
     <loc>https://phonbot.de/datenschutz/</loc>
-    <lastmod>2026-05-11</lastmod>
+    <lastmod>2026-07-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/datenschutz/" />
@@ -363,7 +171,7 @@
 
   <url>
     <loc>https://phonbot.de/agb/</loc>
-    <lastmod>2026-05-11</lastmod>
+    <lastmod>2026-07-11</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/agb/" />
@@ -373,7 +181,7 @@
 
   <url>
     <loc>https://phonbot.de/avv/</loc>
-    <lastmod>2026-05-11</lastmod>
+    <lastmod>2026-07-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/avv/" />
@@ -383,7 +191,7 @@
 
   <url>
     <loc>https://phonbot.de/sub-processors/</loc>
-    <lastmod>2026-05-11</lastmod>
+    <lastmod>2026-07-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
     <xhtml:link rel="alternate" hreflang="de-DE" href="https://phonbot.de/sub-processors/" />

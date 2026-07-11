@@ -979,11 +979,16 @@ ${FOOTER_HTML}
 `;
 }
 
+// Phonbot ist Friseur-only (2026-07): nur noch aktive Slugs generieren.
+// Die uebrigen BRANCHEN-Datensaetze bleiben fuer eine spaetere Reaktivierung.
+const ACTIVE_SLUGS = new Set(['friseur']);
+const ACTIVE_BRANCHEN = BRANCHEN.filter((b) => ACTIVE_SLUGS.has(b.slug));
+
 // Generate all pages (and wipe out any existing files in those folders first)
-for (const b of BRANCHEN) {
+for (const b of ACTIVE_BRANCHEN) {
   const dir = path.join(OUT_DIR, b.slug);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'index.html'), buildPage(b));
   console.log(`✓ ${b.slug}/index.html`);
 }
-console.log(`\nGenerated ${BRANCHEN.length} landing pages`);
+console.log(`\nGenerated ${ACTIVE_BRANCHEN.length} landing pages`);

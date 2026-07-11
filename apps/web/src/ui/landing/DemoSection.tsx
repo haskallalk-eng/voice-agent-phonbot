@@ -38,7 +38,7 @@ function TemplateCard({ template }: TemplateCardProps) {
       <a
         href={`/${template.slug}/`}
         className="absolute inset-0 z-10 rounded-2xl"
-        aria-label={`Mehr ueber Phonbot fuer ${template.name}`}
+        aria-label={`Mehr über Phonbot für ${template.name}`}
       />
 
       <div
@@ -101,8 +101,8 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
             direkt an
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-white/58 sm:text-lg">
-            Ein echter Telefonanruf statt Web-Spielerei: Phonbot beantwortet Phonbot-Fragen,
-            simuliert Branchenablaeufe und reagiert auf Unterbrechungen wie im Kundencall.
+            Ein echter Telefonanruf statt Web-Spielerei: Phonbot beantwortet Fragen,
+            simuliert die Salon-Terminbuchung und reagiert auf Unterbrechungen wie im Kundencall.
           </p>
         </div>
       </div>
@@ -149,7 +149,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
               {[
                 'Frage frei nach Phonbot, Preisen, Einrichtung oder Datenschutz.',
                 'Unterbrich Phonbot mit "stopp", "nein" oder einer Korrektur.',
-                'Starte eine Branchen-Simulation wie Friseur, Handwerk oder Restaurant.',
+                'Buche einen Salon-Termin wie ein Kunde — mit Wunschtermin und Leistung.',
               ].map((text) => (
                 <div key={text} className="flex gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-3 text-sm leading-relaxed text-white/60">
                   <IconCheckCircle size={16} className="mt-0.5 shrink-0 text-cyan-200/80" />
@@ -163,7 +163,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
               className="crystal-button crystal-button-secondary inline-flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold text-white/85 transition-all hover:text-white focus:outline-none focus:ring-2 focus:ring-cyan-300/45"
             >
               <IconPhoneForward size={17} className="text-cyan-200/80" />
-              Lieber Rueckruf starten
+              Lieber Rückruf starten
             </a>
           </div>
         </div>
@@ -184,7 +184,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
         ))}
       </div>
 
-      <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mx-auto grid w-full max-w-md grid-cols-1 gap-4">
         {TEMPLATES.map((template) => (
           <TemplateCard key={template.id} template={template} />
         ))}

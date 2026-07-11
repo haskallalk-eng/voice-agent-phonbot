@@ -196,7 +196,7 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   font-weight: 700;
   letter-spacing: -0.022em !important;
   text-wrap: balance;
-  text-shadow: 0 0 56px rgba(32, 217, 255, 0.16);
+  text-shadow: 0 0 56px rgba(32, 217, 255, 0.09);
 }
 
 .phonbot-landing h3 {
@@ -241,15 +241,15 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   font-weight: 500;
   letter-spacing: 0.32em !important;
   color: rgba(148, 226, 255, 0.72);
-  text-shadow: 0 0 22px rgba(32, 217, 255, 0.22);
+  text-shadow: none;
 }
 
 .phonbot-landing .bg-clip-text.text-transparent,
 .brand-logo-text {
   background-image: var(--crystal-gradient) !important;
   filter:
-    drop-shadow(0 0 10px rgba(255, 91, 10, 0.18))
-    drop-shadow(0 0 12px rgba(32, 217, 255, 0.16));
+    drop-shadow(0 0 10px rgba(255, 91, 10, 0.10))
+    drop-shadow(0 0 12px rgba(32, 217, 255, 0.08));
 }
 
 .phonbot-landing .glass,
@@ -257,15 +257,8 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   color: rgba(255, 255, 255, 0.84);
 }
 
-.phonbot-landing .crystal-step-card h3,
-.phonbot-landing .crystal-step-card p:first-child,
-.phonbot-landing [class*="rounded-2xl"] h3,
-.phonbot-landing [class*="rounded-2xl"] p[class*="font-bold"],
-.phonbot-landing [class*="rounded-2xl"] p[class*="font-semibold"] {
-  text-shadow:
-    0 0 16px rgba(255, 91, 10, 0.10),
-    0 0 18px rgba(32, 217, 255, 0.08);
-}
+/* Clean-Pass 2026-07: Karten-Titel ohne Glow — Lesbarkeit kommt aus
+   Kontrast und Schriftschnitt, nicht aus Leuchteffekten. */
 
 .phonbot-landing .crystal-button {
   font-weight: 620;
@@ -372,8 +365,8 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.42),
     inset 0 -18px 42px rgba(0, 0, 0, 0.16),
-    0 18px 48px rgba(255, 91, 10, 0.24),
-    0 0 34px rgba(32, 217, 255, 0.18);
+    0 14px 36px rgba(255, 91, 10, 0.15),
+    0 0 24px rgba(32, 217, 255, 0.10);
   backdrop-filter: blur(22px) saturate(1.25);
   -webkit-backdrop-filter: blur(22px) saturate(1.25);
 }
@@ -412,8 +405,8 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.52),
     inset 0 -18px 42px rgba(0, 0, 0, 0.12),
-    0 22px 60px rgba(255, 91, 10, 0.34),
-    0 0 52px rgba(32, 217, 255, 0.25);
+    0 18px 44px rgba(255, 91, 10, 0.22),
+    0 0 34px rgba(32, 217, 255, 0.14);
 }
 
 .crystal-button:hover:not(:disabled)::before {
@@ -492,14 +485,8 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   will-change: transform;
 }
 
-[data-hero-phase="settled"] .hero-crystal-float {
-  animation: hero-crystal-idle 9s ease-in-out 2.2s infinite;
-}
-
-@keyframes hero-crystal-idle {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-9px); }
-}
+/* Clean-Pass 2026-07: kein Idle-Schweben mehr — der Kristall steht nach dem
+   Settle ruhig im Hintergrund. Nur der dezente Cursor-Parallax bleibt. */
 
 /* Legibility scrim between crystal and copy — invisible during the fly-in,
    fades in on settle so the headline never fights the bright facets. */
@@ -1126,7 +1113,6 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
     transition: none !important;
   }
 
-  .hero-crystal-float,
   .hero-crystal-poster {
     animation: none !important;
   }
