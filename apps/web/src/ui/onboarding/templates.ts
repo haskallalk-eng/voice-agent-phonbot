@@ -21,7 +21,12 @@ export type Template = {
 
 const CHIPY_DEFAULT_VOICE_ID = 'custom_voice_74a89687ae8c8f1ad19e239e7c';
 
-export const TEMPLATES: Template[] = [
+// Phonbot ist Friseur-only (2026-07): im Onboarding sind nur noch das
+// Friseur-Template und "Eigener Agent" sichtbar. Die uebrigen Templates
+// bleiben als Daten erhalten (Reaktivierung = id in ACTIVE_TEMPLATE_IDS).
+const ACTIVE_TEMPLATE_IDS = new Set(['hairdresser', 'custom']);
+
+const ALL_TEMPLATES: Template[] = [
   {
     id: 'hairdresser',
     iconId: 'scissors',
@@ -214,3 +219,5 @@ Hilf Anrufern mit ihren Anliegen, beantworte Fragen und nimm Rückrufwünsche en
     },
   },
 ];
+
+export const TEMPLATES: Template[] = ALL_TEMPLATES.filter((t) => ACTIVE_TEMPLATE_IDS.has(t.id));
