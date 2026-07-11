@@ -431,10 +431,110 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   mix-blend-mode: screen;
   transform-origin: center center;
   object-position: center 50%;
-  transform: translateY(var(--crystal-settle-y, 0%)) scale(var(--crystal-scale, 1));
+  transform: translateY(var(--crystal-settle-y, 0%)) scale(calc(var(--crystal-scale, 1) * var(--crystal-settle-scale, 1)));
   filter:
     drop-shadow(0 0 42px rgba(32, 217, 255, 0.22))
     drop-shadow(0 0 32px rgba(255, 91, 10, 0.18));
+  transition:
+    transform 1.4s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 1.4s ease,
+    opacity 1.4s ease;
+}
+
+/* Once the crystal has landed it recedes into the background: slightly
+   smaller, dimmer, so the copy in front owns the stage. */
+[data-hero-phase="settled"] .hero-crystal-video {
+  --crystal-settle-scale: 0.94;
+  opacity: 0.88;
+  filter:
+    brightness(0.6) saturate(1.08)
+    drop-shadow(0 0 42px rgba(32, 217, 255, 0.16))
+    drop-shadow(0 0 32px rgba(255, 91, 10, 0.12));
+}
+
+/* ─── Hero entrance sequence (driven by data-hero-phase) ─── */
+
+/* Cursor parallax layer — JS feeds --hero-par-x/y, the slow transition
+   turns raw mousemove into a heavy, floaty drift. */
+.hero-crystal-parallax {
+  transform: translate3d(var(--hero-par-x, 0px), var(--hero-par-y, 0px), 0);
+  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+[data-hero-phase="settled"] .hero-crystal-float {
+  animation: hero-crystal-idle 9s ease-in-out 2.2s infinite;
+}
+
+@keyframes hero-crystal-idle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+}
+
+/* Legibility scrim between crystal and copy — invisible during the fly-in,
+   fades in on settle so the headline never fights the bright facets. */
+.hero-crystal-scrim {
+  opacity: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(56% 44% at 50% 32%, rgba(5, 5, 8, 0.6), transparent 72%),
+    linear-gradient(to bottom, rgba(5, 5, 8, 0.32), transparent 26%, transparent 58%, rgba(5, 5, 8, 0.78) 94%);
+  transition: opacity 1.3s ease 0.05s;
+}
+
+[data-hero-phase="settled"] .hero-crystal-scrim {
+  opacity: 1;
+}
+
+/* Headline lines reveal from behind a clip edge, everything else rises out
+   of a blur — each element staggers via its own --hero-delay. */
+.hero-line {
+  display: block;
+  overflow: hidden;
+  padding: 0 0.18em 0.12em;
+  margin-bottom: -0.12em;
+}
+
+.hero-line-inner {
+  display: inline-block;
+  transition:
+    transform 0.95s cubic-bezier(0.16, 1, 0.3, 1) var(--hero-delay, 0s),
+    opacity 0.6s ease-out var(--hero-delay, 0s);
+}
+
+.hero-copy-item {
+  transition:
+    transform 0.9s cubic-bezier(0.16, 1, 0.3, 1) var(--hero-delay, 0s),
+    opacity 0.7s ease-out var(--hero-delay, 0s),
+    filter 0.85s ease-out var(--hero-delay, 0s);
+}
+
+[data-hero-phase="intro"] .hero-line-inner {
+  opacity: 0;
+  transform: translateY(112%);
+}
+
+[data-hero-phase="intro"] .hero-copy-item {
+  opacity: 0;
+  transform: translateY(26px);
+  filter: blur(8px);
+}
+
+/* One-off light sweep right after the copy lands — a refraction pass over
+   the scene. Only on the cinematic entrance, never on repeat visits. */
+[data-hero-phase="settled"][data-hero-entrance="cinematic"] .hero-crystal-stage::after {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  z-index: 20;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.09) 50%, transparent 58%);
+  animation: hero-light-sweep 1.5s cubic-bezier(0.4, 0, 0.2, 1) 0.9s 1 both;
+}
+
+@keyframes hero-light-sweep {
+  from { transform: translateX(-70%); opacity: 0.95; }
+  to { transform: translateX(70%); opacity: 0; }
 }
 
 @media (max-width: 639px) {
@@ -549,15 +649,8 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
     0 0 22px rgba(32, 217, 255, 0.24);
 }
 
-.crystal-steps-shell {
-  animation: crystal-steps-reveal 0.8s cubic-bezier(0.16, 1, 0.3, 1) 3.45s both;
-}
-
-@media (max-width: 639px) {
-  .mobile-crystal-steps.crystal-steps-shell {
-    animation: none;
-  }
-}
+/* Step cards reveal with the rest of the copy — staggering is driven by the
+   hero phase (data-hero-phase + --hero-delay), not a hardcoded timer. */
 
 /* Pulsing mic ring */
 @keyframes mic-ring {
@@ -679,7 +772,7 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 @keyframes crystal-drop-in {
   0% {
     opacity: 0;
-    transform: translateY(-48%) scale(var(--crystal-scale, 1));
+    transform: translateY(-48%) scale(calc(var(--crystal-scale, 1) * var(--crystal-settle-scale, 1)));
     filter:
       blur(6px)
       drop-shadow(0 0 24px rgba(32, 217, 255, 0.12))
@@ -687,14 +780,14 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   }
   58% {
     opacity: 1;
-    transform: translateY(var(--crystal-settle-y, 0%)) scale(var(--crystal-scale, 1));
+    transform: translateY(var(--crystal-settle-y, 0%)) scale(calc(var(--crystal-scale, 1) * var(--crystal-settle-scale, 1)));
   }
   76% {
-    transform: translateY(calc(var(--crystal-settle-y, 0%) - 2%)) scale(var(--crystal-scale, 1));
+    transform: translateY(calc(var(--crystal-settle-y, 0%) - 2%)) scale(calc(var(--crystal-scale, 1) * var(--crystal-settle-scale, 1)));
   }
   100% {
     opacity: 1;
-    transform: translateY(var(--crystal-settle-y, 0%)) scale(var(--crystal-scale, 1));
+    transform: translateY(var(--crystal-settle-y, 0%)) scale(calc(var(--crystal-scale, 1) * var(--crystal-settle-scale, 1)));
     filter:
       blur(0)
       drop-shadow(0 0 42px rgba(32, 217, 255, 0.22))
@@ -702,16 +795,16 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   }
 }
 
-@keyframes crystal-steps-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(18px) scale(0.985);
-    filter: blur(8px);
+/* Mobile has no video — the poster itself performs the drop-in, then the
+   settle transition takes over (animation removed on settle so the base
+   transform + transition win again). */
+@media (max-width: 639px) {
+  [data-hero-entrance="cinematic"] .hero-crystal-poster {
+    animation: crystal-drop-in 1.7s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-    filter: blur(0);
+
+  [data-hero-phase="settled"] .hero-crystal-poster {
+    animation: none;
   }
 }
 
@@ -989,11 +1082,27 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .crystal-steps-shell {
+  .consent-nudge {
     animation: none;
   }
 
-  .consent-nudge {
-    animation: none;
+  /* Hero starts in the settled phase for reduced-motion users (handled in
+     JS); these rules make sure nothing moves even if a phase flip occurs. */
+  .hero-line-inner,
+  .hero-copy-item,
+  .hero-crystal-video,
+  .hero-crystal-scrim,
+  .hero-crystal-parallax {
+    transition: none !important;
+  }
+
+  .hero-crystal-float,
+  .hero-crystal-poster {
+    animation: none !important;
+  }
+
+  [data-hero-phase="settled"][data-hero-entrance="cinematic"] .hero-crystal-stage::after {
+    animation: none !important;
+    content: none;
   }
 }
