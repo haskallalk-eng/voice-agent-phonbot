@@ -34,10 +34,6 @@ export function ContactPage({ onGoToRegister, onGoToLogin, onBack }: Props) {
           window.location.hash = anchor;
           onBack();
         }}
-        onSelectIndustry={() => {
-          window.location.hash = 'demo';
-          onBack();
-        }}
       />
 
       <div className="flex-1">

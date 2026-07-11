@@ -155,12 +155,6 @@ export function LandingPage({ onGoToRegister, onGoToLogin, onGoToContact }: Prop
         onGoToLogin={onGoToLogin}
         onGoToContact={onGoToContact}
         activePage="landing"
-        onSelectIndustry={() => {
-          // The public demo is telephone-first now: selecting a branch jumps to
-          // the demo block, but never auto-starts a browser web call.
-          document.getElementById('demo')?.scrollIntoView({ behavior: 'smooth' });
-          window.location.hash = 'demo';
-        }}
       />
 
       <main id="main" role="main">

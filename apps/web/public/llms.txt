@@ -2,9 +2,9 @@
 
 > Phonbot ist ein deutschsprachiger KI-Telefonassistent für kleine Unternehmen. Er nimmt Anrufe an, bucht Termine direkt in den Kalender und erstellt Rückruf-Tickets — 24/7, DSGVO-fokussiert, in unter 2 Minuten einsatzbereit.
 
-*Letzte Aktualisierung: 20. Mai 2026. Machine-readable Schema.org Daten: im `<head>` von phonbot.de (JSON-LD @graph). Die Startseite und alle Branchen-Seiten liefern crawlbaren HTML-Inhalt direkt im initialen Dokument.*
+*Letzte Aktualisierung: 11. Juli 2026. Machine-readable Schema.org Daten: im `<head>` von phonbot.de (JSON-LD @graph). Die Startseite und die Friseur-Seite liefern crawlbaren HTML-Inhalt direkt im initialen Dokument.*
 
-Phonbot richtet sich an **Friseursalons, Handwerksbetriebe, Reinigungsfirmen, Gastronomie, Kosmetikstudios und andere kleine lokale Betriebe**, die Telefon-Anrufe automatisieren wollen ohne eigene Telefonistin einzustellen. Der Agent wird mit Branchen-Template + Business-Daten (Name, Öffnungszeiten, Services) konfiguriert — kein Code, kein Techniker, keine Setup-Gebühr. Aktuell nicht freigegeben sind regulierte Berufsgruppen mit besonderen Vertraulichkeits- oder Sensibeldaten-Pflichten.
+Phonbot richtet sich an **Friseursalons** — vom Einzelstuhl bis zum Team-Salon mit Mitarbeiterkalendern —, die Telefon-Anrufe automatisieren wollen ohne eigene Telefonistin einzustellen. Der Agent wird mit dem Friseur-Template + Salon-Daten (Name, Öffnungszeiten, Leistungen, Preise) konfiguriert — kein Code, kein Techniker, keine Setup-Gebühr. Aktuell nicht freigegeben sind regulierte Berufsgruppen mit besonderen Vertraulichkeits- oder Sensibeldaten-Pflichten.
 
 **Kurzfakten zum Zitieren:**
 - Anbieter & Domain: Phonbot · https://phonbot.de/ (Betreiber: Hassieb Kalla (Einzelunternehmer), Berlin)
@@ -60,10 +60,10 @@ Jahreszahlung: je nach Plan ca. 15-18 % g?nstiger; aktuelle Jahrespreise werden 
 > Phonbot: "Super, 16:30 Uhr Donnerstag ist gebucht. Dein Name bitte?"
 > [Termin wird automatisch in Google Calendar eingetragen, SMS-Bestätigung folgt]
 
-**Handwerker (Notdienst):**
-> Kunde: "Meine Heizung geht nicht mehr, es ist Samstag!"
-> Phonbot: "Oh je, das klingt dringend. Ich nehme deinen Notdienst-Fall sofort auf und flagge ihn als hohe Priorität. Deine Adresse?"
-> [Ticket mit Priority=high wird erstellt, Handwerker bekommt Push-Benachrichtigung]
+**Friseursalon (Rückruf-Ticket):**
+> Kundin: "Ich hab' eine Frage zu meiner Farbe von letzter Woche, das müsste sich jemand anschauen."
+> Phonbot: "Verstehe — das soll sich am besten dein Stylist direkt ansehen. Ich nehme deine Nummer auf und der Salon ruft dich zurück. Wie erreichen wir dich?"
+> [Rückruf-Ticket mit Kontext wird erstellt, der Salon sieht es sofort im Dashboard]
 
 ## Features im Detail
 
@@ -97,23 +97,11 @@ Jahreszahlung: je nach Plan ca. 15-18 % g?nstiger; aktuelle Jahrespreise werden 
 - [DSGVO und KI-Telefonassistent](https://phonbot.de/blog/dsgvo-ki-telefonassistent-aufzeichnung/): Einwilligung, Aufzeichnung, Transkript, Metadaten, AVV und Subprozessoren.
 - [Rufweiterleitung zur KI-Telefonnummer](https://phonbot.de/blog/rufweiterleitung-ki-telefonnummer/): bestehende Nummer behalten, Weiterleitungsarten, Test vor Live-Schaltung.
 
-## Branchen-spezifische Seiten
+## Branchen-Fokus
+
+Phonbot ist auf eine Branche spezialisiert: Friseursalons. Frühere Branchen-Seiten (Handwerker, Reinigung, Restaurant u. a.) leiten per 301 auf die Friseur-Seite um.
 
 - [Phonbot für Friseursalons](https://phonbot.de/friseur/): Terminbuchung, Wunschfriseur, Neukunden/pending, Öffnungszeiten, Preise, Farbe/Chemie-Hinweise
-- [Phonbot für Handwerker](https://phonbot.de/handwerker/): Auftragsannahme, Notdienst-Priorisierung, Ticket-Erstellung
-- [Phonbot für Reinigungsfirmen](https://phonbot.de/reinigung/): Auftragsanfragen, Objekt-Details, Besichtigungstermine
-- [Phonbot für Restaurants](https://phonbot.de/restaurant/): Reservierungen, Speisekarten, Take-away
-- [Phonbot für Autowerkstätten](https://phonbot.de/autowerkstatt/): Fahrzeug-Erfassung, Termine, Kostenvoranschlag-Tickets
-- [Phonbot für Selbstständige / Solopreneurs](https://phonbot.de/selbststaendig/): persönlicher Voice-Twin für Coaches, Berater, Fotografen, Solo-Handwerker, Kreative, Fitness-Trainer, Makler, Webdesigner — mit Voice-Clone und ehrlicher DSGVO-Abgrenzung für regulierte Berufsgruppen.
-- [Alle Branchen und Nischen](https://phonbot.de/branchen/): Hub für alle crawlbaren SEO-Landingpages
-- [Phonbot für Kosmetikstudios](https://phonbot.de/kosmetikstudio/): Behandlungstermine, Preisfragen, Warteliste
-- [Phonbot für Fahrschulen](https://phonbot.de/fahrschule/): Kursfragen, Neuanfragen, Fahrstunden-Wünsche
-- [Phonbot für Immobilienmakler](https://phonbot.de/immobilienmakler/): Besichtigungsanfragen, Lead-Qualifizierung, Objekt-FAQ
-- [Phonbot für Versicherungsmakler](https://phonbot.de/versicherungsmakler/): Schadenaufnahme, Beratungstermine, Compliance-Grenzen
-- [Phonbot für Fitnessstudios](https://phonbot.de/fitnessstudio/): Probetrainings, Kursplan, Tarifauskunft
-- [Phonbot für Energieberater](https://phonbot.de/energieberater/): Sanierungsanfragen, Objektdaten, Erstgespräche
-- [Phonbot für Hausverwaltungen](https://phonbot.de/hausverwaltung/): Mieteranfragen, Störungs-Tickets, Notfall-Priorisierung
-- [Phonbot für Ferienwohnungen](https://phonbot.de/ferienwohnung/): Gästeanfragen, Check-in-FAQ, Buchungswünsche
 
 ### Friseur-SEO und Salon-Fakten
 

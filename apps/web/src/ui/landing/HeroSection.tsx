@@ -130,8 +130,9 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
     const onMove = (e: MouseEvent) => {
       const x = (e.clientX / window.innerWidth - 0.5) * 2; // -1..1
       const y = (e.clientY / window.innerHeight - 0.5) * 2;
-      stage.style.setProperty('--hero-par-x', `${(-x * 9).toFixed(1)}px`);
-      stage.style.setProperty('--hero-par-y', `${(-y * 6).toFixed(1)}px`);
+      // Deliberately small — depth cue, not a floaty toy (Clean-Pass 2026-07).
+      stage.style.setProperty('--hero-par-x', `${(-x * 4).toFixed(1)}px`);
+      stage.style.setProperty('--hero-par-y', `${(-y * 2.5).toFixed(1)}px`);
     };
     window.addEventListener('mousemove', onMove, { passive: true });
     return () => window.removeEventListener('mousemove', onMove);
@@ -210,7 +211,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
                 className="hero-copy-item mx-auto mb-6 max-w-[20rem] text-[0.95rem] leading-relaxed text-white/64 sm:mb-7 sm:max-w-3xl sm:text-xl"
                 style={{ '--hero-delay': '0.4s' } as React.CSSProperties}
               >
-                <span className="bg-clip-text font-semibold text-transparent" style={{ backgroundImage: 'var(--crystal-gradient)' }}>Phonbot</span> beantwortet Anrufe, bucht Termine und{' '}
+                <span className="bg-clip-text font-semibold text-transparent" style={{ backgroundImage: 'var(--crystal-gradient)' }}>Phonbot</span> nimmt die Anrufe deines Salons an, bucht Termine und{' '}
                 <span className="font-medium text-white/82">lernt mit jedem Gespräch dazu.</span>
               </p>
 

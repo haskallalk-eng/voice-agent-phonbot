@@ -109,10 +109,7 @@ export const NAV_HTML = `<!--nav-html-begin-->
       <a href="/#features">Features</a>
       <a href="/#preise">Preise</a>
       <a href="/#faq">FAQ</a>
-      <div class="ph-dd-wrap" id="ph-dd">
-        <button type="button" id="ph-dd-btn" class="ph-dd-btn ph-nav-btn" aria-haspopup="true" aria-expanded="false" aria-controls="ph-dd-menu">Branchen ${CHEV}</button>
-        <div class="ph-dd-menu" id="ph-dd-menu" role="menu">${industryLinksDesktop}</div>
-      </div>
+      <a href="/friseur/">Für Friseure</a>
       <a href="/blog/">Blog</a>
       <a href="/kontakt/">Kontakt</a>
     </nav>
@@ -127,10 +124,7 @@ export const NAV_HTML = `<!--nav-html-begin-->
     <a href="/#features">Features</a>
     <a href="/#preise">Preise</a>
     <a href="/#faq">FAQ</a>
-    <details>
-      <summary>Branchen ${CHEV}</summary>
-      <div class="ph-mob-sub">${industryLinksMobile}</div>
-    </details>
+    <a href="/friseur/">Für Friseure</a>
     <a href="/blog/">Blog</a>
     <a href="/kontakt/">Kontakt</a>
     <div class="ph-mob-cta">
