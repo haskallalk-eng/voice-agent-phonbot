@@ -265,12 +265,6 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
-.phonbot-landing .crystal-step-number {
-  font-family: var(--font-display);
-  font-weight: 700;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-}
-
 /* Big stat figures (24/7, < 2 Min, Sprachen-Counter) share the display face. */
 .phonbot-landing p[class*="text-5xl"] {
   font-family: var(--font-display);
@@ -558,88 +552,14 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   mask-image: linear-gradient(to bottom, transparent, #fff 36%, #fff);
 }
 
-.crystal-step-card {
-  position: relative;
-  overflow: hidden;
-  min-height: 116px;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.035)),
-    linear-gradient(112deg, rgba(255, 91, 10, 0.12), rgba(255, 183, 102, 0.06) 36%, rgba(32, 217, 255, 0.10)),
-    rgba(0, 0, 0, 0.44);
-  padding: 14px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -24px 42px rgba(0, 0, 0, 0.18),
-    0 18px 60px rgba(0, 0, 0, 0.42),
-    0 0 34px rgba(32, 217, 255, 0.10);
-  backdrop-filter: blur(20px) saturate(1.2);
-  -webkit-backdrop-filter: blur(20px) saturate(1.2);
-}
-
+/* (Die Hero-Step-Cards wurden 2026-07-12 entfernt — die 3 Schritte leben in
+   der HowSection direkt unter dem Hero. Zugehörige crystal-step-*-Styles
+   sind mit rausgeflogen.) */
 @media (max-width: 639px) {
-  .crystal-step-card {
-    min-height: 92px;
-    padding: 12px;
-  }
-
-  .mobile-crystal-steps {
-    margin-top: 220px;
-  }
-
   .phonbot-landing .crystal-button {
     max-width: 100%;
   }
 }
-
-.crystal-step-card::before {
-  content: "";
-  position: absolute;
-  inset: 1px;
-  border-radius: inherit;
-  background:
-    linear-gradient(112deg, rgba(255, 255, 255, 0.24), transparent 26%, transparent 62%, rgba(255, 255, 255, 0.10)),
-    radial-gradient(circle at 18% 12%, rgba(255, 91, 10, 0.24), transparent 36%),
-    radial-gradient(circle at 88% 20%, rgba(32, 217, 255, 0.22), transparent 38%);
-  opacity: 0.9;
-  pointer-events: none;
-}
-
-.crystal-step-card::after {
-  content: "";
-  position: absolute;
-  left: -20%;
-  right: -20%;
-  top: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.52), transparent);
-  opacity: 0.34;
-}
-
-.crystal-step-number {
-  position: relative;
-  display: inline-flex;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background:
-    linear-gradient(112deg, rgba(255, 91, 10, 0.88), rgba(255, 183, 102, 0.78) 32%, rgba(247, 251, 255, 0.50) 50%, rgba(32, 217, 255, 0.76) 72%, rgba(0, 141, 230, 0.70)),
-    rgba(255, 255, 255, 0.10);
-  color: #fff;
-  font-size: 0.78rem;
-  font-weight: 900;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.42),
-    0 0 22px rgba(32, 217, 255, 0.24);
-}
-
-/* Step cards reveal with the rest of the copy — staggering is driven by the
-   hero phase (data-hero-phase + --hero-delay), not a hardcoded timer. */
 
 /* Pulsing mic ring */
 @keyframes mic-ring {

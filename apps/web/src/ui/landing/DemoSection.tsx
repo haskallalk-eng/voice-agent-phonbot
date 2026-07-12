@@ -9,65 +9,16 @@ import {
 import {
   DEMO_PHONE_HREF,
   DEMO_PHONE_LABEL,
-  TEMPLATES,
-  TEMPLATE_PREVIEWS,
 } from './shared.js';
 
 type DemoSectionProps = {
   onGoToRegister: () => void;
 };
 
-type TemplateCardProps = {
-  template: (typeof TEMPLATES)[number];
-};
-
 function CrystalDemoMark() {
   return (
     <div className="crystal-demo-mark" aria-hidden="true">
       <img src="/brand/phonbot-crystal-icon-cropped.png" alt="" className="h-12 w-12 object-contain" />
-    </div>
-  );
-}
-
-function TemplateCard({ template }: TemplateCardProps) {
-  return (
-    <div
-      className="group relative flex h-full w-full flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.035] p-5 text-left
-        transition-all duration-300 hover:-translate-y-1 hover:border-orange-400/35 hover:bg-white/[0.065] hover:shadow-[0_0_34px_rgba(249,115,22,0.18)]"
-    >
-      <a
-        href={`/${template.slug}/`}
-        className="absolute inset-0 z-10 rounded-2xl"
-        aria-label={`Mehr über Phonbot für ${template.name}`}
-      />
-
-      <div
-        className="flex h-12 w-12 items-center justify-center rounded-2xl"
-        style={{
-          background: 'linear-gradient(135deg, rgba(249,115,22,0.2), rgba(6,182,212,0.15))',
-          border: '1px solid rgba(249,115,22,0.15)',
-        }}
-      >
-        <template.Icon size={23} className="text-white/70 transition-colors group-hover:text-orange-300" />
-      </div>
-
-      <div>
-        <p className="mb-1 text-base font-bold text-white transition-colors group-hover:text-orange-300">{template.name}</p>
-        <p className="text-xs leading-snug text-white/45">{template.description}</p>
-      </div>
-
-      <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs italic leading-relaxed text-white/55">
-        {TEMPLATE_PREVIEWS[template.id]}
-      </div>
-
-      <a
-        href={DEMO_PHONE_HREF}
-        onClick={(e) => e.stopPropagation()}
-        className="relative z-20 mt-auto inline-flex items-center justify-center gap-2 rounded-full border border-orange-500/25 bg-orange-500/10 px-4 py-2 text-xs font-semibold text-orange-200 transition-all hover:bg-orange-500/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-orange-400/50"
-      >
-        <IconPhone size={14} className="opacity-80" />
-        Telefon-Demo anrufen
-      </a>
     </div>
   );
 }
@@ -184,16 +135,12 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
         ))}
       </div>
 
-      <div className="mx-auto grid w-full max-w-md grid-cols-1 gap-4">
-        {TEMPLATES.map((template) => (
-          <TemplateCard key={template.id} template={template} />
-        ))}
-      </div>
-
+      {/* Die frühere Branchen-Karten-Galerie ist raus — es gibt genau eine
+          Branche (Friseur), und die präsentiert die Telefon-Demo oben. */}
       <div className="mt-10 text-center">
         <p className="mb-4 inline-flex items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/40">
           <IconPrivacy size={14} className="text-orange-300" />
-          Datenschutz-Hinweise laufen im Telefon-Demo-Flow bzw. im Rueckruf-Formular.
+          Datenschutz-Hinweise laufen im Telefon-Demo-Flow bzw. im Rückruf-Formular.
         </p>
         <div>
           <button
