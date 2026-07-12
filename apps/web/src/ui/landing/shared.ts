@@ -39,7 +39,7 @@ export const FEATURES: FeatureItem[] = [
 export const STEPS = [
   { num: '1', title: 'Salon anlegen', desc: 'Das Friseur-Template ist vorbereitet: Termine, Services, Preise, Öffnungszeiten.' },
   { num: '2', title: 'Salon-Daten eingeben', desc: 'Name, Öffnungszeiten, Leistungen. Dauert unter 2 Minuten.' },
-  { num: '3', title: 'Agent ist live', desc: 'Dein Agent beantwortet Anrufe sofort. Rund um die Uhr.' },
+  { num: '3', title: 'Phonbot ist live', desc: 'Dein Telefonassistent beantwortet Anrufe sofort. Rund um die Uhr.' },
 ];
 
 export const FAQ_ITEMS = [
@@ -52,8 +52,8 @@ export const FAQ_ITEMS = [
     a: 'Ja. Richte eine Rufweiterleitung zu deiner Phonbot-Nummer ein. Deine bestehende Nummer bleibt unverändert.',
   },
   {
-    q: 'Was passiert, wenn der Agent eine Frage nicht beantworten kann?',
-    a: 'Der Agent erstellt automatisch ein Rückruf-Ticket mit allen relevanten Infos, damit du schnell nachfassen kannst.',
+    q: 'Was passiert, wenn Phonbot eine Frage nicht beantworten kann?',
+    a: 'Phonbot erstellt automatisch ein Rückruf-Ticket mit allen relevanten Infos, damit du schnell nachfassen kannst.',
   },
   {
     q: 'Wie funktioniert die Kalender-Integration?',

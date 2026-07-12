@@ -22,7 +22,7 @@
 <meta name="robots" content="index, follow" />
 <link rel="icon" type="image/svg+xml" href="/icon.svg" />
 <script type="application/ld+json">
-{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://phonbot.de/impressum/#webpage","url":"https://phonbot.de/impressum/","name":"Impressum & Kontakt | Phonbot","description":"Impressum von Hassieb Kalla (Einzelunternehmer), Betreiber von phonbot.de — Angaben gemäß § 5 DDG, Kontakt, Handelsregister, Umsatzsteuer-ID.","inLanguage":"de-DE","dateModified":"2026-05-11","isPartOf":{"@id":"https://phonbot.de/#website"},"publisher":{"@type":"Organization","name":"Phonbot","url":"https://phonbot.de/"},"breadcrumb":{"@id":"https://phonbot.de/impressum/#breadcrumb"}},{"@type":"BreadcrumbList","@id":"https://phonbot.de/impressum/#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Phonbot","item":"https://phonbot.de/"},{"@type":"ListItem","position":2,"name":"Impressum","item":"https://phonbot.de/impressum/"}]}]}
+{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://phonbot.de/impressum/#webpage","url":"https://phonbot.de/impressum/","name":"Impressum & Kontakt | Phonbot","description":"Impressum von Hassieb Kalla (Einzelunternehmer), Betreiber von phonbot.de — Angaben gemäß § 5 DDG, Kontakt, Handelsregister, Umsatzsteuer-ID.","inLanguage":"de-DE","dateModified":"2026-07-11","isPartOf":{"@id":"https://phonbot.de/#website"},"publisher":{"@type":"Organization","name":"Phonbot","url":"https://phonbot.de/"},"breadcrumb":{"@id":"https://phonbot.de/impressum/#breadcrumb"}},{"@type":"BreadcrumbList","@id":"https://phonbot.de/impressum/#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Phonbot","item":"https://phonbot.de/"},{"@type":"ListItem","position":2,"name":"Impressum","item":"https://phonbot.de/impressum/"}]}]}
 </script>
 <style>*{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#0A0A0F;scrollbar-color:rgba(255,255,255,0.15) #0A0A0F;color:#fff;line-height:1.65;overflow-x:clip;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -31,32 +31,27 @@ a{color:inherit;text-decoration:none}
 
 /* ── Nav (matches branch pages + SPA) ── */
 /*--nav-css-begin--*/
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:300 700;font-display:swap;src:url('/fonts/space-grotesk-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+h1,h2,h3,h4{font-family:'Space Grotesk','Inter',ui-sans-serif,system-ui,sans-serif}
+h1,h2{font-weight:700;letter-spacing:-.022em;color:rgba(255,255,255,.96)}
 .ph-header{position:sticky;top:0;z-index:50;border-bottom:1px solid rgba(255,255,255,.05);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);background:rgba(10,10,15,.8)}
-.ph-inner{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.5rem;max-width:1152px;margin:0 auto;gap:1rem}
+.ph-inner{display:flex;align-items:center;justify-content:space-between;padding:.9rem 1.5rem;max-width:1152px;margin:0 auto;gap:1rem}
 .ph-logo{display:flex;align-items:center;gap:8px;text-decoration:none;flex-shrink:0}
-.ph-mark{width:32px;height:32px;object-fit:contain;filter:drop-shadow(0 0 12px rgba(249,115,22,.45)) drop-shadow(0 0 14px rgba(6,182,212,.24))}
-.ph-brand{font-size:18px;font-weight:900;letter-spacing:-.5px;line-height:1}
+.ph-mark{width:34px;height:34px;object-fit:contain;display:block;filter:drop-shadow(0 0 10px rgba(255,91,10,.30)) drop-shadow(0 0 12px rgba(32,217,255,.20))}
+.ph-brand{font-family:'Space Grotesk','Inter',ui-sans-serif,system-ui,sans-serif;font-size:19px;font-weight:700;letter-spacing:-.5px;line-height:1}
 .ph-brand .w{color:#fff}
-.ph-brand .o{background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.ph-brand .o{background:linear-gradient(112deg,#ff5b0a 0%,#ffb766 28%,#f7fbff 48%,#20d9ff 68%,#008de6 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .ph-nav{display:none;align-items:center;gap:2rem}
 @media(min-width:768px){.ph-nav{display:flex}}
-.ph-nav a,.ph-nav-btn{font-size:.875rem;color:rgba(255,255,255,.6);text-decoration:none;transition:color .2s;background:none;border:none;cursor:pointer;font-family:inherit;padding:0;display:flex;align-items:center;gap:.25rem;font-weight:500}
+.ph-nav a,.ph-nav-btn{font-family:'Space Grotesk','Inter',ui-sans-serif,system-ui,sans-serif;font-size:.875rem;color:rgba(255,255,255,.6);text-decoration:none;transition:color .2s;background:none;border:none;cursor:pointer;padding:0;display:flex;align-items:center;gap:.25rem;font-weight:500}
 .ph-nav a:hover,.ph-nav-btn:hover{color:#fff}
-.ph-dd-wrap{position:relative}
-.ph-dd-btn svg{transition:transform .2s}
-#ph-dd.open .ph-dd-btn svg{transform:rotate(180deg)}
-.ph-dd-menu{position:absolute;left:50%;transform:translateX(-50%);top:calc(100% + .75rem);width:16rem;border-radius:1rem;border:1px solid rgba(255,255,255,.1);background:rgba(10,10,15,.95);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 20px 60px rgba(0,0,0,.5);padding:.5rem 0;z-index:60;display:none}
-#ph-dd.open .ph-dd-menu{display:block}
-.ph-dd-menu a{display:flex;align-items:center;gap:.75rem;padding:.625rem 1rem;font-size:.875rem;color:rgba(255,255,255,.8);text-decoration:none;transition:background .15s,color .15s}
-.ph-dd-menu a:hover{background:rgba(255,255,255,.05);color:#fff}
-.ph-dd-menu a svg{color:#FB923C;flex-shrink:0}
 .ph-right{display:flex;align-items:center;gap:1rem;flex-shrink:0}
-.ph-login{display:none;font-size:.875rem;color:rgba(255,255,255,.6);text-decoration:none;transition:color .2s}
+.ph-login{display:none;font-family:'Space Grotesk','Inter',ui-sans-serif,system-ui,sans-serif;font-size:.875rem;color:rgba(255,255,255,.6);text-decoration:none;transition:color .2s}
 @media(min-width:768px){.ph-login{display:block}}
 .ph-login:hover{color:#fff}
-.ph-cta-btn{display:none;font-size:.875rem;text-decoration:none;font-weight:600;color:#fff;border-radius:9999px;padding:10px 20px;background:linear-gradient(135deg,#F97316,#06B6D4);transition:all .3s}
+.ph-cta-btn{display:none;font-family:'Space Grotesk','Inter',ui-sans-serif,system-ui,sans-serif;font-size:.875rem;text-decoration:none;font-weight:600;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.18);border-radius:9999px;padding:10px 20px;background:linear-gradient(112deg,rgba(255,91,10,.88) 0%,rgba(255,148,61,.78) 32%,rgba(103,232,249,.58) 56%,rgba(32,217,255,.78) 74%,rgba(0,141,230,.8) 100%),rgba(10,12,20,.65);box-shadow:inset 0 1px 0 rgba(255,255,255,.42);transition:all .3s}
 @media(min-width:768px){.ph-cta-btn{display:inline-block}}
-.ph-cta-btn:hover{box-shadow:0 0 24px rgba(249,115,22,.5);transform:scale(1.05)}
+.ph-cta-btn:hover{box-shadow:0 0 24px rgba(255,91,10,.45);transform:scale(1.05)}
 .ph-burg{display:flex;flex-direction:column;gap:4px;padding:.5rem;border-radius:.5rem;background:transparent;border:none;cursor:pointer;transition:background .2s}
 @media(min-width:768px){.ph-burg{display:none}}
 .ph-burg:hover{background:rgba(255,255,255,.05)}
@@ -66,27 +61,20 @@ body.mopen .ph-burg span:nth-child(2){opacity:0}
 body.mopen .ph-burg span:nth-child(3){transform:translateY(-6px) rotate(-45deg)}
 .ph-mob{display:none;border-top:1px solid rgba(255,255,255,.05);background:rgba(10,10,15,.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding:.75rem 1.5rem}
 body.mopen .ph-mob{display:block}
-.ph-mob>a,.ph-mob>details>summary{display:flex;align-items:center;justify-content:space-between;padding:.875rem 0;font-size:.875rem;color:rgba(255,255,255,.6);text-decoration:none;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer;list-style:none;font-weight:500}
-.ph-mob>a:hover,.ph-mob>details>summary:hover{color:#fff}
-.ph-mob>details>summary::-webkit-details-marker{display:none}
-.ph-mob>details summary svg{transition:transform .2s}
-.ph-mob>details[open] summary svg{transform:rotate(180deg)}
-.ph-mob-sub{padding:.25rem 0 .5rem}
-.ph-mob-sub a{display:flex;align-items:center;gap:.75rem;padding:.5rem 0;font-size:.85rem;color:rgba(255,255,255,.7);text-decoration:none}
-.ph-mob-sub a:hover{color:#fff}
-.ph-mob-sub a svg{color:#FB923C;flex-shrink:0}
+.ph-mob>a{display:flex;align-items:center;justify-content:space-between;padding:.875rem 0;font-family:'Space Grotesk','Inter',ui-sans-serif,system-ui,sans-serif;font-size:.875rem;color:rgba(255,255,255,.6);text-decoration:none;border-bottom:1px solid rgba(255,255,255,.05);font-weight:500}
+.ph-mob>a:hover{color:#fff}
 .ph-mob-cta{display:flex;flex-direction:column;gap:.5rem;padding:.75rem 0 .25rem}
-.ph-mob-cta a{text-align:center;padding:.75rem;border-radius:.75rem;font-weight:600;text-decoration:none;font-size:.875rem}
+.ph-mob-cta a{text-align:center;padding:.75rem;border-radius:9999px;font-family:'Space Grotesk','Inter',ui-sans-serif,system-ui,sans-serif;font-weight:600;text-decoration:none;font-size:.875rem}
 .ph-mob-cta a.login{border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.7)}
-.ph-mob-cta a.cta{background:linear-gradient(135deg,#F97316,#06B6D4);color:#fff}
+.ph-mob-cta a.cta{background:linear-gradient(112deg,rgba(255,91,10,.88) 0%,rgba(255,148,61,.78) 32%,rgba(103,232,249,.58) 56%,rgba(32,217,255,.78) 74%,rgba(0,141,230,.8) 100%),rgba(10,12,20,.65);border:1px solid rgba(255,255,255,.18);text-shadow:0 1px 2px rgba(0,0,0,.3);color:#fff}
 /*--nav-css-end--*/
 
 /* ── Page layout ── */
 .noise::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");opacity:.015}
 .bg-orbs{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
 .bg-orbs::before,.bg-orbs::after{content:'';position:absolute;clip-path:polygon(50% 0%,88% 18%,100% 54%,70% 100%,22% 90%,0 45%,16% 14%);filter:blur(100px) saturate(1.2);animation:glow-pulse 3s ease-in-out infinite}
-.bg-orbs::before{width:600px;height:600px;top:-200px;right:-150px;background:radial-gradient(ellipse,rgba(249,115,22,.15),transparent 70%)}
-.bg-orbs::after{width:500px;height:500px;bottom:-100px;left:-120px;background:radial-gradient(ellipse,rgba(6,182,212,.11),transparent 70%);animation-delay:1.5s;clip-path:polygon(34% 0%,92% 24%,78% 88%,18% 100%,0 38%)}
+.bg-orbs::before{width:600px;height:600px;top:-200px;right:-150px;background:radial-gradient(ellipse,rgba(255,91,10,.15),transparent 70%)}
+.bg-orbs::after{width:500px;height:500px;bottom:-100px;left:-120px;background:radial-gradient(ellipse,rgba(32,217,255,.11),transparent 70%);animation-delay:1.5s;clip-path:polygon(34% 0%,92% 24%,78% 88%,18% 100%,0 38%)}
 @keyframes glow-pulse{0%,100%{opacity:.3}50%{opacity:.7}}
 
 main{position:relative;z-index:1;padding:3rem 0 6rem}
@@ -99,15 +87,15 @@ main{position:relative;z-index:1;padding:3rem 0 6rem}
 .breadcrumb svg{width:12px;height:12px;opacity:.4}
 
 /* Hero */
-.hero-title{display:inline-flex;align-items:center;gap:.55rem;padding:.35rem .9rem .35rem .5rem;border-radius:999px;background:rgba(249,115,22,.1);border:1px solid rgba(249,115,22,.25);font-size:.8rem;color:#FDBA74;margin-bottom:1.25rem}
+.hero-title{display:inline-flex;align-items:center;gap:.6rem;font-family:'Space Grotesk','Inter',ui-sans-serif,system-ui,sans-serif;font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.32em;color:rgba(148,226,255,.72);margin-bottom:1.25rem}
 .hero-title svg{width:14px;height:14px}
 h1{font-size:clamp(2.25rem,5vw,3.25rem);font-weight:800;letter-spacing:-.025em;line-height:1.1;margin-bottom:.75rem}
-h1 .accent{background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;background-clip:text;color:transparent}
+h1 .accent{background:linear-gradient(112deg,#ff5b0a 0%,#ffb766 28%,#f7fbff 48%,#20d9ff 68%,#008de6 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
 .lead{font-size:1.0625rem;color:rgba(255,255,255,.55);max-width:640px;margin-bottom:3rem}
 
 /* Content card */
 .card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:1.5rem;padding:2.5rem;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);position:relative;overflow:hidden}
-.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(249,115,22,.3),rgba(6,182,212,.3),transparent)}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,91,10,.3),rgba(32,217,255,.3),transparent)}
 @media(max-width:640px){.card{padding:1.75rem 1.25rem}}
 
 section{padding:1rem 0;border-bottom:1px solid rgba(255,255,255,.05)}
@@ -115,7 +103,7 @@ section:last-child{border-bottom:none;padding-bottom:0}
 section:first-child{padding-top:0}
 
 h2{font-size:1.0625rem;font-weight:700;color:#fff;margin:.5rem 0 .85rem;display:flex;align-items:center;gap:.6rem;letter-spacing:-.005em}
-h2 .num{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;padding:0 .5rem;border-radius:8px;background:linear-gradient(135deg,rgba(249,115,22,.18),rgba(6,182,212,.14));border:1px solid rgba(249,115,22,.25);font-size:.75rem;font-weight:700;color:#FDBA74;font-variant-numeric:tabular-nums;flex-shrink:0}
+h2 .num{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;padding:0 .5rem;border-radius:8px;background:linear-gradient(135deg,rgba(255,91,10,.18),rgba(32,217,255,.14));border:1px solid rgba(255,91,10,.25);font-size:.75rem;font-weight:700;color:#FDBA74;font-variant-numeric:tabular-nums;flex-shrink:0}
 h3{font-size:.95rem;font-weight:600;margin:1.25rem 0 .5rem;color:rgba(255,255,255,.9)}
 p{color:rgba(255,255,255,.72);margin-bottom:.65rem;font-size:.95rem}
 p:last-child{margin-bottom:0}
@@ -124,7 +112,7 @@ li{margin-bottom:.3rem}
 
 .contact-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem;margin-top:.75rem}
 .contact-item{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:.875rem;padding:.9rem 1rem;display:flex;align-items:center;gap:.75rem;transition:all .2s}
-.contact-item:hover{border-color:rgba(249,115,22,.25);background:rgba(255,255,255,.05)}
+.contact-item:hover{border-color:rgba(255,91,10,.25);background:rgba(255,255,255,.05)}
 .contact-item svg{width:18px;height:18px;color:#FB923C;flex-shrink:0}
 .contact-item .label{display:block;font-size:.7rem;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.15rem}
 .contact-item .value{display:block;font-size:.9rem;color:#fff;font-weight:500}
@@ -153,11 +141,11 @@ footer a:hover{color:#fff}
 @media(max-width:1024px){.footer-grid{grid-template-columns:1fr 1fr;gap:2rem 1.5rem}.footer-grid .col-brand{grid-column:1/-1}}
 @media(max-width:480px){.footer-grid{grid-template-columns:1fr}}
 .col-brand{display:flex;flex-direction:column;gap:.5rem;align-items:flex-start}
-.col-brand .brand-row{display:flex;align-items:center;gap:6px;text-decoration:none}
-.col-brand .footer-mark{width:28px;height:28px;object-fit:contain;filter:drop-shadow(0 0 10px rgba(249,115,22,.42)) drop-shadow(0 0 12px rgba(6,182,212,.22))}
-.col-brand .brand-row .brand{font-size:18px;font-weight:800;letter-spacing:-.5px}
-.col-brand .brand-row .brand .w{color:#fff}
-.col-brand .brand-row .brand .o{background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.col-brand .brand-row{display:flex;align-items:center;gap:7px;text-decoration:none}
+.col-brand .footer-mark{width:30px;height:30px;object-fit:contain;display:block;filter:drop-shadow(0 0 10px rgba(255,91,10,.30)) drop-shadow(0 0 12px rgba(32,217,255,.20))}
+.col-brand .footer-brand{font-family:'Space Grotesk','Inter',ui-sans-serif,system-ui,sans-serif;font-size:17px;font-weight:700;letter-spacing:-.5px;line-height:1}
+.col-brand .footer-brand .w{color:#fff}
+.col-brand .footer-brand .o{background:linear-gradient(112deg,#ff5b0a 0%,#ffb766 28%,#f7fbff 48%,#20d9ff 68%,#008de6 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .col-brand p{font-size:.75rem;color:rgba(255,255,255,.62);line-height:1.6;margin:.35rem 0 0}
 .site-footer .footer-heading{font-size:.7rem;font-weight:600;color:rgba(255,255,255,.68);text-transform:uppercase;letter-spacing:.12em;margin:0 0 .75rem}
 .site-footer ul.links{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:.5rem}
@@ -167,7 +155,7 @@ footer a:hover{color:#fff}
 @media(min-width:640px){.footer-bottom{flex-direction:row;justify-content:space-between;text-align:left}}
 .footer-bottom p{font-size:.75rem;color:rgba(255,255,255,.58);margin:0}
 .footer-bottom a{color:rgba(255,255,255,.76);text-decoration:underline;text-decoration-color:rgba(255,255,255,.28);transition:all .2s}
-.footer-bottom a:hover{color:rgba(255,255,255,.8);text-decoration-color:rgba(249,115,22,.6)}
+.footer-bottom a:hover{color:rgba(255,255,255,.8);text-decoration-color:rgba(255,91,10,.6)}
 /*--footer-css-end--*/
 </style>
 </head>
@@ -178,16 +166,13 @@ footer a:hover{color:#fff}
 <!--nav-html-begin-->
 <header class="ph-header">
   <div class="ph-inner">
-    <a href="/" class="ph-logo" aria-label="Phonbot Startseite"><img class="ph-mark" src="/brand/phonbot-crystal-icon-cropped.png" alt="" width="32" height="32" decoding="async" loading="eager"><span class="ph-brand"><span class="w">Phon</span><span class="o">bot</span></span></a>
+    <a href="/" class="ph-logo" aria-label="Phonbot Startseite"><img class="ph-mark" src="/brand/phonbot-site-icon-transparent-512.png" alt="" width="34" height="34" decoding="async" loading="eager"><span class="ph-brand"><span class="w">Phon</span><span class="o">bot</span></span></a>
     <nav class="ph-nav" aria-label="Hauptnavigation">
       <a href="/#demo">Demo</a>
       <a href="/#features">Features</a>
       <a href="/#preise">Preise</a>
       <a href="/#faq">FAQ</a>
-      <div class="ph-dd-wrap" id="ph-dd">
-        <button type="button" id="ph-dd-btn" class="ph-dd-btn ph-nav-btn" aria-haspopup="true" aria-expanded="false" aria-controls="ph-dd-menu">Branchen <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M1 3l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-        <div class="ph-dd-menu" id="ph-dd-menu" role="menu"><a href="/branchen/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Alle Branchen</span></a><a href="/friseur/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg><span>Friseur</span></a><a href="/handwerker/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg><span>Handwerker</span></a><a href="/reinigung/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M3 21l7-7"/><path d="M13.5 5.5l5.19-1.04 1.04 5.2-9.23 9.23a2 2 0 01-2.83 0l-2.83-2.83a2 2 0 010-2.83z"/><path d="M7.4 13.4l4.24-4.24"/></svg><span>Reinigung</span></a><a href="/restaurant/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><line x1="18" y1="2" x2="18" y2="22"/><path d="M22 8H14V2"/><line x1="6" y1="2" x2="6" y2="8"/><path d="M2 8a4 4 0 008 0"/><line x1="6" y1="12" x2="6" y2="22"/></svg><span>Restaurant</span></a><a href="/autowerkstatt/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M5 17H3a2 2 0 01-2-2v-4l2.69-6.73A2 2 0 015.54 3h12.92a2 2 0 011.85 1.27L23 11v4a2 2 0 01-2 2h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="17.5" r="2.5"/></svg><span>Autowerkstatt</span></a><a href="/selbststaendig/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M3 14h3a2 2 0 012 2v3a2 2 0 01-2 2H5a2 2 0 01-2-2v-8a9 9 0 0118 0v8a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3a2 2 0 012-2h3"/></svg><span>Selbstständige</span></a><a href="/kosmetikstudio/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M12 2v20"/><path d="M5 7h14"/><path d="M7 7l-3 7h6z"/><path d="M17 7l-3 7h6z"/></svg><span>Kosmetik</span></a><a href="/fahrschule/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M5 17H3v-4l2-5h14l2 5v4h-2"/><path d="M7 8l-1.5 4h13L17 8"/></svg><span>Fahrschule</span></a><a href="/immobilienmakler/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg><span>Immobilien</span></a><a href="/versicherungsmakler/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-5"/></svg><span>Versicherung</span></a><a href="/fitnessstudio/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M6 7v10"/><path d="M18 7v10"/><path d="M3 9v6"/><path d="M21 9v6"/><path d="M6 12h12"/></svg><span>Fitness</span></a><a href="/energieberater/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span>Energieberater</span></a><a href="/hausverwaltung/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M4 21V5a2 2 0 012-2h12a2 2 0 012 2v16"/><path d="M9 21v-6h6v6"/><path d="M8 7h.01M12 7h.01M16 7h.01M8 11h.01M12 11h.01M16 11h.01"/></svg><span>Hausverwaltung</span></a><a href="/ferienwohnung/" role="menuitem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" aria-hidden="true"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/><path d="M7 4h3"/></svg><span>Ferienwohnung</span></a></div>
-      </div>
+      <a href="/friseur/">Für Friseure</a>
       <a href="/blog/">Blog</a>
       <a href="/kontakt/">Kontakt</a>
     </nav>
@@ -202,10 +187,7 @@ footer a:hover{color:#fff}
     <a href="/#features">Features</a>
     <a href="/#preise">Preise</a>
     <a href="/#faq">FAQ</a>
-    <details>
-      <summary>Branchen <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M1 3l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
-      <div class="ph-mob-sub"><a href="/branchen/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span>Alle Branchen</span></a><a href="/friseur/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg><span>Friseur</span></a><a href="/handwerker/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg><span>Handwerker</span></a><a href="/reinigung/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M3 21l7-7"/><path d="M13.5 5.5l5.19-1.04 1.04 5.2-9.23 9.23a2 2 0 01-2.83 0l-2.83-2.83a2 2 0 010-2.83z"/><path d="M7.4 13.4l4.24-4.24"/></svg><span>Reinigung</span></a><a href="/restaurant/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><line x1="18" y1="2" x2="18" y2="22"/><path d="M22 8H14V2"/><line x1="6" y1="2" x2="6" y2="8"/><path d="M2 8a4 4 0 008 0"/><line x1="6" y1="12" x2="6" y2="22"/></svg><span>Restaurant</span></a><a href="/autowerkstatt/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M5 17H3a2 2 0 01-2-2v-4l2.69-6.73A2 2 0 015.54 3h12.92a2 2 0 011.85 1.27L23 11v4a2 2 0 01-2 2h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="17.5" r="2.5"/></svg><span>Autowerkstatt</span></a><a href="/selbststaendig/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M3 14h3a2 2 0 012 2v3a2 2 0 01-2 2H5a2 2 0 01-2-2v-8a9 9 0 0118 0v8a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3a2 2 0 012-2h3"/></svg><span>Selbstständige</span></a><a href="/kosmetikstudio/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M12 2v20"/><path d="M5 7h14"/><path d="M7 7l-3 7h6z"/><path d="M17 7l-3 7h6z"/></svg><span>Kosmetik</span></a><a href="/fahrschule/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M5 17H3v-4l2-5h14l2 5v4h-2"/><path d="M7 8l-1.5 4h13L17 8"/></svg><span>Fahrschule</span></a><a href="/immobilienmakler/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg><span>Immobilien</span></a><a href="/versicherungsmakler/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-5"/></svg><span>Versicherung</span></a><a href="/fitnessstudio/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M6 7v10"/><path d="M18 7v10"/><path d="M3 9v6"/><path d="M21 9v6"/><path d="M6 12h12"/></svg><span>Fitness</span></a><a href="/energieberater/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span>Energieberater</span></a><a href="/hausverwaltung/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M4 21V5a2 2 0 012-2h12a2 2 0 012 2v16"/><path d="M9 21v-6h6v6"/><path d="M8 7h.01M12 7h.01M16 7h.01M8 11h.01M12 11h.01M16 11h.01"/></svg><span>Hausverwaltung</span></a><a href="/ferienwohnung/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" aria-hidden="true"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/><path d="M7 4h3"/></svg><span>Ferienwohnung</span></a></div>
-    </details>
+    <a href="/friseur/">Für Friseure</a>
     <a href="/blog/">Blog</a>
     <a href="/kontakt/">Kontakt</a>
     <div class="ph-mob-cta">
@@ -321,8 +303,8 @@ footer a:hover{color:#fff}
   <div class="footer-container">
     <div class="footer-grid">
       <div class="col-brand">
-        <a href="/" class="brand-row"><img class="footer-mark" src="/brand/phonbot-crystal-icon-cropped.png" alt="" width="28" height="28" decoding="async" loading="lazy"><span class="brand"><span class="w">Phon</span><span class="o">bot</span></span></a>
-        <p>KI-Telefonassistent.<br>Immer erreichbar.</p>
+        <a href="/" class="brand-row" aria-label="Phonbot Startseite"><img class="footer-mark" src="/brand/phonbot-site-icon-transparent-512.png" alt="" width="30" height="30" decoding="async" loading="lazy"><span class="footer-brand"><span class="w">Phon</span><span class="o">bot</span></span></a>
+        <p>Der KI-Telefonassistent für Friseursalons.<br>Immer erreichbar.</p>
       </div>
       <div>
         <p class="footer-heading">Produkt</p>
@@ -330,27 +312,8 @@ footer a:hover{color:#fff}
           <li><a href="/#features">Features</a></li>
           <li><a href="/#demo">Demo</a></li>
           <li><a href="/#preise">Preise</a></li>
+          <li><a href="/friseur/">Für Friseure</a></li>
           <li><a href="/blog/">Blog</a></li>
-        </ul>
-      </div>
-      <div>
-        <p class="footer-heading">Branchen</p>
-        <ul class="links">
-          <li><a href="/branchen/">Alle Branchen</a></li>
-          <li><a href="/friseur/">Friseur</a></li>
-          <li><a href="/handwerker/">Handwerker</a></li>
-          <li><a href="/reinigung/">Reinigung</a></li>
-          <li><a href="/restaurant/">Restaurant</a></li>
-          <li><a href="/autowerkstatt/">Autowerkstatt</a></li>
-          <li><a href="/kosmetikstudio/">Kosmetik</a></li>
-          <li><a href="/fahrschule/">Fahrschule</a></li>
-          <li><a href="/immobilienmakler/">Immobilien</a></li>
-          <li><a href="/versicherungsmakler/">Versicherung</a></li>
-          <li><a href="/fitnessstudio/">Fitness</a></li>
-          <li><a href="/energieberater/">Energieberater</a></li>
-          <li><a href="/hausverwaltung/">Hausverwaltung</a></li>
-          <li><a href="/ferienwohnung/">Ferienwohnung</a></li>
-          <li><a href="/selbststaendig/">Selbstständige</a></li>
         </ul>
       </div>
       <div>
@@ -358,7 +321,7 @@ footer a:hover{color:#fff}
         <ul class="links">
           <li><a href="/datenschutz/">Datenschutz</a></li>
           <li><a href="/avv/">AVV</a></li>
-          <li><a href="/sub-processors/">Sub-Processoren</a></li>
+          <li><a href="/sub-processors/">Subprozessoren</a></li>
           <li><a href="/impressum/">Impressum</a></li>
           <li><a href="/agb/">AGB</a></li>
         </ul>
@@ -373,7 +336,7 @@ footer a:hover{color:#fff}
     </div>
     <div class="footer-bottom">
       <p>© 2026 Phonbot · Ein Produkt von <a href="https://mindrails.de" rel="noopener">Hassieb Kalla</a> (Einzelunternehmer) · Alle Rechte vorbehalten</p>
-      <p>DSGVO-fokussiert · AVV verfügbar · <a href="mailto:info@phonbot.de">info@phonbot.de</a></p>
+      <p>Hosting in Deutschland/EU · AVV verfügbar · <a href="mailto:info@phonbot.de">info@phonbot.de</a></p>
     </div>
   </div>
 </footer>

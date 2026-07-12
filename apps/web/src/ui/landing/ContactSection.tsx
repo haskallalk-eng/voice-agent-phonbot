@@ -53,8 +53,8 @@ export function ContactSection() {
             <div className="relative rounded-2xl p-6 overflow-hidden" style={{ backdropFilter: 'blur(48px)' }}>
               <div className="absolute inset-0" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '1rem' }} />
               <div className="relative">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.15), rgba(6,182,212,0.1))' }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ background: 'linear-gradient(135deg, rgba(255,91,10,0.15), rgba(32,217,255,0.1))' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff5b0a" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 01-2.06 0L2 7"/>
                   </svg>
                 </div>
@@ -69,7 +69,7 @@ export function ContactSection() {
             <div className="relative rounded-2xl p-6 overflow-hidden" style={{ backdropFilter: 'blur(48px)' }}>
               <div className="absolute inset-0" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '1rem' }} />
               <div className="relative">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ background: 'linear-gradient(135deg, rgba(6,182,212,0.15), rgba(249,115,22,0.1))' }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4" style={{ background: 'linear-gradient(135deg, rgba(32,217,255,0.15), rgba(255,91,10,0.1))' }}>
                   <IconBolt size={18} className="text-cyan-400" />
                 </div>
                 <p className="text-xs text-white/30 uppercase tracking-wider font-semibold mb-1">Antwortzeit</p>

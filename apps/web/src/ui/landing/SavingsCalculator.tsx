@@ -28,7 +28,7 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
   const stunden = Math.round(botMin / 60);
   const personal = Math.round((botMin / 60) * lohn);
   const plan = anrufe <= 5 ? 0 : anrufe <= 20 ? 89 : anrufe <= 50 ? 179 : 349;
-  const planName = plan === 0 ? 'Free' : plan === 89 ? 'Starter' : plan === 179 ? 'Pro' : 'Agency';
+  const planName = plan === 0 ? 'Free' : plan === 89 ? 'Starter' : plan === 179 ? 'Professional' : 'Filialen';
   const netto = personal - plan;
   const roi = plan > 0 ? Math.round((netto / plan) * 100) : 0;
 
@@ -47,7 +47,7 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
       style={{ opacity: vis ? 1 : 0, transform: vis ? 'none' : 'translateY(20px)', transition: 'all 0.5s cubic-bezier(.4,0,.2,1)' }}
     >
       <div className="text-center mb-14">
-        <p className="text-[11px] font-semibold tracking-[0.2em] text-orange-400/60 uppercase mb-4">ROI-Rechner</p>
+        <p className="text-[11px] font-semibold tracking-[0.2em] uppercase mb-4">ROI-Rechner</p>
         <h2 className="text-3xl sm:text-[40px] font-extrabold text-white leading-tight">Lohnt sich <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, var(--crystal-warm), var(--crystal-cyan))' }}>Phonbot</span> für deinen Salon?</h2>
       </div>
 
@@ -55,8 +55,8 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
       <div className="relative rounded-3xl overflow-hidden">
         <div className="absolute inset-0 backdrop-blur-[48px]" style={{ background: 'rgba(255,255,255,0.03)' }} />
         <div className="absolute inset-0 rounded-3xl" style={{ border: '1px solid rgba(255,255,255,0.07)' }} />
-        <div className="crystal-page-glow absolute -top-40 -left-40 h-80 w-80 pointer-events-none" style={{ background: 'radial-gradient(ellipse, rgba(249,115,22,0.07) 0%, transparent 72%)' }} />
-        <div className="crystal-page-glow crystal-page-glow-cyan absolute -bottom-40 -right-40 h-80 w-80 pointer-events-none" style={{ background: 'radial-gradient(ellipse, rgba(6,182,212,0.05) 0%, transparent 72%)' }} />
+        <div className="crystal-page-glow absolute -top-40 -left-40 h-80 w-80 pointer-events-none" style={{ background: 'radial-gradient(ellipse, rgba(255,91,10,0.07) 0%, transparent 72%)' }} />
+        <div className="crystal-page-glow crystal-page-glow-cyan absolute -bottom-40 -right-40 h-80 w-80 pointer-events-none" style={{ background: 'radial-gradient(ellipse, rgba(32,217,255,0.05) 0%, transparent 72%)' }} />
 
         <div className="relative grid grid-cols-1 lg:grid-cols-2">
           {/* Sliders */}
@@ -79,7 +79,7 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
                           left: `calc(${pct}% - 8px)`,
                           background: 'rgba(255,255,255,0.9)',
                           backdropFilter: 'blur(8px)',
-                          boxShadow: '0 0 12px rgba(249,115,22,0.4), 0 1px 3px rgba(0,0,0,0.4)',
+                          boxShadow: '0 0 12px rgba(255,91,10,0.4), 0 1px 3px rgba(0,0,0,0.4)',
                         }} />
                       <input type="range" min={sl.min} max={sl.max} step={sl.step} value={sl.v}
                         aria-label={`${sl.l} einstellen`}
@@ -144,6 +144,10 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
                   : netto > 0
                     ? 'Schon ab wenigen Anrufen pro Tag rechnet sich Phonbot für dein Business.'
                     : 'Starte kostenlos und teste, wie viele Anrufe Phonbot für deinen Salon übernimmt.'}
+              </p>
+              {/* Rechenweg offenlegen — präzise Zahlen ohne Herleitung wirken wie Marketing-Mathematik. */}
+              <p className="text-[10px] text-white/12 mt-2 leading-relaxed text-center">
+                Beispielrechnung nur aus deinen Eingaben: Anrufe × (Dauer + Nacharbeit) × Anteil × 22 Werktage × Stundenlohn.
               </p>
             </div>
 

@@ -208,7 +208,7 @@ function TogglePill({ active, disabled = false }: { active: boolean; disabled?: 
       <span
         className={[
           'h-5 w-5 rounded-full transition-transform',
-          active ? 'translate-x-5 bg-orange-300 shadow-[0_0_18px_rgba(249,115,22,0.35)]' : 'translate-x-1 bg-white/35',
+          active ? 'translate-x-5 bg-orange-300 shadow-[0_0_18px_rgba(255,91,10,0.35)]' : 'translate-x-1 bg-white/35',
         ].join(' ')}
       />
     </span>
@@ -484,7 +484,7 @@ function BusinessTabButton({
       className={[
         'min-w-0 flex-1 rounded-2xl border px-4 py-3 text-left transition-all sm:min-w-[10rem]',
         active
-          ? 'border-orange-400/40 bg-orange-500/14 text-white shadow-[0_0_28px_rgba(249,115,22,0.10)]'
+          ? 'border-orange-400/40 bg-orange-500/14 text-white shadow-[0_0_28px_rgba(255,91,10,0.10)]'
           : 'border-white/10 bg-white/[0.035] text-white/55 hover:border-white/18 hover:text-white/80',
       ].join(' ')}
       aria-pressed={active}
@@ -558,7 +558,7 @@ function BusinessInfoPanel({
           onClick={saveDraft}
           disabled={!config || !dirty || saving || !draft.businessName.trim()}
           className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-all disabled:cursor-not-allowed disabled:opacity-40"
-          style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+          style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
         >
           {saving ? 'Speichere...' : dirty ? 'Betrieb speichern' : 'Gespeichert'}
         </button>
@@ -847,7 +847,7 @@ function StaffPanel({ config, onConfigSaved }: { config: AgentConfig | null; onC
           type="submit"
           disabled={!newName.trim() || savingId === 'new'}
           className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-          style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+          style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
         >
           Anlegen
         </button>
@@ -921,7 +921,7 @@ function StaffPanel({ config, onConfigSaved }: { config: AgentConfig | null; onC
                 onClick={() => { void saveSelectedHours(); }}
                 disabled={savingId === `${selected.id}:hours`}
                 className="mt-4 w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
-                style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
               >
                 {savingId === `${selected.id}:hours` ? 'Speichere...' : 'Arbeitszeiten speichern'}
               </button>
@@ -992,7 +992,7 @@ function CustomerDetails({ customer, questions }: { customer: Customer; question
         <div className="pointer-events-none absolute -bottom-16 left-10 h-32 w-32 rounded-full bg-cyan-400/10 blur-3xl" />
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-orange-400/25 bg-black/25 text-sm font-bold text-orange-100 shadow-[0_0_28px_rgba(249,115,22,0.12)]">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-orange-400/25 bg-black/25 text-sm font-bold text-orange-100 shadow-[0_0_28px_rgba(255,91,10,0.12)]">
               {customerInitials(customer.full_name)}
             </div>
             <div className="min-w-0">
@@ -1518,7 +1518,7 @@ export function CustomersPage({ focusCustomerId }: { focusCustomerId?: string | 
             className={[
               'inline-flex items-center justify-between gap-4 rounded-2xl px-5 py-3 text-sm font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed',
               enabled
-                ? 'bg-orange-500/18 text-orange-100 border border-orange-500/30 shadow-[0_0_26px_rgba(249,115,22,0.12)]'
+                ? 'bg-orange-500/18 text-orange-100 border border-orange-500/30 shadow-[0_0_26px_rgba(255,91,10,0.12)]'
                 : 'bg-white/[0.04] text-white/60 border border-white/10 hover:text-white hover:border-white/20',
             ].join(' ')}
           >

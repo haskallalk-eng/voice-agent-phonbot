@@ -406,7 +406,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
             <span className="text-base leading-none">‹</span>
             <span className="hidden sm:inline">Agenten</span>
           </button>
-          <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-orange-400/25 bg-gradient-to-br from-orange-500/22 via-white/[0.04] to-cyan-400/18 shadow-[0_0_26px_rgba(249,115,22,0.16)]">
+          <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-orange-400/25 bg-gradient-to-br from-orange-500/22 via-white/[0.04] to-cyan-400/18 shadow-[0_0_26px_rgba(255,91,10,0.16)]">
             <ActiveIcon size={16} className="text-orange-200" />
             <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.9)]" />
           </div>
@@ -444,7 +444,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
           {config.retellAgentId && (
             <button
               onClick={() => setTab('preview')}
-              className="flex h-9 items-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-3 text-xs font-semibold text-cyan-100 shadow-[0_0_24px_rgba(6,182,212,0.08)] transition-all hover:bg-cyan-300/16 hover:border-cyan-300/40 cursor-pointer"
+              className="flex h-9 items-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-3 text-xs font-semibold text-cyan-100 shadow-[0_0_24px_rgba(32,217,255,0.08)] transition-all hover:bg-cyan-300/16 hover:border-cyan-300/40 cursor-pointer"
             >
               <IconPlay size={13} />
               <span className="hidden sm:inline">Testen</span>
@@ -454,8 +454,8 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
             <button
               onClick={handleSave}
               disabled={saving || deploying || !isDirty}
-              className={`flex h-9 items-center gap-2 rounded-xl px-3.5 text-xs font-semibold text-white shadow-[0_0_28px_rgba(249,115,22,0.16)] transition-all disabled:opacity-50 ${isDirty ? 'cursor-pointer hover:scale-[1.02]' : 'cursor-default'}`}
-              style={{ background: isDirty ? 'linear-gradient(135deg, #F97316, #06B6D4)' : 'rgba(255,255,255,0.08)' }}
+              className={`flex h-9 items-center gap-2 rounded-xl px-3.5 text-xs font-semibold text-white shadow-[0_0_28px_rgba(255,91,10,0.16)] transition-all disabled:opacity-50 ${isDirty ? 'cursor-pointer hover:scale-[1.02]' : 'cursor-default'}`}
+              style={{ background: isDirty ? 'linear-gradient(135deg, #ff5b0a, #20d9ff)' : 'rgba(255,255,255,0.08)' }}
             >
               {saving ? (
                 <span className="inline-block w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -466,8 +466,8 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
             <button
               onClick={handleDeploy}
               disabled={deploying || saving}
-              className="flex h-9 items-center gap-2 rounded-xl px-3.5 text-xs font-semibold text-white shadow-[0_0_30px_rgba(249,115,22,0.18)] transition-all disabled:opacity-50 cursor-pointer hover:scale-[1.02]"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+              className="flex h-9 items-center gap-2 rounded-xl px-3.5 text-xs font-semibold text-white shadow-[0_0_30px_rgba(255,91,10,0.18)] transition-all disabled:opacity-50 cursor-pointer hover:scale-[1.02]"
+              style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
             >
               <IconDeploy size={13} />
               {deploying ? 'Aktiviere…' : 'Aktivieren'}
@@ -479,11 +479,11 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
 
       {/* No phone hint */}
       {config.retellAgentId && !hasPhone && (
-        <div className="flex items-center justify-between px-4 py-2" style={{ background: 'rgba(6,182,212,0.04)', borderBottom: '1px solid rgba(6,182,212,0.08)' }}>
+        <div className="flex items-center justify-between px-4 py-2" style={{ background: 'rgba(32,217,255,0.04)', borderBottom: '1px solid rgba(32,217,255,0.08)' }}>
           <p className="truncate text-[11px] text-cyan-400/60">Nur per Web-Call erreichbar — verbinde eine Telefonnummer für echte Anrufe</p>
           <button onClick={() => onNavigate?.('phone' as Page)}
             className="shrink-0 ml-3 text-[11px] font-medium bg-clip-text text-transparent cursor-pointer"
-            style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+            style={{ backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>
             Nummer einrichten →
           </button>
         </div>
@@ -505,7 +505,7 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
               onClick={() => setTab(t.id)}
               className={`group relative flex h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl border px-1.5 text-[10px] font-semibold transition-all cursor-pointer md:h-full md:min-h-0 md:w-full md:flex-row md:justify-start md:gap-3 md:rounded-2xl md:px-3 md:py-0 md:text-left md:text-xs ${
                 tab === t.id
-                  ? 'bg-gradient-to-br from-orange-500/16 via-white/[0.07] to-cyan-400/12 text-white border-orange-300/22 shadow-[0_0_28px_rgba(249,115,22,0.12)]'
+                  ? 'bg-gradient-to-br from-orange-500/16 via-white/[0.07] to-cyan-400/12 text-white border-orange-300/22 shadow-[0_0_28px_rgba(255,91,10,0.12)]'
                   : 'text-white/38 hover:text-white/75 hover:bg-white/[0.05] border-white/[0.04]'
               }`}
             >
@@ -532,8 +532,8 @@ export function AgentBuilder({ onNavigate }: { onNavigate?: (page: Page) => void
                   <span
                     className="w-2 h-2 rounded-full"
                     style={{
-                      background: 'linear-gradient(135deg, #F97316, #06B6D4)',
-                      boxShadow: '0 0 8px rgba(249,115,22,0.55)',
+                      background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)',
+                      boxShadow: '0 0 8px rgba(255,91,10,0.55)',
                     }}
                   />
                   {pendingSuggestions > 1 && (

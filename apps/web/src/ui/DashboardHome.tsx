@@ -231,7 +231,7 @@ export function DashboardHome({ onNavigate }: Props) {
         allSetupDone ? (
           <div
             className="glass rounded-2xl p-6 border border-green-500/20"
-            style={{ background: 'linear-gradient(135deg, rgba(34,197,94,0.08), rgba(6,182,212,0.05))' }}
+            style={{ background: 'linear-gradient(135deg, rgba(34,197,94,0.08), rgba(32,217,255,0.05))' }}
           >
             <div className="flex items-center gap-3">
               <div>
@@ -245,7 +245,7 @@ export function DashboardHome({ onNavigate }: Props) {
         ) : (
           <div
             className="glass rounded-2xl p-6 border border-orange-500/20"
-            style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.08), rgba(6,182,212,0.05))' }}
+            style={{ background: 'linear-gradient(135deg, rgba(255,91,10,0.08), rgba(32,217,255,0.05))' }}
           >
             <h3 className="text-lg font-bold text-white mb-2">Willkommen bei Phonbot!</h3>
             <p className="text-sm text-white/60 mb-4">
@@ -362,7 +362,7 @@ export function DashboardHome({ onNavigate }: Props) {
             onClick={() => onNavigate('test')}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium
               bg-transparent border border-orange-500/40 text-orange-300
-              hover:border-orange-500/60 hover:text-white hover:shadow-[0_0_14px_rgba(249,115,22,0.25)]
+              hover:border-orange-500/60 hover:text-white hover:shadow-[0_0_14px_rgba(255,91,10,0.25)]
               transition-all duration-200"
           >
             <IconTest size={16} />
@@ -383,7 +383,7 @@ export function DashboardHome({ onNavigate }: Props) {
               onClick={() => onNavigate(page)}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium text-white
                 bg-transparent border border-white/15
-                hover:border-orange-500/60 hover:text-white hover:shadow-[0_0_14px_rgba(249,115,22,0.25)]
+                hover:border-orange-500/60 hover:text-white hover:shadow-[0_0_14px_rgba(255,91,10,0.25)]
                 transition-all duration-200"
             >
               <Icon size={16} />

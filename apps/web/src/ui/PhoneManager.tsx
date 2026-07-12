@@ -445,11 +445,11 @@ export function PhoneManager({ onNavigate }: { onNavigate?: (page: string) => vo
 
       {provisionError && (
         provisionError.includes('Starter') || provisionError.includes('upgrade') || provisionError.includes('Plan') ? (
-          <div className="rounded-2xl p-6 text-center space-y-3" style={{ background: 'rgba(249,115,22,0.05)', backdropFilter: 'blur(24px)', border: '1px solid rgba(249,115,22,0.12)' }}>
-            <div className="w-12 h-12 rounded-xl mx-auto flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.15), rgba(6,182,212,0.1))' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth="1.75" strokeLinecap="round"><path d="M12 2v4m0 12v4m-8-10H0m24 0h-4m-2.93-6.07l2.83-2.83M4.1 19.9l2.83-2.83M19.9 19.9l-2.83-2.83M4.1 4.1l2.83 2.83"/><circle cx="12" cy="12" r="4"/></svg>
+          <div className="rounded-2xl p-6 text-center space-y-3" style={{ background: 'rgba(255,91,10,0.05)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,91,10,0.12)' }}>
+            <div className="w-12 h-12 rounded-xl mx-auto flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(255,91,10,0.15), rgba(32,217,255,0.1))' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff5b0a" strokeWidth="1.75" strokeLinecap="round"><path d="M12 2v4m0 12v4m-8-10H0m24 0h-4m-2.93-6.07l2.83-2.83M4.1 19.9l2.83-2.83M19.9 19.9l-2.83-2.83M4.1 4.1l2.83 2.83"/><circle cx="12" cy="12" r="4"/></svg>
             </div>
-            <p className="text-sm font-semibold bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Eigene Telefonnummer ab 8,99€/Mo</p>
+            <p className="text-sm font-semibold bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>Eigene Telefonnummer ab 8,99€/Mo</p>
             <p className="text-xs text-white/35">Mit dem Nummer-Plan bekommst du eine eigene Telefonnummer + 70 Minuten pro Monat. Dein Agent nimmt dann echte Anrufe entgegen.</p>
             <p className="text-[11px] text-cyan-400/50 mt-1">Tipp: Ab dem Starter-Plan (89€/Mo) ist eine Nummer bereits gratis inklusive.</p>
             <label className="mx-auto flex max-w-md items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-[11px] text-white/45">
@@ -475,7 +475,7 @@ export function PhoneManager({ onNavigate }: { onNavigate?: (page: string) => vo
             }}
               disabled={!billingLegalAccepted}
               className="rounded-lg px-5 py-2.5 text-xs font-semibold text-white transition-all hover:scale-[1.02] disabled:opacity-50 cursor-pointer"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)', boxShadow: '0 4px 20px rgba(249,115,22,0.2)' }}>
+              style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)', boxShadow: '0 4px 20px rgba(255,91,10,0.2)' }}>
               Nummer aktivieren — ab 8,99€/Mo
             </button>
             <button onClick={() => setProvisionError(null)} className="block mx-auto text-[11px] text-white/20 hover:text-white/40 transition-colors cursor-pointer mt-1">
@@ -492,7 +492,7 @@ export function PhoneManager({ onNavigate }: { onNavigate?: (page: string) => vo
 
       {/* Welcome Popup */}
       {showWelcome && newNumber && (
-        <div className="bg-white/5 backdrop-blur-xl border border-orange-500/20 rounded-2xl p-8 space-y-4" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.08), rgba(6,182,212,0.05))' }}>
+        <div className="bg-white/5 backdrop-blur-xl border border-orange-500/20 rounded-2xl p-8 space-y-4" style={{ background: 'linear-gradient(135deg, rgba(255,91,10,0.08), rgba(32,217,255,0.05))' }}>
           <div className="text-center space-y-2">
             <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 flex items-center justify-center mx-auto">
               <svg className="w-7 h-7 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">

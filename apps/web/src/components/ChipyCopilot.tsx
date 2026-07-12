@@ -38,7 +38,7 @@ function TypingIndicator() {
               className="block rounded-full"
               style={{
                 width: 6, height: 6,
-                background: 'linear-gradient(135deg, #F97316, #06B6D4)',
+                background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)',
                 animation: 'chipy-dot-bounce 1.4s ease-in-out infinite',
                 animationDelay: `${i * 0.18}s`,
               }}
@@ -60,7 +60,7 @@ function MessageBubble({ message }: { message: Message }) {
       <div className="flex justify-end mb-4">
         <div
           className="max-w-[82%] px-4 py-2.5 rounded-2xl rounded-br-md text-sm text-white leading-relaxed"
-          style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+          style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
         >
           {message.content}
         </div>
@@ -283,8 +283,8 @@ export function ChipyCopilot() {
           30% { transform: translateY(-5px); opacity: 1; }
         }
         @keyframes chipy-fab-glow {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(249,115,22,0.35), 0 4px 24px rgba(0,0,0,0.4); }
-          50% { box-shadow: 0 0 0 10px rgba(249,115,22,0), 0 4px 24px rgba(0,0,0,0.4); }
+          0%, 100% { box-shadow: 0 0 0 0 rgba(255,91,10,0.35), 0 4px 24px rgba(0,0,0,0.4); }
+          50% { box-shadow: 0 0 0 10px rgba(255,91,10,0), 0 4px 24px rgba(0,0,0,0.4); }
         }
         @keyframes chipy-window-in {
           from { opacity: 0; transform: translateY(16px) scale(0.95); }
@@ -310,20 +310,20 @@ export function ChipyCopilot() {
             width: 20, height: 56,
             borderRadius: docked === 'left' ? '0 14px 14px 0' : '14px 0 0 14px',
             background: 'rgba(10,10,15,0.9)',
-            border: '1px solid rgba(249,115,22,0.35)',
+            border: '1px solid rgba(255,91,10,0.35)',
             borderLeftWidth: docked === 'left' ? 0 : 1,
             borderRightWidth: docked === 'right' ? 0 : 1,
             backdropFilter: 'blur(12px)',
             boxShadow: docked === 'left'
-              ? '4px 0 14px rgba(249,115,22,0.18)'
-              : '-4px 0 14px rgba(249,115,22,0.18)',
+              ? '4px 0 14px rgba(255,91,10,0.18)'
+              : '-4px 0 14px rgba(255,91,10,0.18)',
           }}
         >
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="url(#chipy-peek-g)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <defs>
               <linearGradient id="chipy-peek-g" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#F97316" />
-                <stop offset="100%" stopColor="#06B6D4" />
+                <stop offset="0%" stopColor="#ff5b0a" />
+                <stop offset="100%" stopColor="#20d9ff" />
               </linearGradient>
             </defs>
             {docked === 'left'
@@ -364,14 +364,14 @@ export function ChipyCopilot() {
               width: FAB_SIZE, height: FAB_SIZE,
               borderRadius: '50%',
               background: 'linear-gradient(145deg, #1a1a2e 0%, #0f0f1a 100%)',
-              border: '2px solid rgba(249,115,22,0.35)',
+              border: '2px solid rgba(255,91,10,0.35)',
               animation: dragging ? 'none' : 'chipy-fab-glow 3s ease-in-out infinite',
               touchAction: 'none',
               cursor: dragging ? 'grabbing' : 'pointer',
               transition: dragging ? 'none' : 'transform 0.2s, box-shadow 0.2s',
               transform: dragging ? 'scale(1.12)' : undefined,
               boxShadow: dragging
-                ? '0 0 0 8px rgba(249,115,22,0.15), 0 12px 40px rgba(249,115,22,0.35)'
+                ? '0 0 0 8px rgba(255,91,10,0.15), 0 12px 40px rgba(255,91,10,0.35)'
                 : undefined,
               userSelect: 'none',
             }}
@@ -396,8 +396,8 @@ export function ChipyCopilot() {
             height: 'min(540px, calc(100vh - 120px - env(safe-area-inset-bottom, 0px) - env(safe-area-inset-top, 0px)))',
             borderRadius: 20,
             background: 'linear-gradient(180deg, rgba(15,15,26,0.97) 0%, rgba(10,10,18,0.98) 100%)',
-            border: '1px solid rgba(249,115,22,0.15)',
-            boxShadow: '0 0 60px rgba(249,115,22,0.08), 0 8px 40px rgba(0,0,0,0.6)',
+            border: '1px solid rgba(255,91,10,0.15)',
+            boxShadow: '0 0 60px rgba(255,91,10,0.08), 0 8px 40px rgba(0,0,0,0.6)',
             backdropFilter: 'blur(24px)',
             WebkitBackdropFilter: 'blur(24px)',
             animation: 'chipy-window-in 0.25s ease-out',
@@ -407,8 +407,8 @@ export function ChipyCopilot() {
           <div
             className="flex items-center gap-3 px-4 py-3 shrink-0"
             style={{
-              borderBottom: '1px solid rgba(249,115,22,0.12)',
-              background: 'linear-gradient(135deg, rgba(249,115,22,0.08) 0%, rgba(234,88,12,0.04) 100%)',
+              borderBottom: '1px solid rgba(255,91,10,0.12)',
+              background: 'linear-gradient(135deg, rgba(255,91,10,0.08) 0%, rgba(234,88,12,0.04) 100%)',
             }}
           >
             <FoxLogo size={36} glow />
@@ -416,7 +416,7 @@ export function ChipyCopilot() {
               <p className="font-bold text-white text-sm leading-tight tracking-tight">
                 Chipy Copilot
               </p>
-              <p className="text-xs" style={{ color: 'rgba(249,115,22,0.6)' }}>
+              <p className="text-xs" style={{ color: 'rgba(255,91,10,0.6)' }}>
                 Dein Phonbot-Assistent
               </p>
             </div>
@@ -442,8 +442,8 @@ export function ChipyCopilot() {
                 className="text-xs rounded-xl px-3 py-2 mb-3"
                 style={{
                   color: '#FB923C',
-                  background: 'rgba(249,115,22,0.08)',
-                  border: '1px solid rgba(249,115,22,0.15)',
+                  background: 'rgba(255,91,10,0.08)',
+                  border: '1px solid rgba(255,91,10,0.15)',
                 }}
               >
                 {error}
@@ -455,7 +455,7 @@ export function ChipyCopilot() {
           {/* ── Input ── */}
           <div
             className="px-4 pb-4 pt-2.5 shrink-0"
-            style={{ borderTop: '1px solid rgba(249,115,22,0.08)' }}
+            style={{ borderTop: '1px solid rgba(255,91,10,0.08)' }}
           >
             <div className="flex gap-2 items-end">
               <textarea
@@ -474,7 +474,7 @@ export function ChipyCopilot() {
                   border: '1px solid rgba(255,255,255,0.08)',
                 }}
                 onFocus={(e) => {
-                  e.currentTarget.style.borderColor = 'rgba(249,115,22,0.3)';
+                  e.currentTarget.style.borderColor = 'rgba(255,91,10,0.3)';
                   e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
                 }}
                 onBlur={(e) => {
@@ -495,7 +495,7 @@ export function ChipyCopilot() {
                 style={{
                   background: !input.trim() || loading
                     ? 'rgba(255,255,255,0.05)'
-                    : 'linear-gradient(135deg, #F97316, #06B6D4)',
+                    : 'linear-gradient(135deg, #ff5b0a, #20d9ff)',
                 }}
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>

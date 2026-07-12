@@ -110,20 +110,20 @@ function SuggestionBanner({
     <div
       className="relative glass rounded-2xl p-5 mb-5 overflow-hidden"
       style={{
-        border: '1px solid rgba(249,115,22,0.22)',
-        background: 'linear-gradient(135deg, rgba(249,115,22,0.05) 0%, rgba(6,182,212,0.03) 100%)',
+        border: '1px solid rgba(255,91,10,0.22)',
+        background: 'linear-gradient(135deg, rgba(255,91,10,0.05) 0%, rgba(32,217,255,0.03) 100%)',
       }}
     >
       {/* Soft glow edge — hints at the orange→cyan brand without shouting */}
       <div
         aria-hidden
         className="pointer-events-none absolute -top-16 -right-16 w-48 h-48 rounded-full blur-3xl opacity-40"
-        style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.25) 0%, transparent 70%)' }}
+        style={{ background: 'radial-gradient(circle, rgba(255,91,10,0.25) 0%, transparent 70%)' }}
       />
       <div className="relative flex items-start gap-3">
         <div
           className="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center"
-          style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.2), rgba(6,182,212,0.15))', border: '1px solid rgba(249,115,22,0.2)' }}
+          style={{ background: 'linear-gradient(135deg, rgba(255,91,10,0.2), rgba(32,217,255,0.15))', border: '1px solid rgba(255,91,10,0.2)' }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="text-orange-300">
             <path d="M12 2l2.39 6.95H21l-5.3 4.38L17.4 20 12 15.9 6.6 20l1.7-6.67L3 8.95h6.61z" />
@@ -190,8 +190,8 @@ function SuggestionBanner({
                 setLoading('apply');
                 try { await onApply(s.id, dirty ? displayText : undefined); } finally { setLoading(null); }
               }}
-              className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(249,115,22,0.35)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+              className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(255,91,10,0.35)] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none"
+              style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
             >
               {loading === 'apply' ? 'Übernimmt…' : dirty ? 'Mit deiner Version übernehmen' : 'Übernehmen'}
             </button>
@@ -206,8 +206,8 @@ function SuggestionBanner({
             type="button"
             disabled={loading !== null}
             onClick={() => onNavigate?.(kind.route)}
-            className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(6,182,212,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }}
+            className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(32,217,255,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ background: 'linear-gradient(135deg, #20d9ff, #ff5b0a)' }}
           >
             Zur Einstellung →
           </button>
@@ -632,14 +632,14 @@ function PromptView({
         <div
           className="rounded-xl border overflow-hidden"
           style={{
-            borderColor: '#F9731640',
-            background: 'linear-gradient(135deg, rgba(249,115,22,0.05) 0%, rgba(6,182,212,0.03) 100%)',
+            borderColor: '#ff5b0a40',
+            background: 'linear-gradient(135deg, rgba(255,91,10,0.05) 0%, rgba(32,217,255,0.03) 100%)',
           }}
         >
-          <div className="flex items-center gap-2.5 px-4 py-2.5" style={{ borderBottom: '1px solid rgba(249,115,22,0.2)' }}>
+          <div className="flex items-center gap-2.5 px-4 py-2.5" style={{ borderBottom: '1px solid rgba(255,91,10,0.2)' }}>
             <span
               className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center"
-              style={{ background: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.25)' }}
+              style={{ background: 'rgba(255,91,10,0.12)', border: '1px solid rgba(255,91,10,0.25)' }}
             >
               <IconMessageSquare size={14} className="text-orange-300" />
             </span>
@@ -707,7 +707,7 @@ function RoleCard({
               aria-pressed={active}
               className={`group relative flex flex-col items-center gap-2 p-3 rounded-xl border transition-all text-center cursor-pointer ${
                 active
-                  ? 'border-orange-500/55 bg-orange-500/[0.09] shadow-[0_0_20px_rgba(249,115,22,0.1)]'
+                  ? 'border-orange-500/55 bg-orange-500/[0.09] shadow-[0_0_20px_rgba(255,91,10,0.1)]'
                   : 'border-white/[0.07] bg-white/[0.03] hover:border-orange-500/25 hover:bg-white/[0.06]'
               }`}
             >
@@ -715,7 +715,7 @@ function RoleCard({
                 <span
                   aria-hidden
                   className="absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center"
-                  style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                  style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
                 >
                   <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12" />

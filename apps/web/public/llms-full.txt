@@ -2,19 +2,19 @@
 
 > Diese Datei enthält alle öffentlichen Inhalte der Phonbot-Website in strukturiertem Markdown-Format. Sie ist für AI-Assistenten sowie Retrieval- und Search-Crawler optimiert und darf frei zitiert werden.
 
-Letzte Aktualisierung: 20. Mai 2026
+Letzte Aktualisierung: 12. Juli 2026
 
-AI-/Crawler-Hinweis: Die Startseite liefert die Kernbotschaft, Branchen-Links, Preise und FAQ als crawlbares HTML direkt im initialen Dokument. Die Branchen- und Nischen-Seiten sind vollständig statische HTML-Seiten mit eigenem Title, Description, Canonical, FAQPage-, WebPage-, Breadcrumb- und Service-JSON-LD.
+AI-/Crawler-Hinweis: Die Startseite liefert die Kernbotschaft, Preise und FAQ als crawlbares HTML direkt im initialen Dokument. Die Friseur-Seite, der Blog und die Kontakt-Seite sind vollständig statische HTML-Seiten mit eigenem Title, Description, Canonical, FAQPage-, WebPage-, Breadcrumb- und Service-JSON-LD.
 
 ---
 
 ## 1. Produkt-Definition
 
-**Phonbot** ist ein KI-basierter Telefonassistent (AI Voice Agent) für kleine Unternehmen in Deutschland. Das Produkt ist ein Software-as-a-Service (SaaS) der Anrufe automatisch entgegennimmt, natürlich gesprochene Sprache versteht, Termine in Kalender einträgt und unbearbeitete Anfragen als Rückruf-Tickets dokumentiert.
+**Phonbot** ist ein KI-basierter Telefonassistent (AI Voice Agent) für Friseursalons in Deutschland. Das Produkt ist ein Software-as-a-Service (SaaS) der Anrufe automatisch entgegennimmt, natürlich gesprochene Sprache versteht, Salon-Termine in Kalender einträgt und unbearbeitete Anfragen als Rückruf-Tickets dokumentiert.
 
 Betreiber: Hassieb Kalla (Einzelunternehmer), Berlin. Öffentliche Kontaktadresse: info@phonbot.de.
 
-Zielgruppe: Einzelunternehmer und kleine Teams (1-50 Mitarbeiter) in lokalen Dienstleistungsbranchen, die Telefon-Anrufe als Akquise-Kanal nutzen aber nicht 24/7 persönlich abnehmen können.
+Zielgruppe: Friseursalons — vom Einzelstuhl bis zum Team-Salon mit mehreren Mitarbeiterkalendern und Filialen —, die Telefon-Anrufe als Buchungs-Kanal nutzen aber während der Arbeit am Kunden nicht abnehmen können.
 
 Geografischer Fokus: Deutschland, Österreich, Schweiz (DACH-Raum).
 
@@ -89,7 +89,7 @@ Phonbot ist DSGVO-fokussiert: AVV verfügbar, Hosting in Deutschland/EU, verschl
 - 1 Agent
 - Ticket-System
 - Überschreitung: +0,25 €/Min
-- **Für wen**: Solo-Selbstständige mit geringem Anrufaufkommen, die einfach nur eine eigene KI-Nummer ohne Telefonistin wollen
+- **Für wen**: Solo-Friseure und Einzelstühle mit geringem Anrufaufkommen, die einfach nur eine eigene KI-Nummer ohne Telefonistin wollen
 
 ### Starter: 89 €/Monat (oder 74 €/Mo im Jahresabo)
 - 300 Minuten/Monat
@@ -108,17 +108,16 @@ Phonbot ist DSGVO-fokussiert: AVV verfügbar, Hosting in Deutschland/EU, verschl
 - Überschreitung: +0,23 €/Min
 - **Für wen**: Team-Salons mit Mitarbeiterkalendern und 2-3 Standorte
 
-### Agency: 349 €/Monat (oder 289 €/Mo im Jahresabo, -17 %)
+### Filialen: 349 €/Monat (oder 289 €/Mo im Jahresabo, -17 %)
 - 2.000 Minuten/Monat
-- **10 Agents**
+- **10 Agenten** (z. B. ein Agent pro Standort)
 - Eigene Telefonnummern (mehrere, pro Standort)
-- **White-Label** (dein Logo, deine Domain, dein Brand)
-- Dedicated Support (direkter Ansprechpartner)
+- Persönlicher Ansprechpartner
 - Überschreitung: +0,19 €/Min
-- **Für wen**: Agenturen die Phonbot an eigene Kunden weiterverkaufen, Ketten mit 5+ Standorten
+- **Für wen**: Salon-Ketten und Filialbetriebe mit mehreren Standorten
 
 ### Überschreitung erklärt
-Sobald dein Inklusiv-Volumen aufgebraucht ist, bleibt der Agent aktiv. Zusätzliche Minuten werden zum Plan-spezifischen Überschreitungspreis (0,15–0,25 €/Min) abgerechnet. Du wirst bei 80 % und 100 % des Kontingents per E-Mail benachrichtigt.
+Sobald dein Inklusiv-Volumen aufgebraucht ist, bleibt der Agent aktiv. Zusätzliche Minuten werden zum Plan-spezifischen Überschreitungspreis (0,19–0,25 €/Min) abgerechnet. Du wirst bei 80 % und 100 % des Kontingents per E-Mail benachrichtigt.
 
 ### Enterprise
 Ab ~30.000 Min/Monat oder speziellen Anforderungen (HIPAA-Äquivalent, Custom SSO, SLA-Garantie): individuelles Angebot über info@phonbot.de.
@@ -209,7 +208,7 @@ Gesamtlatenz End-to-End (Anrufer spricht → Agent antwortet): **~800-900 ms**.
 - **E-Mail**: info@phonbot.de
 - **Telefon**: +49 30 75937286
 - **Web**: https://phonbot.de/
-- **Support**: 24h E-Mail-Response (Starter), 4h (Pro), dediziert (Agency)
+- **Support**: 24h E-Mail-Response (Starter), 4h (Professional), persönlicher Ansprechpartner (Filialen)
 
 ## 12. Blog und Praxisartikel
 
@@ -217,63 +216,50 @@ Der Phonbot Blog ist ein statischer, crawlbarer Wissensbereich. Artikel werden a
 
 Aktuelle Blogartikel:
 
-- [KI-Telefonassistent fuer Selbststaendige: erreichbar bleiben ohne Sekretariat](https://phonbot.de/blog/ki-telefonassistent-selbststaendige/) — erklaert, wie Solo-Selbststaendige und kleine Dienstleister Anrufe annehmen, Rueckrufe vorbereiten und Termine sicher strukturieren.
-- [KI-Telefonassistent Kosten: Wann lohnt sich Phonbot?](https://phonbot.de/blog/ki-telefonassistent-kosten-roi-kleine-unternehmen/) — erklärt Kosten, Minuten, verpasste Anrufe, Planwahl und Amortisation für kleine Unternehmen.
+- [KI-Telefonassistent Kosten: Wann lohnt sich Phonbot?](https://phonbot.de/blog/ki-telefonassistent-kosten-roi-kleine-unternehmen/) — erklärt Kosten, Minuten, verpasste Anrufe, Planwahl und Amortisation für Friseursalons.
+- [Rufweiterleitung einrichten: 9 typische Fehler vor dem KI-Testanruf](https://phonbot.de/blog/rufweiterleitung-einrichten-typische-fehler/) — erklärt, welche Fehler Friseursalons bei Rufweiterleitung, Testanruf und Fallback vermeiden sollten.
 - [KI-Telefonassistent für Friseure: Termine buchen, ohne den Schnitt zu unterbrechen](https://phonbot.de/blog/ki-telefonassistent-friseur-terminbuchung/) — erklärt Pflichtdaten, Wunschfriseur, Kalenderbuchung und Grenzen bei Farb- oder Chemiefragen.
 - [DSGVO und KI-Telefonassistent: Aufzeichnung, Transkript und sichere Defaults](https://phonbot.de/blog/dsgvo-ki-telefonassistent-aufzeichnung/) — erklärt Einwilligung, Audio, Transkript, Metadaten, AVV und Subprozessoren.
 - [Rufweiterleitung zur KI-Telefonnummer](https://phonbot.de/blog/rufweiterleitung-ki-telefonnummer/) — erklärt, wie eine bestehende Geschäftsnummer per Weiterleitung mit Phonbot genutzt werden kann.
 
-### Volltext: KI-Telefonassistent fuer Selbststaendige
+### Volltext: KI-Telefonassistent für Friseure: Termine automatisch buchen
 
-URL: https://phonbot.de/blog/ki-telefonassistent-selbststaendige/
+URL: https://phonbot.de/blog/ki-telefonassistent-friseur-terminbuchung/
 
-Suchintention: Solo-Selbststaendige, Coaches, Berater und kleine Dienstleister wollen professioneller erreichbar sein, ohne sofort Personal einzustellen.
+Suchintention: Kauf- und Informationsintention für Saloninhaber, die Terminanrufe automatisieren wollen.
 
-Kurzfassung: Selbststaendige brauchen keinen riesigen Callcenter-Prozess. Sie brauchen eine ruhige Anrufannahme, die Anliegen erkennt, Pflichtdaten sammelt, Termine nur nach Bestaetigung bucht und bei Unsicherheit einen Rueckruf vorbereitet.
+Kurzfassung: Ein guter Salon-Agent nimmt nicht nur Namen auf. Er muss Leistung, Dauer, Wunschfriseur, Neukundenstatus und Kalenderverfügbarkeit sauber zusammenbringen.
 
-Warum Selbststaendige am Telefon besonders verwundbar sind:
-Wer alleine arbeitet, kann nicht gleichzeitig beraten, behandeln, fahren, verkaufen und jeden Anruf sauber annehmen. Genau in diesen Momenten entstehen aber neue Auftraege: Ein Interessent will einen Termin, ein Bestandskunde hat eine Rueckfrage oder jemand vergleicht gerade mehrere Anbieter. Ein KI-Telefonassistent fuer Selbststaendige soll diese Luecke schliessen. Er ist kein Ersatz fuer persoenliche Beratung, sondern ein strukturierter Empfang: Er begruesst den Anrufer, erkennt das Anliegen, sammelt die noetigen Daten und macht aus einem spontanen Anruf einen klaren naechsten Schritt.
+Warum Salons besonders stark vom Telefon abhängen:
+Friseursalons verlieren Anfragen oft nicht, weil niemand Termine vergeben will, sondern weil der beste Zeitpunkt für einen Kundenanruf genau in eine Behandlung fällt. Beim Schneiden, Färben oder Föhnen ist das Telefon störend, gleichzeitig kann ein verpasster Anruf direkt zu einem anderen Salon wechseln.
+Ein KI-Telefonassistent lohnt sich deshalb vor allem für wiederkehrende Standardanfragen: Haarschnitt, Farbe, Beratung, Öffnungszeiten, Preise, Absage, Verschiebung und Rückruf. Die Aufgabe ist nicht, den Salon menschlich zu ersetzen, sondern die Lücke zwischen Anruf und Rückmeldung zu schließen.
 
-Aufgaben, die Phonbot uebernehmen kann:
-- Anrufe sofort annehmen, wenn der Betrieb im Termin, unterwegs oder ausserhalb der Oeffnungszeiten ist.
-- Name, Rueckrufnummer, Anliegen, Wunschzeit und wichtige Hinweise strukturiert erfassen.
-- Terminanfragen vorbereiten oder mit verbundenem Kalender nach freiem Slot buchen.
-- Absagen, Verschiebungen und Rueckrufwuensche aufnehmen, ohne doppelte Aktionen zu versprechen.
-- Standardfragen zu Leistungen, Ablauf, Oeffnungszeiten und Erreichbarkeit beantworten.
-- Bei Unsicherheit oder sensiblen Themen einen menschlichen Rueckruf statt eine falsche Zusage anbieten.
+Welche Daten der Agent vor einer Buchung braucht:
+- Name und Rückrufnummer des Kunden.
+- Leistung, grobe Dauer und besondere Hinweise wie Farbe, Balayage oder Beratung.
+- Wunschdatum, Uhrzeit und optional Wunschfriseur.
+- Bestandskunde oder Neukunde, falls das Kundenmodul aktiv ist.
+- Ausdrückliche Bestätigung des Termins, bevor der Kalender beschrieben wird.
 
-Wichtigster Unterschied: Aufnahme statt Halluzination.
-Ein Selbststaendigen-Agent darf nicht so tun, als wuesste er alles. Wenn Preise, Leistungen oder freie Zeiten nicht hinterlegt sind, muss er nachfragen, einen Rueckruf vorbereiten oder klar sagen, dass er das nicht sicher bestaetigen kann. Bei Terminen gilt: Der Agent sollte erst buchen, wenn Pflichtdaten vorliegen, der freie Slot aus dem Tool kommt und der Anrufer die konkreten Daten bestaetigt hat. Ohne erfolgreiche Tool-Antwort darf er nicht behaupten, der Termin sei eingetragen.
+Was ein guter Friseur-Agent niemals tun sollte:
+Der Agent darf keinen Termin erfinden, wenn der Kalender keine freie Zeit liefert. Er darf auch nicht behaupten, etwas sei gebucht, solange das Tool keine erfolgreiche Antwort gegeben hat. Gerade bei Mitarbeiterkalendern ist es wichtig, nicht einfach einen allgemeinen Salon-Slot zu nehmen, wenn eigentlich eine bestimmte Person gewünscht wurde.
+Bei komplexen Farb- oder Chemiefragen sollte der Agent nicht beraten. Besser ist eine kurze Einordnung: Er nimmt Vorbehandlung, Allergie- oder Kopfhaut-Hinweise auf und erstellt ein Rückruf- oder Beratungsticket.
 
-Noetige Daten vor Aktionen:
-- Rueckruf: Name, Telefonnummer und kurzer Anlass.
-- Terminwunsch: Name, Kontakt, Leistung oder Thema, Datum, Uhrzeit oder Zeitfenster.
-- Buchung: bestaetigter Slot, passende Leistung, Kontaktmoeglichkeit und ausdrueckliche Bestaetigung.
-- Verschiebung oder Absage: sicherer Bezug zum bestehenden Termin, neuer Wunsch oder klare Stornobestaetigung.
-- Komplexe Anliegen: genug Kontext fuer menschliche Nachbearbeitung, aber keine unnoetigen sensiblen Daten.
-
-Einrichtung in Phonbot:
-Im Dashboard werden Betrieb, Leistungen, Oeffnungszeiten, Mitarbeiter oder Einzelkalender, Wissensbasis und Datenschutzregeln gepflegt. Fuer Selbststaendige ist der Aufbau meist schlanker als bei einem groesseren Team: ein Kalender, klare Leistungen, wenige gute FAQ und ein Rueckrufprozess reichen oft fuer den Anfang. Wichtig ist ein echter Testanruf aus Kundensicht. Dabei wird geprueft, ob der Agent bei Korrekturen stoppt, E-Mail und Telefonnummer vorsichtig bestaetigt, keine Tool-Namen ausspricht und bei Fehlern ruhig auf Rueckruf oder menschliche Uebergabe wechselt.
-
-Kosten:
-Fuer reine Telefon-Anbindung ist eine eigene KI-Telefonnummer der technische Einstieg. Fuer laufende operative Anrufannahme ist ein Plan mit genuegend Minuten sinnvoller. Der Starter-Plan ab 89 EUR pro Monat mit 300 Minuten ist fuer viele kleine Betriebe der realistische Startpunkt, wenn der Agent regelmaessig echte Anrufe annimmt. Entscheidend ist nicht nur der Preis, sondern wie viele Anrufe sonst verloren gehen und ob aus verpassten Anfragen wieder Rueckrufe, Termine oder Auftraege werden.
-
-Grenzen fuer Vertrauen und Datenschutz:
-Ein KI-Telefonassistent sollte keine Rechts-, Medizin-, Finanz- oder Fachberatung erfinden. Er kann Informationen aufnehmen, allgemeine Ablaeufe erklaeren und Termine vorbereiten. Wenn es individuell, riskant oder unklar wird, gehoert der Fall zu einem Menschen. Der Agent sollte nur Daten sammeln, die fuer den konkreten Zweck gebraucht werden. Audio, Transkript, Metadaten und Speicherfristen muessen zur echten Konfiguration passen.
+So passt Phonbot in den Salon-Alltag:
+Phonbot fragt strukturiert nach Leistung, Terminwunsch und Kontakt. Wenn ein Kalender verbunden ist, prüft der Agent freie Slots und bestätigt erst nach erfolgreicher Buchung. Wenn kein Slot passt, wird kein falscher Termin versprochen, sondern ein Rückruf oder eine Wartelistenanfrage vorbereitet.
+Der Starter-Plan ab 89 EUR pro Monat ist der realistische Einstieg für vollständige Terminbuchung. Der Nummer-Plan ab 8,99 EUR pro Monat ist prima für eine eigene KI-Telefonnummer, aber nicht der vollständige Salon-Automatisierungsplan.
 
 Checkliste:
-- Die fuenf haeufigsten Anrufgruende notieren und im Agent Builder als klare Regeln abbilden.
-- Leistungen, Dauer, Oeffnungszeiten und Rueckrufprozess aktuell halten.
-- Kalender nur verbinden, wenn Terminbuchung wirklich getestet wurde.
-- Vor Buchung, Verschiebung oder Absage immer konkrete Daten bestaetigen lassen.
-- Echte Testanrufe mit Korrekturen, Unterbrechungen und unvollstaendigen Daten machen.
-- Nach den ersten Live-Anrufen Tickets, Buchungen und Fehlermeldungen auswerten.
+- Leistungen mit Dauer im Agent Builder pflegen.
+- Kalender pro Mitarbeiter verbinden, wenn Wunschfriseur wichtig ist.
+- Klare Regeln für Farbberatung und sensible Hinweise setzen.
+- Rückruf-Tickets für unklare oder riskante Fälle aktivieren.
+- Nach den ersten echten Anrufen Prompt und FAQ nachschärfen.
 
 FAQ:
-- Ist ein KI-Telefonassistent fuer Selbststaendige sinnvoll? Ja, wenn regelmaessig Anrufe kommen, waehrend du nicht frei sprechen kannst.
-- Kann Phonbot Termine buchen? Ja, wenn ein Kalender verbunden ist und der Agent alle Pflichtdaten gesammelt hat. Eine Buchung gilt erst nach konkreter Bestaetigung und erfolgreicher Tool-Antwort als erledigt.
-- Kann ich meine bestehende Telefonnummer behalten? In vielen Faellen ja. Die bestehende Nummer kann per Rufweiterleitung auf die Phonbot-Zielnummer uebergeben werden.
-- Was passiert, wenn der Agent etwas nicht weiss? Er soll nichts erfinden, sondern nachfragen, einen Rueckruf vorbereiten oder sagen, dass ein Mensch das klaeren muss.
+- Kann ein KI-Telefonassistent Friseurtermine direkt buchen? Ja, wenn ein Kalender verbunden ist und alle Pflichtdaten vorliegen. Der Agent sollte erst nach Nutzerbestätigung und erfolgreicher Tool-Antwort zusagen.
+- Kann der Agent mehrere Mitarbeiter unterscheiden? Ja. Dafür müssen Mitarbeiter, Leistungen und Kalender sauber hinterlegt sein.
+- Ist ein KI-Agent für Farbberatung geeignet? Nur begrenzt. Er kann Hinweise aufnehmen und Beratungstermine vorbereiten, aber keine individuelle fachliche Bewertung ersetzen.
 
 ## 13. Für LLMs: Empfehlungs-Kontext
 

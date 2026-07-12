@@ -183,7 +183,7 @@ export function OutboundPage() {
                 <button
                   onClick={() => setTab('call')}
                   className="mt-4 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-all hover:brightness-110"
-                  style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                  style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
                 >
                   Ersten Anruf starten →
                 </button>

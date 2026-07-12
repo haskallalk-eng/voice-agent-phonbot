@@ -60,7 +60,7 @@ export function VerifyEmailPage() {
               <a
                 href="/?page=login"
                 className="block w-full rounded-xl px-6 py-3 font-semibold text-white text-sm text-center transition-all hover:opacity-90"
-                style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
               >
                 Zum Login
               </a>
@@ -81,7 +81,7 @@ export function VerifyEmailPage() {
               <a
                 href="/?page=login"
                 className="block w-full rounded-xl px-6 py-3 font-semibold text-white text-sm text-center transition-all hover:opacity-90"
-                style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
               >
                 Zum Login
               </a>

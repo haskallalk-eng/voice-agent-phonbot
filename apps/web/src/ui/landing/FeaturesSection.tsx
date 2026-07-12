@@ -26,7 +26,7 @@ export function FeaturesSection() {
             {/* Icon */}
             <div className="w-10 h-10 rounded-lg flex items-center justify-center mb-4
               bg-gradient-to-br from-orange-500/15 to-cyan-500/10 border border-orange-500/20
-              group-hover:border-orange-500/40 group-hover:shadow-[0_0_16px_rgba(249,115,22,0.15)]
+              group-hover:border-orange-500/40 group-hover:shadow-[0_0_16px_rgba(255,91,10,0.15)]
               transition-all duration-300">
               <f.Icon size={20} className="text-orange-400/80 group-hover:text-orange-300 transition-colors" />
             </div>

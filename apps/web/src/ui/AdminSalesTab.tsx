@@ -95,7 +95,7 @@ export function AdminSalesTab() {
               <option value="semi">Halb-Auto: Übergabe möglich</option>
               <option value="self">Self: selbst abschließen</option>
             </select>
-            <button className="w-full rounded-2xl px-4 py-3 text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)' }}>
+            <button className="w-full rounded-2xl px-4 py-3 text-sm font-bold text-white" style={{ background: 'linear-gradient(135deg,#ff5b0a,#20d9ff)' }}>
               Vertriebler speichern
             </button>
           </form>

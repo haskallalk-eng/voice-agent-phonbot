@@ -85,15 +85,15 @@ Jahreszahlung: je nach Plan ca. 15-18 % g?nstiger; aktuelle Jahrespreise werden 
 - [Kontakt](https://phonbot.de/kontakt/): Demo, Fragen und Erstgespräch
 - [FAQ](https://phonbot.de/#faq): 9 häufigste Fragen
 - [Demo-Callback](https://phonbot.de/#demo): Phonbot ruft dich live an
-- [Blog](https://phonbot.de/blog/): Praxisartikel zu KI-Telefonie, Rufweiterleitung, DSGVO und Branchen-Automatisierung
+- [Blog](https://phonbot.de/blog/): Praxisartikel zu KI-Telefonie, Rufweiterleitung, DSGVO und Salon-Automatisierung
 - [Kontakt](mailto:info@phonbot.de)
 - [Volltext für LLMs](https://phonbot.de/llms-full.txt): Alle Inhalte als Markdown
 
 ## Blog & Praxisartikel
 
-- [KI-Telefonassistent fuer Selbststaendige](https://phonbot.de/blog/ki-telefonassistent-selbststaendige/): erreichbar bleiben, Rueckrufe vorbereiten, Termine sicher strukturieren.
-- [KI-Telefonassistent Kosten und ROI](https://phonbot.de/blog/ki-telefonassistent-kosten-roi-kleine-unternehmen/): Kosten, Minuten, verpasste Anrufe, Planwahl und Amortisation für kleine Unternehmen.
 - [KI-Telefonassistent für Friseure](https://phonbot.de/blog/ki-telefonassistent-friseur-terminbuchung/): Terminbuchung, Wunschfriseur, Pflichtdaten, Grenzen bei Farbberatung.
+- [KI-Telefonassistent Kosten und ROI](https://phonbot.de/blog/ki-telefonassistent-kosten-roi-kleine-unternehmen/): Kosten, Minuten, verpasste Anrufe, Planwahl und Amortisation für Friseursalons.
+- [Rufweiterleitung einrichten: 9 typische Fehler](https://phonbot.de/blog/rufweiterleitung-einrichten-typische-fehler/): Fehler bei Rufweiterleitung, Testanruf und Fallback vermeiden, bevor Phonbot live geht.
 - [DSGVO und KI-Telefonassistent](https://phonbot.de/blog/dsgvo-ki-telefonassistent-aufzeichnung/): Einwilligung, Aufzeichnung, Transkript, Metadaten, AVV und Subprozessoren.
 - [Rufweiterleitung zur KI-Telefonnummer](https://phonbot.de/blog/rufweiterleitung-ki-telefonnummer/): bestehende Nummer behalten, Weiterleitungsarten, Test vor Live-Schaltung.
 

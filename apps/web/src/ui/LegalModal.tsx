@@ -564,7 +564,7 @@ export function LegalModal({ page, onClose }: Props) {
         style={{
           background: 'rgba(15,15,24,0.97)',
           border: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 0 80px rgba(249,115,22,0.08), 0 0 0 1px rgba(255,255,255,0.06)',
+          boxShadow: '0 0 80px rgba(255,91,10,0.08), 0 0 0 1px rgba(255,255,255,0.06)',
           backdropFilter: 'blur(24px)',
           maxHeight: '90vh',
           display: 'flex',

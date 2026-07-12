@@ -25,7 +25,7 @@ export function FoxLogo({ size = 'md', className = '', glow = false, animate = f
       className={`inline-flex items-center justify-center select-none ${animate ? 'chipy-float' : ''} ${className}`}
       style={{
         width: px, height: px,
-        ...(glow ? { filter: 'drop-shadow(0 0 10px rgba(249,115,22,0.55)) drop-shadow(0 2px 28px rgba(249,115,22,0.2))' } : {}),
+        ...(glow ? { filter: 'drop-shadow(0 0 10px rgba(255,91,10,0.55)) drop-shadow(0 2px 28px rgba(255,91,10,0.2))' } : {}),
       }}
     >
       {/*
@@ -147,25 +147,42 @@ export function FoxEyes({ size = 28, className = '' }: { size?: number; classNam
   );
 }
 
-/** Phonbot wordmark */
+/** Phonbot brand row: App-Icon (Quadrat mit Chipys Augen) + Schriftzug.
+ *  Das Icon ist der einheitliche Marken-Marker der ganzen Site — das alte
+ *  Wordmark-Bild wurde bei 42px Höhe unleserlich klein. */
 export function PhonbotBrand({ size = 'md', className = '' }: { size?: 'sm' | 'md' | 'lg'; className?: string }) {
   const cfg = {
-    sm: { w: 150, h: 42 },
-    md: { w: 200, h: 56 },
-    lg: { w: 280, h: 78 },
+    sm: { icon: 34, text: 19 },
+    md: { icon: 46, text: 25 },
+    lg: { icon: 60, text: 32 },
   }[size];
   return (
-    <img
-      src="/brand/phonbot-crystal-wordmark-cropped.png"
-      width={cfg.w}
-      height={cfg.h}
-      alt="Phonbot"
-      className={`block object-contain ${className}`}
-      style={{
-        width: cfg.w,
-        height: cfg.h,
-        filter: 'drop-shadow(0 0 12px rgba(249,115,22,0.24)) drop-shadow(0 0 18px rgba(6,182,212,0.18))',
-      }}
-    />
+    <span className={`inline-flex items-center gap-2 select-none ${className}`}>
+      <img
+        src="/brand/phonbot-site-icon-transparent-512.png"
+        width={cfg.icon}
+        height={cfg.icon}
+        alt=""
+        aria-hidden="true"
+        className="block object-contain"
+        style={{
+          width: cfg.icon,
+          height: cfg.icon,
+          filter: 'drop-shadow(0 0 10px rgba(255,91,10,0.30)) drop-shadow(0 0 12px rgba(32,217,255,0.20))',
+        }}
+      />
+      <span
+        className="font-bold leading-none text-white"
+        style={{ fontFamily: 'var(--font-display)', fontSize: cfg.text, letterSpacing: '-0.5px' }}
+      >
+        Phon
+        <span
+          className="bg-clip-text text-transparent"
+          style={{ backgroundImage: 'var(--crystal-gradient)' }}
+        >
+          bot
+        </span>
+      </span>
+    </span>
   );
 }

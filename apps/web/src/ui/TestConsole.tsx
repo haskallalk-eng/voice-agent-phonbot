@@ -151,9 +151,9 @@ export function TestConsole({ onNavigate }: { onNavigate?: (page: Page) => void 
       {/* Background glow */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-40 left-1/3 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.06) 0%, transparent 65%)' }} />
+          style={{ background: 'radial-gradient(circle, rgba(255,91,10,0.06) 0%, transparent 65%)' }} />
         <div className="absolute bottom-0 right-1/4 w-[250px] sm:w-[400px] h-[250px] sm:h-[400px] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.04) 0%, transparent 65%)' }} />
+          style={{ background: 'radial-gradient(circle, rgba(32,217,255,0.04) 0%, transparent 65%)' }} />
       </div>
 
       <div className="relative z-10 max-w-2xl mx-auto px-4 sm:px-6 py-8">
@@ -180,7 +180,7 @@ export function TestConsole({ onNavigate }: { onNavigate?: (page: Page) => void 
                   onClick={() => setConfig(a)}
                   className={`flex items-center gap-2.5 px-4 py-3 rounded-xl border transition-all shrink-0 cursor-pointer ${
                     a.tenantId === config?.tenantId
-                      ? 'bg-white/[0.06] border-orange-500/30 shadow-[0_0_12px_rgba(249,115,22,0.08)]'
+                      ? 'bg-white/[0.06] border-orange-500/30 shadow-[0_0_12px_rgba(255,91,10,0.08)]'
                       : 'bg-white/[0.02] border-white/[0.06] hover:bg-white/[0.04] hover:border-white/10'
                   }`}
                 >
@@ -244,7 +244,7 @@ export function TestConsole({ onNavigate }: { onNavigate?: (page: Page) => void 
                     <button
                       onClick={startCall}
                       className="flex items-center gap-3 rounded-full px-8 py-3.5 text-sm font-semibold text-white transition-all hover:scale-105 active:scale-95 cursor-pointer"
-                      style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)', boxShadow: '0 0 20px rgba(249,115,22,0.25)' }}
+                      style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)', boxShadow: '0 0 20px rgba(255,91,10,0.25)' }}
                     >
                       <IconPhone size={18} />
                       Anruf starten
@@ -262,7 +262,7 @@ export function TestConsole({ onNavigate }: { onNavigate?: (page: Page) => void 
             {callState === 'connecting' && (
               <>
                 <div className="w-20 h-20 rounded-full flex items-center justify-center mb-6 animate-pulse"
-                  style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.15), rgba(6,182,212,0.15))', border: '1px solid rgba(249,115,22,0.2)' }}>
+                  style={{ background: 'linear-gradient(135deg, rgba(255,91,10,0.15), rgba(32,217,255,0.15))', border: '1px solid rgba(255,91,10,0.2)' }}>
                   <FoxLogo size={48} glow />
                 </div>
                 <p className="text-sm text-white/50">Verbinde…</p>
@@ -274,7 +274,7 @@ export function TestConsole({ onNavigate }: { onNavigate?: (page: Page) => void 
                 {/* Animated avatar */}
                 <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-4 transition-all duration-300 ${agentTalking ? 'scale-110' : 'scale-100'}`}
                   style={agentTalking
-                    ? { background: 'linear-gradient(135deg, #F97316, #06B6D4)', boxShadow: '0 0 40px rgba(249,115,22,0.4)' }
+                    ? { background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)', boxShadow: '0 0 40px rgba(255,91,10,0.4)' }
                     : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }
                   }>
                   <FoxLogo size={56} glow={agentTalking} />

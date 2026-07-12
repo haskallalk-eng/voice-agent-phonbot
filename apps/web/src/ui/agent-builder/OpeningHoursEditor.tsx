@@ -265,7 +265,7 @@ export function OpeningHoursEditor({ value, onChange }: { value: string; onChang
                   aria-label={`${DAY_LABEL[d]}: ${ds.open ? 'geöffnet' : 'geschlossen'}`}
                   onClick={() => setDay(d, { open: !ds.open })}
                   className="relative w-10 h-5 rounded-full transition-colors cursor-pointer shrink-0"
-                  style={{ background: ds.open ? 'linear-gradient(135deg, #F97316, #06B6D4)' : 'rgba(255,255,255,0.12)' }}
+                  style={{ background: ds.open ? 'linear-gradient(135deg, #ff5b0a, #20d9ff)' : 'rgba(255,255,255,0.12)' }}
                 >
                   {/* Explicit left-0 (not just top): without it, the browser
                       computes `left: auto` as the knob's static-flow offset

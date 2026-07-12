@@ -67,14 +67,14 @@ export function CallbackSection() {
           className="relative rounded-3xl overflow-hidden"
           style={{
             background: 'linear-gradient(160deg, rgba(20,20,32,0.98), rgba(12,12,22,0.98))',
-            border: '1px solid rgba(249,115,22,0.2)',
-            boxShadow: '0 0 60px rgba(249,115,22,0.08), 0 0 120px rgba(6,182,212,0.04)',
+            border: '1px solid rgba(255,91,10,0.2)',
+            boxShadow: '0 0 60px rgba(255,91,10,0.08), 0 0 120px rgba(32,217,255,0.04)',
           }}
         >
           <div className="crystal-page-glow absolute -top-24 -right-20 h-72 w-72 pointer-events-none"
-            style={{ background: 'radial-gradient(ellipse, rgba(249,115,22,0.14) 0%, transparent 72%)' }} />
+            style={{ background: 'radial-gradient(ellipse, rgba(255,91,10,0.14) 0%, transparent 72%)' }} />
           <div className="crystal-page-glow crystal-page-glow-cyan absolute -bottom-24 -left-20 h-72 w-72 pointer-events-none"
-            style={{ background: 'radial-gradient(ellipse, rgba(6,182,212,0.1) 0%, transparent 72%)' }} />
+            style={{ background: 'radial-gradient(ellipse, rgba(32,217,255,0.1) 0%, transparent 72%)' }} />
 
           <div className="relative grid grid-cols-1 sm:grid-cols-5 gap-0">
             {/* Left — visual (3/5 width) */}
