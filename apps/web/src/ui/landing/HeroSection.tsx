@@ -14,13 +14,12 @@ type HeroSectionProps = {
  *             scrim) and the copy staggers in line by line (CSS-driven via
  *             the data-hero-phase attribute).
  *
- * The full cinematic runs once per session; repeat visits, reduced-motion
- * users and headless crawlers get the settled state immediately. A scroll or
+ * The cinematic plays on every page load (owner decision 2026-07-12);
+ * reduced-motion users get the settled state immediately. A scroll or
  * focus during the intro skips straight to the content.
  */
 type HeroPhase = 'intro' | 'settled';
 
-const INTRO_SEEN_KEY = 'pb-hero-intro-seen';
 /** Video runtime is ~3.0s — settle even if `ended` never fires (blocked
  *  autoplay, stalled network, data-saver). */
 const INTRO_FALLBACK_MS = 4200;
@@ -33,22 +32,14 @@ function prefersReducedMotion(): boolean {
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-function introAlreadySeen(): boolean {
-  try {
-    return window.sessionStorage.getItem(INTRO_SEEN_KEY) === '1';
-  } catch {
-    return false; // private mode / storage blocked — just play the intro
-  }
-}
-
 export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProps) {
+  // Owner-Entscheid 2026-07-12: das Intro spielt bei JEDEM Seitenaufruf
+  // (kein sessionStorage-Skip mehr) — nur reduced-motion startet settled.
   const [phase, setPhase] = useState<HeroPhase>(() => {
     if (typeof window === 'undefined') return 'settled';
-    if (prefersReducedMotion() || introAlreadySeen()) return 'settled';
-    return 'intro';
+    return prefersReducedMotion() ? 'settled' : 'intro';
   });
-  // Whether THIS mount runs the cinematic — drives the one-off mobile
-  // drop-in that must not replay on repeat visits.
+  // Whether THIS mount runs the cinematic — drives the one-off mobile drop-in.
   const entranceRef = useRef<'cinematic' | 'instant'>(phase === 'intro' ? 'cinematic' : 'instant');
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -69,9 +60,6 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
 
   const settle = useCallback(() => {
     setPhase('settled');
-    try {
-      window.sessionStorage.setItem(INTRO_SEEN_KEY, '1');
-    } catch { /* private mode — intro simply replays next visit */ }
   }, []);
 
   // Whenever the video exists while the hero is already settled (repeat
@@ -166,9 +154,11 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
             <div className="hero-crystal-scrim absolute inset-0 z-10" aria-hidden="true" />
           </button>
 
-          <div className="pointer-events-none relative z-20 flex min-h-[660px] flex-col justify-start sm:min-h-[calc(100svh-136px)] sm:justify-between lg:min-h-[700px]">
+          {/* Copy verteilt sich über die ganze Bühne: Botschaft oben,
+              Aktionen unten — der Kristall atmet in der Mitte dazwischen. */}
+          <div className="pointer-events-none relative z-20 flex min-h-[660px] flex-col sm:min-h-[calc(100svh-136px)] lg:min-h-[700px]">
             <div
-              className="mx-auto w-full max-w-[21rem] pt-20 text-center sm:max-w-4xl sm:pt-20 lg:pt-20"
+              className="mx-auto w-full max-w-[21rem] pt-20 text-center sm:max-w-4xl sm:pt-24"
               onFocusCapture={settle}
             >
               <p
@@ -194,13 +184,17 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
               </h1>
 
               <p
-                className="hero-copy-item mx-auto mb-6 max-w-[20rem] text-[0.95rem] leading-relaxed text-white/64 sm:mb-7 sm:max-w-3xl sm:text-xl"
+                className="hero-copy-item mx-auto max-w-[20rem] text-[0.95rem] leading-relaxed text-white/64 sm:max-w-3xl sm:text-xl"
                 style={{ '--hero-delay': '0.4s' } as React.CSSProperties}
               >
                 <span className="bg-clip-text font-semibold text-transparent" style={{ backgroundImage: 'var(--crystal-gradient)' }}>Phonbot</span> nimmt die Anrufe deines Salons an, bucht Termine und{' '}
                 <span className="font-medium text-white/82">lernt mit jedem Gespräch dazu.</span>
               </p>
+            </div>
 
+            <div className="flex-1" aria-hidden="true" />
+
+            <div className="mx-auto w-full max-w-[21rem] pb-16 text-center sm:max-w-4xl sm:pb-24">
               <div
                 className="hero-copy-item pointer-events-auto mx-auto flex w-full max-w-[20.5rem] flex-col items-center justify-center gap-3 sm:max-w-none sm:flex-row sm:gap-4"
                 style={{ '--hero-delay': '0.55s' } as React.CSSProperties}
@@ -224,9 +218,6 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
                 style={{ '--hero-delay': '0.7s' } as React.CSSProperties}
               >✓ Kostenlos · ✓ Sofort einsatzbereit · ✓ DSGVO-fokussiert</p>
             </div>
-
-            {/* Die 3 Schritte leben in der HowSection direkt unter dem Hero —
-                hier oben bleibt die Bühne für Kristall + Kernbotschaft. */}
           </div>
         </div>
       </section>

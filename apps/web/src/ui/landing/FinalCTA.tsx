@@ -21,10 +21,10 @@ export function FinalCTA({ onGoToRegister }: FinalCTAProps) {
           }}
         />
         <h2 className="relative text-4xl sm:text-5xl font-extrabold mb-6 leading-tight">
-          Dein Telefon. Jetzt intelligent.
+          Dein Salon-Telefon. Jetzt intelligent.
         </h2>
-        <p className="relative text-white/55 text-lg mb-8">
-          Kostenlos starten — kein Abo, keine Bindung.
+        <p className="relative text-white/65 text-lg mb-8">
+          Kostenlos starten — während du schneidest, bucht Phonbot.
         </p>
         <button
           onClick={onGoToRegister}

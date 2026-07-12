@@ -53,7 +53,7 @@ export function CallbackSection() {
           <p className="text-xs font-semibold tracking-widest text-orange-400/80 uppercase mb-3">Live erleben</p>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white leading-tight">
             Hör selbst, wie{' '}
-            <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+            <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, var(--crystal-warm), var(--crystal-cyan))' }}>
               Phonbot
             </span>{' '}klingt
           </h2>
@@ -79,16 +79,16 @@ export function CallbackSection() {
           <div className="relative grid grid-cols-1 sm:grid-cols-5 gap-0">
             {/* Left — visual (3/5 width) */}
             <div className="sm:col-span-2 p-8 sm:p-10 flex flex-col items-center sm:items-start justify-center text-center sm:text-left">
+              {/* App-Icon (Quadrat mit Chipys Augen) — einheitlicher
+                  Marken-Marker statt des alten Pentagon-Badges + Puls-Blur. */}
               <div className="relative mb-6">
-                <div className="absolute inset-[-10px] opacity-55 blur-xl"
-                  style={{
-                    background: 'conic-gradient(from 140deg, rgba(249,115,22,0.32), rgba(6,182,212,0.16), rgba(249,115,22,0.28))',
-                    clipPath: 'polygon(50% 0%, 82% 18%, 100% 55%, 72% 100%, 26% 90%, 0 48%, 18% 14%)',
-                    animation: 'breathe 2.8s ease-in-out infinite',
-                  }} />
-                <div className="crystal-demo-mark relative">
-                  <img src="/brand/phonbot-crystal-icon-cropped.png" alt="" className="h-12 w-12 object-contain" />
-                </div>
+                <img
+                  src="/brand/phonbot-site-icon-transparent-512.png"
+                  alt=""
+                  aria-hidden="true"
+                  className="h-16 w-16 object-contain"
+                  style={{ filter: 'drop-shadow(0 0 16px rgba(32,217,255,0.22)) drop-shadow(0 0 14px rgba(255,91,10,0.18))' }}
+                />
               </div>
 
               <h3 className="text-xl font-bold text-white mb-2 leading-snug">
@@ -117,8 +117,8 @@ export function CallbackSection() {
             <div className="sm:col-span-3 p-8 sm:p-10 sm:border-l" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
               {state === 'success' ? (
                 <div className="h-full flex flex-col items-center justify-center text-center gap-5 py-4">
-                  <div className="crystal-demo-mark">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#20d9ff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/12 bg-white/[0.05]" style={{ boxShadow: '0 0 24px rgba(32,217,255,0.16)' }}>
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#20d9ff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <polyline points="20 6 9 17 4 12"/>
                     </svg>
                   </div>

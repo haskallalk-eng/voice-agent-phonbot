@@ -9,8 +9,9 @@ export function FaqSection() {
   return (
     <section ref={ref} id="faq" className="relative z-10 px-6 py-20 max-w-3xl mx-auto ambient-glow-alt ambient-glow">
       <div className="text-center mb-12">
+        <p className="text-[11px] font-semibold tracking-[0.2em] uppercase mb-4">Kurz und ehrlich</p>
         <h2 className="text-3xl sm:text-4xl font-extrabold mb-3">Häufige Fragen</h2>
-        <p className="text-white/50 text-base">Alles was du wissen musst — kurz und ehrlich.</p>
+        <p className="text-white/60 text-base">Alles, was du für deinen Salon wissen musst.</p>
       </div>
       <div className="space-y-3">
         {FAQ_ITEMS.map((item, i) => (

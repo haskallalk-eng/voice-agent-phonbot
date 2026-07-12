@@ -31,8 +31,8 @@ export const FEATURES: FeatureItem[] = [
   { Icon: IconBolt, title: 'In 2 Minuten live', desc: 'Salon-Daten eintragen, fertig. Kein Techniker, kein Setup-Marathon.' },
   { Icon: IconPhone, title: 'Weniger Anrufe verpassen', desc: '24/7 erreichbar — auch während du schneidest, färbst oder föhnst. Jeder verpasste Anruf ist ein verpasster Termin.' },
   { Icon: IconSettings, title: 'Deine Nummer bleibt', desc: 'Einfach weiterleiten. Kein Nummernwechsel, keine Unterbrechung für deine Kunden.' },
-  { Icon: IconCalendar, title: 'Termine? Strukturiert.', desc: 'Phonbot prüft freie Slots und bucht erst, wenn der Kalender die Buchung bestätigt.' },
-  { Icon: IconTickets, title: 'Nichts bleibt liegen', desc: 'Was Phonbot nicht sofort löst, wird zum strukturierten Ticket. Kein Zettelchaos.' },
+  { Icon: IconCalendar, title: 'Termine? Strukturiert.', desc: 'Phonbot prüft freie Slots und bucht erst, wenn dein Salonkalender die Buchung bestätigt.' },
+  { Icon: IconTickets, title: 'Nichts bleibt liegen', desc: 'Was Phonbot nicht sofort löst, wird zum strukturierten Ticket. Kein Zettelchaos am Empfang.' },
   { Icon: IconInsights, title: 'Wird mit jedem Anruf besser', desc: 'Phonbot analysiert Gespräche und optimiert sich selbst — dein Agent lernt aus jeder Interaktion.' },
 ];
 
@@ -90,8 +90,8 @@ export const PLANS = [
     features: [
       '30 Freiminuten (einmalig)',
       '1 Agent',
-      'Web-Calls only',
-      'Demo & Testen',
+      'Nur Web-Anrufe (Demo)',
+      'Zum Ausprobieren',
     ],
     cta: 'Kostenlos starten',
     highlight: false,
@@ -146,16 +146,15 @@ export const PLANS = [
     badge: 'Beliebt',
   },
   {
-    name: 'Agency',
+    name: 'Filialen',
     price: '349€',
     yearlyPrice: '289€',
     period: '/Monat',
     features: [
       '✦ Telefonnummer inklusive',
       '2.000 Min/Monat',
-      '10 Agents',
-      'White-Label',
-      'Dedicated Support',
+      '10 Agenten — z. B. je Standort',
+      'Persönlicher Ansprechpartner',
       '+0,19€/Min bei Überschreitung',
     ],
     cta: 'Jetzt upgraden',
