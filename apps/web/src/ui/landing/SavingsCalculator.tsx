@@ -37,7 +37,7 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
     { l: 'Gesprächsdauer / Anruf', v: dauer, s: setDauer, min: 1, max: 15, step: 1, d: `${dauer} min` },
     { l: 'Stundenlohn', v: lohn, s: setLohn, min: 10, max: 80, step: 1, d: `${lohn} €` },
     { l: 'Nacharbeit / Anruf', v: nacharbeit, s: setNacharbeit, min: 0, max: 30, step: 1, d: `${nacharbeit} min` },
-    { l: 'Bot-Quote', v: quote, s: setQuote, min: 10, max: 95, step: 5, d: `${quote} %` },
+    { l: 'Anteil, den Phonbot übernimmt', v: quote, s: setQuote, min: 10, max: 95, step: 5, d: `${quote} %` },
   ];
 
   return (
@@ -48,7 +48,7 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
     >
       <div className="text-center mb-14">
         <p className="text-[11px] font-semibold tracking-[0.2em] text-orange-400/60 uppercase mb-4">ROI-Rechner</p>
-        <h2 className="text-3xl sm:text-[40px] font-extrabold text-white leading-tight">Lohnt sich <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Phonbot</span> für dich?</h2>
+        <h2 className="text-3xl sm:text-[40px] font-extrabold text-white leading-tight">Lohnt sich <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, var(--crystal-warm), var(--crystal-cyan))' }}>Phonbot</span> für deinen Salon?</h2>
       </div>
 
       {/* Glass card */}
@@ -73,7 +73,7 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
                     <div className="relative h-7 flex items-center group cursor-pointer">
                       <div className="absolute inset-x-0 h-[3px] rounded-full" style={{ background: 'rgba(255,255,255,0.06)' }} />
                       <div className="absolute left-0 h-[3px] rounded-full transition-[width] duration-75"
-                        style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #F97316, #06B6D4)' }} />
+                        style={{ width: `${pct}%`, background: 'linear-gradient(90deg, var(--crystal-warm), var(--crystal-cyan))' }} />
                       <div className="absolute w-4 h-4 rounded-full transition-all duration-75 pointer-events-none group-hover:scale-125"
                         style={{
                           left: `calc(${pct}% - 8px)`,
@@ -101,10 +101,10 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
                 <p className={`text-4xl sm:text-[64px] font-extrabold leading-[0.9] tracking-tighter transition-colors duration-300 ${
                   netto > 0 ? '' : netto === 0 ? 'text-white/30' : 'text-orange-300'
                 }`}
-                  style={netto > 0 ? { backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)', WebkitBackgroundClip: 'text', color: 'transparent' } : undefined}
+                  style={netto > 0 ? { backgroundImage: 'linear-gradient(135deg, var(--crystal-warm), var(--crystal-cyan))', WebkitBackgroundClip: 'text', color: 'transparent' } : undefined}
                 >
                   <Num value={netto} />
-                  <span className="text-2xl sm:text-[36px] ml-1 font-semibold" style={netto > 0 ? { backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)', WebkitBackgroundClip: 'text', color: 'transparent' } : undefined}>€</span>
+                  <span className="text-2xl sm:text-[36px] ml-1 font-semibold" style={netto > 0 ? { backgroundImage: 'linear-gradient(135deg, var(--crystal-warm), var(--crystal-cyan))', WebkitBackgroundClip: 'text', color: 'transparent' } : undefined}>€</span>
                 </p>
                 {plan > 0 && (
                   <p className="text-xs text-white/20 mt-3 tracking-wide">
@@ -140,17 +140,17 @@ export function SavingsCalculator({ onCTA }: SavingsCalculatorProps) {
               {/* Context hint */}
               <p className="text-[11px] text-white/15 mt-4 leading-relaxed text-center">
                 {netto > 200
-                  ? 'Entspricht ca. ' + Math.round(netto / lohn) + ' Stunden die dein Team für wichtigere Aufgaben nutzen kann.'
+                  ? 'Entspricht ca. ' + Math.round(netto / lohn) + ' Stunden, die dein Team am Stuhl statt am Telefon verbringt.'
                   : netto > 0
                     ? 'Schon ab wenigen Anrufen pro Tag rechnet sich Phonbot für dein Business.'
-                    : 'Starte kostenlos und teste ob die Bot-Quote für dein Business passt.'}
+                    : 'Starte kostenlos und teste, wie viele Anrufe Phonbot für deinen Salon übernimmt.'}
               </p>
             </div>
 
             {/* CTA */}
             <button
               onClick={onCTA}
-              className="crystal-button mt-6 w-full rounded-2xl px-6 py-4 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] cursor-pointer"
+              className="crystal-button mt-6 w-full rounded-full px-6 py-4 text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.02] cursor-pointer"
             >
               Kostenlos testen
             </button>

@@ -12,7 +12,7 @@ export function StatsSection() {
         <div>
           <p
             className="text-5xl font-extrabold mb-2 bg-clip-text text-transparent"
-            style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+            style={{ backgroundImage: 'linear-gradient(135deg, var(--crystal-warm), var(--crystal-cyan))' }}
           >
             24/7
           </p>
@@ -21,7 +21,7 @@ export function StatsSection() {
         <div>
           <p
             className="text-5xl font-extrabold mb-2 bg-clip-text text-transparent"
-            style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+            style={{ backgroundImage: 'linear-gradient(135deg, var(--crystal-warm), var(--crystal-cyan))' }}
           >
             &lt; 2 Min
           </p>
@@ -30,7 +30,7 @@ export function StatsSection() {
         <div>
           <p
             className="text-5xl font-extrabold mb-2 bg-clip-text text-transparent"
-            style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+            style={{ backgroundImage: 'linear-gradient(135deg, var(--crystal-warm), var(--crystal-cyan))' }}
           >
             {languages}
           </p>

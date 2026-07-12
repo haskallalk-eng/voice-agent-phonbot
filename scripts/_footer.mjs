@@ -19,7 +19,7 @@ export const FOOTER_STYLE = `/*--footer-css-begin--*/
 .col-brand .footer-mark{width:28px;height:28px;object-fit:contain;filter:drop-shadow(0 0 10px rgba(249,115,22,.42)) drop-shadow(0 0 12px rgba(6,182,212,.22))}
 .col-brand .brand-row .brand{font-size:18px;font-weight:800;letter-spacing:-.5px}
 .col-brand .brand-row .brand .w{color:#fff}
-.col-brand .brand-row .brand .o{background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.col-brand .brand-row .brand .o{background:linear-gradient(135deg,#ff5b0a,#20d9ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .col-brand p{font-size:.75rem;color:rgba(255,255,255,.62);line-height:1.6;margin:.35rem 0 0}
 .site-footer .footer-heading{font-size:.7rem;font-weight:600;color:rgba(255,255,255,.68);text-transform:uppercase;letter-spacing:.12em;margin:0 0 .75rem}
 .site-footer ul.links{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:.5rem}

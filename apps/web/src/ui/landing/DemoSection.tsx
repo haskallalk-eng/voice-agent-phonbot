@@ -15,11 +15,17 @@ type DemoSectionProps = {
   onGoToRegister: () => void;
 };
 
-function CrystalDemoMark() {
+/** Das App-Icon (Quadrat mit Chipys Augen) — der einheitliche Marken-Marker
+ *  in den Sektionen (Owner-Vorgabe statt des alten Pentagon-Badges). */
+function AppIconMark({ size = 'h-14 w-14' }: { size?: string }) {
   return (
-    <div className="crystal-demo-mark" aria-hidden="true">
-      <img src="/brand/phonbot-crystal-icon-cropped.png" alt="" className="h-12 w-12 object-contain" />
-    </div>
+    <img
+      src="/brand/phonbot-site-icon-transparent-512.png"
+      alt=""
+      aria-hidden="true"
+      className={`${size} object-contain`}
+      style={{ filter: 'drop-shadow(0 0 16px rgba(32,217,255,0.22)) drop-shadow(0 0 14px rgba(255,91,10,0.18))' }}
+    />
   );
 }
 
@@ -38,15 +44,16 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
             <span className="breathe inline-block h-2 w-2 rounded-full bg-orange-400 shadow-[0_0_14px_rgba(249,115,22,0.75)]" />
             Live-Telefon
           </span>
-          <span className="rounded-full border border-cyan-400/20 bg-cyan-400/8 px-3 py-1 text-xs font-semibold text-cyan-100/80">
-            neue Demo-Leitung
+          <span className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/8 px-3 py-1 text-xs font-bold text-cyan-100/90">
+            <span className="inline-block h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_14px_rgba(32,217,255,0.6)]" />
+            Neue Demo-Leitung
           </span>
         </div>
 
         <div>
           <h2 className="text-3xl font-extrabold leading-tight sm:text-5xl">
             Ruf{' '}
-            <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+            <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, var(--crystal-warm), var(--crystal-cyan))' }}>
               Phonbot
             </span>{' '}
             direkt an
@@ -68,7 +75,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
           >
             <div className="mb-7 flex items-center gap-4">
               <div className="relative">
-                <CrystalDemoMark />
+                <AppIconMark />
               </div>
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-orange-300/80">Direkt anrufen</p>

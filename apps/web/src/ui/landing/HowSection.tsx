@@ -7,6 +7,7 @@ export function HowSection() {
   return (
     <section ref={ref} id="how" className="relative z-10 px-6 py-20 max-w-5xl mx-auto ambient-glow-alt ambient-glow">
       <div className="text-center mb-16">
+        <p className="text-[11px] font-semibold tracking-[0.2em] uppercase mb-4">In 2 Minuten startklar</p>
         <h2 className="text-3xl sm:text-4xl font-extrabold mb-4">So funktioniert's</h2>
       </div>
       <div className="relative flex flex-col md:flex-row items-start md:items-center gap-8 md:gap-0">
@@ -28,14 +29,14 @@ export function HowSection() {
             <div
               className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-extrabold text-white mb-5 relative z-10"
               style={{
-                background: 'linear-gradient(135deg, #F97316, #06B6D4)',
+                background: 'linear-gradient(135deg, var(--crystal-warm), var(--crystal-cyan))',
                 boxShadow: '0 0 24px rgba(249,115,22,0.4)',
               }}
             >
               {step.num}
             </div>
             <h3 className="font-bold text-lg mb-2">{step.title}</h3>
-            <p className="text-white/55 text-sm leading-relaxed">{step.desc}</p>
+            <p className="text-white/65 text-sm leading-relaxed">{step.desc}</p>
           </div>
         ))}
       </div>

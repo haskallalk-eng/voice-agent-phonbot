@@ -81,9 +81,13 @@ export function ContactSection() {
             <div className="relative rounded-2xl p-6 overflow-hidden" style={{ backdropFilter: 'blur(48px)' }}>
               <div className="absolute inset-0" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '1rem' }} />
               <div className="relative flex items-center gap-4">
-                <div className="crystal-demo-mark shrink-0 scale-75">
-                  <img src="/brand/phonbot-crystal-icon-cropped.png" alt="" className="h-12 w-12 object-contain" />
-                </div>
+                <img
+                  src="/brand/phonbot-site-icon-transparent-512.png"
+                  alt=""
+                  aria-hidden="true"
+                  className="h-12 w-12 shrink-0 object-contain"
+                  style={{ filter: 'drop-shadow(0 0 14px rgba(32,217,255,0.2)) drop-shadow(0 0 12px rgba(255,91,10,0.16))' }}
+                />
                 <div>
                   <p className="text-xs text-white/30 uppercase tracking-wider font-semibold mb-0.5">Live testen</p>
                   <p className="text-xs text-white/50">Ruf Phonbot an und erlebe ihn selbst</p>
@@ -107,8 +111,8 @@ export function ContactSection() {
               <div className="relative p-8 sm:p-10">
                 {state === 'sent' ? (
                   <div className="flex flex-col items-center justify-center text-center py-10 gap-5">
-                    <div className="crystal-demo-mark">
-                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#20d9ff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/12 bg-white/[0.05]" style={{ boxShadow: '0 0 24px rgba(32,217,255,0.16)' }}>
+                      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#20d9ff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="20 6 9 17 4 12"/>
                       </svg>
                     </div>

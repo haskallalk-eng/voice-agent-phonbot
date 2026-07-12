@@ -16,9 +16,13 @@ type Props = {
 
 function CrystalModalMark({ className = '' }: { className?: string }) {
   return (
-    <div className={`crystal-demo-mark ${className}`} aria-hidden="true">
-      <img src="/brand/phonbot-crystal-icon-cropped.png" alt="" className="h-12 w-12 object-contain" />
-    </div>
+    <img
+      src="/brand/phonbot-site-icon-transparent-512.png"
+      alt=""
+      aria-hidden="true"
+      className={`h-14 w-14 object-contain ${className}`}
+      style={{ filter: 'drop-shadow(0 0 14px rgba(32,217,255,0.2)) drop-shadow(0 0 12px rgba(255,91,10,0.16))' }}
+    />
   );
 }
 

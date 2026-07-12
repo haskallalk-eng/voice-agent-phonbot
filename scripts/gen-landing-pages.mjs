@@ -458,7 +458,7 @@ ${NAV_STYLE}
 
 /* ── Buttons (canonical gradient pill + neutral glass pill) ── */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;padding:1rem 2rem;border-radius:9999px;font-weight:600;font-size:1rem;transition:all .3s;cursor:pointer;border:none;text-decoration:none}
-.btn-primary{background:linear-gradient(135deg,#F97316,#06B6D4);color:#fff}
+.btn-primary{background:linear-gradient(135deg,#ff5b0a,#20d9ff);color:#fff}
 .btn-primary:hover{transform:scale(1.05);box-shadow:0 0 40px rgba(249,115,22,.5)}
 .btn-ghost{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.9);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
 .btn-ghost:hover{color:#fff;transform:scale(1.05)}
@@ -475,7 +475,7 @@ header.hero{padding:5rem 0 4rem;text-align:center;position:relative;z-index:1}
 .dialogue .bot .ic-inline{color:#FDBA74}
 .savings li .ic-inline{color:#FDBA74;margin-right:.55rem}
 h1{font-size:clamp(2.5rem,6vw,4.5rem);font-weight:800;letter-spacing:-.025em;line-height:1.08;margin-bottom:1.5rem;max-width:48rem;margin-left:auto;margin-right:auto}
-h1 .accent{background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;background-clip:text;color:transparent}
+h1 .accent{background:linear-gradient(135deg,#ff5b0a,#20d9ff);-webkit-background-clip:text;background-clip:text;color:transparent}
 .subtitle{font-size:1.125rem;color:rgba(255,255,255,.6);max-width:42rem;margin:0 auto 2.5rem;line-height:1.6}
 .cta-row{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;align-items:center}
 .trust-line{margin-top:1rem;font-size:.8125rem;color:rgba(255,255,255,.4)}
@@ -508,7 +508,7 @@ p{color:rgba(255,255,255,.7)}
 .dialogue{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:1.5rem;padding:1.75rem;max-width:640px;margin:0 auto;position:relative;overflow:hidden}
 @media(max-width:640px){.dialogue{padding:1.25rem}}
 .dialogue-header{display:flex;align-items:center;gap:.6rem;padding-bottom:1rem;margin-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,.06);font-size:.7rem;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.1em;font-weight:600}
-.dialogue-header .dot{width:8px;height:8px;border-radius:50%;background:#F97316;animation:call-pulse 2s ease-in-out infinite;box-shadow:0 0 14px rgba(249,115,22,.75)}
+.dialogue-header .dot{width:8px;height:8px;border-radius:50%;background:#ff5b0a;animation:call-pulse 2s ease-in-out infinite;box-shadow:0 0 14px rgba(249,115,22,.75)}
 @keyframes call-pulse{0%,100%{box-shadow:0 0 0 0 rgba(249,115,22,.6),0 0 0 0 rgba(6,182,212,.35)}50%{box-shadow:0 0 0 6px rgba(249,115,22,0),0 0 0 12px rgba(6,182,212,0)}}
 .dialogue-header .duration{margin-left:auto;font-variant-numeric:tabular-nums;color:rgba(255,255,255,.5);letter-spacing:.06em}
 
@@ -560,7 +560,7 @@ p{color:rgba(255,255,255,.7)}
 /* ── Value section (the professional "why this pays off" block) ── */
 .value-insight{display:flex;flex-direction:column;align-items:center;text-align:center;max-width:48rem;margin:0 auto 3rem;padding:1.75rem 1.5rem;background:linear-gradient(135deg,rgba(249,115,22,.09),rgba(6,182,212,.05));border:1px solid rgba(249,115,22,.18);border-radius:1.25rem;gap:.5rem}
 @media(min-width:768px){.value-insight{flex-direction:row;gap:1.75rem;text-align:left;padding:1.75rem 2rem}}
-.value-stat{font-size:clamp(2.5rem,6vw,3.75rem);font-weight:800;letter-spacing:-.03em;line-height:1;background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;background-clip:text;color:transparent;flex-shrink:0;white-space:nowrap}
+.value-stat{font-size:clamp(2.5rem,6vw,3.75rem);font-weight:800;letter-spacing:-.03em;line-height:1;background:linear-gradient(135deg,#ff5b0a,#20d9ff);-webkit-background-clip:text;background-clip:text;color:transparent;flex-shrink:0;white-space:nowrap}
 .value-claim{color:rgba(255,255,255,.78);font-size:1rem;line-height:1.55;max-width:34rem}
 @media(max-width:640px){.value-claim{font-size:.9375rem}}
 
@@ -582,7 +582,7 @@ p{color:rgba(255,255,255,.7)}
 .roi-row.highlight{margin-top:.75rem;padding:1rem 1.125rem;border:1px solid rgba(249,115,22,.3);background:linear-gradient(135deg,rgba(249,115,22,.12),rgba(6,182,212,.06));border-radius:.875rem;box-shadow:0 0 32px rgba(249,115,22,.12)}
 .roi-row.highlight .ic{background:linear-gradient(135deg,rgba(249,115,22,.22),rgba(6,182,212,.14));border-color:rgba(249,115,22,.30);color:#FDBA74}
 .roi-row.highlight .label{color:#fff;font-weight:600}
-.roi-row.highlight .amount{background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:1.375rem;font-weight:800}
+.roi-row.highlight .amount{background:linear-gradient(135deg,#ff5b0a,#20d9ff);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:1.375rem;font-weight:800}
 .roi-row.highlight .per{color:rgba(255,255,255,.6)}
 
 /* Extras stack (right column) */

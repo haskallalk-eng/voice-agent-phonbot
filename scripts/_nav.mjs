@@ -54,7 +54,7 @@ export const NAV_STYLE = `/*--nav-css-begin--*/
 .ph-mark{width:32px;height:32px;object-fit:contain;filter:drop-shadow(0 0 12px rgba(249,115,22,.45)) drop-shadow(0 0 14px rgba(6,182,212,.24))}
 .ph-brand{font-size:18px;font-weight:900;letter-spacing:-.5px;line-height:1}
 .ph-brand .w{color:#fff}
-.ph-brand .o{background:linear-gradient(135deg,#F97316,#06B6D4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.ph-brand .o{background:linear-gradient(135deg,#ff5b0a,#20d9ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .ph-nav{display:none;align-items:center;gap:2rem}
 @media(min-width:768px){.ph-nav{display:flex}}
 .ph-nav a,.ph-nav-btn{font-size:.875rem;color:rgba(255,255,255,.6);text-decoration:none;transition:color .2s;background:none;border:none;cursor:pointer;font-family:inherit;padding:0;display:flex;align-items:center;gap:.25rem;font-weight:500}
@@ -71,7 +71,7 @@ export const NAV_STYLE = `/*--nav-css-begin--*/
 .ph-login{display:none;font-size:.875rem;color:rgba(255,255,255,.6);text-decoration:none;transition:color .2s}
 @media(min-width:768px){.ph-login{display:block}}
 .ph-login:hover{color:#fff}
-.ph-cta-btn{display:none;font-size:.875rem;text-decoration:none;font-weight:600;color:#fff;border-radius:9999px;padding:10px 20px;background:linear-gradient(135deg,#F97316,#06B6D4);transition:all .3s}
+.ph-cta-btn{display:none;font-size:.875rem;text-decoration:none;font-weight:600;color:#fff;border-radius:9999px;padding:10px 20px;background:linear-gradient(135deg,#ff5b0a,#20d9ff);transition:all .3s}
 @media(min-width:768px){.ph-cta-btn{display:inline-block}}
 .ph-cta-btn:hover{box-shadow:0 0 24px rgba(249,115,22,.5);transform:scale(1.05)}
 .ph-burg{display:flex;flex-direction:column;gap:4px;padding:.5rem;border-radius:.5rem;background:transparent;border:none;cursor:pointer;transition:background .2s}
@@ -95,7 +95,7 @@ body.mopen .ph-mob{display:block}
 .ph-mob-cta{display:flex;flex-direction:column;gap:.5rem;padding:.75rem 0 .25rem}
 .ph-mob-cta a{text-align:center;padding:.75rem;border-radius:.75rem;font-weight:600;text-decoration:none;font-size:.875rem}
 .ph-mob-cta a.login{border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.7)}
-.ph-mob-cta a.cta{background:linear-gradient(135deg,#F97316,#06B6D4);color:#fff}
+.ph-mob-cta a.cta{background:linear-gradient(135deg,#ff5b0a,#20d9ff);color:#fff}
 /*--nav-css-end--*/`;
 
 /** Full nav HTML — bounded by the `--begin` / `--end` markers so

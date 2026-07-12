@@ -315,35 +315,8 @@ a, select, summary, [tabindex]:not([tabindex="-1"]) {
   transform: translateX(-50%) rotate(4deg);
 }
 
-.crystal-demo-mark {
-  position: relative;
-  display: grid;
-  width: 64px;
-  height: 64px;
-  place-items: center;
-  isolation: isolate;
-}
-
-.crystal-demo-mark::before {
-  content: "";
-  position: absolute;
-  inset: 2px;
-  z-index: -1;
-  clip-path: polygon(50% 0%, 94% 28%, 78% 100%, 20% 100%, 6% 28%);
-  background:
-    linear-gradient(112deg, rgba(255, 91, 10, 0.32), rgba(247, 251, 255, 0.10) 48%, rgba(32, 217, 255, 0.30)),
-    rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow:
-    0 0 28px rgba(255, 91, 10, 0.18),
-    0 0 34px rgba(32, 217, 255, 0.16);
-}
-
-.crystal-demo-mark img {
-  filter:
-    drop-shadow(0 0 12px rgba(255, 91, 10, 0.22))
-    drop-shadow(0 0 14px rgba(32, 217, 255, 0.18));
-}
+/* (Das Pentagon-Badge .crystal-demo-mark wurde 2026-07-12 durch das
+   App-Icon — Quadrat mit Chipys Augen — ersetzt.) */
 
 /* (The old 0.25px white text-stroke made headings look like stickers —
    deliberately removed in the futuristic type pass.) */

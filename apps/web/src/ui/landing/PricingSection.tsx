@@ -63,10 +63,10 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
                 <svg width="14" height="14" viewBox="0 0 24 24" className="shrink-0"><defs><linearGradient id="fg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#F97316"/><stop offset="100%" stopColor="#06B6D4"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill="url(#fg)"/></svg>
               ) : (
                 <span className="w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
-                  style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>✓</span>
+                  style={{ background: 'linear-gradient(135deg, var(--crystal-warm), var(--crystal-cyan))' }}>✓</span>
               )}
               <span className={isHighlight ? 'font-semibold bg-clip-text text-transparent' : 'text-white/70'}
-                style={isHighlight ? { backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' } : undefined}>
+                style={isHighlight ? { backgroundImage: 'linear-gradient(135deg, var(--crystal-warm), var(--crystal-cyan))' } : undefined}>
                 {label}
               </span>
             </li>
@@ -91,7 +91,7 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
           aria-label={yearly ? 'Auf monatliche Zahlung umstellen' : 'Auf jährliche Zahlung umstellen'}
           aria-pressed={yearly}
           className="relative w-14 h-7 rounded-full transition-all duration-300"
-          style={{ background: yearly ? 'linear-gradient(135deg, #F97316, #06B6D4)' : 'rgba(255,255,255,0.1)' }}
+          style={{ background: yearly ? 'linear-gradient(135deg, var(--crystal-warm), var(--crystal-cyan))' : 'rgba(255,255,255,0.1)' }}
         >
           <span
             className="absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow transition-all duration-300"
@@ -133,7 +133,7 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); pickPlan('free'); }}
-          className="crystal-button crystal-button-secondary rounded-xl px-6 py-2.5 text-sm font-semibold text-white whitespace-nowrap transition-all duration-200 hover:scale-105 shrink-0"
+          className="crystal-button crystal-button-secondary rounded-full px-6 py-2.5 text-sm font-semibold text-white whitespace-nowrap transition-all duration-200 hover:scale-105 shrink-0"
         >
           {freePlan.cta}
         </button>
@@ -164,7 +164,7 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
               {isPopular && (
                 <div
                   className="absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-bold text-white rounded-full px-3 py-1"
-                  style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                  style={{ background: 'linear-gradient(135deg, var(--crystal-warm), var(--crystal-cyan))' }}
                 >
                   Empfohlen
                 </div>
@@ -184,7 +184,7 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); pickPlan(plan.name); }}
-                className={`crystal-button w-full rounded-xl px-6 py-3 font-semibold text-sm text-white transition-all duration-300 hover:scale-[1.02] ${isPopular ? '' : 'crystal-button-secondary'}`}
+                className={`crystal-button w-full rounded-full px-6 py-3 font-semibold text-sm text-white transition-all duration-300 hover:scale-[1.02] ${isPopular ? '' : 'crystal-button-secondary'}`}
               >
                 {plan.cta}
               </button>

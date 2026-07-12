@@ -211,10 +211,10 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
                 <button
                   type="submit"
                   disabled={isForgotSubmitting}
-                  className="w-full rounded-xl px-4 py-3 font-semibold text-white text-sm
+                  className="crystal-button w-full rounded-full px-4 py-3 font-semibold text-white text-sm
                     disabled:opacity-50 transition-all duration-300
                     hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] hover:scale-[1.02]"
-                  style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
+                  
                 >
                   {isForgotSubmitting ? (
                     <span className="flex items-center justify-center gap-2">
@@ -239,17 +239,17 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
             <form onSubmit={handleFormSubmit(onMainSubmit)} className="space-y-4">
               {mode === 'register' && preselectedPaidPlan && (
                 <div className="rounded-xl border border-orange-500/20 bg-orange-500/10 px-4 py-3 text-xs leading-relaxed text-orange-100/80">
-                  Du registrierst dich fuer den {PAID_PLAN_LABELS[preselectedPaidPlan]}-Plan. Nach dem Klick oeffnet sich Stripe; der Account wird erst nach erfolgreicher Zahlung aktiviert.
+                  Du registrierst dich für den {PAID_PLAN_LABELS[preselectedPaidPlan]}-Plan. Nach dem Klick öffnet sich Stripe; der Account wird erst nach erfolgreicher Zahlung aktiviert.
                 </div>
               )}
               {mode === 'register' && (
                 <div>
                   <label className="block text-xs font-medium text-white/60 mb-1.5 uppercase tracking-wide">
-                    Organisationsname
+                    Salon-Name
                   </label>
                   <input
                     type="text"
-                    placeholder="Muster GmbH"
+                    placeholder="Salon Muster"
                     className={`w-full rounded-xl bg-white/5 border px-4 py-2.5 text-sm text-white placeholder-white/30
                       focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${errors.orgName ? 'border-orange-400/70' : 'border-white/10'}`}
                     {...register('orgName', { required: mode === 'register', minLength: { value: 2, message: 'Mindestens 2 Zeichen' } })}
@@ -264,7 +264,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
                 </label>
                 <input
                   type={mode === 'login' ? 'text' : 'email'}
-                  placeholder={mode === 'login' ? 'coifeur jimmy, E-Mail oder 0176 12345678' : 'du@beispiel.de'}
+                  placeholder={mode === 'login' ? 'Salon Jimmy, E-Mail oder 0176 12345678' : 'du@beispiel.de'}
                   autoComplete={mode === 'login' ? 'username' : 'email'}
                   className={`w-full rounded-xl bg-white/5 border px-4 py-2.5 text-sm text-white placeholder-white/30
                     focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${errors.email ? 'border-orange-400/70' : 'border-white/10'}`}
@@ -272,7 +272,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
                     required: mode === 'login' ? 'E-Mail, Telefonnummer oder Login-Name ist erforderlich' : 'E-Mail ist erforderlich',
                     validate: (value) => {
                       if (mode === 'login') return value.trim().length >= 3 || 'Bitte gib E-Mail, Telefonnummer oder Login-Name ein.';
-                      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()) || 'Bitte gib eine gueltige E-Mail-Adresse ein.';
+                      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim()) || 'Bitte gib eine gültige E-Mail-Adresse ein.';
                     },
                   })}
                 />
@@ -338,7 +338,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
                       Ich akzeptiere die{' '}
                       <a href="/datenschutz/" target="_blank" rel="noopener" className="text-orange-400 hover:text-orange-300 underline transition-colors">
                         Datenschutzerkl&auml;rung
-                      </a>{' '}
+                      </a>
                       , die{' '}
                       <a href="/agb/" target="_blank" rel="noopener" className="text-orange-400 hover:text-orange-300 underline transition-colors">
                         AGB
@@ -359,8 +359,8 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
                     <span className="text-xs text-white/50 leading-relaxed">
                       Ich best&auml;tige, dass ich Phonbot ausschlie&szlig;lich als Unternehmer
                       im Sinne von &sect;14 BGB teste oder nutze. {preselectedPaidPlan
-                        ? 'Der ausgewaehlte kostenpflichtige Plan wird nach erfolgreicher Stripe-Zahlung aktiviert.'
-                        : 'Ein kostenpflichtiger Plan entsteht erst durch eine spaetere Buchung.'}
+                        ? 'Der ausgewählte kostenpflichtige Plan wird nach erfolgreicher Stripe-Zahlung aktiviert.'
+                        : 'Ein kostenpflichtiger Plan entsteht erst durch eine spätere Buchung.'}
                     </span>
                   </label>
                 </>
@@ -375,10 +375,10 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
               <button
                 type="submit"
                 disabled={isSubmitting || (mode === 'register' && (!dsgvoAccepted || !isBusiness))}
-                className="w-full rounded-xl px-4 py-3 font-semibold text-white text-sm
+                className="crystal-button w-full rounded-full px-4 py-3 font-semibold text-white text-sm
                   disabled:opacity-50 transition-all duration-300
                   hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] hover:scale-[1.02]"
-                style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
+                
               >
                 {isSubmitting ? (
                   <span className="flex items-center justify-center gap-2">
