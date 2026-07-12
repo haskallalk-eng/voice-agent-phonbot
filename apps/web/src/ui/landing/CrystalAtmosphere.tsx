@@ -49,11 +49,11 @@ function CrystalField() {
     <>
       <color attach="background" args={['#050508']} />
       <ambientLight intensity={0.18} />
-      <pointLight color="#F97316" intensity={22} position={[-4, 2.5, 3]} distance={8} />
-      <pointLight color="#06B6D4" intensity={18} position={[4, -1, 2]} distance={8} />
+      <pointLight color="#ff5b0a" intensity={22} position={[-4, 2.5, 3]} distance={8} />
+      <pointLight color="#20d9ff" intensity={18} position={[4, -1, 2]} distance={8} />
       <spotLight color="#ffffff" intensity={3.6} position={[0, 5, 4]} angle={0.42} penumbra={1} />
-      <FloatingShard position={[-3.6, 1.4, -4]} scale={1.05} speed={0.42} color="#F97316" />
-      <FloatingShard position={[3.8, -1.1, -5]} scale={1.18} speed={0.36} color="#06B6D4" />
+      <FloatingShard position={[-3.6, 1.4, -4]} scale={1.05} speed={0.42} color="#ff5b0a" />
+      <FloatingShard position={[3.8, -1.1, -5]} scale={1.18} speed={0.36} color="#20d9ff" />
       <FloatingShard position={[0.2, 0.1, -6.2]} scale={1.6} speed={0.28} color="#ffffff" />
       <FloatingShard position={[-1.8, -2.2, -4.8]} scale={0.68} speed={0.52} color="#FACC15" />
       <FloatingShard position={[2.2, 2.0, -5.6]} scale={0.76} speed={0.48} color="#67E8F9" />

@@ -136,7 +136,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div
           className="crystal-page-glow glow-pulse absolute top-1/4 left-1/2 h-[300px] w-[300px] -translate-x-1/2 sm:h-[600px] sm:w-[600px]"
-          style={{ background: 'radial-gradient(ellipse, rgba(249,115,22,0.1) 0%, transparent 65%)' }}
+          style={{ background: 'radial-gradient(ellipse, rgba(255,91,10,0.1) 0%, transparent 65%)' }}
         />
       </div>
 
@@ -166,7 +166,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
             onClick={() => { setMode('login'); onModeChange?.('login'); setError(null); resetMainForm(); }}
             className="flex-1 py-2 rounded-lg text-sm font-semibold transition-all duration-200"
             style={mode === 'login'
-              ? { background: 'linear-gradient(135deg, #F97316, #06B6D4)', color: '#fff' }
+              ? { background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)', color: '#fff' }
               : { color: 'rgba(255,255,255,0.4)' }}
           >
             Einloggen
@@ -178,7 +178,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
             onClick={() => { setMode('register'); onModeChange?.('register'); setError(null); resetMainForm(); }}
             className="flex-1 py-2 rounded-lg text-sm font-semibold transition-all duration-200"
             style={mode === 'register'
-              ? { background: 'linear-gradient(135deg, #F97316, #06B6D4)', color: '#fff' }
+              ? { background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)', color: '#fff' }
               : { color: 'rgba(255,255,255,0.4)' }}
           >
             Registrieren
@@ -213,7 +213,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
                   disabled={isForgotSubmitting}
                   className="crystal-button w-full rounded-full px-4 py-3 font-semibold text-white text-sm
                     disabled:opacity-50 transition-all duration-300
-                    hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] hover:scale-[1.02]"
+                    hover:shadow-[0_0_30px_rgba(255,91,10,0.4)] hover:scale-[1.02]"
                   
                 >
                   {isForgotSubmitting ? (
@@ -264,7 +264,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
                 </label>
                 <input
                   type={mode === 'login' ? 'text' : 'email'}
-                  placeholder={mode === 'login' ? 'Salon Jimmy, E-Mail oder 0176 12345678' : 'du@beispiel.de'}
+                  placeholder={mode === 'login' ? 'Salon Muster, E-Mail oder 0176 12345678' : 'du@beispiel.de'}
                   autoComplete={mode === 'login' ? 'username' : 'email'}
                   className={`w-full rounded-xl bg-white/5 border px-4 py-2.5 text-sm text-white placeholder-white/30
                     focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200 ${errors.email ? 'border-orange-400/70' : 'border-white/10'}`}
@@ -377,7 +377,7 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
                 disabled={isSubmitting || (mode === 'register' && (!dsgvoAccepted || !isBusiness))}
                 className="crystal-button w-full rounded-full px-4 py-3 font-semibold text-white text-sm
                   disabled:opacity-50 transition-all duration-300
-                  hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] hover:scale-[1.02]"
+                  hover:shadow-[0_0_30px_rgba(255,91,10,0.4)] hover:scale-[1.02]"
                 
               >
                 {isSubmitting ? (
@@ -393,6 +393,11 @@ export function LoginPage({ onGoToLanding, onModeChange, initialMode = 'login' }
                   'Account erstellen'
                 )}
               </button>
+              {mode === 'register' && !preselectedPaidPlan && (
+                <p className="mt-3 text-center text-xs text-white/45">
+                  Kostenlos starten — ein bezahlter Plan entsteht erst durch eine spätere Buchung.
+                </p>
+              )}
             </form>
 
 

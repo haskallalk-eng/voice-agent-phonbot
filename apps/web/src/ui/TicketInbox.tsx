@@ -135,7 +135,7 @@ export function TicketInbox({ focusId }: { focusId?: string | null } = {}) {
               onClick={() => { setFilter(s); setPage(1); }}
               className={`relative inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60 ${
                 active
-                  ? 'text-white font-medium bg-orange-500/15 border border-orange-500/25 shadow-[0_0_14px_rgba(249,115,22,0.18)]'
+                  ? 'text-white font-medium bg-orange-500/15 border border-orange-500/25 shadow-[0_0_14px_rgba(255,91,10,0.18)]'
                   : 'text-white/50 hover:text-white/80 border border-transparent'
               }`}
             >

@@ -13,7 +13,7 @@ export function HowSection() {
       <div className="relative flex flex-col md:flex-row items-start md:items-center gap-8 md:gap-0">
         <div
           className="hidden md:block absolute top-10 left-[calc(16.66%+1rem)] right-[calc(16.66%+1rem)] h-px"
-          style={{ borderTop: '2px dashed rgba(249,115,22,0.3)' }}
+          style={{ borderTop: '2px dashed rgba(255,91,10,0.3)' }}
           aria-hidden="true"
         />
         {STEPS.map((step, i) => (
@@ -30,7 +30,7 @@ export function HowSection() {
               className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-extrabold text-white mb-5 relative z-10"
               style={{
                 background: 'linear-gradient(135deg, var(--crystal-warm), var(--crystal-cyan))',
-                boxShadow: '0 0 24px rgba(249,115,22,0.4)',
+                boxShadow: '0 0 24px rgba(255,91,10,0.4)',
               }}
             >
               {step.num}

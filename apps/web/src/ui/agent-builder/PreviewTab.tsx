@@ -39,7 +39,7 @@ export function PreviewTab({ config, preview, voices, deploying, onDeploy, onPre
       <div className="relative overflow-hidden rounded-[1.7rem] border border-white/[0.09] bg-gradient-to-br from-white/[0.08] via-white/[0.035] to-cyan-400/[0.05] p-8 md:p-10 text-center shadow-[0_24px_90px_rgba(0,0,0,0.25)]">
         <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-orange-400/15 blur-3xl" />
         <div className="pointer-events-none absolute -left-20 bottom-0 h-64 w-64 rounded-full bg-cyan-300/10 blur-3xl" />
-        <div className="relative mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-orange-300/25 bg-orange-400/10 text-orange-100 shadow-[0_0_40px_rgba(249,115,22,0.18)]">
+        <div className="relative mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-orange-300/25 bg-orange-400/10 text-orange-100 shadow-[0_0_40px_rgba(255,91,10,0.18)]">
           <IconDeploy size={30} />
         </div>
         <h3 className="relative mt-5 text-xl font-semibold text-white">Agent noch nicht live testbar</h3>
@@ -50,7 +50,7 @@ export function PreviewTab({ config, preview, voices, deploying, onDeploy, onPre
           onClick={onDeploy}
           disabled={deploying}
           className="relative mt-6 inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-xs font-semibold text-white disabled:opacity-50 transition-all cursor-pointer hover:scale-[1.02]"
-          style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+          style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
         >
           {deploying ? 'Aktiviere...' : <><IconDeploy size={13} />Jetzt aktivieren</>}
         </button>
@@ -73,7 +73,7 @@ export function PreviewTab({ config, preview, voices, deploying, onDeploy, onPre
         <div className="pointer-events-none absolute right-0 top-0 h-56 w-56 rounded-full bg-orange-400/14 blur-3xl" />
         <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-center gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-3xl border border-orange-300/25 bg-orange-400/10 text-orange-100 shadow-[0_0_36px_rgba(249,115,22,0.18)]">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-3xl border border-orange-300/25 bg-orange-400/10 text-orange-100 shadow-[0_0_36px_rgba(255,91,10,0.18)]">
               <IconAgent size={22} />
             </div>
             <div className="min-w-0">

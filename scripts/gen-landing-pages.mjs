@@ -436,7 +436,7 @@ const STYLE = `*{margin:0;padding:0;box-sizing:border-box}
 html{overflow-x:clip;max-width:100vw;scroll-behavior:smooth}
 body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0A0A0F;color:#fff;line-height:1.6;overflow-x:clip;max-width:100vw;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;position:relative}
 a{color:inherit;text-decoration:none}
-::selection{background:rgba(249,115,22,0.3);color:#fff}
+::selection{background:rgba(255,91,10,0.3);color:#fff}
 .container{max-width:72rem;margin:0 auto;padding:0 1.5rem;position:relative;z-index:1}
 
 /* ── Noise overlay (keeps dark from feeling plastic) ── */
@@ -445,9 +445,9 @@ a{color:inherit;text-decoration:none}
 /* ── Ambient glow orbs (3 pulsing radials, fixed full-bleed) ── */
 .orbs{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
 .orb{position:absolute;clip-path:polygon(50% 0%,88% 18%,100% 54%,70% 100%,22% 90%,0 45%,16% 14%);filter:blur(44px) saturate(1.2);animation:glow-pulse 3s ease-in-out infinite}
-.orb-1{width:700px;height:700px;top:-160px;left:-160px;background:radial-gradient(ellipse,rgba(249,115,22,.18) 0%,transparent 70%)}
-.orb-2{width:600px;height:600px;top:50%;right:-240px;background:radial-gradient(ellipse,rgba(6,182,212,.12) 0%,transparent 70%);animation-delay:1.5s;clip-path:polygon(34% 0%,92% 24%,78% 88%,18% 100%,0 38%)}
-.orb-3{width:500px;height:500px;bottom:-160px;left:35%;background:radial-gradient(ellipse,rgba(249,115,22,.10) 0%,transparent 70%);animation-delay:3s}
+.orb-1{width:700px;height:700px;top:-160px;left:-160px;background:radial-gradient(ellipse,rgba(255,91,10,.18) 0%,transparent 70%)}
+.orb-2{width:600px;height:600px;top:50%;right:-240px;background:radial-gradient(ellipse,rgba(32,217,255,.12) 0%,transparent 70%);animation-delay:1.5s;clip-path:polygon(34% 0%,92% 24%,78% 88%,18% 100%,0 38%)}
+.orb-3{width:500px;height:500px;bottom:-160px;left:35%;background:radial-gradient(ellipse,rgba(255,91,10,.10) 0%,transparent 70%);animation-delay:3s}
 @keyframes glow-pulse{0%,100%{opacity:.3}50%{opacity:.7}}
 
 /* ── Glass utility ── */
@@ -458,8 +458,8 @@ ${NAV_STYLE}
 
 /* ── Buttons (canonical gradient pill + neutral glass pill) ── */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;padding:1rem 2rem;border-radius:9999px;font-weight:600;font-size:1rem;transition:all .3s;cursor:pointer;border:none;text-decoration:none}
-.btn-primary{background:linear-gradient(135deg,#ff5b0a,#20d9ff);color:#fff}
-.btn-primary:hover{transform:scale(1.05);box-shadow:0 0 40px rgba(249,115,22,.5)}
+.btn-primary{background:linear-gradient(112deg,rgba(255,91,10,.88) 0%,rgba(255,148,61,.78) 32%,rgba(103,232,249,.58) 56%,rgba(32,217,255,.78) 74%,rgba(0,141,230,.8) 100%),rgba(10,12,20,.65);border:1px solid rgba(255,255,255,.18);text-shadow:0 1px 2px rgba(0,0,0,.3);box-shadow:inset 0 1px 0 rgba(255,255,255,.42);color:#fff}
+.btn-primary:hover{transform:scale(1.05);box-shadow:0 0 40px rgba(255,91,10,.5)}
 .btn-ghost{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.9);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
 .btn-ghost:hover{color:#fff;transform:scale(1.05)}
 .btn-sm{padding:.625rem 1.25rem;font-size:.875rem}
@@ -467,15 +467,15 @@ ${NAV_STYLE}
 /* ── Hero (section 1) ── */
 header.hero{padding:5rem 0 4rem;text-align:center;position:relative;z-index:1}
 @media(max-width:640px){header.hero{padding:3.5rem 0 2.5rem}}
-.hero-eyebrow{display:inline-flex;align-items:center;gap:.5rem;padding:.45rem 1rem;border-radius:9999px;background:rgba(249,115,22,.10);border:1px solid rgba(249,115,22,.25);font-size:.8125rem;color:#FDBA74;margin-bottom:1.75rem;font-weight:500;box-shadow:0 0 20px rgba(249,115,22,.15),inset 0 0 20px rgba(249,115,22,.04)}
-.hero-eyebrow .ic{display:inline-flex;align-items:center;color:#FDBA74}
+.hero-eyebrow{display:inline-flex;align-items:center;gap:.6rem;font-family:'Space Grotesk','Inter',ui-sans-serif,system-ui,sans-serif;font-size:.75rem;text-transform:uppercase;letter-spacing:.32em;color:rgba(148,226,255,.72);margin-bottom:1.75rem;font-weight:600}
+.hero-eyebrow .ic{display:inline-flex;align-items:center;color:rgba(148,226,255,.72)}
 .hero-eyebrow .ic svg{display:block;width:14px;height:14px}
 .ic-inline{display:inline-flex;align-items:center;vertical-align:-3px;color:rgba(255,255,255,.55);margin-right:.4rem}
 .ic-inline svg{display:block}
 .dialogue .bot .ic-inline{color:#FDBA74}
 .savings li .ic-inline{color:#FDBA74;margin-right:.55rem}
 h1{font-size:clamp(2.5rem,6vw,4.5rem);font-weight:800;letter-spacing:-.025em;line-height:1.08;margin-bottom:1.5rem;max-width:48rem;margin-left:auto;margin-right:auto}
-h1 .accent{background:linear-gradient(135deg,#ff5b0a,#20d9ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+h1 .accent{background:linear-gradient(112deg,#ff5b0a 0%,#ffb766 28%,#f7fbff 48%,#20d9ff 68%,#008de6 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
 .subtitle{font-size:1.125rem;color:rgba(255,255,255,.6);max-width:42rem;margin:0 auto 2.5rem;line-height:1.6}
 .cta-row{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;align-items:center}
 .trust-line{margin-top:1rem;font-size:.8125rem;color:rgba(255,255,255,.4)}
@@ -491,8 +491,8 @@ p{color:rgba(255,255,255,.7)}
 /* ── Features (glass cards with gradient-tinted icon tiles) ── */
 .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.25rem}
 .feature{padding:1.75rem;border-radius:1rem;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);transition:all .3s}
-.feature:hover{border-color:rgba(249,115,22,.3);background:rgba(255,255,255,.07);transform:translateY(-2px)}
-.feature-icon{width:48px;height:48px;border-radius:.875rem;background:linear-gradient(135deg,rgba(249,115,22,.18),rgba(6,182,212,.12));display:flex;align-items:center;justify-content:center;margin-bottom:1.25rem;border:1px solid rgba(249,115,22,.15);color:#FB923C}
+.feature:hover{border-color:rgba(255,91,10,.3);background:rgba(255,255,255,.07);transform:translateY(-2px)}
+.feature-icon{width:48px;height:48px;border-radius:.875rem;background:linear-gradient(135deg,rgba(255,91,10,.18),rgba(32,217,255,.12));display:flex;align-items:center;justify-content:center;margin-bottom:1.25rem;border:1px solid rgba(255,91,10,.15);color:#FB923C}
 .feature-icon svg{display:block;width:22px;height:22px}
 .feature h3{font-size:1.0625rem;margin-bottom:.5rem}
 .feature p{font-size:.9375rem;line-height:1.55}
@@ -501,15 +501,15 @@ p{color:rgba(255,255,255,.7)}
 .intent-card strong{display:block;color:#fff;font-size:.95rem;margin-bottom:.4rem}
 .intent-card p{font-size:.9rem;color:rgba(255,255,255,.62);line-height:1.55}
 .context-links{display:flex;flex-wrap:wrap;gap:.65rem;justify-content:center;margin-top:1.75rem}
-.context-links a{font-size:.85rem;color:#9DECF8;text-decoration:none;border:1px solid rgba(6,182,212,.24);background:rgba(6,182,212,.07);border-radius:999px;padding:.45rem .8rem}
-.context-links a:hover{color:#fff;border-color:rgba(249,115,22,.35)}
+.context-links a{font-size:.85rem;color:#9DECF8;text-decoration:none;border:1px solid rgba(32,217,255,.24);background:rgba(32,217,255,.07);border-radius:999px;padding:.45rem .8rem}
+.context-links a:hover{color:#fff;border-color:rgba(255,91,10,.35)}
 
 /* ── Call-style dialogue (glass card with animated chat bubbles) ── */
 .dialogue{backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:1.5rem;padding:1.75rem;max-width:640px;margin:0 auto;position:relative;overflow:hidden}
 @media(max-width:640px){.dialogue{padding:1.25rem}}
 .dialogue-header{display:flex;align-items:center;gap:.6rem;padding-bottom:1rem;margin-bottom:1.25rem;border-bottom:1px solid rgba(255,255,255,.06);font-size:.7rem;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.1em;font-weight:600}
-.dialogue-header .dot{width:8px;height:8px;border-radius:50%;background:#ff5b0a;animation:call-pulse 2s ease-in-out infinite;box-shadow:0 0 14px rgba(249,115,22,.75)}
-@keyframes call-pulse{0%,100%{box-shadow:0 0 0 0 rgba(249,115,22,.6),0 0 0 0 rgba(6,182,212,.35)}50%{box-shadow:0 0 0 6px rgba(249,115,22,0),0 0 0 12px rgba(6,182,212,0)}}
+.dialogue-header .dot{width:8px;height:8px;border-radius:50%;background:#ff5b0a;animation:call-pulse 2s ease-in-out infinite;box-shadow:0 0 14px rgba(255,91,10,.75)}
+@keyframes call-pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,91,10,.6),0 0 0 0 rgba(32,217,255,.35)}50%{box-shadow:0 0 0 6px rgba(255,91,10,0),0 0 0 12px rgba(32,217,255,0)}}
 .dialogue-header .duration{margin-left:auto;font-variant-numeric:tabular-nums;color:rgba(255,255,255,.5);letter-spacing:.06em}
 
 /* Messages animate in on page load, staggered — no IntersectionObserver,
@@ -533,18 +533,18 @@ p{color:rgba(255,255,255,.7)}
 .msg.user{flex-direction:row-reverse}
 .msg .avatar{flex-shrink:0;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);color:rgba(255,255,255,.65);position:relative}
 .msg .avatar svg{display:block;width:14px;height:14px}
-.msg.bot .avatar{background:transparent;border:none;overflow:visible;width:40px;height:40px;filter:drop-shadow(0 0 10px rgba(249,115,22,.30)) drop-shadow(0 0 12px rgba(6,182,212,.20));animation:crystal-breathe 3.5s ease-in-out infinite}
+.msg.bot .avatar{background:transparent;border:none;overflow:visible;width:40px;height:40px;filter:drop-shadow(0 0 10px rgba(255,91,10,.30)) drop-shadow(0 0 12px rgba(32,217,255,.20));animation:crystal-breathe 3.5s ease-in-out infinite}
 .msg.bot .avatar img{display:block;width:40px;height:40px;object-fit:contain}
 @keyframes crystal-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
 .msg .bubble{max-width:78%;padding:.75rem 1rem;border-radius:1rem;font-size:.9375rem;line-height:1.55;position:relative}
 .msg.user .bubble{background:rgba(255,255,255,.06);color:rgba(255,255,255,.82);border-bottom-right-radius:.375rem}
-.msg.bot .bubble{background:linear-gradient(135deg,rgba(249,115,22,.14),rgba(6,182,212,.08));color:#fff;border:1px solid rgba(249,115,22,.22);border-bottom-left-radius:.375rem;box-shadow:0 0 24px rgba(249,115,22,.08)}
+.msg.bot .bubble{background:linear-gradient(135deg,rgba(255,91,10,.14),rgba(32,217,255,.08));color:#fff;border:1px solid rgba(255,91,10,.22);border-bottom-left-radius:.375rem;box-shadow:0 0 24px rgba(255,91,10,.08)}
 .msg .bubble .name{display:block;font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:.3rem;opacity:.65}
 .msg.user .bubble .name{color:rgba(255,255,255,.55);text-align:right}
 .msg.bot .bubble .name{color:#FDBA74}
 
 /* Typing dots — shown after final bot message with a fade-in */
-.dialogue-typing{display:inline-flex;align-items:center;gap:.25rem;padding:.6rem .8rem;border-radius:1rem;background:linear-gradient(135deg,rgba(249,115,22,.12),rgba(6,182,212,.07));border:1px solid rgba(249,115,22,.2);margin-top:.5rem}
+.dialogue-typing{display:inline-flex;align-items:center;gap:.25rem;padding:.6rem .8rem;border-radius:1rem;background:linear-gradient(135deg,rgba(255,91,10,.12),rgba(32,217,255,.07));border:1px solid rgba(255,91,10,.2);margin-top:.5rem}
 .dialogue-typing span{width:5px;height:5px;border-radius:50%;background:#FDBA74;animation:typing-bounce 1.2s ease-in-out infinite}
 .dialogue-typing span:nth-child(2){animation-delay:.15s}
 .dialogue-typing span:nth-child(3){animation-delay:.3s}
@@ -558,9 +558,9 @@ p{color:rgba(255,255,255,.7)}
 }
 
 /* ── Value section (the professional "why this pays off" block) ── */
-.value-insight{display:flex;flex-direction:column;align-items:center;text-align:center;max-width:48rem;margin:0 auto 3rem;padding:1.75rem 1.5rem;background:linear-gradient(135deg,rgba(249,115,22,.09),rgba(6,182,212,.05));border:1px solid rgba(249,115,22,.18);border-radius:1.25rem;gap:.5rem}
+.value-insight{display:flex;flex-direction:column;align-items:center;text-align:center;max-width:48rem;margin:0 auto 3rem;padding:1.75rem 1.5rem;background:linear-gradient(135deg,rgba(255,91,10,.09),rgba(32,217,255,.05));border:1px solid rgba(255,91,10,.18);border-radius:1.25rem;gap:.5rem}
 @media(min-width:768px){.value-insight{flex-direction:row;gap:1.75rem;text-align:left;padding:1.75rem 2rem}}
-.value-stat{font-size:clamp(2.5rem,6vw,3.75rem);font-weight:800;letter-spacing:-.03em;line-height:1;background:linear-gradient(135deg,#ff5b0a,#20d9ff);-webkit-background-clip:text;background-clip:text;color:transparent;flex-shrink:0;white-space:nowrap}
+.value-stat{font-size:clamp(2.5rem,6vw,3.75rem);font-weight:800;letter-spacing:-.03em;line-height:1;background:linear-gradient(112deg,#ff5b0a 0%,#ffb766 28%,#f7fbff 48%,#20d9ff 68%,#008de6 100%);-webkit-background-clip:text;background-clip:text;color:transparent;flex-shrink:0;white-space:nowrap}
 .value-claim{color:rgba(255,255,255,.78);font-size:1rem;line-height:1.55;max-width:34rem}
 @media(max-width:640px){.value-claim{font-size:.9375rem}}
 
@@ -579,17 +579,17 @@ p{color:rgba(255,255,255,.7)}
 .roi-row .per{color:rgba(255,255,255,.5);font-size:.8125rem;font-weight:500;margin-left:.15rem}
 
 /* Highlight row = the savings reveal */
-.roi-row.highlight{margin-top:.75rem;padding:1rem 1.125rem;border:1px solid rgba(249,115,22,.3);background:linear-gradient(135deg,rgba(249,115,22,.12),rgba(6,182,212,.06));border-radius:.875rem;box-shadow:0 0 32px rgba(249,115,22,.12)}
-.roi-row.highlight .ic{background:linear-gradient(135deg,rgba(249,115,22,.22),rgba(6,182,212,.14));border-color:rgba(249,115,22,.30);color:#FDBA74}
+.roi-row.highlight{margin-top:.75rem;padding:1rem 1.125rem;border:1px solid rgba(255,91,10,.3);background:linear-gradient(135deg,rgba(255,91,10,.12),rgba(32,217,255,.06));border-radius:.875rem;box-shadow:0 0 32px rgba(255,91,10,.12)}
+.roi-row.highlight .ic{background:linear-gradient(135deg,rgba(255,91,10,.22),rgba(32,217,255,.14));border-color:rgba(255,91,10,.30);color:#FDBA74}
 .roi-row.highlight .label{color:#fff;font-weight:600}
-.roi-row.highlight .amount{background:linear-gradient(135deg,#ff5b0a,#20d9ff);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:1.375rem;font-weight:800}
+.roi-row.highlight .amount{background:linear-gradient(112deg,#ff5b0a 0%,#ffb766 28%,#f7fbff 48%,#20d9ff 68%,#008de6 100%);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:1.375rem;font-weight:800}
 .roi-row.highlight .per{color:rgba(255,255,255,.6)}
 
 /* Extras stack (right column) */
 .value-extras{display:flex;flex-direction:column;gap:.875rem}
 .extra{display:flex;gap:1rem;padding:1.25rem;border-radius:1rem;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);transition:all .3s}
-.extra:hover{border-color:rgba(249,115,22,.25);background:rgba(255,255,255,.05);transform:translateY(-1px)}
-.extra .ic{flex-shrink:0;width:38px;height:38px;border-radius:.75rem;background:linear-gradient(135deg,rgba(249,115,22,.15),rgba(6,182,212,.10));display:flex;align-items:center;justify-content:center;color:#FB923C;border:1px solid rgba(249,115,22,.18)}
+.extra:hover{border-color:rgba(255,91,10,.25);background:rgba(255,255,255,.05);transform:translateY(-1px)}
+.extra .ic{flex-shrink:0;width:38px;height:38px;border-radius:.75rem;background:linear-gradient(135deg,rgba(255,91,10,.15),rgba(32,217,255,.10));display:flex;align-items:center;justify-content:center;color:#FB923C;border:1px solid rgba(255,91,10,.18)}
 .extra .ic svg{display:block;width:18px;height:18px}
 .extra-body{flex:1;min-width:0}
 .extra-title{color:#fff;font-weight:600;font-size:.9375rem;margin-bottom:.2rem;line-height:1.35}
@@ -598,7 +598,7 @@ p{color:rgba(255,255,255,.7)}
 /* ── FAQ (native <details> accordion, Phonbot-design tint on open) ── */
 .faq-list{max-width:48rem;margin:0 auto;display:flex;flex-direction:column;gap:.75rem}
 .faq-item{border-radius:1rem;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.02);overflow:hidden;transition:all .3s}
-.faq-item[open]{background:rgba(249,115,22,.05);border-color:rgba(249,115,22,.2)}
+.faq-item[open]{background:rgba(255,91,10,.05);border-color:rgba(255,91,10,.2)}
 .faq-item summary{list-style:none;padding:1rem 1.5rem;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:1rem;font-size:.9375rem;font-weight:600;color:rgba(255,255,255,.85);transition:color .2s}
 .faq-item summary::-webkit-details-marker{display:none}
 .faq-item summary:hover{color:#fff}
@@ -607,15 +607,15 @@ p{color:rgba(255,255,255,.7)}
 .faq-item .answer{padding:0 1.5rem 1.25rem;font-size:.9375rem;color:rgba(255,255,255,.55);line-height:1.6}
 
 /* ── Demo hint chip ── */
-.demo-hint{display:inline-flex;align-items:center;padding:.5rem 1rem;border-radius:.625rem;background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);font-size:.8125rem;color:#67E8F9;margin-top:1.25rem}
+.demo-hint{display:inline-flex;align-items:center;padding:.5rem 1rem;border-radius:.625rem;background:rgba(32,217,255,.08);border:1px solid rgba(32,217,255,.2);font-size:.8125rem;color:#67E8F9;margin-top:1.25rem}
 
 /* ── Persona-Katalog (optional — opt-in per BRANCHEN.personas) ──
    Glass cards in a responsive 4/2/1-col grid. Each card keeps wording tight
    so the reader scans the heading + one-line quote in <2s per persona. */
 .personas-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;max-width:60rem;margin:0 auto}
 .persona-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:1rem;padding:1.25rem;backdrop-filter:blur(16px);transition:all .25s}
-.persona-card:hover{border-color:rgba(249,115,22,.25);background:rgba(255,255,255,.06)}
-.persona-icon{width:2.25rem;height:2.25rem;border-radius:.625rem;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(249,115,22,.14),rgba(6,182,212,.08));color:#FDBA74;margin-bottom:.75rem}
+.persona-card:hover{border-color:rgba(255,91,10,.25);background:rgba(255,255,255,.06)}
+.persona-icon{width:2.25rem;height:2.25rem;border-radius:.625rem;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(255,91,10,.14),rgba(32,217,255,.08));color:#FDBA74;margin-bottom:.75rem}
 .persona-title{font-size:.9375rem;font-weight:600;color:#fff;margin-bottom:.375rem}
 .persona-quote{font-size:.8125rem;color:rgba(255,255,255,.55);line-height:1.5;font-style:italic}
 
@@ -896,9 +896,9 @@ ${NAV_HTML}
     <p class="subtitle">${d.subtitle}</p>
     <div class="cta-row">
       <a href="/?page=register" class="btn btn-primary">Kostenlos testen</a>
-      <a href="${DEMO_PHONE_HREF}" class="btn btn-ghost">${icon('phone', 18)}<span style="margin-left:.5rem">Phonbot live anrufen</span></a>
+      <a href="${DEMO_PHONE_HREF}" class="btn btn-ghost">${icon('phone', 18)}<span style="margin-left:.5rem">Demo anrufen</span></a>
     </div>
-    <div class="trust-line">✓ Kostenlos starten · ✓ Sofort einsatzbereit · ✓ DSGVO-fokussiert, AVV verfügbar</div>
+    <div class="trust-line">✓ Kostenlos starten · ✓ In 2 Minuten startklar · ✓ AVV verfügbar</div>
   </div>
 </header>
 

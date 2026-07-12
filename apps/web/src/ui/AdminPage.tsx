@@ -105,7 +105,7 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
           type="submit"
           disabled={loading || !password}
           className="w-full py-3 rounded-xl font-semibold text-white text-sm transition-all duration-200 hover:opacity-90 disabled:opacity-50"
-          style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+          style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
         >
           {loading ? 'Logging in...' : 'Login'}
         </button>

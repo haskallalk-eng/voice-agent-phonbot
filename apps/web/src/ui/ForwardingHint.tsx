@@ -108,7 +108,7 @@ export function ForwardingHint({ label = 'Hinweis' }: { label?: string } = {}) {
               maxWidth: 'calc(100vw - 2rem)',
               zIndex: 9999,
             }}
-            className="pointer-events-none rounded-xl p-3.5 text-xs leading-relaxed text-white/85 bg-[#0A0A0F] border border-white/15 backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.6),0_0_20px_rgba(249,115,22,0.15)]"
+            className="pointer-events-none rounded-xl p-3.5 text-xs leading-relaxed text-white/85 bg-[#0A0A0F] border border-white/15 backdrop-blur-xl shadow-[0_12px_40px_rgba(0,0,0,0.6),0_0_20px_rgba(255,91,10,0.15)]"
           >
             {/* Speech-bubble arrow — flips with the bubble. Uses a 8-px
                 square rotated 45° with two borders to get a clean corner

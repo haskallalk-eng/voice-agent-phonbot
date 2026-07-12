@@ -26,6 +26,7 @@ export function FooterSection({ onShowLegal, onGoToContact }: FooterSectionProps
               <li><a href="/#demo" className="text-sm text-white/60 hover:text-white/90 transition-colors">Demo</a></li>
               <li><a href="/#preise" className="text-sm text-white/60 hover:text-white/90 transition-colors">Preise</a></li>
               <li><a href="/friseur/" className="text-sm text-white/60 hover:text-white/90 transition-colors">Für Friseure</a></li>
+              <li><a href="/blog/" className="text-sm text-white/60 hover:text-white/90 transition-colors">Blog</a></li>
             </ul>
           </div>
 
@@ -35,7 +36,7 @@ export function FooterSection({ onShowLegal, onGoToContact }: FooterSectionProps
             <ul className="space-y-2">
               <li><a href="/datenschutz/" className="text-sm text-white/60 hover:text-white/90 transition-colors">Datenschutz</a></li>
               <li><a href="/avv/" className="text-sm text-white/60 hover:text-white/90 transition-colors">AVV</a></li>
-              <li><a href="/sub-processors/" className="text-sm text-white/60 hover:text-white/90 transition-colors">Sub-Processoren</a></li>
+              <li><a href="/sub-processors/" className="text-sm text-white/60 hover:text-white/90 transition-colors">Subprozessoren</a></li>
               <li><a href="/impressum/" className="text-sm text-white/60 hover:text-white/90 transition-colors">Impressum</a></li>
               <li><a href="/agb/" className="text-sm text-white/60 hover:text-white/90 transition-colors">AGB</a></li>
             </ul>
@@ -66,7 +67,7 @@ export function FooterSection({ onShowLegal, onGoToContact }: FooterSectionProps
             {' (Einzelunternehmer) · Alle Rechte vorbehalten'}
           </p>
           <p className="text-xs text-white/55">
-            DSGVO-fokussiert · AVV verfügbar ·{' '}
+            Hosting in Deutschland/EU · AVV verfügbar ·{' '}
             <a href="mailto:info@phonbot.de" className="text-white/75 hover:text-white/95 transition-colors">info@phonbot.de</a>
           </p>
         </div>

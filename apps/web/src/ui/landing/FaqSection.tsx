@@ -22,8 +22,8 @@ export function FaqSection() {
               opacity: visible ? 1 : 0,
               transform: visible ? 'none' : 'translateY(20px)',
               transition: `opacity 0.5s ease ${i * 0.05}s, transform 0.5s ease ${i * 0.05}s, background 0.2s`,
-              background: open === i ? 'rgba(249,115,22,0.05)' : undefined,
-              borderColor: open === i ? 'rgba(249,115,22,0.2)' : undefined,
+              background: open === i ? 'rgba(255,91,10,0.05)' : undefined,
+              borderColor: open === i ? 'rgba(255,91,10,0.2)' : undefined,
             }}
           >
             <button

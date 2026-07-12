@@ -216,7 +216,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
               <p
                 className="hero-copy-item hero-trust-line mx-auto mt-4 inline-flex max-w-full items-center justify-center rounded-full px-2.5 py-1.5 text-[11px] font-semibold leading-none text-white/68 min-[390px]:text-xs"
                 style={{ '--hero-delay': '0.7s' } as React.CSSProperties}
-              >✓ Kostenlos · ✓ Sofort einsatzbereit · ✓ DSGVO-fokussiert</p>
+              >✓ Kostenlos starten · ✓ In 2 Minuten startklar · ✓ AVV verfügbar</p>
             </div>
           </div>
         </div>

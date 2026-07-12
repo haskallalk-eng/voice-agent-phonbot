@@ -115,7 +115,7 @@ function SuggestionCard({
               className="h-full rounded-full transition-all duration-500"
               style={{
                 width: `${progress * 100}%`,
-                background: progress >= 1 ? '#4ade80' : 'linear-gradient(to right, #F97316, #06B6D4)',
+                background: progress >= 1 ? '#4ade80' : 'linear-gradient(to right, #ff5b0a, #20d9ff)',
               }}
             />
           </div>
@@ -129,8 +129,8 @@ function SuggestionCard({
             onClick={async () => { setLoading('apply'); await onApply(s.id); setLoading(null); }}
             disabled={loading !== null}
             className="flex-1 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50
-              transition-all duration-200 hover:shadow-[0_0_20px_rgba(249,115,22,0.3)] hover:scale-[1.01]"
-            style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
+              transition-all duration-200 hover:shadow-[0_0_20px_rgba(255,91,10,0.3)] hover:scale-[1.01]"
+            style={{ background: 'linear-gradient(to right, #ff5b0a, #20d9ff)' }}
           >
             {loading === 'apply' ? '…' : 'Jetzt anwenden'}
           </button>
@@ -204,7 +204,7 @@ function AbTestCard({ t }: { t: AbTest }) {
           <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-500"
-              style={{ width: `${progress * 100}%`, background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
+              style={{ width: `${progress * 100}%`, background: 'linear-gradient(to right, #ff5b0a, #20d9ff)' }}
             />
           </div>
         </div>
@@ -369,7 +369,7 @@ export function InsightsPage() {
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div
           className="absolute -top-60 right-1/4 w-[350px] sm:w-[600px] h-[350px] sm:h-[600px] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.07) 0%, transparent 65%)' }}
+          style={{ background: 'radial-gradient(circle, rgba(255,91,10,0.07) 0%, transparent 65%)' }}
         />
       </div>
 
@@ -563,7 +563,7 @@ export function InsightsPage() {
             {/* Empty state */}
             {data.analyses.length === 0 && pending.length === 0 && (
               <div className="glass rounded-2xl p-10 border border-white/10 text-center">
-                <div className="mx-auto mb-3 h-10 w-10 rounded-2xl border border-orange-400/20 bg-orange-500/10 shadow-[0_0_28px_rgba(249,115,22,0.14)]" />
+                <div className="mx-auto mb-3 h-10 w-10 rounded-2xl border border-orange-400/20 bg-orange-500/10 shadow-[0_0_28px_rgba(255,91,10,0.14)]" />
                 <h3 className="text-lg font-semibold text-white mb-2">Noch keine Daten</h3>
                 <p className="text-sm text-white/40">
                   Nach dem ersten Anruf erscheinen hier die KI-Analysen und Verbesserungsvorschläge.

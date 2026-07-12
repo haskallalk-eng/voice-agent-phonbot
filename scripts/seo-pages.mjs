@@ -12,8 +12,8 @@ const CORE_INDUSTRY_PAGES_ALL = [
   {
     slug: 'friseur',
     name: 'Friseure',
-    title: 'KI-Telefonassistent fuer Friseure',
-    description: 'Salon-Termine, Wunschfriseur, Neukunden, Oeffnungszeiten, Preise und Rueckrufwuensche.',
+    title: 'KI-Telefonassistent für Friseure',
+    description: 'Salon-Termine, Wunschfriseur, Neukunden, Öffnungszeiten, Preise und Rückrufwünsche.',
   },
   {
     slug: 'handwerker',
@@ -256,7 +256,7 @@ export const SUPPORT_PAGES = [
     slug: 'kontakt',
     name: 'Kontakt',
     title: 'Kontakt zu Phonbot | KI-Telefonassistent testen',
-    description: 'Kontakt zu Phonbot: Demo anfragen, KI-Telefonassistent testen oder Fragen zu Preisen, DSGVO und Einrichtung klaeren.',
+    description: 'Kontakt zu Phonbot: Demo anfragen, KI-Telefonassistent testen oder Fragen zu Preisen, DSGVO und Einrichtung klären.',
   },
 ];
 

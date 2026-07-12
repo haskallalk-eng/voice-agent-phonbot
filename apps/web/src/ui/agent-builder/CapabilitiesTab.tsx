@@ -1455,7 +1455,7 @@ function CalendarConnector({ integrations, onChange }: {
           <div className="flex gap-2">
             <button onClick={handleCalcomConnect} disabled={loading || !calcomKey.trim()}
               className="px-4 py-2 rounded-lg text-xs font-medium text-white disabled:opacity-50 cursor-pointer"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+              style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>
               {loading ? 'Verbinde…' : 'Verbinden'}
             </button>
             <button onClick={() => { setShowCalcomInput(false); setCalcomKey(''); }}
@@ -1513,7 +1513,7 @@ function CalendarConnector({ integrations, onChange }: {
                     onClick={() => connectProvider(prov.id)}
                     disabled={loading}
                     className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 cursor-pointer transition-all hover:brightness-110"
-                    style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                    style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
                   >
                     Verbinden
                   </button>

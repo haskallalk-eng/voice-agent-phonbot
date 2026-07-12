@@ -49,8 +49,8 @@ function json(value) {
 const STYLE = `${NAV_STYLE}
 :root{color-scheme:dark;--bg:#090A0F;--panel:#11131B;--ink:#fff;--muted:rgba(255,255,255,.68);--soft:rgba(255,255,255,.1);--orange:#ff5b0a;--cyan:#20d9ff}
 *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.6;overflow-x:clip}
-a{color:inherit}.page{min-height:100vh}.wrap{width:min(1120px,calc(100% - 40px));margin:0 auto}.hero{padding:76px 0 42px}.crumbs{display:flex;gap:8px;flex-wrap:wrap;color:rgba(255,255,255,.48);font-size:.9rem;margin-bottom:28px}.crumbs a{color:rgba(255,255,255,.72);text-decoration:none}.eyebrow{color:#FDBA74;text-transform:uppercase;letter-spacing:.08em;font-size:.8rem;font-weight:800}.hero h1{font-size:clamp(2.2rem,5vw,4.4rem);line-height:1.05;letter-spacing:-.02em;max-width:900px;margin:14px 0 20px}.lead{font-size:1.13rem;color:var(--muted);max-width:780px}.actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}.btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;border-radius:999px;padding:0 18px;text-decoration:none;font-weight:800;background:linear-gradient(135deg,var(--orange),var(--cyan));color:#fff}.btn.secondary{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14)}
-section{padding:46px 0}.section-head{max-width:760px;margin-bottom:22px}.section-head h2{font-size:2rem;line-height:1.15;margin:0 0 10px}.section-head p{color:var(--muted);margin:0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(236px,1fr));gap:14px}.card{border:1px solid var(--soft);background:rgba(255,255,255,.045);border-radius:8px;padding:18px;text-decoration:none;display:block}.card h3{font-size:1rem;margin:0 0 8px}.card p{color:var(--muted);margin:0}.flow{counter-reset:step;display:grid;gap:10px}.step{counter-increment:step;display:flex;gap:12px;align-items:flex-start;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.08)}.step:before{content:counter(step);display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:rgba(249,115,22,.16);color:#FDBA74;font-weight:900;flex:0 0 auto}.keywords{display:flex;flex-wrap:wrap;gap:8px}.chip{border:1px solid rgba(6,182,212,.28);background:rgba(6,182,212,.08);color:#9DECF8;border-radius:999px;padding:7px 11px;font-size:.88rem}.notice{border-left:3px solid var(--orange);background:rgba(249,115,22,.08);padding:16px 18px;color:rgba(255,255,255,.78);max-width:820px}.faq{display:grid;gap:10px}.faq details{border:1px solid var(--soft);background:rgba(255,255,255,.035);border-radius:8px;padding:0}.faq summary{cursor:pointer;padding:16px 18px;font-weight:800}.faq p{color:var(--muted);margin:0;padding:0 18px 16px}.link-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}.link-list a{border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:14px;text-decoration:none;background:rgba(255,255,255,.035)}.link-list span{display:block;color:rgba(255,255,255,.58);font-size:.9rem;margin-top:4px}.mini{color:rgba(255,255,255,.55);font-size:.92rem}.site-footer{margin-top:0}
+a{color:inherit}.page{min-height:100vh}.wrap{width:min(1120px,calc(100% - 40px));margin:0 auto}.hero{padding:76px 0 42px}.crumbs{display:flex;gap:8px;flex-wrap:wrap;color:rgba(255,255,255,.48);font-size:.9rem;margin-bottom:28px}.crumbs a{color:rgba(255,255,255,.72);text-decoration:none}.eyebrow{font-family:'Space Grotesk','Inter',ui-sans-serif,system-ui,sans-serif;color:rgba(148,226,255,.72);text-transform:uppercase;letter-spacing:.32em;font-size:.75rem;font-weight:600}.hero h1{font-size:clamp(2.2rem,5vw,4.4rem);line-height:1.05;letter-spacing:-.02em;max-width:900px;margin:14px 0 20px}.lead{font-size:1.13rem;color:var(--muted);max-width:780px}.actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}.btn{display:inline-flex;align-items:center;justify-content:center;min-height:44px;border-radius:999px;padding:0 18px;text-decoration:none;font-weight:700;border:1px solid rgba(255,255,255,.18);text-shadow:0 1px 2px rgba(0,0,0,.3);box-shadow:inset 0 1px 0 rgba(255,255,255,.42);background:linear-gradient(112deg,rgba(255,91,10,.88) 0%,rgba(255,148,61,.78) 32%,rgba(103,232,249,.58) 56%,rgba(32,217,255,.78) 74%,rgba(0,141,230,.8) 100%),rgba(10,12,20,.65);color:#fff}.btn.secondary{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14)}
+section{padding:46px 0}.section-head{max-width:760px;margin-bottom:22px}.section-head h2{font-size:2rem;line-height:1.15;margin:0 0 10px}.section-head p{color:var(--muted);margin:0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(236px,1fr));gap:14px}.card{border:1px solid var(--soft);background:rgba(255,255,255,.045);border-radius:8px;padding:18px;text-decoration:none;display:block}.card h3{font-size:1rem;margin:0 0 8px}.card p{color:var(--muted);margin:0}.flow{counter-reset:step;display:grid;gap:10px}.step{counter-increment:step;display:flex;gap:12px;align-items:flex-start;padding:14px 0;border-bottom:1px solid rgba(255,255,255,.08)}.step:before{content:counter(step);display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:rgba(255,91,10,.16);color:#FDBA74;font-weight:900;flex:0 0 auto}.keywords{display:flex;flex-wrap:wrap;gap:8px}.chip{border:1px solid rgba(32,217,255,.28);background:rgba(32,217,255,.08);color:#9DECF8;border-radius:999px;padding:7px 11px;font-size:.88rem}.notice{border-left:3px solid var(--orange);background:rgba(255,91,10,.08);padding:16px 18px;color:rgba(255,255,255,.78);max-width:820px}.faq{display:grid;gap:10px}.faq details{border:1px solid var(--soft);background:rgba(255,255,255,.035);border-radius:8px;padding:0}.faq summary{cursor:pointer;padding:16px 18px;font-weight:800}.faq p{color:var(--muted);margin:0;padding:0 18px 16px}.link-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}.link-list a{border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:14px;text-decoration:none;background:rgba(255,255,255,.035)}.link-list span{display:block;color:rgba(255,255,255,.58);font-size:.9rem;margin-top:4px}.mini{color:rgba(255,255,255,.55);font-size:.92rem}.site-footer{margin-top:0}
 @media(max-width:640px){.wrap{width:min(100% - 28px,1120px)}.hero{padding-top:48px}.hero h1{font-size:2.35rem}.grid{grid-template-columns:1fr}}
 ${FOOTER_STYLE}`;
 
@@ -182,7 +182,7 @@ ${NAV_HTML}
       <p class="eyebrow">${esc(page.eyebrow)}</p>
       <h1>${esc(page.headline)}</h1>
       <p class="lead">${esc(page.intro)}</p>
-      <div class="actions"><a class="btn" href="/?page=register">Kostenlos testen</a><a class="btn secondary" href="${DEMO_PHONE_HREF}">Phonbot live anrufen</a></div>
+      <div class="actions"><a class="btn" href="/?page=register">Kostenlos testen</a><a class="btn secondary" href="${DEMO_PHONE_HREF}">Demo anrufen</a></div>
     </div>
   </header>
   <section>
@@ -325,7 +325,7 @@ function contactJsonLd() {
         '@id': `${url}#webpage`,
         url,
         name: 'Kontakt zu Phonbot',
-        description: 'Kontakt zu Phonbot fuer Demo, Preise, DSGVO und Einrichtung.',
+        description: 'Kontakt zu Phonbot für Demo, Preise, DSGVO und Einrichtung.',
         inLanguage: 'de-DE',
         dateModified: TODAY,
         isPartOf: { '@id': `${SITE}/#website` },
@@ -354,7 +354,7 @@ function renderContactPage() {
   const page = {
     slug: 'kontakt',
     title: 'Kontakt zu Phonbot | KI-Telefonassistent testen',
-    description: 'Kontakt zu Phonbot: Demo anfragen, KI-Telefonassistent testen oder Fragen zu Preisen, DSGVO und Einrichtung klaeren.',
+    description: 'Kontakt zu Phonbot: Demo anfragen, KI-Telefonassistent testen oder Fragen zu Preisen, DSGVO und Einrichtung klären.',
   };
   return `${pageHead({ ...page, jsonLd: contactJsonLd() })}
 <body>
@@ -365,8 +365,8 @@ ${NAV_HTML}
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Phonbot</a><span>/</span><span>Kontakt</span></nav>
       <p class="eyebrow">Kontakt und Demo</p>
       <h1>Phonbot testen oder eine Frage zur KI-Telefonie klären.</h1>
-      <p class="lead">Wenn du wissen willst, ob Phonbot zu deiner Branche passt, schreib kurz, welche Anrufe automatisiert werden sollen. Für die schnelle Demo kannst du direkt ${DEMO_PHONE_LABEL} anrufen oder einen Rückruf anfordern.</p>
-      <div class="actions"><a class="btn" href="mailto:info@phonbot.de">info@phonbot.de</a><a class="btn secondary" href="${DEMO_PHONE_HREF}">Demo anrufen</a></div>
+      <p class="lead">Wenn du wissen willst, ob Phonbot zu deinem Salon passt, schreib kurz, welche Anrufe automatisiert werden sollen. Für die schnelle Demo kannst du direkt ${DEMO_PHONE_LABEL} anrufen oder einen Rückruf anfordern.</p>
+      <div class="actions"><a class="btn" href="mailto:info@phonbot.de">E-Mail schreiben</a><a class="btn secondary" href="${DEMO_PHONE_HREF}">Demo anrufen</a><a class="btn secondary" href="/#callback">Rückruf anfordern</a></div>
     </div>
   </header>
   <section>
@@ -374,14 +374,14 @@ ${NAV_HTML}
       <div class="grid">
         <article class="card"><h3>E-Mail</h3><p><a href="mailto:info@phonbot.de">info@phonbot.de</a></p></article>
         <article class="card"><h3>Telefon</h3><p><a href="tel:+493075937286">+49 30 75937286</a></p></article>
-        <article class="card"><h3>Typische Fragen</h3><p>Preise, Einrichtung, DSGVO, Rufweiterleitung, Kalender-Sync und passende Branchen-Templates.</p></article>
+        <article class="card"><h3>Typische Fragen</h3><p>Preise, Einrichtung, DSGVO, Rufweiterleitung, Kalender-Sync und das Friseur-Template.</p></article>
       </div>
     </div>
   </section>
   <section>
     <div class="wrap">
       <div class="section-head"><h2>Vor dem Gespräch hilfreich</h2><p>Damit der erste Termin konkret wird, reichen wenige Stichpunkte.</p></div>
-      <div class="flow"><div class="step">Welche Branche und wie viele Anrufe pro Monat?</div><div class="step">Welche Anrufe soll der Agent sicher erledigen?</div><div class="step">Welcher Kalender oder welches Tool soll verbunden werden?</div><div class="step">Soll eine bestehende Nummer weitergeleitet werden?</div></div>
+      <div class="flow"><div class="step">Wie groß ist dein Salon und wie viele Anrufe kommen pro Monat?</div><div class="step">Welche Anrufe soll der Agent sicher erledigen?</div><div class="step">Welcher Salonkalender soll verbunden werden?</div><div class="step">Soll eine bestehende Nummer weitergeleitet werden?</div></div>
     </div>
   </section>
 </main>

@@ -175,7 +175,7 @@ export function Sidebar({ current, onNavigate, org, user, onLogout }: Props) {
         <div className="flex items-center gap-2.5 mb-2.5 min-w-0">
           <div
             className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
-            style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+            style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
           >
             {user?.email?.[0]?.toUpperCase() ?? '?'}
           </div>

@@ -60,7 +60,7 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
           return (
             <li key={feat} className={`flex items-center gap-2 ${small ? 'text-xs' : 'text-sm'}`}>
               {isHighlight ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" className="shrink-0"><defs><linearGradient id="fg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#F97316"/><stop offset="100%" stopColor="#06B6D4"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill="url(#fg)"/></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" className="shrink-0"><defs><linearGradient id="fg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#ff5b0a"/><stop offset="100%" stopColor="#20d9ff"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill="url(#fg)"/></svg>
               ) : (
                 <span className="w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
                   style={{ background: 'linear-gradient(135deg, var(--crystal-warm), var(--crystal-cyan))' }}>✓</span>
@@ -150,13 +150,13 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
               tabIndex={0}
               onClick={() => pickPlan(plan.name)}
               onKeyDown={(e) => onCardKey(e, plan.name)}
-              className="gradient-border relative glass rounded-2xl p-8 flex flex-col transition-all duration-300 hover:shadow-[0_0_40px_rgba(249,115,22,0.25)] hover:scale-[1.02] cursor-pointer"
+              className="gradient-border relative glass rounded-2xl p-8 flex flex-col transition-all duration-300 hover:shadow-[0_0_40px_rgba(255,91,10,0.25)] hover:scale-[1.02] cursor-pointer"
               style={
                 isPopular
                   ? {
-                      border: '1px solid rgba(249,115,22,0.6)',
-                      background: 'linear-gradient(160deg, rgba(249,115,22,0.14) 0%, rgba(6,182,212,0.10) 100%)',
-                      boxShadow: '0 0 0 2px rgba(249,115,22,0.25), 0 0 40px rgba(249,115,22,0.18), 0 0 80px rgba(6,182,212,0.06)',
+                      border: '1px solid rgba(255,91,10,0.6)',
+                      background: 'linear-gradient(160deg, rgba(255,91,10,0.14) 0%, rgba(32,217,255,0.10) 100%)',
+                      boxShadow: '0 0 0 2px rgba(255,91,10,0.25), 0 0 40px rgba(255,91,10,0.18), 0 0 80px rgba(32,217,255,0.06)',
                     }
                   : {}
               }
@@ -204,21 +204,21 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
             (onGoToContact ?? onGoToRegister)();
           }
         }}
-        className="glass rounded-2xl p-8 mt-4 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative overflow-hidden cursor-pointer hover:shadow-[0_0_30px_rgba(6,182,212,0.25)] transition-shadow"
+        className="glass rounded-2xl p-8 mt-4 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative overflow-hidden cursor-pointer hover:shadow-[0_0_30px_rgba(32,217,255,0.25)] transition-shadow"
         style={{
-          border: '1px solid rgba(6,182,212,0.35)',
-          background: 'linear-gradient(135deg, rgba(6,182,212,0.08) 0%, rgba(249,115,22,0.06) 100%)',
+          border: '1px solid rgba(32,217,255,0.35)',
+          background: 'linear-gradient(135deg, rgba(32,217,255,0.08) 0%, rgba(255,91,10,0.06) 100%)',
         }}
       >
         <div
           className="crystal-page-glow crystal-page-glow-cyan absolute -top-24 -right-24 h-64 w-64 opacity-45 pointer-events-none"
-          style={{ background: 'radial-gradient(ellipse, rgba(6,182,212,0.32) 0%, transparent 72%)' }}
+          style={{ background: 'radial-gradient(ellipse, rgba(32,217,255,0.32) 0%, transparent 72%)' }}
         />
         <div className="flex-1 relative z-10">
           <div className="flex items-center gap-3 mb-2">
             <span
               className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full text-white"
-              style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }}
+              style={{ background: 'linear-gradient(135deg, #20d9ff, #ff5b0a)' }}
             >
               Enterprise
             </span>
@@ -232,35 +232,35 @@ export function PricingSection({ onGoToRegister, onGoToContact }: PricingSection
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-2 text-sm text-white/70 max-w-2xl">
             <span className="flex min-w-0 items-center gap-2 break-words">
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #20d9ff, #ff5b0a)' }} />
               Unlimited Agents
             </span>
             <span className="flex min-w-0 items-center gap-2 break-words">
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #20d9ff, #ff5b0a)' }} />
               Custom SLA
             </span>
             <span className="flex min-w-0 items-center gap-2 break-words">
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #20d9ff, #ff5b0a)' }} />
               Dedicated Manager
             </span>
             <span className="flex min-w-0 items-center gap-2 break-words">
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #20d9ff, #ff5b0a)' }} />
               White-Label + SSO
             </span>
             <span className="flex min-w-0 items-center gap-2 break-words">
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #20d9ff, #ff5b0a)' }} />
               Custom Integrationen
             </span>
             <span className="flex min-w-0 items-center gap-2 break-words">
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #20d9ff, #ff5b0a)' }} />
               AVV & On-Prem möglich
             </span>
             <span className="flex min-w-0 items-center gap-2 break-words">
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #20d9ff, #ff5b0a)' }} />
               Volume-Rabatt
             </span>
             <span className="flex min-w-0 items-center gap-2 break-words">
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #06B6D4, #F97316)' }} />
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'linear-gradient(135deg, #20d9ff, #ff5b0a)' }} />
               Priority Onboarding
             </span>
           </div>

@@ -177,8 +177,8 @@ export function VoiceDropdown({
             className="relative max-w-md w-full rounded-3xl overflow-hidden"
             style={{
               background: 'rgba(15,15,24,0.98)',
-              border: '1px solid rgba(249,115,22,0.35)',
-              boxShadow: '0 0 60px rgba(249,115,22,0.15), 0 0 0 1px rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,91,10,0.35)',
+              boxShadow: '0 0 60px rgba(255,91,10,0.15), 0 0 0 1px rgba(255,255,255,0.05)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -186,7 +186,7 @@ export function VoiceDropdown({
             <div
               className="absolute top-0 left-0 right-0 h-px"
               style={{
-                background: 'linear-gradient(90deg, transparent, rgba(249,115,22,0.6), rgba(6,182,212,0.6), transparent)',
+                background: 'linear-gradient(90deg, transparent, rgba(255,91,10,0.6), rgba(32,217,255,0.6), transparent)',
               }}
             />
 
@@ -195,9 +195,9 @@ export function VoiceDropdown({
               <div
                 className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
                 style={{
-                  background: 'linear-gradient(135deg, rgba(249,115,22,0.18), rgba(6,182,212,0.12))',
-                  border: '1px solid rgba(249,115,22,0.35)',
-                  boxShadow: '0 0 24px rgba(249,115,22,0.25)',
+                  background: 'linear-gradient(135deg, rgba(255,91,10,0.18), rgba(32,217,255,0.12))',
+                  border: '1px solid rgba(255,91,10,0.35)',
+                  boxShadow: '0 0 24px rgba(255,91,10,0.25)',
                 }}
                 aria-hidden="true"
               >
@@ -222,7 +222,7 @@ export function VoiceDropdown({
               </p>
               <p className="text-3xl font-extrabold mb-1"
                 style={{
-                  background: 'linear-gradient(135deg, #F97316, #06B6D4)',
+                  background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                   backgroundClip: 'text',
@@ -250,8 +250,8 @@ export function VoiceDropdown({
                     onSelect(confirmVoice.voice_id);
                     setConfirmVoice(null);
                   }}
-                  className="w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(249,115,22,0.45)]"
-                  style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                  className="w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:scale-[1.02] hover:shadow-[0_0_24px_rgba(255,91,10,0.45)]"
+                  style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
                 >
                   Bestätigen
                 </button>

@@ -54,11 +54,11 @@ export function CookieBanner({ onShowDatenschutz }: { onShowDatenschutz?: () => 
     <div
       className="fixed bottom-0 left-0 right-0 z-50 px-4 py-2 pb-safe sm:px-6 sm:py-5"
       style={{
-        background: 'linear-gradient(180deg, rgba(5,5,8,0.02), rgba(5,5,8,0.94) 18%, rgba(5,5,8,0.98))',
-        borderTop: '0',
+        background: 'rgba(5,5,8,0.92)',
+        borderTop: '1px solid rgba(255,255,255,0.08)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
-        boxShadow: '0 -22px 54px rgba(5,5,8,0.72)',
+        boxShadow: '0 -22px 54px rgba(5,5,8,0.55)',
       }}
     >
       <div className="mx-auto flex max-w-5xl flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-4">

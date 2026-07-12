@@ -58,6 +58,10 @@ export function NavHeader({
             Für Friseure
           </a>
 
+          <a href="/blog/" className={navLinkClass}>
+            Blog
+          </a>
+
           <button
             onClick={onGoToContact}
             className={`${navLinkClass} ${activePage === 'contact' ? 'text-white font-medium' : ''}`}
@@ -119,6 +123,14 @@ export function NavHeader({
             className="block py-3 text-sm text-white/60 hover:text-white transition-colors border-b border-white/5"
           >
             Für Friseure
+          </a>
+
+          <a
+            href="/blog/"
+            onClick={() => setMobileMenuOpen(false)}
+            className="block py-3 text-sm text-white/60 hover:text-white transition-colors border-b border-white/5"
+          >
+            Blog
           </a>
 
           <button

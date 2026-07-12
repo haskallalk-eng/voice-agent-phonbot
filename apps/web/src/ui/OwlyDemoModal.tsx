@@ -173,7 +173,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
         aria-modal="true"
         aria-labelledby="chipy-demo-modal-title"
         className="relative max-h-[90vh] w-full max-w-md overflow-y-auto overflow-x-hidden rounded-3xl glass-strong fade-up"
-        style={{ boxShadow: '0 0 80px rgba(249,115,22,0.15), 0 0 0 1px rgba(255,255,255,0.08)' }}
+        style={{ boxShadow: '0 0 80px rgba(255,91,10,0.15), 0 0 0 1px rgba(255,255,255,0.08)' }}
         onClick={(e) => e.stopPropagation()}
       >
         <button

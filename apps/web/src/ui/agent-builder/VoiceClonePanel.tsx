@@ -284,7 +284,7 @@ export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
                 }
               }}
             >
-              <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.12), rgba(6,182,212,0.08))' }}>
+              <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(255,91,10,0.12), rgba(32,217,255,0.08))' }}>
                 <IconMicUpload size={20} className="text-orange-400" />
               </div>
               <p className="text-sm text-white/50 mb-1">Audio-Datei hierher ziehen</p>
@@ -292,7 +292,7 @@ export function VoiceClonePanel({ onVoiceCloned }: VoiceClonePanelProps) {
             </div>
           ) : (
             <div className="flex items-center gap-3 rounded-xl px-4 py-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.15), rgba(6,182,212,0.1))' }}>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg, rgba(255,91,10,0.15), rgba(32,217,255,0.1))' }}>
                 <IconMicUpload size={14} className="text-orange-400" />
               </div>
               <div className="flex-1 min-w-0">
@@ -518,7 +518,7 @@ function ProviderDropdown({ value, onChange }: { value: string; onChange: (v: st
           <div
             className="h-px w-full"
             style={{
-              background: 'linear-gradient(90deg, transparent, rgba(249,115,22,0.5), rgba(6,182,212,0.5), transparent)',
+              background: 'linear-gradient(90deg, transparent, rgba(255,91,10,0.5), rgba(32,217,255,0.5), transparent)',
             }}
           />
           {VOICE_PROVIDERS.map((p) => {
@@ -550,7 +550,7 @@ function ProviderDropdown({ value, onChange }: { value: string; onChange: (v: st
                 {active && (
                   <span
                     className="w-1.5 h-1.5 rounded-full mt-2 shrink-0"
-                    style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                    style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
                     aria-hidden="true"
                   />
                 )}

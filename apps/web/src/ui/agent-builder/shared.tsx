@@ -152,7 +152,7 @@ export const PROMPT_TEMPLATES: {
     id: 'reception',
     Icon: IconBuilding,
     accent: 'text-orange-400',
-    hex: '#F97316',
+    hex: '#ff5b0a',
     name: 'Empfang / Zentrale',
     capability: 'Anrufer empfangen und an die richtige Stelle leiten',
     block: `## Empfang
@@ -162,7 +162,7 @@ Begrüße jeden Anrufer freundlich, finde heraus worum es geht und leite ihn zie
     id: 'appointment',
     Icon: IconCalendar,
     accent: 'text-cyan-400',
-    hex: '#06B6D4',
+    hex: '#20d9ff',
     name: 'Terminbuchung',
     capability: 'Termine vereinbaren und verbindlich bestätigen',
     block: `## Terminbuchung
@@ -172,7 +172,7 @@ Wenn der Anrufer einen Termin möchte: Frage nach Datum, Uhrzeit und Art des Ter
     id: 'support',
     Icon: IconSliders,
     accent: 'text-cyan-400',
-    hex: '#06B6D4',
+    hex: '#20d9ff',
     name: 'Kundensupport',
     capability: 'Probleme aufnehmen und Support-Tickets erstellen',
     block: `## Kundensupport
@@ -263,17 +263,17 @@ export type PromptSection = { id: string; label: string; Icon: SectionIconComp; 
 
 export const PROMPT_SECTIONS: PromptSection[] = [
   {
-    id: 'greeting', label: 'Begrüßung', Icon: IconAgent, accent: 'text-orange-400', hex: '#F97316',
+    id: 'greeting', label: 'Begrüßung', Icon: IconAgent, accent: 'text-orange-400', hex: '#ff5b0a',
     description: 'Wie der Agent Anrufer begrüßt',
     text: `Begrüße jeden Anrufer herzlich: "Guten Tag, willkommen bei {businessName}, mein Name ist {agentName} — wie kann ich Ihnen helfen?" Passe die Tageszeit an.`,
   },
   {
-    id: 'tone', label: 'Tonalität', Icon: IconVolume, accent: 'text-cyan-400', hex: '#06B6D4',
+    id: 'tone', label: 'Tonalität', Icon: IconVolume, accent: 'text-cyan-400', hex: '#20d9ff',
     description: 'Sprachstil & Persönlichkeit',
     text: `Spreche ruhig, klar und professionell. Verwende eine freundliche, empathische Sprache. Vermeide Fachjargon. Höre aktiv zu und bestätige das Gehörte mit kurzen Phrasen wie "Ich verstehe" oder "Gerne helfe ich Ihnen".`,
   },
   {
-    id: 'appointment', label: 'Terminbuchung', Icon: IconCalendar, accent: 'text-cyan-400', hex: '#06B6D4',
+    id: 'appointment', label: 'Terminbuchung', Icon: IconCalendar, accent: 'text-cyan-400', hex: '#20d9ff',
     description: 'Termin finden und buchen',
     text: `Wenn ein Anrufer einen Termin möchte: Frage nach gewünschtem Datum, Uhrzeit und Art des Termins. Prüfe die Verfügbarkeit. Biete 2–3 Optionen an. Bestätige den Termin mit Datum, Uhrzeit und Ort. Frage bei Unklarheiten präzise nach.`,
   },

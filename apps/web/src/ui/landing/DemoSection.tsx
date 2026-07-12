@@ -41,7 +41,7 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
       <div className="mb-10 flex flex-col gap-5 text-center">
         <div className="flex flex-wrap items-center justify-center gap-3">
           <span className="inline-flex items-center gap-2 rounded-full border border-orange-400/30 bg-orange-500/12 px-3 py-1 text-xs font-bold text-orange-100">
-            <span className="breathe inline-block h-2 w-2 rounded-full bg-orange-400 shadow-[0_0_14px_rgba(249,115,22,0.75)]" />
+            <span className="breathe inline-block h-2 w-2 rounded-full bg-orange-400 shadow-[0_0_14px_rgba(255,91,10,0.75)]" />
             Live-Telefon
           </span>
           <span className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/8 px-3 py-1 text-xs font-bold text-cyan-100/90">
@@ -65,12 +65,12 @@ export function DemoSection({ onGoToRegister }: DemoSectionProps) {
         </div>
       </div>
 
-      <div className="mx-auto mb-12 overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] shadow-[0_0_90px_rgba(249,115,22,0.10)]">
+      <div className="mx-auto mb-12 overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] shadow-[0_0_90px_rgba(255,91,10,0.10)]">
         <div className="grid gap-0 lg:grid-cols-[1.15fr_0.85fr]">
           <div
             className="relative p-6 sm:p-8 lg:p-10"
             style={{
-              background: 'radial-gradient(ellipse at 18% 12%, rgba(249,115,22,0.16), transparent 34%), radial-gradient(ellipse at 85% 88%, rgba(6,182,212,0.13), transparent 32%)',
+              background: 'radial-gradient(ellipse at 18% 12%, rgba(255,91,10,0.16), transparent 34%), radial-gradient(ellipse at 85% 88%, rgba(32,217,255,0.13), transparent 32%)',
             }}
           >
             <div className="mb-7 flex items-center gap-4">

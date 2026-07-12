@@ -103,7 +103,7 @@ function LoginOverlay({ onLogin, notice }: { onLogin: (rep: SalesRep) => void; n
           </label>
         </div>
         {error && <p className="mt-4 rounded-2xl border border-orange-400/20 bg-orange-500/10 px-4 py-3 text-sm text-orange-100/80">{error}</p>}
-        <button disabled={loading} className="mt-5 w-full rounded-2xl px-4 py-3 text-sm font-bold text-white transition-all hover:brightness-110 disabled:opacity-50" style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)' }}>
+        <button disabled={loading} className="mt-5 w-full rounded-2xl px-4 py-3 text-sm font-bold text-white transition-all hover:brightness-110 disabled:opacity-50" style={{ background: 'linear-gradient(135deg,#ff5b0a,#20d9ff)' }}>
           {loading ? 'Einloggen...' : 'Einloggen'}
         </button>
       </form>
@@ -147,7 +147,7 @@ function PasswordSetup({ onDone }: { onDone: () => void }) {
         <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Temporäres Passwort" className="w-full rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white outline-none focus:border-orange-500/50" />
         <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Neues Passwort, mindestens 8 Zeichen" className="w-full rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white outline-none focus:border-orange-500/50" />
         {error && <p className="rounded-2xl border border-orange-400/20 bg-orange-500/10 px-4 py-3 text-sm text-orange-100/80">{error}</p>}
-        <button disabled={loading || newPassword.length < 8} className="w-full rounded-2xl px-4 py-3 text-sm font-bold text-white transition-all hover:brightness-110 disabled:opacity-50" style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)' }}>
+        <button disabled={loading || newPassword.length < 8} className="w-full rounded-2xl px-4 py-3 text-sm font-bold text-white transition-all hover:brightness-110 disabled:opacity-50" style={{ background: 'linear-gradient(135deg,#ff5b0a,#20d9ff)' }}>
           Passwort speichern
         </button>
       </form>
@@ -253,7 +253,7 @@ function LeadDetail({ lead, onClose, onChanged }: { lead: SalesLead; onClose: ()
               <option value="existing_business_relation">Bestehender Geschäftskontakt</option>
               <option value="manual_one_to_one_context">Manuell geprüfter 1:1 Kontext</option>
             </select>
-            <button disabled={!localLead.email || busy === 'mail'} onClick={() => run('mail', () => salesSendTestLink(localLead.id, basis))} className="mt-3 rounded-xl px-4 py-2 text-sm font-bold text-white disabled:opacity-40" style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)' }}>
+            <button disabled={!localLead.email || busy === 'mail'} onClick={() => run('mail', () => salesSendTestLink(localLead.id, basis))} className="mt-3 rounded-xl px-4 py-2 text-sm font-bold text-white disabled:opacity-40" style={{ background: 'linear-gradient(135deg,#ff5b0a,#20d9ff)' }}>
               Testlink schicken
             </button>
           </section>
@@ -269,7 +269,7 @@ function LeadDetail({ lead, onClose, onChanged }: { lead: SalesLead; onClose: ()
               <input type="datetime-local" value={slotTime} onChange={(e) => setSlotTime(e.target.value)} className="rounded-xl border border-white/10 bg-[#101018] px-3 py-2 text-sm text-white" />
             </div>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Wichtige Gesprächsnotizen" className="mt-2 min-h-20 w-full rounded-xl border border-white/10 bg-[#101018] px-3 py-2 text-sm text-white placeholder:text-white/25" />
-            <button disabled={!slotTime || busy === 'book'} onClick={() => run('book', () => salesBookLead(localLead.id, { appointmentType, slotTime, durationMinutes: 45, notes }))} className="rounded-xl px-4 py-2 text-sm font-bold text-white disabled:opacity-40" style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)' }}>
+            <button disabled={!slotTime || busy === 'book'} onClick={() => run('book', () => salesBookLead(localLead.id, { appointmentType, slotTime, durationMinutes: 45, notes }))} className="rounded-xl px-4 py-2 text-sm font-bold text-white disabled:opacity-40" style={{ background: 'linear-gradient(135deg,#ff5b0a,#20d9ff)' }}>
               In Hot Leads schieben
             </button>
           </section>
@@ -498,8 +498,8 @@ export function SalesPage() {
   return (
     <div className="min-h-screen bg-[#0A0A0F] px-4 py-5 text-white sm:px-6">
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="crystal-page-glow absolute -top-40 right-0 h-[520px] w-[520px]" style={{ background: 'radial-gradient(ellipse,rgba(249,115,22,.11),transparent 62%)' }} />
-        <div className="crystal-page-glow crystal-page-glow-cyan absolute bottom-0 left-10 h-[420px] w-[420px]" style={{ background: 'radial-gradient(ellipse,rgba(6,182,212,.08),transparent 62%)' }} />
+        <div className="crystal-page-glow absolute -top-40 right-0 h-[520px] w-[520px]" style={{ background: 'radial-gradient(ellipse,rgba(255,91,10,.11),transparent 62%)' }} />
+        <div className="crystal-page-glow crystal-page-glow-cyan absolute bottom-0 left-10 h-[420px] w-[420px]" style={{ background: 'radial-gradient(ellipse,rgba(32,217,255,.08),transparent 62%)' }} />
       </div>
       <div className="relative z-10 mx-auto max-w-7xl">
         <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -538,7 +538,7 @@ export function SalesPage() {
                 ['tester', 'Tester'],
                 ['messages', 'Nachrichten'],
               ].map(([id, label]) => (
-                <button key={id} onClick={() => setTab(id as Tab)} className={`rounded-2xl px-4 py-2 text-sm font-semibold transition-all ${tab === id ? 'text-white' : 'text-white/40 hover:text-white/70'}`} style={tab === id ? { background: 'linear-gradient(135deg,#F97316,#06B6D4)' } : undefined}>
+                <button key={id} onClick={() => setTab(id as Tab)} className={`rounded-2xl px-4 py-2 text-sm font-semibold transition-all ${tab === id ? 'text-white' : 'text-white/40 hover:text-white/70'}`} style={tab === id ? { background: 'linear-gradient(135deg,#ff5b0a,#20d9ff)' } : undefined}>
                   {label}
                 </button>
               ))}
@@ -559,7 +559,7 @@ export function SalesPage() {
                     <select value={minScore} onChange={(e) => { setMinScore(Number(e.target.value)); resetLeadCursor(); }} className="rounded-2xl border border-white/10 bg-[#101018] px-4 py-3 text-sm">
                       {[1, 2, 3, 4, 5].map(v => <option key={v} value={v}>ab Bedarf {v}</option>)}
                     </select>
-                    <button disabled={loading || researching} onClick={() => void researchMoreLeads(true)} className="rounded-2xl px-4 py-3 text-sm font-bold disabled:opacity-50" style={{ background: 'linear-gradient(135deg,#F97316,#06B6D4)' }}>
+                    <button disabled={loading || researching} onClick={() => void researchMoreLeads(true)} className="rounded-2xl px-4 py-3 text-sm font-bold disabled:opacity-50" style={{ background: 'linear-gradient(135deg,#ff5b0a,#20d9ff)' }}>
                       {researching ? 'Recherchiere...' : 'Nachlegen'}
                     </button>
                   </div>

@@ -78,7 +78,7 @@ class ErrorBoundary extends React.Component<
           <button
             onClick={() => window.location.reload()}
             className="rounded-xl px-6 py-3 font-semibold text-white text-sm transition-all duration-200 hover:opacity-90"
-            style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+            style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
           >
             Seite neu laden
           </button>
@@ -480,7 +480,7 @@ function AppGate() {
               onClick={retryCheckoutFinalize}
               disabled={!failedCheckoutSession}
               className="flex-1 rounded-xl px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+              style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
             >
               Aktivierung erneut versuchen
             </button>

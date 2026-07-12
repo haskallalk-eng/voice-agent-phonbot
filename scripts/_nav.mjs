@@ -1,79 +1,43 @@
 // Shared nav partial — matches apps/web/src/ui/landing/NavHeader.tsx 1:1.
-// Emits the sticky unified nav that every static HTML page uses
-// (5 branch pages + impressum + datenschutz + agb).
+// Emits the sticky unified nav that every static HTML page uses.
 //
-// HTML interaction (hamburger toggle, Branchen-dropdown open/close,
-// click-outside) lives in /apps/web/public/nav.js — already loaded by
-// every static page via <script src="/nav.js" defer>.
+// The `--nav-css-begin/end--` block also carries the SITE THEME for static
+// pages (Space-Grotesk @font-face + display-typography), so every page that
+// embeds NAV_STYLE — generators AND the hand-maintained legal pages via
+// scripts/sync-legal-nav.mjs — automatically matches the SPA design.
+//
+// HTML interaction (hamburger toggle) lives in /apps/web/public/nav.js —
+// already loaded by every static page via <script src="/nav.js" defer>.
 
-const CRYSTAL_LOGO_HTML =
-  '<img class="ph-mark" src="/brand/phonbot-crystal-icon-cropped.png" alt="" width="32" height="32" decoding="async" loading="eager">';
-
-// Matches TEMPLATES in apps/web/src/ui/landing/shared.ts — keep in sync!
-const INDUSTRIES = [
-  { slug: 'branchen',      name: 'Alle Branchen', iconInner: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>' },
-  { slug: 'friseur',       name: 'Friseur',       iconInner: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/>' },
-  { slug: 'handwerker',    name: 'Handwerker',    iconInner: '<path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>' },
-  { slug: 'reinigung',     name: 'Reinigung',     iconInner: '<path d="M3 21l7-7"/><path d="M13.5 5.5l5.19-1.04 1.04 5.2-9.23 9.23a2 2 0 01-2.83 0l-2.83-2.83a2 2 0 010-2.83z"/><path d="M7.4 13.4l4.24-4.24"/>' },
-  { slug: 'restaurant',    name: 'Restaurant',    iconInner: '<line x1="18" y1="2" x2="18" y2="22"/><path d="M22 8H14V2"/><line x1="6" y1="2" x2="6" y2="8"/><path d="M2 8a4 4 0 008 0"/><line x1="6" y1="12" x2="6" y2="22"/>' },
-  { slug: 'autowerkstatt', name: 'Autowerkstatt', iconInner: '<path d="M5 17H3a2 2 0 01-2-2v-4l2.69-6.73A2 2 0 015.54 3h12.92a2 2 0 011.85 1.27L23 11v4a2 2 0 01-2 2h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="17.5" r="2.5"/>' },
-  // 6. Selbstständige / Solopreneur (2026-04-24) — dedicated target for
-  // freelancers, coaches, consultants, creatives. Uses the headphones
-  // glyph (matches TEMPLATES.IconHeadphones in shared.ts) to visually
-  // differentiate from the 5 classical trade branches above.
-  { slug: 'selbststaendig', name: 'Selbstständige', iconInner: '<path d="M3 14h3a2 2 0 012 2v3a2 2 0 01-2 2H5a2 2 0 01-2-2v-8a9 9 0 0118 0v8a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3a2 2 0 012-2h3"/>' },
-  { slug: 'kosmetikstudio', name: 'Kosmetik', iconInner: '<path d="M12 2v20"/><path d="M5 7h14"/><path d="M7 7l-3 7h6z"/><path d="M17 7l-3 7h6z"/>' },
-  { slug: 'fahrschule', name: 'Fahrschule', iconInner: '<circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M5 17H3v-4l2-5h14l2 5v4h-2"/><path d="M7 8l-1.5 4h13L17 8"/>' },
-  { slug: 'immobilienmakler', name: 'Immobilien', iconInner: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>' },
-  { slug: 'versicherungsmakler', name: 'Versicherung', iconInner: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-5"/>' },
-  { slug: 'fitnessstudio', name: 'Fitness', iconInner: '<path d="M6 7v10"/><path d="M18 7v10"/><path d="M3 9v6"/><path d="M21 9v6"/><path d="M6 12h12"/>' },
-  { slug: 'energieberater', name: 'Energieberater', iconInner: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>' },
-  { slug: 'hausverwaltung', name: 'Hausverwaltung', iconInner: '<path d="M4 21V5a2 2 0 012-2h12a2 2 0 012 2v16"/><path d="M9 21v-6h6v6"/><path d="M8 7h.01M12 7h.01M16 7h.01M8 11h.01M12 11h.01M16 11h.01"/>' },
-  { slug: 'ferienwohnung', name: 'Ferienwohnung', iconInner: '<path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/><path d="M7 4h3"/>' },
-];
-
-const industryIcon = (inner, s) =>
-  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="${s}" height="${s}" aria-hidden="true">${inner}</svg>`;
-
-const industryLinksDesktop = INDUSTRIES
-  .map((i) => `<a href="/${i.slug}/" role="menuitem">${industryIcon(i.iconInner, 18)}<span>${i.name}</span></a>`)
-  .join('');
-
-const industryLinksMobile = INDUSTRIES
-  .map((i) => `<a href="/${i.slug}/">${industryIcon(i.iconInner, 16)}<span>${i.name}</span></a>`)
-  .join('');
-
-const CHEV = '<svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M1 3l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+// Brand row = App-Icon (Quadrat mit Chipys Augen) + Schriftzug, exakt wie
+// PhonbotBrand (FoxLogo.tsx) im SPA.
+const BRAND_ROW_HTML =
+  '<img class="ph-mark" src="/brand/phonbot-site-icon-transparent-512.png" alt="" width="34" height="34" decoding="async" loading="eager"><span class="ph-brand"><span class="w">Phon</span><span class="o">bot</span></span>';
 
 /** Full nav CSS — bounded by the `--begin` / `--end` markers so
  *  `scripts/sync-legal-nav.mjs` can find + replace the block. */
 export const NAV_STYLE = `/*--nav-css-begin--*/
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:300 700;font-display:swap;src:url('/fonts/space-grotesk-latin.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+h1,h2,h3,h4{font-family:'Space Grotesk','Inter',ui-sans-serif,system-ui,sans-serif}
+h1,h2{font-weight:700;letter-spacing:-.022em;color:rgba(255,255,255,.96)}
 .ph-header{position:sticky;top:0;z-index:50;border-bottom:1px solid rgba(255,255,255,.05);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);background:rgba(10,10,15,.8)}
-.ph-inner{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.5rem;max-width:1152px;margin:0 auto;gap:1rem}
+.ph-inner{display:flex;align-items:center;justify-content:space-between;padding:.9rem 1.5rem;max-width:1152px;margin:0 auto;gap:1rem}
 .ph-logo{display:flex;align-items:center;gap:8px;text-decoration:none;flex-shrink:0}
-.ph-mark{width:32px;height:32px;object-fit:contain;filter:drop-shadow(0 0 12px rgba(249,115,22,.45)) drop-shadow(0 0 14px rgba(6,182,212,.24))}
-.ph-brand{font-size:18px;font-weight:900;letter-spacing:-.5px;line-height:1}
+.ph-mark{width:34px;height:34px;object-fit:contain;display:block;filter:drop-shadow(0 0 10px rgba(255,91,10,.30)) drop-shadow(0 0 12px rgba(32,217,255,.20))}
+.ph-brand{font-family:'Space Grotesk','Inter',ui-sans-serif,system-ui,sans-serif;font-size:19px;font-weight:700;letter-spacing:-.5px;line-height:1}
 .ph-brand .w{color:#fff}
-.ph-brand .o{background:linear-gradient(135deg,#ff5b0a,#20d9ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.ph-brand .o{background:linear-gradient(112deg,#ff5b0a 0%,#ffb766 28%,#f7fbff 48%,#20d9ff 68%,#008de6 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .ph-nav{display:none;align-items:center;gap:2rem}
 @media(min-width:768px){.ph-nav{display:flex}}
-.ph-nav a,.ph-nav-btn{font-size:.875rem;color:rgba(255,255,255,.6);text-decoration:none;transition:color .2s;background:none;border:none;cursor:pointer;font-family:inherit;padding:0;display:flex;align-items:center;gap:.25rem;font-weight:500}
+.ph-nav a,.ph-nav-btn{font-family:'Space Grotesk','Inter',ui-sans-serif,system-ui,sans-serif;font-size:.875rem;color:rgba(255,255,255,.6);text-decoration:none;transition:color .2s;background:none;border:none;cursor:pointer;padding:0;display:flex;align-items:center;gap:.25rem;font-weight:500}
 .ph-nav a:hover,.ph-nav-btn:hover{color:#fff}
-.ph-dd-wrap{position:relative}
-.ph-dd-btn svg{transition:transform .2s}
-#ph-dd.open .ph-dd-btn svg{transform:rotate(180deg)}
-.ph-dd-menu{position:absolute;left:50%;transform:translateX(-50%);top:calc(100% + .75rem);width:16rem;border-radius:1rem;border:1px solid rgba(255,255,255,.1);background:rgba(10,10,15,.95);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 20px 60px rgba(0,0,0,.5);padding:.5rem 0;z-index:60;display:none}
-#ph-dd.open .ph-dd-menu{display:block}
-.ph-dd-menu a{display:flex;align-items:center;gap:.75rem;padding:.625rem 1rem;font-size:.875rem;color:rgba(255,255,255,.8);text-decoration:none;transition:background .15s,color .15s}
-.ph-dd-menu a:hover{background:rgba(255,255,255,.05);color:#fff}
-.ph-dd-menu a svg{color:#FB923C;flex-shrink:0}
 .ph-right{display:flex;align-items:center;gap:1rem;flex-shrink:0}
-.ph-login{display:none;font-size:.875rem;color:rgba(255,255,255,.6);text-decoration:none;transition:color .2s}
+.ph-login{display:none;font-family:'Space Grotesk','Inter',ui-sans-serif,system-ui,sans-serif;font-size:.875rem;color:rgba(255,255,255,.6);text-decoration:none;transition:color .2s}
 @media(min-width:768px){.ph-login{display:block}}
 .ph-login:hover{color:#fff}
-.ph-cta-btn{display:none;font-size:.875rem;text-decoration:none;font-weight:600;color:#fff;border-radius:9999px;padding:10px 20px;background:linear-gradient(135deg,#ff5b0a,#20d9ff);transition:all .3s}
+.ph-cta-btn{display:none;font-family:'Space Grotesk','Inter',ui-sans-serif,system-ui,sans-serif;font-size:.875rem;text-decoration:none;font-weight:600;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.18);border-radius:9999px;padding:10px 20px;background:linear-gradient(112deg,rgba(255,91,10,.88) 0%,rgba(255,148,61,.78) 32%,rgba(103,232,249,.58) 56%,rgba(32,217,255,.78) 74%,rgba(0,141,230,.8) 100%),rgba(10,12,20,.65);box-shadow:inset 0 1px 0 rgba(255,255,255,.42);transition:all .3s}
 @media(min-width:768px){.ph-cta-btn{display:inline-block}}
-.ph-cta-btn:hover{box-shadow:0 0 24px rgba(249,115,22,.5);transform:scale(1.05)}
+.ph-cta-btn:hover{box-shadow:0 0 24px rgba(255,91,10,.45);transform:scale(1.05)}
 .ph-burg{display:flex;flex-direction:column;gap:4px;padding:.5rem;border-radius:.5rem;background:transparent;border:none;cursor:pointer;transition:background .2s}
 @media(min-width:768px){.ph-burg{display:none}}
 .ph-burg:hover{background:rgba(255,255,255,.05)}
@@ -83,19 +47,12 @@ body.mopen .ph-burg span:nth-child(2){opacity:0}
 body.mopen .ph-burg span:nth-child(3){transform:translateY(-6px) rotate(-45deg)}
 .ph-mob{display:none;border-top:1px solid rgba(255,255,255,.05);background:rgba(10,10,15,.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding:.75rem 1.5rem}
 body.mopen .ph-mob{display:block}
-.ph-mob>a,.ph-mob>details>summary{display:flex;align-items:center;justify-content:space-between;padding:.875rem 0;font-size:.875rem;color:rgba(255,255,255,.6);text-decoration:none;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer;list-style:none;font-weight:500}
-.ph-mob>a:hover,.ph-mob>details>summary:hover{color:#fff}
-.ph-mob>details>summary::-webkit-details-marker{display:none}
-.ph-mob>details summary svg{transition:transform .2s}
-.ph-mob>details[open] summary svg{transform:rotate(180deg)}
-.ph-mob-sub{padding:.25rem 0 .5rem}
-.ph-mob-sub a{display:flex;align-items:center;gap:.75rem;padding:.5rem 0;font-size:.85rem;color:rgba(255,255,255,.7);text-decoration:none}
-.ph-mob-sub a:hover{color:#fff}
-.ph-mob-sub a svg{color:#FB923C;flex-shrink:0}
+.ph-mob>a{display:flex;align-items:center;justify-content:space-between;padding:.875rem 0;font-family:'Space Grotesk','Inter',ui-sans-serif,system-ui,sans-serif;font-size:.875rem;color:rgba(255,255,255,.6);text-decoration:none;border-bottom:1px solid rgba(255,255,255,.05);font-weight:500}
+.ph-mob>a:hover{color:#fff}
 .ph-mob-cta{display:flex;flex-direction:column;gap:.5rem;padding:.75rem 0 .25rem}
-.ph-mob-cta a{text-align:center;padding:.75rem;border-radius:.75rem;font-weight:600;text-decoration:none;font-size:.875rem}
+.ph-mob-cta a{text-align:center;padding:.75rem;border-radius:9999px;font-family:'Space Grotesk','Inter',ui-sans-serif,system-ui,sans-serif;font-weight:600;text-decoration:none;font-size:.875rem}
 .ph-mob-cta a.login{border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.7)}
-.ph-mob-cta a.cta{background:linear-gradient(135deg,#ff5b0a,#20d9ff);color:#fff}
+.ph-mob-cta a.cta{background:linear-gradient(112deg,rgba(255,91,10,.88) 0%,rgba(255,148,61,.78) 32%,rgba(103,232,249,.58) 56%,rgba(32,217,255,.78) 74%,rgba(0,141,230,.8) 100%),rgba(10,12,20,.65);border:1px solid rgba(255,255,255,.18);text-shadow:0 1px 2px rgba(0,0,0,.3);color:#fff}
 /*--nav-css-end--*/`;
 
 /** Full nav HTML — bounded by the `--begin` / `--end` markers so
@@ -103,7 +60,7 @@ body.mopen .ph-mob{display:block}
 export const NAV_HTML = `<!--nav-html-begin-->
 <header class="ph-header">
   <div class="ph-inner">
-    <a href="/" class="ph-logo" aria-label="Phonbot Startseite">${CRYSTAL_LOGO_HTML}<span class="ph-brand"><span class="w">Phon</span><span class="o">bot</span></span></a>
+    <a href="/" class="ph-logo" aria-label="Phonbot Startseite">${BRAND_ROW_HTML}</a>
     <nav class="ph-nav" aria-label="Hauptnavigation">
       <a href="/#demo">Demo</a>
       <a href="/#features">Features</a>

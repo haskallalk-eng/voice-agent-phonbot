@@ -297,12 +297,12 @@ export function BillingPage() {
                     return (
                       <li key={f} className="flex items-center gap-2 text-sm">
                         {hl ? (
-                          <svg width="14" height="14" viewBox="0 0 24 24" className="shrink-0"><defs><linearGradient id="fgBl" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#F97316"/><stop offset="100%" stopColor="#06B6D4"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill="url(#fgBl)"/></svg>
+                          <svg width="14" height="14" viewBox="0 0 24 24" className="shrink-0"><defs><linearGradient id="fgBl" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#ff5b0a"/><stop offset="100%" stopColor="#20d9ff"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill="url(#fgBl)"/></svg>
                         ) : (
                           <span className="text-green-400">✓</span>
                         )}
                         <span className={hl ? 'font-semibold bg-clip-text text-transparent' : 'text-white/60'}
-                          style={hl ? { backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' } : undefined}>{label}</span>
+                          style={hl ? { backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' } : undefined}>{label}</span>
                       </li>
                     );
                   })}
@@ -327,7 +327,7 @@ export function BillingPage() {
         {/* ── Nummer — subtle line at bottom ── */}
         <div className="rounded-xl border border-white/8 bg-white/[0.02] px-5 py-3 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-sm">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff5b0a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
               <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72c.12.96.36 1.9.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.34 1.85.58 2.81.7A2 2 0 0122 16.92z"/>
             </svg>
             <span className="text-white/50">

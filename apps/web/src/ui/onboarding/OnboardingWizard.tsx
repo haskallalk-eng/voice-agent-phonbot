@@ -45,9 +45,9 @@ const TEMPLATE_CONFIG: Record<string, {
     accent: 'text-orange-300',
     iconBg: 'bg-orange-500/15',
     hoverBorder: 'hover:border-orange-500/40',
-    hoverGlow: 'hover:shadow-[0_0_22px_rgba(249,115,22,0.18)]',
+    hoverGlow: 'hover:shadow-[0_0_22px_rgba(255,91,10,0.18)]',
     selectedBorder: 'border-orange-500/60',
-    selectedGlow: 'shadow-[0_0_22px_rgba(249,115,22,0.25)]',
+    selectedGlow: 'shadow-[0_0_22px_rgba(255,91,10,0.25)]',
   },
   restaurant: {
     Icon: IconRestaurant,
@@ -63,9 +63,9 @@ const TEMPLATE_CONFIG: Record<string, {
     accent: 'text-cyan-300',
     iconBg: 'bg-cyan-500/15',
     hoverBorder: 'hover:border-cyan-500/40',
-    hoverGlow: 'hover:shadow-[0_0_22px_rgba(6,182,212,0.18)]',
+    hoverGlow: 'hover:shadow-[0_0_22px_rgba(32,217,255,0.18)]',
     selectedBorder: 'border-cyan-500/60',
-    selectedGlow: 'shadow-[0_0_22px_rgba(6,182,212,0.25)]',
+    selectedGlow: 'shadow-[0_0_22px_rgba(32,217,255,0.25)]',
   },
   cleaning: {
     Icon: IconBroom,
@@ -81,9 +81,9 @@ const TEMPLATE_CONFIG: Record<string, {
     accent: 'text-cyan-300',
     iconBg: 'bg-cyan-500/15',
     hoverBorder: 'hover:border-cyan-500/40',
-    hoverGlow: 'hover:shadow-[0_0_22px_rgba(6,182,212,0.18)]',
+    hoverGlow: 'hover:shadow-[0_0_22px_rgba(32,217,255,0.18)]',
     selectedBorder: 'border-cyan-500/60',
-    selectedGlow: 'shadow-[0_0_22px_rgba(6,182,212,0.25)]',
+    selectedGlow: 'shadow-[0_0_22px_rgba(32,217,255,0.25)]',
   },
 };
 
@@ -358,7 +358,7 @@ export function OnboardingWizard({ onComplete }: Props) {
         onClick={() => selectTemplate(t)}
         className="flex w-full items-center gap-4 p-5 rounded-2xl border transition-all duration-200 text-left cursor-pointer group"
         style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.07)' }}
-        onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(249,115,22,0.3)'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+        onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,91,10,0.3)'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
         onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
       >
         <div className={`shrink-0 w-11 h-11 rounded-xl ${cfg?.iconBg ?? 'bg-white/10'}
@@ -385,7 +385,7 @@ export function OnboardingWizard({ onComplete }: Props) {
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div
           className="glow-pulse absolute -top-40 left-1/2 -translate-x-1/2 w-[350px] sm:w-[700px] h-[350px] sm:h-[700px] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.12) 0%, transparent 65%)' }}
+          style={{ background: 'radial-gradient(circle, rgba(255,91,10,0.12) 0%, transparent 65%)' }}
         />
       </div>
 
@@ -412,7 +412,7 @@ export function OnboardingWizard({ onComplete }: Props) {
             className="h-full rounded-full transition-all duration-500"
             style={{
               width: `${(stepProgress[step] / totalSteps) * 100}%`,
-              background: 'linear-gradient(to right, #F97316, #06B6D4)',
+              background: 'linear-gradient(to right, #ff5b0a, #20d9ff)',
             }}
           />
         </div>
@@ -518,7 +518,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                 disabled={loading || !form.businessName.trim()}
                 className="w-full rounded-xl px-4 py-3 font-semibold text-sm text-white disabled:opacity-50
                   transition-all duration-200 hover:scale-[1.01] cursor-pointer"
-                style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)', boxShadow: '0 4px 24px rgba(249,115,22,0.2)' }}
+                style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)', boxShadow: '0 4px 24px rgba(255,91,10,0.2)' }}
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
@@ -554,7 +554,7 @@ export function OnboardingWizard({ onComplete }: Props) {
           {!provisionedNumber && !phoneDone && (
             <div className="rounded-2xl p-6 space-y-5" style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.07)' }}>
               <div className="text-center">
-                <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.15), rgba(6,182,212,0.1))' }}>
+                <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(255,91,10,0.15), rgba(32,217,255,0.1))' }}>
                   <IconPhone size={20} className="text-orange-400" />
                 </div>
                 <h3 className="font-semibold text-white text-sm">Eigene Telefonnummer aktivieren</h3>
@@ -584,13 +584,13 @@ export function OnboardingWizard({ onComplete }: Props) {
 
               {phoneError && (
                 phoneError.includes('Starter') || phoneError.includes('upgrade') || phoneError.includes('Plan') ? (
-                  <div className="rounded-xl p-4 text-center space-y-3" style={{ background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.2)' }}>
-                    <p className="text-sm font-medium bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Telefonnummern sind ab dem Starter-Plan verfügbar</p>
+                  <div className="rounded-xl p-4 text-center space-y-3" style={{ background: 'rgba(255,91,10,0.08)', border: '1px solid rgba(255,91,10,0.2)' }}>
+                    <p className="text-sm font-medium bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>Telefonnummern sind ab dem Starter-Plan verfügbar</p>
                     <p className="text-xs text-white/35">Upgrade deinen Plan um eine eigene Nummer zu erhalten.</p>
                     <button
                       onClick={() => setShowUpgrade(true)}
                       className="text-xs font-medium bg-clip-text text-transparent hover:opacity-80 transition-opacity cursor-pointer"
-                      style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                      style={{ backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
                     >
                       Plan upgraden →
                     </button>
@@ -608,7 +608,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                   disabled={phoneLoading}
                   className="w-full rounded-xl px-4 py-3 font-semibold text-sm text-white disabled:opacity-50
                     transition-all duration-200 hover:scale-[1.01] cursor-pointer"
-                  style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)', boxShadow: '0 4px 24px rgba(249,115,22,0.2)' }}
+                  style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)', boxShadow: '0 4px 24px rgba(255,91,10,0.2)' }}
                 >
                   {phoneLoading ? (
                     <span className="flex items-center justify-center gap-2">
@@ -668,7 +668,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                     onClick={() => setCallMode('direct')}
                     className={`w-full glass rounded-2xl p-5 flex items-start gap-4 text-left border-2 transition-all duration-300 cursor-pointer
                       ${callMode === 'direct'
-                        ? 'border-orange-500/60 shadow-[0_0_22px_rgba(249,115,22,0.2)] bg-orange-500/5'
+                        ? 'border-orange-500/60 shadow-[0_0_22px_rgba(255,91,10,0.2)] bg-orange-500/5'
                         : 'border-transparent hover:border-white/20 hover:bg-white/[0.03]'}`}
                   >
                     <div className={`shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-300
@@ -689,7 +689,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                     onClick={() => setCallMode('backup')}
                     className={`w-full glass rounded-2xl p-5 flex items-start gap-4 text-left border-2 transition-all duration-300 cursor-pointer
                       ${callMode === 'backup'
-                        ? 'border-cyan-500/60 shadow-[0_0_22px_rgba(6,182,212,0.2)] bg-cyan-500/5'
+                        ? 'border-cyan-500/60 shadow-[0_0_22px_rgba(32,217,255,0.2)] bg-cyan-500/5'
                         : 'border-transparent hover:border-white/20 hover:bg-white/[0.03]'}`}
                   >
                     <div className={`shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-300
@@ -708,7 +708,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                     onClick={() => setCallMode('always')}
                     className={`w-full glass rounded-2xl p-5 flex items-start gap-4 text-left border-2 transition-all duration-300 cursor-pointer
                       ${callMode === 'always'
-                        ? 'border-orange-500/60 shadow-[0_0_22px_rgba(249,115,22,0.22)] bg-orange-500/5'
+                        ? 'border-orange-500/60 shadow-[0_0_22px_rgba(255,91,10,0.22)] bg-orange-500/5'
                         : 'border-transparent hover:border-white/20 hover:bg-white/[0.03]'}`}
                   >
                     <div className={`shrink-0 w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-300
@@ -797,8 +797,8 @@ export function OnboardingWizard({ onComplete }: Props) {
                   onClick={() => setPhoneDone(true)}
                   disabled={!callMode}
                   className="w-full rounded-xl px-4 py-3 font-semibold text-sm text-white disabled:opacity-40 disabled:cursor-not-allowed
-                    transition-all duration-300 hover:shadow-[0_0_28px_rgba(249,115,22,0.4)] cursor-pointer"
-                  style={{ background: callMode ? 'linear-gradient(to right, #F97316, #06B6D4)' : 'rgba(255,255,255,0.08)' }}
+                    transition-all duration-300 hover:shadow-[0_0_28px_rgba(255,91,10,0.4)] cursor-pointer"
+                  style={{ background: callMode ? 'linear-gradient(to right, #ff5b0a, #20d9ff)' : 'rgba(255,255,255,0.08)' }}
                 >
                   {!callMode
                     ? 'Wähle einen Modus ↑'
@@ -815,7 +815,7 @@ export function OnboardingWizard({ onComplete }: Props) {
             <div className="glass rounded-2xl p-8 text-center space-y-5">
               <div className="flex justify-center"><IconStar size={44} className="text-green-400" /></div>
               <h3 className="text-lg font-semibold text-white">Telefon eingerichtet!</h3>
-              <p className="text-3xl font-bold" style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+              <p className="text-3xl font-bold" style={{ background: 'linear-gradient(to right, #ff5b0a, #20d9ff)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
                 {provisionedNumber}
               </p>
               <p className="text-sm text-white/50">
@@ -827,8 +827,8 @@ export function OnboardingWizard({ onComplete }: Props) {
               <button
                 onClick={() => setStep('calendar')}
                 className="mt-2 rounded-xl px-6 py-2.5 font-semibold text-sm text-white cursor-pointer
-                  transition-all duration-300 hover:shadow-[0_0_24px_rgba(249,115,22,0.4)]"
-                style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
+                  transition-all duration-300 hover:shadow-[0_0_24px_rgba(255,91,10,0.4)]"
+                style={{ background: 'linear-gradient(to right, #ff5b0a, #20d9ff)' }}
               >
                 Weiter →
               </button>
@@ -841,7 +841,7 @@ export function OnboardingWizard({ onComplete }: Props) {
       {step === 'calendar' && (
         <div className="relative z-10 w-full max-w-2xl">
           <div className="text-center mb-8">
-            <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.15), rgba(6,182,212,0.1))' }}>
+            <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(255,91,10,0.15), rgba(32,217,255,0.1))' }}>
               <IconCalendar size={20} className="text-orange-400" />
             </div>
             <h2 className="text-2xl font-bold text-white">Kalender verbinden</h2>
@@ -858,7 +858,7 @@ export function OnboardingWizard({ onComplete }: Props) {
               <div className="flex flex-col items-center gap-3 pt-2">
                 <button onClick={() => setStep('test')}
                   className="w-full max-w-xs rounded-xl px-4 py-3 font-semibold text-sm text-white transition-all duration-200 hover:scale-[1.01] cursor-pointer"
-                  style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)', boxShadow: '0 4px 24px rgba(249,115,22,0.2)' }}>
+                  style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)', boxShadow: '0 4px 24px rgba(255,91,10,0.2)' }}>
                   Weiter
                 </button>
               </div>
@@ -880,7 +880,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                   <p className="text-sm font-semibold text-white">Google Calendar</p>
                   <p className="text-[11px] text-white/30">Ein Klick — OAuth</p>
                 </div>
-                <span className="shrink-0 text-xs font-semibold bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Verbinden →</span>
+                <span className="shrink-0 text-xs font-semibold bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>Verbinden →</span>
               </div>
 
               {/* Microsoft Outlook */}
@@ -894,14 +894,14 @@ export function OnboardingWizard({ onComplete }: Props) {
                   <p className="text-sm font-semibold text-white">Microsoft Outlook</p>
                   <p className="text-[11px] text-white/30">Office 365 / Outlook.com</p>
                 </div>
-                <span className="shrink-0 text-xs font-semibold bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Verbinden →</span>
+                <span className="shrink-0 text-xs font-semibold bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>Verbinden →</span>
               </div>
 
               {/* Cal.com */}
               <div className="rounded-2xl p-5 transition-all" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <div className="flex items-center gap-4 mb-3">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(59,130,246,0.08)' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#06B6D4" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#20d9ff" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-white">Cal.com</p>
@@ -915,8 +915,8 @@ export function OnboardingWizard({ onComplete }: Props) {
                     style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }} />
                   <button onClick={handleCalcom} disabled={calendarLoading || !calcomApiKey.trim()}
                     className="shrink-0 rounded-lg px-4 py-2 text-xs font-semibold disabled:opacity-40 cursor-pointer transition-all hover:brightness-110"
-                    style={{ background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.15)' }}>
-                    <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+                    style={{ background: 'rgba(255,91,10,0.08)', border: '1px solid rgba(255,91,10,0.15)' }}>
+                    <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>
                       {calendarLoading ? '…' : 'OK'}
                     </span>
                   </button>
@@ -924,8 +924,8 @@ export function OnboardingWizard({ onComplete }: Props) {
               </div>
 
               {/* Chipy Kalender (eingebaut) */}
-              <div className="rounded-2xl p-5 flex items-center gap-4" style={{ background: 'rgba(249,115,22,0.03)', backdropFilter: 'blur(24px)', border: '1px solid rgba(249,115,22,0.1)' }}>
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.12), rgba(6,182,212,0.08))' }}>
+              <div className="rounded-2xl p-5 flex items-center gap-4" style={{ background: 'rgba(255,91,10,0.03)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,91,10,0.1)' }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg, rgba(255,91,10,0.12), rgba(32,217,255,0.08))' }}>
                   <FoxLogo size={24} />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -940,8 +940,8 @@ export function OnboardingWizard({ onComplete }: Props) {
               {/* Skip */}
               <button onClick={() => setStep('test')}
                 className="w-full rounded-xl px-4 py-3 text-sm font-medium transition-all cursor-pointer mt-1 hover:brightness-125"
-                style={{ background: 'rgba(249,115,22,0.04)', border: '1px solid rgba(249,115,22,0.15)' }}>
-                <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+                style={{ background: 'rgba(255,91,10,0.04)', border: '1px solid rgba(255,91,10,0.15)' }}>
+                <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>
                   Überspringen — später einrichten
                 </span>
               </button>
@@ -955,8 +955,8 @@ export function OnboardingWizard({ onComplete }: Props) {
         <div className="relative z-10 w-full max-w-sm">
           {/* Header */}
           <div className="text-center mb-10">
-            <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.15), rgba(6,182,212,0.1))' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F97316" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(255,91,10,0.15), rgba(32,217,255,0.1))' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff5b0a" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="17" x2="12" y2="21"/>
               </svg>
             </div>
@@ -976,8 +976,8 @@ export function OnboardingWizard({ onComplete }: Props) {
                 </div>
                 <button onClick={startTestCall}
                   className="rounded-xl px-8 py-3 font-semibold text-sm transition-all duration-200 hover:bg-white/[0.03] cursor-pointer"
-                  style={{ background: 'rgba(249,115,22,0.04)', border: '1px solid rgba(249,115,22,0.15)' }}>
-                  <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Gespräch starten</span>
+                  style={{ background: 'rgba(255,91,10,0.04)', border: '1px solid rgba(255,91,10,0.15)' }}>
+                  <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>Gespräch starten</span>
                 </button>
                 <p className="text-[10px] text-white/15">Mikrofon wird benötigt</p>
               </div>
@@ -986,7 +986,7 @@ export function OnboardingWizard({ onComplete }: Props) {
             {callState === 'connecting' && (
               <div className="flex flex-col items-center gap-4 py-10">
                 <div className="w-16 h-16 rounded-full flex items-center justify-center animate-pulse"
-                  style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.12), rgba(6,182,212,0.08))', border: '1px solid rgba(249,115,22,0.15)' }}>
+                  style={{ background: 'linear-gradient(135deg, rgba(255,91,10,0.12), rgba(32,217,255,0.08))', border: '1px solid rgba(255,91,10,0.15)' }}>
                   <FoxLogo size={40} glow />
                 </div>
                 <p className="text-xs text-white/30">Verbinde…</p>
@@ -997,7 +997,7 @@ export function OnboardingWizard({ onComplete }: Props) {
               <div className="flex flex-col items-center gap-4 py-8">
                 <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 ${agentTalking ? 'scale-110' : ''}`}
                   style={agentTalking
-                    ? { background: 'linear-gradient(135deg, #F97316, #06B6D4)', boxShadow: '0 0 32px rgba(249,115,22,0.35)' }
+                    ? { background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)', boxShadow: '0 0 32px rgba(255,91,10,0.35)' }
                     : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }
                   }>
                   <FoxLogo size={48} glow={agentTalking} />
@@ -1031,7 +1031,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                 <p className="text-xs text-white/50">Gespräch beendet</p>
                 <button onClick={() => { setCallState('idle'); setCallError(null); }}
                   className="text-[11px] font-medium bg-clip-text text-transparent cursor-pointer"
-                  style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+                  style={{ backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>
                   Nochmal testen
                 </button>
               </div>
@@ -1052,7 +1052,7 @@ export function OnboardingWizard({ onComplete }: Props) {
           <div className="flex flex-col items-center gap-3">
             <button onClick={() => setStep('done')}
               className="w-full rounded-xl px-6 py-3 font-semibold text-sm text-white transition-all duration-200 hover:scale-[1.01] cursor-pointer"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)', boxShadow: '0 4px 20px rgba(249,115,22,0.15)' }}>
+              style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)', boxShadow: '0 4px 20px rgba(255,91,10,0.15)' }}>
               Weiter
             </button>
             <button onClick={() => setStep('done')}
@@ -1104,8 +1104,8 @@ export function OnboardingWizard({ onComplete }: Props) {
           <button
             onClick={() => { clearOnboardingState(); onComplete(); }}
             className="rounded-xl px-8 py-3 font-semibold text-white
-              transition-all duration-300 hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] hover:scale-[1.01]"
-            style={{ background: 'linear-gradient(to right, #F97316, #06B6D4)' }}
+              transition-all duration-300 hover:shadow-[0_0_30px_rgba(255,91,10,0.4)] hover:scale-[1.01]"
+            style={{ background: 'linear-gradient(to right, #ff5b0a, #20d9ff)' }}
           >
             Dashboard öffnen →
           </button>
@@ -1124,8 +1124,8 @@ function UpgradeModal({ onClose }: { onClose: () => void }) {
   const [legalAccepted, setLegalAccepted] = useState(false);
 
   const plans = [
-    { id: 'starter', name: 'Starter', price: '89', features: ['✦ Telefonnummer inklusive', '300 Min/Monat', '1 Agent'], accent: '#F97316' },
-    { id: 'pro', name: 'Professional', price: '179', features: ['✦ Telefonnummer inklusive', '900 Min/Monat', '3 Agents', 'Kalender-Integration', 'Priority Support'], accent: '#06B6D4', recommended: true },
+    { id: 'starter', name: 'Starter', price: '89', features: ['✦ Telefonnummer inklusive', '300 Min/Monat', '1 Agent'], accent: '#ff5b0a' },
+    { id: 'pro', name: 'Professional', price: '179', features: ['✦ Telefonnummer inklusive', '900 Min/Monat', '3 Agents', 'Kalender-Integration', 'Priority Support'], accent: '#20d9ff', recommended: true },
     { id: 'agency', name: 'Agency', price: '349', features: ['✦ Telefonnummer inklusive', '2.000 Min/Monat', '10 Agents', 'White-Label', 'Dedicated Support'], accent: '#8B5CF6' },
   ];
 
@@ -1178,16 +1178,16 @@ function UpgradeModal({ onClose }: { onClose: () => void }) {
             <div key={p.id} className="rounded-xl p-5 relative flex flex-col"
               style={{
                 background: 'rgba(255,255,255,0.02)',
-                border: p.recommended ? '1px solid rgba(6,182,212,0.2)' : '1px solid rgba(255,255,255,0.06)',
+                border: p.recommended ? '1px solid rgba(32,217,255,0.2)' : '1px solid rgba(255,255,255,0.06)',
               }}>
               {p.recommended && (
                 <span className="absolute left-1/2 -translate-x-1/2 rounded-full px-3 py-0.5"
-                  style={{ background: '#14141f', border: '1px solid rgba(6,182,212,0.2)', top: '-9px' }}>
+                  style={{ background: '#14141f', border: '1px solid rgba(32,217,255,0.2)', top: '-9px' }}>
                   <span className="text-[10px] font-semibold bg-clip-text text-transparent"
-                    style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Empfohlen</span>
+                    style={{ backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>Empfohlen</span>
                 </span>
               )}
-              <p className="text-sm font-bold bg-clip-text text-transparent mb-0.5" style={{ backgroundImage: `linear-gradient(135deg, ${p.accent}, #06B6D4)` }}>{p.name}</p>
+              <p className="text-sm font-bold bg-clip-text text-transparent mb-0.5" style={{ backgroundImage: `linear-gradient(135deg, ${p.accent}, #20d9ff)` }}>{p.name}</p>
               <p className="text-2xl font-extrabold text-white mb-3">{p.price}<span className="text-sm text-white/30 font-normal">€/Mo</span></p>
               <ul className="space-y-1.5 flex-1">
                 {p.features.map(f => {
@@ -1196,12 +1196,12 @@ function UpgradeModal({ onClose }: { onClose: () => void }) {
                   return (
                     <li key={f} className="text-[11px] flex items-center gap-1.5">
                       {hl ? (
-                        <svg width="12" height="12" viewBox="0 0 24 24" className="shrink-0 fancy-star"><defs><linearGradient id="fgOb" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#F97316"/><stop offset="100%" stopColor="#06B6D4"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill="url(#fgOb)"/></svg>
+                        <svg width="12" height="12" viewBox="0 0 24 24" className="shrink-0 fancy-star"><defs><linearGradient id="fgOb" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#ff5b0a"/><stop offset="100%" stopColor="#20d9ff"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill="url(#fgOb)"/></svg>
                       ) : (
                         <span className="w-1 h-1 rounded-full shrink-0" style={{ background: p.accent }} />
                       )}
                       <span className={hl ? 'font-semibold bg-clip-text text-transparent' : 'text-white/40'}
-                        style={hl ? { backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' } : undefined}>
+                        style={hl ? { backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' } : undefined}>
                         {label}
                       </span>
                     </li>
@@ -1213,12 +1213,12 @@ function UpgradeModal({ onClose }: { onClose: () => void }) {
                 disabled={loading !== null || !legalAccepted}
                 className="w-full rounded-lg py-2.5 text-xs font-semibold disabled:opacity-50 transition-all hover:brightness-110 cursor-pointer mt-5"
                 style={{
-                  background: 'rgba(249,115,22,0.05)',
-                  border: '1px solid rgba(249,115,22,0.15)',
+                  background: 'rgba(255,91,10,0.05)',
+                  border: '1px solid rgba(255,91,10,0.15)',
                   borderRadius: '0.5rem',
                 }}
               >
-                <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+                <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>
                   {loading === p.id ? '…' : 'Auswählen'}
                 </span>
               </button>

@@ -24,7 +24,7 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 const btnBase = 'inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-orange-500/50 px-4 py-2.5 text-sm';
 
 const btnVariants: Record<ButtonVariant, string> = {
-  primary: 'text-white hover:scale-105 active:scale-95 shadow-[0_10px_34px_rgba(249,115,22,0.18)] hover:shadow-[0_14px_42px_rgba(6,182,212,0.18)]',
+  primary: 'text-white hover:scale-105 active:scale-95 shadow-[0_10px_34px_rgba(255,91,10,0.18)] hover:shadow-[0_14px_42px_rgba(32,217,255,0.18)]',
   secondary: 'bg-white/[0.05] border border-white/10 text-white hover:border-orange-500/30 hover:bg-white/[0.08] active:scale-95',
   danger: 'bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 active:scale-95',
   ghost: 'text-white/60 hover:text-white hover:bg-white/5 active:scale-95',
@@ -35,7 +35,7 @@ export function Button({ variant = 'secondary', loading, icon, children, classNa
     <button
       className={`${btnBase} ${btnVariants[variant]} ${className}`}
       disabled={disabled || loading}
-      style={variant === 'primary' ? { background: 'linear-gradient(135deg, #F97316, #06B6D4)' } : undefined}
+      style={variant === 'primary' ? { background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' } : undefined}
       {...props}
     >
       {loading ? <Spinner size="sm" /> : icon}
@@ -172,7 +172,7 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div ref={dialogRef} className={`${sizeClass} relative w-full overflow-hidden rounded-3xl border border-white/10 bg-[#14141F] shadow-[0_32px_120px_rgba(0,0,0,0.62)] max-h-[90vh]`}>
-        <span className="absolute inset-x-0 top-0 h-1" style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }} />
+        <span className="absolute inset-x-0 top-0 h-1" style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }} />
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
           <h2 id="modal-title" className="text-lg font-semibold text-white">{title}</h2>
           <button onClick={onClose} className="text-white/40 hover:text-white p-1 rounded-xl hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-orange-500/50" aria-label="Schließen">

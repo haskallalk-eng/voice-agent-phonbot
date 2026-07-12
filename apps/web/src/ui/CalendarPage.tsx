@@ -233,7 +233,7 @@ function initialCalendarView(): CalendarViewMode {
   return 'week';
 }
 
-const TEAM_BOOKING_COLORS = ['#F97316', '#06B6D4', '#22C55E', '#A855F7', '#F59E0B', '#EC4899', '#14B8A6'];
+const TEAM_BOOKING_COLORS = ['#ff5b0a', '#20d9ff', '#22C55E', '#A855F7', '#F59E0B', '#EC4899', '#14B8A6'];
 
 function colorHash(value: string): number {
   let hash = 0;
@@ -258,18 +258,18 @@ function isGroupedBooking(booking: CalendarBooking): boolean {
 }
 
 function bookingAccent(booking: CalendarBooking): string {
-  if (isGroupedBooking(booking)) return '#06B6D4';
+  if (isGroupedBooking(booking)) return '#20d9ff';
   if (booking.staffColor?.trim()) return booking.staffColor.trim();
   if (booking.calendarScope === 'staff') {
     const key = booking.staffId ?? booking.staffName ?? booking.id;
     return TEAM_BOOKING_COLORS[colorHash(key) % TEAM_BOOKING_COLORS.length]!;
   }
-  return '#F97316';
+  return '#ff5b0a';
 }
 
 function hexToRgba(color: string, alpha: number): string {
   const hex = color.trim().replace('#', '');
-  if (!/^[0-9a-f]{6}$/i.test(hex)) return `rgba(249,115,22,${alpha})`;
+  if (!/^[0-9a-f]{6}$/i.test(hex)) return `rgba(255,91,10,${alpha})`;
   const r = parseInt(hex.slice(0, 2), 16);
   const g = parseInt(hex.slice(2, 4), 16);
   const b = parseInt(hex.slice(4, 6), 16);
@@ -283,7 +283,7 @@ function bookingSourceLabel(booking: CalendarBooking): string {
 }
 
 function bookingWithBusinessMeta(booking: ChipyBooking): CalendarBooking {
-  return { ...booking, calendarScope: 'business', staffId: null, staffName: 'Betrieb', staffColor: '#F97316' };
+  return { ...booking, calendarScope: 'business', staffId: null, staffName: 'Betrieb', staffColor: '#ff5b0a' };
 }
 
 function bookingWithStaffMeta(booking: ChipyBooking, staff: CalendarStaff): CalendarBooking {
@@ -342,7 +342,7 @@ function groupCalendarBookingsByStart(bookings: CalendarBooking[]): CalendarBook
       calendarScope: 'business',
       staffId: null,
       staffName: 'Team',
-      staffColor: '#06B6D4',
+      staffColor: '#20d9ff',
       groupedBookings: sorted,
     } satisfies CalendarBooking];
   }).sort((a, b) => a.slot_time.localeCompare(b.slot_time));
@@ -381,10 +381,10 @@ type ProviderMeta = { label: string; color: string; bg: string; icon: string };
 const PROVIDER_META: Record<string, ProviderMeta> = {
   google:    { label: 'Google Calendar',   color: '#4285F4', bg: 'rgba(66,133,244,0.08)',   icon: 'G' },
   microsoft: { label: 'Microsoft Outlook', color: '#0078D4', bg: 'rgba(0,120,212,0.12)',    icon: 'M' },
-  calcom:    { label: 'Cal.com',           color: '#06B6D4', bg: 'rgba(6,182,212,0.10)',   icon: 'C' },
-  chipy:    { label: 'Chipy Kalender',   color: '#F97316', bg: 'rgba(249,115,22,0.12)',   icon: 'P' },
+  calcom:    { label: 'Cal.com',           color: '#20d9ff', bg: 'rgba(32,217,255,0.10)',   icon: 'C' },
+  chipy:    { label: 'Chipy Kalender',   color: '#ff5b0a', bg: 'rgba(255,91,10,0.12)',   icon: 'P' },
 };
-const DEFAULT_PROVIDER_META: ProviderMeta = { label: 'Chipy Kalender', color: '#F97316', bg: 'rgba(249,115,22,0.12)', icon: 'P' };
+const DEFAULT_PROVIDER_META: ProviderMeta = { label: 'Chipy Kalender', color: '#ff5b0a', bg: 'rgba(255,91,10,0.12)', icon: 'P' };
 
 // ── Booking Modal ─────────────────────────────────────────────────────────────
 
@@ -515,7 +515,7 @@ function BookingModal({
             </button>
             <button type="submit" disabled={loading || !name || durationMinutes < 5 || bufferMinutes < 0}
               className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40 transition-all"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+              style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>
               {loading ? 'Speichern…' : 'Termin anlegen'}
             </button>
           </div>
@@ -583,7 +583,7 @@ function BookingDetailsModal({
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 overscroll-contain" style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(8px)' }}>
       <div className="w-full max-w-lg max-h-[calc(100vh-2rem)] overflow-y-auto rounded-3xl border border-white/10 shadow-[0_32px_120px_rgba(0,0,0,0.62)]" style={{ background: '#14141F' }} role="dialog" aria-modal="true" aria-labelledby="booking-details-title">
         <div className="relative border-b border-white/8 p-5">
-          <span className="absolute inset-x-0 top-0 h-1" style={{ background: `linear-gradient(90deg, ${accent}, rgba(6,182,212,0.7))` }} />
+          <span className="absolute inset-x-0 top-0 h-1" style={{ background: `linear-gradient(90deg, ${accent}, rgba(32,217,255,0.7))` }} />
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/30">Termindetails</p>
@@ -681,7 +681,7 @@ function BookingDetailsModal({
 
           {!grouped && <div className="flex flex-col gap-2 sm:flex-row">
             {onOpenCustomer && (
-              <button type="button" onClick={() => { void onOpenCustomer(booking); }} className="flex-1 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-[0_14px_36px_rgba(249,115,22,0.18)]" style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+              <button type="button" onClick={() => { void onOpenCustomer(booking); }} className="flex-1 rounded-xl px-4 py-3 text-sm font-semibold text-white shadow-[0_14px_36px_rgba(255,91,10,0.18)]" style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>
                 Kundenmodul öffnen
               </button>
             )}
@@ -1019,7 +1019,7 @@ function _DayDrawer({
           {!isFullBlocked && (
             <button onClick={onAddBooking}
               className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 cursor-pointer"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+              style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>
               + Termin
             </button>
           )}
@@ -1061,9 +1061,9 @@ function CalendarViewSwitch({ value, onChange }: { value: CalendarViewMode; onCh
           onClick={() => onChange(mode)}
           className={[
             'rounded-xl px-3 py-2 text-xs font-semibold transition-all',
-            value === mode ? 'text-white shadow-[0_10px_30px_rgba(249,115,22,0.16)]' : 'text-white/35 hover:text-white/65',
+            value === mode ? 'text-white shadow-[0_10px_30px_rgba(255,91,10,0.16)]' : 'text-white/35 hover:text-white/65',
           ].join(' ')}
-          style={value === mode ? { background: 'linear-gradient(135deg, rgba(249,115,22,0.28), rgba(6,182,212,0.22))' } : undefined}
+          style={value === mode ? { background: 'linear-gradient(135deg, rgba(255,91,10,0.28), rgba(32,217,255,0.22))' } : undefined}
         >
           {labels[mode]}
         </button>
@@ -1323,7 +1323,7 @@ function WeeklyCalendar({
                           left: `${inset}px`,
                           right: `${6 + Math.max(0, 4 - overlap) * 2}px`,
                           borderColor: hexToRgba(accent, 0.42),
-                          background: `linear-gradient(135deg, ${hexToRgba(accent, 0.24)}, rgba(255,255,255,0.045) 48%, rgba(6,182,212,0.12))`,
+                          background: `linear-gradient(135deg, ${hexToRgba(accent, 0.24)}, rgba(255,255,255,0.045) 48%, rgba(32,217,255,0.12))`,
                         }}
                         title="Kundendetails oeffnen"
                       >
@@ -1460,7 +1460,7 @@ function DailyCalendar({
           <button type="button" onClick={() => onDateChange(new Date())} className="rounded-xl border border-orange-400/20 bg-orange-500/10 px-3 py-2 text-xs font-semibold text-orange-100/75 hover:text-orange-50">Heute</button>
           <button type="button" onClick={() => onDateChange(addDays(date, 1))} className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-white/55 hover:text-white">Naechster Tag</button>
           {canAdd && (
-            <button type="button" onClick={() => onAddBooking?.(date)} className="rounded-xl px-3 py-2 text-xs font-semibold text-white shadow-[0_12px_30px_rgba(249,115,22,0.18)]" style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+            <button type="button" onClick={() => onAddBooking?.(date)} className="rounded-xl px-3 py-2 text-xs font-semibold text-white shadow-[0_12px_30px_rgba(255,91,10,0.18)]" style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>
               + Termin
             </button>
           )}
@@ -1521,7 +1521,7 @@ function DailyCalendar({
                 left: `${inset}px`,
                 right: '16px',
                 borderColor: hexToRgba(accent, 0.42),
-                background: `linear-gradient(135deg, ${hexToRgba(accent, 0.25)}, rgba(255,255,255,0.045) 46%, rgba(6,182,212,0.12))`,
+                background: `linear-gradient(135deg, ${hexToRgba(accent, 0.25)}, rgba(255,255,255,0.045) 46%, rgba(32,217,255,0.12))`,
               }}
               title="Kundendetails oeffnen"
             >
@@ -1824,7 +1824,7 @@ function SettingsPanel({
                   aria-pressed={day.enabled}
                   onClick={() => setSchedule(s => ({ ...s, [dow]: { ...day, enabled: !day.enabled } }))}
                   className="relative w-9 h-5 rounded-full transition-all shrink-0 cursor-pointer"
-                  style={day.enabled ? { background: 'linear-gradient(135deg, #F97316, #06B6D4)' } : { background: 'rgba(255,255,255,0.08)' }}
+                  style={day.enabled ? { background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' } : { background: 'rgba(255,255,255,0.08)' }}
                 >
                   <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${day.enabled ? 'translate-x-4' : 'translate-x-0'}`} />
                 </button>
@@ -1847,7 +1847,7 @@ function SettingsPanel({
         {saveError && <p className="text-xs text-red-300 mt-3">{saveError}</p>}
         <button onClick={handleSave} disabled={saving}
           className="mt-4 w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition-all disabled:opacity-40 hover:scale-[1.01] cursor-pointer"
-          style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)', boxShadow: '0 4px 20px rgba(249,115,22,0.15)' }}>
+          style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)', boxShadow: '0 4px 20px rgba(255,91,10,0.15)' }}>
           {saving ? 'Speichern…' : saved ? 'Gespeichert ✓' : 'Speichern'}
         </button>
       </div>
@@ -1891,7 +1891,7 @@ function SettingsPanel({
                 blockMode === m ? 'bg-white/8' : 'text-white/30 hover:text-white/50'
               }`}>
               {blockMode === m ? (
-                <span className="bg-clip-text text-transparent font-semibold" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>{m === 'day' ? 'Tag' : m === 'range' ? 'Zeitraum' : 'Uhrzeiten'}</span>
+                <span className="bg-clip-text text-transparent font-semibold" style={{ backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>{m === 'day' ? 'Tag' : m === 'range' ? 'Zeitraum' : 'Uhrzeiten'}</span>
               ) : (m === 'day' ? 'Tag' : m === 'range' ? 'Zeitraum' : 'Uhrzeiten')}
             </button>
           ))}
@@ -1906,8 +1906,8 @@ function SettingsPanel({
               className={`${inputClass} flex-1 placeholder-white/15`} style={inputStyle} />
             <button onClick={handleAddBlock} disabled={!newBlockDate}
               className="w-full shrink-0 rounded-lg px-4 py-2 text-xs font-semibold transition-all hover:brightness-110 disabled:opacity-30 sm:w-auto cursor-pointer"
-              style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
-              <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Sperren</span>
+              style={{ background: 'rgba(255,91,10,0.06)', border: '1px solid rgba(255,91,10,0.15)' }}>
+              <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>Sperren</span>
             </button>
           </div>
         )}
@@ -1926,8 +1926,8 @@ function SettingsPanel({
                 className={`${inputClass} flex-1 placeholder-white/15`} style={inputStyle} />
               <button onClick={handleAddRange} disabled={!newBlockDate || !newBlockEndDate}
                 className="w-full shrink-0 rounded-lg px-4 py-2 text-xs font-semibold transition-all hover:brightness-110 disabled:opacity-30 sm:w-auto cursor-pointer"
-                style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
-                <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Sperren</span>
+                style={{ background: 'rgba(255,91,10,0.06)', border: '1px solid rgba(255,91,10,0.15)' }}>
+                <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>Sperren</span>
               </button>
             </div>
           </div>
@@ -1949,8 +1949,8 @@ function SettingsPanel({
                 className={`${inputClass} flex-1 placeholder-white/15`} style={inputStyle} />
               <button onClick={handleAddHoursBlock} disabled={!newBlockDate || !newBlockStartTime || !newBlockEndTime}
                 className="w-full shrink-0 rounded-lg px-4 py-2 text-xs font-semibold transition-all hover:brightness-110 disabled:opacity-30 sm:w-auto cursor-pointer"
-                style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)' }}>
-                <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>Sperren</span>
+                style={{ background: 'rgba(255,91,10,0.06)', border: '1px solid rgba(255,91,10,0.15)' }}>
+                <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>Sperren</span>
               </button>
             </div>
           </div>
@@ -2189,7 +2189,7 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
               <div className="rounded-2xl px-5 py-4 hover:bg-white/[0.04] transition-all" style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.06)' }}>
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(59,130,246,0.08)' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#06B6D4" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#20d9ff" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-white">Cal.com</p>
@@ -2213,8 +2213,8 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
                     <button onClick={async () => { setCalcomLoading(true); setCalcomError(null); try { await connectCalcom(calcomKey); setCalcomKey(''); await loadStatus(); } catch (e: unknown) { setCalcomError((e instanceof Error ? e.message : null) ?? 'Fehler'); } finally { setCalcomLoading(false); } }}
                       disabled={calcomLoading || !calcomKey.trim()}
                       className="shrink-0 rounded-lg px-4 py-2 text-xs font-semibold disabled:opacity-40 cursor-pointer transition-all hover:brightness-110"
-                      style={{ background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.12)' }}>
-                      <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+                      style={{ background: 'rgba(255,91,10,0.06)', border: '1px solid rgba(255,91,10,0.12)' }}>
+                      <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>
                         {calcomLoading ? '…' : 'Verbinden'}
                       </span>
                     </button>
@@ -2227,8 +2227,8 @@ function ConnectionsPanel({ onStatusChange }: { onStatusChange: (s: CalendarStat
           })()}
 
           {/* Chipy (built-in) */}
-          <div className="flex items-center gap-4 rounded-2xl px-5 py-4" style={{ background: 'rgba(249,115,22,0.03)', backdropFilter: 'blur(24px)', border: '1px solid rgba(249,115,22,0.08)' }}>
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.1), rgba(6,182,212,0.06))' }}>
+          <div className="flex items-center gap-4 rounded-2xl px-5 py-4" style={{ background: 'rgba(255,91,10,0.03)', backdropFilter: 'blur(24px)', border: '1px solid rgba(255,91,10,0.08)' }}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg, rgba(255,91,10,0.1), rgba(32,217,255,0.06))' }}>
               <FoxLogo size={24} />
             </div>
             <div className="flex-1 min-w-0">
@@ -2462,7 +2462,7 @@ function StaffPanel({
           {provider === 'google' ? (
             <svg width="18" height="18" viewBox="0 0 24 24" className="fancy-star"><defs><linearGradient id={`staffGglCal-${selected?.id ?? 'x'}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#4285F4"/><stop offset="33%" stopColor="#34A853"/><stop offset="66%" stopColor="#FBBC05"/><stop offset="100%" stopColor="#EA4335"/></linearGradient></defs><path d="M12 1C12.8 7.6 16.4 11.2 23 12c-6.6.8-10.2 4.4-11 11-.8-6.6-4.4-10.2-11-11C7.6 11.2 11.2 7.6 12 1z" fill={`url(#staffGglCal-${selected?.id ?? 'x'})`}/></svg>
           ) : provider === 'calcom' ? (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#06B6D4" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#20d9ff" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           ) : provider === 'microsoft' ? (
             <IconMicrosoftWindow size={19} className="text-[#00BCF2]" />
           ) : (
@@ -2485,14 +2485,14 @@ function StaffPanel({
               style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }} />
             <button onClick={() => { void runConnect(provider); }} disabled={!calcomKey.trim() || connectionLoading === provider}
               className="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+              style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>
               Verbinden
             </button>
           </div>
         ) : (
             <button onClick={() => { void runConnect(provider); }} disabled={connectionLoading === provider}
               className="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+              style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>
             Verbinden
           </button>
         )}
@@ -2550,7 +2550,7 @@ function StaffPanel({
                 <button
                   onClick={() => { setSelectedStaffDay(new Date()); setShowStaffAddBooking(true); }}
                   className="shrink-0 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-all hover:opacity-90"
-                  style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+                  style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
                 >
                   + Termin
                 </button>
@@ -2636,8 +2636,8 @@ function StaffPanel({
 
           <aside className="min-w-0 space-y-4">
           <section
-            className="rounded-2xl border border-orange-500/20 p-4 shadow-[0_18px_52px_rgba(249,115,22,0.08)]"
-            style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.10), rgba(255,255,255,0.025) 46%, rgba(6,182,212,0.07))' }}
+            className="rounded-2xl border border-orange-500/20 p-4 shadow-[0_18px_52px_rgba(255,91,10,0.08)]"
+            style={{ background: 'linear-gradient(135deg, rgba(255,91,10,0.10), rgba(255,255,255,0.025) 46%, rgba(32,217,255,0.07))' }}
           >
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
@@ -2913,9 +2913,9 @@ export function CalendarPage({
       {/* Background glow */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-40 left-1/3 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(249,115,22,0.07) 0%, transparent 65%)' }} />
+          style={{ background: 'radial-gradient(circle, rgba(255,91,10,0.07) 0%, transparent 65%)' }} />
         <div className="absolute bottom-0 right-1/4 w-[250px] sm:w-[400px] h-[250px] sm:h-[400px] rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.05) 0%, transparent 65%)' }} />
+          style={{ background: 'radial-gradient(circle, rgba(32,217,255,0.05) 0%, transparent 65%)' }} />
       </div>
 
       <div className="relative z-10 mx-auto flex min-h-0 w-full max-w-[1900px] flex-col">
@@ -2937,7 +2937,7 @@ export function CalendarPage({
             <button
               onClick={() => { setSelectedDay(new Date()); setShowAddBooking(true); }}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>
+              style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>
               + Termin
             </button>
           )}
@@ -2952,7 +2952,7 @@ export function CalendarPage({
                 tab === t.id ? 'bg-white/8' : 'text-white/35 hover:text-white/55',
               ].join(' ')}>
               {tab === t.id ? (
-                <span className="bg-clip-text text-transparent font-semibold" style={{ backgroundImage: 'linear-gradient(135deg, #F97316, #06B6D4)' }}>{t.label}</span>
+                <span className="bg-clip-text text-transparent font-semibold" style={{ backgroundImage: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}>{t.label}</span>
               ) : t.label}
             </button>
           ))}
@@ -2971,8 +2971,8 @@ export function CalendarPage({
           <div
             className="mb-4 shrink-0 rounded-2xl p-4 flex items-start gap-3"
             style={{
-              background: 'linear-gradient(135deg, rgba(249,115,22,0.08), rgba(6,182,212,0.05))',
-              border: '1px solid rgba(249,115,22,0.15)',
+              background: 'linear-gradient(135deg, rgba(255,91,10,0.08), rgba(32,217,255,0.05))',
+              border: '1px solid rgba(255,91,10,0.15)',
             }}
           >
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-orange-500/15 bg-orange-500/10 text-orange-300">
@@ -2989,7 +2989,7 @@ export function CalendarPage({
               <button
                 onClick={() => document.getElementById('calendar-connections')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
                 className="mt-2 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all hover:opacity-90"
-                style={{ background: 'rgba(249,115,22,0.2)', color: '#FB923C' }}
+                style={{ background: 'rgba(255,91,10,0.2)', color: '#FB923C' }}
               >
                 Kalender verbinden →
               </button>
@@ -3001,7 +3001,7 @@ export function CalendarPage({
           <div className="grid gap-4">
             <div className="flex min-w-0 flex-col gap-4">
             {staffModeActive && (
-              <div className="shrink-0 rounded-3xl border border-orange-500/20 p-4 shadow-[0_18px_60px_rgba(249,115,22,0.10)]" style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.13), rgba(255,255,255,0.035) 48%, rgba(6,182,212,0.10))' }}>
+              <div className="shrink-0 rounded-3xl border border-orange-500/20 p-4 shadow-[0_18px_60px_rgba(255,91,10,0.10)]" style={{ background: 'linear-gradient(135deg, rgba(255,91,10,0.13), rgba(255,255,255,0.035) 48%, rgba(32,217,255,0.10))' }}>
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-100/65">Kalenderlogik</p>
@@ -3113,8 +3113,8 @@ export function CalendarPage({
 
             <aside className="min-w-0 space-y-4">
             <section
-              className="rounded-2xl border border-orange-500/20 p-4 shadow-[0_18px_52px_rgba(249,115,22,0.08)]"
-              style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.10), rgba(255,255,255,0.025) 46%, rgba(6,182,212,0.07))' }}
+              className="rounded-2xl border border-orange-500/20 p-4 shadow-[0_18px_52px_rgba(255,91,10,0.08)]"
+              style={{ background: 'linear-gradient(135deg, rgba(255,91,10,0.10), rgba(255,255,255,0.025) 46%, rgba(32,217,255,0.07))' }}
             >
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>

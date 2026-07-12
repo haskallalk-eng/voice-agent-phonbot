@@ -17,8 +17,8 @@ import { AdaptiveTextarea } from '../../components/AdaptiveTextarea.js';
 
 type TagId = 'BELIEBT' | 'NEU' | 'AKTION';
 const TAG_COLORS: Record<TagId, { border: string; bg: string; text: string }> = {
-  BELIEBT: { border: 'rgba(249,115,22,0.35)', bg: 'rgba(249,115,22,0.08)', text: '#FDBA74' },
-  NEU:     { border: 'rgba(6,182,212,0.35)',  bg: 'rgba(6,182,212,0.08)',  text: '#67E8F9' },
+  BELIEBT: { border: 'rgba(255,91,10,0.35)', bg: 'rgba(255,91,10,0.08)', text: '#FDBA74' },
+  NEU:     { border: 'rgba(32,217,255,0.35)',  bg: 'rgba(32,217,255,0.08)',  text: '#67E8F9' },
   AKTION:  { border: 'rgba(251,191,36,0.4)',  bg: 'rgba(251,191,36,0.08)', text: '#FCD34D' },
 };
 
@@ -42,7 +42,7 @@ function PriceModeChip({
       className="text-[11px] font-medium px-3 py-1.5 rounded-full transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60"
       style={
         active
-          ? { background: 'linear-gradient(135deg, #F97316, #06B6D4)', color: '#fff' }
+          ? { background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)', color: '#fff' }
           : { background: 'transparent', color: 'rgba(255,255,255,0.55)' }
       }
     >
@@ -155,8 +155,8 @@ export function ServicesEditor({
             <button
               type="button"
               onClick={migrateLegacy}
-              className="text-xs px-4 py-2 rounded-full font-semibold text-white transition-all duration-300 hover:scale-[1.03] hover:shadow-[0_0_20px_rgba(249,115,22,0.35)] cursor-pointer"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+              className="text-xs px-4 py-2 rounded-full font-semibold text-white transition-all duration-300 hover:scale-[1.03] hover:shadow-[0_0_20px_rgba(255,91,10,0.35)] cursor-pointer"
+              style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
             >
               Übernehmen
             </button>
@@ -175,8 +175,8 @@ export function ServicesEditor({
         <div
           className="rounded-2xl border px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
           style={{
-            borderColor: 'rgba(249,115,22,0.16)',
-            background: 'linear-gradient(135deg, rgba(249,115,22,0.08), rgba(6,182,212,0.045))',
+            borderColor: 'rgba(255,91,10,0.16)',
+            background: 'linear-gradient(135deg, rgba(255,91,10,0.08), rgba(32,217,255,0.045))',
           }}
         >
           <div>
@@ -189,8 +189,8 @@ export function ServicesEditor({
             <button
               type="button"
               onClick={addPreset}
-              className="shrink-0 rounded-full px-4 py-2 text-xs font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_22px_rgba(249,115,22,0.35)] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60"
-              style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+              className="shrink-0 rounded-full px-4 py-2 text-xs font-semibold text-white transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_22px_rgba(255,91,10,0.35)] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500/60"
+              style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
             >
               {value.length > 0 ? 'Standards übernehmen' : 'Preset übernehmen'}
             </button>
@@ -208,8 +208,8 @@ export function ServicesEditor({
           <button
             type="button"
             onClick={add}
-            className="text-xs px-5 py-2 rounded-full font-semibold text-white transition-all duration-300 hover:scale-[1.03] hover:shadow-[0_0_24px_rgba(249,115,22,0.4)] cursor-pointer"
-            style={{ background: 'linear-gradient(135deg, #F97316, #06B6D4)' }}
+            className="text-xs px-5 py-2 rounded-full font-semibold text-white transition-all duration-300 hover:scale-[1.03] hover:shadow-[0_0_24px_rgba(255,91,10,0.4)] cursor-pointer"
+            style={{ background: 'linear-gradient(135deg, #ff5b0a, #20d9ff)' }}
           >
             Ersten Service anlegen
           </button>
@@ -225,9 +225,9 @@ export function ServicesEditor({
             key={s.id}
             className="rounded-2xl border overflow-hidden transition-colors duration-200"
             style={{
-              borderColor: isExpanded ? 'rgba(249,115,22,0.25)' : 'rgba(255,255,255,0.10)',
+              borderColor: isExpanded ? 'rgba(255,91,10,0.25)' : 'rgba(255,255,255,0.10)',
               background: isExpanded
-                ? 'linear-gradient(135deg, rgba(249,115,22,0.04) 0%, rgba(6,182,212,0.02) 100%)'
+                ? 'linear-gradient(135deg, rgba(255,91,10,0.04) 0%, rgba(32,217,255,0.02) 100%)'
                 : 'rgba(255,255,255,0.04)',
             }}
           >
