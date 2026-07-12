@@ -161,11 +161,12 @@ export function LandingPage({ onGoToRegister, onGoToLogin, onGoToContact }: Prop
         {/* ── HERO + TRUST BAR ── */}
         <HeroSection onGoToRegister={onGoToRegister} onShowDemoModal={() => setShowDemoModal(true)} />
 
-        {/* ── WAVEFORM + DEMO ── */}
-        <DeferredDemoSection onGoToRegister={onGoToRegister} />
-
-        {/* ── HOW IT WORKS (scroll-triggered) ── */}
+        {/* ── HOW IT WORKS — direkt nach dem Hero (die Schritte stehen nur
+            noch hier, nicht mehr als Karten im Hero) ── */}
         <HowSection />
+
+        {/* ── TELEFON-DEMO ── */}
+        <DeferredDemoSection onGoToRegister={onGoToRegister} />
 
         {/* ── FEATURES ── */}
         <FeaturesSection />

@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { IconBolt, IconPhone, IconStar } from '../PhonbotIcons.js';
-import { STEPS } from './shared.js';
 
 type HeroSectionProps = {
   onGoToRegister: () => void;
@@ -129,7 +128,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
         <div
           data-hero-phase={phase}
           data-hero-entrance={entranceRef.current}
-          className="crystal-plain-bg relative min-h-[960px] overflow-hidden px-4 pb-8 pt-0 sm:min-h-[calc(100svh-72px)] sm:px-8 sm:pb-9 sm:pt-0 lg:min-h-[790px] lg:px-10 lg:pb-10 lg:pt-0"
+          className="crystal-plain-bg relative min-h-[700px] overflow-hidden px-4 pb-8 pt-0 sm:min-h-[calc(100svh-72px)] sm:px-8 sm:pb-9 sm:pt-0 lg:min-h-[790px] lg:px-10 lg:pb-10 lg:pt-0"
         >
 
           <button
@@ -167,7 +166,7 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
             <div className="hero-crystal-scrim absolute inset-0 z-10" aria-hidden="true" />
           </button>
 
-          <div className="pointer-events-none relative z-20 flex min-h-[920px] flex-col justify-start sm:min-h-[calc(100svh-136px)] sm:justify-between lg:min-h-[700px]">
+          <div className="pointer-events-none relative z-20 flex min-h-[660px] flex-col justify-start sm:min-h-[calc(100svh-136px)] sm:justify-between lg:min-h-[700px]">
             <div
               className="mx-auto w-full max-w-[21rem] pt-20 text-center sm:max-w-4xl sm:pt-20 lg:pt-20"
               onFocusCapture={settle}
@@ -226,22 +225,8 @@ export function HeroSection({ onGoToRegister, onShowDemoModal }: HeroSectionProp
               >✓ Kostenlos · ✓ Sofort einsatzbereit · ✓ DSGVO-fokussiert</p>
             </div>
 
-            <div
-              className="crystal-steps-shell mobile-crystal-steps hero-copy-item pointer-events-none relative z-30 mx-auto grid w-full max-w-[22rem] gap-3 sm:absolute sm:inset-x-6 sm:bottom-20 sm:top-auto sm:mx-0 sm:max-w-none sm:grid-cols-3 lg:inset-x-8 lg:bottom-24"
-              style={{ '--hero-delay': '0.85s' } as React.CSSProperties}
-            >
-              {STEPS.map((step) => (
-                <div key={step.num} className="crystal-step-card">
-                  <div className="relative flex items-start gap-3">
-                    <div className="crystal-step-number">{step.num}</div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-white">{step.title}</p>
-                      <p className="mt-1 text-xs leading-relaxed text-white/58">{step.desc}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {/* Die 3 Schritte leben in der HowSection direkt unter dem Hero —
+                hier oben bleibt die Bühne für Kristall + Kernbotschaft. */}
           </div>
         </div>
       </section>
