@@ -2,7 +2,7 @@
 
 > Diese Datei enthält alle öffentlichen Inhalte der Phonbot-Website in strukturiertem Markdown-Format. Sie ist für AI-Assistenten sowie Retrieval- und Search-Crawler optimiert und darf frei zitiert werden.
 
-Letzte Aktualisierung: 12. Juli 2026
+Letzte Aktualisierung: 11. Juli 2026
 
 AI-/Crawler-Hinweis: Die Startseite liefert die Kernbotschaft, Preise und FAQ als crawlbares HTML direkt im initialen Dokument. Die Friseur-Seite, der Blog und die Kontakt-Seite sind vollständig statische HTML-Seiten mit eigenem Title, Description, Canonical, FAQPage-, WebPage-, Breadcrumb- und Service-JSON-LD.
 
@@ -108,7 +108,7 @@ Phonbot ist DSGVO-fokussiert: AVV verfügbar, Hosting in Deutschland/EU, verschl
 - Überschreitung: +0,23 €/Min
 - **Für wen**: Team-Salons mit Mitarbeiterkalendern und 2-3 Standorte
 
-### Filialen: 349 €/Monat (oder 289 €/Mo im Jahresabo, -17 %)
+### Agency (Filialen): 349 €/Monat (oder 289 €/Mo im Jahresabo, -17 %)
 - 2.000 Minuten/Monat
 - **10 Agenten** (z. B. ein Agent pro Standort)
 - Eigene Telefonnummern (mehrere, pro Standort)

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { IconPhone, IconInsights, IconStar } from './PhonbotIcons.js';
+import { SeoIdeasPanel } from './SeoIdeasPanel.js';
 import {
   getInsights,
   applyInsightSuggestion,
@@ -324,6 +325,7 @@ export function InsightsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [consolidating, setConsolidating] = useState(false);
+  const [view, setView] = useState<'ideas' | 'agent'>('ideas');
 
   async function load() {
     setLoading(true);
@@ -364,7 +366,7 @@ export function InsightsPage() {
   const trend = data?.trend;
 
   return (
-    <div className="min-h-screen bg-[#0A0A0F] text-white px-6 py-10">
+    <div className="min-h-screen bg-[#0A0A0F] text-white px-4 py-6 sm:px-6 sm:py-10">
       {/* Background glow */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div
@@ -373,16 +375,16 @@ export function InsightsPage() {
         />
       </div>
 
-      <div className="relative z-10 max-w-3xl mx-auto">
+      <div className="relative z-10 max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8 flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold mb-1">KI-Insights</h1>
             <p className="text-white/50 text-sm">
-              Jeder Anruf wird analysiert. Wiederkehrende Probleme werden automatisch behoben.
+              Ideen steuern und aus Gesprächen lernen.
             </p>
           </div>
-          <div className="flex items-center gap-3 shrink-0">
+          {view === 'agent' && <div className="flex items-center gap-3 shrink-0">
             {trend && (
               <div className={`glass rounded-2xl px-4 py-3 border text-center ${
                 trend.direction === 'up' ? 'border-green-500/20' :
@@ -404,8 +406,25 @@ export function InsightsPage() {
                 <p className="text-xs text-white/40 mt-0.5">Ø Score</p>
               </div>
             )}
-          </div>
+          </div>}
         </div>
+
+        <div className="mb-7 inline-grid w-full grid-cols-2 rounded-xl border border-white/10 bg-white/[0.025] p-1 sm:w-auto">
+          <button
+            onClick={() => setView('ideas')}
+            className={`min-h-10 rounded-lg px-4 text-sm font-medium transition-colors ${view === 'ideas' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/65'}`}
+          >
+            Wachstumsideen
+          </button>
+          <button
+            onClick={() => setView('agent')}
+            className={`min-h-10 rounded-lg px-4 text-sm font-medium transition-colors ${view === 'agent' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/65'}`}
+          >
+            Agent-Lernen
+          </button>
+        </div>
+
+        {view === 'ideas' ? <SeoIdeasPanel /> : <>
 
         {/* How it works */}
         <div className="glass rounded-2xl p-5 border border-white/10 mb-8">
@@ -572,6 +591,7 @@ export function InsightsPage() {
             )}
           </>
         )}
+        </>}
       </div>
     </div>
   );

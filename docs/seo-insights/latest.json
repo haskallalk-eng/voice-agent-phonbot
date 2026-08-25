@@ -1,0 +1,406 @@
+{
+  "generatedAt": "2026-08-25T00:36:31.301Z",
+  "site": "https://phonbot.de",
+  "inventory": {
+    "coreIndustryPages": 6,
+    "nichePages": 8,
+    "supportPages": 2,
+    "blogPosts": 7,
+    "sitemapExists": true,
+    "robotsExists": true,
+    "distExists": true
+  },
+  "opportunities": [
+    {
+      "id": "feature-ki-terminbuchung-telefon",
+      "type": "feature-page",
+      "slug": "ki-terminbuchung-telefon",
+      "title": "KI-Terminbuchung am Telefon",
+      "primaryKeyword": "KI Terminbuchung Telefon",
+      "funnel": "money",
+      "audience": "Terminbasierte Betriebe mit Kalenderdruck",
+      "reason": "Direkt kaufnah: Nutzer suchen nicht nur KI, sondern eine konkrete Terminbuchungsfunktion.",
+      "implementation": "Static feature page with booking flow, calendar safety rules, visible FAQ answers, matching SoftwareApplication/Service JSON-LD, links to Friseur, Kosmetikstudio, Fitnessstudio, Kontakt.",
+      "quality": {
+        "exists": false,
+        "textChars": 0,
+        "hasCanonical": false,
+        "hasJsonLd": false,
+        "hasFaq": false,
+        "hasCta": false
+      },
+      "impact": 10,
+      "confidence": 7,
+      "effort": 4,
+      "risk": 2,
+      "score": 118,
+      "gates": [
+        "new-page-opportunity",
+        "canonical-required",
+        "structured-data-required",
+        "faq-answer-block-required",
+        "conversion-path-required"
+      ]
+    },
+    {
+      "id": "feature-ki-anrufannahme-24-7",
+      "type": "feature-page",
+      "slug": "ki-anrufannahme-24-7",
+      "title": "KI-Anrufannahme 24/7",
+      "primaryKeyword": "KI Anrufannahme 24/7",
+      "funnel": "money",
+      "audience": "Lokale Dienstleister mit verpassten Anrufen",
+      "reason": "Sehr nah am Kernproblem von Phonbot und breit genug fuer interne Verlinkung aus allen Branchen.",
+      "implementation": "Static feature page with use cases, after-hours routing, no-false-promise section, FAQ, links from hero/footer/blog.",
+      "quality": {
+        "exists": false,
+        "textChars": 0,
+        "hasCanonical": false,
+        "hasJsonLd": false,
+        "hasFaq": false,
+        "hasCta": false
+      },
+      "impact": 10,
+      "confidence": 7,
+      "effort": 4,
+      "risk": 2,
+      "score": 118,
+      "gates": [
+        "new-page-opportunity",
+        "canonical-required",
+        "structured-data-required",
+        "faq-answer-block-required",
+        "conversion-path-required"
+      ]
+    },
+    {
+      "id": "comparison-ki-telefonassistent-vs-telefonservice",
+      "type": "comparison-page",
+      "slug": "ki-telefonassistent-vs-telefonservice",
+      "title": "KI-Telefonassistent vs Telefonservice",
+      "primaryKeyword": "KI Telefonassistent vs Telefonservice",
+      "funnel": "comparison",
+      "audience": "Kaeufer, die Alternativen vergleichen",
+      "reason": "Comparison pages sind kaufnah und koennen Einwaende zu Vertrauen, Datenschutz, Kosten und Qualitaet sauber abholen.",
+      "implementation": "Neutral comparison with cost bands, response-time table, privacy caveats, FAQ, strong internal links.",
+      "quality": {
+        "exists": false,
+        "textChars": 0,
+        "hasCanonical": false,
+        "hasJsonLd": false,
+        "hasFaq": false,
+        "hasCta": false
+      },
+      "impact": 9,
+      "confidence": 7,
+      "effort": 4,
+      "risk": 2,
+      "score": 108,
+      "gates": [
+        "new-page-opportunity",
+        "canonical-required",
+        "structured-data-required",
+        "faq-answer-block-required",
+        "conversion-path-required"
+      ]
+    },
+    {
+      "id": "industry-steuerberater",
+      "type": "industry-page",
+      "slug": "steuerberater",
+      "title": "KI-Telefonassistent fuer Steuerberater",
+      "primaryKeyword": "KI Telefonassistent Steuerberater",
+      "funnel": "money",
+      "audience": "Steuerkanzleien",
+      "reason": "Professional-services niche with clear phone pain and lead value; risk manageable with no-tax-advice guardrails.",
+      "implementation": "Industry page for appointment intake, document reminders, callback tickets, no tax advice, visible FAQ answers and matching service schema.",
+      "quality": {
+        "exists": false,
+        "textChars": 0,
+        "hasCanonical": false,
+        "hasJsonLd": false,
+        "hasFaq": false,
+        "hasCta": false
+      },
+      "impact": 10,
+      "confidence": 7,
+      "effort": 5,
+      "risk": 4,
+      "score": 105,
+      "gates": [
+        "new-page-opportunity",
+        "canonical-required",
+        "structured-data-required",
+        "faq-answer-block-required",
+        "conversion-path-required"
+      ]
+    },
+    {
+      "id": "local-ki-telefonassistent-berlin",
+      "type": "local-page",
+      "slug": "ki-telefonassistent-berlin",
+      "title": "KI-Telefonassistent Berlin",
+      "primaryKeyword": "KI Telefonassistent Berlin",
+      "funnel": "money",
+      "audience": "Lokale Betriebe in Berlin",
+      "reason": "Mindrails/Phonbot has Germany/Berlin context; local intent can be valuable if content stays genuinely local.",
+      "implementation": "Local page only if it has real local proof: Berlin phone demo, German hosting context, local service area text, ContactPoint schema.",
+      "quality": {
+        "exists": false,
+        "textChars": 0,
+        "hasCanonical": false,
+        "hasJsonLd": false,
+        "hasFaq": false,
+        "hasCta": false
+      },
+      "impact": 10,
+      "confidence": 6,
+      "effort": 4,
+      "risk": 4,
+      "score": 103,
+      "gates": [
+        "new-page-opportunity",
+        "canonical-required",
+        "structured-data-required",
+        "faq-answer-block-required",
+        "conversion-path-required"
+      ]
+    },
+    {
+      "id": "industry-zahnarzt",
+      "type": "industry-page",
+      "slug": "zahnarzt",
+      "title": "KI-Telefonassistent fuer Zahnarztpraxen",
+      "primaryKeyword": "KI Telefonassistent Zahnarzt",
+      "funnel": "money",
+      "audience": "Zahnarztpraxen",
+      "reason": "High-value appointment niche, but higher compliance risk because medical-adjacent claims must be carefully limited.",
+      "implementation": "Industry page focused on appointment intake, recall, emergencies-to-human, no medical advice, strong disclaimers.",
+      "quality": {
+        "exists": false,
+        "textChars": 0,
+        "hasCanonical": false,
+        "hasJsonLd": false,
+        "hasFaq": false,
+        "hasCta": false
+      },
+      "impact": 10,
+      "confidence": 6,
+      "effort": 5,
+      "risk": 5,
+      "score": 95,
+      "gates": [
+        "new-page-opportunity",
+        "canonical-required",
+        "structured-data-required",
+        "faq-answer-block-required",
+        "conversion-path-required"
+      ]
+    },
+    {
+      "id": "industry-anwalt",
+      "type": "industry-page",
+      "slug": "anwalt",
+      "title": "KI-Telefonassistent fuer Kanzleien",
+      "primaryKeyword": "KI Telefonassistent Anwalt",
+      "funnel": "money",
+      "audience": "Anwaltskanzleien",
+      "reason": "High lead value, but YMYL/legal risk means this must be intake-only and human-reviewed.",
+      "implementation": "Only build with strict legal-disclaimer and intake positioning: no Rechtsberatung, conflict-check routing, urgent deadlines to human.",
+      "quality": {
+        "exists": false,
+        "textChars": 0,
+        "hasCanonical": false,
+        "hasJsonLd": false,
+        "hasFaq": false,
+        "hasCta": false
+      },
+      "impact": 10,
+      "confidence": 6,
+      "effort": 5,
+      "risk": 5,
+      "score": 95,
+      "gates": [
+        "new-page-opportunity",
+        "canonical-required",
+        "structured-data-required",
+        "faq-answer-block-required",
+        "conversion-path-required"
+      ]
+    },
+    {
+      "id": "blog-kosten-ki-telefonassistent-2026",
+      "type": "blog-post",
+      "slug": "blog/ki-telefonassistent-kosten-2026",
+      "title": "KI-Telefonassistent Kosten 2026",
+      "primaryKeyword": "KI Telefonassistent Kosten",
+      "funnel": "comparison",
+      "audience": "Preisbewusste Kaufinteressenten",
+      "reason": "There is an ROI article, but a clearer cost guide can capture price-intent queries and support conversion.",
+      "implementation": "Blog guide with transparent Phonbot plans, total cost factors, examples by call volume, links to pricing/register.",
+      "quality": {
+        "exists": false,
+        "textChars": 0,
+        "hasCanonical": false,
+        "hasJsonLd": false,
+        "hasFaq": false,
+        "hasCta": false
+      },
+      "impact": 7,
+      "confidence": 7,
+      "effort": 3,
+      "risk": 2,
+      "score": 94,
+      "gates": [
+        "new-page-opportunity",
+        "canonical-required",
+        "structured-data-required",
+        "faq-answer-block-required",
+        "conversion-path-required"
+      ]
+    },
+    {
+      "id": "problem-anrufbeantworter-alternative",
+      "type": "problem-page",
+      "slug": "anrufbeantworter-alternative",
+      "title": "Anrufbeantworter Alternative fuer kleine Unternehmen",
+      "primaryKeyword": "Anrufbeantworter Alternative Unternehmen",
+      "funnel": "problem",
+      "audience": "Betriebe, die Mailbox/AB als ungenuegend erleben",
+      "reason": "Guter SEO-Hebel, weil Nutzer ihr Problem bereits benennen, aber noch nicht zwingend nach KI suchen.",
+      "implementation": "Comparison-style guide: Mailbox vs Sekretariat vs KI-Telefonassistent, honest limits, CTA to demo.",
+      "quality": {
+        "exists": false,
+        "textChars": 0,
+        "hasCanonical": false,
+        "hasJsonLd": false,
+        "hasFaq": false,
+        "hasCta": false
+      },
+      "impact": 8,
+      "confidence": 6,
+      "effort": 4,
+      "risk": 2,
+      "score": 92,
+      "gates": [
+        "new-page-opportunity",
+        "canonical-required",
+        "structured-data-required",
+        "faq-answer-block-required",
+        "conversion-path-required"
+      ]
+    },
+    {
+      "id": "blog-rufweiterleitung-telekom-o2-vodafone",
+      "type": "blog-post",
+      "slug": "blog/rufweiterleitung-telekom-o2-vodafone-ki",
+      "title": "Rufweiterleitung Telekom, Vodafone und O2 fuer KI-Telefonie",
+      "primaryKeyword": "Rufweiterleitung Telekom KI Telefon",
+      "funnel": "setup",
+      "audience": "Users setting up forwarding",
+      "reason": "Setup queries are practical, low-risk and likely to convert after technical success.",
+      "implementation": "Provider-specific setup overview with caveat to verify current carrier UI, screenshots only if maintained.",
+      "quality": {
+        "exists": false,
+        "textChars": 0,
+        "hasCanonical": false,
+        "hasJsonLd": false,
+        "hasFaq": false,
+        "hasCta": false
+      },
+      "impact": 7,
+      "confidence": 6,
+      "effort": 3,
+      "risk": 2,
+      "score": 87,
+      "gates": [
+        "new-page-opportunity",
+        "canonical-required",
+        "structured-data-required",
+        "faq-answer-block-required",
+        "conversion-path-required"
+      ]
+    },
+    {
+      "id": "programmatic-city-industry-matrix",
+      "type": "programmatic-system",
+      "slug": "city-industry-matrix",
+      "title": "City x Industry Matrix",
+      "primaryKeyword": "KI Telefonassistent {Branche} {Stadt}",
+      "funnel": "money",
+      "audience": "Local service searches",
+      "reason": "Potentially large reach, but risky if pages become thin or duplicate. Should start with 3 hand-written pilots.",
+      "implementation": "Pilot only: Berlin x Friseur, Berlin x Handwerker, Berlin x Zahnarzt. Require local proof, unique FAQs and Search Console validation before scaling.",
+      "quality": {
+        "exists": false,
+        "textChars": 0,
+        "hasCanonical": false,
+        "hasJsonLd": false,
+        "hasFaq": false,
+        "hasCta": false
+      },
+      "impact": 10,
+      "confidence": 5,
+      "effort": 8,
+      "risk": 6,
+      "score": 70,
+      "gates": [
+        "new-page-opportunity",
+        "canonical-required",
+        "structured-data-required",
+        "faq-answer-block-required",
+        "conversion-path-required",
+        "human-review-before-publish",
+        "pilot-before-scale"
+      ]
+    },
+    {
+      "id": "trust-dsgvo-ki-telefonassistent",
+      "type": "trust-page",
+      "slug": "dsgvo-ki-telefonassistent",
+      "title": "DSGVO und KI-Telefonassistenten",
+      "primaryKeyword": "DSGVO KI Telefonassistent",
+      "funnel": "trust",
+      "audience": "Datenschutzbewusste Betriebe",
+      "reason": "Bestehende Blogartikel decken DSGVO an, aber eine evergreen Trust-Landingpage kann intern und extern staerker ranken.",
+      "implementation": "Evergreen page with processing overview, retention, AVV, sub-processors, no legal advice wording and visible FAQ answers.",
+      "quality": {
+        "exists": false,
+        "textChars": 0,
+        "hasCanonical": false,
+        "hasJsonLd": false,
+        "hasFaq": false,
+        "hasCta": false
+      },
+      "impact": 5,
+      "confidence": 6,
+      "effort": 5,
+      "risk": 4,
+      "score": 51,
+      "gates": [
+        "new-page-opportunity",
+        "canonical-required",
+        "structured-data-required",
+        "faq-answer-block-required",
+        "conversion-path-required"
+      ]
+    }
+  ],
+  "guidance": [
+    {
+      "label": "Google SEO Starter Guide",
+      "url": "https://developers.google.com/search/docs/fundamentals/seo-starter-guide",
+      "principle": "Make content easy for search engines to understand and useful for users."
+    },
+    {
+      "label": "Google structured data guidelines",
+      "url": "https://developers.google.com/search/docs/appearance/structured-data/sd-policies",
+      "principle": "Structured data must match visible page content and is eligibility, not a guarantee."
+    },
+    {
+      "label": "Google AI features optimization guide",
+      "url": "https://developers.google.com/search/docs/fundamentals/ai-optimization-guide",
+      "principle": "AI search visibility follows the same people-first, crawlable, well-structured content rules."
+    }
+  ]
+}

@@ -14,6 +14,7 @@ import {
   IconBilling,
   IconLogout,
   IconBuilding,
+  IconInsights,
 } from './PhonbotIcons.js';
 import { deleteAccount } from '../lib/api.js';
 
@@ -32,6 +33,7 @@ const NAV_GROUPS: { label?: string; items: NavItem[] }[] = [
       { id: 'tickets', label: 'Tickets', Icon: IconTickets },
       { id: 'customers', label: 'Mein Business', Icon: IconBuilding },
       { id: 'calendar', label: 'Kalender', Icon: IconCalendar },
+      { id: 'insights', label: 'KI-Insights', Icon: IconInsights },
     ],
   },
   {
