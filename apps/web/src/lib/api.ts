@@ -1448,6 +1448,69 @@ export function triggerConsolidation() {
   return request<{ ok: boolean }>(`/insights/consolidate`, { method: 'POST', body: '{}' });
 }
 
+export type SeoIdeaStatus = 'active' | 'hidden' | 'completed';
+
+export type SeoIdea = {
+  id: string;
+  title: string;
+  summary: string;
+  primary_keyword: string | null;
+  target_path: string | null;
+  page_type: string | null;
+  funnel: string | null;
+  audience: string | null;
+  reason: string;
+  implementation: string;
+  impact: number | null;
+  confidence: number | null;
+  effort: number | null;
+  risk: number | null;
+  priority_score: number | null;
+  gates: string[];
+  outline: string[];
+  source: 'automation' | 'manual';
+  status: SeoIdeaStatus;
+  generated_by_llm: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export function getSeoIdeas() {
+  return request<{ items: SeoIdea[] }>('/insights/seo-ideas');
+}
+
+export function syncSeoIdeas() {
+  return request<{ ok: boolean; created: number }>('/insights/seo-ideas/sync', { method: 'POST', body: '{}' });
+}
+
+export function createSeoIdea(title: string, notes: string) {
+  return request<{ item: SeoIdea }>('/insights/seo-ideas', {
+    method: 'POST',
+    body: JSON.stringify({ title, notes }),
+  });
+}
+
+export function createExpandedSeoIdea(title: string, notes: string) {
+  return request<{ item: SeoIdea }>('/insights/seo-ideas/expand', {
+    method: 'POST',
+    body: JSON.stringify({ title, notes }),
+  });
+}
+
+export function expandSeoIdea(id: string) {
+  return request<{ item: SeoIdea }>(`/insights/seo-ideas/${encodeURIComponent(id)}/expand`, {
+    method: 'POST',
+    body: '{}',
+  });
+}
+
+export function updateSeoIdeaStatus(id: string, status: SeoIdeaStatus) {
+  return request<{ item: SeoIdea }>(`/insights/seo-ideas/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+}
+
 // --- Outbound ---
 
 export type OutboundCall = {

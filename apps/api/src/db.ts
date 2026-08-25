@@ -1160,6 +1160,40 @@ async function runMigrationBody() {
   await pool.query(`ALTER TABLE prompt_suggestions ADD COLUMN IF NOT EXISTS all_examples JSONB;`);
   await pool.query(`ALTER TABLE prompt_suggestions ADD COLUMN IF NOT EXISTS embedding JSONB;`);
 
+  // SEO growth ideas shown in the Insights control center. These are kept
+  // separate from prompt_suggestions because they never mutate a live agent.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS seo_ideas (
+      id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      org_id             UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+      source_key         TEXT,
+      title              TEXT NOT NULL,
+      summary            TEXT NOT NULL DEFAULT '',
+      primary_keyword    TEXT,
+      target_path        TEXT,
+      page_type          TEXT,
+      funnel             TEXT,
+      audience           TEXT,
+      reason             TEXT NOT NULL DEFAULT '',
+      implementation     TEXT NOT NULL DEFAULT '',
+      impact             SMALLINT CHECK (impact BETWEEN 1 AND 10),
+      confidence         SMALLINT CHECK (confidence BETWEEN 1 AND 10),
+      effort             SMALLINT CHECK (effort BETWEEN 1 AND 10),
+      risk               SMALLINT CHECK (risk BETWEEN 1 AND 10),
+      priority_score     INT,
+      gates              JSONB NOT NULL DEFAULT '[]',
+      outline            JSONB NOT NULL DEFAULT '[]',
+      source             TEXT NOT NULL DEFAULT 'manual',
+      status             TEXT NOT NULL DEFAULT 'active'
+                           CHECK (status IN ('active', 'hidden', 'completed')),
+      generated_by_llm   BOOLEAN NOT NULL DEFAULT false,
+      created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE(org_id, source_key)
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS seo_ideas_org_status ON seo_ideas(org_id, status, priority_score DESC);`);
+
   // ── Prompt versions (for rollback) ─────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS prompt_versions (
