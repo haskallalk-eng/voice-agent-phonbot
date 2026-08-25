@@ -167,7 +167,17 @@ export async function runOwnKbSourceImportReadinessCli(
 
 export function isDirectCliInvocation(moduleUrl: string, argvEntry: string | undefined): boolean {
   if (!argvEntry) return false;
-  return path.resolve(fileURLToPath(moduleUrl)) === path.resolve(argvEntry);
+  const modulePath = fileURLToPath(moduleUrl);
+  const isWindowsDrivePath = (value: string) => /^\/?[a-z]:[\\/]/i.test(value);
+
+  if (isWindowsDrivePath(modulePath) && isWindowsDrivePath(argvEntry)) {
+    const normalizeWindowsPath = (value: string) => path.win32
+      .normalize(value.replace(/^\/(?=[a-z]:[\\/])/i, ''))
+      .toLowerCase();
+    return normalizeWindowsPath(modulePath) === normalizeWindowsPath(argvEntry);
+  }
+
+  return path.resolve(modulePath) === path.resolve(argvEntry);
 }
 
 if (isDirectCliInvocation(import.meta.url, process.argv[1])) {
