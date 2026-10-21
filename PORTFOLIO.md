@@ -29,6 +29,13 @@ Ich verbinde Shopify, n8n und APIs zu Abläufen für Bestellungen, Lager, Versan
 - **Phonbot:** Mein Stack mit GPT Live 1 funktioniert bereits. Das öffentliche Repository zeigt noch den älteren Retell-/OpenAI-Realtime-Stand; die aktuelle GPT-Live-1-Implementierung ist hier noch nicht vollständig dokumentiert.
 - **Mindrails Supervisor:** Das Repository bietet einen Screenshot, eine lokal ausführbare Offline-Demo und dokumentierte Tests. Die Offline-Demo zeigt die Entscheidungslogik mit synthetischen Beispielen.
 
+## Projekte nachvollziehen
+
+- **Geschäftlicher Ablauf:** Die Doctor-K-Fallstudie führt durch Shop, zentralen Bestand, Versand und Kundeninformation.
+- **Automatisierungsumfang:** Die Musik-Fallstudie beschreibt die zwei Zielgruppen und die sechs E-Mail-Workflows.
+- **Technische Umsetzung:** Im [Phonbot-README](README.md#code-gezielt-ansehen) sind API, Konfiguration und Dashboard direkt verlinkt.
+- **Ausführbares Beispiel:** Die [Supervisor-Offline-Demo](https://github.com/haskallalk-eng/mindrails-supervisor#try-the-free-offline-demo) benötigt keinen API-Schlüssel; sie zeigt die Entscheidungslogik mit synthetischen Daten.
+
 ## Zusammenarbeit
 
 Ich suche eine Festanstellung in **KI-Implementierung, Prozessautomatisierung, technischem Kunden-Onboarding oder E-Commerce**. Start flexibel, Voll- oder Teilzeit, Berlin/hybrid oder remote.
