@@ -1,5 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import crypto from 'node:crypto';
+import dns from 'node:dns/promises';
+import type { LookupAddress, LookupOptions } from 'node:dns';
 import {
   buildCanonicalBusinessFacts,
   normalizeKnowledgeRetrievalSettings,
@@ -8,7 +10,15 @@ import {
   toRetellKbConfig,
 } from '../knowledge.js';
 
+function mockDnsAddresses(addresses: LookupAddress[]) {
+  // Match both lookup overloads; production requests all resolved addresses.
+  const lookup = async (_host: string, options?: LookupOptions | number) =>
+    typeof options === 'object' && options.all ? addresses : addresses[0]!;
+  return vi.spyOn(dns, 'lookup').mockImplementation(lookup as typeof dns.lookup);
+}
+
 describe('knowledge sources', () => {
+  afterEach(() => vi.restoreAllMocks());
   it('turns custom text into Retell knowledge_base_texts', async () => {
     const payload = await prepareKnowledgePayload({
       knowledgeSources: [
@@ -191,6 +201,8 @@ describe('knowledge sources', () => {
   });
 
   it('does not reject normal numeric public URL paths as phone PII', async () => {
+    // This test checks URL/PII handling, not external DNS availability.
+    mockDnsAddresses([{ address: '93.184.216.34', family: 4 }]);
     const payload = await prepareKnowledgePayload({
       knowledgeSources: [
         { id: 'url_numeric', type: 'url', name: 'Blog Archiv', content: 'https://example.com/2026/05/20/12345678' },
@@ -200,6 +212,29 @@ describe('knowledge sources', () => {
     expect(payload.urls).toEqual(['https://example.com/2026/05/20/12345678']);
     expect(payload.sources[0]).toMatchObject({ status: 'indexed' });
     expect(payload.signature).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('blocks knowledge URLs when DNS returns any private address', async () => {
+    mockDnsAddresses([
+      { address: '93.184.216.34', family: 4 },
+      { address: '127.0.0.1', family: 4 },
+    ]);
+    const payload = await prepareKnowledgePayload({
+      knowledgeSources: [{ id: 'url_private_dns', type: 'url', name: 'FAQ', content: 'https://example.com/faq' }],
+    }, { includeCanonicalBusinessFacts: false });
+    expect(payload.urls).toEqual([]);
+    expect(payload.sources[0]).toMatchObject({ status: 'error', error: 'PRIVATE_HOST' });
+    expect(payload.signature).toBeNull();
+  });
+
+  it('blocks knowledge URLs when DNS lookup fails', async () => {
+    vi.spyOn(dns, 'lookup').mockRejectedValue(Object.assign(new Error('DNS unavailable'), { code: 'EAI_AGAIN' }));
+    const payload = await prepareKnowledgePayload({
+      knowledgeSources: [{ id: 'url_failed_dns', type: 'url', name: 'FAQ', content: 'https://example.com/faq' }],
+    }, { includeCanonicalBusinessFacts: false });
+    expect(payload.urls).toEqual([]);
+    expect(payload.sources[0]).toMatchObject({ status: 'error', error: 'PRIVATE_HOST' });
+    expect(payload.signature).toBeNull();
   });
 
   it('rejects knowledge URLs with sensitive query tokens', async () => {

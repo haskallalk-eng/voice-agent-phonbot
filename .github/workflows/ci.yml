@@ -22,6 +22,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Test secret check and scan tracked files
+        run: node --test scripts/check-secrets.test.mjs && node scripts/check-secrets.mjs
+
       - name: Build Shared
         run: pnpm --filter @vas/shared build
 

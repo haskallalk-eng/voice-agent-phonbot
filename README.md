@@ -96,12 +96,16 @@ For Codex architecture and rollout decisions, use `AGENTS.md` and `PLANS.md`.
 
 ## Tests
 
+[Prüfnachweis vom 22.10.2026: Tests, Builds und Grenzen](docs/portfolio-validation.md).
+
 ```bash
 pnpm --filter @vas/api test --run
 pnpm check
+node --test scripts/check-secrets.test.mjs
+node scripts/check-secrets.mjs
 ```
 
-Die Befehle führen die vorhandenen API-Tests einmalig aus und prüfen die TypeScript-Typen von API und Web-App. Ein erfolgreicher lokaler Testlauf ersetzt keinen Test der eingerichteten Telefonie und externen Dienste.
+Die Befehle führen die vorhandenen API-Tests einmalig aus, prüfen die TypeScript-Typen von API und Web-App und suchen nach bekannten Zugangsdaten-Mustern in versionierten Dateien. Der Zugangsdaten-Check läuft auch in CI; der Pre-Commit-Hook prüft den Git-Index. Fundstellen werden ohne geheime Werte ausgegeben. Ein erfolgreicher lokaler Testlauf ersetzt keinen Test der eingerichteten Telefonie und externen Dienste.
 
 ## Docs
 
