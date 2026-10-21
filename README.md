@@ -1,6 +1,10 @@
 # Phonbot — Voice Agent SaaS
 
-KI-Telefonassistent für kleine Unternehmen. Kunden konfigurieren ihren Agent per Dashboard — kein Code, kein Techniker nötig. Nativ deutschsprachig, DSGVO-konform, ab 89 €/Monat.
+**Portfolio von Hassieb Kalla:** [Projektübersicht für Arbeitgeber](PORTFOLIO.md) · [Doctor-K-Fallstudie](CASE-STUDY-DOCTOR-K.md) · [LinkedIn](https://www.linkedin.com/in/hassieb-kalla-mindrails/)
+
+KI-Telefonassistent für kleine Unternehmen mit konfigurierbaren Agenten und Dashboard.
+
+**Entwicklungsstand:** Retell ist laut Projektdokumentation der aktuelle Produktionspfad. OpenAI Realtime ist ein Referenz-/Laborpfad, kein bestätigter GPT-Live-1-Produktionsstack. Die Verfügbarkeit einer Live-Installation ist nicht durch den Quellcode allein belegt.
 
 **Betreiber:** Hassieb Kalla (Einzelunternehmer), Berlin · [phonbot.de](https://phonbot.de)
 
