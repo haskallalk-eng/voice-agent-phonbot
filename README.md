@@ -4,7 +4,7 @@
 
 KI-Telefonassistent für kleine Unternehmen mit konfigurierbaren Agenten und Dashboard.
 
-**Entwicklungsstand:** Retell ist laut Projektdokumentation der aktuelle Produktionspfad. OpenAI Realtime ist ein Referenz-/Laborpfad, kein bestätigter GPT-Live-1-Produktionsstack. Die Verfügbarkeit einer Live-Installation ist nicht durch den Quellcode allein belegt.
+**Projektstand (22. Oktober 2026):** Nach Angabe des Projektverantwortlichen Hassieb Kalla funktioniert der Phonbot-Stack mit GPT Live 1 bereits. Dieser öffentliche Repository-Stand dokumentiert bisher Retell sowie einen älteren OpenAI-Realtime-Pfad; sein Abgleich mit der aktuellen GPT-Live-1-Implementierung steht noch aus. Die folgenden technischen Einrichtungsangaben beziehen sich auf den hier veröffentlichten Code.
 
 **Betreiber:** Hassieb Kalla (Einzelunternehmer), Berlin · [phonbot.de](https://phonbot.de)
 
