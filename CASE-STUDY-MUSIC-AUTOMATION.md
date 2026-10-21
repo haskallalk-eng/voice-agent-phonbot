@@ -16,7 +16,7 @@ Für einen Musikproduzenten habe ich wiederkehrende Kommunikations- und Planungs
 | Überblick schaffen | Internes Dashboard mit Datenbank und Reel-Analytics |
 | Marketing unterstützen | Unterstützung bei Content-Erstellung sowie Social- und Meta-Ads-Planung |
 
-Ich habe die technischen Abläufe mit KI-Unterstützung umgesetzt. Der Schwerpunkt lag darauf, Kontaktgewinnung, Zielgruppenzuordnung und wiederkehrende Kommunikation zusammenzuführen.
+Mein Beitrag umfasst die Einrichtung der sechs Workflows, die Strukturierung der Kontakte über Tags und die Verbindung mit Content-Planung und Dashboard. Bei der technischen Umsetzung nutze ich KI-Unterstützung. Die zwei Zielgruppen werden über getrennte E-Mail-Abläufe angesprochen.
 
 ## Fachliches Ablaufmodell
 
@@ -31,10 +31,12 @@ flowchart TD
 
 Vereinfachtes fachliches Modell; keine technische Darstellung sämtlicher Integrationen.
 
-## Ergebnis und Nachweisumfang
+## Ergebnis
 
-Entstanden sind sechs zielgruppenspezifische E-Mail-Workflows, eine strukturierte Kontaktbasis sowie Werkzeuge für Content-Planung und Auswertung. Für dieses Projekt veröffentliche ich keine Umsatz-, Conversion- oder Zeitersparniswerte, da dazu keine belegten Zahlen vorliegen.
+Entstanden sind sechs zielgruppenspezifische E-Mail-Workflows, eine strukturierte Kontaktbasis sowie Werkzeuge für Content-Planung und Auswertung.
 
-Die Beschreibung beruht auf meiner Projektarbeit. Kundennamen, Kontaktdaten und interne Workflow-Exporte bleiben vertraulich. Im Gespräch erläutere ich gern die Segmentierung, die einzelnen Prozessschritte und meinen Beitrag.
+Im Gespräch erläutere ich die Segmentierung, den Aufbau der sechs E-Mail-Workflows und die Verbindung zur Content-Planung.
+
+**Veröffentlichungsumfang:** Projektbeschreibung aus eigener Arbeit; Kundennamen, Kontaktdaten und interne Workflow-Exporte bleiben privat.
 
 [Zur Projektübersicht](PORTFOLIO.md) · [LinkedIn](https://www.linkedin.com/in/hassieb-kalla-mindrails/)
