@@ -108,6 +108,7 @@ Acceptance:
 
 ## Progress
 
+- [x] 2026-10-22: Portfolio verification hardening: replaced the staged secret hook with a redacting Node checker, added a tracked-file CI check and regression tests. No provider, runtime, rollout or deployment changes. Known-pattern checks are not a full security audit. Made the numeric-URL unit test independent of external DNS and added private-address/DNS-failure cases; runtime SSRF rules are unchanged.
 - [x] 2026-05-29: Created `AGENTS.md` provider-neutral architecture contract.
 - [x] 2026-05-29: Created initial `PLANS.md` milestone roadmap.
 - [x] 2026-05-29: Upgraded `AGENTS.md` with enforcement boundary, TrustedScope, retrieved-content safety, runtime action policy, and promotion gates.
