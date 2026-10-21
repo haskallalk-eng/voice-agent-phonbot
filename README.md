@@ -1,12 +1,13 @@
-# Phonbot — Voice Agent SaaS
+# Phonbot
+**Ein Projekt von MindRails · KI-Telefonassistent für kleine Unternehmen**
 
-**Portfolio von Hassieb Kalla:** [Profil und Projekte](https://github.com/haskallalk-eng) · [Doctor-K-Fallstudie](https://github.com/haskallalk-eng/haskallalk-eng/blob/main/case-studies/doctor-k.md) · [LinkedIn](https://www.linkedin.com/in/hassieb-kalla-mindrails/)
+Phonbot verbindet Telefonie, konfigurierbare KI-Agenten und ein Dashboard zur Verwaltung. Unternehmen können damit wiederkehrende Anfragen und angebundene Abläufe wie Terminwünsche über einen Telefonassistenten bearbeiten.
 
-KI-Telefonassistent für kleine Unternehmen mit konfigurierbaren Agenten und Dashboard.
+**Mein Beitrag:** Ich, Hassieb Kalla, entwickle Phonbot unter MindRails mit KI-Unterstützung, unter anderem Claude Code. Mein Schwerpunkt liegt auf dem Zusammenspiel von Agentenkonfiguration, Integrationen und Geschäftsabläufen.
+
+[Profil und weitere Projekte](https://github.com/haskallalk-eng) · [Produktwebsite](https://phonbot.de) · [Kontakt](mailto:info@mindrails.de)
 
 **Projektstand:** Mein Phonbot-Stack mit GPT Live 1 funktioniert bereits. Dieses öffentliche Repository dokumentiert noch den älteren Retell-/OpenAI-Realtime-Stand. Die folgenden Einrichtungsangaben beziehen sich auf diesen veröffentlichten Code; die aktuelle GPT-Live-1-Implementierung ist hier noch nicht vollständig dokumentiert.
-
-**Projektportfolio:** Hassieb Kalla, Berlin · [phonbot.de](https://phonbot.de)
 
 ## Monorepo
 
