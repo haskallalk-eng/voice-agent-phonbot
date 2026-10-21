@@ -18,25 +18,62 @@ KI-Telefonassistent für kleine Unternehmen mit konfigurierbaren Agenten und Das
 | `packages/voice-core` | Voice types + OpenAI Realtime provider (reference, not runtime) |
 | `packages/ui` | Reusable UI components (planned) |
 
-## Quick Start
+## Code gezielt ansehen
+
+| Bereich | Einstieg |
+| --- | --- |
+| API, Routen und Integrationen | [API-Einstieg](apps/api/src/index.ts) |
+| Konfiguration und Startprüfungen | [Umgebungsprüfung](apps/api/src/env.ts) |
+| Dashboard und API-Verbindung | [Web-Paket](apps/web/package.json) · [Vite-Konfiguration](apps/web/vite.config.ts) |
+| Projektstruktur und Telefonablauf | [Architekturübersicht](docs/architecture.md) |
+| Lokale Prüfungen | [API-Skripte](apps/api/package.json) · [Workspace-Skripte](package.json) |
+
+## Lokale Einrichtung
+
+Das Projekt verwendet **pnpm 9.15.3** laut [package.json](package.json). Die vollständige Anwendung benötigt eine eingerichtete Datenbank und passende Zugangsdaten für die verwendeten Dienste; dies ist keine Demo ohne Konfiguration.
+
+Vom Repository-Stamm aus:
 
 ```bash
-cp apps/api/.env.example apps/api/.env   # fill in keys
-cp apps/web/.env.example apps/web/.env   # fill in public keys
-pnpm install
-pnpm -r build
-pnpm --filter @vas/api dev               # API on :3002
-pnpm --filter @vas/web dev               # Dashboard on :3000
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env
 ```
 
-See `apps/api/.env.example` for all required env vars (40+).
+Vor dem Start in der lokalen Datei `apps/api/.env` die vorhandenen Werte ersetzen:
 
-## How it works
+```dotenv
+NODE_ENV=development
+PORT=3002
+APP_URL=http://localhost:3000
+```
+
+Die Vorlage enthält Produktionswerte und Port 3001. Lokal erwartet der [Vite-Proxy](apps/web/vite.config.ts) die API auf Port 3002. Datenbank, eigene Schlüssel und gegebenenfalls Callback-Adressen anhand der Vorlagen einrichten. `VITE_*`-Werte sind öffentlich im Frontend-Build; dort gehören keine geheimen Schlüssel hinein.
+
+```bash
+pnpm install
+pnpm -r build
+```
+
+**Terminal 1 – API:**
+
+```bash
+pnpm --filter @vas/api dev
+```
+
+**Terminal 2 – Dashboard:**
+
+```bash
+pnpm --filter @vas/web dev
+```
+
+Dashboard: `http://localhost:3000`. Externe Webhooks benötigen zusätzlich eine für den jeweiligen Anbieter erreichbare, korrekt konfigurierte Adresse. Die lokale Einrichtung allein aktiviert keine Telefonie.
+
+## Ablauf im veröffentlichten Retell-Stand
 
 1. **Configure** your agent (name, voice, prompt, tools, calendar)
 2. **Deploy** to Retell AI with one click
 3. **Test** via browser web-call or text chat
-4. **Assign** a German phone number — your agent is live 24/7
+4. **Assign** a configured German phone number to make the agent reachable.
 
 ## Security
 
@@ -60,8 +97,11 @@ For Codex architecture and rollout decisions, use `AGENTS.md` and `PLANS.md`.
 ## Tests
 
 ```bash
-cd apps/api && pnpm test       # smoke tests (usage, captcha, session-store)
+pnpm --filter @vas/api test --run
+pnpm check
 ```
+
+Die Befehle führen die vorhandenen API-Tests einmalig aus und prüfen die TypeScript-Typen von API und Web-App. Ein erfolgreicher lokaler Testlauf ersetzt keinen Test der eingerichteten Telefonie und externen Dienste.
 
 ## Docs
 
