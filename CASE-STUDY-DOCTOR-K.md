@@ -1,12 +1,12 @@
 # Doctor K – E-Commerce und Prozessautomatisierung
-**Praxisprojekt von Hassieb Kalla · Stand: 22. Oktober 2026**
+**Praxisprojekt von Hassieb Kalla · Shopify, n8n und betriebliche Integrationen**
 
 Für den familiennahen Handelsbetrieb hinter Doctor K habe ich Shopify, Kasse, Lager und wiederkehrende Kundenkommunikation miteinander verbunden. Ziel war, manuelle Arbeit zu reduzieren und Online- und Ladenverkäufe in zusammenhängenden Abläufen zu bearbeiten.
 
-> Doctor K bezeichnet hier das Handelsprojekt, keine Arztpraxis. Diese Fallstudie dokumentiert meine Projektarbeit; der interne Quellcode ist nicht veröffentlicht. Phonbot ist ein separates Voice-Agent-Projekt und kein Quellcode-Nachweis für sämtliche hier beschriebenen Funktionen.
+**Projektkontext:** Doctor K ist ein Handels- und E-Commerce-Projekt im familiären Umfeld.
 
 ## Mein Beitrag
-Ich habe den Shopify-Shop aufgebaut und interne Anwendungen und Automatisierungen umgesetzt. Meine Kenntnisse habe ich mir praktisch erarbeitet. Bei der Softwareentwicklung nutze ich KI-Unterstützung, unter anderem Claude Code. Meine Arbeit verbindet Prozessverständnis, Anforderungsaufnahme und praktische Umsetzung.
+Mein Beitrag umfasst den Aufbau des Shopify-Shops, die Verbindung von Kasse und Bestand sowie interne Anwendungen und Automatisierungen. Bei der Entwicklung nutze ich KI-Unterstützung, unter anderem Claude Code. Ein Schwerpunkt war die Übertragung bestehender Klaviyo-Flows auf selbst gehostetes n8n.
 
 ## Umsetzung
 | Bereich | Projektbeitrag |
@@ -31,21 +31,15 @@ flowchart TD
 
 Die Automatisierung verbindet einzelne Arbeitsschritte: Bestellungen, Bestandsveränderungen, Versand und Kundeninformation werden gemeinsam betrachtet. n8n übernimmt wiederkehrende E-Mail-Abläufe; der Telefonassistent ergänzt die Kundenkommunikation.
 
-## Beobachtete Wirkung
-**Interne Einschätzungen des Projektverantwortlichen, keine unabhängig validierten Messwerte.** Ein genauer Vergleichszeitraum und eine kontrollierte Abgrenzung anderer Einflussfaktoren liegen für diese Veröffentlichung nicht vor.
+## Ergebnis
 
-| Beobachtung | Interne Einschätzung |
-| --- | --- |
-| Online-Verkäufe | Etwa +300 % |
-| Monatlicher Gesamtumsatz | Etwa das 1,5-Fache |
-| Entlastung der Geschäftsführung | Etwa drei Stunden täglich |
-| Reduzierter Telefonaufwand | Mindestens eine Stunde täglich |
+Online- und Ladenverkäufe sind über den zentralen Bestand verbunden. Versandvorbereitung, Etiketten und Kundeninformationen wurden in zusammenhängende Abläufe übertragen. Wiederkehrende E-Mail-Flows laufen über selbst gehostetes n8n.
 
-Die Umsatzentwicklung wird nicht ausschließlich der Automatisierung zugerechnet. Die Zeitangaben können sich überschneiden und werden nicht addiert.
+**Interne Schätzungen:** etwa drei Stunden tägliche Entlastung der Geschäftsführung und mindestens eine Stunde weniger Telefonaufwand. Die Zeitangaben können sich überschneiden und werden nicht addiert. Umsatzangaben werden erst ergänzt, wenn Kennzahl und Vergleichszeitraum eindeutig dokumentiert sind.
 
 ## Was ich im Gespräch zeigen kann
 Ich erläutere gern den Bestellablauf, die Migration von Klaviyo zu n8n und meinen konkreten Anteil an den Integrationen. Geeignete Einblicke in interne Anwendungen können nach Abstimmung gezeigt werden.
 
-Diese Fallstudie basiert auf meiner Projektbeschreibung. Sie enthält keine Kundendaten, Zugangsdaten, Anrufmitschnitte oder internen Systemadressen. Eine unabhängige Funktionsprüfung des Systems ist damit nicht verbunden.
+**Veröffentlichungsumfang:** Projektbeschreibung aus eigener Arbeit; interner Quellcode und Kundendaten bleiben privat.
 
 [LinkedIn](https://www.linkedin.com/in/hassieb-kalla-mindrails/) · [Weitere öffentliche Projekte](PORTFOLIO.md)
