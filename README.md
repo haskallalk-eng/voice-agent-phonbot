@@ -1,12 +1,12 @@
 # Phonbot — Voice Agent SaaS
 
-**Portfolio von Hassieb Kalla:** [Projektübersicht für Arbeitgeber](PORTFOLIO.md) · [Doctor-K-Fallstudie](CASE-STUDY-DOCTOR-K.md) · [LinkedIn](https://www.linkedin.com/in/hassieb-kalla-mindrails/)
+**Portfolio von Hassieb Kalla:** [Profil und Projekte](https://github.com/haskallalk-eng) · [Doctor-K-Fallstudie](https://github.com/haskallalk-eng/haskallalk-eng/blob/main/case-studies/doctor-k.md) · [LinkedIn](https://www.linkedin.com/in/hassieb-kalla-mindrails/)
 
 KI-Telefonassistent für kleine Unternehmen mit konfigurierbaren Agenten und Dashboard.
 
 **Projektstand:** Mein Phonbot-Stack mit GPT Live 1 funktioniert bereits. Dieses öffentliche Repository dokumentiert noch den älteren Retell-/OpenAI-Realtime-Stand. Die folgenden Einrichtungsangaben beziehen sich auf diesen veröffentlichten Code; die aktuelle GPT-Live-1-Implementierung ist hier noch nicht vollständig dokumentiert.
 
-**Betreiber:** Hassieb Kalla (Einzelunternehmer), Berlin · [phonbot.de](https://phonbot.de)
+**Projektportfolio:** Hassieb Kalla, Berlin · [phonbot.de](https://phonbot.de)
 
 ## Monorepo
 
