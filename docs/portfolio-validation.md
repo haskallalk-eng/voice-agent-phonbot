@@ -18,6 +18,14 @@ Ausgangsstand: `f84679214ab8525bd52a43851959fe26e2758fa1`. Die Ergebnisse unten 
 | Datenbankmigrationen | 6 Migrationsdateien formal geprüft; statische Own-KB-Prüfung bestanden |
 | SEO-Artefakte | Reproduzierbar generiert; Audit mit 0 Warnungen und 0 Fehlern |
 
+## Lokaler Prüfstand und laufende CI
+
+Die Tabelle oben dokumentiert einen **lokalen Prüfstand vom 22. Oktober 2026**. Sie ist keine Aussage, dass jeder aktuelle CI-Lauf alle aufgeführten Prüfungen wiederholt.
+
+Der [CI-Workflow](../.github/workflows/ci.yml) verwendet Node.js 22 und prüft API-Tests, API-/Web-Typen, den Zugangsdaten-Checker, die formale Migrationsprüfung sowie Shared-/Web-Builds und SEO-Artefakte. Der lokale Prüfstand oben wurde mit Node.js 24.19.0 erstellt.
+
+Die zusätzlichen Shared-, Voice-Core- und Web-Tests, der API-/Voice-Core-Build und die statische Own-KB-Prüfung gehören zum dokumentierten lokalen Prüfstand; der verlinkte CI-Workflow erzwingt sie derzeit nicht. Für die Bewertung eines anderen Commits müssen diese Prüfungen erneut ausgeführt und mit dessen Revision dokumentiert werden.
+
 ## Reproduzieren
 
 ```sh
