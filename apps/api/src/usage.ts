@@ -1,328 +1,245 @@
-/**
- * Usage metering helpers.
- * Tracks minutes_used per org and enforces plan limits.
- */
-
+/** Usage holds and actual consumption are separate, transactionally settled values. */
+import { randomUUID } from 'node:crypto';
+import type { PoolClient } from 'pg';
 import { pool } from './db.js';
-import { PLANS, type PlanId, chargeOverageMinutes, chargePremiumVoiceMinutes } from './billing.js';
+import { PLANS, type PlanId } from './billing.js';
 import { getVoiceSurcharge } from './voice-catalog.js';
 
-/**
- * Default minutes we reserve at call-start. Reconciled to actual at call-end
- * (Retell webhook). 5 min is a generous-but-bounded estimate that covers most
- * inbound calls; reconciliation refunds the unused part for shorter calls.
- *
- * The whole point of reserving is to close the E7 race: under the old
- * "check then increment at end" model, 10 parallel calls could each see
- * `allowed: true` and only deduct after the fact → over-limit billing.
- * With reservation, the limit-check and the deduct happen in ONE atomic SQL.
- */
 export const DEFAULT_CALL_RESERVE_MINUTES = 5;
-
-/**
- * Plan statuses that block usage. Mirrors Stripe subscription.status lifecycle:
- * - `incomplete` / `incomplete_expired`: initial payment not confirmed (blocks
- *   the subscription.created-before-checkout.completed race where plan='starter'
- *   lands in DB before the charge is captured).
- * - `past_due`: invoice retry in progress.
- * - `unpaid`: all retries failed.
- * - `paused` / `canceled`: user/operator action.
- *
- * Allowed: `active`, `trialing` (legitimate trial), and `free` (no Stripe sub).
- */
 export const BLOCKED_PLAN_STATUSES = [
-  'incomplete',
-  'incomplete_expired',
-  'past_due',
-  'unpaid',
-  'paused',
-  'canceled',
+  'incomplete', 'incomplete_expired', 'past_due', 'unpaid', 'paused', 'canceled',
 ] as const;
 
-/**
- * Returns the per-minute overcharge rate for a given plan.
- */
 export function getOverchargeRate(planId: string): number {
   return PLANS[planId as PlanId]?.overchargePerMinute ?? 0;
 }
 
-/**
- * Increment the minutes_used counter for an org (raw, non-atomic). Kept for
- * legacy paths that don't go through reservation. New code should use
- * `tryReserveMinutes` + `reconcileMinutes` instead.
- */
-export async function incrementMinutesUsed(orgId: string, minutes: number): Promise<void> {
-  if (!pool) return;
-  await pool.query(
-    `UPDATE orgs SET minutes_used = minutes_used + $1 WHERE id = $2`,
-    [minutes, orgId],
-  );
+type OrgUsage = {
+  id: string; minutes_used: number | string; minutes_reserved: number | string;
+  minutes_limit: number | string; plan: string; plan_status: string; name: string;
+};
+type Reservation = { id: string; minutes: number | string; call_id: string | null; created_at: Date | string; state: 'held' | 'released' | 'settled' };
+export type UsageReservation = { allowed: boolean; minutesUsed: number; minutesLimit: number; reservationId?: string };
+export type UsageSettlementContext = { callId: string; agentId?: string; reservationId?: string; startedAt?: number };
+
+function validMinutes(minutes: number, allowZero = false): number {
+  if (!Number.isFinite(minutes) || minutes < 0 || (!allowZero && minutes === 0)) throw new Error('USAGE_MINUTES_INVALID');
+  const rounded = Math.round(minutes * 100) / 100;
+  if (!allowZero && rounded === 0) throw new Error('USAGE_MINUTES_INVALID');
+  return rounded;
+}
+function validCallId(callId: string): void {
+  if (typeof callId !== 'string' || !callId.trim() || callId.length > 256) throw new Error('USAGE_CALL_ID_REQUIRED');
+}
+function validReservationId(id: string): void {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error('USAGE_RESERVATION_INVALID');
 }
 
-/**
- * Atomic check-and-reserve: tries to bump `minutes_used` by `minutes`, but
- * ONLY if the new total stays within `minutes_limit` and the plan is not
- * paused/past_due/canceled. Returns the post-reservation usage on success
- * or `{allowed: false, ...}` on failure.
- *
- * Closes E7: read+update-in-one-statement means 10 parallel callers can't
- * each pass the check before the first one's deduct lands.
- */
-export async function tryReserveMinutes(
-  orgId: string,
-  minutes: number = DEFAULT_CALL_RESERVE_MINUTES,
-): Promise<{ allowed: boolean; minutesUsed: number; minutesLimit: number }> {
-  if (!pool) {
-    if (process.env.NODE_ENV === 'production') {
-      return { allowed: false, minutesUsed: 0, minutesLimit: 0 };
+async function transaction<T>(run: (client: PoolClient) => Promise<T>): Promise<T> {
+  if (!pool) throw new Error('USAGE_DATABASE_UNAVAILABLE');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await run(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+async function lockOrg(client: PoolClient, orgId: string): Promise<OrgUsage | undefined> {
+  const result = await client.query<OrgUsage>(
+    'SELECT id, minutes_used, minutes_reserved, minutes_limit, plan, plan_status, name FROM orgs WHERE id = $1 FOR UPDATE', [orgId],
+  );
+  return result.rows[0];
+}
+function occupied(org: OrgUsage): number { return Number(org.minutes_used) + Number(org.minutes_reserved); }
+async function activatedAt(client: PoolClient): Promise<number> {
+  const { rows } = await client.query('SELECT activated_at FROM usage_ledger_state WHERE singleton = true');
+  const activated = rows[0]?.activated_at ? new Date(rows[0].activated_at).getTime() : NaN;
+  if (!Number.isFinite(activated)) throw new Error('USAGE_LEDGER_NOT_ACTIVATED');
+  return activated;
+}
+
+/** Capacity hold only. Paid plans have a soft cap; actual usage is billed at settlement. */
+export async function tryReserveMinutes(orgId: string, minutes = DEFAULT_CALL_RESERVE_MINUTES): Promise<UsageReservation> {
+  minutes = validMinutes(minutes);
+  if (!pool) return { allowed: false, minutesUsed: 0, minutesLimit: 0 };
+  return transaction(async (client) => {
+    const org = await lockOrg(client, orgId);
+    if (!org) return { allowed: false, minutesUsed: 0, minutesLimit: 0 };
+    await activatedAt(client);
+    const used = occupied(org);
+    const limit = Number(org.minutes_limit);
+    if ((BLOCKED_PLAN_STATUSES as readonly string[]).includes(org.plan_status)
+      || (used + minutes > limit && getOverchargeRate(org.plan) <= 0)) {
+      return { allowed: false, minutesUsed: used, minutesLimit: limit };
     }
-    return { allowed: true, minutesUsed: 0, minutesLimit: 9999 };
-  }
+    const reservationId = randomUUID();
+    await client.query('INSERT INTO usage_reservations (id, org_id, minutes) VALUES ($1, $2, $3)', [reservationId, orgId, minutes]);
+    await client.query('UPDATE orgs SET minutes_reserved = minutes_reserved + $2 WHERE id = $1', [orgId, minutes]);
+    return { allowed: true, minutesUsed: used + minutes, minutesLimit: limit, reservationId };
+  });
+}
 
-  // Plan IDs that permit billable overage past the limit (soft cap). Computed
-  // from PLANS at call time so adding a new paid plan propagates automatically.
-  // Free / zero-rate plans get hard-blocked when over limit.
-  //
-  // Defensive guard: an empty list would make `plan = ANY($3::text[])` always
-  // false in SQL, turning every paid-plan call into 'hard_blocked'. That would
-  // be a silent billing outage. If this happens, it's a config error (e.g. all
-  // overchargePerMinute set to 0); use a sentinel that can never match a real
-  // plan id so the SQL still executes but the error is visible via logs.
-  const paidPlans: string[] = Object.values(PLANS)
-    .filter((p) => p.overchargePerMinute > 0)
-    .map((p) => p.id);
-  if (paidPlans.length === 0) {
-    process.stderr.write('[usage] WARNING: no paid plans have overchargePerMinute > 0; paid-plan overage will not be allowed\n');
-    paidPlans.push('__NO_PAID_PLAN_CONFIGURED__');
-  }
+async function readReservation(client: PoolClient, orgId: string, reservationId: string): Promise<Reservation> {
+  validReservationId(reservationId);
+  const { rows } = await client.query<Reservation>('SELECT id, minutes, call_id, state, created_at FROM usage_reservations WHERE org_id = $1 AND id = $2 FOR UPDATE', [orgId, reservationId]);
+  if (!rows[0]) throw new Error('USAGE_RESERVATION_NOT_FOUND');
+  return rows[0];
+}
+async function releaseHold(client: PoolClient, org: OrgUsage, reservation: Reservation): Promise<void> {
+  if (reservation.state !== 'held') return;
+  if (Number(org.minutes_reserved) < Number(reservation.minutes)) throw new Error('USAGE_HOLD_INVARIANT_BROKEN');
+  await client.query('UPDATE orgs SET minutes_reserved = minutes_reserved - $2 WHERE id = $1', [org.id, reservation.minutes]);
+}
 
-  // ATOMIC reservation in a single SQL statement.
-  //
-  // The old flow (fast-path UPDATE → SELECT fallback → conditional UPDATE)
-  // had a TOCTOU race window on the paid-plan soft cap: 10 parallel callers
-  // could all read the same stale minutes_used via the SELECT before any
-  // UPDATE landed, each then issue their own UPDATE, and bump the counter
-  // by 10× the intended amount — effectively unbounded overage reservation.
-  //
-  // Here everything happens inside one Postgres statement kernel:
-  //   1. `locked` CTE grabs a SELECT ... FOR UPDATE row-lock on the org.
-  //   2. `decision` CTE evaluates the branch:
-  //        - blocked status (incomplete / past_due / paused / …)  → deny
-  //        - minutes_used + reserve ≤ limit                       → allow (within)
-  //        - plan is paid (rate > 0)                              → allow (overage)
-  //        - else (free plan over limit)                          → deny (hard)
-  //   3. `applied` CTE performs the UPDATE only when the decision allows.
-  //   4. Final SELECT returns the decision + post-state to JS.
-  //
-  // Parallel callers serialize on the row lock and observe each other's
-  // deductions. No overshooting possible.
-  const res = await pool.query(
-    `WITH locked AS (
-       SELECT id, minutes_used, minutes_limit, plan, plan_status
-       FROM orgs WHERE id = $1 FOR UPDATE
-     ),
-     decision AS (
-       SELECT
-         id, minutes_used, minutes_limit,
-         CASE
-           WHEN plan_status IN ('incomplete','incomplete_expired','past_due','unpaid','paused','canceled')
-             THEN 'blocked'
-           WHEN minutes_used + $2 <= minutes_limit
-             THEN 'within_limit'
-           WHEN plan = ANY($3::text[])
-             THEN 'overage_allowed'
-           ELSE 'hard_blocked'
-         END AS decision
-       FROM locked
-     ),
-     applied AS (
-       UPDATE orgs
-       SET minutes_used = orgs.minutes_used + $2
-       FROM decision
-       WHERE orgs.id = decision.id
-         AND decision.decision IN ('within_limit', 'overage_allowed')
-       RETURNING orgs.id, orgs.minutes_used AS new_used
-     )
-     SELECT
-       d.decision AS decision,
-       COALESCE(a.new_used, d.minutes_used) AS minutes_used,
-       d.minutes_limit
-     FROM decision d
-     LEFT JOIN applied a ON a.id = d.id`,
-    [orgId, minutes, paidPlans],
+/** Call creation rejected before success: release the exact scoped hold, at most once. */
+export async function releaseMinutesReservation(orgId: string, reservationId: string): Promise<void> {
+  await transaction(async (client) => {
+    const org = await lockOrg(client, orgId);
+    if (!org) throw new Error('USAGE_ORG_NOT_FOUND');
+    const reservation = await readReservation(client, orgId, reservationId);
+    if (reservation.state !== 'held') return;
+    await releaseHold(client, org, reservation);
+    await client.query("UPDATE usage_reservations SET state = 'released', finished_at = now() WHERE id = $1", [reservation.id]);
+  });
+}
+
+/** Bind successful creation; a webhook may already have settled the same reservation. */
+export async function bindMinutesReservation(orgId: string, reservationId: string, callId: string): Promise<void> {
+  validCallId(callId);
+  await transaction(async (client) => {
+    const org = await lockOrg(client, orgId);
+    if (!org) throw new Error('USAGE_ORG_NOT_FOUND');
+    const reservation = await readReservation(client, orgId, reservationId);
+    if (reservation.call_id && reservation.call_id !== callId) throw new Error('USAGE_RESERVATION_CALL_MISMATCH');
+    const settled = await client.query('SELECT call_id, reservation_id FROM usage_settlements WHERE org_id = $1 AND call_id = $2', [orgId, callId]);
+    if (settled.rowCount) {
+      if (settled.rows[0].reservation_id && settled.rows[0].reservation_id !== reservation.id) throw new Error('USAGE_RESERVATION_CALL_MISMATCH');
+      await releaseHold(client, org, reservation);
+      await client.query("UPDATE usage_reservations SET call_id = $2, state = 'settled', finished_at = COALESCE(finished_at, now()) WHERE id = $1", [reservation.id, callId]);
+      await client.query('UPDATE usage_settlements SET reservation_id = $3 WHERE org_id = $1 AND call_id = $2 AND reservation_id IS NULL', [orgId, callId, reservation.id]);
+      return;
+    }
+    if (reservation.state !== 'held') throw new Error('USAGE_RESERVATION_NOT_HELD');
+    await client.query('UPDATE usage_reservations SET call_id = $2 WHERE id = $1', [reservation.id, callId]);
+  });
+}
+
+async function queueInvoice(client: PoolClient, org: OrgUsage, callId: string, kind: 'overage' | 'premium_voice', minutes: number, rate: number, voiceId?: string): Promise<void> {
+  const amount = Math.round(minutes * rate * 100);
+  if (amount <= 0) return;
+  const key = `${kind === 'overage' ? 'overage' : 'premium'}:${org.id}:${callId}`;
+  const metadata = kind === 'overage'
+    ? { orgId: org.id, overageMinutes: String(minutes), plan: org.plan }
+    : { orgId: org.id, premiumMinutes: String(minutes), surcharge: String(rate) };
+  const description = kind === 'overage'
+    ? `${minutes} Min Überschreitung (${rate.toFixed(2)} €/Min)`
+    : `${minutes.toFixed(2)} Min Premium-Stimme${voiceId ? ` "${voiceId}"` : ''} (+${rate.toFixed(2)} €/Min)`;
+  // Durable invoice intent is committed with usage, before any Stripe effect.
+  // The existing retryFailedInvoiceItems worker delivers this row after commit.
+  await client.query(
+    `INSERT INTO failed_invoice_items (org_id, kind, amount_cents, currency, description, idempotency_key, metadata, retry_count)
+     VALUES ($1, $2, $3, 'eur', $4, $5, $6, 0)
+     ON CONFLICT (idempotency_key) DO NOTHING`,
+    [org.id, kind, amount, description, key, JSON.stringify(metadata)],
   );
-
-  if (!res.rowCount) {
-    // Org not found → deny (matches prior behaviour).
-    return { allowed: false, minutesUsed: 0, minutesLimit: 0 };
-  }
-  const row = res.rows[0];
-  const allowed = row.decision === 'within_limit' || row.decision === 'overage_allowed';
-  return {
-    allowed,
-    minutesUsed: Number(row.minutes_used ?? 0),
-    minutesLimit: Number(row.minutes_limit ?? 0),
-  };
 }
 
 /**
- * Reconciliation at call-end: adjusts the counter by the delta between what
- * we actually consumed and what we reserved. `delta = actual - reserved`.
- * Negative deltas (short calls) refund the over-reservation. We clamp to
- * GREATEST(0, ...) so a fast hangup before the actual minute counter ticked
- * doesn't push us into negative storage.
+ * Commit actual consumption once per org/call. A reservation is released only
+ * when the database proves it belongs to this org and call. Inbound calls with
+ * no reservation add their full duration, never a guessed five-minute delta.
  */
-export async function reconcileMinutes(
-  orgId: string,
-  reservedMinutes: number,
-  actualMinutes: number,
-  agentId?: string,
-  callId?: string,
-): Promise<void> {
-  if (!pool) return;
-
-  // Premium-voice surcharge (applied to ALL minutes of the call, not just
-  // overage). Looked up by resolving the agent's configured voice against
-  // voice-catalog.ts; voices without a surcharge field no-op. Fire-and-
-  // forget so Stripe-API slowness doesn't block the webhook response —
-  // the charge function persists Stripe failures in failed_invoice_items
-  // and the cron retries them, so we don't need to handle errors here.
-  if (agentId && actualMinutes > 0) {
-    try {
-      const voiceRes = await pool.query(
-        `SELECT data->>'voice' AS voice_id FROM agent_configs
-         WHERE data->>'retellAgentId' = $1 OR data->>'retellCallbackAgentId' = $1
-         LIMIT 1`,
-        [agentId],
+export async function reconcileMinutes(orgId: string, actualMinutes: number, context: UsageSettlementContext): Promise<void> {
+  actualMinutes = validMinutes(actualMinutes, true);
+  validCallId(context.callId);
+  if (context.reservationId !== undefined) validReservationId(context.reservationId);
+  const settled = await transaction(async (client) => {
+    const org = await lockOrg(client, orgId);
+    if (!org) throw new Error('USAGE_ORG_NOT_FOUND');
+    const activated = await activatedAt(client);
+    const duplicate = await client.query('SELECT call_id, actual_minutes, reservation_id FROM usage_settlements WHERE org_id = $1 AND call_id = $2', [orgId, context.callId]);
+    if (duplicate.rowCount) {
+      const prior = duplicate.rows[0];
+      if (Number(prior.actual_minutes) !== actualMinutes || (context.reservationId && prior.reservation_id !== context.reservationId)) throw new Error('USAGE_SETTLEMENT_CONFLICT');
+      return undefined;
+    }
+    let reservation: Reservation | undefined;
+    if (context.reservationId) {
+      reservation = await readReservation(client, orgId, context.reservationId);
+    } else {
+      reservation = (await client.query<Reservation>('SELECT id, minutes, call_id, state, created_at FROM usage_reservations WHERE org_id = $1 AND call_id = $2 FOR UPDATE', [orgId, context.callId])).rows[0];
+    }
+    const startedAt = context.startedAt ?? (reservation ? new Date(reservation.created_at).getTime() : NaN);
+    if (!Number.isFinite(startedAt) || startedAt < activated) throw new Error('USAGE_LEGACY_CALL_REQUIRES_REVIEW');
+    if (reservation?.call_id && reservation.call_id !== context.callId) throw new Error('USAGE_RESERVATION_CALL_MISMATCH');
+    if (reservation?.state === 'settled') throw new Error('USAGE_RESERVATION_ALREADY_SETTLED');
+    if (reservation) {
+      await releaseHold(client, org, reservation);
+      await client.query("UPDATE usage_reservations SET call_id = $2, state = 'settled', finished_at = now() WHERE id = $1", [reservation.id, context.callId]);
+    }
+    const previous = Number(org.minutes_used);
+    const total = Math.round((previous + actualMinutes) * 100) / 100;
+    const limit = Number(org.minutes_limit);
+    const overage = Math.round((Math.max(0, total - limit) - Math.max(0, previous - limit)) * 100) / 100;
+    await client.query('UPDATE orgs SET minutes_used = $2 WHERE id = $1', [orgId, total]);
+    await client.query(
+      'INSERT INTO usage_settlements (org_id, call_id, reservation_id, actual_minutes, overage_minutes) VALUES ($1, $2, $3, $4, $5)',
+      [orgId, context.callId, reservation?.id ?? null, actualMinutes, overage],
+    );
+    await queueInvoice(client, org, context.callId, 'overage', overage, getOverchargeRate(org.plan));
+    if (context.agentId && actualMinutes > 0) {
+      const voice = await client.query(
+        `SELECT data->>'voice' AS voice_id FROM agent_configs WHERE org_id = $1
+         AND (data->>'retellAgentId' = $2 OR data->>'retellCallbackAgentId' = $2) LIMIT 1`,
+        [orgId, context.agentId],
       );
-      const voiceId = voiceRes.rows[0]?.voice_id as string | undefined;
-      if (voiceId) {
-        const surcharge = getVoiceSurcharge(voiceId);
-        if (surcharge > 0) {
-          // Stable idempotency key built from callId so a webhook retry
-          // can't double-charge — Stripe dedups on the same key.
-          const surchargeKey = callId ? `premium:${orgId}:${callId}` : undefined;
-          void chargePremiumVoiceMinutes(orgId, actualMinutes, surcharge, voiceId, surchargeKey);
-        }
-      }
-    } catch (err) {
-      process.stderr.write(`[usage] premium-voice lookup failed for org=${orgId}: ${(err as Error).message}\n`);
+      const voiceId = voice.rows[0]?.voice_id as string | undefined;
+      if (voiceId) await queueInvoice(client, org, context.callId, 'premium_voice', actualMinutes, getVoiceSurcharge(voiceId), voiceId);
     }
-  }
+    return { ...org, minutes_used: total };
+  });
+  if (settled) await sendUsageWarning(orgId, settled).catch(() => {
+    process.stderr.write('[usage] warning notification failed after settlement\n');
+  });
+}
 
-  const delta = actualMinutes - reservedMinutes;
-  if (delta === 0) return;
-
-  // Atomic UPDATE RETURNING captures pre- and post-state in one statement,
-  // eliminating the race condition where a parallel webhook could read stale
-  // minutes_used between a separate SELECT and UPDATE.
-  // CTE captures the pre-update state atomically, then applies the delta.
-  // No race: both reads happen in the same statement execution.
-  const res = await pool.query(
-    `WITH pre AS (
-       SELECT minutes_used AS old_used, minutes_limit, plan, name
-       FROM orgs WHERE id = $1 FOR UPDATE
-     )
-     UPDATE orgs SET minutes_used = GREATEST(0, orgs.minutes_used + $2)
-     FROM pre WHERE orgs.id = $1
-     RETURNING orgs.minutes_used, pre.old_used, pre.minutes_limit, pre.plan, pre.name`,
-    [orgId, delta],
-  );
-
-  if (!res.rowCount) return;
-  const row = res.rows[0];
-  const postUsed = (row.minutes_used ?? 0) as number;
-  const preUsed = (row.old_used ?? 0) as number;
-  const limit = (row.minutes_limit ?? 0) as number;
-  const plan = (row.plan as string) ?? 'free';
-
-  const overageBefore = Math.max(0, preUsed - limit);
-  const overageAfter = Math.max(0, postUsed - limit);
-  const newOverage = overageAfter - overageBefore;
-  if (newOverage > 0) {
-    const rate = getOverchargeRate(plan);
-    // Stable idempotency key from callId — webhook retries dedup at Stripe.
-    const overageKey = callId ? `overage:${orgId}:${callId}` : undefined;
-    void chargeOverageMinutes(orgId, newOverage, rate, overageKey);
-  }
-
-  // Usage warning emails at 80% and 100% thresholds.
-  // Fire-and-forget — never block the webhook response for an email.
-  if (row && limit > 0) {
-    const pct = Math.round((postUsed / limit) * 100);
-    const thresholds = [80, 100] as const;
-    for (const t of thresholds) {
-      if (pct >= t) {
-        // Only send once per threshold: check Redis dedup key.
-        // If Redis is unavailable, skip the email entirely (fail-closed).
-        // Better: user misses a notification until Redis is back, vs.
-        // getting duplicate emails on every single reconciliation.
-        const { redis } = await import('./redis.js');
-        if (!redis?.isOpen) break;
-        const dedupKey = `usage_warn:${orgId}:${t}`;
-        const claimed = await redis.set(dedupKey, '1', { NX: true, EX: 30 * 24 * 3600 }).catch(() => null);
-        if (!claimed) continue; // already sent this cycle
-        // Look up owner email
-        const ownerRes = await pool.query(
-          `SELECT u.email FROM users u WHERE u.org_id = $1 AND u.role = 'owner' AND u.is_active = true LIMIT 1`,
-          [orgId],
-        );
-        const email = ownerRes.rows[0]?.email as string | undefined;
-        if (email) {
-          const { sendUsageWarningEmail } = await import('./email.js');
-          sendUsageWarningEmail({
-            toEmail: email,
-            orgName: row.name ?? 'Phonbot',
-            minutesUsed: row.minutes_used,
-            minutesLimit: row.minutes_limit,
-            percent: pct,
-          }).catch(() => {/* logged inside */});
-        }
-        break; // only send the highest-threshold email
-      }
-    }
+async function sendUsageWarning(orgId: string, org: OrgUsage): Promise<void> {
+  const limit = Number(org.minutes_limit);
+  if (limit <= 0) return;
+  const percent = Math.round(Number(org.minutes_used) / limit * 100);
+  if (percent < 80) return;
+  const { redis } = await import('./redis.js');
+  if (!redis?.isOpen) return;
+  // Highest reached threshold first. Warning failures do not undo settlement.
+  const threshold = percent >= 100 ? 100 : 80;
+  const claimed = await redis.set(`usage_warn:${orgId}:${threshold}`, '1', { NX: true, EX: 30 * 24 * 3600 }).catch(() => null);
+  if (!claimed || !pool) return;
+  const result = await pool.query("SELECT email FROM users WHERE org_id = $1 AND role = 'owner' AND is_active = true LIMIT 1", [orgId]);
+  const email = result.rows[0]?.email as string | undefined;
+  if (email) {
+    const { sendUsageWarningEmail } = await import('./email.js');
+    await sendUsageWarningEmail({ toEmail: email, orgName: org.name ?? 'Phonbot', minutesUsed: Number(org.minutes_used), minutesLimit: limit, percent }).catch(() => {});
   }
 }
 
-/**
- * Read-only check whether an org would be allowed to start a call right now.
- * Use this for UI gating (e.g. "Test-Call" button enabled/disabled), not for
- * actually authorising a call — that path MUST go through tryReserveMinutes
- * to win the race.
- */
-export async function checkUsageLimit(orgId: string): Promise<{
-  allowed: boolean;
-  minutesUsed: number;
-  minutesLimit: number;
-}> {
-  if (!pool) {
-    // Production MUST have a DB — fail closed so a mis-deployed instance
-    // can't silently authorise unlimited usage. Dev keeps the permissive
-    // fallback so local developers don't need Postgres for every experiment.
-    if (process.env.NODE_ENV === 'production') {
-      return { allowed: false, minutesUsed: 0, minutesLimit: 0 };
-    }
-    return { allowed: true, minutesUsed: 0, minutesLimit: 9999 };
-  }
-
-  const res = await pool.query(
-    `SELECT minutes_used, minutes_limit, plan_status FROM orgs WHERE id = $1`,
-    [orgId],
-  );
-
-  if (!res.rows.length) {
-    // Unknown org — deny
-    return { allowed: false, minutesUsed: 0, minutesLimit: 0 };
-  }
-
-  const { minutes_used, minutes_limit, plan_status } = res.rows[0];
-  // Block usage if subscription is paused, past_due, or canceled
-  const blockedStatuses = new Set<string>(BLOCKED_PLAN_STATUSES);
-  const statusBlocked = blockedStatuses.has(plan_status);
-
+/** Read-only UI hint; only tryReserveMinutes authorizes capacity atomically. */
+export async function checkUsageLimit(orgId: string): Promise<UsageReservation> {
+  if (!pool) return { allowed: false, minutesUsed: 0, minutesLimit: 0 };
+  const result = await pool.query<OrgUsage>(`SELECT minutes_used, minutes_reserved, minutes_limit, plan_status, plan FROM orgs WHERE id = $1
+    AND EXISTS (SELECT 1 FROM usage_ledger_state WHERE singleton = true AND activated_at IS NOT NULL)`, [orgId]);
+  const org = result.rows[0];
+  if (!org) return { allowed: false, minutesUsed: 0, minutesLimit: 0 };
+  const minutesUsed = occupied(org);
+  const minutesLimit = Number(org.minutes_limit);
   return {
-    allowed: !statusBlocked && minutes_used < minutes_limit,
-    minutesUsed: minutes_used,
-    minutesLimit: minutes_limit,
+    allowed: !(BLOCKED_PLAN_STATUSES as readonly string[]).includes(org.plan_status)
+      && (minutesUsed < minutesLimit || getOverchargeRate(org.plan) > 0),
+    minutesUsed, minutesLimit,
   };
 }

@@ -6,7 +6,7 @@ import type { JwtPayload } from './auth.js';
 import { pool } from './db.js';
 import { redis } from './redis.js';
 import { buildAgentInstructions } from './agent-instructions.js';
-import { tryReserveMinutes, DEFAULT_CALL_RESERVE_MINUTES } from './usage.js';
+import { tryReserveMinutes, bindMinutesReservation, releaseMinutesReservation, DEFAULT_CALL_RESERVE_MINUTES } from './usage.js';
 import { invalidateOrgIdCache } from './org-id-cache.js';
 import {
   createLLM,
@@ -14,6 +14,7 @@ import {
   createAgent as retellCreateAgent,
   updateAgent as retellUpdateAgent,
   createWebCall,
+  isDefiniteRetellRejection,
   listCalls,
   getCall,
   getAgent as retellGetAgent,
@@ -1654,6 +1655,7 @@ REGELN:
     const prompt = ensureOutboundSafetyKernel(`${outboundBaseline}\n\n${legacyCallbackPrompt}`);
 
     const result = await triggerBridgeCall({
+      orgId: params.orgId,
       toNumber: params.customerPhone,
       fromNumber,
       prompt,
@@ -2390,24 +2392,12 @@ export async function registerAgentConfig(app: FastifyInstance) {
   app.post('/agent-config/web-call', { ...auth }, async (req: FastifyRequest) => {
     const { orgId } = req.user as JwtPayload;
 
-    // Atomically reserve DEFAULT_CALL_RESERVE_MINUTES (E7). Closes the race
-    // where parallel pre-call checks could each pass and exceed the limit
-    // post-deduct. Webhook reconciles to actual minutes at call_ended.
-    const reserve = await tryReserveMinutes(orgId, DEFAULT_CALL_RESERVE_MINUTES);
-    if (!reserve.allowed) {
-      return {
-        ok: false,
-        error: 'USAGE_LIMIT_REACHED',
-        minutesUsed: reserve.minutesUsed,
-        minutesLimit: reserve.minutesLimit,
-      };
-    }
-
     // Use specific agent if tenantId provided, otherwise fall back to first deployed agent.
     // agentTenantId is user input — verify ownership before creating a web call,
     // otherwise an attacker could open live web-call sessions against any org's agent.
     const parsed = z.object({ agentTenantId: z.string().optional() }).safeParse(req.body);
-    const tenantId = parsed.success ? parsed.data.agentTenantId : undefined;
+    if (!parsed.success) return { ok: false, error: 'INVALID_INPUT' };
+    const tenantId = parsed.data.agentTenantId;
 
     let config: AgentConfig;
     if (tenantId) {
@@ -2440,14 +2430,30 @@ export async function registerAgentConfig(app: FastifyInstance) {
     if (!config.retellAgentId) {
       return { ok: false, error: 'AGENT_NOT_DEPLOYED', message: 'Deploy the agent first.' };
     }
-    const call = await createWebCall(config.retellAgentId, {
-      dynamicVariables: buildBerlinDynamicVariables(),
-      metadata: {
-        phonbot_test_console: 'true',
-        org_id: orgId,
-        tenant_id: config.tenantId,
-      },
-    });
+    if (!process.env.RETELL_API_KEY) return { ok: false, error: 'RETELL_NOT_CONFIGURED' };
+    // All ownership/config validation is complete before any quota is held.
+    const reserve = await tryReserveMinutes(orgId, DEFAULT_CALL_RESERVE_MINUTES);
+    if (!reserve.allowed || !reserve.reservationId) {
+      return { ok: false, error: 'USAGE_LIMIT_REACHED', minutesUsed: reserve.minutesUsed, minutesLimit: reserve.minutesLimit };
+    }
+    let call: Awaited<ReturnType<typeof createWebCall>>;
+    try {
+      call = await createWebCall(config.retellAgentId, {
+        dynamicVariables: buildBerlinDynamicVariables(),
+        metadata: {
+          phonbot_test_console: 'true', org_id: orgId, tenant_id: config.tenantId,
+          usage_reservation_id: reserve.reservationId,
+        },
+      });
+    } catch (err) {
+      // A timeout is not proof that Retell created no call. Keep that hold; a
+      // signed event can reconcile it through its DB-scoped reservation ID.
+      if (isDefiniteRetellRejection(err)) await releaseMinutesReservation(orgId, reserve.reservationId);
+      throw err;
+    }
+    if (typeof call.call_id !== 'string' || !call.call_id.trim()) throw new Error('RETELL_CALL_CREATION_UNCONFIRMED');
+    // Do not refund if binding fails: the provider already created this call.
+    await bindMinutesReservation(orgId, reserve.reservationId, call.call_id);
     if (redis?.isOpen && call.call_id) {
       await redis.set(`retell_test_call:${call.call_id}`, JSON.stringify({ orgId, tenantId: config.tenantId }), { EX: 2 * 60 * 60 }).catch(() => {});
     }

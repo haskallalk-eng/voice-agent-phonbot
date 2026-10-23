@@ -8,27 +8,11 @@
  *   POST /learning/apply-to-template/:templateId    — apply top learnings to a template
  */
 
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import OpenAI from 'openai';
 import { pool } from './db.js';
-
-// Gate cross-tenant aggregate reads (template_learnings + conversation_patterns
-// pool data across all orgs, so only platform admins may read them directly).
-// Mirrors the requireAdmin in admin.ts: BOTH the admin flag AND the audience
-// claim must be set, and we MUST `return` so handler code below the auth block
-// never runs after a 401/403 reply.
-async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
-  try {
-    await req.jwtVerify();
-    const payload = req.user as Record<string, unknown>;
-    if (!payload.admin || payload.aud !== 'phonbot:admin') {
-      return reply.status(403).send({ error: 'Admin access required' });
-    }
-  } catch {
-    return reply.status(401).send({ error: 'Unauthorized' });
-  }
-}
+import { requireAdmin } from './admin-auth.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? '' });
 const MODEL = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';

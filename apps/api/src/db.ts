@@ -3,6 +3,7 @@ import dns from 'node:dns/promises';
 import { URL } from 'node:url';
 import './env.js'; // ensure dotenv is loaded before we read process.env
 import { logBg } from './logger.js';
+import { USAGE_LEDGER_SCHEMA_SQL } from './usage-schema.js';
 
 const { Pool } = pg;
 
@@ -466,6 +467,10 @@ async function runMigrationBody() {
       END IF;
     END $$;
   `);
+
+  // Additive only; the new ledger stays inactive until legacy calls are drained
+  // and the existing usage baseline is reviewed. No inferred counter rewrite.
+  await pool.query(USAGE_LEDGER_SCHEMA_SQL);
 
   // Twilio subaccount + regulatory compliance
   await pool.query(`ALTER TABLE orgs ADD COLUMN IF NOT EXISTS twilio_subaccount_sid text;`);

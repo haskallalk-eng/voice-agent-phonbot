@@ -1,4 +1,6 @@
 # Phonbot
+[![CI](https://github.com/haskallalk-eng/voice-agent-phonbot/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/haskallalk-eng/voice-agent-phonbot/actions/workflows/ci.yml)
+
 **Ein Projekt von MindRails · KI-Telefonassistent für kleine Unternehmen**
 
 Phonbot verbindet Telefonie, konfigurierbare KI-Agenten und ein Dashboard zur Verwaltung. Unternehmen können damit wiederkehrende Anfragen und angebundene Abläufe wie Terminwünsche über einen Telefonassistenten bearbeiten.
@@ -12,8 +14,8 @@ Phonbot verbindet Telefonie, konfigurierbare KI-Agenten und ein Dashboard zur Ve
 ## In 5 Minuten prüfen
 
 1. **Aufbau verstehen:** Die [Architekturübersicht](docs/architecture.md) und der [API-Einstieg](apps/api/src/index.ts) zeigen Komponenten und angebundene Dienste.
-2. **Einen Fehlerfall nachvollziehen:** Die [Retell-Signaturprüfung](apps/api/src/retell-webhooks.ts) und ihre [Tests](apps/api/src/__tests__/webhook-signature.test.ts) zeigen, wie manipulierte Request-Bodies und fehlende Signaturen behandelt werden.
-3. **Prüfumfang einordnen:** Der [Prüfnachweis vom 22. Oktober 2026](docs/portfolio-validation.md) nennt Quellstand, Test- und Build-Ergebnisse sowie Reproduktionsbefehle und offene Live-Prüfungen.
+2. **Einen Fehlerfall nachvollziehen:** Die [Retell-Signaturprüfung](apps/api/src/retell-signature.ts) und ihre [Tests](apps/api/src/__tests__/webhook-signature.test.ts) zeigen, wie manipulierte Request-Bodies und fehlende Signaturen behandelt werden. Der [Review-Nachtrag](docs/review-follow-up.md) erklärt weitere Korrekturen und ihre Grenzen.
+3. **Prüfumfang einordnen:** Der [Prüfnachweis vom 23. Oktober 2026](docs/portfolio-validation.md) nennt Quellstand, Test- und Build-Ergebnisse sowie Reproduktionsbefehle und offene Live-Prüfungen.
 
 Dieser Einstieg lässt sich ohne Zugangsdaten lesen. Zum Ausführen der vollständigen Anwendung sind eigene Datenbank- und Dienstzugänge erforderlich.
 
@@ -40,6 +42,8 @@ Dieser Einstieg lässt sich ohne Zugangsdaten lesen. Zum Ausführen der vollstä
 ## Lokale Einrichtung
 
 Das Projekt verwendet **pnpm 9.15.3** laut [package.json](package.json). Die vollständige Anwendung benötigt eine eingerichtete Datenbank und passende Zugangsdaten für die verwendeten Dienste; dies ist keine Demo ohne Konfiguration.
+
+Die neue Minutenverwaltung benötigt zusätzlich eine bewusst aktivierte Datenbank nach dem [beschriebenen Cutover](docs/usage-ledger-rollout.md). Migration und Startup lassen sie zunächst inaktiv, damit historische Reservierungen nicht versehentlich als Verbrauch abgerechnet werden. Einen bestehenden Betrieb erst nach Drain und Datenabgleich umstellen.
 
 Vom Repository-Stamm aus:
 
@@ -90,7 +94,7 @@ Die folgenden Beispiele verknüpfen konkrete Funktionen mit ihren automatisierte
 
 | Beispiel | Implementierung und Testumfang |
 | --- | --- |
-| Retell-Webhook-Signaturen | [`verifyRetellSignature`](apps/api/src/retell-webhooks.ts) prüft Signaturen anhand des unveränderten Request-Bodys. Die [Tests](apps/api/src/__tests__/webhook-signature.test.ts) decken unter anderem manipulierte Bodies, falsche Schlüssel sowie fehlende und ungültige Signaturen ab. Im Code gibt es eine ausdrücklich aktivierbare Ausnahme für unsignierte Entwicklungsanfragen. |
+| Retell-Webhook-Signaturen | [`verifyRetellSignature`](apps/api/src/retell-signature.ts) prüft Signaturen anhand des unveränderten Request-Bodys. Die [Tests](apps/api/src/__tests__/webhook-signature.test.ts) decken manipulierte Bodies, Zeitfenster, falsche Schlüssel sowie fehlende und ungültige Signaturen ab. Unsignierte Entwicklungsanfragen erfordern eine ausdrückliche Ausnahme; Legacy-Signaturen enthalten keinen Zeitstempel. |
 | Token-Verschlüsselung | Das [Kryptomodul](apps/api/src/crypto.ts) verwendet AES-256-GCM mit zufälligem IV. [Tests](apps/api/src/__tests__/crypto.test.ts) prüfen Ver- und Entschlüsselung, unterschiedliche Chiffrate und beschädigte Eingaben. Legacy-Klartext bleibt lesbar; ohne Schlüssel ist außerhalb der Produktion Klartextspeicherung möglich. |
 | Redaktion personenbezogener Daten | Die [Redaktionsfunktionen](apps/api/src/pii.ts) ersetzen definierte Muster, etwa für E-Mail-Adressen, Telefonnummern und IBANs. [Tests](apps/api/src/__tests__/pii.test.ts) prüfen diese Muster, verschachtelte Daten und die Freigabe sichtbarer Bestätigungen. Mustererkennung erfasst nicht jede Form personenbezogener Daten. |
 | Rufnummernprüfung | Die [gemeinsame Prüffunktion](packages/shared/src/phone.ts) normalisiert Eingaben und lehnt bestimmte Sonderrufnummern ab. [Tests](apps/api/src/__tests__/phone-validation.test.ts) prüfen unter anderem Länge und ausgewählte deutsche und internationale Sperrpräfixe. Ein positives Ergebnis ersetzt keine Freigabe des tatsächlichen Anrufziels. |
@@ -99,16 +103,16 @@ Diese Beispiele dokumentieren die gezeigten Codepfade und Tests. Sie sind kein v
 
 ## Tests
 
-[Prüfnachweis vom 22.10.2026: Tests, Builds und Grenzen](docs/portfolio-validation.md).
+[Prüfnachweis vom 23.10.2026: Tests, Builds und Grenzen](docs/portfolio-validation.md).
 
 ```bash
-pnpm --filter @vas/api test --run
+pnpm -r --workspace-concurrency=1 run test --run
 pnpm check
 node --test scripts/check-secrets.test.mjs
 node scripts/check-secrets.mjs
 ```
 
-Die Befehle führen die vorhandenen API-Tests einmalig aus, prüfen die TypeScript-Typen von API und Web-App und suchen nach bekannten Zugangsdaten-Mustern in versionierten Dateien. Der Zugangsdaten-Check läuft auch in CI; der Pre-Commit-Hook prüft den Git-Index. Fundstellen werden ohne geheime Werte ausgegeben. Ein erfolgreicher lokaler Testlauf ersetzt keinen Test der eingerichteten Telefonie und externen Dienste.
+Die Befehle führen die Tests aller Workspace-Pakete einmalig aus, prüfen die TypeScript-Typen von API und Web-App und suchen nach bekannten Zugangsdaten-Mustern in versionierten Dateien. Die zusätzliche [PostgreSQL-Integrationsprüfung](apps/api/integration/README.md) benötigt eine isolierte Testdatenbank; CI stellt sie bereit. Der Zugangsdaten-Check läuft auch in CI; der Pre-Commit-Hook prüft den Git-Index. Fundstellen werden ohne geheime Werte ausgegeben. Ein erfolgreicher lokaler Testlauf ersetzt keinen Test der eingerichteten Telefonie und externen Dienste.
 
 ## Dokumentation und Mitarbeit
 

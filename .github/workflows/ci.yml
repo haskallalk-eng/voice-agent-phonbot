@@ -8,8 +8,23 @@ on:
 
 jobs:
   typecheck:
-    name: Typecheck
+    name: Build and test
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: phonbot_usage_test
+          POSTGRES_DB: phonbot_usage_test
+          # Disposable local service only; never a deployment credential.
+          POSTGRES_PASSWORD: local-test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U phonbot_usage_test -d phonbot_usage_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -25,39 +40,27 @@ jobs:
       - name: Test secret check and scan tracked files
         run: node --test scripts/check-secrets.test.mjs && node scripts/check-secrets.mjs
 
-      - name: Build Shared
-        run: pnpm --filter @vas/shared build
+      - name: Build Shared and Voice Core
+        run: pnpm --filter @vas/shared --filter @vas/voice-core build
 
-      - name: Typecheck API
-        run: cd apps/api && pnpm typecheck
+      - name: Build API (includes TypeScript checks)
+        run: pnpm --filter @vas/api build
 
       - name: Typecheck Web
-        run: cd apps/web && pnpm typecheck
+        run: pnpm --filter @vas/web typecheck
 
-      - name: Check Supabase migrations
-        run: node scripts/check-supabase-migrations.mjs
+      - name: Check Supabase migrations and static Own-KB readiness
+        run: pnpm supabase:migrations:check
 
-      - name: Test API
-        run: cd apps/api && pnpm test -- --run
+      - name: Test all workspace packages
+        run: pnpm -r --workspace-concurrency=1 run test --run
 
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    needs: typecheck
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Build Shared
-        run: pnpm --filter @vas/shared build
+      - name: Test usage reservations against isolated PostgreSQL
+        env:
+          USAGE_TEST_DATABASE: phonbot_usage_test
+          USAGE_TEST_DATABASE_PASSWORD: local-test-only
+          USAGE_TEST_DATABASE_PORT: 5432
+        run: pnpm --filter @vas/api test:integration
 
       - name: Generate SEO pages
         run: pnpm seo:generate
@@ -66,7 +69,7 @@ jobs:
         run: git diff --exit-code -- apps/web/public
 
       - name: Build Web
-        run: cd apps/web && pnpm build
+        run: pnpm --filter @vas/web build
 
       - name: Audit SEO artifact
         run: pnpm seo:audit

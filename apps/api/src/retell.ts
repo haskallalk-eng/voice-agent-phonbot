@@ -81,9 +81,23 @@ async function retellRequest<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Retell API ${res.status}: ${text}`);
+    throw new RetellApiError(res.status, text);
   }
   return res.json() as Promise<T>;
+}
+
+/** HTTP response received from Retell, distinct from an unknown network outcome. */
+export class RetellApiError extends Error {
+  constructor(public readonly httpStatus: number, detail: string) {
+    super(`Retell API ${httpStatus}: ${detail}`);
+    this.name = 'RetellApiError';
+  }
+}
+
+export function isDefiniteRetellRejection(error: unknown): boolean {
+  // Timeout/conflict/server failures may follow a successful creation. Keep the
+  // reservation until a provider event or operator reconciliation resolves them.
+  return error instanceof RetellApiError && [400, 401, 403, 404, 405, 413, 415, 422, 429].includes(error.httpStatus);
 }
 
 async function retellFormRequest<T>(path: string, form: FormData, init?: RequestInit): Promise<T> {

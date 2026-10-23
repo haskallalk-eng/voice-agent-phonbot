@@ -14,6 +14,7 @@ import WS from 'ws';
 import twilio from 'twilio';
 import { pool } from './db.js';
 import { redis } from './redis.js';
+import { tryReserveMinutes, bindMinutesReservation, releaseMinutesReservation, reconcileMinutes } from './usage.js';
 
 // Twilio signs every webhook with HMAC-SHA1(authToken, fullUrl + sortedBodyParams).
 // Without validation, anyone who guesses our webhook URL can POST fake CallStatus
@@ -177,6 +178,8 @@ interface CallSession {
   prompt?: string;
   createdAt: number;
   outboundRecordId?: string;
+  orgId?: string;
+  usageReservationId?: string;
 }
 
 const SESSION_PREFIX = 'bridge_session:';
@@ -214,6 +217,7 @@ async function deleteSession(sessionId: string): Promise<void> {
  * Returns the Twilio call SID to use as a tracking ID.
  */
 export async function triggerBridgeCall(params: {
+  orgId: string;
   toNumber: string;
   fromNumber: string;
   prompt: string;
@@ -224,37 +228,86 @@ export async function triggerBridgeCall(params: {
   outboundRecordId?: string;
 }): Promise<{ ok: boolean; sessionId: string; twilioCallSid?: string; error?: string }> {
   const sessionId = crypto.randomUUID();
-  await createSession(sessionId, { phone: params.toNumber, name: params.name, prompt: params.prompt, createdAt: Date.now(), outboundRecordId: params.outboundRecordId });
-
-  const twimlUrl = `${params.webhookBase}/outbound/twiml/${sessionId}`;
-  const statusCallback = params.outboundRecordId ? `${params.webhookBase}/outbound/status/${sessionId}` : undefined;
-
-  const urlParams: Record<string, string> = { To: params.toNumber, From: params.fromNumber, Url: twimlUrl, Method: 'POST' };
-  if (statusCallback) {
-    urlParams.StatusCallback = statusCallback;
-    urlParams.StatusCallbackEvent = 'completed';
+  if (!pool) return { ok: false, sessionId, error: 'DB_NOT_CONFIGURED' };
+  if (!params.orgId || !params.twilioSid || !params.twilioToken || !params.toNumber || !params.fromNumber) {
+    return { ok: false, sessionId, error: 'INVALID_CALL_CONFIGURATION' };
   }
-
-  const res = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${params.twilioSid}/Calls.json`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${params.twilioSid}:${params.twilioToken}`).toString('base64')}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams(urlParams),
-    },
+  // Validate URL and durable ownership before holding quota or contacting Twilio.
+  const callbackUrl = new URL(`/outbound/status/${sessionId}`, params.webhookBase);
+  const twimlUrl = new URL(`/outbound/twiml/${sessionId}`, params.webhookBase).toString();
+  let recordId = params.outboundRecordId;
+  if (recordId) {
+    const owned = await pool.query(`SELECT id FROM outbound_calls WHERE id = $1 AND org_id = $2`, [recordId, params.orgId]);
+    if (!owned.rows[0]) return { ok: false, sessionId, error: 'NOT_YOUR_OUTBOUND_CALL' };
+  } else {
+    const record = await pool.query(
+      `INSERT INTO outbound_calls (org_id, to_number, contact_name, campaign, status)
+       VALUES ($1, $2, $3, 'customer-callback', 'initiated') RETURNING id`,
+      [params.orgId, params.toNumber, params.name ?? null],
+    );
+    recordId = record.rows[0]?.id as string | undefined;
+    if (!recordId) return { ok: false, sessionId, error: 'DB_ERROR' };
+  }
+  const markLocalFailure = () => pool!.query(
+    `UPDATE outbound_calls SET status = 'failed' WHERE id = $1 AND org_id = $2 AND call_id IS NULL AND status = 'initiated'`,
+    [recordId, params.orgId],
   );
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    await deleteSession(sessionId);
-    return { ok: false, sessionId, error: body };
+  const reserve = await tryReserveMinutes(params.orgId).catch(async (err: unknown) => {
+    // The provider has not been contacted, even if the ledger rejected activation
+    // or its reservation outcome is uncertain. Preserve any hold for reconciliation.
+    await markLocalFailure();
+    throw err;
+  });
+  if (!reserve.allowed || !reserve.reservationId) {
+    await markLocalFailure();
+    return { ok: false, sessionId, error: 'USAGE_LIMIT_REACHED' };
   }
-
-  const data = await res.json() as { sid?: string };
-  return { ok: true, sessionId, twilioCallSid: data.sid };
+  const reservationId = reserve.reservationId;
+  let requestStarted = false;
+  try {
+    await createSession(sessionId, { phone: params.toNumber, name: params.name, prompt: params.prompt,
+      createdAt: Date.now(), outboundRecordId: recordId, orgId: params.orgId, usageReservationId: reservationId });
+    callbackUrl.searchParams.set('outbound_record_id', recordId);
+    callbackUrl.searchParams.set('usage_reservation_id', reservationId);
+    const urlParams = new URLSearchParams({ To: params.toNumber, From: params.fromNumber, Url: twimlUrl,
+      Method: 'POST', StatusCallback: callbackUrl.toString(), StatusCallbackEvent: 'completed' });
+    requestStarted = true;
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${params.twilioSid}/Calls.json`, {
+      method: 'POST',
+      headers: { Authorization: `Basic ${Buffer.from(`${params.twilioSid}:${params.twilioToken}`).toString('base64')}`,
+        'Content-Type': 'application/x-www-form-urlencoded' },
+      body: urlParams, signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) {
+      if ([400, 401, 403, 404, 405, 413, 415, 422, 429].includes(res.status)) {
+        await releaseMinutesReservation(params.orgId, reservationId);
+        await markLocalFailure();
+        // Session cleanup cannot keep a definitively rejected call pending.
+        await deleteSession(sessionId).catch(() => {});
+        return { ok: false, sessionId, error: 'CALL_REJECTED' };
+      }
+      // A timeout, conflict or server failure can occur after a call was created.
+      // Hold quota until a signed callback or explicit operator reconciliation.
+      return { ok: false, sessionId, error: 'CALL_CREATION_UNCONFIRMED' };
+    }
+    const data = await res.json() as { sid?: string };
+    if (typeof data.sid !== 'string' || !/^CA[0-9a-f]{32}$/i.test(data.sid)) throw new Error('CALL_CREATION_UNCONFIRMED');
+    await bindMinutesReservation(params.orgId, reservationId, data.sid);
+    await pool.query(
+      `UPDATE outbound_calls SET call_id = COALESCE(call_id, $1),
+         status = CASE WHEN status = 'initiated' THEN 'calling' ELSE status END
+       WHERE id = $2 AND org_id = $3 AND (call_id IS NULL OR call_id = $1)`,
+      [data.sid, recordId, params.orgId],
+    );
+    return { ok: true, sessionId, twilioCallSid: data.sid };
+  } catch (err) {
+    if (!requestStarted) {
+      await releaseMinutesReservation(params.orgId, reservationId);
+      await markLocalFailure();
+    }
+    // Do not release an ambiguous creation or a call that failed only during binding.
+    throw err;
+  }
 }
 
 // ── Route registration ────────────────────────────────────────────────────────
@@ -297,25 +350,43 @@ export async function registerTwilioBridge(app: FastifyInstance) {
     // Twilio statuses: queued, ringing, in-progress, completed, busy, failed, no-answer, canceled
     const terminal = ['completed', 'busy', 'failed', 'no-answer', 'canceled'].includes(callStatus);
 
-    const session = await getSession(sessionId);
-    if (pool && session?.outboundRecordId) {
-      const mappedStatus = callStatus === 'completed' ? 'completed'
-        : callStatus === 'busy' ? 'busy'
-        : callStatus === 'no-answer' ? 'no_answer'
-        : callStatus === 'canceled' ? 'canceled'
-        : callStatus === 'failed' ? 'failed'
-        : callStatus;
-      await pool.query(
-        `UPDATE outbound_calls SET status = $1 WHERE id = $2`,
-        [mappedStatus, session.outboundRecordId],
-      ).catch((err: Error) => app.log.warn({ err: err.message, sessionId }, 'status update failed'));
+    // Ignore late nonterminal statuses; they must not overwrite a settled call.
+    if (!terminal) return reply.code(200).send('');
+    if (!process.env.TWILIO_AUTH_TOKEN || !pool) return reply.code(503).send('billing unavailable');
+    const query = req.query as Record<string, unknown>;
+    const recordId = query.outbound_record_id;
+    const reservationId = query.usage_reservation_id;
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (typeof recordId !== 'string' || !uuid.test(recordId) || typeof reservationId !== 'string' || !uuid.test(reservationId)) {
+      // Old bridge callbacks lack durable billing correlation. Do not guess from
+      // an expiring Redis session or silently debit an unrelated organization.
+      return reply.code(400).send('missing billing correlation');
     }
-
-    if (terminal) {
-      await deleteSession(sessionId).catch(() => {});
+    const callId = body.CallSid;
+    if (typeof callId !== 'string' || !/^CA[0-9a-f]{32}$/i.test(callId) ||
+        typeof body.CallDuration !== 'string' || !/^\d+$/.test(body.CallDuration)) {
+      return reply.code(400).send('missing call identity or duration');
     }
-
-    reply.code(200).send('');
+    const seconds = Number(body.CallDuration);
+    if (!Number.isSafeInteger(seconds) || seconds < 0) return reply.code(400).send('invalid duration');
+    const record = await pool.query(`SELECT org_id, call_id FROM outbound_calls WHERE id = $1`, [recordId]);
+    const row = record.rows[0] as { org_id?: string; call_id?: string | null } | undefined;
+    if (!row?.org_id) return reply.code(404).send('unknown outbound call');
+    if (row.call_id && row.call_id !== callId) return reply.code(409).send('call identity mismatch');
+    // Ledger validates reservation→org/call ownership and atomically settles once.
+    // It also handles a callback arriving before the create response was bound.
+    // The record may predate ledger activation; the verified reservation's own
+    // creation time is the billing proof, not the earlier outbound draft record.
+    await reconcileMinutes(row.org_id, Math.round(seconds / 60 * 100) / 100, { callId, reservationId });
+    const mappedStatus = callStatus === 'no-answer' ? 'no_answer' : callStatus;
+    await pool.query(
+      `UPDATE outbound_calls SET call_id = COALESCE(call_id, $1), duration_s = $2, status = $3
+       WHERE id = $4 AND org_id = $5 AND (call_id IS NULL OR call_id = $1)
+         AND status NOT IN ('completed', 'busy', 'no_answer', 'canceled', 'failed')`,
+      [callId, seconds, mappedStatus, recordId, row.org_id],
+    );
+    await deleteSession(sessionId).catch(() => {});
+    return reply.code(200).send('');
   });
 
   // WS /outbound/ws/:sessionId
@@ -487,7 +558,7 @@ export async function registerTwilioBridge(app: FastifyInstance) {
         (async () => {
           try {
             await localPool.query(
-              `UPDATE outbound_calls SET transcript = $1, status = 'completed' WHERE id = $2`,
+              `UPDATE outbound_calls SET transcript = $1 WHERE id = $2`,
               [transcript, recordId],
             );
             const { analyzeOutboundCall } = await import('./outbound-insights.js');

@@ -1,131 +1,122 @@
-/**
- * Webhook signature verification tests (FINAL-04).
- * Ensures Retell HMAC + timing-safe compare actually rejects forged/empty/malformed signatures.
- */
-
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import crypto from 'node:crypto';
 
-// Mock env
 const TEST_API_KEY = 'test-retell-key-for-hmac-verification';
-vi.stubEnv('RETELL_API_KEY', TEST_API_KEY);
-vi.stubEnv('NODE_ENV', 'test');
+const NOW = 1_790_000_000_000;
+const WINDOW_MS = 5 * 60 * 1000;
+const BODY = '{"event":"call_ended","call":{"call_id":"test","minutes":5}}';
 
-const { verifyRetellSignature } = await import('../retell-webhooks.js');
+let verifyRetellSignature: typeof import('../retell-webhooks.js').verifyRetellSignature;
 
-function signedReq(body: string, signature: string) {
-  return {
-    headers: { 'x-retell-signature': signature },
-    rawBody: body,
-  } as unknown as Parameters<typeof verifyRetellSignature>[0];
+function signedReq(rawBody: unknown, signature: unknown) {
+  return { headers: { 'x-retell-signature': signature }, rawBody } as unknown as Parameters<typeof verifyRetellSignature>[0];
 }
 
-describe('Retell webhook HMAC verification logic', () => {
-  function computeHmac(body: string, key: string): string {
-    return crypto.createHmac('sha256', key).update(body).digest('hex');
-  }
+function currentSignature(body = BODY, timestamp = NOW, key = TEST_API_KEY): string {
+  const digest = crypto.createHmac('sha256', key).update(body + timestamp).digest('hex');
+  return `v=${timestamp},d=${digest}`;
+}
 
-  function computeCurrentRetellSignature(body: string, key: string, timestamp: string): string {
-    const digest = crypto.createHmac('sha256', key).update(body + timestamp).digest('hex');
-    return `v=${timestamp},d=${digest}`;
-  }
+function legacySignature(body = BODY, key = TEST_API_KEY): string {
+  return crypto.createHmac('sha256', key).update(body).digest('hex');
+}
 
-  it('production verifier accepts current Retell signature format', () => {
-    const body = JSON.stringify({ event: 'call_ended', call: { call_id: 'test' } });
-    const timestamp = String(Date.now());
-    const signature = computeCurrentRetellSignature(body, TEST_API_KEY, timestamp);
+async function loadVerifier(key: string | undefined, mode = 'test', allowUnsigned: string | undefined = undefined) {
+  vi.stubEnv('RETELL_API_KEY', key);
+  vi.stubEnv('NODE_ENV', mode);
+  vi.stubEnv('ALLOW_UNSIGNED_WEBHOOKS', allowUnsigned);
+  vi.resetModules();
+  // The production route imports this same isolated verifier.
+  ({ verifyRetellSignature } = await import('../retell-signature.js'));
+}
 
-    expect(verifyRetellSignature(signedReq(body, signature))).toBe(true);
-  });
-
-  it('production verifier rejects tampered current-format bodies', () => {
-    const body = JSON.stringify({ event: 'call_ended', call: { call_id: 'test' } });
-    const tampered = JSON.stringify({ event: 'call_ended', call: { call_id: 'evil' } });
-    const timestamp = String(Date.now());
-    const signature = computeCurrentRetellSignature(body, TEST_API_KEY, timestamp);
-
-    expect(verifyRetellSignature(signedReq(tampered, signature))).toBe(false);
-  });
-
-  it('production verifier rejects requests without rawBody', () => {
-    const body = JSON.stringify({ event: 'call_ended', call: { call_id: 'test' } });
-    const timestamp = String(Date.now());
-    const signature = computeCurrentRetellSignature(body, TEST_API_KEY, timestamp);
-
-    expect(
-      verifyRetellSignature({
-        headers: { 'x-retell-signature': signature },
-      } as unknown as Parameters<typeof verifyRetellSignature>[0])
-    ).toBe(false);
-  });
-
-  it('current Retell signature format is v=timestamp,d=digest over body plus timestamp', () => {
-    const body = JSON.stringify({ event: 'call_ended', call: { call_id: 'test' } });
-    const timestamp = '1778087000000';
-    const signature = computeCurrentRetellSignature(body, TEST_API_KEY, timestamp);
-    const match = signature.match(/^v=(\d+),d=([0-9a-f]+)$/);
-
-    expect(match?.[1]).toBe(timestamp);
-    expect(match?.[2]).toBe(crypto.createHmac('sha256', TEST_API_KEY).update(body + timestamp).digest('hex'));
-  });
-
-  it('correct HMAC matches via timingSafeEqual', () => {
-    const body = JSON.stringify({ event: 'call_ended', call: { call_id: 'test' } });
-    const signature = computeHmac(body, TEST_API_KEY);
-
-    const expected = crypto.createHmac('sha256', TEST_API_KEY).update(body).digest('hex');
-
-    expect(signature.length).toBe(expected.length);
-    expect(
-      crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'))
-    ).toBe(true);
-  });
-
-  it('wrong key produces different HMAC', () => {
-    const body = '{"event":"call_ended"}';
-    const timestamp = String(Date.now());
-    const wrongDigest = crypto.createHmac('sha256', 'wrong-key').update(body + timestamp).digest('hex');
-    const wrongSignature = `v=${timestamp},d=${wrongDigest}`;
-
-    expect(verifyRetellSignature(signedReq(body, wrongSignature))).toBe(false);
-  });
-
-  it('tampered body produces different HMAC', () => {
-    const original = '{"event":"call_ended","call":{"minutes":5}}';
-    const tampered = '{"event":"call_ended","call":{"minutes":999}}';
-    const timestamp = String(Date.now());
-    const digest = crypto.createHmac('sha256', TEST_API_KEY).update(original + timestamp).digest('hex');
-
-    expect(verifyRetellSignature(signedReq(tampered, `v=${timestamp},d=${digest}`))).toBe(false);
-  });
-
-  it('empty signature is rejected by the verifier', () => {
-    const body = '{"event":"call_ended"}';
-
-    expect(verifyRetellSignature(signedReq(body, ''))).toBe(false);
-  });
-
-  it('non-hex signature is rejected by the verifier', () => {
-    const body = '{"event":"call_ended"}';
-    const timestamp = String(Date.now());
-    const nonHex = 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz';
-
-    expect(verifyRetellSignature(signedReq(body, `v=${timestamp},d=${nonHex}`))).toBe(false);
-  });
-
-  it('HMAC is deterministic (same input → same output)', () => {
-    const body = '{"test": true}';
-    const sig1 = computeHmac(body, TEST_API_KEY);
-    const sig2 = computeHmac(body, TEST_API_KEY);
-    expect(sig1).toBe(sig2);
-  });
+beforeEach(async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(NOW);
+  await loadVerifier(TEST_API_KEY);
 });
 
-describe('Stripe webhook signature verification logic', () => {
-  it('stripe-signature header format is correct (t=timestamp,v1=signature)', () => {
-    const header = 't=1234567890,v1=abc123def456';
-    const parts = header.split(',');
-    expect(parts[0]!.startsWith('t=')).toBe(true);
-    expect(parts[1]!.startsWith('v1=')).toBe(true);
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
+
+describe('Retell production signature verifier', () => {
+  it.each([BODY, Buffer.from(BODY)])('accepts exact signed raw bytes (string and Buffer)', (rawBody) => {
+    expect(verifyRetellSignature(signedReq(rawBody, currentSignature()))).toBe(true);
+  });
+
+  it.each([-WINDOW_MS, -WINDOW_MS + 1, 0, WINDOW_MS - 1, WINDOW_MS])(
+    'accepts the inclusive five-minute clock window at offset %i ms', (offset) => {
+      expect(verifyRetellSignature(signedReq(BODY, currentSignature(BODY, NOW + offset)))).toBe(true);
+    },
+  );
+
+  it.each([-WINDOW_MS - 1, WINDOW_MS + 1])('rejects stale or future signatures at offset %i ms', (offset) => {
+    expect(verifyRetellSignature(signedReq(BODY, currentSignature(BODY, NOW + offset)))).toBe(false);
+  });
+
+  it('rejects a changed timestamp even within the accepted window', () => {
+    const signature = currentSignature().replace(`v=${NOW}`, `v=${NOW + 1}`);
+    expect(verifyRetellSignature(signedReq(BODY, signature))).toBe(false);
+  });
+
+  it('rejects a changed body and a semantically identical reserialization', () => {
+    expect(verifyRetellSignature(signedReq(BODY.replace('5', '9'), currentSignature()))).toBe(false);
+    expect(verifyRetellSignature(signedReq(JSON.stringify(JSON.parse(BODY), null, 2), currentSignature()))).toBe(false);
+  });
+
+  it('rejects a signature generated with a different key', () => {
+    expect(verifyRetellSignature(signedReq(BODY, currentSignature(BODY, NOW, 'wrong-key')))).toBe(false);
+  });
+
+  it.each([undefined, null, {}, 123])('rejects missing or unsupported rawBody %j', (rawBody) => {
+    expect(verifyRetellSignature(signedReq(rawBody, currentSignature()))).toBe(false);
+  });
+
+  it.each([undefined, null, '', [], [currentSignature()], 123, 'not-hex', `v=${NOW},d=${'z'.repeat(64)}`])(
+    'rejects malformed or missing signature %j without throwing', (signature) => {
+      expect(verifyRetellSignature(signedReq(BODY, signature))).toBe(false);
+    },
+  );
+
+  it.each([
+    ['current', currentSignature()],
+    ['legacy', legacySignature()],
+  ])('rejects truncated, extended and odd-length %s digests', (_format, signature) => {
+    for (const malformed of [signature.slice(0, -1), signature + 'a', signature + 'ab']) {
+      expect(verifyRetellSignature(signedReq(BODY, malformed))).toBe(false);
+    }
+  });
+
+  it('retains the existing legacy body-only HMAC compatibility', () => {
+    expect(verifyRetellSignature(signedReq(BODY, legacySignature()))).toBe(true);
+    expect(verifyRetellSignature(signedReq(BODY + ' ', legacySignature()))).toBe(false);
+    expect(verifyRetellSignature(signedReq(BODY, legacySignature(BODY, 'wrong-key')))).toBe(false);
+  });
+
+  it('does not pretend the legacy format has a timestamp/replay limit', () => {
+    const signature = legacySignature();
+    vi.mocked(Date.now).mockReturnValue(NOW + 24 * 60 * 60 * 1000);
+    expect(verifyRetellSignature(signedReq(BODY, signature))).toBe(true);
+  });
+
+  it.each([
+    ['test', undefined, false],
+    ['development', undefined, false],
+    ['development', '1', false],
+    ['development', 'false', false],
+    ['development', 'true', true],
+    ['test', 'true', true],
+    ['production', undefined, false],
+    ['production', 'true', false],
+  ] as const)('missing key: %s mode / opt-in %s => %s', async (mode, optIn, accepted) => {
+    await loadVerifier(undefined, mode, optIn);
+    expect(verifyRetellSignature(signedReq(undefined, undefined))).toBe(accepted);
+  });
+
+  it.each(['test', 'development', 'production'])('a configured key remains mandatory with dev opt-in in %s', async (mode) => {
+    await loadVerifier(TEST_API_KEY, mode, 'true');
+    expect(verifyRetellSignature(signedReq(BODY, undefined))).toBe(false);
+    expect(verifyRetellSignature(signedReq(BODY, currentSignature()))).toBe(true);
   });
 });

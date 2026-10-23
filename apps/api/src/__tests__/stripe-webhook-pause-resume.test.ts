@@ -19,7 +19,7 @@
  * `Stripe.webhooks.generateTestHeaderString`.
  */
 
-import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 import Fastify from 'fastify';
 import type { FastifyRequest } from 'fastify';
 import jwt from '@fastify/jwt';
@@ -112,7 +112,7 @@ function makeSubscriptionEvent(
   };
 }
 
-async function buildApp() {
+async function buildApp(captureRawBody = true) {
   const app = Fastify();
   await app.register(jwt, { secret: 'test-secret-32-chars-minimum!!!' });
   await app.register(cookie, { secret: 'test-secret-32-chars-minimum!!!' });
@@ -122,7 +122,7 @@ async function buildApp() {
     'application/json',
     { parseAs: 'buffer' },
     (_req, body: Buffer, done) => {
-      (_req as FastifyRequest & { rawBody: Buffer }).rawBody = body;
+      if (captureRawBody) (_req as FastifyRequest & { rawBody: Buffer }).rawBody = body;
       if (body.length === 0) return done(null, null);
       try {
         done(null, JSON.parse(body.toString()));
@@ -143,6 +143,11 @@ describe('Stripe webhook /billing/webhook — pause/resume/deleted route integra
 
   beforeAll(async () => {
     app = await buildApp();
+  });
+
+  afterAll(async () => {
+    await app.close();
+    vi.unstubAllEnvs();
   });
 
   beforeEach(() => {
@@ -169,6 +174,47 @@ describe('Stripe webhook /billing/webhook — pause/resume/deleted route integra
     });
     expect(res.statusCode).toBe(400);
     expect(JSON.parse(res.body)).toEqual({ error: 'Invalid signature' });
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it.each(['missing-header', 'wrong-key', 'changed-body', 'reserialized-body', 'stale-timestamp'])(
+    'rejects %s before any billing database operation', async (scenario) => {
+      const rawBody = JSON.stringify(makeSubscriptionEvent('customer.subscription.paused'));
+      let payload = rawBody;
+      const signature = Stripe.webhooks.generateTestHeaderString({
+        payload: rawBody,
+        secret: scenario === 'wrong-key' ? 'whsec_wrong_synthetic_key' : TEST_WEBHOOK_SECRET,
+        timestamp: Math.floor(Date.now() / 1000) - (scenario === 'stale-timestamp' ? 301 : 0),
+      });
+      if (scenario === 'changed-body') payload = rawBody.replace('org-from-meta', 'org-tampered');
+      if (scenario === 'reserialized-body') payload = JSON.stringify(JSON.parse(rawBody), null, 2);
+      const res = await app.inject({
+        method: 'POST', url: '/billing/webhook', payload,
+        headers: {
+          'content-type': 'application/json',
+          ...(scenario === 'missing-header' ? {} : { 'stripe-signature': signature }),
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toEqual({ error: 'Invalid signature' });
+      expect(mockQuery).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a correctly signed parsed body when rawBody capture is absent', async () => {
+    const withoutRawBody = await buildApp(false);
+    try {
+      const { rawBody, signature } = signedPayload(makeSubscriptionEvent('customer.subscription.paused'));
+      const res = await withoutRawBody.inject({
+        method: 'POST', url: '/billing/webhook', payload: rawBody,
+        headers: { 'content-type': 'application/json', 'stripe-signature': signature },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toEqual({ error: 'Invalid signature' });
+      expect(mockQuery).not.toHaveBeenCalled();
+    } finally {
+      await withoutRawBody.close();
+    }
   });
 
   it('paused → resolver hit + UPDATE plan_status=paused', async () => {

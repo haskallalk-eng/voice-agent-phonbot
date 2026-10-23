@@ -50,11 +50,17 @@ export function decrypt(value: string | null | undefined): string | null {
   }
   const parts = value.slice(PREFIX.length).split(':');
   if (parts.length !== 3) return null;
+  // Decode only the envelope emitted by encrypt(): 12-byte IV, full 16-byte
+  // GCM tag and complete hex bytes. Buffer.from(hex) otherwise silently drops
+  // malformed suffixes, and Node can accept shorter authentication tags.
+  if (!/^[0-9a-f]{24}$/i.test(parts[0]!) ||
+      !/^[0-9a-f]{32}$/i.test(parts[1]!) ||
+      !/^(?:[0-9a-f]{2})*$/i.test(parts[2]!)) return null;
   try {
     const iv = Buffer.from(parts[0]!, 'hex');
     const tag = Buffer.from(parts[1]!, 'hex');
     const ct = Buffer.from(parts[2]!, 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv, { authTagLength: 16 });
     decipher.setAuthTag(tag);
     return Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8');
   } catch (e) {

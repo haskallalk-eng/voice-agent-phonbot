@@ -8,6 +8,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "test": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "own-kb:backfill": "tsx src/scripts/backfill-own-kb.ts",
     "own-kb:eval": "tsx src/scripts/eval-own-kb.ts",
     "own-kb:shadow": "tsx src/scripts/shadow-own-kb.ts",

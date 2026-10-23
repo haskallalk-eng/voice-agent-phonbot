@@ -108,6 +108,8 @@ Acceptance:
 
 ## Progress
 
+- [x] 2026-10-23: The next independent review reproduced missing overage charges for reserved minutes and found incomplete reservation lifecycles. Corrected with separate held capacity and consumed minutes; atomic per-call settlement and invoice outbox; org/call-bound reservation identity; validation before reserve and explicit release/retain semantics for provider outcomes; Retell and signed Twilio completion routes. Additive schema stays inactive until an explicit drained/baseline-checked cutover. Real PostgreSQL settlement, contention, rollback, replay and cutover regressions, route failure/duplicate tests, full local validation and independent code rereview passed. No live migration or activation.
+- [x] 2026-10-23: Followed up the independent portfolio review: strict Retell signature/AES envelope validation, shared admin gate, production-route regressions, durable call-start deduplication, true no-pool tests, and isolated PostgreSQL reservation tests. CI now covers every workspace test package, API/Voice-Core builds and static Own-KB checks. Local validation passed; see docs/portfolio-validation.md for revision and limits. No deployment, provider switch or production credential change.
 - [x] 2026-10-22: Portfolio verification hardening: replaced the staged secret hook with a redacting Node checker, added a tracked-file CI check and regression tests. No provider, runtime, rollout or deployment changes. Known-pattern checks are not a full security audit. Made the numeric-URL unit test independent of external DNS and added private-address/DNS-failure cases; runtime SSRF rules are unchanged.
 - [x] 2026-05-29: Created `AGENTS.md` provider-neutral architecture contract.
 - [x] 2026-05-29: Created initial `PLANS.md` milestone roadmap.
@@ -324,6 +326,8 @@ Acceptance:
 
 ## Surprises & Discoveries
 
+- 2026-10-23 follow-up: Paid usage already at its limit, followed by a five-minute reservation, produced invoice requests for 0/0/3 minutes for actual calls of 2/5/8 minutes. The counter mixed temporary holds with consumption. The generic Retell completion also assumed every call had reserved five minutes; customer outbound used a separate Twilio bridge without the assumed Retell completion path.
+- 2026-10-23: Hex decoding accepted malformed suffixes, truncated GCM tags were accepted, and call_started lacked the durable claim used by other lifecycle events. Several old tests did not exercise the application boundary their names implied. A real PostgreSQL lock test distinguished the reservation SQL from a deliberately unlocked test-only mutation.
 - Observation: Own-KB smoke proved retrieval reachability but not coverage quality.
   Evidence: live shadow smoke returned 10 questions, 0 answerable, p95 about 715 ms.
 - Observation: `knowledge.search` has org/tenant ambiguity in the OpenAI/tool execution path.
@@ -491,6 +495,8 @@ Acceptance:
 
 ## Decision Log
 
+- 2026-10-23 follow-up: A subtraction-only invoice formula cannot distinguish other concurrent holds. Separate reservations from confirmed consumption and persist settlement plus invoice intent atomically instead. Preserve historical counters; never guess which old minutes were holds. Gate activation until a controlled cutover, and reject pre-cutover unreserved calls. Keep customer-outbound feature defaults unchanged.
+- 2026-10-23: Keep legacy Retell signatures compatible, enforce canonical digest/envelope lengths, and claim call_started before side effects. Claim-first handling prevents concurrent duplicate attempts but is best-effort delivery: a crash after the claim can lose an event. An outbox/retry protocol is a separate change. Use an isolated loopback PostgreSQL schema for SQL concurrency evidence; do not infer production latency, rotation or live acceptance from these tests.
 - Decision: Implement scope/privacy hardening before Canonical Runtime Contract.
   Rationale: Provider-neutral abstraction is unsafe while retrieval scope and PII handling remain ambiguous.
   Date/Author: 2026-05-29 / Codex plan after external critique.
@@ -961,6 +967,8 @@ Acceptance:
 
 ## Outcomes & Retrospective
 
+- 2026-10-23 final follow-up: 1,902 API tests in 134 files, 10 other workspace tests, 32 real PostgreSQL cases and four secret-checker regressions passed. API/Web types, all relevant builds, seven migration files, static Own-KB and SEO checks passed. A fresh mutation of only the final ledger test interceptor removed the org-row lock and made the selected free-cap contention test fail as intended. The full PostgreSQL run had no skips; 31 other cases were intentionally excluded only from that focused mutation run. These are local results, not a new public CI or deployment result.
+- 2026-10-23: The first local follow-up, before the additional usage-ledger correction, passed 1,838 API tests, 10 other workspace tests, 10 real PostgreSQL integration cases, four secret-checker regressions, types/builds, static migrations/Own-KB checks and SEO checks. The deliberately unlocked reservation mutation failed the free-cap case as expected. Those counts do not validate the subsequent accounting changes; see the final verification record for their own run. Public CI must be assessed for the published revision separately. These corrections do not close missing live-call, credential-rotation, customer-acceptance or human-team-review evidence.
 DrKalla custom-runtime quality + turn-taking build, 2026-06-13 (Claude, branch `drkalla-memory-ab-hardening`):
 
 - Barge-in: a newer caller turn now aborts the in-flight model call via an `AbortSignal` threaded through the client contract, so the serialized turn chain advances immediately instead of waiting out the stale turn's stream budget; a superseded turn's agent memory is no longer committed (it never spoke). Live-verified: a superseding turn spoke alone in 159 ms.

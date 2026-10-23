@@ -5,9 +5,9 @@
  * the call lifecycle changes. Two distinct auth bars apply (TOOL_AUTH_NOTE):
  *
  *   • POST /retell/webhook   (lifecycle: call_started/_ended/_analyzed)
- *     STRICT verifyRetellSignature(): HMAC-SHA256 over rawBody using
- *     RETELL_API_KEY, timing-safe compared against x-retell-signature.
- *     No body-only fallback — these events MUTATE billing
+ *     verifyRetellSignature(): HMAC-SHA256 over rawBody + timestamp using
+ *     RETELL_API_KEY, with legacy body-only HMAC compatibility.
+ *     No unsigned-body fallback — these events MUTATE billing
  *     (orgs.minutes_used) and persist transcripts/insights, so a forged
  *     event must be impossible without the API key.
  *
@@ -20,9 +20,11 @@
 
 import crypto from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { verifyRetellSignature, type RawBodyRequest } from './retell-signature.js';
+export { verifyRetellSignature } from './retell-signature.js';
 import { createTicket, mergeTicketMetadata } from './tickets.js';
 import { appendTraceEvent, traceScopeFields } from './traces.js';
-import { reconcileMinutes, DEFAULT_CALL_RESERVE_MINUTES } from './usage.js';
+import { reconcileMinutes } from './usage.js';
 import { pool } from './db.js';
 import { redis } from './redis.js';
 import {
@@ -66,7 +68,6 @@ import {
   type CustomerModuleConfig,
 } from './customers.js';
 
-const RETELL_API_KEY = process.env.RETELL_API_KEY ?? '';
 const DEFAULT_TICKET_REASON = 'Allgemeine Übergabe';
 
 function now() {
@@ -122,70 +123,6 @@ async function deleteRetellCallForPrivacy(callId: string): Promise<void> {
   }
 }
 
-/** Internal shape of the extended request with rawBody attached by the content-type parser. */
-type RawBodyRequest = FastifyRequest & { rawBody?: Buffer | string };
-
-/**
- * Verify the Retell webhook signature.
- * Retell sends `x-retell-signature: <hex>` which is HMAC-SHA256 of the raw body
- * signed with RETELL_API_KEY.
- * Returns true when valid or when RETELL_API_KEY is not configured (dev mode).
- */
-export function verifyRetellSignature(req: RawBodyRequest): boolean {
-  // Always require signature — no NODE_ENV bypass. Misconfigured env would otherwise
-  // let attackers forge call_ended webhooks (manipulate minutes_used, inject transcripts, etc.).
-  if (!RETELL_API_KEY) {
-    // Dev-only escape: require explicit opt-in via ALLOW_UNSIGNED_WEBHOOKS=true
-    if (process.env.ALLOW_UNSIGNED_WEBHOOKS === 'true' && process.env.NODE_ENV !== 'production') return true;
-    return false;
-  }
-
-  const signature = (req.headers['x-retell-signature'] as string) ?? '';
-
-  // rawBody MUST be set by the addContentTypeParser in index.ts for application/json.
-  // If it's missing, the request came over a content-type we can't reliably re-serialize
-  // (form-urlencoded, multipart) — falling back to JSON.stringify(req.body) would
-  // produce a different byte sequence than what Retell signed → every signature would
-  // fail anyway, plus we'd lose the audit trail. Refuse outright.
-  let rawBody: string;
-  if (typeof req.rawBody === 'string') {
-    rawBody = req.rawBody;
-  } else if (Buffer.isBuffer(req.rawBody)) {
-    rawBody = req.rawBody.toString();
-  } else {
-    return false;
-  }
-
-  const signed = signature.match(/^v=(\d+),d=([0-9a-f]+)$/i);
-  if (signed) {
-    const timestampRaw = signed[1];
-    const digest = signed[2];
-    if (!timestampRaw || !digest) return false;
-    const timestamp = Number(timestampRaw);
-    if (!Number.isFinite(timestamp)) return false;
-    if (Math.abs(Date.now() - timestamp) > 5 * 60 * 1000) return false;
-
-    const expected = crypto
-      .createHmac('sha256', RETELL_API_KEY)
-      .update(rawBody + timestampRaw)
-      .digest('hex');
-    return timingSafeHexEqual(digest, expected);
-  }
-
-  // Legacy fallback kept for older Retell deliveries/tests that carried only
-  // HMAC(rawBody) as hex. Current Retell sends v=<timestamp>,d=<digest>.
-  if (!/^[0-9a-f]+$/i.test(signature)) return false;
-  const expected = crypto.createHmac('sha256', RETELL_API_KEY).update(rawBody).digest('hex');
-  return timingSafeHexEqual(signature, expected);
-}
-
-function timingSafeHexEqual(a: string, b: string): boolean {
-  if (!/^[0-9a-f]+$/i.test(a) || !/^[0-9a-f]+$/i.test(b)) return false;
-  const left = Buffer.from(a, 'hex');
-  const right = Buffer.from(b, 'hex');
-  if (left.length !== right.length) return false;
-  return crypto.timingSafeEqual(left, right);
-}
 
 /**
  * Auth gate for Retell Custom-Function (tool) endpoints.
@@ -1176,7 +1113,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
   // ── Call lifecycle webhook ─────────────────────────────────────────────────
   // Retell sends call_started / call_ended / call_analyzed events here.
   // These events MUTATE billing (orgs.minutes_used) and persist transcripts +
-  // trigger insights — so the auth bar is the strict HMAC check, no body-only
+  // trigger insights — so the auth bar is the HMAC check, no unsigned-body
   // fallback. A spoofed call_ended would otherwise inflate minutes, inject
   // fake transcripts, fan out to customer webhooks, and (with a guessable
   // call_id) trigger DELETE on real Retell calls. The OR-fallback chain that
@@ -1205,10 +1142,26 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
     const call = body?.call ?? body;
 
     if (event === 'call_started') {
+      const callId = (call as RetellCallData).call_id;
+      if (typeof callId !== 'string' || callId.trim() === '') {
+        return reply.status(400).send({ error: 'Missing call_id' });
+      }
+      // Never start externally visible effects without a durable claim.
+      if (!pool) return reply.status(503).send({ error: 'Database not configured' });
       const agentId = (call as RetellCallData).agent_id;
       const orgId = agentId ? await getOrgIdByAgentId(agentId) : null;
       const fromNumber = (call as RetellCallData).from_number;
       const toNumber = (call as RetellCallData).to_number;
+
+      // Claim after context resolution, before forwarding verification or customer
+      // fan-out. The existing (call_id, event_type) key also serializes concurrent
+      // retries. Delivery remains best-effort/at-most-once: a crash after this claim
+      // may lose delivery. Do not release it after partial fan-out and duplicate
+      // customers that already received the event. Claims expire after 90 days.
+      if (!(await claimProcessedRetellEvent(callId, 'call_started'))) {
+        req.log.info({ callId }, 'retell call_started dedup hit - skipping');
+        return { ok: true, deduped: true };
+      }
 
       // Close the forwarding-verification loop: if there's a pending verifier
       // dial against this Phonbot inbound, match the inbound caller-ID and
@@ -1223,7 +1176,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
 
       if (orgId) {
         fireInboundWebhooks(orgId, 'call.started', {
-          callId: (call as RetellCallData).call_id,
+          callId,
           agentId,
           fromNumber,
           toNumber,
@@ -1242,13 +1195,42 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       const endTs = (call as RetellCallData).end_timestamp;
       const agentId = (call as RetellCallData).agent_id;
       const dedupCallId = (call as RetellCallData).call_id;
+      if (typeof dedupCallId !== 'string' || !dedupCallId.trim()) {
+        return reply.status(400).send({ error: 'Missing call_id' });
+      }
+      if (typeof agentId !== 'string' || !agentId.trim()) {
+        return reply.status(400).send({ error: 'Missing agent_id' });
+      }
+      if (!pool) return reply.status(503).send({ error: 'WEBHOOK_STORAGE_UNAVAILABLE' });
+      const signedDuration = (call as RetellCallData & { duration_ms?: number }).duration_ms;
+      const validStart = typeof startTs === 'number' && Number.isFinite(startTs) && startTs >= 0;
+      const validEnd = typeof endTs === 'number' && Number.isFinite(endTs) && endTs >= 0;
+      const callDurationMs = validStart && validEnd && endTs >= startTs
+        ? endTs - startTs
+        : typeof signedDuration === 'number' && Number.isFinite(signedDuration) && signedDuration >= 0
+          ? signedDuration : undefined;
+      if (callDurationMs === undefined || !Number.isFinite(callDurationMs)) {
+        // Do not acknowledge an incomplete terminal event or invent zero usage.
+        // A corrected provider retry must still be able to settle the reservation.
+        return reply.status(503).send({ error: 'CALL_DURATION_UNAVAILABLE' });
+      }
+      const minutes = Math.round((callDurationMs / 60000) * 100) / 100;
+      const orgId = await getOrgIdByAgentId(agentId);
+      if (orgId) {
+        const reservationId = (call as RetellCallData & { metadata?: Record<string, unknown> }).metadata?.usage_reservation_id;
+        if (reservationId !== undefined && typeof reservationId !== 'string') throw new Error('INVALID_USAGE_RESERVATION_ID');
+        // Billing must precede the independent side-effect claim. A crash after
+        // that claim must not prevent a retry from committing its settlement.
+        // The scoped ledger itself atomically deduplicates usage and invoice intent;
+        // it alone knows the hold amount, including callback-before-bind cases.
+        await reconcileMinutes(orgId, minutes, {
+          callId: dedupCallId, agentId, reservationId, startedAt: validStart ? startTs : undefined,
+        });
+      }
 
-      // Idempotency gate: Retell retries call_ended on timeout/non-2xx.
-      // Without this, a retried webhook runs reconcileMinutes twice and
-      // double-bills overages (€9 bill → €28 on 3x retry) and doubles
-      // analyzeCall (double OpenAI cost). INSERT ... ON CONFLICT returns 0
-      // rows on second call → we short-circuit.
-      if (dedupCallId && !(await claimProcessedRetellEvent(dedupCallId, 'call_ended'))) {
+      // This claim gates best-effort transcript/analysis/fan-out work only.
+      // Billing above is retried even if a prior process left this claim behind.
+      if (!(await claimProcessedRetellEvent(dedupCallId, 'call_ended'))) {
         req.log.info({ callId: dedupCallId }, 'retell call_ended dedup hit - skipping');
         return { ok: true, deduped: true };
       }
@@ -1259,33 +1241,7 @@ export async function registerRetellWebhooks(app: FastifyInstance) {
       // transcript persistence + analysis and DELETE the call from Retell.
       const recordingDeclined = await recordingDeclinedCallExists(dedupCallId);
 
-      if (startTs && endTs && agentId) {
-        const callDurationMs = Math.max(0, endTs - startTs);
-        // Second-accurate billing: 61s = 1.02 min, not 2 min. Customers pay
-        // for what they actually used. Stored as NUMERIC(10,2) in orgs.minutes_used.
-        // See AGB § 5: "sekundengenaue Abrechnung".
-        const minutes = Math.round((callDurationMs / 60000) * 100) / 100;
-
-        const orgId = await getOrgIdByAgentId(agentId);
-        if (orgId) {
-          // Pre-call reserved DEFAULT_CALL_RESERVE_MINUTES (E7). Reconcile
-          // delta now: actual ≤ reserved → refund the over-reservation;
-          // actual > reserved → top up the difference. agentId is also passed
-          // so premium-voice surcharge can be looked up and billed inside.
-          // callId threads through to make the Stripe idempotency key stable
-          // across webhook retries — a retried call_ended can no longer
-          // double-charge the customer.
-          const usageClaimed = await claimProcessedRetellEvent(dedupCallId, 'call_ended_usage');
-          if (usageClaimed) {
-            try {
-              await reconcileMinutes(orgId, DEFAULT_CALL_RESERVE_MINUTES, minutes, agentId, dedupCallId);
-            } catch (err) {
-              await forgetProcessedRetellEvent(dedupCallId, 'call_ended_usage', req.log);
-              throw err;
-            }
-          }
-        }
-
+      if (agentId) {
         // AI analysis — fire and forget, never blocks the webhook response
         const transcript = (call as RetellCallData & { transcript?: string }).transcript;
         const callId = (call as RetellCallData).call_id;

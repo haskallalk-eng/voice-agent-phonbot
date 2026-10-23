@@ -433,12 +433,6 @@ export async function triggerSalesCall(params: {
     return { ok: false, error: 'PHONE_PREFIX_NOT_ALLOWED' };
   }
 
-  // Atomically reserve minutes (E7) — closes the race vs. parallel calls.
-  // Webhook reconciles to actual at call_ended.
-  const { tryReserveMinutes, DEFAULT_CALL_RESERVE_MINUTES } = await import('./usage.js');
-  const reserve = await tryReserveMinutes(params.orgId, DEFAULT_CALL_RESERVE_MINUTES);
-  if (!reserve.allowed) return { ok: false, error: 'USAGE_LIMIT_REACHED' };
-
   // Audit-Round-10 HIGH: 3 unrelated DB lookups parallelised. Previously
   // sequential (~30 ms total), now ~10 ms — visible on outbound-call-burst
   // campaigns. getOutboundConfig is also a single SELECT internally, so all
@@ -496,6 +490,7 @@ export async function triggerSalesCall(params: {
 
   try {
     const result = await triggerBridgeCall({
+      orgId: params.orgId,
       toNumber: params.toNumber,
       fromNumber,
       prompt,
@@ -507,18 +502,13 @@ export async function triggerSalesCall(params: {
     });
 
     if (!result.ok) {
-      await pool.query(`UPDATE outbound_calls SET status = 'failed' WHERE id = $1`, [outboundRecordId]);
       return { ok: false, error: result.error ?? 'CALL_FAILED' };
     }
 
-    await pool.query(
-      `UPDATE outbound_calls SET call_id = $1, status = 'calling' WHERE id = $2`,
-      [result.twilioCallSid ?? result.sessionId, outboundRecordId],
-    );
-
     return { ok: true, callId: result.twilioCallSid ?? result.sessionId, outboundRecordId };
   } catch (e: unknown) {
-    await pool.query(`UPDATE outbound_calls SET status = 'failed' WHERE id = $1`, [outboundRecordId]);
+    // The bridge retains reservations for ambiguous provider outcomes; neither
+    // refund nor overwrite a terminal callback with an assumed failure here.
     return { ok: false, error: e instanceof Error ? e.message : 'CALL_FAILED' };
   }
 }

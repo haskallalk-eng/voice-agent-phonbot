@@ -1,161 +1,85 @@
-/**
- * Smoke tests for usage.ts — validates the atomic reservation logic (E7)
- * without a real database. Uses vitest mocks to simulate pg.Pool.
- *
- * These tests are intentionally lightweight: they verify the SQL intent and
- * the branching logic, NOT the Postgres row-lock behaviour (which would
- * require an integration test against a real instance).
- */
-
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-// Mock the pool before importing usage
-const mockQuery = vi.fn();
-vi.mock('../db.js', () => ({
-  pool: { query: (...args: unknown[]) => mockQuery(...args) },
-}));
-vi.mock('../billing.js', () => ({
-  PLANS: {
-    starter: { id: 'starter', minutesLimit: 500, overchargePerMinute: 0.05 },
-    free: { id: 'free', minutesLimit: 100, overchargePerMinute: 0 },
-  },
-}));
-
-const { tryReserveMinutes, reconcileMinutes, checkUsageLimit, DEFAULT_CALL_RESERVE_MINUTES } = await import('../usage.js');
-
-describe('tryReserveMinutes (atomic single-statement CASE)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    process.env.NODE_ENV = 'production';
-  });
-
-  it('allows within-limit reservation (decision=within_limit)', async () => {
-    mockQuery.mockResolvedValueOnce({
-      rows: [{ decision: 'within_limit', minutes_used: 105, minutes_limit: 500 }],
-      rowCount: 1,
-    });
-    const result = await tryReserveMinutes('org-1', 5);
-    expect(result.allowed).toBe(true);
-    expect(result.minutesUsed).toBe(105);
-    expect(result.minutesLimit).toBe(500);
-    // Only ONE SQL call — the whole reservation is now atomic.
-    expect(mockQuery).toHaveBeenCalledTimes(1);
-    const sql = mockQuery.mock.calls[0]![0] as string;
-    expect(sql).toContain('FOR UPDATE');
-    expect(sql).toContain('minutes_used + $2 <= minutes_limit');
-    expect(sql).toContain("'blocked'");
-    expect(sql).toContain("'within_limit'");
-    expect(sql).toContain("'overage_allowed'");
-    expect(sql).toContain("'hard_blocked'");
-  });
-
-  it('allows paid-plan overage (decision=overage_allowed)', async () => {
-    // Starter plan past limit: row is locked, CASE decides overage_allowed, UPDATE applies.
-    mockQuery.mockResolvedValueOnce({
-      rows: [{ decision: 'overage_allowed', minutes_used: 503, minutes_limit: 500 }],
-      rowCount: 1,
-    });
-    const result = await tryReserveMinutes('org-1', 5);
-    expect(result.allowed).toBe(true);
-    expect(result.minutesUsed).toBe(503);
-    expect(mockQuery).toHaveBeenCalledTimes(1);
-  });
-
-  it('denies free-plan over limit (decision=hard_blocked)', async () => {
-    mockQuery.mockResolvedValueOnce({
-      rows: [{ decision: 'hard_blocked', minutes_used: 28, minutes_limit: 30 }],
-      rowCount: 1,
-    });
-    const result = await tryReserveMinutes('org-1', 5);
-    expect(result.allowed).toBe(false);
-    expect(result.minutesUsed).toBe(28);
-    expect(result.minutesLimit).toBe(30);
-  });
-
-  it('denies blocked plan status (decision=blocked)', async () => {
-    mockQuery.mockResolvedValueOnce({
-      rows: [{ decision: 'blocked', minutes_used: 10, minutes_limit: 500 }],
-      rowCount: 1,
-    });
-    const result = await tryReserveMinutes('org-1', 5);
-    expect(result.allowed).toBe(false);
-    expect(result.minutesUsed).toBe(10);
-  });
-
-  it('returns allowed:false for unknown org (0 rows)', async () => {
-    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
-    const result = await tryReserveMinutes('ghost-org', 5);
-    expect(result.allowed).toBe(false);
-    expect(result.minutesUsed).toBe(0);
-    expect(mockQuery).toHaveBeenCalledTimes(1);
-  });
-
-  it('passes the paidPlans list as $3', async () => {
-    mockQuery.mockResolvedValueOnce({
-      rows: [{ decision: 'within_limit', minutes_used: 10, minutes_limit: 500 }],
-      rowCount: 1,
-    });
-    await tryReserveMinutes('org-1', 5);
-    const params = mockQuery.mock.calls[0]![1] as unknown[];
-    expect(params[0]).toBe('org-1');
-    expect(params[1]).toBe(5);
-    expect(Array.isArray(params[2])).toBe(true);
-    // From the billing.js mock: only 'starter' has overchargePerMinute > 0.
-    expect(params[2]).toContain('starter');
-    expect(params[2]).not.toContain('free');
-  });
-
-  it('uses DEFAULT_CALL_RESERVE_MINUTES as default', () => {
-    expect(DEFAULT_CALL_RESERVE_MINUTES).toBe(5);
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+const { mockQuery, mockConnect, mockRelease, database } = vi.hoisted(() => {
+  const mockQuery = vi.fn();
+  const mockRelease = vi.fn();
+  const mockConnect = vi.fn(async () => ({ query: mockQuery, release: mockRelease }));
+  return { mockQuery, mockConnect, mockRelease, database: { pool: { query: mockQuery, connect: mockConnect } as { query: typeof mockQuery; connect: typeof mockConnect } | null } };
+});
+vi.mock('../db.js', () => ({ get pool() { return database.pool; } }));
+vi.mock('../billing.js', () => ({ PLANS: {
+  starter: { id: 'starter', overchargePerMinute: 0.05 }, free: { id: 'free', overchargePerMinute: 0 },
+} }));
+vi.mock('../redis.js', () => ({ redis: null }));
+const { tryReserveMinutes, reconcileMinutes, checkUsageLimit } = await import('../usage.js');
+const org = { id: 'org-1', minutes_used: 0, minutes_reserved: 0, minutes_limit: 5, plan: 'free', plan_status: 'active', name: 'Synthetic' };
+beforeEach(() => {
+  mockQuery.mockReset(); mockConnect.mockClear(); mockRelease.mockClear();
+  database.pool = { query: mockQuery, connect: mockConnect };
+  vi.stubEnv('NODE_ENV', 'production');
+  mockQuery.mockImplementation(async (sql: string) => {
+    if (sql.startsWith('SELECT id, minutes_used')) return { rows: [org], rowCount: 1 };
+    if (sql.startsWith('SELECT activated_at')) return { rows: [{ activated_at: new Date(0) }], rowCount: 1 };
+    return { rows: [], rowCount: 0 };
   });
 });
+afterEach(() => vi.unstubAllEnvs());
 
-describe('reconcileMinutes', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('adjusts upward when actual > reserved', async () => {
-    // Single atomic CTE query: WITH pre AS (SELECT ... FOR UPDATE) UPDATE ... RETURNING
-    mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [{ minutes_used: 28, old_used: 25, minutes_limit: 45, plan: 'starter', name: 'Test' }] });
-    await reconcileMinutes('org-1', 5, 8);
-    const sql = mockQuery.mock.calls[0]![0] as string;
-    const params = mockQuery.mock.calls[0]![1] as number[];
-    expect(sql).toContain('GREATEST(0,');
-    expect(params![1]).toBe(3); // 8 - 5 = +3
-  });
-
-  it('adjusts downward when actual < reserved (refund)', async () => {
-    // Single atomic CTE query
-    mockQuery.mockResolvedValueOnce({ rowCount: 1, rows: [{ minutes_used: 10, old_used: 13, minutes_limit: 45, plan: 'starter', name: 'Test' }] });
-    await reconcileMinutes('org-1', 5, 2);
-    const params = mockQuery.mock.calls[0]![1] as number[];
-    expect(params![1]).toBe(-3); // 2 - 5 = -3, GREATEST(0,...) protects DB
-  });
-
-  it('no-ops when actual === reserved', async () => {
-    await reconcileMinutes('org-1', 5, 5);
+describe('usage database boundary', () => {
+  it.each(['production', 'development'])('fails closed with a null pool in %s', async (environment) => {
+    vi.stubEnv('NODE_ENV', environment);
+    database.pool = null;
+    const denied = { allowed: false, minutesUsed: 0, minutesLimit: 0 };
+    expect(await tryReserveMinutes('org-1')).toEqual(denied);
+    expect(await checkUsageLimit('org-1')).toEqual(denied);
+    await expect(reconcileMinutes('org-1', 5, { callId: 'call-1' })).rejects.toThrow('USAGE_DATABASE_UNAVAILABLE');
     expect(mockQuery).not.toHaveBeenCalled();
+    expect(mockConnect).not.toHaveBeenCalled();
   });
-});
-
-describe('checkUsageLimit', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('returns allowed:false in prod when pool is null (tested via import mock)', async () => {
-    // Our mock always provides a pool, so this tests the actual DB path.
-    // For the fail-closed prod-without-DB path, see the code comment in usage.ts.
-    mockQuery.mockResolvedValueOnce({
-      rows: [{ minutes_used: 50, minutes_limit: 100, plan_status: 'active' }],
-    });
-    const result = await checkUsageLimit('org-1');
-    expect(result.allowed).toBe(true);
-    expect(result.minutesUsed).toBe(50);
+  it('propagates connection failure instead of authorizing usage', async () => {
+    mockConnect.mockRejectedValueOnce(new Error('test database unavailable'));
+    await expect(tryReserveMinutes('org-1')).rejects.toThrow('test database unavailable');
   });
-
-  it('blocks paused subscriptions', async () => {
-    mockQuery.mockResolvedValueOnce({
-      rows: [{ minutes_used: 10, minutes_limit: 100, plan_status: 'paused' }],
+  it('rolls back and releases its connection after a failed reservation insert', async () => {
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (sql.startsWith('SELECT id, minutes_used')) return { rows: [org], rowCount: 1 };
+      if (sql.startsWith('SELECT activated_at')) return { rows: [{ activated_at: new Date(0) }], rowCount: 1 };
+      if (sql.startsWith('INSERT INTO usage_reservations')) throw new Error('test write failure');
+      return { rows: [], rowCount: 0 };
     });
-    const result = await checkUsageLimit('org-1');
-    expect(result.allowed).toBe(false);
+    await expect(tryReserveMinutes('org-1')).rejects.toThrow('test write failure');
+    expect(mockQuery).toHaveBeenCalledWith('ROLLBACK');
+    expect(mockQuery).not.toHaveBeenCalledWith('COMMIT');
+    expect(mockRelease).toHaveBeenCalledOnce();
+  });
+  it('uses the default five-minute capacity hold and returns its reservation ID', async () => {
+    const result = await tryReserveMinutes('org-1');
+    expect(result).toMatchObject({ allowed: true, minutesUsed: 5, minutesLimit: 5 });
+    expect(result.reservationId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(mockQuery).toHaveBeenCalledWith('UPDATE orgs SET minutes_reserved = minutes_reserved + $2 WHERE id = $1', ['org-1', 5]);
+    expect(mockRelease).toHaveBeenCalledOnce();
+  });
+  it.each([-1, 0, NaN, Infinity])('rejects invalid reservation amount %s before querying', async (minutes) => {
+    await expect(tryReserveMinutes('org-1', minutes)).rejects.toThrow('USAGE_MINUTES_INVALID');
+    expect(mockConnect).not.toHaveBeenCalled();
+  });
+  it.each([-1, NaN, Infinity])('rejects invalid actual usage %s before querying', async (minutes) => {
+    await expect(reconcileMinutes('org-1', minutes, { callId: 'call-1' })).rejects.toThrow('USAGE_MINUTES_INVALID');
+    expect(mockConnect).not.toHaveBeenCalled();
+  });
+  it('requires a stable call identity for settlement', async () => {
+    await expect(reconcileMinutes('org-1', 5, { callId: '' })).rejects.toThrow('USAGE_CALL_ID_REQUIRED');
+    expect(mockConnect).not.toHaveBeenCalled();
+  });
+  it('rejects malformed reservation metadata before touching the database', async () => {
+    await expect(reconcileMinutes('org-1', 5, { callId: 'call-1', reservationId: 'not-a-uuid' })).rejects.toThrow('USAGE_RESERVATION_INVALID');
+    expect(mockConnect).not.toHaveBeenCalled();
+  });
+  it('propagates a UI query error without allowing a call', async () => {
+    mockQuery.mockRejectedValueOnce(new Error('test query failure'));
+    await expect(checkUsageLimit('org-1')).rejects.toThrow('test query failure');
+  });
+  it('includes outstanding holds in the read-only capacity hint', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ ...org, minutes_used: 1, minutes_reserved: 4 }], rowCount: 1 });
+    expect(await checkUsageLimit('org-1')).toEqual({ allowed: false, minutesUsed: 5, minutesLimit: 5 });
   });
 });

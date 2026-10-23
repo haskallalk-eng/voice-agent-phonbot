@@ -12,6 +12,7 @@ import { buildAgentInstructions } from './agent-instructions.js';
 import { buildPromptQaReport, type PromptEvalSource, type PromptQaRealCallResearch } from './prompt-eval.js';
 import { humanMeetingUrl } from './sms.js';
 import { getDefaultRetellLlmModel } from './retell.js';
+import { requireAdmin } from './admin-auth.js';
 
 /**
  * Audit-Round-8 (Codex M07-MEDIUM-C): admin cross-org reads are intentional
@@ -300,24 +301,6 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
 if (!ADMIN_PASSWORD && !ADMIN_PASSWORD_HASH && process.env.NODE_ENV === 'production') {
   throw new Error('ADMIN_PASSWORD or ADMIN_PASSWORD_HASH is required in production — refusing to start');
-}
-
-/** Middleware: verify admin JWT token */
-async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
-  try {
-    await req.jwtVerify();
-    const payload = req.user as Record<string, unknown>;
-    // H2: Verify both admin flag AND audience claim to prevent user-JWTs
-    // from being accepted on admin endpoints.
-    if (!payload.admin || payload.aud !== 'phonbot:admin') {
-      // Explicit return after send: Fastify does short-circuit on sent replies,
-      // but being explicit guarantees no handler code below this block ever
-      // runs after a 403/401 — a refactor-safe defence-in-depth for auth.
-      return reply.status(403).send({ error: 'Admin access required' });
-    }
-  } catch {
-    return reply.status(401).send({ error: 'Unauthorized' });
-  }
 }
 
 export async function registerAdmin(app: FastifyInstance) {
