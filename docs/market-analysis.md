@@ -1,9 +1,11 @@
-# Market Analysis — Voice Agent SaaS
-_Stand: März 2026_
+# Historische Markthypothesen — Voice Agent SaaS
+_Planungsnotiz vom März 2026; keine aktuelle Markt- oder Preisrecherche._
+
+Anbieterangaben, Budgets, Preise und Produktideen unten sind damalige Arbeitsannahmen. Sie wurden hier nicht anhand aktueller Quellen oder Kundendaten verifiziert und belegen keine Conversion, Marge oder Compliance.
 
 ---
 
-## 1. Wettbewerber-Übersicht
+## 1. Damalige Wettbewerber-Annahmen
 
 | Anbieter | Positionierung | Pricing-Modell | Zielgruppe |
 |---|---|---|---|
@@ -14,7 +16,7 @@ _Stand: März 2026_
 | **Twilio Flex** | Contact Center Platform | $1/active user hour oder $150/user/mo | Enterprise |
 | **Aircall** | Cloud Phone System | Seat-based, ab ~$40/user/mo | SMB Sales/Support |
 
-### Key Insights:
+### Positionierungshypothesen:
 - **Retell, Vapi** = Infrastruktur-Layer — kein fertiges Produkt für Endkunden
 - **Synthflow** = nächster Wettbewerber: No-code Builder, Free-to-start, White-Label für Reseller
 - **Bland** = Enterprise, großes Ticket-Sales
@@ -22,41 +24,41 @@ _Stand: März 2026_
 
 ---
 
-## 2. Was konvertiert gut — Pricing & Onboarding Patterns
+## 2. Zu prüfende Pricing- und Onboarding-Hypothesen
 
-### Pricing-Modelle nach Conversion-Rate (Industrie-Standard):
+### Modelloptionen; keine gemessene Rangfolge:
 
-**1. Freemium / Free-Start** (höchste Trial-to-Paid-Conversion ~15–25%)
+**1. Freemium / Free-Start**
 - Kein Kreditkartenpflicht zum Start
 - Limitiertes Gratis-Kontingent (z.B. 50 Minuten/Monat)
 - Upgrade-Prompts wenn Limit erreicht
-- → Synthflow macht das genau so
+- Hypothese: Ein Einstieg ohne Zahlungshürde erleichtert den ersten Test.
 
-**2. Flat-Rate mit Minutenkontingent** (einfachste Kaufentscheidung)
+**2. Flat-Rate mit Minutenkontingent**
 - z.B. Starter 89€/mo = 300 Min inkl.
 - Überschreitung = €/Min
-- Kunden wissen was sie zahlen — niedrige Abbruchrate
+- Hypothese: Ein sichtbares Kontingent erleichtert die Kostenplanung.
 
-**3. Per-Minute ohne Grundgebühr** (niedrigste Einstiegshürde, schlechter für Retention)
-- Gut für Testen, schlecht für Bindung
-- Kunden denken zu viel über Kosten nach
+**3. Per-Minute ohne Grundgebühr**
+- Hypothese: Nutzungsabhängige Kosten erleichtern kleine Tests.
+- Offene Frage: Wie beeinflusst variable Abrechnung Nutzung und Bindung?
 
 **Empfehlung für uns:** Flat-Rate-Tier + Minuten-Add-On
 
 ---
 
-## 3. Beste UX Patterns für Conversion
+## 3. UX-Ideen für Nutzertests
 
 ### Onboarding (kritischster Schritt):
 
-**Was funktioniert:**
+**Zu testende Erleichterungen:**
 - ✅ "5-Minuten Setup" — Agent sofort konfigurieren und testen ohne Kreditkarte
 - ✅ Vorausgefüllte Templates ("Friseur-Agent starten", "Handwerker-Agent starten")
 - ✅ Sofort hörbares Ergebnis — User muss beim Onboarding mit dem Agent sprechen können
 - ✅ Progress-Indicator: Setup-Wizard statt leerer Formular
 - ✅ Telefonnummer-Step am Ende (Commitment-Punkt nach "Wow-Moment")
 
-**Was tötet Conversion:**
+**Mögliche Hürden:**
 - ❌ Kreditkarte vor erstem Test
 - ❌ Technisches Jargon ("LLM", "STT", "webhook")
 - ❌ Leere State ohne Guidance
@@ -64,7 +66,7 @@ _Stand: März 2026_
 
 ### Dashboard UX:
 
-**Best Practice (gelernt aus Intercom, Crisp, Freshdesk):**
+**Vorgeschlagene Dashboard-Elemente:**
 - Single-Page-App mit klarer Navigation
 - "Health" Widget oben: Minuten verbraucht, Calls heute, offene Tickets
 - Agent-Status immer sichtbar (deployed / nicht deployed)
@@ -75,7 +77,7 @@ _Stand: März 2026_
 
 ## 4. Feature-Prioritäten für eine verkaufsfähige Software
 
-### Must-Have (ohne das kein Verkauf):
+### Damals priorisierte Kernfunktionen:
 1. **Agent-Konfiguration ohne Code** — Formular mit Business-Name, Öffnungszeiten, Services
 2. **Live-Test direkt im Browser** — Mic-Button, sofort sprechen
 3. **Telefonnummer zuweisen** — Eingehende Calls landen beim Agent
@@ -101,29 +103,29 @@ _Stand: März 2026_
 
 ---
 
-## 5. Unser Produkt-Fit & Differenzierung
+## 5. Zielgruppen- und Differenzierungshypothesen
 
 ### Wer ist unser Kunde?
 **Primär:** Lokale Dienstleister in DACH (Friseur, Handwerker, Arztpraxis, Reinigung)
 - Kein Tech-Background
 - Brauchen jemanden der Anrufe abnimmt wenn sie beschäftigt sind
-- Budget: 89–349€/Monat
-- Entscheidung in <5 Minuten
+- Angenommenes Budget: 89–349€/Monat, hier nicht durch Kundenbefragungen belegt
+- Ziel: Nutzen und Einrichtung schnell verständlich machen; Entscheidungsdauer ungemessen
 
 **Sekundär:** Agenturen die Voice Agents für ihre Kunden konfigurieren (Reseller)
 - Wollen White-Label
-- Budget: 200–500€/Monat pro Kunde
+- Angenommenes Budget: 200–500€/Monat pro Kunde, hier nicht durch Kundenbefragungen belegt
 
-### Unser Vorteil:
-- **DACH-fokussiert** — Deutsche Stimmen, DSGVO-konform, deutsches UI
-- **Kein Tech-Setup** — sofort nutzbar
+### Angestrebte Differenzierung:
+- **DACH-fokussiert** — Deutsche Stimmen, deutsches UI; Datenschutzanforderungen gesondert prüfen
+- **Einfachere Einrichtung** — Ziel für das Onboarding, keine gemessene Einrichtungszeit
 - **Retell als Infra** — wir bauen nur das Produkt drauf
 
 ---
 
 ## 6. Empfohlene Produkt-Roadmap
 
-### Phase 1 — Sellable MVP (jetzt):
+### Phase 1 — damalige MVP-Planung:
 - [x] Auth + Multi-Tenant
 - [ ] Onboarding-Wizard (Template-Auswahl → Business-Daten → Test-Call → Telefonnummer)
 - [ ] Stripe Billing (2 Pläne: Starter 49€/mo, Pro 149€/mo)
@@ -144,7 +146,9 @@ _Stand: März 2026_
 
 ---
 
-## 7. Empfohlene Pricing-Struktur
+## 7. Historischer Pricing-Entwurf
+
+Illustrative Planannahmen; kein aktuelles Angebot und kein Nachweis wirtschaftlicher Tragfähigkeit:
 
 | Plan | Preis | Inkl. | Überschreitung |
 |---|---|---|---|
@@ -153,4 +157,4 @@ _Stand: März 2026_
 | **Pro** | 179€/Mo | 900 Min, 3 Agents, 3 Nummern | 0.23€/Min |
 | **Agency** | 349€/Mo | 2.000 Min, 10 Agents, White-Label | 0.19€/Min |
 
-_Unsere Kosten bei Retell: ~0.07€/Min → Marge ~40–70% je nach Plan_
+_Damals angenommener Retell-Kostenansatz: ~0.07€/Min; hier nicht verifiziert. Ohne vollständige Anbieter-, Telefonie-, Infrastruktur-, Support- und Auslastungsdaten lässt sich daraus keine belastbare Marge ableiten._
