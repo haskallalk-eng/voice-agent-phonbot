@@ -1,0 +1,55 @@
+To: [ANBIETER_SUPPORT_ADRESSE]
+Cc: [ANBIETER_RECHTSABTEILUNG_ADRESSE]
+From: [GESCHAEFTLICHE_KONTAKTADRESSE]
+Subject: Data Processing Agreement (DPA) + SCC Request — EU Customer ([VERANTWORTLICHE_PERSON] / Phonbot)
+X-Unsent: 1
+Content-Type: text/plain; charset=utf-8
+MIME-Version: 1.0
+
+PUBLIC TEMPLATE - replace placeholders before use. Keep completed account and
+contact details in a separate private copy. This historical draft is not
+evidence of contract acceptance or a completed compliance review.
+
+Hi Cartesia team,
+
+We're an EU-based B2B SaaS ([VERANTWORTLICHE_PERSON], Berlin, Germany) building
+[PRODUKT_DOMAIN_ODER_WORKSPACE] — a voice-agent platform that uses Cartesia for text-to-
+speech in production. Cartesia is in our published sub-processor list
+at [OEFFENTLICHE_ANBIETERLISTE_URL].
+
+Under GDPR Article 28, we need a signed Data Processing Agreement in
+place before going live. Could you please send:
+
+1. Your standard Data Processing Addendum (DPA) — pre-signed PDF or
+   DocuSign link.
+
+2. EU Standard Contractual Clauses (SCC) — Module 3 (processor-to-
+   processor) appended to the DPA.
+
+3. Confirmation of your current DPF (EU-US Data Privacy Framework)
+   certification status, if any.
+
+4. Your policy on model-training use, and separately the retention
+   periods for API content, logs and application state, including
+   available controls and exceptions.
+
+5. A list of any sub-processors Cartesia in turn relies on (hosting,
+   GPU compute, etc.) and their country of operation.
+
+If you don't currently maintain a standard DPA template, we can share
+ours as a starting point — just let us know.
+
+Account details:
+  Company:       [UNTERNEHMEN / RECHTSFORM]
+  Country:       Germany
+  Account email: [GESCHAEFTLICHE_KONTAKTADRESSE]
+  Use case:      TTS for German-language voice agent (de-DE),
+                 streaming audio over WebRTC
+
+Best regards,
+[VERANTWORTLICHE_PERSON]
+Geschäftsinhaber
+[UNTERNEHMEN / RECHTSFORM]
+[GESCHAEFTSANSCHRIFT / LAND]
+[GESCHAEFTLICHE_KONTAKTADRESSE] · [GESCHAEFTSTELEFON]
+[PRODUKT_WEBSITE_URL]
