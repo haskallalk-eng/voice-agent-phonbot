@@ -1,60 +1,64 @@
 # Technischer Prüfnachweis – Phonbot
 
-Stand: **22. Oktober 2026**. Prüfung in einem frischen lokalen Checkout mit Node.js 24.19.0 und pnpm 9.15.3.
+Stand: **23. Oktober 2026**. Lokale Prüfung nach Installation mit eingefrorenem Lockfile, Node.js 24.16.0, pnpm 9.15.3 und isoliertem PostgreSQL 16.15.
 
-Ausgangsstand: `9ba11615433c7fc88902185fcb50a942d02c98fe`. Der ursprüngliche veröffentlichte Prüfstand einschließlich der damaligen Prüfverbesserungen ist [Commit `234cbac`](https://github.com/haskallalk-eng/voice-agent-phonbot/commit/234cbacbe7a8b37851d503654a97f5922eaaa69c). Spätere Dokumentationsänderungen stellen keinen erneuten Lauf der unten aufgeführten lokalen Prüfungen dar.
+Code- und Testrevision: [`83df877`](https://github.com/haskallalk-eng/voice-agent-phonbot/commit/83df877c621a311b101bda16e2ae0e967274c37d). Spätere reine Dokumentationsänderungen stellen keinen neuen Anwendungstest dar.
 
 ## Ergebnisse
 
 | Prüfung | Ergebnis |
 | --- | --- |
-| API-Testlauf | 1.745 Tests in 131 Dateien bestanden |
+| API-Testlauf | 1.902 Tests in 134 Dateien bestanden |
 | Shared-Paket | 6 Tests bestanden |
 | Voice-Core-Referenz | 2 Tests bestanden |
 | Web-Paket | 2 Tests bestanden |
+| PostgreSQL-Integration | 32 Tests mit getrennten echten Datenbankverbindungen bestanden |
+| Testempfindlichkeit | Entferntes `FOR UPDATE` in isolierter Testmutation ließ den Freitarif-Konkurrenztest erwartungsgemäß fehlschlagen |
 | Zugangsdaten-Checker | 4 Regressionstests bestanden; versionierte Dateien ohne Treffer der bekannten Muster |
 | TypeScript | API und Web bestanden |
 | Build | Shared, Voice Core, API und Web bestanden |
-| Datenbankmigrationen | 6 Migrationsdateien formal geprüft; statische Own-KB-Prüfung bestanden |
+| Datenbankmigrationen | 7 Migrationsdateien formal geprüft; statische Own-KB-Prüfung bestanden |
 | SEO-Artefakte | Reproduzierbar generiert; Audit mit 0 Warnungen und 0 Fehlern |
+
+Die PostgreSQL-Suite prüft tatsächlich ausgeführte SQL, Sperren und Transaktionen. Die Datenbankgrenze wird auf isolierte Verbindungen gelenkt; Tarifkonstanten sind Testwerte. Sie prüft keine produktive Datenbank und keine Zahlungsabwicklung beim Anbieter. Die Webhook-Routentests verwenden hingegen simulierte fachliche Datenbankantworten. Diese unterschiedlichen Nachweise sind nicht austauschbar.
 
 ## Lokaler Prüfstand und laufende CI
 
-Die Tabelle oben dokumentiert einen **lokalen Prüfstand vom 22. Oktober 2026**. Sie ist keine Aussage, dass jeder aktuelle CI-Lauf alle aufgeführten Prüfungen wiederholt.
+Der [Workflow](../.github/workflows/ci.yml) verwendet Node.js 22 und einen kurzlebigen PostgreSQL-16-Dienst. Er enthält Tests aller Workspace-Pakete, PostgreSQL-Integration, Shared-/Voice-Core-/API-/Web-Builds, API-/Web-Typprüfung, Zugangsdaten-Checker, formale Migrationen, statische Own-KB-Prüfung und SEO-Prüfungen.
 
-Der [CI-Workflow](../.github/workflows/ci.yml) verwendet Node.js 22 und prüft API-Tests, API-/Web-Typen, den Zugangsdaten-Checker, die formale Migrationsprüfung sowie Shared-/Web-Builds und SEO-Artefakte. Der lokale Prüfstand oben wurde mit Node.js 24.19.0 erstellt.
-
-Die zusätzlichen Shared-, Voice-Core- und Web-Tests, der API-/Voice-Core-Build und die statische Own-KB-Prüfung gehören zum dokumentierten lokalen Prüfstand; der verlinkte CI-Workflow erzwingt sie derzeit nicht. Für die Bewertung eines anderen Commits müssen diese Prüfungen erneut ausgeführt und mit dessen Revision dokumentiert werden.
+Die Tabelle dokumentiert lokale Ergebnisse mit Node.js 24.16.0. Ob ein veröffentlichter Commit auch unter den CI-Bedingungen bestanden hat, ist im [zugehörigen GitHub-Lauf](https://github.com/haskallalk-eng/voice-agent-phonbot/actions/workflows/ci.yml) anhand seiner Revision zu prüfen. Ein früherer grüner Lauf ist kein Nachweis für spätere Änderungen.
 
 ## Reproduzieren
 
 ```sh
 corepack pnpm install --frozen-lockfile
 corepack pnpm --filter @vas/shared --filter @vas/voice-core build
-corepack pnpm --filter @vas/api exec vitest run
-corepack pnpm --filter @vas/shared --filter @vas/voice-core --filter @vas/web exec vitest run
-corepack pnpm --filter @vas/api typecheck
-corepack pnpm --filter @vas/web typecheck
 corepack pnpm --filter @vas/api build
-corepack pnpm --filter @vas/web build
+corepack pnpm --filter @vas/web typecheck
+corepack pnpm -r --workspace-concurrency=1 run test --run
 node --test scripts/check-secrets.test.mjs
 node scripts/check-secrets.mjs
 corepack pnpm supabase:migrations:check
 corepack pnpm seo:generate
+git diff --exit-code -- apps/web/public
+corepack pnpm --filter @vas/web build
 corepack pnpm seo:audit
 ```
 
-## Behobene Prüflücken
+Für die zusätzliche Datenbankprüfung zuerst die [isolierte PostgreSQL-Testumgebung](../apps/api/integration/README.md) einrichten und dann ausführen:
 
-- Ein URL-/PII-Test hing von einer echten DNS-Antwort für `example.com` ab. Die DNS-Antwort wird nun im Test kontrolliert. Zusätzliche Fälle prüfen, dass private Zieladressen und DNS-Ausfälle weiterhin blockiert werden. Die Schutzlogik der Anwendung wurde nicht gelockert.
-- Der lokale Pre-Commit-Hook und CI verwenden einen gemeinsamen Zugangsdaten-Checker. Er nennt Datei, Zeile und Regel, gibt aber keine gefundenen Geheimnisse aus. Der Hook prüft den Git-Index, CI die versionierten Dateien.
+```sh
+corepack pnpm --filter @vas/api test:integration
+```
+
+Die Suite verlangt eine ausdrückliche Testdatenbank-Konfiguration und überspringt fehlende Voraussetzungen nicht stillschweigend. Sie lädt keine Anwendungs-`.env` und verwendet keine produktive Datenbankadresse.
 
 ## Aussagekraft
 
-Diese Ergebnisse belegen automatisierte Tests und Builds des veröffentlichten Codes. Sie belegen **keinen vollständigen Live-Telefonietest**, keine gemessene Produktionslatenz und keine Funktionsprüfung des separaten GPT-Live-1-Stacks. Externe Anbieter, echte Anrufe, Live-Datenbanken und produktive Buchungen wurden nicht ausgeführt.
+Der [Review-Nachtrag](review-follow-up.md) ordnet Signatur- und JWT-Routentests, Verschlüsselungsgrenzen, Ereignis-Deduplizierung und Datenbanktests den jeweiligen Befunden zu. Der frühere Nachweis vom 22. Oktober enthielt 1.745 API-Tests; die obigen Zahlen stammen aus dem neuen vollständigen Lauf.
 
-Der Zugangsdaten-Checker erkennt definierte Muster. Er ersetzt weder einen vollständigen Sicherheitsaudit noch den Nachweis einer Schlüsselrotation beim Anbieter. Die Git-Historie ist nicht Teil dieses Checks.
+Diese Ergebnisse belegen automatisierte Prüfungen des Codes. Sie belegen **keinen vollständigen Live-Telefonietest**, keine gemessene Produktionslatenz, keine Anbieter-Abnahme und keine Funktionsprüfung des separaten GPT-Live-1-Stacks. Externe Telefonie, produktive Buchungen und Dienstkonfigurationen wurden nicht ausgeführt.
+
+Der Zugangsdaten-Checker erkennt definierte Muster. Er ersetzt weder einen vollständigen Sicherheitsaudit noch den Nachweis einer Schlüsselrotation. Die Git-Historie ist nicht Teil dieses Checks. Die Historienbereinigung vom 23. Oktober ist ein separater Vorgang und kein Rotationsnachweis.
 
 [Projektübersicht](../README.md) · [CI-Läufe](https://github.com/haskallalk-eng/voice-agent-phonbot/actions/workflows/ci.yml)
-
-> Historienbereinigung am 23. Oktober 2026: Vollstaendige Commit-Verweise zeigen auf die bereinigten Entsprechungen. Der Anwendungscode dieser Pruefstaende wurde dabei nicht geaendert; dies ist kein neuer Testlauf.
