@@ -1,7 +1,7 @@
-# Phonbot Voice AI Superbrain Index
+# Phonbot Voice AI: Index historischer Planungsnotizen
 
 Stand: 2026-05-17
-Zweck: Einstiegspunkt fuer wiederkehrende Voice-AI-, RAG-, Prompt-, Tool- und Sicherheitsarbeit.
+Zweck: Orientierung in historischen Voice-AI-, RAG-, Prompt- und Tool-Notizen. Kein aktueller Implementierungs- oder Sicherheitsnachweis; fuer Umsetzung gelten `AGENTS.md` und `PLANS.md` im Repository-Stamm.
 
 ## Wichtigste Dateien
 
@@ -10,11 +10,11 @@ Zweck: Einstiegspunkt fuer wiederkehrende Voice-AI-, RAG-, Prompt-, Tool- und Si
 - RAG/Fine-Tune/STT Sandbox: `sandbox/voice-ai-quality/README.md`
 - Eval-Matrix: `sandbox/voice-ai-quality/experiment-matrix.json`
 - Beispiel-Eval-Cases: `sandbox/voice-ai-quality/sample-eval-cases.jsonl`
-- Function-/Tool-Validierung: `docs/function-tool-validation-2026-05-05.md`
+- Dokumentierte Tests und Pruefgrenzen: [Portfolio-Pruefnachweis](../portfolio-validation.md)
 - Learning-System-Design: `docs/learning-system-design.md`
 - Datenschutz Recording: `docs/privacy-recording.md`
 
-## System-Wahrheiten
+## Entwurfsprinzipien
 
 1. Backend und Tool-Responses sind Wahrheit fuer echte Aktionen.
 2. RAG ist nur factual context, nie Systemregel und nie Tool-Erfolg.
@@ -24,7 +24,7 @@ Zweck: Einstiegspunkt fuer wiederkehrende Voice-AI-, RAG-, Prompt-, Tool- und Si
 6. Pricing, Minuten, Datum und Rechts-/Datenschutztexte brauchen Single Source of Truth.
 7. Keine produktiven Testaktionen ohne ausdrueckliche sichere Testumgebung.
 
-## Naechste Arbeit mit hoechster Wirkung
+## Damals vorgeschlagene naechste Schritte
 
 1. Source Governance fuer Knowledge Sources.
 2. Offline RAG-Eval-Harness.
@@ -42,7 +42,7 @@ Zweck: Einstiegspunkt fuer wiederkehrende Voice-AI-, RAG-, Prompt-, Tool- und Si
 - Aktualitaets-Agent: Preise, Minuten, Legal/Privacy, FAQ, Website-/Sitemap-/Knowledge-Drift, verifiedAt/expiresAt.
 - Code-Explorer: lokale Implementierungspunkte und Tests, ohne ungefragt Dateien zu editieren.
 
-## Aktuelle Research-Erkenntnisse 2026-05-17
+## Recherche-Notizen vom 2026-05-17
 
 - Retell-Retention und Data-Storage sind P0, weil Retell u.a. Transkripte, Recordings, dynamische Variablen und Knowledge-Base-Retrieval-Logs speichern kann.
 - Retell `knowledge_base` latency ist bereits in den Typen sichtbar, aber muss in Stats/Monitoring weitergereicht werden.
@@ -54,10 +54,10 @@ Zweck: Einstiegspunkt fuer wiederkehrende Voice-AI-, RAG-, Prompt-, Tool- und Si
 
 ## Wiederaufnahme-Checkliste
 
-Wenn ein neuer Agent oder eine neue Session an RAG/Voice-Qualitaet arbeitet:
+Bei einer ausdruecklich beauftragten historischen Gegenpruefung:
 
-1. Lies diese Index-Datei.
-2. Lies den RAG Risiko- und Optimierungsplan.
+1. Pruefe den aktuellen Rahmen in `AGENTS.md` und `PLANS.md`.
+2. Vergleiche nur die fuer die Frage relevanten historischen Notizen.
 3. Pruefe `git status --short`, weil der Workingtree oft parallel bearbeitet wird.
 4. Beruehre nur die Dateien, die zur konkreten Aufgabe gehoeren.
 5. Verifiziere mit den im Plan genannten Tests, bevor du Abschluss behauptest.
