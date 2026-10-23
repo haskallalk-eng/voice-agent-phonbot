@@ -124,7 +124,9 @@ Additional API instances must share the intended PostgreSQL and Redis services
 and use compatible schema and application versions. Add load balancing and
 capacity planning explicitly; do not run mixed ledger versions during cutover.
 
-For local development, install workspace dependencies and use `pnpm dev` with
-development credentials and disposable services. The default API and Web
-development ports are 3001 and 5173. Local setup does not provision or deploy a
-production environment.
+For local development, follow the [README setup](../README.md#lokale-einrichtung)
+with development credentials and disposable services. The configured Vite
+server uses port 3000 and proxies API requests to port 3002, so set the API's
+`PORT=3002` and `APP_URL=http://localhost:3000` as documented there. These are
+development ports, distinct from the Compose service ports above. Local setup
+does not provision or deploy a production environment.
