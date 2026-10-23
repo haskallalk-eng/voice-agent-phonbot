@@ -2,7 +2,7 @@
 
 Stand: **22. Oktober 2026**. Prüfung in einem frischen lokalen Checkout mit Node.js 24.19.0 und pnpm 9.15.3.
 
-Ausgangsstand: `f84679214ab8525bd52a43851959fe26e2758fa1`. Der ursprüngliche veröffentlichte Prüfstand einschließlich der damaligen Prüfverbesserungen ist [Commit `44b4e0d`](https://github.com/haskallalk-eng/voice-agent-phonbot/commit/44b4e0d979053a9b5f40e3075f9c1130dda0ce0b). Spätere Dokumentationsänderungen stellen keinen erneuten Lauf der unten aufgeführten lokalen Prüfungen dar.
+Ausgangsstand: `9ba11615433c7fc88902185fcb50a942d02c98fe`. Der ursprüngliche veröffentlichte Prüfstand einschließlich der damaligen Prüfverbesserungen ist [Commit `44b4e0d`](https://github.com/haskallalk-eng/voice-agent-phonbot/commit/234cbacbe7a8b37851d503654a97f5922eaaa69c). Spätere Dokumentationsänderungen stellen keinen erneuten Lauf der unten aufgeführten lokalen Prüfungen dar.
 
 ## Ergebnisse
 
@@ -56,3 +56,5 @@ Diese Ergebnisse belegen automatisierte Tests und Builds des veröffentlichten C
 Der Zugangsdaten-Checker erkennt definierte Muster. Er ersetzt weder einen vollständigen Sicherheitsaudit noch den Nachweis einer Schlüsselrotation beim Anbieter. Die Git-Historie ist nicht Teil dieses Checks.
 
 [Projektübersicht](../README.md) · [CI-Läufe](https://github.com/haskallalk-eng/voice-agent-phonbot/actions/workflows/ci.yml)
+
+> Historienbereinigung am 23. Oktober 2026: Vollstaendige Commit-Verweise zeigen auf die bereinigten Entsprechungen. Der Anwendungscode dieser Pruefstaende wurde dabei nicht geaendert; dies ist kein neuer Testlauf.
