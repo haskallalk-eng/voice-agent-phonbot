@@ -1,66 +1,99 @@
 # Secrets Rotation Runbook
 
-Wenn `apps/api/.env` mal eingesehen oder geleakt wurde, **alle** Keys bei den Providern rotieren. `.env` ist lokal/auf dem Server und gitignored — nie in Git.
+Bei vermuteter Offenlegung betroffene Zugangsdaten und ihre Abhängigkeiten
+ermitteln, die Umstellung koordinieren und alte Geheimnisse widerrufen. Neue
+Werte gehören ausschließlich in den geschützten Secret-Speicher der bestätigten
+Zielumgebung. Keine Schlüssel, Serverzugänge oder Verbindungszeichenfolgen in
+Issues, Commits, Screenshots oder Prüfberichte aufnehmen.
 
-## Reihenfolge (höchstes Risiko zuerst)
+## Abschlussnachweis
 
-### 1. Stripe — **sofort**
-- Dashboard → Developers → API keys → "Roll secret key"
-- Neuen `STRIPE_SECRET_KEY` in `apps/api/.env` auf Server setzen
-- Webhook-Secret: Dashboard → Developers → Webhooks → Endpoint → "Roll signing secret" → `STRIPE_WEBHOOK_SECRET`
+Entfernung aus dem aktuellen Quellcode, Bereinigung der Git-Historie und
+Ungültigkeit eines alten Geheimnisses sind drei unterschiedliche Maßnahmen.
+Ein inaktives Projekt oder ein sauberer Secret-Scan beweist keine Rotation.
+Ein Abschluss benötigt je betroffenem Geheimnis:
 
-### 2. Twilio — **sofort**
-- Console → Account → API keys & tokens → Auth Token → "Change" (generiert neuen `TWILIO_AUTH_TOKEN`)
-- Ggf. zusätzlich: Account SID rotieren ist NICHT möglich, nur Auth Token
+- betroffenen Dienst und eine nicht geheime Schlüsselkennung,
+- Datum und verantwortliche Person für Austausch und Widerruf,
+- Anbieterbestätigung oder einen geeigneten Nachweis, dass der alte Zugang
+  nicht mehr gültig ist,
+- überprüfte abhängige Dienste, Ergebnis und verbleibende Einschränkungen.
 
-### 3. OpenAI
-- Platform → API keys → alten Key revoken, neuen erstellen → `OPENAI_API_KEY`
+Diese Nachweise privat aufbewahren; öffentlich reichen ein redigierter Status
+und gegebenenfalls eine freigegebene Referenz. Niemals den alten oder neuen
+Geheimwert als Nachweis veröffentlichen.
 
-### 4. Retell
-- Dashboard → API Keys → Revoke + Create → `RETELL_API_KEY`
-- Webhook-Secret: `RETELL_WEBHOOK_SECRET` (falls separat vergeben)
+## Anbieterzugänge
 
-### 5. Supabase / Postgres
-- Dashboard → Settings → Database → Reset Database Password → `DATABASE_URL` anpassen
-- Alle aktiven Sessions werden gekickt, API braucht Neustart
+Die aktuelle Rotationsfunktion des jeweiligen Anbieters verwenden. Wo möglich,
+neuen Zugang bereitstellen, Verbraucher umstellen, Funktion prüfen und den alten
+Zugang widerrufen. Bei aktiver Kompromittierung kann sofortiger Widerruf vor
+Wiederherstellung des Dienstes erforderlich sein. Überlappung, Unterbrechung und
+Auswirkungen müssen für den jeweiligen Dienst geplant werden.
 
-### 6. Resend
-- Dashboard → API Keys → Revoke + Create → `RESEND_API_KEY`
+| Dienst | Konfiguration und zu prüfende Abhängigkeiten |
+|--------|---------------------------------------------|
+| Stripe | `STRIPE_SECRET_KEY` und separat `STRIPE_WEBHOOK_SECRET`; API-Zugriff, Webhook-Prüfung und Invoice-Worker in der richtigen Test-/Live-Umgebung. |
+| Twilio | `TWILIO_AUTH_TOKEN` und gegebenenfalls separate API-/SIP-Zugänge; ausgehende Anfragen und signierte Callbacks. Eine Account SID ist kein Ersatz für die Rotation eines Authentifizierungsgeheimnisses. |
+| Retell | `RETELL_API_KEY`; API-Zugriff und eingehende Webhook-Signaturen. Der aktuelle [Verifier](../apps/api/src/retell-signature.ts) verwendet diesen Schlüssel und liest kein separates `RETELL_WEBHOOK_SECRET`. |
+| OpenAI, Resend und weitere aktivierte Anbieter | Tatsächlich verwendete API-Schlüssel widerrufen und ersetzen; alle Verbraucher des jeweiligen Schlüssels prüfen. |
+| PostgreSQL | Passwort der tatsächlich verwendeten Datenbankrolle ändern und geschützte `DATABASE_URL`-/Migrationskonfiguration konsistent aktualisieren. Eine Änderung von `POSTGRES_PASSWORD` in Compose ändert ein bestehendes Datenbankpasswort nicht. Bestehende Verbindungen separat berücksichtigen. |
+| Google / Microsoft OAuth | Client-Geheimnisse nach Anbieterprozess wechseln; OAuth-Callback und Token-Erneuerung prüfen. Die Wirkung auf bestehende Grants und Refresh-Tokens prüfen, nicht pauschal eine automatische Abmeldung annehmen. |
+| Redis | Tatsächliche Netzfreigaben und Authentifizierung prüfen. Die Root-Compose-Datei veröffentlicht keinen Redis-Hostport und konfiguriert derzeit kein Passwort. Eine Einführung oder Rotation muss Server und `REDIS_URL` gemeinsam umstellen. |
 
-### 7. Google OAuth (Calendar/Gmail)
-- Cloud Console → Credentials → Client-Secret rotieren → `GOOGLE_CLIENT_SECRET`
-- Alle bestehenden Refresh-Tokens der User werden ungültig → User müssen neu verbinden
+## Anwendungsschlüssel mit Zustandsabhängigkeiten
 
-### 8. Microsoft OAuth
-- Entra ID → App registrations → Certificates & secrets → neuen Client Secret → alten löschen → `MS_CLIENT_SECRET`
+### Verschlüsselte Integrationsdaten
 
-### 9. LiveKit / Deepgram / ElevenLabs
-- Jeweiliges Dashboard → API Keys → rotieren
-- `LIVEKIT_API_SECRET`, `DEEPGRAM_API_KEY`, `ELEVENLABS_API_KEY`
+`ENCRYPTION_KEY` verschlüsselt gespeicherte Integrationsgeheimnisse mit
+AES-256-GCM. Ein bloßer Austausch macht bestehende verschlüsselte Werte
+unlesbar; [crypto.ts](../apps/api/src/crypto.ts) enthält keinen automatischen
+Mehrschlüssel- oder Re-Encryption-Ablauf. Vor einem Wechsel entweder eine
+kontrollierte Migration mit geprüftem Wiederherstellungsweg vorbereiten oder
+betroffene Integrationen gezielt invalidieren und neu verbinden lassen. Zugriff
+auf den alten Schlüssel während einer Migration ist ebenfalls zu schützen.
 
-### 10. Redis
-- Läuft aktuell ohne Passwort im Docker-Netz (nur intern erreichbar). Wenn extern exponiert würde: `REDIS_PASSWORD` setzen + `requirepass` in Redis-Config.
+### Sitzungen und signierte URLs
 
-### 11. ENCRYPTION_KEY (OAuth-Token-AES-GCM)
-- **NICHT einfach rotieren!** Verschlüsselt OAuth-Tokens in der DB (`google_tokens`, `ms_tokens`, `cal_com_keys`). Rotation würde alle bestehenden Tokens unlesbar machen.
-- Nur bei echter Kompromittierung: neue Key setzen UND alle User-Integrationen invalidieren → User müssen Google/MS/Cal neu verbinden.
+`JWT_SECRET` signiert Access-JWTs und die Refresh-Cookies. Nach einem Wechsel
+werden auch vorhandene Cookie-Signaturen abgelehnt, obwohl zugehörige
+Refresh-Token-Datensätze weiterhin in der Datenbank liegen können. Bei einer
+Kompromittierung die Sitzungssperrung und den Widerruf gespeicherter Tokens
+ausdrücklich einplanen; ein Schlüsselwechsel löscht diese Datensätze nicht.
 
-### 12. JWT_SECRET
-- Neuer Key → alle aktiven Access-JWTs ungültig → alle User werden ausgeloggt. Refresh-Tokens in DB bleiben gültig (anderer Mechanismus).
+Retell-Tool-URLs verwenden `RETELL_TOOL_AUTH_SECRET` mit einem Fallback auf
+`JWT_SECRET`. Ein Wechsel des wirksamen Schlüssels erfordert die koordinierte
+Erneuerung und Prüfung der betroffenen Tool-URLs. Einen kompromittierten
+JWT-Schlüssel lediglich unter dem separaten Variablennamen weiterzuverwenden
+ist keine Rotation.
 
-## Deploy nach Rotation
+Weitere Abhängigkeiten sind `WEBHOOK_SIGNING_SECRET`, `OAUTH_STATE_SECRET` und
+gegebenenfalls `CALENDAR_CHANGE_TOKEN_SECRET`. Prüfen, welche ausstehenden
+Signaturen, Links, OAuth-Vorgänge oder Webhook-Verbraucher ein Wechsel ungültig
+macht. Kein Schlüsselwechsel allein darf als Nachweis gelten, dass alle
+abhängigen Integrationen bereits umgestellt sind.
 
-```bash
-ssh root@87.106.111.213
-cd /opt/phonbot
-# apps/api/.env mit neuen Keys editieren
-nano apps/api/.env
-docker compose restart api web
-docker compose logs -f api  # prüfen dass kein "ENV missing" Error kommt
-```
+## Ausrollen und prüfen
 
-## Prevention
-- `.env` ist in `.gitignore` — nie committen
-- `.env.example` enthält nur Placeholder
-- Secrets niemals in Logs, Error-Messages oder Sentry
-- Audit: `git log --all -p | grep -iE "password|secret|key=|token="` regelmäßig checken
+Den vom Betreiber bestätigten Zugang und Secret-Speicher verwenden; diese
+öffentliche Anleitung enthält bewusst keine konkreten Infrastrukturadressen.
+Nach der Änderung müssen die betroffenen Prozesse ihre neue Konfiguration
+tatsächlich laden. Bei Compose liest ein einfacher Container-Neustart eine
+geänderte `env_file` nicht neu ein; eine kontrollierte Neuerstellung der
+betroffenen Container gehört zum vereinbarten Release-Verfahren.
+
+Den [Deployment-Leitfaden](deployment.md) und bei einem Versionswechsel den
+[Usage-Ledger-Cutover](usage-ledger-rollout.md) beachten. Das Deployment-Skript
+kann Retell-Konfigurationen und die öffentliche Demo verändern; diese
+Nebenwirkungen müssen bewusst eingeplant oder über die dokumentierten Schalter
+ausgenommen werden. Anschließend Dienstbereitschaft, Signaturen und betroffene
+Integrationen prüfen und den redigierten Abschlussnachweis festhalten.
+
+## Vorbeugung
+
+- Lokale `.env`-Dateien und Secret-Speicher aus Git heraushalten.
+- Beispielkonfigurationen ausschließlich mit Platzhaltern pflegen.
+- Geheimnisse nicht in Logs, Fehlermeldungen oder Telemetrie schreiben.
+- Den redigierenden Repository-Secret-Check verwenden; ein Treffer wird ohne
+  Geheimwert bearbeitet. Ein erfolgreicher Musterscan ist keine vollständige
+  Sicherheitsprüfung oder Garantie für eine saubere Git-Historie.

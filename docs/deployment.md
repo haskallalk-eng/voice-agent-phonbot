@@ -1,113 +1,130 @@
 # Deployment Guide
 
-## Prerequisites
+The repository provides a Docker Compose build. A GitHub push and a passing CI
+run publish and verify source code; the [CI workflow](../.github/workflows/ci.yml)
+does not deploy the application. Record the source commit, built image digest,
+target environment and rollback image for each release. Confirm how the target
+receives images or source before choosing a deployment procedure.
 
-- Docker + Docker Compose
-- A domain pointing to your server
-- Retell AI account + API key
-- Stripe account (test or live keys)
-- Resend account + verified domain
+## Before starting or upgrading
 
-## Quick Start (Docker)
+The usage-ledger release requires the controlled sequence in
+[Usage ledger rollout](usage-ledger-rollout.md): stop admission on all old
+instances, drain calls and callbacks, review the historical usage baseline,
+apply the additive schema, verify the service database role, deploy consistently
+and explicitly activate the cutover. Old and new versions must not bill in
+parallel. Migration and startup leave the ledger inactive; reservations and
+settlement fail closed until activation. A code rollback after new ledger
+activity also requires a drain and accounting review.
 
-Production deploys use the root `docker-compose.yml`, root `Caddyfile`, and
-`scripts/deploy.sh`. Do not deploy from `infra/docker`; that folder is only a
-legacy local/dev stack and does not carry the production SEO/security routing
-rules.
+Before any rollout, confirm the actual database target from protected runtime
+configuration, a usable backup and restore procedure, available build resources,
+and the rollback plan. Do not infer the active database from a provider dashboard
+or a sample connection string. Keep environment-specific access details and
+release evidence in the operator's private records.
 
-1. Clone the repo and copy env:
-   ```bash
-   cp apps/api/.env.example apps/api/.env
-   # Edit apps/api/.env with your actual keys
-   ```
+## Compose services
 
-2. Start everything:
-   ```bash
-   DOMAIN=yourdomain.com bash scripts/deploy.sh
-   ```
+The root [docker-compose.yml](../docker-compose.yml) and
+[Caddyfile](../Caddyfile) define the application stack. `infra/docker` is a legacy
+local/development stack and does not carry the same routing and security rules.
 
-3. Caddy auto-provisions SSL via Let's Encrypt. Your app is live at `https://yourdomain.com`.
+| Service | Internal port | Purpose |
+|---------|---------------|---------|
+| api | 3001 | Fastify API |
+| web | 80 | React SPA served by nginx |
+| db | 5432 | PostgreSQL 16 with a persistent named volume |
+| redis | 6379 | Redis 7 with persistent storage |
+| caddy | 80, 443 | Public reverse proxy and TLS termination |
 
-## Services
+Only Caddy publishes host ports in the root configuration. PostgreSQL, Redis,
+API and Web use the internal Docker network. The API's `DATABASE_URL` determines
+which database it actually uses; the presence of the `db` service alone does not
+prove that a running API connects to it. Back up PostgreSQL data separately from
+application images and verify restore procedures before upgrades.
 
-| Service  | Internal Port | Description                     |
-|----------|---------------|---------------------------------|
-| api      | 3001          | Fastify API server              |
-| web      | 80            | React SPA (nginx)               |
-| redis    | 6379          | Redis 7 (sessions + traces)     |
-| caddy    | 80, 443       | Reverse proxy + auto-SSL        |
+## Configuration
 
-Production data lives in the configured external PostgreSQL/Supabase
-`DATABASE_URL`; the root Compose stack does not expose a public database.
+Use [apps/api/.env.example](../apps/api/.env.example) as a variable reference,
+not as a ready-to-run production configuration. Its sample database and Redis
+URLs must be adapted to the intended topology. Store actual values outside Git.
 
-## Environment Variables
+- The API loads `apps/api/.env` through Compose's `env_file`.
+- Compose obtains `POSTGRES_PASSWORD` separately through its interpolation
+  environment, such as a protected root `.env`. Configure the API's database
+  connection consistently. Changing this variable does not rotate the password
+  inside an already initialized PostgreSQL volume.
+- Set `REDIS_URL` for the selected Redis service; `localhost` inside the API
+  container refers to that container.
+- Configure the frontend URL, webhook base URL, DNS and reverse proxy together.
+  The root Compose file currently does not pass `DOMAIN` into the Caddy
+  container. Setting a host-shell `DOMAIN` variable alone therefore does not
+  configure Caddy; explicitly supply the container setting or adapt the
+  Caddyfile and validate the resulting routing.
+- Check [env.ts](../apps/api/src/env.ts) and the relevant integration startup
+  checks for production requirements. They include the database, JWT,
+  encryption, Retell, OpenAI, Twilio, Stripe and webhook-signing configuration.
+  OpenAI is required by the current production validator even though Retell
+  remains the voice runtime. OAuth and other enabled features have additional
+  requirements.
+- `ENCRYPTION_KEY` must be 64 hexadecimal characters. Plan changes to signing
+  and encryption keys using [Secrets rotation](secrets-rotation.md).
 
-See `.env.example` for all required variables.
+## What the deployment script does
 
-### Required for Production
-- `DATABASE_URL` — PostgreSQL connection string
-- `REDIS_URL` — Redis connection string
-- `JWT_SECRET` — Random 64-char hex (`openssl rand -hex 32`)
-- `RETELL_API_KEY` — From Retell AI dashboard
-- `STRIPE_SECRET_KEY` — From Stripe dashboard
-- `STRIPE_WEBHOOK_SECRET` — From `stripe listen` or Stripe dashboard
-- `RESEND_API_KEY` — From Resend dashboard
-- `APP_URL` — Your frontend URL (e.g. `https://yourdomain.com`)
-- `WEBHOOK_BASE_URL` — Public URL for Retell webhooks
-- `DOMAIN` — Your domain for Caddy SSL
+[scripts/deploy.sh](../scripts/deploy.sh) assumes a Git checkout with the expected
+remote and Docker Compose available. It pulls `origin master`, builds locally,
+then starts or recreates services. It is not an image-transfer procedure for a
+host without a checkout, and it does not pin a release commit for the operator.
+Resolve and record the intended revision before using a release procedure.
 
-### Optional
-- `OPENAI_API_KEY` — Only needed for web chat (voice works without it via Retell)
-- `SENTRY_DSN` — Error tracking
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google Calendar integration
+The script also has these effects:
 
-## Stripe Setup
+| Setting | Behavior |
+|---------|----------|
+| `RUN_SUPABASE_MIGRATIONS=1` | Runs the migration check and Supabase CLI database push; requires `MIGRATION_DATABASE_URL`. Confirm that URL's target independently. |
+| `BUILD_CLEAN=1` | Disables Docker build cache; requires sufficient build memory and storage. |
+| Default after service startup | Executes active Retell configuration sync and then public-demo phone sync. These can change provider state. |
+| `SKIP_RETELL_SYNC=1` | Skips the entire Retell sync block, including public-demo sync. |
+| `SKIP_PUBLIC_DEMO_SYNC=1` | Skips only public-demo sync; active Retell configuration sync still runs unless separately skipped. |
 
-1. Create products + prices in Stripe for Starter/Pro/Agency plans
-2. Set the price IDs in `.env`
-3. Set up webhook endpoint: `https://yourdomain.com/billing/webhook`
-4. Events to listen for:
-   - `customer.subscription.created`
-   - `customer.subscription.updated`
-   - `customer.subscription.deleted`
-   - `invoice.payment_failed`
+The optional migration flag does not disable the API's startup schema
+initialization. Neither path replaces the ledger cutover procedure above.
+For an infrastructure or ledger update, explicitly decide whether provider
+configuration changes belong in the release and use the appropriate opt-out.
+Skipping sync also requires verifying that existing signed tool URLs remain
+compatible. A sync failure can occur after containers have already changed;
+the script does not automatically roll back that partial deployment.
 
-## Retell AI Setup
+## Provider setup and verification
 
-1. After first deploy, go to Dashboard → Agent → Deploy
-2. Set webhook URL in Retell dashboard: `https://yourdomain.com/retell/webhook`
-3. Tool webhook URLs are auto-configured during deploy
+Configure Stripe products and price IDs, the billing webhook and its signing
+secret for the same test or live environment. Configure Retell lifecycle and
+tool webhooks against the intended public base URL and verify signatures after
+any key or URL change. Use a verified sender domain for Resend. Follow the
+current provider setup instructions and check the routes handled by this
+revision rather than assuming a historical event list is complete.
 
-## Resend Setup
+`GET /health` reports process liveness and Redis status. Its database check is
+deferred; an `ok` response does not establish database readiness. The API's
+`GET /ready` probes the database and applicable Own-KB prerequisites. With the
+root Caddy routing, use `/api/ready` for that API route. Readiness does not prove
+ledger activation, successful billing, voice quality or latency.
 
-1. Verify your domain in Resend
-2. Update `EMAIL_FROM` to use your verified domain
+After a controlled rollout, verify the running image identity, database
+readiness, ledger state, webhook authentication and invoice-worker status.
+Observe failed invoice intents, rejected events and unresolved holds. Keep
+customer data and credentials out of logs and public verification reports.
+Real call quality and latency require separate, authorized call measurements;
+a successful build or health response is not that evidence.
 
-## Health Check
+## Scaling and local development
 
-```bash
-curl https://yourdomain.com/health
-# → {"ok":true,"checks":{"db":"ok","redis":"ok"}}
-```
+Additional API instances must share the intended PostgreSQL and Redis services
+and use compatible schema and application versions. Add load balancing and
+capacity planning explicitly; do not run mixed ledger versions during cutover.
 
-## Monitoring
-
-- Health endpoint: `GET /health`
-- Sentry (if configured): errors + performance
-- Docker logs: `docker compose logs -f api`
-
-## Scaling
-
-The API is stateless (sessions in Redis, data in Postgres). To scale:
-1. Run multiple `api` instances behind Caddy
-2. Use managed Postgres (e.g. Supabase, Neon, RDS)
-3. Use managed Redis (e.g. Upstash, ElastiCache)
-
-## Local Development
-
-```bash
-pnpm install
-pnpm dev          # starts API + Web in watch mode
-```
-
-API runs on `http://localhost:3001`, Web on `http://localhost:5173`.
+For local development, install workspace dependencies and use `pnpm dev` with
+development credentials and disposable services. The default API and Web
+development ports are 3001 and 5173. Local setup does not provision or deploy a
+production environment.
