@@ -2,7 +2,7 @@
 
 Stand: **22. Oktober 2026**. Prüfung in einem frischen lokalen Checkout mit Node.js 24.19.0 und pnpm 9.15.3.
 
-Ausgangsstand: `9ba11615433c7fc88902185fcb50a942d02c98fe`. Der ursprüngliche veröffentlichte Prüfstand einschließlich der damaligen Prüfverbesserungen ist [Commit `44b4e0d`](https://github.com/haskallalk-eng/voice-agent-phonbot/commit/234cbacbe7a8b37851d503654a97f5922eaaa69c). Spätere Dokumentationsänderungen stellen keinen erneuten Lauf der unten aufgeführten lokalen Prüfungen dar.
+Ausgangsstand: `9ba11615433c7fc88902185fcb50a942d02c98fe`. Der ursprüngliche veröffentlichte Prüfstand einschließlich der damaligen Prüfverbesserungen ist [Commit `234cbac`](https://github.com/haskallalk-eng/voice-agent-phonbot/commit/234cbacbe7a8b37851d503654a97f5922eaaa69c). Spätere Dokumentationsänderungen stellen keinen erneuten Lauf der unten aufgeführten lokalen Prüfungen dar.
 
 ## Ergebnisse
 
