@@ -1,4 +1,4 @@
-# Own KB + Multi-Layer Voice Agent Plan
+# Own KB + Multi-Layer Voice Agent: Historical Plan
 
 Date: 2026-05-28
 Status: historical planning baseline, not authoritative, not production approval
@@ -22,11 +22,9 @@ The own KB becomes the governed source-of-truth, evidence, eval, and shadow syst
 
 This reduces the Retell per-KB hosting failure mode without sacrificing production voice latency by assumption. Own-KB must prove that pinned core facts, cache, structured lookups, hybrid retrieval, and selective reranking can match the Retell-KB runtime benchmark before replacing it.
 
-## 98 Percent Definition
+## Proposed Release Criteria
 
-We do not define "98%" as a feeling. We define it as a release gate.
-
-Architecture can be considered 98% ready when all of these are true:
+These are proposed acceptance criteria, not observed results or a percentage of production readiness:
 
 1. 0 P0 failures across at least 150 independent high-risk replay/eval cases.
 2. 0 cross-tenant retrievals in synthetic, shadow, and canary tests.
@@ -40,19 +38,11 @@ Architecture can be considered 98% ready when all of these are true:
 10. Rollback to Retell can happen per org/agent without data loss.
 11. Monitoring, alerts, cost caps, retention cleanup, and incident runbooks exist.
 
-Current confidence after 40-role review:
+At the planning date, live DB verification, representative evals and shadow telemetry were still missing. Architecture review alone does not establish production readiness.
 
-- Own KB architecture direction: 90%.
-- DB/schema plan without live Supabase verification: 88%.
-- Retrieval quality plan: 90%.
-- Security/privacy plan: 92%.
-- Migration/ops plan: 90%.
-- OpenAI Realtime readiness as future Layer 0 candidate: 60-65%.
-- Overall production readiness today: not 98%, because live DB access, real evals, and shadow telemetry are missing.
+## Blockers Recorded at the Planning Date
 
-## Current Blockers
-
-Local secrets currently missing:
+Local configuration recorded as missing at that time:
 
 - `DATABASE_URL`
 - `SUPABASE_PROJECT_ID`
@@ -472,9 +462,9 @@ async function knowledgeSearch(req) {
 }
 ```
 
-## Latency Budget
+## Proposed Latency Budget
 
-| Path | p50 | p95 | Action |
+| Path | p50 target | p95 target | Action |
 | --- | ---: | ---: | --- |
 | Pinned core facts | < 10 ms | < 20 ms | no RAG |
 | Redis cache | < 20 ms | < 50 ms | return directly |
@@ -501,11 +491,11 @@ Minimum suites:
 9. Retention suite: source deletion removes chunks, embeddings, citations, logs.
 10. Migration parity suite: Retell KB vs own KB answers.
 
-Release gate:
+Proposed release gate (targets, not observed results):
 
 - At least 150 P0/P1 cases.
 - 0 P0 failures.
-- P1 pass rate >= 98%.
+- P1 pass rate target >= 98%; report passed/total P1 cases and the versioned eval set.
 - No unresolved security/privacy finding.
 - Latency budget passes on real infra.
 
@@ -667,7 +657,7 @@ Packages:
 - Professional: URLs/PDFs with review states and freshness.
 - Agency: approvals, audits, source governance, eval reports, integrations.
 
-## Remaining Work To Reach 98 Percent
+## Remaining Work Before Release Evaluation
 
 1. Add missing credentials.
 2. Verify Supabase pgvector version and extension.
@@ -685,7 +675,7 @@ Packages:
 
 ## Final Planning Verdict
 
-The 98% path is viable, but it is evidence-based. The architecture itself is now shaped well enough to start implementation. We must not claim production 98% until the DB, eval, shadow, and canary evidence exists.
+This historical plan proposes an implementation order and acceptance criteria. Release decisions require DB, eval, shadow and canary evidence; the plan itself does not establish production readiness.
 
 Best next implementation order:
 
