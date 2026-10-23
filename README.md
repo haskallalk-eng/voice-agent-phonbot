@@ -7,7 +7,15 @@ Phonbot verbindet Telefonie, konfigurierbare KI-Agenten und ein Dashboard zur Ve
 
 [Profil und weitere Projekte](https://github.com/haskallalk-eng) · [Produktwebsite](https://phonbot.de) · [Kontakt](mailto:info@mindrails.de)
 
-**Projektstand:** Mein Phonbot-Stack mit GPT Live 1 funktioniert bereits. Dieses öffentliche Repository dokumentiert noch den älteren Retell-/OpenAI-Realtime-Stand. Die folgenden Einrichtungsangaben beziehen sich auf diesen veröffentlichten Code; die aktuelle GPT-Live-1-Implementierung ist hier noch nicht vollständig dokumentiert.
+**Veröffentlichter Stand:** Das Repository zeigt die Retell-basierte Anwendung und Referenz-/Lab-Code für OpenAI Realtime. Retell und Retell-KB bleiben laut Projektarchitektur Laufzeit und Rückfalloption; OpenAI Realtime und die eigene Wissenssuche unterliegen gesonderten Freigabekriterien. Die Einrichtung und Prüfnachweise unten beziehen sich auf den hier veröffentlichten Code. Ein vollständiger Live-Telefonietest und gemessene Produktionslatenzen sind im [Prüfnachweis](docs/portfolio-validation.md) nicht enthalten.
+
+## In 5 Minuten prüfen
+
+1. **Aufbau verstehen:** Die [Architekturübersicht](docs/architecture.md) und der [API-Einstieg](apps/api/src/index.ts) zeigen Komponenten und angebundene Dienste.
+2. **Einen Fehlerfall nachvollziehen:** Die [Retell-Signaturprüfung](apps/api/src/retell-webhooks.ts) und ihre [Tests](apps/api/src/__tests__/webhook-signature.test.ts) zeigen, wie manipulierte Request-Bodies und fehlende Signaturen behandelt werden.
+3. **Prüfumfang einordnen:** Der [Prüfnachweis vom 22. Oktober 2026](docs/portfolio-validation.md) nennt Quellstand, Test- und Build-Ergebnisse sowie Reproduktionsbefehle und offene Live-Prüfungen.
+
+Dieser Einstieg lässt sich ohne Zugangsdaten lesen. Zum Ausführen der vollständigen Anwendung sind eigene Datenbank- und Dienstzugänge erforderlich.
 
 ## Monorepo
 
@@ -76,24 +84,18 @@ Dashboard: `http://localhost:3000`. Externe Webhooks benötigen zusätzlich eine
 3. **Test** via browser web-call or text chat
 4. **Assign** a configured German phone number to make the agent reachable.
 
-## Security
+## Sicherheitsmechanismen nachvollziehen
 
-Codex authority: `AGENTS.md` and `PLANS.md` are the only authoritative
-architecture, rollout, KB, latency, security-gate, and planning documents.
-`CLAUDE.md` is legacy Claude guidance and may be used only for low-level repo
-hygiene when explicitly useful.
+Die folgenden Beispiele verknüpfen konkrete Funktionen mit ihren automatisierten Tests:
 
-- Multi-tenant isolation (`org_id` on every query, SQL-level ON CONFLICT guards)
-- Webhook signature verification (Retell HMAC, Stripe constructEvent, Twilio)
-- Token encryption at rest (AES-256-GCM for OAuth + Cal.com keys)
-- Access JWT in memory only (no localStorage), refresh via httpOnly cookie
-- Anti-toll-fraud phone-prefix whitelist (DACH default) on all dial paths
-- Cloudflare Turnstile CAPTCHA on public demo endpoints
-- PII redaction in logs (Pino paths + Sentry beforeSend)
-- Rate-limiting per IP + per org + global Redis counters
-- Atomic minute-reservation (`tryReserveMinutes`) against concurrent-call over-billing
+| Beispiel | Implementierung und Testumfang |
+| --- | --- |
+| Retell-Webhook-Signaturen | [`verifyRetellSignature`](apps/api/src/retell-webhooks.ts) prüft Signaturen anhand des unveränderten Request-Bodys. Die [Tests](apps/api/src/__tests__/webhook-signature.test.ts) decken unter anderem manipulierte Bodies, falsche Schlüssel sowie fehlende und ungültige Signaturen ab. Im Code gibt es eine ausdrücklich aktivierbare Ausnahme für unsignierte Entwicklungsanfragen. |
+| Token-Verschlüsselung | Das [Kryptomodul](apps/api/src/crypto.ts) verwendet AES-256-GCM mit zufälligem IV. [Tests](apps/api/src/__tests__/crypto.test.ts) prüfen Ver- und Entschlüsselung, unterschiedliche Chiffrate und beschädigte Eingaben. Legacy-Klartext bleibt lesbar; ohne Schlüssel ist außerhalb der Produktion Klartextspeicherung möglich. |
+| Redaktion personenbezogener Daten | Die [Redaktionsfunktionen](apps/api/src/pii.ts) ersetzen definierte Muster, etwa für E-Mail-Adressen, Telefonnummern und IBANs. [Tests](apps/api/src/__tests__/pii.test.ts) prüfen diese Muster, verschachtelte Daten und die Freigabe sichtbarer Bestätigungen. Mustererkennung erfasst nicht jede Form personenbezogener Daten. |
+| Rufnummernprüfung | Die [gemeinsame Prüffunktion](packages/shared/src/phone.ts) normalisiert Eingaben und lehnt bestimmte Sonderrufnummern ab. [Tests](apps/api/src/__tests__/phone-validation.test.ts) prüfen unter anderem Länge und ausgewählte deutsche und internationale Sperrpräfixe. Ein positives Ergebnis ersetzt keine Freigabe des tatsächlichen Anrufziels. |
 
-For Codex architecture and rollout decisions, use `AGENTS.md` and `PLANS.md`.
+Diese Beispiele dokumentieren die gezeigten Codepfade und Tests. Sie sind kein vollständiger Sicherheitsaudit und kein Nachweis der Konfiguration eines laufenden Deployments.
 
 ## Tests
 
@@ -108,11 +110,8 @@ node scripts/check-secrets.mjs
 
 Die Befehle führen die vorhandenen API-Tests einmalig aus, prüfen die TypeScript-Typen von API und Web-App und suchen nach bekannten Zugangsdaten-Mustern in versionierten Dateien. Der Zugangsdaten-Check läuft auch in CI; der Pre-Commit-Hook prüft den Git-Index. Fundstellen werden ohne geheime Werte ausgegeben. Ein erfolgreicher lokaler Testlauf ersetzt keinen Test der eingerichteten Telefonie und externen Dienste.
 
-## Docs
+## Dokumentation und Mitarbeit
 
-- `AGENTS.md` - Codex architecture and safety contract
-- `PLANS.md` - Codex living execution plan
-
-- `CLAUDE.md` - legacy Claude guidance; Codex may use it only for low-level repo hygiene, not architecture, rollout, KB, latency, provider, security-gate, or production decisions
-- `docs/architecture.md` - system architecture
-- `apps/api/.env.example` - all 40+ env vars documented
+- [Architekturübersicht](docs/architecture.md)
+- [API-Konfigurationsvorlage](apps/api/.env.example)
+- Für Änderungen am Projekt gelten der [Architekturvertrag](AGENTS.md) und der [Umsetzungsplan](PLANS.md).
