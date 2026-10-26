@@ -1455,6 +1455,7 @@ export async function registerAdmin(app: FastifyInstance) {
     const q = z.object({
       limit: z.coerce.number().int().min(1).max(200).default(50),
       offset: z.coerce.number().int().min(0).default(0),
+      search: z.string().trim().max(200).default(''),
     }).parse(req.query);
 
     const { rows } = await pool.query(
@@ -1462,12 +1463,14 @@ export async function registerAdmin(app: FastifyInstance) {
               o.id as org_id, o.name as org_name, o.plan, o.plan_status
        FROM users u
        LEFT JOIN orgs o ON o.id = u.org_id
-       ORDER BY u.created_at DESC
+       WHERE $3 = '' OR strpos(lower(concat_ws(' ', u.email, o.name, o.plan, u.role,
+         CASE WHEN u.is_active THEN 'active' ELSE 'inactive' END)), lower($3)) > 0
+       ORDER BY u.created_at DESC, u.id DESC
        LIMIT $1 OFFSET $2`,
-      [q.limit, q.offset],
+      [q.limit + 1, q.offset, q.search],
     );
     void recordAdminRead(req, '/admin/users', rows.length, q);
-    return { items: rows };
+    return { items: rows.slice(0, q.limit), hasMore: rows.length > q.limit };
   });
 
   // ── GET /admin/orgs ───────────────────────────────────────────────────────
@@ -1477,6 +1480,7 @@ export async function registerAdmin(app: FastifyInstance) {
     const q = z.object({
       limit: z.coerce.number().int().min(1).max(200).default(50),
       offset: z.coerce.number().int().min(0).default(0),
+      search: z.string().trim().max(200).default(''),
     }).parse(req.query);
 
     // Audit-Round-11 LOW (Codex F-04): replace per-row correlated subqueries
@@ -1498,12 +1502,14 @@ export async function registerAdmin(app: FastifyInstance) {
          SELECT COUNT(*)::bigint AS users_count
          FROM users WHERE org_id = o.id
        ) uc ON TRUE
-       ORDER BY o.created_at DESC
+       WHERE $3 = '' OR strpos(lower(concat_ws(' ', o.name, o.slug, o.plan, o.plan_status,
+         CASE WHEN o.is_active THEN 'active' ELSE 'inactive' END)), lower($3)) > 0
+       ORDER BY o.created_at DESC, o.id DESC
        LIMIT $1 OFFSET $2`,
-      [q.limit, q.offset],
+      [q.limit + 1, q.offset, q.search],
     );
     void recordAdminRead(req, '/admin/orgs', rows.length, q);
-    return { items: rows };
+    return { items: rows.slice(0, q.limit), hasMore: rows.length > q.limit };
   });
 
   // ── POST /admin/diag/email-test ──────────────────────────────────────────

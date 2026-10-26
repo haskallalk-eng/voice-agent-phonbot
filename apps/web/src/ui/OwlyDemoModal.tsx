@@ -1,5 +1,6 @@
 // Note: file named OwlyDemoModal for historical reasons, mascot is now "Chipy".
 import React, { useEffect, useRef, useState } from 'react';
+import { TurnstileWidget, type TurnstileHandle } from './TurnstileWidget.js';
 import { IconPhone } from './PhonbotIcons.js';
 import {
   DEMO_PHONE_HREF,
@@ -74,27 +75,34 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
     });
   }
 
+  const turnstileRef = useRef<TurnstileHandle>(null);
+  const submittingRef = useRef(false);
+
   async function submitCallback(e: React.FormEvent) {
     e.preventDefault();
+    if (submittingRef.current) return;
     if (!cbConsent) {
       setCbError('Bitte bestätige zuerst den Demo-Datenschutzhinweis.');
       pulseConsent();
       return;
     }
+    submittingRef.current = true;
     setCbLoading(true);
     setCbError(null);
     try {
+      if (!turnstileRef.current) throw new Error('Die Sicherheitsprüfung lädt noch. Bitte erneut versuchen.');
+      const turnstileToken = await turnstileRef.current.execute();
       const res = await fetch('/api/demo/callback', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: cbName, email: cbEmail, phone: cbPhone, privacyConsent: true }),
+        body: JSON.stringify({ name: cbName, email: cbEmail, phone: cbPhone, privacyConsent: true, turnstileToken }),
         signal: AbortSignal.timeout(10_000),
       });
       if (!res.ok) {
         let serverMsg = '';
         try {
           const body = await res.json() as { error?: string };
-          serverMsg = body?.error ?? '';
+          serverMsg = res.status === 403 ? 'Die Sicherheitsprüfung ist fehlgeschlagen. Bitte erneut versuchen.' : body?.error ?? '';
         } catch {
           // Non-JSON error body.
         }
@@ -113,9 +121,10 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
       if (name === 'AbortError' || name === 'TimeoutError') {
         setCbError('Verbindung zu langsam. Bitte versuche es nochmal.');
       } else {
-        setCbError('Netzwerkfehler. Bitte versuche es nochmal.');
+        setCbError(err instanceof Error ? err.message : 'Anfrage fehlgeschlagen. Bitte erneut versuchen.');
       }
     } finally {
+      submittingRef.current = false;
       setCbLoading(false);
     }
   }
@@ -293,6 +302,7 @@ export function OwlyDemoModal({ onClose, onGoToRegister }: Props) {
                       Ich bin einverstanden, dass Chipy mich für die Demo anruft und Phonbot die Anfrage zur Demo-Qualität und Lead-Bearbeitung verarbeitet.
                     </span>
                   </label>
+                  <TurnstileWidget ref={turnstileRef} mode="execute" theme="dark" />
                   <button
                     type="submit"
                     disabled={cbLoading}

@@ -18,6 +18,7 @@ describe('verifyTurnstile', () => {
   });
   afterEach(() => {
     process.env = { ...originalEnv };
+    vi.unstubAllGlobals();
   });
 
   it('returns true in dev when SECRET is unset (fail-open)', async () => {
@@ -36,15 +37,17 @@ describe('verifyTurnstile', () => {
     expect(await verifyTurnstile('any-token')).toBe(false);
   });
 
-  // After 1e8e0dc: empty token → true (defense-in-depth, not hard-gate).
-  // Turnstile adds a layer but primary defense is rate-limit + global-cap.
-  it('returns true when token is empty (defense-in-depth, not hard-gate)', async () => {
+  it('rejects missing, blank and oversized tokens before contacting Cloudflare', async () => {
     process.env.TURNSTILE_SECRET_KEY = 'test-secret';
     process.env.NODE_ENV = 'production';
     const mod = await import('../captcha.js');
     verifyTurnstile = mod.verifyTurnstile;
-    expect(await verifyTurnstile('')).toBe(true);
-    expect(await verifyTurnstile(undefined)).toBe(true); // also defense-in-depth
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    for (const token of ['', undefined, '   ', 'x'.repeat(2049)]) {
+      expect(await verifyTurnstile(token)).toBe(false);
+    }
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('returns true when Cloudflare responds success:true', async () => {

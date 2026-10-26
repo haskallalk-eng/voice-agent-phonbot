@@ -1,11 +1,11 @@
-import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
+import { useEffect, useState, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
 
 // Cloudflare Turnstile widget — supports two modes:
 //
 // 1. "managed" (default): renders visibly, auto-starts challenge, calls
 //    onToken when done. Good for forms where the user is already committed.
 //
-// 2. "execute": renders invisibly (0×0), does NOT auto-start. Parent calls
+// 2. "execute": runs on demand and remains visible for interactive checks. Parent calls
 //    executeTurnstile() to trigger the challenge on-demand (e.g. when user
 //    clicks "Demo starten"). Returns a Promise<string> with the token.
 //    This is the mode the user requested: "erst wenn die risikoreiche
@@ -45,6 +45,11 @@ function loadScript(): Promise<void> {
     s.onerror = () => reject(new Error('turnstile script failed'));
     document.head.appendChild(s);
   });
+  scriptPromise = scriptPromise.catch(error => {
+    document.querySelector(`script[src="${SCRIPT_SRC}"]`)?.remove();
+    scriptPromise = null;
+    throw error;
+  });
   return scriptPromise;
 }
 
@@ -60,15 +65,28 @@ type Props = {
 
 export const TurnstileWidget = forwardRef<TurnstileHandle, Props>(
   function TurnstileWidget({ onToken, theme = 'auto', mode = 'managed' }, ref) {
+    const [initializationAttempt, setInitializationAttempt] = useState(0);
     const containerRef = useRef<HTMLDivElement>(null);
     const widgetIdRef = useRef<string | null>(null);
-    const resolveRef = useRef<((token: string) => void) | null>(null);
+    const pendingRef = useRef<{
+      resolve: (token: string) => void;
+      reject: (error: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    } | null>(null);
+
+    const finish = useCallback((token?: string) => {
+      const pending = pendingRef.current;
+      if (!pending) return;
+      pendingRef.current = null;
+      clearTimeout(pending.timer);
+      if (token) pending.resolve(token);
+      else pending.reject(new Error('Die Sicherheitsprüfung konnte nicht abgeschlossen werden. Bitte erneut versuchen.'));
+    }, []);
 
     const handleCallback = useCallback((token: string) => {
       onToken?.(token);
-      resolveRef.current?.(token);
-      resolveRef.current = null;
-    }, [onToken]);
+      finish(token);
+    }, [onToken, finish]);
 
     useEffect(() => {
       if (!SITE_KEY || !containerRef.current) return;
@@ -81,44 +99,59 @@ export const TurnstileWidget = forwardRef<TurnstileHandle, Props>(
             theme,
             execution: mode === 'execute' ? 'execute' : 'render',
             callback: (token: string) => handleCallback(token),
-            'expired-callback': () => { onToken?.(''); },
-            'error-callback': () => { onToken?.(''); },
+            appearance: mode === 'execute' ? 'interaction-only' : 'always',
+            'expired-callback': () => { onToken?.(''); finish(); },
+            'error-callback': () => { onToken?.(''); finish(); },
+            'timeout-callback': () => { onToken?.(''); finish(); },
           });
         })
         .catch(() => {});
       return () => {
         cancelled = true;
+        finish();
         if (widgetIdRef.current && window.turnstile) {
           try { window.turnstile.remove(widgetIdRef.current); } catch { /* noop */ }
           widgetIdRef.current = null;
         }
       };
-    }, [handleCallback, onToken, theme, mode]);
+    }, [handleCallback, onToken, theme, mode, finish, initializationAttempt]);
 
     useImperativeHandle(ref, () => ({
       execute: () => new Promise<string>((resolve, reject) => {
-        if (!SITE_KEY) { resolve(''); return; }
-        if (!widgetIdRef.current || !window.turnstile) {
-          reject(new Error('turnstile not ready'));
+        if (!SITE_KEY) {
+          if (import.meta.env.PROD) reject(new Error('Die Sicherheitsprüfung ist derzeit nicht verfügbar.'));
+          else resolve('');
           return;
         }
-        resolveRef.current = resolve;
-        window.turnstile.execute(widgetIdRef.current);
-        setTimeout(() => {
-          if (resolveRef.current) {
-            resolveRef.current = null;
-            reject(new Error('turnstile timeout'));
-          }
-        }, 10_000);
+        if (!widgetIdRef.current || !window.turnstile) {
+          setInitializationAttempt(attempt => attempt + 1);
+          reject(new Error('Die Sicherheitsprüfung lädt noch. Bitte in Kürze erneut versuchen.'));
+          return;
+        }
+        if (pendingRef.current) {
+          reject(new Error('Die Sicherheitsprüfung läuft bereits.'));
+          return;
+        }
+        try {
+          // Every submission needs a fresh, single-use token, including retries.
+          window.turnstile.reset(widgetIdRef.current);
+          pendingRef.current = {
+            resolve, reject, timer: setTimeout(() => finish(), 60_000),
+          };
+          window.turnstile.execute(widgetIdRef.current);
+        } catch {
+          if (pendingRef.current) finish();
+          else reject(new Error('Die Sicherheitsprüfung ist derzeit nicht verfügbar.'));
+        }
       }),
-    }), []);
+    }), [finish]);
 
     if (!SITE_KEY) return null;
     return (
       <div
         ref={containerRef}
         className="cf-turnstile-container"
-        style={mode === 'execute' ? { position: 'absolute', width: 0, height: 0, overflow: 'hidden' } : { margin: '12px 0' }}
+        style={{ margin: '12px 0' }}
       />
     );
   },

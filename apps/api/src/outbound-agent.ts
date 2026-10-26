@@ -1,3 +1,5 @@
+import { reservePublicCallback } from './public-callback-budget.js';
+import { isPhonePrefixAllowed } from './phone-policy.js';
 /**
  * Outbound Sales Agent — dedicated Retell agent for outbound sales calls.
  *
@@ -427,9 +429,7 @@ export async function triggerSalesCall(params: {
   // a future caller (campaign-worker, webhook, internal job) that skipped the
   // route-level check cannot make Phonbot dial +1-900-* / +44-9-* premium-rate
   // numbers on behalf of any org. See memory/fix-specs.md:T-32.
-  const ALLOWED_PHONE_PREFIXES = (process.env.ALLOWED_PHONE_PREFIXES ?? '+49,+43,+41')
-    .split(',').map(p => p.trim()).filter(Boolean);
-  if (!ALLOWED_PHONE_PREFIXES.some(p => params.toNumber.startsWith(p))) {
+  if (!isPhonePrefixAllowed(params.toNumber)) {
     return { ok: false, error: 'PHONE_PREFIX_NOT_ALLOWED' };
   }
 
@@ -740,8 +740,7 @@ export async function registerOutbound(app: FastifyInstance) {
     if (!phone.startsWith('+')) phone = '+49' + phone;
 
     // Abuse guard: country whitelist (default DACH region — configurable via env)
-    const ALLOWED_PREFIXES = (process.env.ALLOWED_PHONE_PREFIXES ?? '+49,+43,+41').split(',').map((p) => p.trim()).filter(Boolean);
-    if (!ALLOWED_PREFIXES.some((p) => phone.startsWith(p))) {
+    if (!isPhonePrefixAllowed(phone)) {
       app.log.warn({ phone, ip: req.ip }, 'Rejected website-callback: non-allowed country prefix');
       return reply.status(400).send({ error: 'Aktuell nur Telefonnummern aus der DACH-Region (DE/AT/CH) unterstützt' });
     }
@@ -750,6 +749,14 @@ export async function registerOutbound(app: FastifyInstance) {
     if (!fromNumber) {
       app.log.warn('RETELL_OUTBOUND_NUMBER not configured — cannot make callback');
       return reply.status(503).send({ error: 'Rückruf aktuell nicht verfügbar' });
+    }
+
+    const budget = await reservePublicCallback();
+    if (!budget.ok) {
+      app.log.warn({ reason: budget.reason }, 'Public callback budget refused request');
+      return reply.status(budget.reason === 'limit' ? 429 : 503).send({
+        error: 'Rückruf aktuell nicht verfügbar. Bitte versuche es später erneut.',
+      });
     }
 
     // Dedup — same phone within 24h won't retrigger a callback. Identical to
