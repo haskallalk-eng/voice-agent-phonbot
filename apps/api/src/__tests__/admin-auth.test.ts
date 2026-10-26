@@ -3,7 +3,7 @@ import Fastify from 'fastify';
 import jwt from '@fastify/jwt';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { query } = vi.hoisted(() => ({ query: vi.fn(async () => ({ rows: [], rowCount: 0 })) }));
+const { query } = vi.hoisted(() => ({ query: vi.fn<(...args: unknown[]) => Promise<{ rows: Record<string, unknown>[]; rowCount: number }>>(async () => ({ rows: [], rowCount: 0 })) }));
 vi.mock('../db.js', () => ({ pool: { query } }));
 // Keep unrelated provider/email integrations offline; route registration,
 // Fastify request lifecycle, JWT signing/verifying and admin gate remain real.
@@ -73,5 +73,26 @@ describe.each(['/admin/leads', '/learning/templates/test-template/learnings'])('
     const response = await app.inject({ url, headers: { authorization: `Bearer ${token}` } });
     expect(response.statusCode).toBe(200);
     expect(query).toHaveBeenCalled();
+  });
+});
+
+
+describe.each(['/admin/users', '/admin/orgs'])('admin pagination: %s', url => {
+  it('returns a bounded page and hasMore without exposing the lookahead row', async () => {
+    const rows = Array.from({ length: 51 }, (_, id) => ({ id: `synthetic-${id}` }));
+    query.mockResolvedValueOnce({ rows, rowCount: 51 });
+    const token = app.jwt.sign({ admin: true, aud: 'phonbot:admin' });
+    const response = await app.inject({ url: `${url}?limit=50&offset=50&search=Needle`, headers: { authorization: `Bearer ${token}` } });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ items: rows.slice(0, 50), hasMore: true });
+    expect(query.mock.calls[0]?.[1]).toEqual([51, 50, 'Needle']);
+  });
+  it('reports the final page and preserves the admin access boundary', async () => {
+    const token = app.jwt.sign({ admin: true, aud: 'phonbot:admin' });
+    const response = await app.inject({ url, headers: { authorization: `Bearer ${token}` } });
+    expect(response.json()).toEqual({ items: [], hasMore: false });
+    query.mockClear();
+    expect((await app.inject({ url })).statusCode).toBe(401);
+    expect(query).not.toHaveBeenCalled();
   });
 });

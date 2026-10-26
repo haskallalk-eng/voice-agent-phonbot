@@ -358,22 +358,36 @@ function LeadsTab() {
 
 // ── Users Tab ─────────────────────────────────────────────────────────────────
 
-function UsersTab() {
+export function UsersTab() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [orgs, setOrgs] = useState<AdminOrg[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'users' | 'orgs'>('users');
   const [search, setSearch] = useState('');
 
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [error, setError] = useState('');
+  const [retry, setRetry] = useState(0);
+  const pageSize = 50;
+
   useEffect(() => {
-    Promise.all([adminGetUsers(), adminGetOrgs()])
-      .then(([u, o]) => {
-        setUsers(u.items);
-        setOrgs(o.items);
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    const query = { limit: pageSize, offset, search };
+    const request = view === 'users'
+      ? adminGetUsers(query).then(result => {
+        if (!cancelled) { setUsers(result.items); setHasMore(result.hasMore); }
       })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+      : adminGetOrgs(query).then(result => {
+        if (!cancelled) { setOrgs(result.items); setHasMore(result.hasMore); }
+      });
+    request.catch(() => {
+      if (!cancelled) setError('Die Liste konnte nicht geladen werden. Bitte erneut versuchen.');
+    }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [view, offset, search, retry]);
 
   function formatDate(dateStr: string) {
     return new Date(dateStr).toLocaleDateString('de-DE', {
@@ -383,31 +397,28 @@ function UsersTab() {
     });
   }
 
-  const filteredUsers = users.filter(u => matchesSearch(search, u.email, u.org_name, u.plan, u.role, u.is_active ? 'active' : 'inactive'));
-  const filteredOrgs = orgs.filter(o => matchesSearch(search, o.name, o.slug, o.plan, o.plan_status, o.is_active ? 'active' : 'inactive'));
-
-  if (loading) return <LoadingSpinner />;
-
   return (
     <div className="space-y-4">
       {/* Search + Sub-toggle */}
       <div className="flex items-center gap-3 flex-wrap">
-        <SearchInput value={search} onChange={setSearch} placeholder={view === 'users' ? 'Email, Org, Plan, Rolle...' : 'Name, Plan, Status...'} />
+        <SearchInput value={search} onChange={value => { setSearch(value); setOffset(0); }} placeholder={view === 'users' ? 'Email, Org, Plan, Rolle...' : 'Name, Plan, Status...'} />
         {(['users', 'orgs'] as const).map((v) => (
           <button
             key={v}
-            onClick={() => { setView(v); setSearch(''); }}
+            onClick={() => { setView(v); setSearch(''); setOffset(0); }}
             className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors border ${
               view === v
                 ? 'bg-orange-500/20 border-orange-500/40 text-orange-300'
                 : 'bg-white/5 border-white/10 text-white/50 hover:bg-white/10'
             }`}
           >
-            {v === 'users' ? `Users (${search ? `${filteredUsers.length}/` : ''}${users.length})` : `Orgs (${search ? `${filteredOrgs.length}/` : ''}${orgs.length})`}
+            {v === 'users' ? 'Benutzer' : 'Unternehmen'}
           </button>
         ))}
       </div>
 
+      {error && <div role="alert">{error} <button onClick={() => setRetry(value => value + 1)}>Erneut versuchen</button></div>}
+      {loading ? <LoadingSpinner /> : !error && <>
       {view === 'users' ? (
         <div className="glass rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
@@ -423,7 +434,7 @@ function UsersTab() {
                 </tr>
               </thead>
               <tbody>
-                {filteredUsers.map((u) => (
+                {users.map((u) => (
                   <tr key={u.id} className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
                     <td className="px-4 py-3 text-white">{u.email}</td>
                     <td className="px-4 py-3 text-white/60">{u.org_name || '-'}</td>
@@ -462,7 +473,7 @@ function UsersTab() {
                 </tr>
               </thead>
               <tbody>
-                {filteredOrgs.map((o) => (
+                {orgs.map((o) => (
                   <tr key={o.id} className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
                     <td className="px-4 py-3 text-white">{o.name}</td>
                     <td className="px-4 py-3">
@@ -487,6 +498,13 @@ function UsersTab() {
           </div>
         </div>
       )}
+      <nav aria-label="Listenseiten" className="flex items-center gap-4 text-sm text-white/70">
+        <button disabled={offset === 0} onClick={() => setOffset(value => Math.max(0, value - pageSize))} className="disabled:opacity-40">Zurück</button>
+        <span>Seite {Math.floor(offset / pageSize) + 1} · {view === 'users' ? users.length : orgs.length} Einträge</span>
+        <button disabled={!hasMore} onClick={() => setOffset(value => value + pageSize)} className="disabled:opacity-40">Weiter</button>
+      </nav>
+      {(view === 'users' ? users.length : orgs.length) === 0 && <p>Keine Einträge gefunden.</p>}
+      </>}
     </div>
   );
 }

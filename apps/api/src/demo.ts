@@ -1,3 +1,5 @@
+import { reservePublicCallback } from './public-callback-budget.js';
+import { isPhonePrefixAllowed } from './phone-policy.js';
 /**
  * Demo endpoints — no auth required.
  * Allows landing page visitors to try a voice agent before signing up.
@@ -1038,25 +1040,6 @@ const DemoCallbackBody = z.object({
   privacyConsent: z.literal(true),
 });
 
-// Global hourly cost cap across ALL IPs — the per-IP rate-limit (10/h) is
-// easily bypassed by a botnet, and every demo call burns OpenAI + Retell
-// spend. Env-configurable so we can raise it for campaigns.
-const DEMO_GLOBAL_HOURLY_CAP = Number(process.env.DEMO_GLOBAL_HOURLY_CAP ?? 200);
-
-async function enforceGlobalDemoCap(kind: 'call' | 'callback'): Promise<{ ok: true } | { ok: false; count: number }> {
-  if (!redis?.isOpen) return { ok: true }; // fail open when Redis down
-  const hour = new Date().toISOString().slice(0, 13); // YYYY-MM-DDTHH
-  const key = `demo:global:${kind}:${hour}`;
-  try {
-    const results = await redis.multi().incr(key).expire(key, 3700).exec();
-    const count = Number(results?.[0] ?? 0);
-    if (count > DEMO_GLOBAL_HOURLY_CAP) return { ok: false, count };
-    return { ok: true };
-  } catch {
-    return { ok: true };
-  }
-}
-
 export async function registerDemo(app: FastifyInstance) {
   // GET /demo/templates — list available templates
   app.get('/demo/templates', async () => {
@@ -1099,12 +1082,6 @@ export async function registerDemo(app: FastifyInstance) {
       return reply.status(403).send({ error: 'captcha_failed', message: 'Bitte Captcha bestätigen.' });
     }
 
-    const cap = await enforceGlobalDemoCap('callback');
-    if (!cap.ok) {
-      app.log.warn({ count: cap.count, limit: DEMO_GLOBAL_HOURLY_CAP }, 'demo/callback global hourly cap hit');
-      return reply.status(429).send({ error: 'Demo temporarily unavailable — please try again later.' });
-    }
-
     const { name, email } = parsed.data;
     // Normalize phone to E.164 format
     let phone = parsed.data.phone.replace(/[\s\-()]/g, '');
@@ -1113,10 +1090,17 @@ export async function registerDemo(app: FastifyInstance) {
     if (!phone.startsWith('+')) phone = '+49' + phone;
 
     // Abuse guard: country whitelist (default DACH — configurable via ALLOWED_PHONE_PREFIXES)
-    const ALLOWED_PREFIXES = (process.env.ALLOWED_PHONE_PREFIXES ?? '+49,+43,+41').split(',').map((p) => p.trim()).filter(Boolean);
-    if (!ALLOWED_PREFIXES.some((p) => phone.startsWith(p))) {
+    if (!isPhonePrefixAllowed(phone)) {
       app.log.warn({ phone, ip: req.ip }, 'Rejected demo/callback: non-allowed country prefix');
       return reply.status(400).send({ error: 'Aktuell nur Telefonnummern aus der DACH-Region (DE/AT/CH) unterstützt' });
+    }
+
+    const budget = await reservePublicCallback();
+    if (!budget.ok) {
+      app.log.warn({ reason: budget.reason }, 'Public callback budget refused request');
+      return reply.status(budget.reason === 'limit' ? 429 : 503).send({
+        error: 'Rückruf aktuell nicht verfügbar. Bitte versuche es später erneut.',
+      });
     }
 
     // Dedup — same phone within 24h won't retrigger a callback. Prevents a

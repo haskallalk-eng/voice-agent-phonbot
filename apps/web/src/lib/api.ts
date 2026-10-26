@@ -1982,8 +1982,14 @@ export type AdminUser = {
   plan_status: string | null;
 };
 
-export function adminGetUsers() {
-  return adminRequest<{ items: AdminUser[] }>('/admin/users');
+export type AdminPageQuery = { limit?: number; offset?: number; search?: string };
+
+function adminPageQuery(query: AdminPageQuery): string {
+  return new URLSearchParams({ limit: String(query.limit ?? 50), offset: String(query.offset ?? 0), search: query.search ?? '' }).toString();
+}
+
+export function adminGetUsers(query: AdminPageQuery = {}) {
+  return adminRequest<{ items: AdminUser[]; hasMore: boolean }>(`/admin/users?${adminPageQuery(query)}`);
 }
 
 export type AdminOrg = {
@@ -2000,8 +2006,8 @@ export type AdminOrg = {
   users_count: number;
 };
 
-export function adminGetOrgs() {
-  return adminRequest<{ items: AdminOrg[] }>('/admin/orgs');
+export function adminGetOrgs(query: AdminPageQuery = {}) {
+  return adminRequest<{ items: AdminOrg[]; hasMore: boolean }>(`/admin/orgs?${adminPageQuery(query)}`);
 }
 
 // ── Demo Calls ────────────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import { isPhonePrefixAllowed } from './phone-policy.js';
 /**
  * Phone number management — provision, assign, and verify numbers.
  * Supports: Retell-provisioned numbers + Twilio-owned numbers imported into Retell.
@@ -125,13 +126,6 @@ async function routeTwilioNumberToSipTrunk(phoneNumber: string, orgId?: string):
 // POST arbitrary +1-900-* / +44-9-* premium-rate numbers and drain the Twilio
 // budget (classic IRSF). Environment-override for legitimate international
 // expansion.
-const ALLOWED_PHONE_PREFIXES = (process.env.ALLOWED_PHONE_PREFIXES ?? '+49,+43,+41')
-  .split(',').map(p => p.trim()).filter(Boolean);
-
-function isPhonePrefixAllowed(number: string): boolean {
-  return ALLOWED_PHONE_PREFIXES.some(p => number.startsWith(p));
-}
-
 // ── DB Migration ────────────────────────────────────────────────────────────
 
 export async function migratePhone() {

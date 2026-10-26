@@ -1,3 +1,4 @@
+import { isPhonePrefixAllowed } from './phone-policy.js';
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { pool } from './db.js';
@@ -99,10 +100,8 @@ export async function createTicket(
   // by any user with access to the ticket — the callback endpoint does check
   // prefixes, but if a future endpoint or batch-job reads tickets and dials
   // without re-checking, we'd have a toll-fraud vector. Belt-and-suspenders.
-  const ALLOWED_PREFIXES = (process.env.ALLOWED_PHONE_PREFIXES ?? '+49,+43,+41')
-    .split(',').map(p => p.trim()).filter(Boolean);
   const normalizedPhone = normalizeTicketPhoneForStorage(body.customerPhone);
-  if (!ALLOWED_PREFIXES.some(p => normalizedPhone.startsWith(p))) {
+  if (!isPhonePrefixAllowed(normalizedPhone)) {
     if (opts.allowUnverifiedPhone) {
       body.customerPhone = safeUnverifiedPhone(body.customerPhone);
     } else {
@@ -315,8 +314,7 @@ export async function registerTickets(app: FastifyInstance) {
     // means a user can stuff customer_phone="+1-premium-rate" into a ticket
     // and bill it via callback. Gate here with the same DACH-default list used
     // by /demo/callback and /outbound-agent.
-    const ALLOWED_PREFIXES = (process.env.ALLOWED_PHONE_PREFIXES ?? '+49,+43,+41').split(',').map((p) => p.trim()).filter(Boolean);
-    if (!ALLOWED_PREFIXES.some((p) => ticket!.customer_phone!.startsWith(p))) {
+    if (!isPhonePrefixAllowed(ticket!.customer_phone!)) {
       req.log.warn({ orgId, ticketId: params.id }, 'ticket callback rejected: non-DACH phone prefix');
       return reply.status(400).send({ ok: false, error: 'PHONE_PREFIX_NOT_ALLOWED' });
     }
