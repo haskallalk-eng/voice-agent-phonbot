@@ -9,15 +9,13 @@ Phonbot verbindet Telefonie, konfigurierbare KI-Agenten und ein Dashboard zur Ve
 
 [Profil und weitere Projekte](https://github.com/haskallalk-eng) · [Produktwebsite](https://phonbot.de) · [Kontakt](mailto:info@mindrails.de)
 
-**Veröffentlichter Stand:** Das Repository zeigt die Retell-basierte Anwendung und Referenz-/Lab-Code für OpenAI Realtime. Retell und Retell-KB bleiben laut Projektarchitektur Laufzeit und Rückfalloption; OpenAI Realtime und die eigene Wissenssuche unterliegen gesonderten Freigabekriterien. Die Einrichtung und Prüfnachweise unten beziehen sich auf den hier veröffentlichten Code. Ein vollständiger Live-Telefonietest und gemessene Produktionslatenzen sind im [Prüfnachweis](docs/portfolio-validation.md) nicht enthalten.
+Phonbot ist bereits bei einem Kunden im echten Telefonbetrieb. Dieses Repository enthält die Retell-basierte Anwendung und Referenzcode für OpenAI Realtime. Der veröffentlichte Code und die konkrete Kundeninstallation können unterschiedliche Stände haben.
 
-## In 5 Minuten prüfen
+## Einstieg
 
-1. **Aufbau verstehen:** Die [Architekturübersicht](docs/architecture.md) und der [API-Einstieg](apps/api/src/index.ts) zeigen Komponenten und angebundene Dienste.
-2. **Einen Fehlerfall nachvollziehen:** Die [Retell-Signaturprüfung](apps/api/src/retell-signature.ts) und ihre [Tests](apps/api/src/__tests__/webhook-signature.test.ts) zeigen, wie manipulierte Request-Bodies und fehlende Signaturen behandelt werden. Der [Review-Nachtrag](docs/review-follow-up.md) erklärt weitere Korrekturen und ihre Grenzen.
-3. **Prüfumfang einordnen:** Der [Prüfnachweis vom 23. Oktober 2026](docs/portfolio-validation.md) nennt Quellstand, Test- und Build-Ergebnisse sowie Reproduktionsbefehle und offene Live-Prüfungen.
-
-Dieser Einstieg lässt sich ohne Zugangsdaten lesen. Zum Ausführen der vollständigen Anwendung sind eigene Datenbank- und Dienstzugänge erforderlich.
+- [Architektur](docs/architecture.md) und [API](apps/api/src/index.ts): Komponenten und angebundene Dienste.
+- [Kalender](apps/web/src/ui/CalendarPage.tsx): Betriebs- und Mitarbeiterkalender, Buchungsdialoge und Einstellungen.
+- [Tests und bisherige Ergebnisse](docs/portfolio-validation.md): Befehle, geprüfte Revisionen und Umfang.
 
 ## Monorepo
 
@@ -81,31 +79,24 @@ pnpm --filter @vas/web dev
 
 Dashboard: `http://localhost:3000`. Externe Webhooks benötigen zusätzlich eine für den jeweiligen Anbieter erreichbare, korrekt konfigurierte Adresse. Die lokale Einrichtung allein aktiviert keine Telefonie.
 
-## Ablauf im veröffentlichten Retell-Stand
+## Telefonassistent einrichten
 
-1. **Configure** your agent (name, voice, prompt, tools, calendar)
-2. **Deploy** to Retell AI with one click
-3. **Test** via browser web-call or text chat
-4. **Assign** a configured German phone number to make the agent reachable.
+1. Agent mit Stimme, Anweisungen, Werkzeugen und Kalender konfigurieren.
+2. Konfiguration an Retell übertragen.
+3. Per Browseranruf oder Textchat ausprobieren.
+4. Eine eingerichtete Telefonnummer zuweisen.
 
-## Sicherheitsmechanismen nachvollziehen
+## Codebeispiele
 
-Die folgenden Beispiele verknüpfen konkrete Funktionen mit ihren automatisierten Tests:
-
-| Beispiel | Implementierung und Testumfang |
-| --- | --- |
-| Retell-Webhook-Signaturen | [`verifyRetellSignature`](apps/api/src/retell-signature.ts) prüft Signaturen anhand des unveränderten Request-Bodys. Die [Tests](apps/api/src/__tests__/webhook-signature.test.ts) decken manipulierte Bodies, Zeitfenster, falsche Schlüssel sowie fehlende und ungültige Signaturen ab. Unsignierte Entwicklungsanfragen erfordern eine ausdrückliche Ausnahme; Legacy-Signaturen enthalten keinen Zeitstempel. |
-| Token-Verschlüsselung | Das [Kryptomodul](apps/api/src/crypto.ts) verwendet AES-256-GCM mit zufälligem IV. [Tests](apps/api/src/__tests__/crypto.test.ts) prüfen Ver- und Entschlüsselung, unterschiedliche Chiffrate und beschädigte Eingaben. Legacy-Klartext bleibt lesbar; ohne Schlüssel ist außerhalb der Produktion Klartextspeicherung möglich. |
-| Redaktion personenbezogener Daten | Die [Redaktionsfunktionen](apps/api/src/pii.ts) ersetzen definierte Muster, etwa für E-Mail-Adressen, Telefonnummern und IBANs. [Tests](apps/api/src/__tests__/pii.test.ts) prüfen diese Muster, verschachtelte Daten und die Freigabe sichtbarer Bestätigungen. Mustererkennung erfasst nicht jede Form personenbezogener Daten. |
-| Rufnummernprüfung | Die [gemeinsame Prüffunktion](packages/shared/src/phone.ts) normalisiert Eingaben und lehnt bestimmte Sonderrufnummern ab. [Tests](apps/api/src/__tests__/phone-validation.test.ts) prüfen unter anderem Länge und ausgewählte deutsche und internationale Sperrpräfixe. Ein positives Ergebnis ersetzt keine Freigabe des tatsächlichen Anrufziels. |
-
-Diese Beispiele dokumentieren die gezeigten Codepfade und Tests. Sie sind kein vollständiger Sicherheitsaudit und kein Nachweis der Konfiguration eines laufenden Deployments.
+- [Webhook-Signaturen](apps/api/src/retell-signature.ts) und [Tests](apps/api/src/__tests__/webhook-signature.test.ts): Prüfung des unveränderten Request-Bodys, manipulierte Eingaben und Zeitgrenzen.
+- [Kundenzuordnung](apps/web/src/ui/calendar/customerLookup.ts) und [Tests](apps/web/src/ui/calendar/customerLookup.test.ts): vollständige Treffer, Mehrdeutigkeiten und unvollständige Suchergebnisse.
+- [Token-Verschlüsselung](apps/api/src/crypto.ts) und [Tests](apps/api/src/__tests__/crypto.test.ts): AES-256-GCM und Umgang mit beschädigten Eingaben. Die Konfiguration und der Umgang mit bestehenden Klartextwerten sind im Modul beschrieben.
 
 ## Tests
 
 [Prüfnachweis vom 23.10.2026: Tests, Builds und Grenzen](docs/portfolio-validation.md).
 
-Aktualisierung vom 26.10.2026: [Eindeutige Kundenzuordnung, Kalenderaufteilung und Regressionstests](docs/calendar-follow-up.md).
+[Kundenzuordnung und Kalenderaufteilung](docs/calendar-follow-up.md).
 
 ```bash
 pnpm -r --workspace-concurrency=1 run test --run
@@ -114,7 +105,7 @@ node --test scripts/check-secrets.test.mjs
 node scripts/check-secrets.mjs
 ```
 
-Die Befehle führen die Tests aller Workspace-Pakete einmalig aus, prüfen die TypeScript-Typen von API und Web-App und suchen nach bekannten Zugangsdaten-Mustern in versionierten Dateien. Die zusätzliche [PostgreSQL-Integrationsprüfung](apps/api/integration/README.md) benötigt eine isolierte Testdatenbank; CI stellt sie bereit. Der Zugangsdaten-Check läuft auch in CI; der Pre-Commit-Hook prüft den Git-Index. Fundstellen werden ohne geheime Werte ausgegeben. Ein erfolgreicher lokaler Testlauf ersetzt keinen Test der eingerichteten Telefonie und externen Dienste.
+CI führt außerdem die [PostgreSQL-Integrationstests](apps/api/integration/README.md) mit einer isolierten Datenbank aus. Der Zugangsdaten-Check sucht nach bekannten Mustern und gibt keine geheimen Werte aus. Umfang und Grenzen der bisherigen Testläufe stehen im verlinkten Prüfbericht.
 
 ## Dokumentation und Mitarbeit
 

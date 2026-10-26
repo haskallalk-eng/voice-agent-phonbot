@@ -108,6 +108,8 @@ Acceptance:
 
 ## Progress
 
+- [x] 2026-10-26: Calendar cleanup: extract BookingModal, BookingDetailsModal, SettingsPanel, ConnectionsPanel and StaffPanel; share configuration and UI helpers; remove the unused day drawer and block handlers. Acceptance: preserve booking, deletion confirmation, staff scoping and customer navigation; pass Web types/build/tests and focused interaction checks. Shorten the README and state the owner-confirmed customer deployment without claiming that local checks validated it.
+
 - [x] 2026-10-26: Portfolio follow-up: isolate calendar presentation/model code and replace first-hit customer navigation with unique complete identity matching. Files: CalendarPage, calendar model/views/customerLookup, API search limit and focused regressions. Acceptance: partial names/suffix phones/duplicates/truncated searches cannot navigate; valid unique matches still work; Web tests, types and build pass. Audit existing issue status against the public revision without treating absent operational evidence as completion. No provider/runtime/DB/deployment changes.
 
 - [x] 2026-10-23: The next independent review reproduced missing overage charges for reserved minutes and found incomplete reservation lifecycles. Corrected with separate held capacity and consumed minutes; atomic per-call settlement and invoice outbox; org/call-bound reservation identity; validation before reserve and explicit release/retain semantics for provider outcomes; Retell and signed Twilio completion routes. Additive schema stays inactive until an explicit drained/baseline-checked cutover. Real PostgreSQL settlement, contention, rollback, replay and cutover regressions, route failure/duplicate tests, full local validation and independent code rereview passed. No live migration or activation.
@@ -328,6 +330,8 @@ Acceptance:
 
 ## Surprises & Discoveries
 
+- 2026-10-26 cleanup: The old day drawer and its two block handlers have no callers. CalendarPage still combines five independent components after the earlier view extraction.
+
 - 2026-10-26: Partial customer searches are candidate lists, not identity proof. A later search can expose an additional matching customer; search-limit saturation also prevents a uniqueness decision. Several open issue descriptions are stale, while operational closure evidence remains absent. See docs/issue-status-2026-10-26.md.
 
 - 2026-10-23 follow-up: Paid usage already at its limit, followed by a five-minute reservation, produced invoice requests for 0/0/3 minutes for actual calls of 2/5/8 minutes. The counter mixed temporary holds with consumption. The generic Retell completion also assumed every call had reserved five minutes; customer outbound used a separate Twilio bridge without the assumed Retell completion path.
@@ -498,6 +502,8 @@ Acceptance:
   Evidence: benchmark samples now carry optional `questionFingerprint`; promotion is blocked when paired Retell/Own-KB samples are missing fingerprints, have mismatched fingerprints, or include duplicate provider samples for the same `questionId`.
 
 ## Decision Log
+
+- 2026-10-26 cleanup: Extract existing components along their current props and state boundaries; keep API calls and booking rules intact. Delete only code with no callers. Keep detailed test records linked from a shorter project introduction.
 
 - 2026-10-26: Keep calendar navigation conservative: exact complete phone identity, or a unique complete name only when no phone is supplied; never infer country codes or select a first candidate. Collect all bounded searches, reject ambiguity and saturated results. Extract views/model without changing provider, backend, database or deployment behavior. Keep unresolved operational issues open.
 
@@ -972,6 +978,8 @@ Acceptance:
   Date/Author: 2026-06-13 / Claude custom-runtime latency-reality pass.
 
 ## Outcomes & Retrospective
+
+- 2026-10-26 cleanup: CalendarPage reduced from 2,202 to 519 lines. Web typecheck/build, focused lint and 29 Web tests pass, including six DOM interaction tests for booking, retry, deletion confirmation, errors and staff scoping. Extracted component bodies preserve the original behavior; only unused handlers were removed. README shortened; customer deployment is owner-confirmed, not a result of these local checks.
 
 - 2026-10-26: CalendarPage reduced from 3,177 to about 2,200 lines; model, views and customer lookup now have explicit modules. Web types/build and 23 tests passed locally, including 18 customer-identity regressions and three view/grouping tests. The eleven open issues have an evidence-based status table; no unverified operational work is marked complete. See docs/calendar-follow-up.md for validation scope.
 
