@@ -4,7 +4,7 @@
 
 Voice Agent SaaS – a customer-facing platform that lets businesses configure and deploy AI phone agents without technical knowledge.
 
-This is a conceptual overview of the published Retell integration. It does not certify a deployed configuration or demonstrate live call performance. For a code review, start with the [source and test walkthrough](../README.md#in-5-minuten-prüfen) and the [dated verification record](portfolio-validation.md).
+This is a conceptual overview of the published Retell integration. It does not certify a deployed configuration or demonstrate live call performance. For a code review, start with the [source and test examples](../README.md#codebeispiele) and the [dated verification record](portfolio-validation.md).
 
 ## Stack
 
