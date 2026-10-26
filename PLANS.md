@@ -108,6 +108,8 @@ Acceptance:
 
 ## Progress
 
+- [x] 2026-10-26: Portfolio follow-up: isolate calendar presentation/model code and replace first-hit customer navigation with unique complete identity matching. Files: CalendarPage, calendar model/views/customerLookup, API search limit and focused regressions. Acceptance: partial names/suffix phones/duplicates/truncated searches cannot navigate; valid unique matches still work; Web tests, types and build pass. Audit existing issue status against the public revision without treating absent operational evidence as completion. No provider/runtime/DB/deployment changes.
+
 - [x] 2026-10-23: The next independent review reproduced missing overage charges for reserved minutes and found incomplete reservation lifecycles. Corrected with separate held capacity and consumed minutes; atomic per-call settlement and invoice outbox; org/call-bound reservation identity; validation before reserve and explicit release/retain semantics for provider outcomes; Retell and signed Twilio completion routes. Additive schema stays inactive until an explicit drained/baseline-checked cutover. Real PostgreSQL settlement, contention, rollback, replay and cutover regressions, route failure/duplicate tests, full local validation and independent code rereview passed. No live migration or activation.
 - [x] 2026-10-23: Followed up the independent portfolio review: strict Retell signature/AES envelope validation, shared admin gate, production-route regressions, durable call-start deduplication, true no-pool tests, and isolated PostgreSQL reservation tests. CI now covers every workspace test package, API/Voice-Core builds and static Own-KB checks. Local validation passed; see docs/portfolio-validation.md for revision and limits. No deployment, provider switch or production credential change.
 - [x] 2026-10-22: Portfolio verification hardening: replaced the staged secret hook with a redacting Node checker, added a tracked-file CI check and regression tests. No provider, runtime, rollout or deployment changes. Known-pattern checks are not a full security audit. Made the numeric-URL unit test independent of external DNS and added private-address/DNS-failure cases; runtime SSRF rules are unchanged.
@@ -326,6 +328,8 @@ Acceptance:
 
 ## Surprises & Discoveries
 
+- 2026-10-26: Partial customer searches are candidate lists, not identity proof. A later search can expose an additional matching customer; search-limit saturation also prevents a uniqueness decision. Several open issue descriptions are stale, while operational closure evidence remains absent. See docs/issue-status-2026-10-26.md.
+
 - 2026-10-23 follow-up: Paid usage already at its limit, followed by a five-minute reservation, produced invoice requests for 0/0/3 minutes for actual calls of 2/5/8 minutes. The counter mixed temporary holds with consumption. The generic Retell completion also assumed every call had reserved five minutes; customer outbound used a separate Twilio bridge without the assumed Retell completion path.
 - 2026-10-23: Hex decoding accepted malformed suffixes, truncated GCM tags were accepted, and call_started lacked the durable claim used by other lifecycle events. Several old tests did not exercise the application boundary their names implied. A real PostgreSQL lock test distinguished the reservation SQL from a deliberately unlocked test-only mutation.
 - Observation: Own-KB smoke proved retrieval reachability but not coverage quality.
@@ -494,6 +498,8 @@ Acceptance:
   Evidence: benchmark samples now carry optional `questionFingerprint`; promotion is blocked when paired Retell/Own-KB samples are missing fingerprints, have mismatched fingerprints, or include duplicate provider samples for the same `questionId`.
 
 ## Decision Log
+
+- 2026-10-26: Keep calendar navigation conservative: exact complete phone identity, or a unique complete name only when no phone is supplied; never infer country codes or select a first candidate. Collect all bounded searches, reject ambiguity and saturated results. Extract views/model without changing provider, backend, database or deployment behavior. Keep unresolved operational issues open.
 
 - 2026-10-23 follow-up: A subtraction-only invoice formula cannot distinguish other concurrent holds. Separate reservations from confirmed consumption and persist settlement plus invoice intent atomically instead. Preserve historical counters; never guess which old minutes were holds. Gate activation until a controlled cutover, and reject pre-cutover unreserved calls. Keep customer-outbound feature defaults unchanged.
 - 2026-10-23: Keep legacy Retell signatures compatible, enforce canonical digest/envelope lengths, and claim call_started before side effects. Claim-first handling prevents concurrent duplicate attempts but is best-effort delivery: a crash after the claim can lose an event. An outbox/retry protocol is a separate change. Use an isolated loopback PostgreSQL schema for SQL concurrency evidence; do not infer production latency, rotation or live acceptance from these tests.
@@ -966,6 +972,8 @@ Acceptance:
   Date/Author: 2026-06-13 / Claude custom-runtime latency-reality pass.
 
 ## Outcomes & Retrospective
+
+- 2026-10-26: CalendarPage reduced from 3,177 to about 2,200 lines; model, views and customer lookup now have explicit modules. Web types/build and 23 tests passed locally, including 18 customer-identity regressions and three view/grouping tests. The eleven open issues have an evidence-based status table; no unverified operational work is marked complete. See docs/calendar-follow-up.md for validation scope.
 
 - 2026-10-23 final follow-up: 1,902 API tests in 134 files, 10 other workspace tests, 32 real PostgreSQL cases and four secret-checker regressions passed. API/Web types, all relevant builds, seven migration files, static Own-KB and SEO checks passed. A fresh mutation of only the final ledger test interceptor removed the org-row lock and made the selected free-cap contention test fail as intended. The full PostgreSQL run had no skips; 31 other cases were intentionally excluded only from that focused mutation run. These are local results, not a new public CI or deployment result.
 - 2026-10-23: The first local follow-up, before the additional usage-ledger correction, passed 1,838 API tests, 10 other workspace tests, 10 real PostgreSQL integration cases, four secret-checker regressions, types/builds, static migrations/Own-KB checks and SEO checks. The deliberately unlocked reservation mutation failed the free-cap case as expected. Those counts do not validate the subsequent accounting changes; see the final verification record for their own run. Public CI must be assessed for the published revision separately. These corrections do not close missing live-call, credential-rotation, customer-acceptance or human-team-review evidence.

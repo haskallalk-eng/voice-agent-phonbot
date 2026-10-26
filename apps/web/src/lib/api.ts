@@ -876,8 +876,11 @@ export function getCustomerModuleStatus() {
   return request<CustomerModuleStatus>('/customers/status');
 }
 
-export function getCustomers(search?: string) {
-  const qs = search?.trim() ? `?search=${encodeURIComponent(search.trim())}` : '';
+export function getCustomers(search?: string, limit?: number) {
+  const params = new URLSearchParams();
+  if (search?.trim()) params.set('search', search.trim());
+  if (limit !== undefined) params.set('limit', String(limit));
+  const qs = params.size ? `?${params}` : '';
   return request<{ items: Customer[] }>(`/customers${qs}`);
 }
 
