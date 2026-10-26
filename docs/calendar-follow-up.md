@@ -34,5 +34,3 @@ node scripts/check-secrets.mjs
 23 Web-Tests in drei Dateien: 18 Fälle für die Kundenzuordnung, drei Render-/Gruppierungsregressionen der ausgelagerten Ansichten und zwei bestehende Checkout-Regressionen. Zu den Fällen gehören Teilnamen, widersprechende oder verkürzte Nummern, gleichnamige Kunden, doppelte Suchergebnisse, Suchfehler und eine ausgeschöpfte Treffergrenze.
 
 Die Ansichtstests prüfen serverseitig gerendertes React-Markup und Gruppierungsdaten. Sie ersetzen keine interaktive Browser- oder Live-Telefonie-Abnahme. API-, Datenbank-, Telefonie- und Deployment-Verhalten werden durch diesen Nachtrag nicht geändert. Der PR durchläuft zusätzlich die bestehende Repository-CI mit allen Workspace-Tests und isolierter PostgreSQL-Prüfung; den konkreten CI-Status zeigt GitHub am PR.
-
-[Öffentliche Issue-Statusprüfung](issue-status-2026-10-26.md)

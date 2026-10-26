@@ -105,7 +105,7 @@ Diese Beispiele dokumentieren die gezeigten Codepfade und Tests. Sie sind kein v
 
 [Prüfnachweis vom 23.10.2026: Tests, Builds und Grenzen](docs/portfolio-validation.md).
 
-Aktualisierung vom 26.10.2026: [Eindeutige Kundenzuordnung, Kalenderaufteilung und Regressionstests](docs/calendar-follow-up.md) · [Belegter Stand der offenen Issues](docs/issue-status-2026-10-26.md).
+Aktualisierung vom 26.10.2026: [Eindeutige Kundenzuordnung, Kalenderaufteilung und Regressionstests](docs/calendar-follow-up.md).
 
 ```bash
 pnpm -r --workspace-concurrency=1 run test --run
