@@ -108,6 +108,8 @@ Acceptance:
 
 ## Progress
 
+- [x] 2026-10-26: Callback and admin improvements: share the public callback budget, complete Turnstile submission/retry handling, consolidate country-prefix checks, and paginate/search admin users and organizations. Acceptance: rejected requests cannot reach call creation; both callback routes consume one atomic budget; admin records beyond the first page remain searchable; API/Web types and regression tests pass. No live deployment or credentials change.
+
 - [x] 2026-10-26: Calendar cleanup: extract BookingModal, BookingDetailsModal, SettingsPanel, ConnectionsPanel and StaffPanel; share configuration and UI helpers; remove the unused day drawer and block handlers. Acceptance: preserve booking, deletion confirmation, staff scoping and customer navigation; pass Web types/build/tests and focused interaction checks. Shorten the README and state the owner-confirmed customer deployment without claiming that local checks validated it.
 
 - [x] 2026-10-26: Portfolio follow-up: isolate calendar presentation/model code and replace first-hit customer navigation with unique complete identity matching. Files: CalendarPage, calendar model/views/customerLookup, API search limit and focused regressions. Acceptance: partial names/suffix phones/duplicates/truncated searches cannot navigate; valid unique matches still work; Web tests, types and build pass. Audit existing issue status against the public revision without treating absent operational evidence as completion. No provider/runtime/DB/deployment changes.
@@ -330,6 +332,8 @@ Acceptance:
 
 ## Surprises & Discoveries
 
+- 2026-10-26: Both public callback forms need fresh Turnstile tokens on retries. Admin filtering must run before pagination so records beyond the first page remain discoverable.
+
 - 2026-10-26 cleanup: The old day drawer and its two block handlers have no callers. CalendarPage still combines five independent components after the earlier view extraction.
 
 - 2026-10-26: Partial customer searches are candidate lists, not identity proof. A later search can expose an additional matching customer; search-limit saturation also prevents a uniqueness decision. Several open issue descriptions are stale, while operational closure evidence remains absent. See docs/issue-status-2026-10-26.md.
@@ -502,6 +506,8 @@ Acceptance:
   Evidence: benchmark samples now carry optional `questionFingerprint`; promotion is blocked when paired Retell/Own-KB samples are missing fingerprints, have mismatched fingerprints, or include duplicate provider samples for the same `questionId`.
 
 ## Decision Log
+
+- 2026-10-26: Retain the existing UTC-hour callback key and configurable default of 200; count validated callback requests before messaging/call side effects. Stop new public callbacks when the shared counter is unavailable. Preserve the existing country allowlist and incoming voice runtime.
 
 - 2026-10-26 cleanup: Extract existing components along their current props and state boundaries; keep API calls and booking rules intact. Delete only code with no callers. Keep detailed test records linked from a shorter project introduction.
 
@@ -978,6 +984,8 @@ Acceptance:
   Date/Author: 2026-06-13 / Claude custom-runtime latency-reality pass.
 
 ## Outcomes & Retrospective
+
+- 2026-10-26: Callback guards, token retries, shared phone policy and searchable admin pagination implemented. API/Web builds and workspace tests passed locally. PostgreSQL pagination regression is included in CI; no live runtime or credential changes performed.
 
 - 2026-10-26 cleanup: CalendarPage reduced from 2,202 to 519 lines. Web typecheck/build, focused lint and 29 Web tests pass, including six DOM interaction tests for booking, retry, deletion confirmation, errors and staff scoping. Extracted component bodies preserve the original behavior; only unused handlers were removed. README shortened; customer deployment is owner-confirmed, not a result of these local checks.
 

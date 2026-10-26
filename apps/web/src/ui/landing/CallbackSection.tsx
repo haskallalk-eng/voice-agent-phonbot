@@ -9,21 +9,27 @@ export function CallbackSection() {
   const [name, setName] = React.useState('');
   const [privacyConsent, setPrivacyConsent] = React.useState(false);
   const turnstileRef = React.useRef<TurnstileHandle>(null);
+  const submittingRef = React.useRef(false);
   const [state, setState] = React.useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [error, setError] = React.useState('');
   const ref = React.useRef<HTMLElement>(null);
   const visible = useVisible(ref);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submittingRef.current) return;
     if (!phone.trim() || !email.trim() || !privacyConsent) return;
+    submittingRef.current = true;
     setState('loading');
+    setError('');
     try {
       // Execute Turnstile on-demand — only when user actually submits
-      let token = '';
-      try { token = await (turnstileRef.current?.execute() ?? Promise.resolve('')); } catch { /* proceed without */ }
+      if (!turnstileRef.current) throw new Error('Die Sicherheitsprüfung lädt noch. Bitte erneut versuchen.');
+      const token = await turnstileRef.current.execute();
 
       const res = await fetch('/api/outbound/website-callback', {
         method: 'POST',
+        signal: AbortSignal.timeout(10_000),
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           phone: phone.trim(),
@@ -33,10 +39,15 @@ export function CallbackSection() {
           turnstileToken: token || undefined,
         }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error(res.status === 403
+        ? 'Die Sicherheitsprüfung ist fehlgeschlagen. Bitte erneut versuchen.'
+        : 'Rückruf aktuell nicht verfügbar. Bitte versuche es später erneut.');
       setState('success');
-    } catch {
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Bitte erneut versuchen.');
       setState('error');
+    } finally {
+      submittingRef.current = false;
     }
   }
 
@@ -179,8 +190,8 @@ export function CallbackSection() {
                   {/* Turnstile — invisible, execute-on-demand at submit time */}
                   <TurnstileWidget ref={turnstileRef} mode="execute" theme="dark" />
                   {state === 'error' && (
-                    <p className="rounded-xl border border-orange-400/20 bg-orange-500/10 px-4 py-2.5 text-xs text-orange-100/80">
-                      Etwas ist schiefgelaufen — bitte versuche es erneut.
+                    <p role="alert" className="rounded-xl border border-orange-400/20 bg-orange-500/10 px-4 py-2.5 text-xs text-orange-100/80">
+                      {error}
                     </p>
                   )}
                   <button
